@@ -11,9 +11,15 @@ struct ImDrawList;
 struct ImVec2;
 using ImU32 = unsigned int;
 
+namespace Horo::Log
+{
+class IStructuredLogQuery;
+} // namespace Horo::Log
+
 namespace Horo::Editor
 {
 class EditorDataBus;
+class IEditorGuiRenderer;
 class IEditorViewportRenderer;
 struct EditorWorkspaceViewCommandData;
 struct EditorWorkspaceViewModel;
@@ -22,9 +28,11 @@ struct EditorWorkspaceViewModel;
 struct PanelContext
 {
     EditorDataBus &dataBus;
+    IEditorGuiRenderer* guiRenderer{nullptr};
     IEditorViewportRenderer *viewportRenderer{nullptr};
     Input::InputRouter *inputRouter{nullptr};
     Input::InputContextToken *workspaceInputContext{nullptr};
+    const Log::IStructuredLogQuery *logQuery{nullptr};
 };
 
 /** @brief Base interface for a modular Workspace Panel (e.g. Hierarchy, Inspector) */

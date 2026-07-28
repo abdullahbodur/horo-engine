@@ -117,18 +117,19 @@ namespace
             "workspace.global_dock.tab.audio",
             "workspace.global_dock.tab.network",
             "workspace.global_dock.tab.localization",
-            "workspace.global_dock.preview.console",
             "workspace.global_dock.preview.mcp",
             "workspace.global_dock.preview.performance",
             "workspace.global_dock.preview.physics",
             "workspace.global_dock.preview.audio",
             "workspace.global_dock.preview.network",
             "workspace.global_dock.preview.localization",
-            "workspace.global_dock.console.session_started",
-            "workspace.global_dock.console.texture_converted",
-            "workspace.global_dock.console.scene_loaded",
-            "workspace.global_dock.console.missing_animation",
-            "workspace.global_dock.console.selection",
+            "workspace.global_dock.console.filter.error",
+            "workspace.global_dock.console.filter.warn",
+            "workspace.global_dock.console.filter.info",
+            "workspace.global_dock.console.filter.debug",
+            "workspace.global_dock.console.filter.trace",
+            "workspace.global_dock.console.search",
+            "workspace.global_dock.console.empty",
             "workspace.global_dock.mcp.bridge",
             "workspace.global_dock.mcp.tools",
             "workspace.global_dock.mcp.awaiting",
@@ -148,11 +149,31 @@ namespace
             "workspace.global_dock.localization.strings",
             "workspace.global_dock.localization.fonts",
         };
+        constexpr std::array contentBrowserKeys{
+            "workspace.content_browser.loading",
+            "workspace.content_browser.unavailable",
+            "workspace.content_browser.no_results",
+            "workspace.content_browser.search",
+            "workspace.content_browser.filter.all_types",
+            "workspace.content_browser.sort.name",
+            "workspace.content_browser.sort.type",
+        };
         const auto assertGlobalDockKeysExist = [&globalDockKeys](const Horo::Editor::LocalizationService& service)
         {
             for (const char* key : globalDockKeys)
                 REQUIRE((!service.Get("editor", key).starts_with("[missing:")));
         };
+        const auto assertContentBrowserKeysExist =
+            [&contentBrowserKeys](
+                const Horo::Editor::LocalizationService& service)
+            {
+                for (const char* key : contentBrowserKeys)
+                {
+                    REQUIRE(
+                        (!service.Get("editor", key)
+                              .starts_with("[missing:")));
+                }
+            };
 
         const std::filesystem::path enPath = "assets/localization/editor/en-US.json";
         const std::filesystem::path trPath = "assets/localization/editor/tr-TR.json";
@@ -170,9 +191,11 @@ namespace
         REQUIRE((service.Get("editor", "settings.input.shortcut.press_keys") == "Press keys..."));
         REQUIRE((service.Get("editor", "workspace.content_browser.embedded") == "EMBEDDED"));
         REQUIRE((service.Get("editor", "workspace.content_browser.project_asset_dock") == "Project asset dock"));
+        REQUIRE((service.Get("editor", "workspace.content_browser.empty") == "This folder is empty."));
         REQUIRE((service.Get("editor", "workspace.global_dock.tab.assets") == "Assets"));
         REQUIRE((service.Get("editor", "workspace.global_dock.tab.localization") == "L10n"));
         assertGlobalDockKeysExist(service);
+        assertContentBrowserKeysExist(service);
 
         REQUIRE((service.Prepare(Horo::Editor::LocaleTag{"tr-TR"}, &error)));
         REQUIRE((service.ActivatePrepared(&error)));
@@ -180,8 +203,10 @@ namespace
         REQUIRE((service.Get("editor", "settings.input.shortcut.press_keys") == "Tuşlara basın..."));
         REQUIRE((service.Get("editor", "workspace.content_browser.embedded") == "YERLEŞİK"));
         REQUIRE((service.Get("editor", "workspace.content_browser.project_asset_dock") == "Proje varlık paneli"));
+        REQUIRE((service.Get("editor", "workspace.content_browser.empty") == "Bu klasör boş."));
         REQUIRE((service.Get("editor", "workspace.global_dock.tab.assets") == "Varlıklar"));
         REQUIRE((service.Get("editor", "workspace.global_dock.tab.localization") == "L10n"));
         assertGlobalDockKeysExist(service);
+        assertContentBrowserKeysExist(service);
     }
 } // namespace

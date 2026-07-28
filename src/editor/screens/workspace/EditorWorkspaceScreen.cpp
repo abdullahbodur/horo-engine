@@ -3,6 +3,7 @@
 #include "Horo/Editor/EditorServiceRegistry.h"
 #include "editor/document/EditorViewportSceneExtractor.h"
 #include "editor/renderer/EditorViewportRenderer.h"
+#include "editor/renderer/EditorGuiRenderer.h"
 #include "Horo/Editor/GuiScreenHost.h"
 #include "Horo/Editor/Localization/ILocalizationService.h"
 #include "Horo/Editor/EditorSettingsStore.h"
@@ -10,6 +11,7 @@
 #include "Horo/Editor/ScreenRegistry.h"
 #include "Horo/Editor/WorkspacePanelRegistry.h"
 #include "Horo/Foundation/Logging/Logger.h"
+#include "Horo/Foundation/Logging/StructuredLogStore.h"
 
 #include "editor/screens/NavigationErrors.h"
 #include "EditorWorkspaceView.h"
@@ -38,9 +40,15 @@ namespace Horo::Editor
                   workspaceInputContext_(inputRouter_.PushContext(Input::InputContextId{"editor.workspace"},
                                                                   Input::InputContextKind::EditorWorkspace)),
                   view_(context_, registry_, services.Get<std::uintptr_t>(), inputRouter_, workspaceInputContext_),
+                  servicesGuiRenderer_(services.TryGet<IEditorGuiRenderer>()),
                   viewportRenderer_(services.TryGet<IEditorViewportRenderer>()),
                   viewportSceneState_(services.Get<EditorViewportSceneState>()),
                   runtimeScene_(services.Get<Runtime::RuntimeSceneService>()),
+                  assetRegistry_(services.TryGet<Assets::AssetRegistry>()),
+                  importerCatalog_(services.TryGetConst<Assets::AssetImporterCatalogSnapshot>()),
+                  mutations_(services.TryGet<ProjectMutationCoordinator>()),
+                  durableFiles_(services.TryGet<DurableFileSystem>()),
+                  logQuery_(services.TryGetConst<Log::IStructuredLogQuery>()),
                   projectOpenService_(services.Get<ProjectOpenService>())
             {
             }
@@ -60,7 +68,11 @@ namespace Horo::Editor
                 ProjectSessionActivationLease activation = std::move(reserved).Value();
                 std::string projectRoot = activation.Candidate().projectRoot.string();
 
-                controller_ = std::make_unique<EditorWorkspaceController>(std::move(projectRoot), runtimeScene_);
+                const Assets::AssetRegistrySnapshot assetSnapshot =
+                    assetRegistry_ ? assetRegistry_->Snapshot() : Assets::AssetRegistrySnapshot{};
+                controller_ = std::make_unique<EditorWorkspaceController>(
+                    std::move(projectRoot), runtimeScene_, assetSnapshot, assetRegistry_, mutations_, durableFiles_,
+                    importerCatalog_);
                 host_.SetCurrentProjectRoot(controller_->ViewModel().projectRoot);
                 LoadProjectInputProfile(controller_->ViewModel().projectRoot);
                 viewportSceneState_.Replace(controller_->ViewportScene());
@@ -71,7 +83,12 @@ namespace Horo::Editor
                          controller_->ViewModel().projectRoot.c_str());
 
                 PanelContext panelContext{
-                    controller_->DataBus(), viewportRenderer_, &inputRouter_, &workspaceInputContext_
+                    .dataBus = controller_->DataBus(),
+                    .guiRenderer = servicesGuiRenderer_,
+                    .viewportRenderer = viewportRenderer_,
+                    .inputRouter = &inputRouter_,
+                    .workspaceInputContext = &workspaceInputContext_,
+                    .logQuery = logQuery_,
                 };
                 registry_.AttachAll(panelContext);
                 UpdateStatusItems();
@@ -89,6 +106,9 @@ namespace Horo::Editor
             {
                 if (controller_)
                 {
+                    if (assetRegistry_ != nullptr)
+                        controller_->RefreshAssets(assetRegistry_->Snapshot());
+                    controller_->UpdateContentBrowser();
                     controller_->SynchronizeRuntimeScenePreview();
                     controller_->UpdateFps(ImGui::GetIO().Framerate);
                 }
@@ -407,9 +427,15 @@ namespace Horo::Editor
             Input::InputRouter& inputRouter_;
             Input::InputContextToken workspaceInputContext_;
             EditorWorkspaceView view_;
+            IEditorGuiRenderer* servicesGuiRenderer_{nullptr};
             IEditorViewportRenderer* viewportRenderer_{nullptr};
             EditorViewportSceneState& viewportSceneState_;
             Runtime::RuntimeSceneService& runtimeScene_;
+            Assets::AssetRegistry* assetRegistry_{};
+            const Assets::AssetImporterCatalogSnapshot* importerCatalog_{};
+            ProjectMutationCoordinator* mutations_{};
+            DurableFileSystem* durableFiles_{};
+            const Log::IStructuredLogQuery* logQuery_{};
             ProjectOpenService& projectOpenService_;
             DocumentRevision publishedSceneRevision_{};
             SelectionRevision publishedSelectionRevision_{};

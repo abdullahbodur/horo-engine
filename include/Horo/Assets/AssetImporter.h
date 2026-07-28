@@ -6,6 +6,7 @@
  */
 
 #include "Horo/Assets/AssetRegistry.h"
+#include "Horo/Assets/AssetPreview.h"
 #include "Horo/Foundation/CancellationToken.h"
 #include "Horo/Foundation/Result.h"
 
@@ -57,6 +58,7 @@ struct ImportSettingDescriptor
     std::optional<double> minimum;               /**< Minimum value for Integer/Float. */
     std::optional<double> maximum;               /**< Maximum value for Integer/Float. */
     std::vector<ImportSettingChoice> choices;    /**< Choices for Choice kind. */
+    bool includeInPresets{false};                /**< Whether user-created import presets may retain this field. */
 };
 
 // ---------------------------------------------------------------------------
@@ -128,12 +130,25 @@ struct AssetImporterContribution
     std::string contributionId;                              /**< Stable unique contribution identity. */
     std::string packageId;                                   /**< Owning package identity. */
     std::string moduleId;                                    /**< Module identity. */
-    std::string version;                                     /**< Contribution version. */
+    std::string moduleVersion;                               /**< Canonical semantic version of the owning module. */
+    std::string version;                                     /**< Canonical semantic version of this contribution. */
     std::vector<std::string> fileExtensions;                  /**< Lowercase extensions without dot. */
     std::vector<AssetTypeId> assetTypes;                      /**< Asset types this importer produces. */
+
+    /** @brief Optional destination subfolder category for auto-organization. Empty = no subfolder. */
+    std::string subfolderCategory;                            /**< e.g. "Meshes", "Textures", "Audio". */
+
     std::vector<ImportSettingDescriptor> settings;            /**< Declarative import settings schema. */
     bool builtIn{false};                                     /**< True for engine-provided importers. */
     std::shared_ptr<const IAssetImporter> strategy;           /**< Immutable strategy instance. */
+    std::shared_ptr<const IAssetPreviewProvider> previewProvider; /**< Optional editor-card preview strategy. */
+    AssetPreviewFallback previewFallback{AssetPreviewFallback::Automatic}; /**< Host fallback when preview fails. */
+
+    /** @brief Target file extension this importer produces (including dot). */
+    std::string targetExtension{".horoasset"};
+
+    /** @brief True if this importer supports creating a meta sidecar. */
+    bool supportsMetaSidecar{true};
 
     /** @brief Returns true when this contribution handles the given extension. */
     [[nodiscard]] bool HandlesExtension(std::string_view extension) const noexcept;
@@ -174,6 +189,14 @@ class AssetImporterCatalogSnapshot final
     /** @brief Finds a contribution by file extension. */
     [[nodiscard]] const AssetImporterContribution *FindContributionByExtension(std::string_view extension) const noexcept;
 
+    /**
+     * @brief Finds the preview contribution for a stable asset type.
+     * @param assetType Stable type to present.
+     * @return First deterministic matching contribution, or null when no importer owns the type.
+     */
+    [[nodiscard]] const AssetImporterContribution* FindPreviewContribution(
+        const AssetTypeId& assetType) const noexcept;
+
   private:
     friend class AssetImporterCatalog;
 
@@ -197,6 +220,13 @@ class AssetImporterCatalog final
      * @return Result<void> with a typed error on duplicate ID or extension conflict.
      */
     [[nodiscard]] Result<void> Register(AssetImporterContribution entry);
+
+    /**
+     * @brief Registers a complete contribution batch atomically.
+     * @param entries Candidate entries copied into the catalog only when every entry validates.
+     * @return Success, or the first typed validation/conflict error with the catalog unchanged.
+     */
+    [[nodiscard]] Result<void> RegisterBatch(std::vector<AssetImporterContribution> entries);
 
     /**
      * @brief Seals the catalog and publishes the immutable snapshot.

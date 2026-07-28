@@ -87,9 +87,48 @@ revision so a later authoritative installation boundary can reject stale work.
 Service shutdown stops admission, cancels and joins owned requests, and prevents
 callbacks after service destruction.
 
-AST-001A does not implement importers, ID generation, cooking, archives, cache,
-hot reload, or Content Browser integration. Runtime-scene consumption is the
+AST-001A does not implement cooking, archives, cache, or hot reload. The editor
+Content Browser combines the immutable registry snapshot with a bounded
+directory enumeration used strictly for presentation. Files without canonical
+identity metadata remain visibly marked as unregistered and never become
+runtime-resolvable assets by appearing in the browser. A successful editor
+import writes the canonical `<asset>.horo` identity sidecar, rebuilds and
+publishes the registry, and the active workspace replaces its Content Browser
+projection when that revision changes. Runtime-scene consumption is the
 separate AST-001B slice described below.
+
+Content Browser navigation state uses canonical absolute native paths. It
+enumerates direct child directories and visible non-sidecar files beneath the
+absolute project `assets` root, decorates matching files from the pinned
+registry snapshot, and exposes absolute breadcrumb targets. Relative navigation
+and `..` segments are never presented to the UI. Rename and recoverable-delete
+operations hold the shared project mutation lease, move payload and sidecars as
+one logical entry, and rebuild the registry before publishing the refreshed
+view. Portable sidecars and the derived asset index retain normalized
+project-relative `ProjectPath` values for cross-machine portability.
+
+Importer contributions may attach an `IAssetPreviewProvider`. The host passes
+the bounded imported editor payload, absolute diagnostic path, stable asset
+type, requested dimensions, and cancellation token. A provider returns only an
+owned tightly packed RGBA8 image; ImGui callbacks, renderer handles, backend
+types, texture ownership, and arbitrary card UI do not cross the module
+boundary. The Content Browser validates the image, uploads and caches it through
+the selected GUI renderer, and destroys the texture when the directory or panel
+lifetime ends. Missing or failed providers select host-owned mesh, image, audio,
+or generic fallbacks by declared asset type.
+
+Identity sidecars retain the importer contribution ID so asset types shared by
+multiple importers resolve the provider that authored the payload. This field is
+advisory for editor presentation; runtime identity and dependency resolution
+continue to use `AssetId` and `AssetTypeId`.
+
+The built-in FBX importer uses a pinned ufbx scene decoder with bounded parser
+allocations. It combines every mesh instance, applies each node's geometry-to-world
+transform, triangulates polygon faces, and emits the same versioned mesh editor
+payload consumed by the built-in preview provider. The provider depth-rasterizes
+shaded triangle surfaces; topology-free legacy payloads use the typed mesh fallback
+instead of fabricating a point-cloud preview. Malformed scenes fail import with a
+typed diagnostic instead of committing an opaque payload.
 
 ## Implemented AST-001B Runtime Scene Consumption
 
@@ -266,31 +305,38 @@ Metadata includes:
 
 - logical asset ID
 - source file hash
-- importer version
+- stable importer contribution identity and version
+- owning package/module identity and module version
+- absolute original source path used by the editor reimport workflow
 - metadata schema version
 - import timestamp
-- cooker settings
-- user overrides (compression, scale, coordinate system)
+- serialized importer settings required to reproduce the import
 - dependencies
+- typed reasons for the last import transaction
 
 ```json
 {
   "schemaVersion": 1,
   "assetId": "a1b2c3d4-e5f6-4890-abcd-ef1234567890",
   "assetType": "core.mesh",
-  "sourceHash": "sha256:abc123...",
+  "importerContributionId": "com.vendor.fbx-importer.importer",
   "importerVersion": "1.2.0",
+  "importerPackageId": "com.vendor.fbx-importer",
+  "importerModuleId": "com.vendor.fbx-importer.native",
+  "importerModuleVersion": "2.0.0",
+  "absoluteSourcePath": "/Users/developer/project-source/cube.fbx",
+  "sourceExtension": "fbx",
+  "sourceHash": "sha256:abc123...",
+  "sourceByteSize": 421337,
   "importSettings": {
-    "coordinateSystem": "YUp",
-    "unitScale": 1.0
-  },
-  "cookSettings": {
-    "meshCompression": "draco",
-    "generateTangents": true
+    "settings.coordinateSystem": "0",
+    "settings.unitScale": "1.0"
   },
   "dependencies": [
-    "texture_checker_001"
-  ]
+    "8c643d5e-708d-4b00-b326-7a621a42ee54"
+  ],
+  "lastImportReasons": ["source_changed", "module_changed"],
+  "importedAtUtc": "2026-07-27T00:00:00.000+00:00"
 }
 ```
 
@@ -320,8 +366,17 @@ enum class MigrationAction {
 
 Rules:
 
-- If `importerVersion` in metadata is older than the registered importer, the
-  asset is automatically re-imported.
+- Explicit reimport resolves the exact recorded `importerContributionId`; a
+  different contribution is never selected merely because it claims the same
+  extension.
+- Source bytes are hashed before import. A hash change records
+  `source_changed`; a contribution-version change records `importer_changed`;
+  and an owning module identity/version change records `module_changed`.
+- When none of those values changed, an explicit user action records
+  `manual_reimport`.
+- Reimport preserves `assetId`, restores the serialized importer settings, and
+  atomically replaces payload plus sidecar. Publication failure restores the
+  previous pair.
 - If only the sidecar `schemaVersion` changed and the importer is the same, the
   metadata is upgraded in-place without touching the source asset.
 - If the old schema is no longer supported, a diagnostic error is emitted and
@@ -331,9 +386,9 @@ Rules:
 MigrationAction AssetMigrationService::Evaluate(const AssetMetadata& metadata);
 ```
 
-Migration is triggered on project open and on explicit "Validate Assets"
-commands. It is never silent: the GUI import log, CLI output, and MCP result
-report every migrated asset.
+Automatic migration policy remains future work. The implemented editor action
+is explicit and never silent: the Asset Info surface presents stored/current
+provenance and the structured log reports every completed reimport.
 
 ## Asset Configuration
 

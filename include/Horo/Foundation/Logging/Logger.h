@@ -5,11 +5,13 @@
 
 #include <chrono>
 #include <cstdio>
+#include <memory>
 #include <string>
 #include <string_view>
 
 namespace Horo::Log
 {
+    class StructuredLogStore;
 
     /**
      * @brief Minimal structured logger with JSONL file output.
@@ -46,6 +48,12 @@ namespace Horo::Log
         static void SetLevel(Level level) noexcept;
 
         /**
+         * @brief Installs the optional process-owned bounded in-memory sink.
+         * @param store Shared store retained until replacement or logger shutdown.
+         */
+        static void SetStructuredLogStore(std::shared_ptr<StructuredLogStore> store);
+
+        /**
          * @brief Logs a structured record if `level` passes the current filter.
          *
          * @param category  Stable dotted category (e.g. "editor.startup").
@@ -64,6 +72,7 @@ namespace Horo::Log
         static Logger &Instance();
 
         std::FILE *m_file = nullptr;
+        std::shared_ptr<StructuredLogStore> m_structuredStore;
         Level m_level = Level::Info;
         std::chrono::steady_clock::time_point m_startTime;
         uint64_t m_sequence = 0;

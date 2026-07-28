@@ -4,15 +4,14 @@
 
 #include "Horo/Assets/AssetImportOperation.h"
 
+#include "Horo/Assets/AssetImportMetadata.h"
 #include "Horo/Foundation/JobSystem.h"
 #include "Horo/Foundation/Logging/Logger.h"
 #include "../AssetErrors.h"
 
 #include <algorithm>
 #include <cstdint>
-#include <fstream>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <vector>
 
@@ -28,6 +27,68 @@ std::string LowerExtension(const std::filesystem::path &path)
     std::transform(ext.begin(), ext.end(), ext.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return ext;
+}
+
+std::filesystem::path NormalizeAbsolute(const std::filesystem::path& path)
+{
+    std::error_code error;
+    std::filesystem::path absolute = std::filesystem::absolute(path, error);
+    if (error)
+        return {};
+    absolute = absolute.lexically_normal();
+    const std::filesystem::path canonical = std::filesystem::weakly_canonical(absolute, error);
+    return error ? absolute : canonical;
+}
+
+std::int64_t SourceLastWriteTime(const std::filesystem::path& path)
+{
+    std::error_code error;
+    const auto value = std::filesystem::last_write_time(path, error);
+    return error ? 0 : value.time_since_epoch().count();
+}
+
+std::string SerializeDefaultSetting(const ImportSettingDescriptor& descriptor)
+{
+    switch (descriptor.kind)
+    {
+    case ImportSettingKind::Boolean:
+        return std::holds_alternative<bool>(descriptor.defaultValue) &&
+            std::get<bool>(descriptor.defaultValue) ? "true" : "false";
+    case ImportSettingKind::Integer:
+        return std::holds_alternative<std::int64_t>(descriptor.defaultValue)
+            ? std::to_string(std::get<std::int64_t>(descriptor.defaultValue))
+            : "0";
+    case ImportSettingKind::Float:
+        return std::holds_alternative<double>(descriptor.defaultValue)
+            ? std::to_string(std::get<double>(descriptor.defaultValue))
+            : "0.000000";
+    case ImportSettingKind::Text:
+        return std::holds_alternative<std::string>(descriptor.defaultValue)
+            ? std::get<std::string>(descriptor.defaultValue)
+            : std::string{};
+    case ImportSettingKind::Choice:
+        if (std::holds_alternative<std::size_t>(descriptor.defaultValue))
+            return std::to_string(std::get<std::size_t>(descriptor.defaultValue));
+        for (std::size_t index = 0; index < descriptor.choices.size(); ++index)
+        {
+            if (descriptor.choices[index].value == descriptor.defaultValue)
+                return std::to_string(index);
+        }
+        return "0";
+    }
+    return {};
+}
+
+void MaterializeDefaultSettings(
+    AssetImportItem& item, const AssetImporterContribution* contribution)
+{
+    if (contribution == nullptr)
+        return;
+    for (const auto& descriptor : contribution->settings)
+    {
+        item.settings.emplace(
+            "settings." + descriptor.id, SerializeDefaultSetting(descriptor));
+    }
 }
 } // namespace
 
@@ -55,34 +116,49 @@ Result<AssetImportSnapshot> AssetImportOperation::Start(
 
     for (const auto &sourceFile : request.sourceFiles)
     {
-        auto ext = LowerExtension(sourceFile);
+        const std::filesystem::path absoluteSource = NormalizeAbsolute(sourceFile);
+        auto ext = LowerExtension(absoluteSource);
         const auto *strategy = catalog_->FindByExtension(ext);
 
         // Find contribution ID from the strategy — workaround until
         // FindContributionByExtension is added to the snapshot.
         std::string contribId;
         const auto *contrib = catalog_->FindContributionByExtension(ext);
+        std::string targetExt = ".horoasset";
+        bool supportsMeta = true;
         if (contrib)
+        {
             contribId = contrib->contributionId;
+            targetExt = contrib->targetExtension;
+            supportsMeta = contrib->supportsMetaSidecar;
+        }
 
         auto parsed = ProjectPath::Parse(
-            std::filesystem::relative(sourceFile, request.projectRoot).string());
+            std::filesystem::relative(absoluteSource, request.projectRoot).string());
         if (!parsed.HasValue())
         {
             // File is outside the project root — use just the filename
             // as the project-relative path.
-            parsed = ProjectPath::Parse(sourceFile.filename().string());
+            parsed = ProjectPath::Parse(absoluteSource.filename().string());
             if (!parsed.HasValue())
                 continue;
         }
         AssetImportItem item{
             .sourceFile = std::move(parsed).Value(),
-            .absoluteSourcePath = sourceFile,
+            .absoluteSourcePath = absoluteSource,
             .importerContributionId = contribId,
+            .importerVersion = contrib != nullptr ? contrib->version : std::string{},
+            .importerPackageId = contrib != nullptr ? contrib->packageId : std::string{},
+            .importerModuleId = contrib != nullptr ? contrib->moduleId : std::string{},
+            .importerModuleVersion = contrib != nullptr ? contrib->moduleVersion : std::string{},
             .sourceExtension = ext,
-            .displayName = sourceFile.filename().string(),
+            .displayName = absoluteSource.stem().string(),
             .destinationFolder = request.destinationFolder,
+            .targetExtension = targetExt,
+            .supportsMetaSidecar = supportsMeta,
+            .importReasons = {AssetImportReason::InitialImport},
         };
+        MaterializeDefaultSettings(item, contrib);
 
         if (!strategy)
         {
@@ -94,7 +170,7 @@ Result<AssetImportSnapshot> AssetImportOperation::Start(
             LOG_ERROR("editor.asset_import",
                       "No importer for .%s — %s",
                       ext.c_str(),
-                      sourceFile.filename().string().c_str());
+                      absoluteSource.filename().string().c_str());
         }
 
         snapshot_.items.push_back(std::move(item));
@@ -116,34 +192,49 @@ Result<AssetImportSnapshot> AssetImportOperation::AddFiles(
 
     for (const auto &sourceFile : sourceFiles)
     {
-        auto ext = LowerExtension(sourceFile);
+        const std::filesystem::path absoluteSource = NormalizeAbsolute(sourceFile);
+        auto ext = LowerExtension(absoluteSource);
         const auto *strategy = catalog_->FindByExtension(ext);
 
         std::string contribId;
         const auto *contrib = catalog_->FindContributionByExtension(ext);
+        std::string targetExt = ".horoasset";
+        bool supportsMeta = true;
         if (contrib)
+        {
             contribId = contrib->contributionId;
+            targetExt = contrib->targetExtension;
+            supportsMeta = contrib->supportsMetaSidecar;
+        }
 
         auto parsed = ProjectPath::Parse(
-            std::filesystem::relative(sourceFile, projectRoot).string());
+            std::filesystem::relative(absoluteSource, projectRoot).string());
         if (!parsed.HasValue())
         {
             // File is outside the project root — use just the filename
             // as the project-relative path. The importer reads from the
             // original absolute path; sourceFile is for display only.
-            parsed = ProjectPath::Parse(sourceFile.filename().string());
+            parsed = ProjectPath::Parse(absoluteSource.filename().string());
             if (!parsed.HasValue())
                 continue;  // Can't even parse the filename — skip
         }
 
         AssetImportItem item{
             .sourceFile = std::move(parsed).Value(),
-            .absoluteSourcePath = sourceFile,
+            .absoluteSourcePath = absoluteSource,
             .importerContributionId = contribId,
+            .importerVersion = contrib != nullptr ? contrib->version : std::string{},
+            .importerPackageId = contrib != nullptr ? contrib->packageId : std::string{},
+            .importerModuleId = contrib != nullptr ? contrib->moduleId : std::string{},
+            .importerModuleVersion = contrib != nullptr ? contrib->moduleVersion : std::string{},
             .sourceExtension = ext,
-            .displayName = sourceFile.filename().string(),
-            .destinationFolder = "Assets",
+            .displayName = absoluteSource.stem().string(),
+            .destinationFolder = "assets",
+            .targetExtension = targetExt,
+            .supportsMetaSidecar = supportsMeta,
+            .importReasons = {AssetImportReason::InitialImport},
         };
+        MaterializeDefaultSettings(item, contrib);
 
         if (!strategy)
         {
@@ -155,7 +246,7 @@ Result<AssetImportSnapshot> AssetImportOperation::AddFiles(
             LOG_ERROR("editor.asset_import",
                       "No importer for .%s — %s",
                       ext.c_str(),
-                      sourceFile.filename().string().c_str());
+                      absoluteSource.filename().string().c_str());
         }
 
         snapshot_.items.push_back(std::move(item));
@@ -178,8 +269,9 @@ Result<AssetImportSnapshot> AssetImportOperation::ImportSingleItem(
     if (item.result.has_value())
         return Result<AssetImportSnapshot>::Success(snapshot_);
 
-    const auto *strategy = catalog_->FindByExtension(item.sourceExtension);
-    if (!strategy)
+    const auto* contribution = catalog_->FindById(item.importerContributionId);
+    if (contribution == nullptr || contribution->strategy == nullptr ||
+        !contribution->HandlesExtension(item.sourceExtension))
     {
         item.diagnostics.push_back(ImportDiagnostic{
             .severity = ImportDiagnostic::Severity::Error,
@@ -194,36 +286,33 @@ Result<AssetImportSnapshot> AssetImportOperation::ImportSingleItem(
         return Result<AssetImportSnapshot>::Success(snapshot_);
     }
 
-    // Read source file bytes
-    std::vector<std::uint8_t> fileBytes;
+    auto source = ReadAssetImportSource(item.absoluteSourcePath);
+    if (source.HasError())
     {
-        std::ifstream file(item.absoluteSourcePath, std::ios::binary | std::ios::ate);
-        if (!file)
-        {
-            item.diagnostics.push_back(ImportDiagnostic{
-                .severity = ImportDiagnostic::Severity::Error,
-                .code = ImportErrors::NoImporter.code.Value(),
-                .message = "Cannot open source file: " + item.absoluteSourcePath.string(),
-            });
-            LOG_ERROR("editor.asset_import",
-                      "Cannot open source file: %s",
-                      item.absoluteSourcePath.string().c_str());
-            snapshot_.revision = ++revision_;
-            return Result<AssetImportSnapshot>::Success(snapshot_);
-        }
-        auto size = file.tellg();
-        file.seekg(0, std::ios::beg);
-        fileBytes.resize(static_cast<std::size_t>(size));
-        file.read(reinterpret_cast<char *>(fileBytes.data()), size);
+        item.diagnostics.push_back(ImportDiagnostic{
+            .severity = ImportDiagnostic::Severity::Error,
+            .code = source.ErrorValue().code.Value(),
+            .message = source.ErrorValue().message,
+        });
+        snapshot_.revision = ++revision_;
+        return Result<AssetImportSnapshot>::Success(snapshot_);
     }
+    std::vector<std::uint8_t> fileBytes = std::move(source).Value();
+    item.sourceHash = HashAssetImportSource(fileBytes);
+    item.sourceByteSize = fileBytes.size();
+    item.sourceLastWriteTime = SourceLastWriteTime(item.absoluteSourcePath);
+
+    auto resolved = ResolveImportSettings(*contribution, item.settings);
+    if (resolved.HasError())
+        return Result<AssetImportSnapshot>::Failure(resolved.ErrorValue());
 
     AssetImportInput input{
         .sourceBytes = fileBytes,
         .sourceExtension = item.sourceExtension,
-        .settings = {},
+        .settings = std::move(resolved).Value(),
     };
 
-    auto result = strategy->Import(input, cancellation);
+    auto result = contribution->strategy->Import(input, cancellation);
     if (result.HasValue())
     {
         item.resolvedType = result.Value().type;
@@ -243,6 +332,17 @@ Result<AssetImportSnapshot> AssetImportOperation::ImportSingleItem(
                   err.message.c_str());
     }
 
+    snapshot_.revision = ++revision_;
+    return Result<AssetImportSnapshot>::Success(snapshot_);
+}
+
+Result<AssetImportSnapshot> AssetImportOperation::SetItemSettings(
+    const std::size_t index, std::unordered_map<std::string, std::string> settings)
+{
+    if (index >= snapshot_.items.size())
+        return Result<AssetImportSnapshot>::Failure(Error{CookErrors::MalformedArtifact.code});
+
+    snapshot_.items[index].settings = std::move(settings);
     snapshot_.revision = ++revision_;
     return Result<AssetImportSnapshot>::Success(snapshot_);
 }

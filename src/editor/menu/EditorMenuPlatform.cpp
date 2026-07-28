@@ -15,5 +15,10 @@ namespace Horo::Editor {
     std::optional<EditorMenuInvocation> PollNativeEditorMenuAction() noexcept {
         return std::nullopt;
     }
+
+    /** @copydoc RevealInNativeFileManager */
+    bool RevealInNativeFileManager(const std::filesystem::path&) noexcept {
+        return false;
+    }
 } // namespace Horo::Editor
 #endif

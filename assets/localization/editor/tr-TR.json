@@ -385,6 +385,12 @@
     "settings.input.mappings_label": {
       "text": "Merkezi Giriş Eşleme"
     },
+    "settings.input.shortcut.click_to_record": {
+      "text": "Kaydetmek için tıkla"
+    },
+    "settings.input.shortcut.press_keys": {
+      "text": "Tuşlara basın..."
+    },
     "settings.language": {
       "text": "Dil"
     },
@@ -422,7 +428,7 @@
       "text": "Ağ"
     },
     "settings.nav.plugins": {
-      "text": "Eklentiler"
+      "text": "Uzantılar"
     },
     "settings.nav.rendering": {
       "text": "Render"
@@ -482,7 +488,7 @@
       "text": "Platform"
     },
     "settings.plugins.description": {
-      "text": "Kurulu eklentiler ayarları, izinleri, tanılamayı ve manifest metadata’sını sunar. Proje eklentileri yalnızca güvenilirse editör eklentilerini geçersiz kılar."
+      "text": "Uzantılar sürümlenmiş paketlerdir. Her paket asset importer ve önizleme sağlayıcısı gibi native modüller sunabilir."
     },
     "settings.plugins.feedback.install_not_implemented": {
       "text": "Eklenti yükleme penceresi henüz uygulanmadı."
@@ -515,7 +521,7 @@
       "text": "Etkinleştirmede yeniden başlat"
     },
     "settings.plugins.runtime": {
-      "text": "Çalışma Zamanı & Keşif"
+      "text": "Çalışma Zamanı"
     },
     "settings.plugins.scope.editor": {
       "text": "Editör geneli"
@@ -546,6 +552,120 @@
     },
     "settings.plugins.status.vendor": {
       "text": "Doğrulanmış Sağlayıcı"
+    },
+    "settings.extensions.active_count": {
+      "text": "Çalışma zamanında aktif"
+    },
+    "settings.extensions.author": {
+      "text": "Geliştirici"
+    },
+    "settings.extensions.builtin_manifest": {
+      "text": "Bu uzantı editöre derlenmiştir ve harici bir manifest yolu yoktur."
+    },
+    "settings.extensions.contributions": {
+      "text": "Katkılar"
+    },
+    "settings.extensions.details": {
+      "text": "UZANTI DETAYLARI"
+    },
+    "settings.extensions.empty": {
+      "text": "Bu filtreyle eşleşen uzantı yok."
+    },
+    "settings.extensions.feedback.installed": {
+      "text": "Uzantı devre dışı durumda kuruldu. Native modülleri yüklemek için etkinleştirip editörü yeniden başlatın."
+    },
+    "settings.extensions.feedback.restart": {
+      "text": "Etkinleştirme tercihi kaydedildi. Çalışma zamanı değişikliğini uygulamak için editörü yeniden başlatın."
+    },
+    "settings.extensions.filter": {
+      "text": "Uzantıları filtrele..."
+    },
+    "settings.extensions.install_root": {
+      "text": "Absolute kurulum kökü"
+    },
+    "settings.extensions.installed_count": {
+      "text": "Kurulu paketler"
+    },
+    "settings.extensions.installed_heading": {
+      "text": "KURULU UZANTILAR"
+    },
+    "settings.extensions.lifecycle": {
+      "text": "ETKİNLEŞTİRME YAŞAM DÖNGÜSÜ"
+    },
+    "settings.extensions.marketplace": {
+      "text": "Marketplace"
+    },
+    "settings.extensions.marketplace.empty": {
+      "text": "Bu aramayla eşleşen uyumlu uzantı bulunamadı."
+    },
+    "settings.extensions.marketplace.installing": {
+      "text": "Kuruluyor..."
+    },
+    "settings.extensions.marketplace.installed": {
+      "text": "Kurulu"
+    },
+    "settings.extensions.marketplace.search": {
+      "text": "Marketplace'te ara..."
+    },
+    "settings.extensions.marketplace.search.action": {
+      "text": "Ara"
+    },
+    "settings.extensions.marketplace.searching": {
+      "text": "Uzantı registry'sinde aranıyor..."
+    },
+    "settings.extensions.marketplace.unavailable": {
+      "text": "Uzantı marketplace servisi bu editör kompozisyonunda mevcut değil."
+    },
+    "settings.extensions.manifest": {
+      "text": "Absolute manifest"
+    },
+    "settings.extensions.modules": {
+      "text": "Modüller"
+    },
+    "settings.extensions.none": {
+      "text": "Tanımlanmamış"
+    },
+    "settings.extensions.origin": {
+      "text": "Kaynak"
+    },
+    "settings.extensions.origin.builtin": {
+      "text": "Yerleşik"
+    },
+    "settings.extensions.origin.user": {
+      "text": "Kullanıcı kurulumu"
+    },
+    "settings.extensions.package_id": {
+      "text": "Paket ID"
+    },
+    "settings.extensions.pending_count": {
+      "text": "Yeniden başlatma bekliyor"
+    },
+    "settings.extensions.restart_required": {
+      "text": "Yeniden başlatma gerekli"
+    },
+    "settings.extensions.select_folder": {
+      "text": "Bir uzantı paket klasörü seçin"
+    },
+    "settings.extensions.select_prompt": {
+      "text": "Paket, modül, katkı ve manifest bilgilerini incelemek için listeden bir uzantı seçin."
+    },
+    "settings.extensions.status.active": {
+      "text": "Aktif"
+    },
+    "settings.extensions.status.inactive": {
+      "text": "Pasif"
+    },
+    "settings.extensions.tab.manifest": {
+      "text": "Manifest"
+    },
+    "settings.extensions.tab.overview": {
+      "text": "Genel Bakış"
+    },
+    "settings.extensions.total": {
+      "text": "toplam"
+    },
+    "settings.extensions.unavailable": {
+      "text": "Uzantı envanteri servisi bu editör kompozisyonunda mevcut değil."
     },
     "settings.plugins.steam.desc": {
       "text": "Steam başarımları, arayüzü, ağ soketleri ve derleme meta verileri."
@@ -740,18 +860,19 @@
     "workspace.global_dock.tab.audio": {"text": "Ses"},
     "workspace.global_dock.tab.network": {"text": "Net"},
     "workspace.global_dock.tab.localization": {"text": "L10n"},
-    "workspace.global_dock.preview.console": {"text": "Konsol önizlemesi"},
     "workspace.global_dock.preview.mcp": {"text": "MCP önizlemesi"},
     "workspace.global_dock.preview.performance": {"text": "Performans önizlemesi"},
     "workspace.global_dock.preview.physics": {"text": "Fizik hata ayıklama önizlemesi"},
     "workspace.global_dock.preview.audio": {"text": "Ses mikseri önizlemesi"},
     "workspace.global_dock.preview.network": {"text": "Ağ hata ayıklama önizlemesi"},
     "workspace.global_dock.preview.localization": {"text": "Yerelleştirme önizlemesi"},
-    "workspace.global_dock.console.session_started": {"text": "Editör oturumu başladı. Revizyon r112."},
-    "workspace.global_dock.console.texture_converted": {"text": "T Wall Old: doku biçimi kullanımdan kaldırıldı, otomatik dönüştürüldü."},
-    "workspace.global_dock.console.scene_loaded": {"text": "Sahne yüklendi: Room (11 nesne, 4 bileşen)."},
-    "workspace.global_dock.console.missing_animation": {"text": "PF Enemy: animasyon durum makinesi referansı eksik."},
-    "workspace.global_dock.console.selection": {"text": "floor 000 seçildi."},
+    "workspace.global_dock.console.filter.error": {"text": "Hata"},
+    "workspace.global_dock.console.filter.warn": {"text": "Uyarı"},
+    "workspace.global_dock.console.filter.info": {"text": "Bilgi"},
+    "workspace.global_dock.console.filter.debug": {"text": "Debug"},
+    "workspace.global_dock.console.filter.trace": {"text": "Trace"},
+    "workspace.global_dock.console.search": {"text": "Ara"},
+    "workspace.global_dock.console.empty": {"text": "Etkin filtrelerle eşleşen log yok."},
     "workspace.global_dock.mcp.bridge": {"text": "horo.mcp.bridge@0.4.0 — etkin"},
     "workspace.global_dock.mcp.tools": {"text": "scene.query, scene.select, scene.move, asset.list, build.trigger"},
     "workspace.global_dock.mcp.awaiting": {"text": "Araç çağrısı bekleniyor…"},
@@ -771,6 +892,82 @@
     "workspace.global_dock.localization.strings": {"text": "1.247 çevrildi · 0 eksik · 18 belirsiz"},
     "workspace.global_dock.localization.fonts": {"text": "Noto Sans · RTL: ✓ · CJK: ✓"},
     "workspace.content_browser.assets_root": {"text": "varlıklar/"},
+    "workspace.content_browser.empty": {"text": "Bu klasör boş."},
+    "workspace.content_browser.loading": {"text": "Varlıklar yükleniyor..."},
+    "workspace.content_browser.unavailable": {"text": "Bu varlık klasörü okunamadı."},
+    "workspace.content_browser.no_results": {"text": "Geçerli filtrelerle eşleşen varlık yok."},
+    "workspace.content_browser.search": {"text": "Geçerli klasörde ara..."},
+    "workspace.content_browser.filter.all_types": {"text": "Tüm türler"},
+    "workspace.content_browser.sort.name": {"text": "Ad"},
+    "workspace.content_browser.sort.type": {"text": "Tür"},
+    "workspace.content_browser.action.rename": {"text": "Yeniden Adlandır"},
+    "workspace.content_browser.action.delete": {"text": "Sil"},
+    "workspace.content_browser.action.asset_info": {"text": "Varlık Bilgisi"},
+    "workspace.content_browser.action.duplicate": {"text": "Çoğalt"},
+    "workspace.content_browser.action.copy": {"text": "Kopyala"},
+    "workspace.content_browser.action.cut": {"text": "Kes / Taşı"},
+    "workspace.content_browser.action.paste_here": {"text": "Buraya Yapıştır"},
+    "workspace.content_browser.action.move_here": {"text": "Buraya Taşı"},
+    "workspace.content_browser.action.create_folder": {"text": "Klasör Oluştur"},
+    "workspace.content_browser.action.import_here": {"text": "Buraya İçe Aktar"},
+    "workspace.content_browser.action.refresh": {"text": "Yenile"},
+    "workspace.content_browser.action.reimport": {"text": "Yeniden İçe Aktar"},
+    "workspace.content_browser.action.reveal": {"text": "Dosya Yöneticisinde Göster"},
+    "workspace.content_browser.action.copy_path": {"text": "Mutlak Yolu Kopyala"},
+    "workspace.content_browser.action.cancel": {"text": "İptal"},
+    "workspace.content_browser.action.close": {"text": "Kapat"},
+    "workspace.content_browser.create_folder.title": {"text": "Klasör Oluştur"},
+    "workspace.content_browser.create_folder.name": {"text": "Klasör adı"},
+    "workspace.content_browser.info.title": {"text": "Varlık Bilgisi"},
+    "workspace.content_browser.info.directory": {"text": "Klasör"},
+    "workspace.content_browser.info.asset": {"text": "Varlık"},
+    "workspace.content_browser.info.path": {"text": "Mutlak yol"},
+    "workspace.content_browser.info.type": {"text": "Varlık türü"},
+    "workspace.content_browser.info.asset_id": {"text": "Varlık kimliği"},
+    "workspace.content_browser.info.registration": {"text": "Kayıt"},
+    "workspace.content_browser.info.registered": {"text": "Kayıtlı"},
+    "workspace.content_browser.info.unregistered": {"text": "Kayıtsız"},
+    "workspace.content_browser.info.size": {"text": "Payload boyutu"},
+    "workspace.content_browser.info.importer": {"text": "İçe aktarıcı"},
+    "workspace.content_browser.info.module": {"text": "Modül"},
+    "workspace.content_browser.info.source": {"text": "İçe aktarma kaynağı"},
+    "workspace.content_browser.info.reimport_status": {"text": "Yeniden içe aktarma"},
+    "workspace.content_browser.info.reimport_manual": {"text": "Kullanılabilir (manuel)"},
+    "workspace.content_browser.info.reimport_source_changed": {"text": "Kaynak değişti"},
+    "workspace.content_browser.info.reimport_source_stale": {"text": "Kaynak değişmiş olabilir"},
+    "workspace.content_browser.info.reimport_importer_changed": {"text": "İçe aktarıcı değişti"},
+    "workspace.content_browser.info.reimport_module_changed": {"text": "Modül değişti"},
+    "workspace.content_browser.info.last_import_reason": {"text": "Son içe aktarma nedeni"},
+    "workspace.content_browser.info.import_reason_initial": {"text": "İlk içe aktarma"},
+    "workspace.content_browser.info.import_reason_manual": {"text": "Manuel yeniden içe aktarma"},
+    "workspace.content_browser.info.metadata": {"text": "Metadata"},
+    "workspace.content_browser.info.none": {"text": "Mevcut değil"},
+    "workspace.content_browser.rename.title": {"text": "Varlık Girdisini Yeniden Adlandır"},
+    "workspace.content_browser.rename.name": {"text": "AD"},
+    "workspace.content_browser.delete.title": {"text": "Varlık Girdisini Sil"},
+    "workspace.content_browser.delete.message": {"text": "Bu girdi Assets klasöründen kaldırılacak ve projenin geri alınabilir yerel çöp klasörüne taşınacak."},
+    "workspace.content_browser.delete.dependencies": {"text": "Doğrudan bağımlılıklar"},
+    "workspace.content_browser.delete.dependency_warning": {"text": "Bu varlığın kayıtlı bağımlılıkları var. Silme işlemi referans verilen varlıkları silmez."},
+    "workspace.content_browser.operation.unavailable": {"text": "Bu editör bileşiminde varlık işlemleri kullanılamıyor."},
+    "workspace.content_browser.operation.invalid_name": {"text": "Geçerli bir dosya veya klasör adı seçin."},
+    "workspace.content_browser.operation.invalid_target": {"text": "Seçilen varlık girdisi artık mevcut değil."},
+    "workspace.content_browser.operation.name_exists": {"text": "Bu ada sahip bir girdi zaten var."},
+    "workspace.content_browser.operation.busy": {"text": "Başka bir proje yazma işlemi etkin. Kısa süre sonra tekrar deneyin."},
+    "workspace.content_browser.operation.rename_failed": {"text": "Varlık girdisi yeniden adlandırılamadı."},
+    "workspace.content_browser.operation.delete_failed": {"text": "Varlık girdisi proje çöpüne taşınamadı."},
+    "workspace.content_browser.operation.registry_failed": {"text": "Varlık değişti ancak Varlık Kaydı yenilenemedi."},
+    "workspace.content_browser.operation.clipboard_empty": {"text": "Yapıştırılacak bir varlık yok."},
+    "workspace.content_browser.operation.asset_required": {"text": "Bu işlem kayıtlı bir varlık gerektirir."},
+    "workspace.content_browser.operation.copy_failed": {"text": "Varlık kopyalanamadı."},
+    "workspace.content_browser.operation.move_failed": {"text": "Varlık taşınamadı."},
+    "workspace.content_browser.operation.create_folder_failed": {"text": "Klasör oluşturulamadı."},
+    "workspace.content_browser.operation.same_folder": {"text": "Varlık zaten bu klasörde."},
+    "workspace.content_browser.operation.companion_invalid": {"text": "Varlık metadata veya companion dosya seti eksik ya da güvenli değil."},
+    "workspace.content_browser.operation.rollback_failed": {"text": "İşlem başarısız oldu ve tamamen geri alınamadı. Devam etmeden önce proje dosyalarını inceleyin."},
+    "workspace.content_browser.operation.reimport_unavailable": {"text": "Bu varlık yeniden içe aktarma kaynağını kaydetmiyor."},
+    "workspace.content_browser.operation.reimport_importer_missing": {"text": "Bu varlıkta kayıtlı içe aktarıcı modülü kullanılamıyor."},
+    "workspace.content_browser.operation.reimport_failed": {"text": "Varlık yeniden içe aktarılamadı; önceki payload korundu."},
+    "workspace.content_browser.operation.reveal_unavailable": {"text": "Dosya Yöneticisi entegrasyonu bu platformda kullanılamıyor."},
     "workspace.content_browser.scenes": {"text": "sahneler"},
     "workspace.content_browser.models": {"text": "modeller"},
     "workspace.content_browser.textures": {"text": "dokular"},

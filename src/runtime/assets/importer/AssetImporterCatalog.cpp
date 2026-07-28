@@ -7,6 +7,7 @@
 #include "../AssetErrors.h"
 
 #include <algorithm>
+#include <cctype>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -14,118 +15,222 @@
 
 namespace Horo::Assets
 {
-
-// ---------------------------------------------------------------------------
-// AssetImporterContribution
-// ---------------------------------------------------------------------------
-
-bool AssetImporterContribution::HandlesExtension(std::string_view extension) const noexcept
-{
-    return std::find(fileExtensions.begin(), fileExtensions.end(), extension) != fileExtensions.end();
-}
-
-// ---------------------------------------------------------------------------
-// AssetImporterCatalogSnapshot
-// ---------------------------------------------------------------------------
-
-const IAssetImporter *AssetImporterCatalogSnapshot::FindByExtension(std::string_view extension) const noexcept
-{
-    for (const auto &entry : entries_)
+    namespace
     {
-        if (entry.HandlesExtension(extension))
-            return entry.strategy.get();
-    }
-    return nullptr;
-}
+        [[nodiscard]] bool IsCanonicalSemanticVersion(const std::string_view value)
+        {
+            if (value.empty() || value.size() > 64 || value.find('+') != std::string_view::npos)
+                return false;
+            const std::size_t dash = value.find('-');
+            const std::string_view core = value.substr(0, dash);
+            std::size_t componentStart = 0;
+            for (int component = 0; component < 3; ++component)
+            {
+                const std::size_t end = component == 2 ? core.size() : core.find('.', componentStart);
+                if (end == std::string_view::npos || end == componentStart)
+                    return false;
+                const std::string_view digits = core.substr(componentStart, end - componentStart);
+                if ((digits.size() > 1 && digits.front() == '0') ||
+                    !std::ranges::all_of(digits, [](const unsigned char character)
+                    {
+                        return std::isdigit(character) != 0;
+                    }))
+                {
+                    return false;
+                }
+                componentStart = end + 1;
+            }
+            if (componentStart != core.size() + 1)
+                return false;
+            if (dash == std::string_view::npos)
+                return true;
+            const std::string_view prerelease = value.substr(dash + 1);
+            if (prerelease.empty())
+                return false;
+            std::size_t identifierStart = 0;
+            while (identifierStart <= prerelease.size())
+            {
+                const std::size_t end = prerelease.find('.', identifierStart);
+                const std::string_view identifier = prerelease.substr(
+                    identifierStart, end == std::string_view::npos
+                                         ? prerelease.size() - identifierStart
+                                         : end - identifierStart);
+                if (identifier.empty() ||
+                    !std::ranges::all_of(identifier, [](const unsigned char character)
+                    {
+                        return std::isalnum(character) != 0 || character == '-';
+                    }))
+                {
+                    return false;
+                }
+                const bool numeric = std::ranges::all_of(
+                    identifier, [](const unsigned char character)
+                    {
+                        return std::isdigit(character) != 0;
+                    });
+                if (numeric && identifier.size() > 1 && identifier.front() == '0')
+                    return false;
+                if (end == std::string_view::npos)
+                    return true;
+                identifierStart = end + 1;
+            }
+            return false;
+        }
+    } // namespace
 
-const AssetImporterContribution *AssetImporterCatalogSnapshot::FindById(std::string_view contributionId) const noexcept
-{
-    for (const auto &entry : entries_)
+    // ---------------------------------------------------------------------------
+    // AssetImporterContribution
+    // ---------------------------------------------------------------------------
+
+    bool AssetImporterContribution::HandlesExtension(std::string_view extension) const noexcept
     {
-        if (entry.contributionId == contributionId)
-            return &entry;
+        return std::find(fileExtensions.begin(), fileExtensions.end(), extension) != fileExtensions.end();
     }
-    return nullptr;
-}
 
-const AssetImporterContribution *AssetImporterCatalogSnapshot::FindContributionByExtension(
-    std::string_view extension) const noexcept
-{
-    for (const auto &entry : entries_)
+    // ---------------------------------------------------------------------------
+    // AssetImporterCatalogSnapshot
+    // ---------------------------------------------------------------------------
+
+    const IAssetImporter* AssetImporterCatalogSnapshot::FindByExtension(std::string_view extension) const noexcept
     {
-        if (entry.HandlesExtension(extension))
-            return &entry;
+        for (const auto& entry : entries_)
+        {
+            if (entry.HandlesExtension(extension))
+                return entry.strategy.get();
+        }
+        return nullptr;
     }
-    return nullptr;
-}
 
-// ---------------------------------------------------------------------------
-// AssetImporterCatalog
-// ---------------------------------------------------------------------------
-
-struct AssetImporterCatalog::State
-{
-    std::vector<AssetImporterContribution> entries;
-    std::shared_ptr<const AssetImporterCatalogSnapshot> published;
-    bool sealed{false};
-};
-
-AssetImporterCatalog::AssetImporterCatalog() : state_(std::make_unique<State>()) {}
-AssetImporterCatalog::~AssetImporterCatalog() = default;
-
-Result<void> AssetImporterCatalog::Register(AssetImporterContribution entry)
-{
-    if (state_->sealed)
-        return Result<void>::Failure(Error{CookErrors::CatalogSealed.code});
-
-    // Check for duplicate contribution ID
-    for (const auto &existing : state_->entries)
+    const AssetImporterContribution* AssetImporterCatalogSnapshot::FindById(
+        std::string_view contributionId) const noexcept
     {
-        if (existing.contributionId == entry.contributionId)
-            return Result<void>::Failure(Error{CookErrors::DuplicateCooker.code});
+        for (const auto& entry : entries_)
+        {
+            if (entry.contributionId == contributionId)
+                return &entry;
+        }
+        return nullptr;
     }
 
-    state_->entries.push_back(std::move(entry));
-    return Result<void>::Success();
-}
+    const AssetImporterContribution* AssetImporterCatalogSnapshot::FindContributionByExtension(
+        std::string_view extension) const noexcept
+    {
+        for (const auto& entry : entries_)
+        {
+            if (entry.HandlesExtension(extension))
+                return &entry;
+        }
+        return nullptr;
+    }
 
-Result<std::shared_ptr<const AssetImporterCatalogSnapshot>> AssetImporterCatalog::Publish()
-{
-    if (state_->sealed)
-        return Result<std::shared_ptr<const AssetImporterCatalogSnapshot>>::Failure(
-            Error{CookErrors::CatalogSealed.code});
+    /** @copydoc AssetImporterCatalogSnapshot::FindPreviewContribution */
+    const AssetImporterContribution* AssetImporterCatalogSnapshot::FindPreviewContribution(
+        const AssetTypeId& assetType) const noexcept
+    {
+        for (const auto& entry : entries_)
+        {
+            if (std::find(entry.assetTypes.begin(), entry.assetTypes.end(), assetType) != entry.assetTypes.end())
+                return &entry;
+        }
+        return nullptr;
+    }
 
-    // Sort entries by first extension, then contribution ID
-    std::sort(state_->entries.begin(), state_->entries.end(),
-              [](const AssetImporterContribution &a, const AssetImporterContribution &b) {
-                  const auto aExt = a.fileExtensions.empty() ? "" : a.fileExtensions.front();
-                  const auto bExt = b.fileExtensions.empty() ? "" : b.fileExtensions.front();
-                  if (aExt != bExt)
-                      return aExt < bExt;
-                  return a.contributionId < b.contributionId;
-              });
+    // ---------------------------------------------------------------------------
+    // AssetImporterCatalog
+    // ---------------------------------------------------------------------------
 
-    auto snapshot = std::make_shared<AssetImporterCatalogSnapshot>(state_->entries);
-    state_->published = snapshot;
-    state_->sealed = true;
-    return Result<std::shared_ptr<const AssetImporterCatalogSnapshot>>::Success(snapshot);
-}
+    struct AssetImporterCatalog::State
+    {
+        std::vector<AssetImporterContribution> entries;
+        std::shared_ptr<const AssetImporterCatalogSnapshot> published;
+        bool sealed{false};
+    };
 
-std::shared_ptr<const AssetImporterCatalogSnapshot> AssetImporterCatalog::Snapshot() const noexcept
-{
-    return state_->published;
-}
+    AssetImporterCatalog::AssetImporterCatalog() : state_(std::make_unique<State>())
+    {
+    }
 
-bool AssetImporterCatalog::IsSealed() const noexcept
-{
-    return state_->sealed;
-}
+    AssetImporterCatalog::~AssetImporterCatalog() = default;
 
-void AssetImporterCatalog::Reset()
-{
-    if (state_->sealed)
-        return;
-    state_->entries.clear();
-}
+    Result<void> AssetImporterCatalog::Register(AssetImporterContribution entry)
+    {
+        std::vector<AssetImporterContribution> batch;
+        batch.push_back(std::move(entry));
+        return RegisterBatch(std::move(batch));
+    }
 
+    /** @copydoc AssetImporterCatalog::RegisterBatch */
+    Result<void> AssetImporterCatalog::RegisterBatch(std::vector<AssetImporterContribution> entries)
+    {
+        if (state_->sealed)
+            return Result<void>::Failure(Error{CookErrors::CatalogSealed.code});
+
+        std::vector<std::string_view> incomingIds;
+        incomingIds.reserve(entries.size());
+        for (const auto& entry : entries)
+        {
+            if (entry.contributionId.empty() || entry.packageId.empty() || entry.moduleId.empty() ||
+                !IsCanonicalSemanticVersion(entry.moduleVersion) ||
+                !IsCanonicalSemanticVersion(entry.version) || entry.strategy == nullptr)
+            {
+                return Result<void>::Failure(MakeError(
+                    CookErrors::MalformedArtifact,
+                    "Importer contributions require stable package/module identities and canonical module/importer versions."));
+            }
+
+            if (std::ranges::any_of(state_->entries, [&entry](const AssetImporterContribution& existing)
+                {
+                    return existing.contributionId == entry.contributionId;
+                }) ||
+                std::ranges::find(incomingIds, entry.contributionId) != incomingIds.end())
+            {
+                return Result<void>::Failure(Error{CookErrors::DuplicateCooker.code});
+            }
+            incomingIds.push_back(entry.contributionId);
+        }
+
+        state_->entries.reserve(state_->entries.size() + entries.size());
+        std::ranges::move(entries, std::back_inserter(state_->entries));
+        return Result<void>::Success();
+    }
+
+    Result<std::shared_ptr<const AssetImporterCatalogSnapshot>> AssetImporterCatalog::Publish()
+    {
+        if (state_->sealed)
+            return Result<std::shared_ptr<const AssetImporterCatalogSnapshot>>::Failure(
+                Error{CookErrors::CatalogSealed.code});
+
+        // Sort entries by first extension, then contribution ID
+        std::sort(state_->entries.begin(), state_->entries.end(),
+                  [](const AssetImporterContribution& a, const AssetImporterContribution& b)
+                  {
+                      const auto aExt = a.fileExtensions.empty() ? "" : a.fileExtensions.front();
+                      const auto bExt = b.fileExtensions.empty() ? "" : b.fileExtensions.front();
+                      if (aExt != bExt)
+                          return aExt < bExt;
+                      return a.contributionId < b.contributionId;
+                  });
+
+        auto snapshot = std::make_shared<AssetImporterCatalogSnapshot>(state_->entries);
+        state_->published = snapshot;
+        state_->sealed = true;
+        return Result<std::shared_ptr<const AssetImporterCatalogSnapshot>>::Success(snapshot);
+    }
+
+    std::shared_ptr<const AssetImporterCatalogSnapshot> AssetImporterCatalog::Snapshot() const noexcept
+    {
+        return state_->published;
+    }
+
+    bool AssetImporterCatalog::IsSealed() const noexcept
+    {
+        return state_->sealed;
+    }
+
+    void AssetImporterCatalog::Reset()
+    {
+        if (state_->sealed)
+            return;
+        state_->entries.clear();
+    }
 } // namespace Horo::Assets

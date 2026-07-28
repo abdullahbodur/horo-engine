@@ -17,6 +17,7 @@ enum class ProjectMutationOwner : std::uint8_t
     Save,
     Autosave,
     Package,
+    Asset,
     Cli,
     Mcp
 };

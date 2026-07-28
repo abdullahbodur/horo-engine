@@ -10,7 +10,6 @@
 #include "Horo/Foundation/String.h"
 
 #include <chrono>
-#include <cstring>
 #include <exception>
 #include <format>
 #include <fstream>

@@ -9,6 +9,8 @@
 #include "Horo/Editor/RecentProjectInspectionService.h"
 #include "Horo/Editor/ScreenRegistry.h"
 #include "Horo/Editor/SettingsModal.h"
+#include "Horo/Extensions/ExtensionInventory.h"
+#include "Horo/Extensions/ExtensionMarketplace.h"
 #include "Horo/Editor/WelcomeController.h"
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Runtime/Input.h"
@@ -102,7 +104,11 @@ namespace Horo::Editor
                 case WelcomeViewCommand::OpenSettings:
                     {
                         static_cast<void>(modalHost_.OpenRoot(
-                            std::make_unique<SettingsModal>(context_, settings_, logoTexture_)));
+                            std::make_unique<SettingsModal>(
+                                context_, settings_, logoTexture_,
+                                host_.Services().TryGet<Extensions::ExtensionInventory>(),
+                                host_.Services().TryGet<
+                                    Extensions::ExtensionMarketplaceService>())));
                         break;
                     }
                 case WelcomeViewCommand::OpenRecentProject:

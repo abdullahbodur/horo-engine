@@ -7,17 +7,162 @@
 #include "Horo/Assets/AssetImporter.h"
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Foundation/ErrorCode.h"
+#include "Horo/Foundation/Sha256.h"
 #include "runtime/assets/importer/ProjectAssetImportCommitter.h"
 
+#include <algorithm>
+#include <array>
 #include <filesystem>
 #include <memory>
+#include <random>
 #include <string>
 
 namespace Horo::Editor
 {
+    namespace
+    {
+        [[nodiscard]] std::string PresetScopeKey(const Assets::AssetImportItem& item)
+        {
+            return item.importerContributionId + '\n' + item.sourceExtension;
+        }
+
+        [[nodiscard]] bool IsValidAssetName(const std::string_view name)
+        {
+            if (name.empty() || name == "." || name == "..")
+                return false;
+            const std::filesystem::path path{name};
+            return path.filename() == path && !path.has_parent_path();
+        }
+
+        [[nodiscard]] Assets::AssetId MakeAssetId(const Assets::AssetImportItem& item)
+        {
+            std::array<std::uint8_t, 16> bytes{};
+            if (item.assetIdStrategy == 1)
+            {
+                const std::string sourcePath = item.absoluteSourcePath.generic_string();
+                const Sha256Digest digest = ComputeSha256(std::span<const std::byte>{
+                    reinterpret_cast<const std::byte*>(sourcePath.data()), sourcePath.size()
+                });
+                std::ranges::copy_n(digest.bytes.begin(), bytes.size(), bytes.begin());
+            }
+            else
+            {
+                std::random_device random;
+                for (std::uint8_t& byte : bytes)
+                    byte = static_cast<std::uint8_t>(random());
+            }
+            bytes[6] = static_cast<std::uint8_t>((bytes[6] & 0x0fU) | 0x40U);
+            bytes[8] = static_cast<std::uint8_t>((bytes[8] & 0x3fU) | 0x80U);
+            return Assets::AssetId::FromBytes(bytes);
+        }
+
+        [[nodiscard]] bool EqualsIgnoringAsciiCase(
+            const std::string_view left, const std::string_view right)
+        {
+            return left.size() == right.size() &&
+                std::ranges::equal(left, right, [](const unsigned char lhs, const unsigned char rhs)
+                {
+                    return std::tolower(lhs) == std::tolower(rhs);
+                });
+        }
+
+        [[nodiscard]] std::string ResolveDestinationFolder(
+            const Assets::AssetImportItem& item,
+            const Assets::AssetImporterCatalogSnapshot* catalog)
+        {
+            std::filesystem::path destination =
+                item.destinationFolder.empty()
+                    ? std::filesystem::path{"assets"}
+                    : std::filesystem::path{item.destinationFolder};
+            destination = destination.lexically_normal();
+            if (item.subfolderByType != 0 || catalog == nullptr)
+                return destination.generic_string();
+
+            const auto* contribution = catalog->FindById(item.importerContributionId);
+            if (contribution == nullptr || contribution->subfolderCategory.empty())
+                return destination.generic_string();
+
+            const std::string selectedFolderName = destination.filename().string();
+            if (!EqualsIgnoringAsciiCase(selectedFolderName, contribution->subfolderCategory))
+                destination /= contribution->subfolderCategory;
+            return destination.generic_string();
+        }
+
+        class FixedAssetIdGenerator final : public Assets::IAssetIdGenerator
+        {
+        public:
+            explicit FixedAssetIdGenerator(const Assets::AssetId id) noexcept : id_(id)
+            {
+            }
+
+            [[nodiscard]] Assets::AssetId Generate() override
+            {
+                return id_;
+            }
+
+        private:
+            Assets::AssetId id_;
+        };
+
+        [[nodiscard]] AssetImportModal::ImportPreset CapturePresetValues(
+            const Assets::AssetImportItem& item,
+            const Assets::AssetImporterCatalogSnapshot& catalog,
+            std::string name)
+        {
+            AssetImportModal::ImportPreset preset{
+                .name = std::move(name),
+                .destinationFolder = item.destinationFolder,
+                .subfolderByType = item.subfolderByType,
+                .assetIdStrategy = item.assetIdStrategy,
+                .createMetaSidecar = item.createMetaSidecar,
+                .overwriteWithoutPrompt = item.overwriteWithoutPrompt,
+            };
+
+            const auto* contribution = catalog.FindById(item.importerContributionId);
+            if (!contribution)
+                return preset;
+
+            for (const auto& descriptor : contribution->settings)
+            {
+                if (!descriptor.includeInPresets)
+                    continue;
+                const std::string key = "settings." + descriptor.id;
+                if (const auto value = item.settings.find(key); value != item.settings.end())
+                    preset.settings.emplace(key, value->second);
+            }
+            return preset;
+        }
+
+        void ApplyPresetValues(
+            Assets::AssetImportItem& item,
+            const AssetImportModal::ImportPreset& preset,
+            const Assets::AssetImporterCatalogSnapshot& catalog)
+        {
+            if (const auto* contribution = catalog.FindById(item.importerContributionId))
+            {
+                for (const auto& descriptor : contribution->settings)
+                {
+                    if (!descriptor.includeInPresets)
+                        continue;
+                    const std::string key = "settings." + descriptor.id;
+                    item.settings.erase(key);
+                    if (const auto value = preset.settings.find(key); value != preset.settings.end())
+                        item.settings.emplace(key, value->second);
+                }
+            }
+
+            item.destinationFolder = preset.destinationFolder;
+            item.subfolderByType = preset.subfolderByType;
+            item.assetIdStrategy = preset.assetIdStrategy;
+            item.createMetaSidecar = preset.createMetaSidecar;
+            item.overwriteWithoutPrompt = preset.overwriteWithoutPrompt;
+        }
+    } // namespace
+
     AssetImportModal::AssetImportModal(const Theme::Fonts& fonts, JobSystem& jobs,
-                                       std::shared_ptr<const Assets::AssetImporterCatalogSnapshot> catalog) noexcept
-        : m_fonts(fonts), m_jobs(jobs), m_catalog(std::move(catalog))
+                                       std::shared_ptr<const Assets::AssetImporterCatalogSnapshot> catalog,
+                                       Assets::AssetRegistry* assetRegistry) noexcept
+        : m_fonts(fonts), m_jobs(jobs), m_catalog(std::move(catalog)), m_assetRegistry(assetRegistry)
     {
     }
 
@@ -46,6 +191,9 @@ namespace Horo::Editor
         m_events = &context.events;
         m_prepared = false;
         m_queuedFiles.clear();
+        m_activePresetNames.clear();
+        m_presetsByImporterAndExtension.clear();
+        m_defaultPresetValues.clear();
         m_snapshot = Assets::AssetImportSnapshot{};
 
         m_logCtx = std::make_unique<Log::LogContext>(
@@ -95,15 +243,122 @@ namespace Horo::Editor
         return *m_catalog;
     }
 
-    void AssetImportModal::SetProjectRoot(const std::filesystem::path &root) noexcept
+    void AssetImportModal::SetProjectRoot(const std::filesystem::path& root) noexcept
     {
         m_projectRoot = root;
+    }
+
+    /** @copydoc AssetImportModal::SetDefaultDestination */
+    void AssetImportModal::SetDefaultDestination(
+        const std::filesystem::path& absoluteDirectory) noexcept
+    {
+        if (m_projectRoot.empty() || !absoluteDirectory.is_absolute())
+            return;
+        std::error_code error;
+        const std::filesystem::path root =
+            std::filesystem::weakly_canonical(m_projectRoot, error);
+        if (error)
+            return;
+        const std::filesystem::path destination =
+            std::filesystem::weakly_canonical(absoluteDirectory, error);
+        if (error)
+            return;
+        const std::filesystem::path relative = destination.lexically_relative(root);
+        if (relative.empty() || relative.is_absolute())
+            return;
+        for (const auto& segment : relative)
+        {
+            if (segment == "..")
+                return;
+        }
+        const std::string candidate = relative.generic_string();
+        if (ProjectPath::Parse(candidate).HasValue() &&
+            (candidate == "assets" || candidate.starts_with("assets/")))
+        {
+            m_defaultDestinationFolder = candidate;
+        }
     }
 
     void AssetImportModal::SelectItem(std::size_t index)
     {
         if (index < m_snapshot.items.size())
             m_snapshot.selectedItemIndex = index;
+    }
+
+    std::vector<std::string> AssetImportModal::PresetNames(const std::size_t index) const
+    {
+        std::vector<std::string> names{"Default"};
+        if (index >= m_snapshot.items.size())
+            return names;
+
+        const auto presets = m_presetsByImporterAndExtension.find(PresetScopeKey(m_snapshot.items[index]));
+        if (presets == m_presetsByImporterAndExtension.end())
+            return names;
+
+        names.reserve(presets->second.size() + 1);
+        for (const auto& preset : presets->second)
+            names.push_back(preset.name);
+        return names;
+    }
+
+    std::string_view AssetImportModal::ActivePresetName(const std::size_t index) const noexcept
+    {
+        static constexpr std::string_view kDefaultPreset = "Default";
+        if (index >= m_activePresetNames.size() || m_activePresetNames[index].empty())
+            return kDefaultPreset;
+        return m_activePresetNames[index];
+    }
+
+    bool AssetImportModal::ApplyPreset(const std::size_t index, const std::string_view presetName)
+    {
+        if (index >= m_snapshot.items.size())
+            return false;
+
+        auto& item = m_snapshot.items[index];
+        if (presetName == "Default")
+        {
+            if (index >= m_defaultPresetValues.size())
+                return false;
+            ApplyPresetValues(item, m_defaultPresetValues[index], *m_catalog);
+        }
+        else
+        {
+            const auto presets = m_presetsByImporterAndExtension.find(PresetScopeKey(item));
+            if (presets == m_presetsByImporterAndExtension.end())
+                return false;
+            const auto preset = std::find_if(
+                presets->second.begin(), presets->second.end(),
+                [presetName](const ImportPreset& candidate) { return candidate.name == presetName; });
+            if (preset == presets->second.end())
+                return false;
+            ApplyPresetValues(item, *preset, *m_catalog);
+        }
+
+        if (m_activePresetNames.size() < m_snapshot.items.size())
+            m_activePresetNames.resize(m_snapshot.items.size(), "Default");
+        m_activePresetNames[index] = presetName;
+        return true;
+    }
+
+    bool AssetImportModal::CreatePreset(const std::size_t index, const std::string_view presetName)
+    {
+        if (index >= m_snapshot.items.size() || presetName.empty() || presetName == "Default")
+            return false;
+
+        const auto& item = m_snapshot.items[index];
+        if (item.importerContributionId.empty())
+            return false;
+
+        auto& presets = m_presetsByImporterAndExtension[PresetScopeKey(item)];
+        if (std::any_of(presets.begin(), presets.end(),
+                        [presetName](const ImportPreset& preset) { return preset.name == presetName; }))
+            return false;
+
+        presets.push_back(CapturePresetValues(item, *m_catalog, std::string{presetName}));
+        if (m_activePresetNames.size() < m_snapshot.items.size())
+            m_activePresetNames.resize(m_snapshot.items.size(), "Default");
+        m_activePresetNames[index] = presetName;
+        return true;
     }
 
     Result<void> AssetImportModal::BeginImport(
@@ -119,7 +374,7 @@ namespace Horo::Editor
             projectRoot = projectRoot.parent_path();
         }
         if (projectRoot.empty() || projectRoot == projectRoot.root_path())
-            projectRoot = sourceFiles.front().parent_path();  // Fallback
+            projectRoot = sourceFiles.front().parent_path(); // Fallback
         return BeginImport(sourceFiles, projectRoot, cancellation);
     }
 
@@ -137,15 +392,25 @@ namespace Horo::Editor
         }
 
         m_projectRoot = projectRoot;
-        m_committer = Assets::MakeProjectCommitter();
+        m_committer = Assets::MakeProjectCommitter(m_assetRegistry);
 
         // If operation already exists, append files; otherwise start a new one.
         if (m_operation)
         {
+            const std::size_t previousItemCount = m_snapshot.items.size();
             auto result = m_operation->AddFiles(sourceFiles, projectRoot, cancellation);
             if (result.HasError())
                 return Result<void>::Failure(result.ErrorValue());
             m_snapshot = result.Value();
+            if (!m_defaultDestinationFolder.empty())
+            {
+                for (std::size_t index = previousItemCount; index < m_snapshot.items.size(); ++index)
+                    m_snapshot.items[index].destinationFolder = m_defaultDestinationFolder;
+            }
+            m_activePresetNames.resize(m_snapshot.items.size(), "Default");
+            m_defaultPresetValues.reserve(m_snapshot.items.size());
+            for (std::size_t index = previousItemCount; index < m_snapshot.items.size(); ++index)
+                m_defaultPresetValues.push_back(CapturePresetValues(m_snapshot.items[index], *m_catalog, "Default"));
             LOG_INFO("editor.asset_import", "Added %zu files to queue: %zu total.",
                      sourceFiles.size(), m_snapshot.items.size());
             return Result<void>::Success();
@@ -163,6 +428,16 @@ namespace Horo::Editor
             return Result<void>::Failure(result.ErrorValue());
 
         m_snapshot = result.Value();
+        if (!m_defaultDestinationFolder.empty())
+        {
+            for (auto& item : m_snapshot.items)
+                item.destinationFolder = m_defaultDestinationFolder;
+        }
+        m_activePresetNames.assign(m_snapshot.items.size(), "Default");
+        m_defaultPresetValues.clear();
+        m_defaultPresetValues.reserve(m_snapshot.items.size());
+        for (const auto& item : m_snapshot.items)
+            m_defaultPresetValues.push_back(CapturePresetValues(item, *m_catalog, "Default"));
         LOG_INFO("editor.asset_import", "Import started: %zu files.", m_snapshot.items.size());
 
         return Result<void>::Success();
@@ -186,60 +461,123 @@ namespace Horo::Editor
             return Result<void>::Failure(err);
         }
 
+        if (index >= m_snapshot.items.size())
+        {
+            Error err;
+            err.code = ErrorCode{"editor.asset_import.invalid_item"};
+            err.domain = ErrorDomainId{"horo.editor"};
+            return Result<void>::Failure(err);
+        }
+
+        const auto& pendingItem = m_snapshot.items[index];
+        if (!IsValidAssetName(pendingItem.displayName))
+        {
+            Error err;
+            err.code = ErrorCode{"editor.asset_import.invalid_asset_name"};
+            err.domain = ErrorDomainId{"horo.editor"};
+            return Result<void>::Failure(err);
+        }
+
+        const std::string pendingDestination =
+            pendingItem.destinationFolder.empty() ? "assets" : pendingItem.destinationFolder;
+        if (!ProjectPath::Parse(pendingDestination).HasValue())
+        {
+            Error err;
+            err.code = ErrorCode{"editor.asset_import.invalid_destination"};
+            err.domain = ErrorDomainId{"horo.editor"};
+            return Result<void>::Failure(err);
+        }
+
+        auto settingsResult = m_operation->SetItemSettings(index, m_snapshot.items[index].settings);
+        if (settingsResult.HasError())
+            return Result<void>::Failure(settingsResult.ErrorValue());
+
         auto result = m_operation->ImportSingleItem(index, cancellation);
         if (result.HasError())
             return Result<void>::Failure(result.ErrorValue());
 
-        m_snapshot = result.Value();
+        // Merge only the imported item's fields from the operation result,
+        // preserving user-modified UI state (e.g. destinationFolder) on other items.
+        const auto& opSnapshot = result.Value();
+        auto& targetItem = m_snapshot.items[index];
+        targetItem.diagnostics = opSnapshot.items[index].diagnostics;
+        targetItem.result = opSnapshot.items[index].result;
+        targetItem.resolvedType = opSnapshot.items[index].resolvedType;
+        targetItem.sourceHash = opSnapshot.items[index].sourceHash;
+        targetItem.sourceByteSize = opSnapshot.items[index].sourceByteSize;
+        targetItem.sourceLastWriteTime = opSnapshot.items[index].sourceLastWriteTime;
+        m_snapshot.phase = opSnapshot.phase;
+        m_snapshot.revision = opSnapshot.revision;
+
         LOG_INFO("editor.asset_import", "Imported item %zu: %s",
                  index, m_snapshot.items[index].displayName.c_str());
 
         // Check for conflicts before committing
-        const auto &item = m_snapshot.items[index];
+        auto commitItem = m_snapshot.items[index]; // mutable copy for name/folder transforms
 
         // Skip items that failed to import (no result payload)
-        if (!item.result.has_value())
+        if (!commitItem.result.has_value())
         {
             LOG_INFO("editor.asset_import", "Skipping commit for %s — import produced no result.",
-                     item.displayName.c_str());
+                     commitItem.displayName.c_str());
             return Result<void>::Success();
         }
 
-        if (WouldConflict(item))
+        const Assets::AssetId assetId = MakeAssetId(commitItem);
+
+        // Apply naming convention
+        if (commitItem.namingConvention == 1) // Lowercase + underscore
+        {
+            std::string name = commitItem.displayName;
+            std::transform(name.begin(), name.end(), name.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            std::replace(name.begin(), name.end(), ' ', '_');
+            commitItem.displayName = name;
+        }
+        else if (commitItem.namingConvention == 2) // AssetId prefix
+        {
+            commitItem.displayName = assetId.ToString().substr(0, 12) + "_" + commitItem.displayName;
+        }
+        // convention 0 = Preserve source name (no transform)
+
+        const std::string destFolder = ResolveDestinationFolder(commitItem, m_catalog.get());
+
+        // Conflict check (skip if overwriteWithoutPrompt)
+        if (!commitItem.overwriteWithoutPrompt && WouldConflict(commitItem))
         {
             ConflictItem conflict;
-            conflict.assetName = m_snapshot.items[index].displayName + "." + m_snapshot.items[index].sourceExtension;
-            conflict.conflictDescription = "An asset with this name already exists in Assets/";
+            conflict.assetName = commitItem.displayName + "." + commitItem.sourceExtension;
+            conflict.conflictDescription = "An asset with this name already exists.";
             conflict.snapshotIndex = index;
             m_conflictQueue.push_back(std::move(conflict));
             LOG_INFO("editor.asset_import", "Conflict detected for %s — queued for resolution",
-                     m_snapshot.items[index].displayName.c_str());
+                     commitItem.displayName.c_str());
         }
         else
         {
-            // Commit to project storage directly
+            // Commit to project storage
             if (m_committer)
             {
-                std::string destFolder = m_snapshot.items[index].destinationFolder;
-                if (destFolder.empty())
-                    destFolder = "Assets";
                 Assets::PreparedAssetImportBatch batch{
                     .operationId = m_snapshot.operationId,
                     .projectRoot = m_projectRoot,
                     .destinationFolder = ProjectPath::Parse(destFolder).Value(),
-                    .items = {m_snapshot.items[index]},
+                    .items = {commitItem},
                 };
 
-                struct DummyIdGen final : Assets::IAssetIdGenerator
-                {
-                    Assets::AssetId Generate() override { return Assets::AssetId{}; }
-                } idGen;
+                FixedAssetIdGenerator idGen{assetId};
                 CancellationToken noCancel;
                 auto commitResult = m_committer->Commit(batch, idGen, noCancel);
                 if (commitResult.HasError())
-                    LOG_ERROR("editor.asset_import", "Commit failed for item %zu", index);
+                {
+                    LOG_ERROR("editor.asset_import", "Commit failed for item %zu: %s", index,
+                              commitResult.ErrorValue().message.c_str());
+                    return Result<void>::Failure(commitResult.ErrorValue());
+                }
                 else
+                {
                     LOG_INFO("editor.asset_import", "Committed item %zu to project storage.", index);
+                }
             }
         }
 
@@ -250,21 +588,20 @@ namespace Horo::Editor
     // Conflict resolution
     // -------------------------------------------------------------------------
 
-    bool AssetImportModal::WouldConflict(const Assets::AssetImportItem &item) const
+    bool AssetImportModal::WouldConflict(const Assets::AssetImportItem& item) const
     {
-        if (m_projectRoot.empty())
+        if (m_projectRoot.empty() || !m_catalog)
             return false;
 
-        std::string destFolder = item.destinationFolder;
-        if (destFolder.empty())
-            destFolder = "Assets";
-        std::filesystem::path targetPath = m_projectRoot / destFolder / (item.displayName + ".horoasset");
+        const std::string destinationFolder = ResolveDestinationFolder(item, m_catalog.get());
+        std::filesystem::path targetPath =
+            m_projectRoot / destinationFolder / (item.displayName + item.targetExtension);
         std::error_code ec;
         return std::filesystem::exists(targetPath, ec);
     }
 
     void AssetImportModal::CommitCurrentItem(
-        const Assets::AssetImportItem &item,
+        const Assets::AssetImportItem& item,
         ConflictChoice choice,
         bool applyAll)
     {
@@ -274,42 +611,56 @@ namespace Horo::Editor
             return;
         }
 
-        std::string destFolder = m_snapshot.items[m_conflictCursor].destinationFolder;
-        if (destFolder.empty())
-            destFolder = "Assets";
+        auto commitItem = item; // mutable copy
 
-        std::string assetName = item.displayName;
+        const Assets::AssetId assetId = MakeAssetId(commitItem);
+
+        // Apply naming convention
+        if (commitItem.namingConvention == 1) // Lowercase + underscore
+        {
+            std::string name = commitItem.displayName;
+            std::transform(name.begin(), name.end(), name.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            std::replace(name.begin(), name.end(), ' ', '_');
+            commitItem.displayName = name;
+        }
+        else if (commitItem.namingConvention == 2) // AssetId prefix
+        {
+            commitItem.displayName = assetId.ToString().substr(0, 12) + "_" + commitItem.displayName;
+        }
+
+        const std::string destFolder = ResolveDestinationFolder(commitItem, m_catalog.get());
+
+        std::string assetName = commitItem.displayName;
         if (choice == ConflictChoice::Rename)
         {
             // Simple rename: append _1, _2, etc.
             int suffix = 1;
             std::filesystem::path base = m_projectRoot / destFolder;
-            while (std::filesystem::exists(base / (assetName + ".horoasset")))
-                assetName = item.displayName + "_" + std::to_string(++suffix);
+            while (std::filesystem::exists(base / (assetName + commitItem.targetExtension)))
+                assetName = commitItem.displayName + "_" + std::to_string(++suffix);
         }
 
         // Build a modified batch with the (possibly renamed) name
+        commitItem.displayName = assetName;
         Assets::PreparedAssetImportBatch batch{
             .operationId = m_snapshot.operationId,
             .projectRoot = m_projectRoot,
             .destinationFolder = ProjectPath::Parse(destFolder).Value(),
-            .items = {item},
+            .items = {commitItem},
         };
 
-        // Override displayName for rename case
-        batch.items[0].displayName = assetName;
-
-        struct DummyIdGen final : Assets::IAssetIdGenerator
-        {
-            Assets::AssetId Generate() override { return Assets::AssetId{}; }
-        } idGen;
+        FixedAssetIdGenerator idGen{assetId};
 
         CancellationToken noCancel;
         auto commitResult = m_committer->Commit(batch, idGen, noCancel);
         if (commitResult.HasError())
-            LOG_ERROR("editor.asset_import", "Commit failed for %s", assetName.c_str());
+        LOG_ERROR("editor.asset_import", "Commit failed for %s: %s", assetName.c_str(),
+                  commitResult.ErrorValue().message.c_str());
         else
+        {
             LOG_INFO("editor.asset_import", "Committed %s (choice=%d)", assetName.c_str(), static_cast<int>(choice));
+        }
     }
 
     void AssetImportModal::ResolveCurrentConflict(ConflictChoice choice, bool applyAll)
@@ -320,8 +671,8 @@ namespace Horo::Editor
         if (applyAll)
             m_applyAllChoice = choice;
 
-        const auto &conflict = m_conflictQueue[m_conflictCursor];
-        const auto &item = m_snapshot.items[conflict.snapshotIndex];
+        const auto& conflict = m_conflictQueue[m_conflictCursor];
+        const auto& item = m_snapshot.items[conflict.snapshotIndex];
         CommitCurrentItem(item, choice, applyAll);
 
         ++m_conflictCursor;

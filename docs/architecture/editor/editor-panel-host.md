@@ -113,6 +113,11 @@ every possible GUI or domain action.
 `EditorPanelHost` owns layout and tab lifetime. Individual tabs own only their
 presentation state and drawing.
 
+The bottom Console tab is a presentation consumer of the foundation
+`IStructuredLogQuery` capability. It does not parse terminal text or own a second
+logger. Terminal, persistent JSONL, and Console delivery fan out from the same
+accepted structured record.
+
 `EditorModalHost` is a separate overlay owner. Settings, Build & Release, import,
 and confirmation workflows are not tabs or layout nodes. While a modal is open,
 the panel host remains mounted and rendered but receives no user interaction.

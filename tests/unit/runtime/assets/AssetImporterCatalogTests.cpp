@@ -48,6 +48,7 @@ AssetImporterContribution MakeContribution(std::string id, std::string ext, std:
         .contributionId = std::move(id),
         .packageId = "test.pkg",
         .moduleId = "test.mod",
+        .moduleVersion = "1.0.0",
         .version = "1.0.0",
         .fileExtensions = {std::move(ext)},
         .assetTypes = {Type("core.mesh")},
@@ -102,6 +103,14 @@ TEST_CASE("Importer catalog rejects duplicate contribution ID", "[native]")
 
     auto result = catalog.Register(MakeContribution("test.obj", "fbx", "B"));
     REQUIRE((result.HasError()));
+}
+
+TEST_CASE("Importer catalog requires independent canonical module and importer versions", "[native]")
+{
+    AssetImporterCatalog catalog;
+    auto contribution = MakeContribution("test.obj", "obj", "A");
+    contribution.moduleVersion = "latest";
+    REQUIRE(catalog.Register(std::move(contribution)).HasError());
 }
 
 TEST_CASE("Importer catalog can register multiple extensions", "[native]")

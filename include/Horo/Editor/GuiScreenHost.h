@@ -6,6 +6,7 @@
 #include "Horo/Editor/GuiRoute.h"
 #include "Horo/Editor/ScreenRegistry.h"
 #include "Horo/Editor/WorkspacePanelRegistry.h"
+#include "Horo/Assets/AssetImporter.h"
 #include "Horo/Foundation/Diagnostics.h"
 #include "Horo/Foundation/JobSystem.h"
 #include "Horo/Foundation/Result.h"
@@ -26,6 +27,13 @@ namespace Horo::Input
 {
 class InputRouter;
 } // namespace Horo::Input
+
+namespace Horo::Extensions
+{
+class ExtensionInventory;
+class ExtensionMarketplaceService;
+class ExtensionManager;
+} // namespace Horo::Extensions
 
 namespace Horo::Editor
 {
@@ -228,7 +236,9 @@ class GuiScreenHost
                            EngineDataBus &engineEvents, ProjectCreationService &creationService,
                            Input::InputRouter &inputRouter, const RendererAvailabilitySnapshot &rendererAvailability,
                            ScreenRegistry screenRegistry, WorkspacePanelRegistry workspacePanelRegistry,
-                           std::uintptr_t logoTexture = 0);
+                           std::uintptr_t logoTexture = 0,
+                           Extensions::ExtensionInventory* extensionInventory = nullptr,
+                           Extensions::ExtensionMarketplaceService* extensionMarketplace = nullptr);
 
     ~GuiScreenHost();
 
@@ -339,6 +349,8 @@ class GuiScreenHost
     EngineDataBus *engineEvents_;
     ProjectCreationService *creationService_;
     std::uintptr_t logoTexture_{0};
+    Extensions::ExtensionInventory* extensionInventory_{};
+    Extensions::ExtensionMarketplaceService* extensionMarketplace_{};
 
     EditorServiceRegistry services_;
     ScreenRegistry screenRegistry_;
@@ -348,6 +360,9 @@ class GuiScreenHost
     std::vector<std::string_view> activeStatusPanelIds_;
 
     JobSystem m_importJobs{JobSystemConfig{.workerCount = 1}};
+    std::unique_ptr<Assets::AssetImporterCatalog> importerCatalogCandidate_;
+    std::unique_ptr<Extensions::ExtensionManager> extensionManager_;
+    std::shared_ptr<const Assets::AssetImporterCatalogSnapshot> importerCatalog_;
 
     GuiRoute activeRoute_;
     GuiRouteRevision activeRevision_{0};

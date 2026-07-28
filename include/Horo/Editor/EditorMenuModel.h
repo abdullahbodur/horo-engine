@@ -2,6 +2,7 @@
 
 #include "Horo/Runtime/Scene/PrimitiveCatalog.h"
 
+#include <filesystem>
 #include <optional>
 #include <string_view>
 #include <vector>
@@ -31,8 +32,9 @@ enum class EditorMenuAction
 /** @brief Typed command emitted by every platform menu adapter. */
 struct EditorMenuInvocation
 {
-    EditorMenuAction action{EditorMenuAction::None};
-    std::optional<Runtime::PrimitiveId> primitive;
+    EditorMenuAction action{EditorMenuAction::None}; /**< Requested application command. */
+    std::optional<Runtime::PrimitiveId> primitive; /**< Optional primitive selected by Create. */
+    std::optional<std::filesystem::path> assetDestination; /**< Absolute Import Assets destination override. */
 };
 
 /** @brief Structural kind of one menu model entry. */

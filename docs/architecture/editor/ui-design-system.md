@@ -329,6 +329,14 @@ The modal-surface primitive provides visual structure only. Exclusive focus,
 input blocking, modal stack ownership, close policy, and focus restoration belong
 to `EditorModalHost`.
 
+The current GUI implementation exposes this structure through
+`Ui::ScopedModalShell`. It owns responsive centering, shared title-bar chrome,
+the close affordance, body/footer geometry, and the fixed footer surface.
+`Ui::ModalSplitPane` composes an optional leading navigation/sidebar with a
+scrollable primary pane. Modal workflows supply content and actions; they do not
+redraw this chrome. Compact status metadata uses the semantic `Ui::Badge`
+primitive rather than feature-local tag or pill drawing.
+
 Rules:
 
 - modal content fits within the editor client area at every supported UI scale

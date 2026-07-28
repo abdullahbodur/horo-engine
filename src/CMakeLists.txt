@@ -6,6 +6,7 @@ add_library(HoroFoundation STATIC
         foundation/text/String.cpp
         foundation/logging/Logger.cpp
         foundation/logging/LogContext.cpp
+        foundation/logging/StructuredLogStore.cpp
         foundation/data_bus/DataBus.cpp
         foundation/jobs/JobSystem.cpp
         foundation/config/Configuration.cpp
@@ -23,7 +24,15 @@ target_include_directories(HoroFoundation
 
 add_library(HoroPlatform STATIC
         platform/Platform.cpp
+        platform/PlatformErrors.cpp
 )
+
+if (WIN32)
+    target_sources(HoroPlatform PRIVATE platform/windows/DynamicLibrary_Windows.cpp)
+else ()
+    target_sources(HoroPlatform PRIVATE platform/posix/DynamicLibrary_Posix.cpp)
+    target_link_libraries(HoroPlatform PRIVATE dl)
+endif ()
 
 add_library(HoroEngine::Platform ALIAS HoroPlatform)
 
@@ -100,17 +109,21 @@ add_library(HoroAssets STATIC
         runtime/assets/cooker/AssetCookOutput.cpp
         runtime/assets/cooker/AssetCookService.cpp
         runtime/assets/importer/AssetImporterCatalog.cpp
+        runtime/assets/importer/AssetImportMetadata.cpp
         runtime/assets/importer/AssetImportOperation.cpp
+        runtime/assets/importer/AssetReimport.cpp
         runtime/assets/importer/ProjectAssetImportCommitter.cpp
         runtime/assets/importer/builtin/obj_mesh/ObjMeshImporter.cpp
+        runtime/assets/importer/builtin/obj_mesh/ObjMeshPreviewProvider.cpp
         runtime/assets/importer/builtin/fbx_mesh/FbxMeshImporter.cpp
+        runtime/assets/importer/builtin/fbx_mesh/FbxMeshParser.cpp
 )
 add_library(HoroEngine::Assets ALIAS HoroAssets)
 target_compile_features(HoroAssets PUBLIC cxx_std_20)
 target_include_directories(HoroAssets PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(HoroAssets
         PUBLIC HoroEngine::Foundation
-        PRIVATE nlohmann_json::nlohmann_json
+        PRIVATE nlohmann_json::nlohmann_json HoroThirdParty::Ufbx
 )
 target_link_libraries(HoroRuntimeScene PUBLIC HoroEngine::Assets)
 
@@ -325,6 +338,7 @@ add_library(HoroEditorServices STATIC
         editor/EditorServiceErrors.cpp
         editor/screens/welcome/WelcomeController.cpp
         editor/screens/project_creation/ProjectCreationController.cpp
+        editor/screens/workspace/ContentBrowserModel.cpp
         editor/project_model/ProjectCreationService.cpp
         editor/project_model/ProjectMutation.cpp
         editor/project_model/ProjectMigrationTransaction.cpp
@@ -372,6 +386,7 @@ target_link_libraries(HoroEditorServices
         HoroEngine::EditorModel
         HoroEngine::Input
         PRIVATE
+        HoroEngine::Assets
         nlohmann_json::nlohmann_json
 )
 
@@ -468,6 +483,7 @@ if (HORO_BUILD_EDITOR_GUI)
             PRIVATE
             HoroThirdParty::ImGui
             HoroEngine::EditorRenderExtraction
+            nlohmann_json::nlohmann_json
     )
 
     if (APPLE)
@@ -479,4 +495,35 @@ if (HORO_BUILD_EDITOR_GUI)
         target_sources(HoroGui PRIVATE ${_HORO_EDITOR_MENU_MAC_SOURCE})
         target_link_libraries(HoroGui PRIVATE "-framework AppKit")
     endif ()
+endif ()
+
+add_library(HoroExtensions STATIC
+        extensions/host/ExtensionManager.cpp
+        extensions/manifest/ExtensionManifestParser.cpp
+        extensions/registry/ExtensionErrors.cpp
+        extensions/registry/ExtensionInventory.cpp
+        extensions/marketplace/ExtensionMarketplace.cpp
+        extensions/capabilities/asset_pipeline_points/ExternalAssetImporter.cpp
+)
+
+add_library(HoroEngine::Extensions ALIAS HoroExtensions)
+
+target_compile_features(HoroExtensions PUBLIC cxx_std_20)
+target_include_directories(HoroExtensions
+        PUBLIC
+        ${PROJECT_SOURCE_DIR}/include
+)
+target_link_libraries(HoroExtensions
+        PUBLIC HoroEngine::Foundation HoroEngine::Platform HoroEngine::Assets
+        PRIVATE nlohmann_json::nlohmann_json
+)
+target_compile_definitions(HoroExtensions PRIVATE
+        HORO_ENABLE_EXTENSION_MARKETPLACE=$<BOOL:${HORO_ENABLE_EXTENSION_MARKETPLACE}>
+)
+if(HORO_ENABLE_EXTENSION_MARKETPLACE)
+    target_link_libraries(HoroExtensions PRIVATE CURL::libcurl miniz)
+endif()
+
+if (HORO_BUILD_EDITOR_GUI)
+    target_link_libraries(HoroGui PRIVATE HoroEngine::Extensions)
 endif ()

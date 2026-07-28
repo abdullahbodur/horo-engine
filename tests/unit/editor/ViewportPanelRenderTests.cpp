@@ -111,7 +111,12 @@ TEST_CASE("Viewport Panel Render Tests", "[unit][editor]")
     auto workspaceInput =
         inputRouter.PushContext(Input::InputContextId{"editor.workspace"}, Input::InputContextKind::EditorWorkspace);
     ViewportPanel panel;
-    PanelContext panelContext{editorEvents, &renderer, &inputRouter, &workspaceInput};
+    PanelContext panelContext{
+        .dataBus = editorEvents,
+        .viewportRenderer = &renderer,
+        .inputRouter = &inputRouter,
+        .workspaceInputContext = &workspaceInput,
+    };
     panel.OnAttach(panelContext);
 
     Input::FrameNumber inputFrame = 1;

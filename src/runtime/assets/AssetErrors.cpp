@@ -151,6 +151,11 @@ namespace Horo::Assets::ImportErrors
         "OBJ file contains no vertex positions.",
         "Ensure the file has valid vertex data."
     };
+    const ErrorCodeDescriptor FbxMalformed{
+        kImportDomain, ErrorCode{"asset.import.fbx.malformed"}, kImportError,
+        "FBX mesh geometry is missing, malformed, or uses an unsupported array encoding.",
+        "Export the source as a standard ASCII or binary FBX mesh and retry."
+    };
     const ErrorCodeDescriptor ImportCancelled{
         kImportDomain, ErrorCode{"asset.import.cancelled"}, kImportError,
         "The import operation was cancelled.",

@@ -1,9 +1,23 @@
 #include "editor/screens/workspace/EditorWorkspaceController.h"
+#include "Horo/Assets/AssetReimport.h"
 #include "Horo/Editor/EditorWorkspaceEvents.h"
 #include "Horo/Editor/WorkspacePanelRegistry.h"
 #include "Horo/Foundation/Logging/Logger.h"
 #include "editor/document/EditorViewportPicking.h"
 #include "editor/document/RuntimeSceneConversion.h"
+#include "editor/menu/EditorMenuPlatform.h"
+
+#include <nlohmann/json.hpp>
+
+#include <array>
+#include <cctype>
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <format>
+#include <random>
+#include <span>
+#include <vector>
 
 namespace Horo::Editor
 {
@@ -42,6 +56,328 @@ namespace Horo::Editor
             topPanel.clear();
             bottomPanel.clear();
             mode = SideDockMode::Full;
+        }
+
+        [[nodiscard]] bool HasPathPrefix(const std::filesystem::path& root,
+                                         const std::filesystem::path& candidate)
+        {
+            auto rootPart = root.begin();
+            auto candidatePart = candidate.begin();
+            while (rootPart != root.end() && candidatePart != candidate.end())
+            {
+                if (*rootPart != *candidatePart)
+                    return false;
+                ++rootPart;
+                ++candidatePart;
+            }
+            return rootPart == root.end();
+        }
+
+        [[nodiscard]] std::filesystem::path NormalizeAbsolute(const std::filesystem::path& path)
+        {
+            std::error_code error;
+            const std::filesystem::path absolute = std::filesystem::absolute(path, error).lexically_normal();
+            if (error)
+                return {};
+            const std::filesystem::path canonical = std::filesystem::weakly_canonical(absolute, error);
+            return error ? absolute : canonical;
+        }
+
+        [[nodiscard]] bool IsDirectContentBrowserEntry(const ContentBrowserDirectory& directory,
+                                                       const std::filesystem::path& candidate)
+        {
+            if (!candidate.is_absolute())
+                return false;
+            const std::filesystem::path normalized = NormalizeAbsolute(candidate);
+            const std::filesystem::path root = NormalizeAbsolute(directory.absoluteRootPath);
+            const std::filesystem::path current = NormalizeAbsolute(directory.absoluteCurrentPath);
+            if (normalized.empty() || root.empty() || current.empty() || normalized.parent_path() != current ||
+                !HasPathPrefix(root, normalized))
+            {
+                return false;
+            }
+            std::error_code error;
+            const auto status = std::filesystem::symlink_status(normalized, error);
+            return !error && !std::filesystem::is_symlink(status) &&
+                (std::filesystem::is_directory(status) || std::filesystem::is_regular_file(status));
+        }
+
+        [[nodiscard]] std::optional<std::vector<std::filesystem::path>>
+        ValidatedAssetCompanions(
+            const std::filesystem::path& source,
+            const bool requireIdentitySidecar)
+        {
+            std::error_code error;
+            const std::filesystem::file_status sourceStatus =
+                std::filesystem::symlink_status(source, error);
+            if (error || std::filesystem::is_symlink(sourceStatus) ||
+                !std::filesystem::is_regular_file(sourceStatus))
+            {
+                return std::nullopt;
+            }
+
+            std::vector<std::filesystem::path> paths{source};
+            for (const char* suffix : {".horo", ".meta"})
+            {
+                std::filesystem::path sidecar = source;
+                sidecar += suffix;
+                error.clear();
+                const std::filesystem::file_status status =
+                    std::filesystem::symlink_status(sidecar, error);
+                if (error)
+                {
+                    if (error !=
+                        std::errc::no_such_file_or_directory)
+                    {
+                        return std::nullopt;
+                    }
+                    error.clear();
+                    if (requireIdentitySidecar &&
+                        std::string_view{suffix} == ".horo")
+                    {
+                        return std::nullopt;
+                    }
+                    continue;
+                }
+                if (!std::filesystem::exists(status))
+                {
+                    if (requireIdentitySidecar &&
+                        std::string_view{suffix} == ".horo")
+                    {
+                        return std::nullopt;
+                    }
+                    continue;
+                }
+                if (std::filesystem::is_symlink(status) ||
+                    !std::filesystem::is_regular_file(status))
+                {
+                    return std::nullopt;
+                }
+                paths.push_back(std::move(sidecar));
+            }
+            return paths;
+        }
+
+        [[nodiscard]] std::string PortableFold(const std::string_view value)
+        {
+            std::string folded{value};
+            std::ranges::transform(
+                folded, folded.begin(), [](const unsigned char character)
+                {
+                    return static_cast<char>(std::tolower(character));
+                });
+            return folded;
+        }
+
+        [[nodiscard]] bool DirectoryContainsPortableName(
+            const std::filesystem::path& directory,
+            const std::string_view name,
+            const std::filesystem::path& ignoredEntry = {})
+        {
+            const std::string foldedName = PortableFold(name);
+            const std::filesystem::path normalizedIgnored =
+                ignoredEntry.empty()
+                    ? std::filesystem::path{}
+                    : ignoredEntry.lexically_normal();
+            std::error_code error;
+            std::filesystem::directory_iterator iterator{
+                directory, std::filesystem::directory_options::skip_permission_denied, error
+            };
+            const std::filesystem::directory_iterator end;
+            while (!error && iterator != end)
+            {
+                if (iterator->path().lexically_normal() != normalizedIgnored &&
+                    PortableFold(iterator->path().filename().string()) ==
+                        foldedName)
+                {
+                    return true;
+                }
+                iterator.increment(error);
+            }
+            return error || iterator != end;
+        }
+
+        [[nodiscard]] bool IsPortableEntryName(
+            const std::string_view name)
+        {
+            if (name.empty() || name == "." || name == ".." ||
+                name.ends_with(' ') || name.ends_with('.'))
+            {
+                return false;
+            }
+            for (const unsigned char character : name)
+            {
+                if (character < 32U ||
+                    std::string_view{"<>:\"/\\|?*"}.find(
+                        static_cast<char>(character)) !=
+                        std::string_view::npos)
+                {
+                    return false;
+                }
+            }
+
+            const std::size_t dot = name.find('.');
+            const std::string stem = PortableFold(name.substr(0, dot));
+            if (stem == "con" || stem == "prn" || stem == "aux" ||
+                stem == "nul")
+            {
+                return false;
+            }
+            if (stem.size() == 4 &&
+                (stem.starts_with("com") || stem.starts_with("lpt")) &&
+                stem[3] >= '1' && stem[3] <= '9')
+            {
+                return false;
+            }
+            return true;
+        }
+
+        [[nodiscard]] bool RollbackPathMoves(
+            const std::vector<
+                std::pair<std::filesystem::path, std::filesystem::path>>&
+                moved)
+        {
+            bool complete = true;
+            for (auto item = moved.rbegin(); item != moved.rend(); ++item)
+            {
+                std::error_code error;
+                std::filesystem::rename(item->second, item->first, error);
+                if (error)
+                {
+                    complete = false;
+                    LOG_ERROR(
+                        "editor.content_browser",
+                        "Rollback rename failed: %s -> %s (%s)",
+                        item->second.string().c_str(),
+                        item->first.string().c_str(),
+                        error.message().c_str());
+                }
+            }
+            return complete;
+        }
+
+        [[nodiscard]] bool RemoveCreatedPaths(
+            const std::vector<std::filesystem::path>& created)
+        {
+            bool complete = true;
+            for (auto item = created.rbegin(); item != created.rend(); ++item)
+            {
+                std::error_code error;
+                if (!std::filesystem::remove(*item, error) || error)
+                {
+                    complete = false;
+                    LOG_ERROR(
+                        "editor.content_browser",
+                        "Copy rollback removal failed: %s (%s)",
+                        item->string().c_str(),
+                        error.message().c_str());
+                }
+            }
+            return complete;
+        }
+
+        [[nodiscard]] std::filesystem::path CompanionDestination(
+            const std::filesystem::path& item,
+            const std::filesystem::path& source,
+            const std::filesystem::path& destination)
+        {
+            if (item == source)
+                return destination;
+            std::filesystem::path target = destination;
+            target += item.extension().string();
+            return target;
+        }
+
+        [[nodiscard]] bool AssetDestinationAvailable(
+            const std::filesystem::path& source,
+            const std::filesystem::path& destination,
+            const std::vector<std::filesystem::path>& companions)
+        {
+            return std::ranges::all_of(
+                companions,
+                [&source, &destination](
+                    const std::filesystem::path& item)
+                {
+                    const std::filesystem::path target =
+                        CompanionDestination(item, source, destination);
+                    return !DirectoryContainsPortableName(
+                        target.parent_path(),
+                        target.filename().string());
+                });
+        }
+
+        [[nodiscard]] bool PathDoesNotExist(
+            const std::filesystem::path& path)
+        {
+            std::error_code error;
+            const std::filesystem::file_status status =
+                std::filesystem::symlink_status(path, error);
+            if (error ==
+                std::errc::no_such_file_or_directory)
+            {
+                return true;
+            }
+            return !error && !std::filesystem::exists(status);
+        }
+
+        [[nodiscard]] std::filesystem::path ResolveDuplicateDestination(
+            const std::filesystem::path& source,
+            const std::filesystem::path& destinationDirectory,
+            const std::vector<std::filesystem::path>& companions)
+        {
+            const std::string extension = source.extension().string();
+            const std::string stem = source.stem().string();
+            for (std::uint32_t index = 1; index < 10000; ++index)
+            {
+                const std::filesystem::path candidate =
+                    destinationDirectory / std::format("{} ({}){}", stem, index, extension);
+                if (AssetDestinationAvailable(
+                        source, candidate, companions))
+                {
+                    return candidate;
+                }
+            }
+            return {};
+        }
+
+        [[nodiscard]] Assets::AssetId GenerateRandomAssetId(
+            const Assets::AssetRegistrySnapshot& snapshot)
+        {
+            std::random_device random;
+            for (std::uint32_t attempt = 0; attempt < 32; ++attempt)
+            {
+                std::array<std::uint8_t, 16> bytes{};
+                for (std::uint8_t& byte : bytes)
+                    byte = static_cast<std::uint8_t>(random());
+                bytes[6] = static_cast<std::uint8_t>((bytes[6] & 0x0fU) | 0x40U);
+                bytes[8] = static_cast<std::uint8_t>((bytes[8] & 0x3fU) | 0x80U);
+                const Assets::AssetId candidate = Assets::AssetId::FromBytes(bytes);
+                if (candidate.IsValid() && snapshot.Find(candidate) == nullptr)
+                    return candidate;
+            }
+            return {};
+        }
+
+        [[nodiscard]] std::optional<nlohmann::json> ReadSidecarJson(
+            const std::filesystem::path& path)
+        {
+            std::error_code error;
+            const std::uintmax_t size = std::filesystem::file_size(path, error);
+            if (error || size == 0 || size > 1024U * 1024U)
+                return std::nullopt;
+            std::ifstream input(path, std::ios::binary);
+            if (!input)
+                return std::nullopt;
+            const nlohmann::json parsed =
+                nlohmann::json::parse(input, nullptr, false, true);
+            return parsed.is_object() ? std::optional<nlohmann::json>{parsed} : std::nullopt;
+        }
+
+        [[nodiscard]] std::vector<std::byte> JsonBytes(const nlohmann::json& value)
+        {
+            const std::string serialized = value.dump(2) + '\n';
+            const auto* begin = reinterpret_cast<const std::byte*>(serialized.data());
+            return {begin, begin + serialized.size()};
         }
 
         void ActivateSideDock(SideDockMode& mode, std::string& fullPanel, std::string& topPanel,
@@ -212,10 +548,36 @@ namespace Horo::Editor
         }
     } // namespace
 
-    EditorWorkspaceController::EditorWorkspaceController(std::string projectRoot, Runtime::RuntimeSceneService &runtimeScene)
-        : m_runtimeScene(runtimeScene)
+    EditorWorkspaceController::EditorWorkspaceController(
+        std::string projectRoot, Runtime::RuntimeSceneService &runtimeScene,
+        const Assets::AssetRegistrySnapshot& assetRegistry, Assets::AssetRegistry* mutableAssetRegistry,
+        ProjectMutationCoordinator* mutations, DurableFileSystem* durableFiles,
+        const Assets::AssetImporterCatalogSnapshot* importerCatalog)
+        : m_runtimeScene(runtimeScene), m_assetRegistry(assetRegistry),
+          m_mutableAssetRegistry(mutableAssetRegistry), m_mutations(mutations), m_durableFiles(durableFiles),
+          m_importerCatalog(importerCatalog)
     {
-        m_viewModel.projectRoot = std::move(projectRoot);
+        std::error_code pathError;
+        std::filesystem::path absoluteProjectRoot =
+            std::filesystem::absolute(std::filesystem::path{projectRoot}, pathError).lexically_normal();
+        if (pathError)
+        {
+            pathError.clear();
+            absoluteProjectRoot =
+                (std::filesystem::current_path(pathError) / std::filesystem::path{projectRoot}).lexically_normal();
+        }
+        if (!pathError)
+        {
+            std::error_code canonicalError;
+            const std::filesystem::path canonicalProjectRoot =
+                std::filesystem::weakly_canonical(absoluteProjectRoot, canonicalError);
+            if (!canonicalError)
+                absoluteProjectRoot = canonicalProjectRoot;
+        }
+        m_viewModel.projectRoot = absoluteProjectRoot.string();
+        m_viewModel.assetRegistryRevision = assetRegistry.Revision();
+        m_viewModel.contentBrowser =
+            BuildContentBrowserDirectory(m_viewModel.projectRoot, {}, assetRegistry, m_importerCatalog);
         m_viewModel.panelDockAreas = {
             {"horo.hierarchy", WorkspaceDockArea::Left},
             {"horo.viewport", WorkspaceDockArea::Document},
@@ -257,6 +619,37 @@ namespace Horo::Editor
     void EditorWorkspaceController::UpdateFps(const float fps)
     {
         m_viewModel.fps = fps;
+    }
+
+    /** @copydoc EditorWorkspaceController::RefreshAssets */
+    void EditorWorkspaceController::RefreshAssets(const Assets::AssetRegistrySnapshot& assetRegistry)
+    {
+        if (assetRegistry.Revision() == m_viewModel.assetRegistryRevision)
+            return;
+        m_assetRegistry = assetRegistry;
+        m_viewModel.assetRegistryRevision = assetRegistry.Revision();
+        m_contentBrowserRefreshPending = false;
+        m_contentBrowserLoadingPresented = false;
+        m_viewModel.contentBrowser = BuildContentBrowserDirectory(
+            m_viewModel.projectRoot, m_viewModel.contentBrowser.absoluteCurrentPath, m_assetRegistry,
+            m_importerCatalog);
+        ReconcileContentBrowserNavigation();
+    }
+
+    /** @copydoc EditorWorkspaceController::UpdateContentBrowser */
+    void EditorWorkspaceController::UpdateContentBrowser()
+    {
+        if (!m_contentBrowserRefreshPending)
+            return;
+        if (!m_contentBrowserLoadingPresented)
+        {
+            m_contentBrowserLoadingPresented = true;
+            return;
+        }
+
+        m_contentBrowserRefreshPending = false;
+        m_contentBrowserLoadingPresented = false;
+        RefreshContentBrowserAfterMutation();
     }
 
     void EditorWorkspaceController::ProcessCommand(const EditorWorkspaceViewCommandData& cmd)
@@ -426,6 +819,65 @@ namespace Horo::Editor
                     m_documentCommands.Execute(RenameSceneObjectCommand{*cmd.objectPayload, *cmd.stringPayload}),
                     "Rename object");
             }
+            break;
+        case EditorWorkspaceViewCommand::NavigateContentBrowser:
+            if (cmd.stringPayload.has_value())
+                NavigateContentBrowser(*cmd.stringPayload, true);
+            break;
+        case EditorWorkspaceViewCommand::NavigateContentBrowserBack:
+            NavigateContentBrowserBack();
+            break;
+        case EditorWorkspaceViewCommand::NavigateContentBrowserForward:
+            NavigateContentBrowserForward();
+            break;
+        case EditorWorkspaceViewCommand::NavigateContentBrowserUp:
+            NavigateContentBrowserUp();
+            break;
+        case EditorWorkspaceViewCommand::RefreshContentBrowser:
+            RequestContentBrowserRefresh();
+            break;
+        case EditorWorkspaceViewCommand::RenameContentBrowserEntry:
+            if (cmd.stringPayload.has_value() && cmd.secondaryStringPayload.has_value())
+                RenameContentBrowserEntry(*cmd.stringPayload, *cmd.secondaryStringPayload);
+            break;
+        case EditorWorkspaceViewCommand::DeleteContentBrowserEntry:
+            if (cmd.stringPayload.has_value())
+                DeleteContentBrowserEntry(*cmd.stringPayload);
+            break;
+        case EditorWorkspaceViewCommand::DuplicateContentBrowserAsset:
+            if (cmd.stringPayload.has_value())
+                DuplicateContentBrowserAsset(*cmd.stringPayload);
+            break;
+        case EditorWorkspaceViewCommand::CopyContentBrowserAsset:
+            if (cmd.stringPayload.has_value())
+                SetContentBrowserClipboard(*cmd.stringPayload, ContentBrowserClipboardMode::Copy);
+            break;
+        case EditorWorkspaceViewCommand::CutContentBrowserAsset:
+            if (cmd.stringPayload.has_value())
+                SetContentBrowserClipboard(*cmd.stringPayload, ContentBrowserClipboardMode::Move);
+            break;
+        case EditorWorkspaceViewCommand::PasteContentBrowserAsset:
+            PasteContentBrowserAsset(
+                cmd.stringPayload.value_or(m_viewModel.contentBrowser.absoluteCurrentPath));
+            break;
+        case EditorWorkspaceViewCommand::TransferContentBrowserAsset:
+            if (cmd.contentBrowserTransfer.has_value())
+                TransferContentBrowserAsset(*cmd.contentBrowserTransfer);
+            break;
+        case EditorWorkspaceViewCommand::CancelContentBrowserClipboard:
+            ClearContentBrowserClipboard();
+            break;
+        case EditorWorkspaceViewCommand::CreateContentBrowserFolder:
+            if (cmd.stringPayload.has_value() && cmd.secondaryStringPayload.has_value())
+                CreateContentBrowserFolder(*cmd.stringPayload, *cmd.secondaryStringPayload);
+            break;
+        case EditorWorkspaceViewCommand::ReimportContentBrowserAsset:
+            if (cmd.stringPayload.has_value())
+                ReimportContentBrowserAsset(*cmd.stringPayload);
+            break;
+        case EditorWorkspaceViewCommand::RevealContentBrowserEntry:
+            if (cmd.stringPayload.has_value())
+                RevealContentBrowserEntry(*cmd.stringPayload);
             break;
         case EditorWorkspaceViewCommand::ChangeActivePanel:
             if (cmd.targetIndex.has_value() && cmd.stringPayload.has_value())
@@ -924,6 +1376,1117 @@ namespace Horo::Editor
             m_deferredRuntimeSnapshot.reset();
             QueueRuntimeScene(std::move(deferred));
         }
+    }
+
+    void EditorWorkspaceController::RefreshContentBrowserAfterMutation()
+    {
+        m_contentBrowserRefreshPending = false;
+        m_contentBrowserLoadingPresented = false;
+        if (m_mutableAssetRegistry != nullptr)
+        {
+            auto rebuilt = Assets::RebuildAssetRegistry(
+                *m_mutableAssetRegistry, m_viewModel.projectRoot, Assets::AssetRegistryOpenMode::Edit);
+            if (rebuilt.HasError() || rebuilt.Value().status == Assets::AssetRegistryBuildStatus::Failed)
+            {
+                m_viewModel.contentBrowserOperationError =
+                    "workspace.content_browser.operation.registry_failed";
+                m_viewModel.contentBrowser = BuildContentBrowserDirectory(
+                    m_viewModel.projectRoot, m_viewModel.contentBrowser.absoluteCurrentPath, m_assetRegistry,
+                    m_importerCatalog);
+                ReconcileContentBrowserNavigation();
+                return;
+            }
+            m_assetRegistry = m_mutableAssetRegistry->Snapshot();
+            m_viewModel.assetRegistryRevision = m_assetRegistry.Revision();
+        }
+        m_viewModel.contentBrowser = BuildContentBrowserDirectory(
+            m_viewModel.projectRoot, m_viewModel.contentBrowser.absoluteCurrentPath, m_assetRegistry,
+            m_importerCatalog);
+        ReconcileContentBrowserNavigation();
+    }
+
+    void EditorWorkspaceController::RequestContentBrowserRefresh()
+    {
+        if (m_contentBrowserRefreshPending)
+            return;
+        m_contentBrowserRefreshPending = true;
+        m_contentBrowserLoadingPresented = false;
+        m_viewModel.contentBrowser.loadState =
+            ContentBrowserLoadState::Loading;
+        m_viewModel.contentBrowserOperationError.clear();
+    }
+
+    void EditorWorkspaceController::ReconcileContentBrowserNavigation()
+    {
+        const std::filesystem::path root =
+            NormalizeAbsolute(m_viewModel.contentBrowser.absoluteRootPath);
+        const std::filesystem::path current =
+            NormalizeAbsolute(m_viewModel.contentBrowser.absoluteCurrentPath);
+        const auto isValidHistoryEntry =
+            [&root, &current](const std::filesystem::path& entry)
+            {
+                const std::filesystem::path normalized =
+                    NormalizeAbsolute(entry);
+                return !normalized.empty() && normalized != current &&
+                    IsContentBrowserDirectoryTargetAllowed(root, normalized);
+            };
+        std::erase_if(
+            m_contentBrowserBackHistory,
+            [&isValidHistoryEntry](const std::filesystem::path& entry)
+            {
+                return !isValidHistoryEntry(entry);
+            });
+        std::erase_if(
+            m_contentBrowserForwardHistory,
+            [&isValidHistoryEntry](const std::filesystem::path& entry)
+            {
+                return !isValidHistoryEntry(entry);
+            });
+        m_viewModel.contentBrowserCanNavigateBack =
+            !m_contentBrowserBackHistory.empty();
+        m_viewModel.contentBrowserCanNavigateForward =
+            !m_contentBrowserForwardHistory.empty();
+    }
+
+    void EditorWorkspaceController::NavigateContentBrowser(
+        const std::filesystem::path& absoluteDirectory, const bool recordHistory)
+    {
+        const std::filesystem::path root =
+            NormalizeAbsolute(m_viewModel.contentBrowser.absoluteRootPath);
+        const std::filesystem::path destination = NormalizeAbsolute(absoluteDirectory);
+        if (!IsContentBrowserDirectoryTargetAllowed(root, destination))
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.invalid_target";
+            return;
+        }
+
+        const std::filesystem::path current =
+            NormalizeAbsolute(m_viewModel.contentBrowser.absoluteCurrentPath);
+        if (destination == current)
+            return;
+
+        m_contentBrowserRefreshPending = false;
+        m_contentBrowserLoadingPresented = false;
+        if (recordHistory && !current.empty())
+        {
+            m_contentBrowserBackHistory.push_back(current);
+            m_contentBrowserForwardHistory.clear();
+        }
+        m_viewModel.contentBrowser = BuildContentBrowserDirectory(
+            m_viewModel.projectRoot, destination, m_assetRegistry, m_importerCatalog);
+        m_viewModel.contentBrowserOperationError.clear();
+        m_viewModel.contentBrowserCanNavigateBack = !m_contentBrowserBackHistory.empty();
+        m_viewModel.contentBrowserCanNavigateForward = !m_contentBrowserForwardHistory.empty();
+    }
+
+    void EditorWorkspaceController::NavigateContentBrowserBack()
+    {
+        if (m_contentBrowserBackHistory.empty())
+            return;
+        const std::filesystem::path current =
+            NormalizeAbsolute(m_viewModel.contentBrowser.absoluteCurrentPath);
+        while (!m_contentBrowserBackHistory.empty())
+        {
+            const std::filesystem::path destination = m_contentBrowserBackHistory.back();
+            m_contentBrowserBackHistory.pop_back();
+            if (!IsContentBrowserDirectoryTargetAllowed(
+                    m_viewModel.contentBrowser.absoluteRootPath, destination))
+            {
+                continue;
+            }
+            if (!current.empty())
+                m_contentBrowserForwardHistory.push_back(current);
+            NavigateContentBrowser(destination, false);
+            break;
+        }
+        m_viewModel.contentBrowserCanNavigateBack = !m_contentBrowserBackHistory.empty();
+        m_viewModel.contentBrowserCanNavigateForward = !m_contentBrowserForwardHistory.empty();
+    }
+
+    void EditorWorkspaceController::NavigateContentBrowserForward()
+    {
+        if (m_contentBrowserForwardHistory.empty())
+            return;
+        const std::filesystem::path current =
+            NormalizeAbsolute(m_viewModel.contentBrowser.absoluteCurrentPath);
+        while (!m_contentBrowserForwardHistory.empty())
+        {
+            const std::filesystem::path destination = m_contentBrowserForwardHistory.back();
+            m_contentBrowserForwardHistory.pop_back();
+            if (!IsContentBrowserDirectoryTargetAllowed(
+                    m_viewModel.contentBrowser.absoluteRootPath, destination))
+            {
+                continue;
+            }
+            if (!current.empty())
+                m_contentBrowserBackHistory.push_back(current);
+            NavigateContentBrowser(destination, false);
+            break;
+        }
+        m_viewModel.contentBrowserCanNavigateBack = !m_contentBrowserBackHistory.empty();
+        m_viewModel.contentBrowserCanNavigateForward = !m_contentBrowserForwardHistory.empty();
+    }
+
+    void EditorWorkspaceController::NavigateContentBrowserUp()
+    {
+        const std::filesystem::path root =
+            NormalizeAbsolute(m_viewModel.contentBrowser.absoluteRootPath);
+        const std::filesystem::path current =
+            NormalizeAbsolute(m_viewModel.contentBrowser.absoluteCurrentPath);
+        if (!root.empty() && current != root)
+            NavigateContentBrowser(current.parent_path(), true);
+    }
+
+    void EditorWorkspaceController::DuplicateContentBrowserAsset(const std::string& absolutePath)
+    {
+        m_viewModel.contentBrowserOperationError.clear();
+        static_cast<void>(CopyContentBrowserAssetTo(
+            NormalizeAbsolute(absolutePath), NormalizeAbsolute(absolutePath).parent_path()));
+    }
+
+    void EditorWorkspaceController::SetContentBrowserClipboard(
+        const std::string& absolutePath, const ContentBrowserClipboardMode mode)
+    {
+        m_viewModel.contentBrowserOperationError.clear();
+        const std::filesystem::path source = NormalizeAbsolute(absolutePath);
+        std::error_code error;
+        const auto status = std::filesystem::symlink_status(source, error);
+        if (!IsDirectContentBrowserEntry(m_viewModel.contentBrowser, source) || error ||
+            !std::filesystem::is_regular_file(status))
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.invalid_target";
+            return;
+        }
+        m_viewModel.contentBrowserClipboard = {
+            .mode = mode,
+            .absoluteSourcePath = source.string(),
+        };
+    }
+
+    void EditorWorkspaceController::PasteContentBrowserAsset(const std::string& absoluteDirectory)
+    {
+        m_viewModel.contentBrowserOperationError.clear();
+        const ContentBrowserClipboardState clipboard = m_viewModel.contentBrowserClipboard;
+        if (clipboard.mode == ContentBrowserClipboardMode::None ||
+            clipboard.absoluteSourcePath.empty())
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.clipboard_empty";
+            return;
+        }
+
+        const std::filesystem::path source =
+            NormalizeAbsolute(clipboard.absoluteSourcePath);
+        const std::filesystem::path destination = NormalizeAbsolute(absoluteDirectory);
+        const bool succeeded =
+            clipboard.mode == ContentBrowserClipboardMode::Copy
+                ? CopyContentBrowserAssetTo(source, destination)
+                : MoveContentBrowserAssetTo(source, destination);
+        if (succeeded && clipboard.mode == ContentBrowserClipboardMode::Move)
+            ClearContentBrowserClipboard();
+    }
+
+    void EditorWorkspaceController::TransferContentBrowserAsset(
+        const ContentBrowserAssetTransferRequest& request)
+    {
+        m_viewModel.contentBrowserOperationError.clear();
+        if (!std::filesystem::path{request.absoluteSourcePath}.is_absolute() ||
+            !std::filesystem::path{
+                request.absoluteDestinationDirectory}
+                 .is_absolute())
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.invalid_target";
+            return;
+        }
+        const std::filesystem::path source =
+            NormalizeAbsolute(request.absoluteSourcePath);
+        const std::filesystem::path destination =
+            NormalizeAbsolute(request.absoluteDestinationDirectory);
+        if (request.mode == ContentBrowserTransferMode::Copy)
+            static_cast<void>(CopyContentBrowserAssetTo(source, destination));
+        else
+            static_cast<void>(MoveContentBrowserAssetTo(source, destination));
+    }
+
+    void EditorWorkspaceController::CreateContentBrowserFolder(
+        const std::string& absoluteDirectory, const std::string& name)
+    {
+        m_viewModel.contentBrowserOperationError.clear();
+        if (m_mutations == nullptr || m_durableFiles == nullptr)
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.unavailable";
+            return;
+        }
+        const std::filesystem::path directory = NormalizeAbsolute(absoluteDirectory);
+        const std::filesystem::path requestedName{name};
+        if (!IsContentBrowserDirectoryTargetAllowed(
+                m_viewModel.contentBrowser.absoluteRootPath, directory) ||
+            requestedName != requestedName.filename() ||
+            !IsPortableEntryName(name))
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.invalid_name";
+            return;
+        }
+        if (DirectoryContainsPortableName(directory, name))
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.name_exists";
+            return;
+        }
+
+        auto lease = m_mutations->TryAcquire(ProjectMutationRequest{
+            .projectRoot = m_viewModel.projectRoot,
+            .owner = ProjectMutationOwner::Asset,
+            .operationId = "content-browser-create-folder",
+        });
+        if (lease.HasError())
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.busy";
+            return;
+        }
+        std::error_code error;
+        if (!std::filesystem::create_directory(directory / requestedName, error) || error)
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.create_folder_failed";
+            return;
+        }
+        static_cast<void>(m_durableFiles->SyncDirectory(directory));
+        RefreshContentBrowserAfterMutation();
+    }
+
+    bool EditorWorkspaceController::CopyContentBrowserAssetTo(
+        const std::filesystem::path& absoluteSource,
+        const std::filesystem::path& absoluteDestinationDirectory)
+    {
+        if (m_mutations == nullptr || m_durableFiles == nullptr ||
+            m_mutableAssetRegistry == nullptr)
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.unavailable";
+            return false;
+        }
+
+        const std::filesystem::path root =
+            NormalizeAbsolute(m_viewModel.contentBrowser.absoluteRootPath);
+        const std::filesystem::path source = NormalizeAbsolute(absoluteSource);
+        const std::filesystem::path destinationDirectory =
+            NormalizeAbsolute(absoluteDestinationDirectory);
+        std::error_code error;
+        const auto sourceStatus = std::filesystem::symlink_status(source, error);
+        if (error || std::filesystem::is_symlink(sourceStatus) ||
+            !std::filesystem::is_regular_file(sourceStatus) ||
+            !HasPathPrefix(root, source) ||
+            !IsContentBrowserDirectoryTargetAllowed(root, destinationDirectory))
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.invalid_target";
+            return false;
+        }
+
+        const std::filesystem::path projectRoot =
+            NormalizeAbsolute(m_viewModel.projectRoot);
+        const std::string projectPath =
+            source.lexically_relative(projectRoot).generic_string();
+        const Assets::AssetRecord* sourceRecord = m_assetRegistry.FindByPath(projectPath);
+        std::filesystem::path sourceSidecar = source;
+        sourceSidecar += ".horo";
+        const auto companions =
+            ValidatedAssetCompanions(source, true);
+        if (sourceRecord == nullptr || !companions.has_value())
+        {
+            m_viewModel.contentBrowserOperationError =
+                sourceRecord == nullptr
+                    ? "workspace.content_browser.operation.asset_required"
+                    : "workspace.content_browser.operation.companion_invalid";
+            return false;
+        }
+
+        std::filesystem::path destination = destinationDirectory / source.filename();
+        if (destinationDirectory == source.parent_path() ||
+            !AssetDestinationAvailable(
+                source, destination, *companions))
+        {
+            destination = ResolveDuplicateDestination(
+                source, destinationDirectory, *companions);
+        }
+        if (destination.empty())
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.name_exists";
+            return false;
+        }
+
+        auto sidecar = ReadSidecarJson(sourceSidecar);
+        const Assets::AssetId newId = GenerateRandomAssetId(m_assetRegistry);
+        if (!sidecar.has_value() || !newId.IsValid())
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.copy_failed";
+            return false;
+        }
+        (*sidecar)["assetId"] = newId.ToString();
+
+        auto lease = m_mutations->TryAcquire(ProjectMutationRequest{
+            .projectRoot = m_viewModel.projectRoot,
+            .owner = ProjectMutationOwner::Asset,
+            .operationId = "content-browser-copy",
+        });
+        if (lease.HasError())
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.busy";
+            return false;
+        }
+
+        std::vector<std::filesystem::path> created;
+        for (const std::filesystem::path& item : *companions)
+        {
+            const std::filesystem::path target =
+                CompanionDestination(item, source, destination);
+            if (!PathDoesNotExist(target))
+            {
+                const bool rollbackComplete =
+                    RemoveCreatedPaths(created);
+                m_viewModel.contentBrowserOperationError =
+                    rollbackComplete
+                        ? "workspace.content_browser.operation.name_exists"
+                        : "workspace.content_browser.operation.rollback_failed";
+                return false;
+            }
+            if (item == sourceSidecar)
+            {
+                const std::vector<std::byte> bytes = JsonBytes(*sidecar);
+                if (m_durableFiles->WriteDurable(
+                        target, bytes)
+                        .HasError())
+                {
+                    std::error_code cleanupError;
+                    std::filesystem::remove(target, cleanupError);
+                    const bool rollbackComplete =
+                        RemoveCreatedPaths(created);
+                    m_viewModel.contentBrowserOperationError =
+                        rollbackComplete
+                            ? "workspace.content_browser.operation.copy_failed"
+                            : "workspace.content_browser.operation.rollback_failed";
+                    return false;
+                }
+            }
+            else
+            {
+                if (m_durableFiles->CopyDurable(
+                        item, target)
+                        .HasError())
+                {
+                    std::error_code cleanupError;
+                    std::filesystem::remove(target, cleanupError);
+                    const bool rollbackComplete =
+                        RemoveCreatedPaths(created);
+                    m_viewModel.contentBrowserOperationError =
+                        rollbackComplete
+                            ? "workspace.content_browser.operation.copy_failed"
+                            : "workspace.content_browser.operation.rollback_failed";
+                    return false;
+                }
+            }
+            created.push_back(target);
+        }
+        if (m_durableFiles->SyncDirectory(destinationDirectory).HasError())
+        {
+            const bool rollbackComplete =
+                RemoveCreatedPaths(created);
+            m_viewModel.contentBrowserOperationError =
+                rollbackComplete
+                    ? "workspace.content_browser.operation.copy_failed"
+                    : "workspace.content_browser.operation.rollback_failed";
+            return false;
+        }
+
+        auto rebuilt = Assets::RebuildAssetRegistry(
+            *m_mutableAssetRegistry, projectRoot, Assets::AssetRegistryOpenMode::Edit);
+        const std::string destinationProjectPath =
+            destination.lexically_relative(projectRoot).generic_string();
+        const Assets::AssetRegistrySnapshot rebuiltSnapshot =
+            m_mutableAssetRegistry->Snapshot();
+        const Assets::AssetRecord* copiedRecord = rebuiltSnapshot.Find(newId);
+        if (rebuilt.HasError() ||
+            rebuilt.Value().status != Assets::AssetRegistryBuildStatus::Complete ||
+            copiedRecord == nullptr ||
+            copiedRecord->sourcePath.String() != destinationProjectPath)
+        {
+            const bool rollbackComplete = RemoveCreatedPaths(created);
+            static_cast<void>(Assets::RebuildAssetRegistry(
+                *m_mutableAssetRegistry, projectRoot, Assets::AssetRegistryOpenMode::Edit));
+            m_viewModel.contentBrowserOperationError =
+                rollbackComplete
+                    ? "workspace.content_browser.operation.registry_failed"
+                    : "workspace.content_browser.operation.rollback_failed";
+            return false;
+        }
+        m_assetRegistry = m_mutableAssetRegistry->Snapshot();
+        m_viewModel.assetRegistryRevision = m_assetRegistry.Revision();
+        m_viewModel.contentBrowser = BuildContentBrowserDirectory(
+            projectRoot, m_viewModel.contentBrowser.absoluteCurrentPath,
+            m_assetRegistry, m_importerCatalog);
+        return true;
+    }
+
+    bool EditorWorkspaceController::MoveContentBrowserAssetTo(
+        const std::filesystem::path& absoluteSource,
+        const std::filesystem::path& absoluteDestinationDirectory)
+    {
+        if (m_mutations == nullptr || m_durableFiles == nullptr ||
+            m_mutableAssetRegistry == nullptr)
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.unavailable";
+            return false;
+        }
+        const std::filesystem::path root =
+            NormalizeAbsolute(m_viewModel.contentBrowser.absoluteRootPath);
+        const std::filesystem::path source = NormalizeAbsolute(absoluteSource);
+        const std::filesystem::path destinationDirectory =
+            NormalizeAbsolute(absoluteDestinationDirectory);
+        std::error_code error;
+        const auto sourceStatus = std::filesystem::symlink_status(source, error);
+        if (error || std::filesystem::is_symlink(sourceStatus) ||
+            !std::filesystem::is_regular_file(sourceStatus) ||
+            !HasPathPrefix(root, source) ||
+            !IsContentBrowserDirectoryTargetAllowed(root, destinationDirectory))
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.invalid_target";
+            return false;
+        }
+        if (source.parent_path() == destinationDirectory)
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.same_folder";
+            return false;
+        }
+        const std::filesystem::path projectRoot =
+            NormalizeAbsolute(m_viewModel.projectRoot);
+        const std::string oldProjectPath =
+            source.lexically_relative(projectRoot).generic_string();
+        const Assets::AssetRecord* record = m_assetRegistry.FindByPath(oldProjectPath);
+        if (record == nullptr)
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.asset_required";
+            return false;
+        }
+        const auto companions =
+            ValidatedAssetCompanions(source, true);
+        if (!companions.has_value())
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.companion_invalid";
+            return false;
+        }
+        const Assets::AssetId originalId = record->id;
+        const std::filesystem::path destination =
+            destinationDirectory / source.filename();
+        if (!AssetDestinationAvailable(
+                source, destination, *companions))
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.name_exists";
+            return false;
+        }
+
+        auto lease = m_mutations->TryAcquire(ProjectMutationRequest{
+            .projectRoot = m_viewModel.projectRoot,
+            .owner = ProjectMutationOwner::Asset,
+            .operationId = "content-browser-move",
+        });
+        if (lease.HasError())
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.busy";
+            return false;
+        }
+
+        std::vector<std::pair<std::filesystem::path, std::filesystem::path>> moved;
+        for (const std::filesystem::path& item : *companions)
+        {
+            const std::filesystem::path target =
+                CompanionDestination(item, source, destination);
+            if (!PathDoesNotExist(target))
+            {
+                const bool rollbackComplete =
+                    RollbackPathMoves(moved);
+                m_viewModel.contentBrowserOperationError =
+                    rollbackComplete
+                        ? "workspace.content_browser.operation.name_exists"
+                        : "workspace.content_browser.operation.rollback_failed";
+                return false;
+            }
+            std::filesystem::rename(item, target, error);
+            if (error)
+            {
+                const bool rollbackComplete =
+                    RollbackPathMoves(moved);
+                m_viewModel.contentBrowserOperationError =
+                    rollbackComplete
+                        ? "workspace.content_browser.operation.move_failed"
+                        : "workspace.content_browser.operation.rollback_failed";
+                return false;
+            }
+            moved.emplace_back(item, target);
+        }
+        if (m_durableFiles->SyncDirectory(source.parent_path()).HasError() ||
+            m_durableFiles->SyncDirectory(destinationDirectory).HasError())
+        {
+            const bool rollbackComplete =
+                RollbackPathMoves(moved);
+            m_viewModel.contentBrowserOperationError =
+                rollbackComplete
+                    ? "workspace.content_browser.operation.move_failed"
+                    : "workspace.content_browser.operation.rollback_failed";
+            return false;
+        }
+
+        auto rebuilt = Assets::RebuildAssetRegistry(
+            *m_mutableAssetRegistry, projectRoot, Assets::AssetRegistryOpenMode::Edit);
+        const std::string newProjectPath =
+            destination.lexically_relative(projectRoot).generic_string();
+        const bool registryValid =
+            rebuilt.HasValue() &&
+            rebuilt.Value().status == Assets::AssetRegistryBuildStatus::Complete &&
+            m_mutableAssetRegistry->Snapshot().Find(originalId) != nullptr &&
+            m_mutableAssetRegistry->Snapshot().Find(originalId)->sourcePath.String() ==
+                newProjectPath;
+        if (!registryValid)
+        {
+            const bool rollbackComplete =
+                RollbackPathMoves(moved);
+            static_cast<void>(Assets::RebuildAssetRegistry(
+                *m_mutableAssetRegistry, projectRoot, Assets::AssetRegistryOpenMode::Edit));
+            m_viewModel.contentBrowserOperationError =
+                rollbackComplete
+                    ? "workspace.content_browser.operation.registry_failed"
+                    : "workspace.content_browser.operation.rollback_failed";
+            return false;
+        }
+        m_assetRegistry = m_mutableAssetRegistry->Snapshot();
+        m_viewModel.assetRegistryRevision = m_assetRegistry.Revision();
+        m_viewModel.contentBrowser = BuildContentBrowserDirectory(
+            projectRoot, m_viewModel.contentBrowser.absoluteCurrentPath,
+            m_assetRegistry, m_importerCatalog);
+        return true;
+    }
+
+    void EditorWorkspaceController::ClearContentBrowserClipboard() noexcept
+    {
+        m_viewModel.contentBrowserClipboard = {};
+    }
+
+    void EditorWorkspaceController::ReimportContentBrowserAsset(const std::string& absolutePath)
+    {
+        m_viewModel.contentBrowserOperationError.clear();
+        if (m_mutations == nullptr || m_durableFiles == nullptr ||
+            m_mutableAssetRegistry == nullptr || m_importerCatalog == nullptr)
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.unavailable";
+            return;
+        }
+        const std::filesystem::path target = NormalizeAbsolute(absolutePath);
+        if (!IsDirectContentBrowserEntry(m_viewModel.contentBrowser, target))
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.invalid_target";
+            return;
+        }
+
+        auto lease = m_mutations->TryAcquire(ProjectMutationRequest{
+            .projectRoot = m_viewModel.projectRoot,
+            .owner = ProjectMutationOwner::Asset,
+            .operationId = "content-browser-reimport",
+        });
+        if (lease.HasError())
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.busy";
+            return;
+        }
+
+        auto reimported = Assets::ReimportProjectAsset(
+            Assets::AssetReimportRequest{
+                .absoluteProjectRoot = NormalizeAbsolute(m_viewModel.projectRoot),
+                .absoluteAssetPath = target,
+                .importerCatalog = m_importerCatalog,
+                .registry = m_mutableAssetRegistry,
+                .files = m_durableFiles,
+            },
+            CancellationToken{});
+        if (reimported.HasError())
+        {
+            LOG_ERROR("editor.content_browser", "Reimport failed for %s: %s",
+                      target.string().c_str(), reimported.ErrorValue().message.c_str());
+            m_viewModel.contentBrowserOperationError =
+                reimported.ErrorValue().code.Value() == "asset.import.no_importer"
+                    ? "workspace.content_browser.operation.reimport_importer_missing"
+                    : (reimported.ErrorValue().code.Value() == "asset.registry.source_missing"
+                        ? "workspace.content_browser.operation.reimport_unavailable"
+                        : "workspace.content_browser.operation.reimport_failed");
+            return;
+        }
+        m_assetRegistry = m_mutableAssetRegistry->Snapshot();
+        m_viewModel.assetRegistryRevision = m_assetRegistry.Revision();
+        m_viewModel.contentBrowser = BuildContentBrowserDirectory(
+            m_viewModel.projectRoot, m_viewModel.contentBrowser.absoluteCurrentPath,
+            m_assetRegistry, m_importerCatalog);
+    }
+
+    void EditorWorkspaceController::RevealContentBrowserEntry(const std::string& absolutePath)
+    {
+        m_viewModel.contentBrowserOperationError.clear();
+        const std::filesystem::path target = NormalizeAbsolute(absolutePath);
+        const std::filesystem::path root =
+            NormalizeAbsolute(m_viewModel.contentBrowser.absoluteRootPath);
+        std::error_code error;
+        const auto status = std::filesystem::symlink_status(target, error);
+        if (error || std::filesystem::is_symlink(status) ||
+            (!std::filesystem::is_regular_file(status) &&
+             !std::filesystem::is_directory(status)) ||
+            !HasPathPrefix(root, target))
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.invalid_target";
+            return;
+        }
+        if (!RevealInNativeFileManager(target))
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.reveal_unavailable";
+        }
+    }
+
+    void EditorWorkspaceController::RenameContentBrowserEntry(
+        const std::string& absolutePath, const std::string& newName)
+    {
+        m_viewModel.contentBrowserOperationError.clear();
+        if (m_mutations == nullptr || m_durableFiles == nullptr || m_mutableAssetRegistry == nullptr)
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.unavailable";
+            return;
+        }
+
+        if (!std::filesystem::path{absolutePath}.is_absolute())
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.invalid_target";
+            return;
+        }
+        const std::filesystem::path source = NormalizeAbsolute(absolutePath);
+        std::filesystem::path requestedName{newName};
+        if (!IsDirectContentBrowserEntry(m_viewModel.contentBrowser, source) ||
+            requestedName != requestedName.filename() ||
+            !IsPortableEntryName(newName))
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.invalid_name";
+            return;
+        }
+        std::error_code error;
+        const bool regularFile = std::filesystem::is_regular_file(source, error);
+        if (regularFile && requestedName.extension().empty())
+            requestedName += source.extension().string();
+        if (regularFile && requestedName.extension() != source.extension())
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.invalid_name";
+            return;
+        }
+        const std::filesystem::path destination = source.parent_path() / requestedName;
+        if (destination == source)
+            return;
+        if (DirectoryContainsPortableName(
+                source.parent_path(), requestedName.string(), source))
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.name_exists";
+            return;
+        }
+
+        const bool directory = std::filesystem::is_directory(source, error);
+        if (error)
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.invalid_target";
+            return;
+        }
+        std::vector<std::filesystem::path> sources;
+        if (directory)
+        {
+            sources.push_back(source);
+        }
+        else
+        {
+            const std::filesystem::path projectRoot =
+                NormalizeAbsolute(m_viewModel.projectRoot);
+            const Assets::AssetRecord* record = m_assetRegistry.FindByPath(
+                source.lexically_relative(projectRoot).generic_string());
+            const auto companions =
+                ValidatedAssetCompanions(source, record != nullptr);
+            if (!companions.has_value())
+            {
+                m_viewModel.contentBrowserOperationError =
+                    "workspace.content_browser.operation.companion_invalid";
+                return;
+            }
+            sources = *companions;
+            for (const std::filesystem::path& item : sources)
+            {
+                const std::filesystem::path target =
+                    CompanionDestination(item, source, destination);
+                if (DirectoryContainsPortableName(
+                        target.parent_path(), target.filename().string(),
+                        item))
+                {
+                    m_viewModel.contentBrowserOperationError =
+                        "workspace.content_browser.operation.name_exists";
+                    return;
+                }
+            }
+        }
+
+        auto lease = m_mutations->TryAcquire(ProjectMutationRequest{
+            .projectRoot = m_viewModel.projectRoot,
+            .owner = ProjectMutationOwner::Asset,
+            .operationId = "content-browser-rename",
+        });
+        if (lease.HasError())
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.busy";
+            return;
+        }
+
+        std::vector<std::pair<std::filesystem::path, std::filesystem::path>> moved;
+        moved.reserve(sources.size());
+        for (const std::filesystem::path& item : sources)
+        {
+            const std::filesystem::path target =
+                CompanionDestination(item, source, destination);
+            if (!PathDoesNotExist(target))
+            {
+                const bool rollbackComplete =
+                    RollbackPathMoves(moved);
+                m_viewModel.contentBrowserOperationError =
+                    rollbackComplete
+                        ? "workspace.content_browser.operation.name_exists"
+                        : "workspace.content_browser.operation.rollback_failed";
+                return;
+            }
+            std::filesystem::rename(item, target, error);
+            if (error)
+            {
+                const bool rollbackComplete =
+                    RollbackPathMoves(moved);
+                m_viewModel.contentBrowserOperationError =
+                    rollbackComplete
+                        ? "workspace.content_browser.operation.rename_failed"
+                        : "workspace.content_browser.operation.rollback_failed";
+                return;
+            }
+            moved.emplace_back(item, target);
+        }
+        if (m_durableFiles->SyncDirectory(source.parent_path()).HasError())
+        {
+            const bool rollbackComplete =
+                RollbackPathMoves(moved);
+            m_viewModel.contentBrowserOperationError =
+                rollbackComplete
+                    ? "workspace.content_browser.operation.rename_failed"
+                    : "workspace.content_browser.operation.rollback_failed";
+            return;
+        }
+
+        const std::filesystem::path projectRoot =
+            NormalizeAbsolute(m_viewModel.projectRoot);
+        auto rebuilt = Assets::RebuildAssetRegistry(
+            *m_mutableAssetRegistry, projectRoot,
+            Assets::AssetRegistryOpenMode::Edit);
+        const Assets::AssetRegistrySnapshot rebuiltSnapshot =
+            m_mutableAssetRegistry->Snapshot();
+        const bool registryValid =
+            rebuilt.HasValue() &&
+            rebuilt.Value().status ==
+                Assets::AssetRegistryBuildStatus::Complete &&
+            rebuiltSnapshot.Records().size() ==
+                m_assetRegistry.Records().size() &&
+            std::ranges::all_of(
+                m_assetRegistry.Records(),
+                [&rebuiltSnapshot](const Assets::AssetRecord& record)
+                {
+                    return rebuiltSnapshot.Find(record.id) != nullptr;
+                });
+        if (!registryValid)
+        {
+            const bool rollbackComplete =
+                RollbackPathMoves(moved);
+            static_cast<void>(Assets::RebuildAssetRegistry(
+                *m_mutableAssetRegistry, projectRoot,
+                Assets::AssetRegistryOpenMode::Edit));
+            m_viewModel.contentBrowserOperationError =
+                rollbackComplete
+                    ? "workspace.content_browser.operation.registry_failed"
+                    : "workspace.content_browser.operation.rollback_failed";
+            return;
+        }
+        m_assetRegistry = rebuiltSnapshot;
+        m_viewModel.assetRegistryRevision = m_assetRegistry.Revision();
+        m_viewModel.contentBrowser = BuildContentBrowserDirectory(
+            projectRoot,
+            m_viewModel.contentBrowser.absoluteCurrentPath,
+            m_assetRegistry, m_importerCatalog);
+    }
+
+    void EditorWorkspaceController::DeleteContentBrowserEntry(const std::string& absolutePath)
+    {
+        m_viewModel.contentBrowserOperationError.clear();
+        if (m_mutations == nullptr || m_durableFiles == nullptr || m_mutableAssetRegistry == nullptr)
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.unavailable";
+            return;
+        }
+
+        if (!std::filesystem::path{absolutePath}.is_absolute())
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.invalid_target";
+            return;
+        }
+        const std::filesystem::path source = NormalizeAbsolute(absolutePath);
+        if (!IsDirectContentBrowserEntry(m_viewModel.contentBrowser, source))
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.invalid_target";
+            return;
+        }
+
+        auto lease = m_mutations->TryAcquire(ProjectMutationRequest{
+            .projectRoot = m_viewModel.projectRoot,
+            .owner = ProjectMutationOwner::Asset,
+            .operationId = "content-browser-delete",
+        });
+        if (lease.HasError())
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.busy";
+            return;
+        }
+
+        std::error_code error;
+        const bool directory = std::filesystem::is_directory(source, error);
+        if (error)
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.delete_failed";
+            return;
+        }
+
+        std::vector<std::filesystem::path> sources;
+        if (directory)
+        {
+            sources.push_back(source);
+        }
+        else
+        {
+            const std::filesystem::path projectRoot =
+                NormalizeAbsolute(m_viewModel.projectRoot);
+            const Assets::AssetRecord* record = m_assetRegistry.FindByPath(
+                source.lexically_relative(projectRoot).generic_string());
+            const auto companions =
+                ValidatedAssetCompanions(source, record != nullptr);
+            if (!companions.has_value())
+            {
+                m_viewModel.contentBrowserOperationError =
+                    "workspace.content_browser.operation.companion_invalid";
+                return;
+            }
+            sources = *companions;
+        }
+
+        const auto stamp = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        const std::filesystem::path trashRoot =
+            NormalizeAbsolute(m_viewModel.projectRoot) / ".horo" /
+            "local" / "trash";
+        std::filesystem::create_directories(trashRoot, error);
+        if (error)
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.delete_failed";
+            return;
+        }
+        std::filesystem::path trashDirectory;
+        for (std::uint32_t attempt = 0; attempt < 1000; ++attempt)
+        {
+            trashDirectory =
+                trashRoot /
+                std::format(
+                    "asset-{}-{}", stamp, attempt);
+            error.clear();
+            if (std::filesystem::create_directory(
+                    trashDirectory, error))
+            {
+                break;
+            }
+            if (error)
+            {
+                trashDirectory.clear();
+                break;
+            }
+            trashDirectory.clear();
+        }
+        if (trashDirectory.empty())
+        {
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.delete_failed";
+            return;
+        }
+
+        nlohmann::json manifest{
+            {"schemaVersion", 1},
+            {"originalAbsolutePath", source.string()},
+            {"deletedAtUnixMicroseconds", stamp},
+            {"entries", nlohmann::json::array()},
+        };
+        for (const std::filesystem::path& item : sources)
+        {
+            manifest["entries"].push_back({
+                {"originalAbsolutePath", item.string()},
+                {"trashFileName", item.filename().string()},
+            });
+        }
+        std::filesystem::path manifestPath;
+        for (std::uint32_t attempt = 0; attempt < 1000; ++attempt)
+        {
+            const std::string fileName =
+                attempt == 0
+                    ? "trash.json"
+                    : std::format("trash-{}.json", attempt);
+            const bool collidesWithMovedEntry =
+                std::ranges::any_of(
+                    sources,
+                    [&fileName](
+                        const std::filesystem::path& item)
+                    {
+                        return PortableFold(
+                                   item.filename().string()) ==
+                            PortableFold(fileName);
+                    });
+            if (!collidesWithMovedEntry)
+            {
+                manifestPath = trashDirectory / fileName;
+                break;
+            }
+        }
+        if (manifestPath.empty())
+        {
+            std::filesystem::remove_all(trashDirectory, error);
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.delete_failed";
+            return;
+        }
+        if (m_durableFiles->WriteDurable(
+                manifestPath, JsonBytes(manifest))
+                .HasError())
+        {
+            std::filesystem::remove_all(trashDirectory, error);
+            m_viewModel.contentBrowserOperationError =
+                "workspace.content_browser.operation.delete_failed";
+            return;
+        }
+
+        std::vector<std::pair<std::filesystem::path, std::filesystem::path>> moved;
+        moved.reserve(sources.size());
+        for (const std::filesystem::path& item : sources)
+        {
+            const std::filesystem::path target = trashDirectory / item.filename();
+            if (!PathDoesNotExist(target))
+            {
+                const bool rollbackComplete =
+                    RollbackPathMoves(moved);
+                if (rollbackComplete)
+                    std::filesystem::remove_all(trashDirectory, error);
+                m_viewModel.contentBrowserOperationError =
+                    rollbackComplete
+                        ? "workspace.content_browser.operation.delete_failed"
+                        : "workspace.content_browser.operation.rollback_failed";
+                return;
+            }
+            std::filesystem::rename(item, target, error);
+            if (error)
+            {
+                const bool rollbackComplete =
+                    RollbackPathMoves(moved);
+                if (rollbackComplete)
+                    std::filesystem::remove_all(trashDirectory, error);
+                m_viewModel.contentBrowserOperationError =
+                    rollbackComplete
+                        ? "workspace.content_browser.operation.delete_failed"
+                        : "workspace.content_browser.operation.rollback_failed";
+                return;
+            }
+            moved.emplace_back(item, target);
+        }
+
+        if (m_durableFiles->SyncDirectory(source.parent_path()).HasError() ||
+            m_durableFiles->SyncDirectory(trashDirectory).HasError())
+        {
+            const bool rollbackComplete =
+                RollbackPathMoves(moved);
+            if (rollbackComplete)
+                std::filesystem::remove_all(trashDirectory, error);
+            m_viewModel.contentBrowserOperationError =
+                rollbackComplete
+                    ? "workspace.content_browser.operation.delete_failed"
+                    : "workspace.content_browser.operation.rollback_failed";
+            return;
+        }
+
+        const std::filesystem::path projectRoot =
+            NormalizeAbsolute(m_viewModel.projectRoot);
+        auto rebuilt = Assets::RebuildAssetRegistry(
+            *m_mutableAssetRegistry, projectRoot,
+            Assets::AssetRegistryOpenMode::Edit);
+        if (rebuilt.HasError() ||
+            rebuilt.Value().status !=
+                Assets::AssetRegistryBuildStatus::Complete)
+        {
+            const bool rollbackComplete =
+                RollbackPathMoves(moved);
+            if (rollbackComplete)
+                std::filesystem::remove_all(trashDirectory, error);
+            static_cast<void>(Assets::RebuildAssetRegistry(
+                *m_mutableAssetRegistry, projectRoot,
+                Assets::AssetRegistryOpenMode::Edit));
+            m_viewModel.contentBrowserOperationError =
+                rollbackComplete
+                    ? "workspace.content_browser.operation.registry_failed"
+                    : "workspace.content_browser.operation.rollback_failed";
+            return;
+        }
+        LOG_INFO("editor.content_browser", "Moved asset entry to recoverable project trash: %s",
+                 trashDirectory.string().c_str());
+        m_assetRegistry = m_mutableAssetRegistry->Snapshot();
+        m_viewModel.assetRegistryRevision = m_assetRegistry.Revision();
+        m_viewModel.contentBrowser = BuildContentBrowserDirectory(
+            projectRoot,
+            m_viewModel.contentBrowser.absoluteCurrentPath,
+            m_assetRegistry, m_importerCatalog);
     }
 
     void EditorWorkspaceController::RefreshSelectionProjection()

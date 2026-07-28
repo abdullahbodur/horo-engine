@@ -14,6 +14,9 @@
 #include "Horo/Foundation/Logging/LogContext.h"
 
 #include <memory>
+#include <string>
+#include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace Horo::Editor::Theme
@@ -49,7 +52,8 @@ namespace Horo::Editor
          * @param catalog Published immutable importer catalog snapshot.
          */
         AssetImportModal(const Theme::Fonts& fonts, JobSystem& jobs,
-                         std::shared_ptr<const Assets::AssetImporterCatalogSnapshot> catalog) noexcept;
+                         std::shared_ptr<const Assets::AssetImporterCatalogSnapshot> catalog,
+                         Assets::AssetRegistry* assetRegistry = nullptr) noexcept;
 
         [[nodiscard]] ModalId Id() const override;
         [[nodiscard]] ModalPresentation Presentation() const override;
@@ -67,6 +71,12 @@ namespace Horo::Editor
 
         /** @brief Sets the project root for asset destination paths. Call before BeginImport when known. */
         void SetProjectRoot(const std::filesystem::path &root) noexcept;
+
+        /**
+         * @brief Sets the absolute asset directory applied to files subsequently added to the queue.
+         * @param absoluteDirectory Existing directory beneath the active project's assets root.
+         */
+        void SetDefaultDestination(const std::filesystem::path& absoluteDirectory) noexcept;
 
         /** @brief Returns the stored project root (empty if not set). */
         [[nodiscard]] const std::filesystem::path &ProjectRoot() const noexcept { return m_projectRoot; }
@@ -86,6 +96,48 @@ namespace Horo::Editor
 
         /** @brief Selects an item by index for the settings panel. */
         void SelectItem(std::size_t index);
+
+        /** @brief Named importer-settings snapshot scoped to one importer contribution. */
+        struct ImportPreset
+        {
+            std::string name; /**< User-visible preset name, unique within its importer. */
+            std::unordered_map<std::string, std::string> settings; /**< Serialized importer settings. */
+            std::string destinationFolder; /**< Project-relative destination retained by the preset. */
+            int subfolderByType{0}; /**< Destination organization mode retained by the preset. */
+            int assetIdStrategy{0}; /**< Asset identity strategy retained by the preset. */
+            bool createMetaSidecar{true}; /**< Meta-sidecar choice retained by the preset. */
+            bool overwriteWithoutPrompt{false}; /**< Conflict policy retained by the preset. */
+        };
+
+        /**
+         * @brief Returns preset names available to a queued item's importer and extension.
+         * @param index Queue index whose importer/extension preset scope is requested.
+         * @return Ordered preset names for the compact footer selector.
+         */
+        [[nodiscard]] std::vector<std::string> PresetNames(std::size_t index) const;
+
+        /**
+         * @brief Returns the active preset name for a queued item.
+         * @param index Queue index.
+         * @return Active preset name, or Default for an invalid/new item.
+         */
+        [[nodiscard]] std::string_view ActivePresetName(std::size_t index) const noexcept;
+
+        /**
+         * @brief Applies a named importer preset to one queued item.
+         * @param index Queue index.
+         * @param presetName Preset name; Default restores schema defaults.
+         * @return True when the preset exists and was applied.
+         */
+        [[nodiscard]] bool ApplyPreset(std::size_t index, std::string_view presetName);
+
+        /**
+         * @brief Captures the current settings of one queued item as a named preset.
+         * @param index Queue index.
+         * @param presetName Non-empty name unique within the selected importer.
+         * @return True when the preset was created.
+         */
+        [[nodiscard]] bool CreatePreset(std::size_t index, std::string_view presetName);
 
         /** @brief Conflict resolution choice for the popup. */
         enum class ConflictChoice : std::uint8_t
@@ -125,8 +177,10 @@ namespace Horo::Editor
         const Theme::Fonts &m_fonts;
         JobSystem &m_jobs;
         std::shared_ptr<const Assets::AssetImporterCatalogSnapshot> m_catalog;
+        Assets::AssetRegistry* m_assetRegistry{};
         EditorDataBus *m_events = nullptr;
         std::filesystem::path m_projectRoot; /**< Stored for committer. */
+        std::string m_defaultDestinationFolder;
 
         std::unique_ptr<Assets::AssetImportOperation> m_operation;
         std::unique_ptr<Assets::ProjectAssetImportCommitter> m_committer;
@@ -140,6 +194,11 @@ namespace Horo::Editor
 
         // Source files queued for import
         std::vector<std::filesystem::path> m_queuedFiles;
+
+        // Presets are separated by stable contribution ID and source extension.
+        std::unordered_map<std::string, std::vector<ImportPreset>> m_presetsByImporterAndExtension;
+        std::vector<std::string> m_activePresetNames;
+        std::vector<ImportPreset> m_defaultPresetValues;
 
         /// @brief RAII MDC frame active for the lifetime of this modal.
         std::unique_ptr<Log::LogContext> m_logCtx;

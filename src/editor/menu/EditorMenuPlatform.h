@@ -2,6 +2,7 @@
 
 #include "Horo/Editor/EditorMenuModel.h"
 
+#include <filesystem>
 #include <optional>
 
 namespace Horo::Editor {
@@ -22,4 +23,12 @@ namespace Horo::Editor {
      * @return Pending invocation, or empty when no native menu command is waiting.
      */
     [[nodiscard]] std::optional<EditorMenuInvocation> PollNativeEditorMenuAction() noexcept;
+
+    /**
+     * @brief Reveals one absolute editor-owned path in the native file manager.
+     * @param absolutePath Existing absolute file or directory path.
+     * @return True when the platform accepted the reveal request.
+     */
+    [[nodiscard]] bool RevealInNativeFileManager(
+        const std::filesystem::path& absolutePath) noexcept;
 } // namespace Horo::Editor

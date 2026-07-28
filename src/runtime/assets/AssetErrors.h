@@ -48,6 +48,7 @@ namespace Horo::Assets::ImportErrors
 {
 extern const ErrorCodeDescriptor NoImporter;
 extern const ErrorCodeDescriptor ObjNoVertices;
+extern const ErrorCodeDescriptor FbxMalformed;
 extern const ErrorCodeDescriptor ImportCancelled;
 extern const ErrorCodeDescriptor ObjParseWarning;
 } // namespace Horo::Assets::ImportErrors

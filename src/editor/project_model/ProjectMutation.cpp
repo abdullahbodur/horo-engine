@@ -31,6 +31,8 @@ namespace Horo::Editor
                 return "autosave";
             case ProjectMutationOwner::Package:
                 return "package";
+            case ProjectMutationOwner::Asset:
+                return "asset";
             case ProjectMutationOwner::Cli:
                 return "cli";
             case ProjectMutationOwner::Mcp:

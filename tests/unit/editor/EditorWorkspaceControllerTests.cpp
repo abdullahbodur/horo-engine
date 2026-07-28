@@ -2,16 +2,90 @@
 
 #include "editor/screens/workspace/EditorWorkspaceController.h"
 
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <span>
+#include <string>
+#include <string_view>
+
 namespace
 {
     using namespace Horo;
     using namespace Horo::Editor;
     namespace Math = Math;
 
+    const ErrorCodeDescriptor InjectedFilesystemFailure{
+        .domain = ErrorDomainId{"test.content_browser"},
+        .code = ErrorCode{"injected"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Injected Content Browser filesystem failure.",
+    };
+
+    class SyncFailingFilesystem final : public DurableFileSystem
+    {
+    public:
+        [[nodiscard]] Result<ExclusiveFileLock> TryAcquireExclusive(
+            const std::filesystem::path& path,
+            const std::string_view ownerMetadata) override
+        {
+            return native_.TryAcquireExclusive(path, ownerMetadata);
+        }
+
+        [[nodiscard]] Result<std::uint64_t> AvailableBytes(
+            const std::filesystem::path& path) const override
+        {
+            return native_.AvailableBytes(path);
+        }
+
+        [[nodiscard]] Result<void> WriteDurable(
+            const std::filesystem::path& path,
+            const std::span<const std::byte> bytes) override
+        {
+            return native_.WriteDurable(path, bytes);
+        }
+
+        [[nodiscard]] Result<void> CopyDurable(
+            const std::filesystem::path& source,
+            const std::filesystem::path& destination) override
+        {
+            return native_.CopyDurable(source, destination);
+        }
+
+        [[nodiscard]] Result<void> AtomicReplace(
+            const std::filesystem::path& prepared,
+            const std::filesystem::path& destination) override
+        {
+            return native_.AtomicReplace(prepared, destination);
+        }
+
+        [[nodiscard]] Result<void> RemoveDurable(
+            const std::filesystem::path& path) override
+        {
+            return native_.RemoveDurable(path);
+        }
+
+        [[nodiscard]] Result<void> SyncDirectory(
+            const std::filesystem::path& path) override
+        {
+            if (failSync)
+                return Result<void>::Failure(
+                    MakeError(InjectedFilesystemFailure));
+            return native_.SyncDirectory(path);
+        }
+
+        bool failSync{false};
+
+    private:
+        NativeDurableFileSystem native_;
+    };
+
     class TestWorkspaceController final
     {
     public:
-        TestWorkspaceController() : controller_("test-project", runtimeScene_)
+        explicit TestWorkspaceController(std::string projectRoot = "test-project")
+            : controller_(std::move(projectRoot), runtimeScene_)
         {
             REQUIRE((runtimeScene_.Startup(cancellation_.Token()).HasValue()));
             PumpLifecycleCommit();
@@ -43,6 +117,16 @@ namespace
             return controller_.ViewportScene();
         }
 
+        void RefreshAssets(const Assets::AssetRegistrySnapshot& snapshot)
+        {
+            controller_.RefreshAssets(snapshot);
+        }
+
+        void UpdateContentBrowser()
+        {
+            controller_.UpdateContentBrowser();
+        }
+
     private:
         void PumpLifecycleCommit()
         {
@@ -55,6 +139,765 @@ namespace
         CancellationSource cancellation_;
         EditorWorkspaceController controller_;
     };
+
+    TEST_CASE("Published Asset Registry Revisions Refresh The Content Browser Projection", "[unit][editor]")
+    {
+        const std::filesystem::path projectRoot =
+            std::filesystem::temp_directory_path() /
+            ("horo-workspace-assets-" + std::to_string(
+                std::chrono::steady_clock::now().time_since_epoch().count()));
+        const std::filesystem::path meshesDirectory = projectRoot / "assets/Meshes";
+        std::filesystem::create_directories(meshesDirectory);
+        {
+            std::ofstream payload(meshesDirectory / "arrow_bow3.horoasset", std::ios::binary);
+            payload << "asset";
+        }
+
+        TestWorkspaceController controller{projectRoot.string()};
+        Assets::AssetRegistry registry;
+        auto assetId = Assets::AssetId::Parse("00112233-4455-6677-8899-aabbccddeeff");
+        auto assetType = Assets::AssetTypeId::Parse("core.mesh");
+        auto sourcePath = ProjectPath::Parse("assets/Meshes/arrow_bow3.horoasset");
+        auto metadataPath = ProjectPath::Parse("assets/Meshes/arrow_bow3.horoasset.horo");
+        REQUIRE((assetId.HasValue()));
+        REQUIRE((assetType.HasValue()));
+        REQUIRE((sourcePath.HasValue()));
+        REQUIRE((metadataPath.HasValue()));
+        const auto published = registry.Publish({Assets::AssetRecord{
+            .id = std::move(assetId).Value(),
+            .type = std::move(assetType).Value(),
+            .sourcePath = std::move(sourcePath).Value(),
+            .metadataPath = std::move(metadataPath).Value(),
+        }});
+        REQUIRE((published.status == Assets::AssetRegistryBuildStatus::Complete));
+
+        controller.RefreshAssets(registry.Snapshot());
+
+        REQUIRE((controller.ViewModel().assetRegistryRevision == published.publishedRevision));
+        REQUIRE((controller.ViewModel().contentBrowser.entries.size() == 1));
+        REQUIRE((controller.ViewModel().contentBrowser.entries[0].kind ==
+                 ContentBrowserEntryKind::Directory));
+        REQUIRE((controller.ViewModel().contentBrowser.entries[0].displayName == "Meshes"));
+        REQUIRE((std::filesystem::path{
+                     controller.ViewModel().contentBrowser.entries[0].absolutePath}.is_absolute()));
+
+        EditorWorkspaceViewCommandData navigate;
+        navigate.command = EditorWorkspaceViewCommand::NavigateContentBrowser;
+        navigate.stringPayload = meshesDirectory.string();
+        controller.ProcessCommand(navigate);
+        REQUIRE((controller.ViewModel().contentBrowser.absoluteCurrentPath ==
+                 std::filesystem::weakly_canonical(meshesDirectory).string()));
+        REQUIRE((controller.ViewModel().contentBrowser.entries.size() == 1));
+        REQUIRE((controller.ViewModel().contentBrowser.entries[0].displayName ==
+                 "arrow_bow3"));
+        REQUIRE((std::filesystem::path{
+                     controller.ViewModel().contentBrowser.entries[0].absolutePath}.is_absolute()));
+
+        std::error_code cleanupError;
+        std::filesystem::remove_all(projectRoot, cleanupError);
+    }
+
+    TEST_CASE(
+        "Content Browser Refresh Exposes Loading And Reconciles Deleted Navigation Targets",
+        "[unit][editor]")
+    {
+        const std::filesystem::path projectRoot =
+            std::filesystem::temp_directory_path() /
+            ("horo-workspace-refresh-" + std::to_string(
+                std::chrono::steady_clock::now()
+                    .time_since_epoch()
+                    .count()));
+        const std::filesystem::path deletedDirectory =
+            projectRoot / "assets/Deleted";
+        std::filesystem::create_directories(deletedDirectory);
+
+        TestWorkspaceController controller{projectRoot.string()};
+        EditorWorkspaceViewCommandData navigate;
+        navigate.command =
+            EditorWorkspaceViewCommand::NavigateContentBrowser;
+        navigate.stringPayload = deletedDirectory.string();
+        controller.ProcessCommand(navigate);
+        REQUIRE(
+            (controller.ViewModel().contentBrowserCanNavigateBack));
+
+        std::error_code removeError;
+        std::filesystem::remove_all(deletedDirectory, removeError);
+        REQUIRE_FALSE(removeError);
+
+        EditorWorkspaceViewCommandData refresh;
+        refresh.command =
+            EditorWorkspaceViewCommand::RefreshContentBrowser;
+        controller.ProcessCommand(refresh);
+        REQUIRE(
+            (controller.ViewModel().contentBrowser.loadState ==
+             ContentBrowserLoadState::Loading));
+
+        controller.UpdateContentBrowser();
+        REQUIRE(
+            (controller.ViewModel().contentBrowser.loadState ==
+             ContentBrowserLoadState::Loading));
+        controller.UpdateContentBrowser();
+        REQUIRE(
+            (controller.ViewModel().contentBrowser.loadState ==
+             ContentBrowserLoadState::Ready));
+        REQUIRE(
+            (controller.ViewModel().contentBrowser.absoluteCurrentPath ==
+             std::filesystem::weakly_canonical(
+                 projectRoot / "assets")
+                 .string()));
+        REQUIRE_FALSE(
+            controller.ViewModel().contentBrowserCanNavigateBack);
+        REQUIRE_FALSE(
+            controller.ViewModel().contentBrowserCanNavigateForward);
+
+        std::filesystem::remove_all(projectRoot, removeError);
+    }
+
+    TEST_CASE("Content Browser Rename And Delete Preserve Registry Consistency", "[unit][editor]")
+    {
+        const std::filesystem::path projectRoot =
+            std::filesystem::temp_directory_path() /
+            ("horo-workspace-asset-mutation-" + std::to_string(
+                std::chrono::steady_clock::now().time_since_epoch().count()));
+        const std::filesystem::path meshesDirectory = projectRoot / "assets/Meshes";
+        std::filesystem::create_directories(meshesDirectory);
+        std::filesystem::create_directories(projectRoot / ".horo/local");
+        const std::filesystem::path source = meshesDirectory / "crate.horoasset";
+        {
+            std::ofstream payload(source, std::ios::binary);
+            payload << "asset";
+        }
+        {
+            std::ofstream metadata(source.string() + ".horo");
+            metadata << R"({
+  "schemaVersion": 1,
+  "assetId": "00112233-4455-6677-8899-aabbccddeeff",
+  "assetType": "core.mesh"
+})";
+        }
+
+        Assets::AssetRegistry registry;
+        const auto initial =
+            Assets::RebuildAssetRegistry(registry, projectRoot, Assets::AssetRegistryOpenMode::Edit);
+        REQUIRE((initial.HasValue()));
+        REQUIRE((initial.Value().status == Assets::AssetRegistryBuildStatus::Complete));
+        NativeDurableFileSystem files;
+        ProjectMutationCoordinator mutations{files};
+        Runtime::RuntimeSceneService runtimeScene;
+        CancellationSource cancellation;
+        REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
+        EditorWorkspaceController controller{
+            projectRoot.string(), runtimeScene, registry.Snapshot(), &registry, &mutations, &files};
+
+        EditorWorkspaceViewCommandData navigate;
+        navigate.command = EditorWorkspaceViewCommand::NavigateContentBrowser;
+        navigate.stringPayload = meshesDirectory.string();
+        controller.ProcessCommand(navigate);
+
+        EditorWorkspaceViewCommandData rename;
+        rename.command = EditorWorkspaceViewCommand::RenameContentBrowserEntry;
+        rename.stringPayload = source.string();
+        rename.secondaryStringPayload = "hero_crate.horoasset";
+        controller.ProcessCommand(rename);
+        const std::filesystem::path renamed = meshesDirectory / "hero_crate.horoasset";
+        REQUIRE((!std::filesystem::exists(source)));
+        REQUIRE((std::filesystem::is_regular_file(renamed)));
+        REQUIRE((std::filesystem::is_regular_file(renamed.string() + ".horo")));
+        REQUIRE((controller.ViewModel().contentBrowserOperationError.empty()));
+        REQUIRE((registry.Snapshot().Records().size() == 1));
+        REQUIRE((registry.Snapshot().Records()[0].sourcePath.String() ==
+                 "assets/Meshes/hero_crate.horoasset"));
+
+        EditorWorkspaceViewCommandData remove;
+        remove.command = EditorWorkspaceViewCommand::DeleteContentBrowserEntry;
+        remove.stringPayload = renamed.string();
+        controller.ProcessCommand(remove);
+        REQUIRE((!std::filesystem::exists(renamed)));
+        REQUIRE((!std::filesystem::exists(renamed.string() + ".horo")));
+        REQUIRE((controller.ViewModel().contentBrowserOperationError.empty()));
+        REQUIRE((registry.Snapshot().Records().empty()));
+        const std::filesystem::path trashRoot =
+            projectRoot / ".horo/local/trash";
+        REQUIRE((std::filesystem::is_directory(trashRoot)));
+        const std::filesystem::path trashEntry =
+            std::filesystem::directory_iterator{trashRoot}->path();
+        REQUIRE(
+            (std::filesystem::is_regular_file(
+                trashEntry / renamed.filename())));
+        REQUIRE(
+            (std::filesystem::is_regular_file(
+                trashEntry /
+                (renamed.filename().string() + ".horo"))));
+        std::ifstream manifest(trashEntry / "trash.json");
+        const std::string manifestText{
+            std::istreambuf_iterator<char>{manifest},
+            std::istreambuf_iterator<char>{}};
+        REQUIRE(
+            (manifestText.find(renamed.string()) !=
+             std::string::npos));
+
+        std::error_code cleanupError;
+        std::filesystem::remove_all(projectRoot, cleanupError);
+    }
+
+    TEST_CASE("Content Browser Copy And Move Preserve Asset Identity Contracts", "[unit][editor]")
+    {
+        const std::filesystem::path projectRoot =
+            std::filesystem::temp_directory_path() /
+            ("horo-workspace-asset-copy-move-" + std::to_string(
+                std::chrono::steady_clock::now().time_since_epoch().count()));
+        const std::filesystem::path sourceDirectory = projectRoot / "assets/Meshes";
+        const std::filesystem::path targetDirectory = projectRoot / "assets/Target";
+        std::filesystem::create_directories(sourceDirectory);
+        std::filesystem::create_directories(targetDirectory);
+        std::filesystem::create_directories(projectRoot / ".horo/local");
+        const std::filesystem::path source = sourceDirectory / "crate.horoasset";
+        {
+            std::ofstream payload(source, std::ios::binary);
+            payload << "asset";
+        }
+        {
+            std::ofstream metadata(source.string() + ".horo");
+            metadata << R"({
+  "schemaVersion": 1,
+  "assetId": "00112233-4455-6677-8899-aabbccddeeff",
+  "assetType": "core.mesh"
+})";
+        }
+
+        Assets::AssetRegistry registry;
+        const auto initial =
+            Assets::RebuildAssetRegistry(registry, projectRoot, Assets::AssetRegistryOpenMode::Edit);
+        REQUIRE((initial.HasValue()));
+        NativeDurableFileSystem files;
+        ProjectMutationCoordinator mutations{files};
+        Runtime::RuntimeSceneService runtimeScene;
+        CancellationSource cancellation;
+        REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
+        EditorWorkspaceController controller{
+            projectRoot.string(), runtimeScene, registry.Snapshot(), &registry, &mutations, &files};
+
+        EditorWorkspaceViewCommandData navigate;
+        navigate.command = EditorWorkspaceViewCommand::NavigateContentBrowser;
+        navigate.stringPayload = sourceDirectory.string();
+        controller.ProcessCommand(navigate);
+
+        EditorWorkspaceViewCommandData duplicate;
+        duplicate.command = EditorWorkspaceViewCommand::DuplicateContentBrowserAsset;
+        duplicate.stringPayload = source.string();
+        controller.ProcessCommand(duplicate);
+        const std::filesystem::path duplicatePath =
+            sourceDirectory / "crate (1).horoasset";
+        REQUIRE((std::filesystem::is_regular_file(duplicatePath)));
+        REQUIRE((std::filesystem::is_regular_file(duplicatePath.string() + ".horo")));
+        const Assets::AssetRegistrySnapshot afterDuplicate = registry.Snapshot();
+        const Assets::AssetRecord* originalRecord =
+            afterDuplicate.FindByPath("assets/Meshes/crate.horoasset");
+        const Assets::AssetRecord* duplicateRecord =
+            afterDuplicate.FindByPath("assets/Meshes/crate (1).horoasset");
+        REQUIRE((originalRecord != nullptr));
+        REQUIRE((duplicateRecord != nullptr));
+        REQUIRE((originalRecord->id != duplicateRecord->id));
+        const Assets::AssetId originalId = originalRecord->id;
+        const Assets::AssetId duplicateId = duplicateRecord->id;
+
+        EditorWorkspaceViewCommandData copy;
+        copy.command = EditorWorkspaceViewCommand::CopyContentBrowserAsset;
+        copy.stringPayload = source.string();
+        controller.ProcessCommand(copy);
+        REQUIRE((controller.ViewModel().contentBrowserClipboard.mode ==
+                 ContentBrowserClipboardMode::Copy));
+
+        EditorWorkspaceViewCommandData paste;
+        paste.command = EditorWorkspaceViewCommand::PasteContentBrowserAsset;
+        paste.stringPayload = targetDirectory.string();
+        controller.ProcessCommand(paste);
+        const std::filesystem::path copiedPath = targetDirectory / "crate.horoasset";
+        REQUIRE((std::filesystem::is_regular_file(copiedPath)));
+        const Assets::AssetRegistrySnapshot afterCopy = registry.Snapshot();
+        const Assets::AssetRecord* copiedRecord =
+            afterCopy.FindByPath("assets/Target/crate.horoasset");
+        REQUIRE((copiedRecord != nullptr));
+        REQUIRE((copiedRecord->id != originalId));
+        REQUIRE((controller.ViewModel().contentBrowserClipboard.mode ==
+                 ContentBrowserClipboardMode::Copy));
+
+        EditorWorkspaceViewCommandData cut;
+        cut.command = EditorWorkspaceViewCommand::CutContentBrowserAsset;
+        cut.stringPayload = source.string();
+        controller.ProcessCommand(cut);
+        paste.stringPayload = targetDirectory.string();
+        controller.ProcessCommand(paste);
+        REQUIRE((std::filesystem::is_regular_file(source)));
+        REQUIRE((controller.ViewModel().contentBrowserClipboard.mode ==
+                 ContentBrowserClipboardMode::Move));
+        REQUIRE((controller.ViewModel().contentBrowserOperationError ==
+                 "workspace.content_browser.operation.name_exists"));
+
+        cut.stringPayload = duplicatePath.string();
+        controller.ProcessCommand(cut);
+        REQUIRE((controller.ViewModel().contentBrowserClipboard.mode ==
+                 ContentBrowserClipboardMode::Move));
+
+        paste.stringPayload = targetDirectory.string();
+        controller.ProcessCommand(paste);
+        const std::filesystem::path movedPath =
+            targetDirectory / "crate (1).horoasset";
+        REQUIRE((!std::filesystem::exists(duplicatePath)));
+        REQUIRE((std::filesystem::is_regular_file(movedPath)));
+        const Assets::AssetRegistrySnapshot afterMove =
+            registry.Snapshot();
+        const Assets::AssetRecord* movedRecord =
+            afterMove.FindByPath("assets/Target/crate (1).horoasset");
+        REQUIRE((movedRecord != nullptr));
+        REQUIRE((movedRecord->id == duplicateId));
+        REQUIRE((controller.ViewModel().contentBrowserClipboard.mode ==
+                 ContentBrowserClipboardMode::None));
+        REQUIRE((controller.ViewModel().contentBrowserOperationError.empty()));
+
+        const std::filesystem::path dragCopyDirectory =
+            projectRoot / "assets/DragCopy";
+        const std::filesystem::path dragMoveDirectory =
+            projectRoot / "assets/DragMove";
+        std::filesystem::create_directories(dragCopyDirectory);
+        std::filesystem::create_directories(dragMoveDirectory);
+
+        EditorWorkspaceViewCommandData dragCopy;
+        dragCopy.command =
+            EditorWorkspaceViewCommand::TransferContentBrowserAsset;
+        dragCopy.contentBrowserTransfer =
+            ContentBrowserAssetTransferRequest{
+                .absoluteSourcePath = source.string(),
+                .absoluteDestinationDirectory =
+                    dragCopyDirectory.string(),
+                .mode = ContentBrowserTransferMode::Copy,
+            };
+        controller.ProcessCommand(dragCopy);
+        const Assets::AssetRegistrySnapshot afterDragCopy =
+            registry.Snapshot();
+        const Assets::AssetRecord* dragCopyRecord =
+            afterDragCopy.FindByPath(
+                "assets/DragCopy/crate.horoasset");
+        REQUIRE((dragCopyRecord != nullptr));
+        REQUIRE((dragCopyRecord->id != originalId));
+        REQUIRE((controller.ViewModel().contentBrowserClipboard.mode ==
+                 ContentBrowserClipboardMode::None));
+
+        EditorWorkspaceViewCommandData dragMove;
+        dragMove.command =
+            EditorWorkspaceViewCommand::TransferContentBrowserAsset;
+        dragMove.contentBrowserTransfer =
+            ContentBrowserAssetTransferRequest{
+                .absoluteSourcePath = movedPath.string(),
+                .absoluteDestinationDirectory =
+                    dragMoveDirectory.string(),
+                .mode = ContentBrowserTransferMode::Move,
+            };
+        controller.ProcessCommand(dragMove);
+        REQUIRE((!std::filesystem::exists(movedPath)));
+        const Assets::AssetRegistrySnapshot afterDragMove =
+            registry.Snapshot();
+        const Assets::AssetRecord* dragMoveRecord =
+            afterDragMove.FindByPath(
+                "assets/DragMove/crate (1).horoasset");
+        REQUIRE((dragMoveRecord != nullptr));
+        REQUIRE((dragMoveRecord->id == duplicateId));
+        REQUIRE((controller.ViewModel().contentBrowserClipboard.mode ==
+                 ContentBrowserClipboardMode::None));
+
+        EditorWorkspaceViewCommandData relativeDrag;
+        relativeDrag.command =
+            EditorWorkspaceViewCommand::TransferContentBrowserAsset;
+        relativeDrag.contentBrowserTransfer =
+            ContentBrowserAssetTransferRequest{
+                .absoluteSourcePath = "assets/Meshes/crate.horoasset",
+                .absoluteDestinationDirectory =
+                    dragCopyDirectory.string(),
+                .mode = ContentBrowserTransferMode::Move,
+            };
+        controller.ProcessCommand(relativeDrag);
+        REQUIRE((controller.ViewModel().contentBrowserOperationError ==
+                 "workspace.content_browser.operation.invalid_target"));
+
+        EditorWorkspaceViewCommandData createFolder;
+        createFolder.command = EditorWorkspaceViewCommand::CreateContentBrowserFolder;
+        createFolder.stringPayload = sourceDirectory.string();
+        createFolder.secondaryStringPayload = "Generated";
+        controller.ProcessCommand(createFolder);
+        REQUIRE((std::filesystem::is_directory(sourceDirectory / "Generated")));
+
+        navigate.stringPayload = targetDirectory.string();
+        controller.ProcessCommand(navigate);
+        REQUIRE((controller.ViewModel().contentBrowserCanNavigateBack));
+        EditorWorkspaceViewCommandData navigateBack;
+        navigateBack.command = EditorWorkspaceViewCommand::NavigateContentBrowserBack;
+        controller.ProcessCommand(navigateBack);
+        REQUIRE((controller.ViewModel().contentBrowser.absoluteCurrentPath ==
+                 std::filesystem::weakly_canonical(sourceDirectory).string()));
+        REQUIRE((controller.ViewModel().contentBrowserCanNavigateForward));
+
+        std::error_code cleanupError;
+        std::filesystem::remove_all(projectRoot, cleanupError);
+    }
+
+    TEST_CASE(
+        "Content Browser Move Rolls Back When Directory Durability Fails",
+        "[unit][editor]")
+    {
+        const std::filesystem::path projectRoot =
+            std::filesystem::temp_directory_path() /
+            ("horo-workspace-asset-move-rollback-" +
+             std::to_string(
+                 std::chrono::steady_clock::now()
+                     .time_since_epoch()
+                     .count()));
+        const std::filesystem::path sourceDirectory =
+            projectRoot / "assets/Source";
+        const std::filesystem::path targetDirectory =
+            projectRoot / "assets/Target";
+        std::filesystem::create_directories(sourceDirectory);
+        std::filesystem::create_directories(targetDirectory);
+        std::filesystem::create_directories(projectRoot / ".horo/local");
+        const std::filesystem::path source =
+            sourceDirectory / "rollback.horoasset";
+        {
+            std::ofstream payload(source, std::ios::binary);
+            payload << "asset";
+        }
+        {
+            std::ofstream metadata(source.string() + ".horo");
+            metadata << R"({
+  "schemaVersion": 1,
+  "assetId": "20112233-4455-6677-8899-aabbccddeeff",
+  "assetType": "core.mesh"
+})";
+        }
+
+        Assets::AssetRegistry registry;
+        REQUIRE(
+            (Assets::RebuildAssetRegistry(
+                 registry, projectRoot,
+                 Assets::AssetRegistryOpenMode::Edit)
+                 .HasValue()));
+        SyncFailingFilesystem files;
+        ProjectMutationCoordinator mutations{files};
+        Runtime::RuntimeSceneService runtimeScene;
+        CancellationSource cancellation;
+        REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
+        EditorWorkspaceController controller{
+            projectRoot.string(), runtimeScene, registry.Snapshot(),
+            &registry, &mutations, &files};
+
+        EditorWorkspaceViewCommandData navigate;
+        navigate.command =
+            EditorWorkspaceViewCommand::NavigateContentBrowser;
+        navigate.stringPayload = sourceDirectory.string();
+        controller.ProcessCommand(navigate);
+
+        files.failSync = true;
+        EditorWorkspaceViewCommandData move;
+        move.command =
+            EditorWorkspaceViewCommand::TransferContentBrowserAsset;
+        move.contentBrowserTransfer =
+            ContentBrowserAssetTransferRequest{
+                .absoluteSourcePath = source.string(),
+                .absoluteDestinationDirectory =
+                    targetDirectory.string(),
+                .mode = ContentBrowserTransferMode::Move,
+            };
+        controller.ProcessCommand(move);
+
+        REQUIRE((std::filesystem::is_regular_file(source)));
+        REQUIRE(
+            (std::filesystem::is_regular_file(
+                source.string() + ".horo")));
+        REQUIRE_FALSE(
+            std::filesystem::exists(
+                targetDirectory / source.filename()));
+        REQUIRE(
+            (registry.Snapshot().FindByPath(
+                 "assets/Source/rollback.horoasset") != nullptr));
+        REQUIRE(
+            (controller.ViewModel().contentBrowserOperationError ==
+             "workspace.content_browser.operation.move_failed"));
+
+        files.failSync = false;
+        std::error_code cleanupError;
+        std::filesystem::remove_all(projectRoot, cleanupError);
+    }
+
+    TEST_CASE(
+        "Content Browser Rejects Unsafe Portable Paths And Companion Sets",
+        "[unit][editor]")
+    {
+        const std::filesystem::path projectRoot =
+            std::filesystem::temp_directory_path() /
+            ("horo-workspace-asset-path-hardening-" +
+             std::to_string(
+                 std::chrono::steady_clock::now()
+                     .time_since_epoch()
+                     .count()));
+        const std::filesystem::path sourceDirectory =
+            projectRoot / "assets/Source";
+        const std::filesystem::path targetDirectory =
+            projectRoot / "assets/Target";
+        const std::filesystem::path outsideDirectory =
+            projectRoot.parent_path() /
+            (projectRoot.filename().string() + "-outside");
+        std::filesystem::create_directories(sourceDirectory);
+        std::filesystem::create_directories(targetDirectory);
+        std::filesystem::create_directories(outsideDirectory);
+        std::filesystem::create_directories(projectRoot / ".horo/local");
+        std::filesystem::path source =
+            sourceDirectory / "crate.horoasset";
+        {
+            std::ofstream payload(source, std::ios::binary);
+            payload << "asset";
+        }
+        {
+            std::ofstream metadata(source.string() + ".horo");
+            metadata << R"({
+  "schemaVersion": 1,
+  "assetId": "30112233-4455-6677-8899-aabbccddeeff",
+  "assetType": "core.mesh"
+})";
+        }
+
+        Assets::AssetRegistry registry;
+        REQUIRE(
+            (Assets::RebuildAssetRegistry(
+                 registry, projectRoot,
+                 Assets::AssetRegistryOpenMode::Edit)
+                 .HasValue()));
+        NativeDurableFileSystem files;
+        ProjectMutationCoordinator mutations{files};
+        Runtime::RuntimeSceneService runtimeScene;
+        CancellationSource cancellation;
+        REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
+        EditorWorkspaceController controller{
+            projectRoot.string(), runtimeScene, registry.Snapshot(),
+            &registry, &mutations, &files};
+
+        EditorWorkspaceViewCommandData navigate;
+        navigate.command =
+            EditorWorkspaceViewCommand::NavigateContentBrowser;
+        navigate.stringPayload = sourceDirectory.string();
+        controller.ProcessCommand(navigate);
+
+        {
+            std::ofstream collision(
+                targetDirectory / "CRATE.HOROASSET",
+                std::ios::binary);
+            collision << "collision";
+        }
+        EditorWorkspaceViewCommandData move;
+        move.command =
+            EditorWorkspaceViewCommand::TransferContentBrowserAsset;
+        move.contentBrowserTransfer =
+            ContentBrowserAssetTransferRequest{
+                .absoluteSourcePath = source.string(),
+                .absoluteDestinationDirectory =
+                    targetDirectory.string(),
+                .mode = ContentBrowserTransferMode::Move,
+            };
+        controller.ProcessCommand(move);
+        REQUIRE((std::filesystem::is_regular_file(source)));
+        REQUIRE(
+            (controller.ViewModel().contentBrowserOperationError ==
+             "workspace.content_browser.operation.name_exists"));
+        std::filesystem::remove(
+            targetDirectory / "CRATE.HOROASSET");
+
+        EditorWorkspaceViewCommandData rename;
+        rename.command =
+            EditorWorkspaceViewCommand::RenameContentBrowserEntry;
+        rename.stringPayload = source.string();
+        rename.secondaryStringPayload = "çatı.horoasset";
+        controller.ProcessCommand(rename);
+        source = sourceDirectory / "çatı.horoasset";
+        REQUIRE((std::filesystem::is_regular_file(source)));
+        REQUIRE(
+            (std::filesystem::is_regular_file(
+                source.string() + ".horo")));
+
+        {
+            std::ofstream companionCollision(
+                sourceDirectory / "safe.horoasset.horo");
+            companionCollision << "collision";
+        }
+        rename.stringPayload = source.string();
+        rename.secondaryStringPayload = "safe.horoasset";
+        controller.ProcessCommand(rename);
+        REQUIRE((std::filesystem::is_regular_file(source)));
+        REQUIRE(
+            (controller.ViewModel().contentBrowserOperationError ==
+             "workspace.content_browser.operation.name_exists"));
+        std::filesystem::remove(
+            sourceDirectory / "safe.horoasset.horo");
+
+        const std::filesystem::path identitySidecar =
+            source.string() + ".horo";
+        const std::filesystem::path heldSidecar =
+            sourceDirectory / "held-sidecar";
+        std::filesystem::rename(identitySidecar, heldSidecar);
+        EditorWorkspaceViewCommandData copy;
+        copy.command =
+            EditorWorkspaceViewCommand::TransferContentBrowserAsset;
+        copy.contentBrowserTransfer =
+            ContentBrowserAssetTransferRequest{
+                .absoluteSourcePath = source.string(),
+                .absoluteDestinationDirectory =
+                    targetDirectory.string(),
+                .mode = ContentBrowserTransferMode::Copy,
+            };
+        controller.ProcessCommand(copy);
+        REQUIRE(
+            (controller.ViewModel().contentBrowserOperationError ==
+             "workspace.content_browser.operation.companion_invalid"));
+        REQUIRE_FALSE(
+            std::filesystem::exists(
+                targetDirectory / source.filename()));
+        std::filesystem::rename(heldSidecar, identitySidecar);
+
+        EditorWorkspaceViewCommandData createFolder;
+        createFolder.command =
+            EditorWorkspaceViewCommand::CreateContentBrowserFolder;
+        createFolder.stringPayload = sourceDirectory.string();
+        createFolder.secondaryStringPayload = "CON";
+        controller.ProcessCommand(createFolder);
+        REQUIRE_FALSE(
+            std::filesystem::exists(sourceDirectory / "CON"));
+        REQUIRE(
+            (controller.ViewModel().contentBrowserOperationError ==
+             "workspace.content_browser.operation.invalid_name"));
+        createFolder.secondaryStringPayload = "unsafe.";
+        controller.ProcessCommand(createFolder);
+        REQUIRE_FALSE(
+            std::filesystem::exists(sourceDirectory / "unsafe."));
+
+        std::error_code symlinkError;
+        const std::filesystem::path escape =
+            projectRoot / "assets/Escape";
+        std::filesystem::create_directory_symlink(
+            outsideDirectory, escape, symlinkError);
+        if (!symlinkError)
+        {
+            copy.contentBrowserTransfer->absoluteDestinationDirectory =
+                escape.string();
+            controller.ProcessCommand(copy);
+            REQUIRE(
+                (controller.ViewModel().contentBrowserOperationError ==
+                 "workspace.content_browser.operation.invalid_target"));
+            REQUIRE(
+                std::filesystem::is_empty(outsideDirectory));
+        }
+
+        std::error_code cleanupError;
+        std::filesystem::remove_all(projectRoot, cleanupError);
+        std::filesystem::remove_all(
+            outsideDirectory, cleanupError);
+    }
+
+    TEST_CASE(
+        "Content Browser Rename And Delete Roll Back Degraded Registry Publication",
+        "[unit][editor]")
+    {
+        const std::filesystem::path projectRoot =
+            std::filesystem::temp_directory_path() /
+            ("horo-workspace-asset-registry-rollback-" +
+             std::to_string(
+                 std::chrono::steady_clock::now()
+                     .time_since_epoch()
+                     .count()));
+        const std::filesystem::path assetDirectory =
+            projectRoot / "assets/Source";
+        std::filesystem::create_directories(assetDirectory);
+        std::filesystem::create_directories(projectRoot / ".horo/local");
+        const std::filesystem::path source =
+            assetDirectory / "stable.horoasset";
+        {
+            std::ofstream payload(source, std::ios::binary);
+            payload << "asset";
+        }
+        {
+            std::ofstream metadata(source.string() + ".horo");
+            metadata << R"({
+  "schemaVersion": 1,
+  "assetId": "40112233-4455-6677-8899-aabbccddeeff",
+  "assetType": "core.mesh"
+})";
+        }
+
+        Assets::AssetRegistry registry;
+        const auto initial = Assets::RebuildAssetRegistry(
+            registry, projectRoot,
+            Assets::AssetRegistryOpenMode::Edit);
+        REQUIRE((initial.HasValue()));
+        REQUIRE(
+            (initial.Value().status ==
+             Assets::AssetRegistryBuildStatus::Complete));
+        NativeDurableFileSystem files;
+        ProjectMutationCoordinator mutations{files};
+        Runtime::RuntimeSceneService runtimeScene;
+        CancellationSource cancellation;
+        REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
+        EditorWorkspaceController controller{
+            projectRoot.string(), runtimeScene, registry.Snapshot(),
+            &registry, &mutations, &files};
+
+        EditorWorkspaceViewCommandData navigate;
+        navigate.command =
+            EditorWorkspaceViewCommand::NavigateContentBrowser;
+        navigate.stringPayload = assetDirectory.string();
+        controller.ProcessCommand(navigate);
+
+        const std::filesystem::path corrupt =
+            assetDirectory / "corrupt.horoasset";
+        {
+            std::ofstream payload(corrupt, std::ios::binary);
+            payload << "asset";
+        }
+        {
+            std::ofstream metadata(corrupt.string() + ".horo");
+            metadata << "{ invalid";
+        }
+
+        EditorWorkspaceViewCommandData rename;
+        rename.command =
+            EditorWorkspaceViewCommand::RenameContentBrowserEntry;
+        rename.stringPayload = source.string();
+        rename.secondaryStringPayload = "renamed.horoasset";
+        controller.ProcessCommand(rename);
+        REQUIRE((std::filesystem::is_regular_file(source)));
+        REQUIRE(
+            (std::filesystem::is_regular_file(
+                source.string() + ".horo")));
+        REQUIRE_FALSE(
+            std::filesystem::exists(
+                assetDirectory / "renamed.horoasset"));
+        REQUIRE(
+            (controller.ViewModel().contentBrowserOperationError ==
+             "workspace.content_browser.operation.registry_failed"));
+
+        EditorWorkspaceViewCommandData remove;
+        remove.command =
+            EditorWorkspaceViewCommand::DeleteContentBrowserEntry;
+        remove.stringPayload = source.string();
+        controller.ProcessCommand(remove);
+        REQUIRE((std::filesystem::is_regular_file(source)));
+        REQUIRE(
+            (std::filesystem::is_regular_file(
+                source.string() + ".horo")));
+        REQUIRE(
+            (controller.ViewModel().contentBrowserOperationError ==
+             "workspace.content_browser.operation.registry_failed"));
+        REQUIRE(
+            (registry.Snapshot().FindByPath(
+                 "assets/Source/stable.horoasset") != nullptr));
+
+        std::error_code cleanupError;
+        std::filesystem::remove_all(projectRoot, cleanupError);
+    }
 
     TEST_CASE (
     "Moving An Active Panel Across Areas Updates Its Runtime Placement"

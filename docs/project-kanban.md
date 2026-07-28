@@ -12,7 +12,7 @@ sözleşmelerin uygulanma ve doğrulanma durumunu özetler.
 
 | Yapılıyor                                                                                          | İncelenecek                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Hazır                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Bağımlı                                                                                                                                                                                                                                                                       | Sonra                                                                                                                                                                                                                                                                                                                                 | Tamamlandı                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 |----------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [AST-001 · Asset pipeline temeli](#ast-001)<br>[AST-001D · Modular import ve GUI modal](#ast-001d) | [FND-001A · TaskGroup structured concurrency](#fnd-001a)<br>[PRJ-001A · Shared project mutation](#prj-001a)<br>[FND-001 · Foundation kontrat denetimi](#fnd-001)<br>[INP-001 · Input entegrasyon denetimi](#inp-001)<br>[MTH-001 · Scene math ve viewport denetimi](#mth-001)<br>[DOC-001 · Scene document kalıcılık denetimi](#doc-001)<br>[RND-002 · OpenGL/Metal parity denetimi](#rnd-002)<br>[TST-001 · Test matrisi ve CI denetimi](#tst-001)<br>[TST-002 · Dear ImGui UI automation](#tst-002) | [MAT-001 · Material ve shader temeli](#mat-001)<br>[EDT-002 · Inspector authoring](#edt-002)<br>[EDT-003 · Content Browser asset işlemleri](#edt-003)<br>[EDT-004 · Console, output ve operations panelleri](#edt-004)<br>[PRJ-001 · Project save/open/recovery](#prj-001)<br>[CLI-001 · Headless CLI host](#cli-001)<br>[MCP-001 · MCP host ve tool registry](#mcp-001)<br>[OBS-001 · Observability temeli](#obs-001)<br>[SEC-001 · Runtime güvenlik politikaları](#sec-001) | [MIG-001F · Subsystem/provider adoption](#mig-001f)<br>[GME-001 · Play mode ve gameplay runtime](#gme-001)<br>[PHY-001 · Physics runtime](#phy-001)<br>[AUD-001 · Audio runtime](#aud-001)<br>[PKG-001 · Package sistemi](#pkg-001)<br>[REL-001 · Release pipeline](#rel-001) | [NET-001 · Networking](#net-001)<br>[GUI-001 · Runtime Game UI/HUD](#gui-001)<br>[PLT-001 · Platform services](#plt-001)<br>[EXT-001 · Extension ve gameplay module host](#ext-001)<br>[PFB-001 · Prefab sistemi](#pfb-001)<br>[ADV-001 · Advanced renderer özellikleri](#adv-001)<br>[ADV-002 · Gelişmiş dünya sistemleri](#adv-002) | [MIG-001 · Project migration architecture](#mig-001)<br>[MIG-001A · Version ve compatibility foundation](#mig-001a)<br>[MIG-001B · Migration registry ve planner](#mig-001b)<br>[MIG-001C · Transaction ve recovery](#mig-001c)<br>[MIG-001D · Project-open entegrasyonu](#mig-001d)<br>[MIG-001E · Welcome compatibility görünümü](#mig-001e)<br>[MIG-001F-01 · Project settings migration adoption](#mig-001f-01)<br>[RUN-001 · Runtime lifecycle ve frame scheduler](#run-001)<br>[ARC-001 · Desired tree ve target uyumu](#arc-001)<br>[EDT-001 · Editor vertical slice sağlamlaştırma](#edt-001)<br>[RND-001 · Generic renderer resource geçişi](#rnd-001)<br>[SCN-001 · Scene runtime ve ECS temeli](#scn-001)<br>[AST-001A · Asset registry ve provider baseline](#ast-001a)<br>[AST-001B · Runtime scene asset resolution](#ast-001b)<br>[BAS-001 · Foundation primitives](#bas-001)<br>[BAS-002 · Scene math baseline](#bas-002)<br>[BAS-003 · Runtime input baseline](#bas-003)<br>[BAS-004 · Editor host ve workspace baseline](#bas-004)<br>[BAS-005 · Hierarchy create ve typed primitives](#bas-005)<br>[BAS-006 · Procedural mesh ve viewport baseline](#bas-006)<br>[BAS-007 · macOS app identity](#bas-007)<br>[AST-001C · headless-null cooking ve cache](#ast-001c) |
+| [EDT-004 · Console, output ve operations panelleri](#edt-004)<br>[EXT-001 · Extension ve gameplay module host](#ext-001) | [EDT-003 · Content Browser asset işlemleri](#edt-003)<br>[FND-001A · TaskGroup structured concurrency](#fnd-001a)<br>[PRJ-001A · Shared project mutation](#prj-001a)<br>[FND-001 · Foundation kontrat denetimi](#fnd-001)<br>[INP-001 · Input entegrasyon denetimi](#inp-001)<br>[MTH-001 · Scene math ve viewport denetimi](#mth-001)<br>[DOC-001 · Scene document kalıcılık denetimi](#doc-001)<br>[RND-002 · OpenGL/Metal parity denetimi](#rnd-002)<br>[TST-001 · Test matrisi ve CI denetimi](#tst-001)<br>[TST-002 · Dear ImGui UI automation](#tst-002) | [MAT-001 · Material ve shader temeli](#mat-001)<br>[EDT-002 · Inspector authoring](#edt-002)<br>[PRJ-001 · Project save/open/recovery](#prj-001)<br>[CLI-001 · Headless CLI host](#cli-001)<br>[MCP-001 · MCP host ve tool registry](#mcp-001)<br>[OBS-001 · Observability temeli](#obs-001)<br>[SEC-001 · Runtime güvenlik politikaları](#sec-001) | [MIG-001F · Subsystem/provider adoption](#mig-001f)<br>[GME-001 · Play mode ve gameplay runtime](#gme-001)<br>[PHY-001 · Physics runtime](#phy-001)<br>[AUD-001 · Audio runtime](#aud-001)<br>[PKG-001 · Package sistemi](#pkg-001)<br>[REL-001 · Release pipeline](#rel-001) | [NET-001 · Networking](#net-001)<br>[GUI-001 · Runtime Game UI/HUD](#gui-001)<br>[PLT-001 · Platform services](#plt-001)<br>[PFB-001 · Prefab sistemi](#pfb-001)<br>[ADV-001 · Advanced renderer özellikleri](#adv-001)<br>[ADV-002 · Gelişmiş dünya sistemleri](#adv-002) | [MIG-001 · Project migration architecture](#mig-001)<br>[MIG-001A · Version ve compatibility foundation](#mig-001a)<br>[MIG-001B · Migration registry ve planner](#mig-001b)<br>[MIG-001C · Transaction ve recovery](#mig-001c)<br>[MIG-001D · Project-open entegrasyonu](#mig-001d)<br>[MIG-001E · Welcome compatibility görünümü](#mig-001e)<br>[MIG-001F-01 · Project settings migration adoption](#mig-001f-01)<br>[RUN-001 · Runtime lifecycle ve frame scheduler](#run-001)<br>[ARC-001 · Desired tree ve target uyumu](#arc-001)<br>[EDT-001 · Editor vertical slice sağlamlaştırma](#edt-001)<br>[RND-001 · Generic renderer resource geçişi](#rnd-001)<br>[SCN-001 · Scene runtime ve ECS temeli](#scn-001)<br>[AST-001 · Asset pipeline temeli](#ast-001)<br>[AST-001A · Asset registry ve provider baseline](#ast-001a)<br>[AST-001B · Runtime scene asset resolution](#ast-001b)<br>[AST-001C · headless-null cooking ve cache](#ast-001c)<br>[AST-001D · Modular import ve GUI modal](#ast-001d)<br>[BAS-001 · Foundation primitives](#bas-001)<br>[BAS-002 · Scene math baseline](#bas-002)<br>[BAS-003 · Runtime input baseline](#bas-003)<br>[BAS-004 · Editor host ve workspace baseline](#bas-004)<br>[BAS-005 · Hierarchy create ve typed primitives](#bas-005)<br>[BAS-006 · Procedural mesh ve viewport baseline](#bas-006)<br>[BAS-007 · macOS app identity](#bas-007) |
 
 ## Durum Sözleşmesi
 
@@ -38,24 +38,35 @@ sözleşmelerin uygulanma ve doğrulanma durumunu özetler.
 
 ## Genel Durum Özeti
 
-18 Temmuz 2026 itibarıyla aktif CMake yüzeyi Foundation, Platform, Runtime,
+28 Temmuz 2026 itibarıyla aktif CMake yüzeyi Foundation, Platform, Runtime,
 Input, Scene Model, Render API/Frontend, OpenGL, Metal, Editor Model ve Editor
 GUI katmanlarını kapsar. Runtime lifecycle ve frame scheduler artık graphical
 HoroEditor ile null-renderer headless test hostunun ortak kontratıdır. SCN-001
 baseline immutable definition, tek-owner runtime storage ve editor viewport
 tüketimini; AST-001A asset identity, registry ve provider temelini; AST-001B ise
-snapshot-pinned runtime scene asset çözümlemeyi ekler.
-Tam ECS, importer/cooker, physics, audio, networking, game UI, CLI/MCP, gameplay,
-extensions, packages, observability, release ve security alanlarının çoğu hâlâ
-sonraki ticket kapsamındadır.
+snapshot-pinned runtime scene asset çözümlemeyi ekler. AST-001D ile modular
+importer katalogu, declarative/preset-uyumlu settings, transactional project
+commit, OBJ/FBX preview provider'ları ve GUI Asset Import modal dilimi
+tamamlanmıştır. Content Browser gerçek project asset ağacını, mutasyonları ve
+preview'ları tüketmeye; Console ise terminal ile aynı structured log akışının
+bounded snapshot'ını göstermeye başlamıştır. Extension hostunun C ABI
+scaffolding ve manifest temeline ek olarak gerçek `asset.importer` registration
+portu, external shared-library örneği ve snapshot-pinned lifecycle local olarak
+uygulanmaktadır.
+Tam gameplay runtime, physics, audio, networking, game UI, CLI/MCP, packages,
+metrics/diagnostic bundle, release ve security alanlarının çoğu hâlâ sonraki
+ticket kapsamındadır.
 
 Önerilen temel ilerleme sırası:
 
-1. [ARC-001](#arc-001), [EDT-001](#edt-001) ve [RND-001](#rnd-001) ile mevcut
-   local dilimi stabilize et.
-2. [AST-001](#ast-001) importer/cooker dilimini ve [MAT-001](#mat-001) ile editor viewport verisini gerçek
-   asset/resource akışına bağla.
-3. Editor authoring ve persistence ticketlarını kapat.
+1. [EDT-004](#edt-004) içinde Build Output, Operations ve source navigation
+   dilimlerini kapat; [EDT-003](#edt-003) cross-platform filesystem parity
+   kanıtını [TST-001](#tst-001) matrisiyle tamamla.
+2. [EXT-001](#ext-001) trust/package resolution ve kalan contribution
+   noktalarını tamamla; implemented external importer ABI'sini platform
+   matrisinde doğrula.
+3. [MAT-001](#mat-001), [EDT-002](#edt-002) ve [PRJ-001](#prj-001) ile editor
+   authoring/persistence omurgasını ilerlet.
 4. Gameplay, physics ve audio gibi bağımlı sistemleri ancak bu omurgadan sonra aç.
 
 ## Ticket Detayları
@@ -652,25 +663,35 @@ sonraki ticket kapsamındadır.
 
 ### AST-001D — Modular import ve Asset Import modal
 
-- **Durum:** Yapılıyor
+- **Durum:** Tamamlandı
 - **Öncelik:** P1
 - **Özet:** Import pipeline'ını modular importer katalogu, transactional commit
   boundary ve GUI import modal ile tamamla.
-- **Kabul:** Source file → importer catalog → import operation → registry → cook
-  → provider akışı 76/76 test ile doğrulandı. Importer katalogu snapshot-based
-  immutable lookup yapar. Import operation headless olarak çalışır. HTML design
-  güncellendi. GUI modal implementation pending.
-- **Son doğrulama:** 2026-07-23. Backend complete: importer catalog (9 tests),
-  import operation (3 tests), full pipeline integration (1 test). 76 total asset
-  tests pass. GUI modal (ImGui) requires full editor stack.
+- **Kabul:** Source file → importer catalog → import operation → transactional
+  project commit → registry → cook → provider akışı testlidir. Importer katalogu
+  immutable snapshot lookup kullanır; import operation headless çalışır.
+  Geliştirici katkısı declarative typed settings, alan başına
+  `includeInPresets`, optional preview provider ve type-aware host fallback
+  sözleşmelerini sunar. GUI modal absolute destination, unique asset name,
+  extension-scoped preset seçimi/oluşturması ve importer settings çözümlemesini
+  aynı operation modeline bağlar. Importer contribution ve owning module
+  canonical SemVer'ları ayrıdır; effective settings ve versioned provenance
+  sidecar'a yazılır.
+- **Kanıt:** `AssetImporter.h`, `AssetPreview.h`, `AssetImportOperation`,
+  `ProjectAssetImportCommitter`, OBJ/FBX importer ve preview provider'ları,
+  `AssetImportModal` lifecycle/presentation ve modular E2E integration.
+- **Son doğrulama:** 2026-07-27 — importer catalog 9/9, import operation 4/4,
+  modular pipeline 1/1, Asset Import modal lifecycle/preset/path 3/3, OBJ
+  importer/preview 7/7 ve FBX importer/preview 2/2; toplam targeted dilim 26/26
+  geçti. `HoroEditor` OpenGL composition build'i geçti.
 - **Mimari:** [Asset Pipeline](./architecture/runtime/asset-pipeline.md),
-  [Asset Import Modal HTML](./architecture/runtime/asset-import-modal.html).
+  [Extension System](./architecture/extensions/plugin-system.md).
 - **Bağımlılık:** [AST-001C](#ast-001c).
-- **Kapsam dışı:** Editor UI modal ImGui implementation (ayrı dilim).
+- **Kapsam dışı:** External dynamic-library discovery/load/unload ve package
+  policy [EXT-001](#ext-001); Content Browser operasyonları
+  [EDT-003](#edt-003) kapsamındadır.
 
 [↑ Kanbana dön](#kanban)
-
-### MAT-001 — Material ve shader temeli
 
 ### EDT-002 — Inspector typed authoring
 
@@ -690,12 +711,85 @@ sonraki ticket kapsamındadır.
 
 ### EDT-003 — Content Browser asset işlemleri
 
-- **Durum:** Hazır
+- **Durum:** İncelenecek
 - **Öncelik:** P1
 - **Özet:** Content Browser'ı gerçek project asset index, import, rename, move,
   delete, reveal ve drag payload use-case'lerine bağla.
-- **Kabul:** UI doğrudan filesystem mutate etmez; path traversal, collision,
-  rollback, missing file ve non-ASCII path senaryoları test edilir.
+- **Tamamlanan dilim:** Project `assets` kökü absolute path ile taranır; gerçek
+  alt klasörler ve asset kayıtları aynı gridde gösterilir; breadcrumb segmentleri
+  absolute hedeflere gider. Registry revision publish'i görünümü yeniler.
+  Rename/delete shared mutation boundary üzerinden registry tutarlılığını korur.
+  Asset info importer/module metadata'sını gösterir; contribution-owned
+  OBJ/FBX preview provider'ları ve mesh/image/audio/generic fallback'ler
+  asset-card sunumuna bağlanmıştır. Card menüsü `Duplicate`, `Copy`, `Cut/Move`,
+  `Rename`, `Delete`, `Reimport`, macOS `Reveal in File Manager`,
+  `Copy Absolute Path` ve `Asset Info` sunar. Folder/background menüsü
+  `Paste/Move Here`, `Create Folder`, `Import Here` ve `Refresh` sunar.
+  Back/forward/up history ile tek-card seçimi de canlıdır.
+- **Tamamlanan clipboard ve kimlik semantiği:** Duplicate ile Copy/Paste source payload,
+  importer metadata/settings ve dependency bilgisinden yeni bir asset üretir
+  fakat mutlaka yeni `AssetId` yazar. Cut/Move source ve bütün companion
+  dosyalarını aynı mutation lease ve rollback sınırında taşır ve mevcut
+  `AssetId`'yi korur.
+  Implicit overwrite yoktur. Copy state source'u değiştirmez; cut state source
+  card'ını farklı/dimmed bir tona taşır, proje içinde klasörler arasında
+  gezinirken korunur ve Escape/cancel, başarılı move veya project close ile
+  temizlenir.
+- **Kısayollar:** `Cmd/Ctrl+C`, `Cmd/Ctrl+X`, `Cmd/Ctrl+V`,
+  `Cmd/Ctrl+D` ve Escape aynı typed workspace command path'ine bağlıdır.
+- **Tamamlanan reimport/provenance:** İlk import sidecar'ı absolute source,
+  SHA-256, bütün effective importer settings, dependency'ler, importer
+  contribution/version ve package/module identity/version bilgisini yazar.
+  Reimport exact contribution'ı çağırır, stable `AssetId`'yi korur, payload ve
+  sidecar'ı durable staging/backup ile yayınlar ve registry failure'da rollback
+  yapar. `source_changed`, `importer_changed`, `module_changed` ve
+  `manual_reimport` nedenleri ayrı kaydedilir; Asset Info stored/current
+  sürümleri ve son nedeni gösterir.
+- **Tamamlanan Browser UX:** Current-folder name search, exact asset-type
+  filtresi, kullanıcı seçilebilir name/type ve ascending/descending sort panel
+  presentation state'i olarak çalışır; authoritative directory snapshot'ını
+  değiştirmez. `Loading/Ready/Error` durumu explicit'tir. Manuel senkron refresh
+  loading frame'ini yayınladıktan sonra tarar; registry/mutation refresh'i
+  artık var olmayan absolute history hedeflerini eler, kaybolan current folder
+  asset root'a döner ve selection yalnız görünür query sonucunda korunur.
+- **Tamamlanan drag ve ek kısayollar:** Asset card drag/drop absolute source ve
+  destination ile typed transfer request üretir; normal drop identity-preserving
+  move, `Cmd/Ctrl` drop new-identity copy hattını kullanır. Geçersiz same-folder
+  move hedefi reddedilir ve drop target durumu görselleştirilir. `F2` ve
+  `Delete`, context-menu ile aynı rename/delete modal ve validation hattını
+  paylaşır; UI doğrudan filesystem mutate etmez.
+- **Tamamlanan filesystem güvenliği:** Delete, orijinal absolute path ve companion
+  eşlemesini durable `trash.json` manifestinde tutan unique recoverable project
+  trash kullanır; popup doğrudan dependency sayısını gösterir. Mutation
+  girişleri portable reserved/trailing isimleri, case-fold collision,
+  asset-root/symlink escape, relative path, missing veya symlink companion seti
+  ve existing destination durumlarını fail-closed reddeder. Copy durable
+  primitive kullanır; move/rename/delete partial I/O, durability ve
+  incomplete/degraded registry publish hatalarında tamamlanan path hareketlerini
+  geri alır ve rollback başarısızlığını ayrı kullanıcı hatası olarak yayınlar.
+- **Takip dilimleri:** İlk uygulama tek asset clipboard operasyonlarını kapatır.
+  Recursive folder copy/move, multi-selection ve batch operasyonları aynı
+  kurallar üzerinde ayrı regression dilimi olarak eklenir.
+- **Kabul:** UI yalnız typed workspace command üretir; bütün authored filesystem
+  değişiklikleri shared project mutation lease altında source + metadata
+  companion setine atomik uygulanır. Path traversal, symlink escape, collision,
+  rollback, missing file, non-ASCII, case-folding ve macOS/Linux/Windows path
+  senaryoları test edilir.
+- **Son doğrulama:** 2026-07-27 — Content Browser/Asset Import/localization/
+  workspace controller targeted matrisi 42/42 geçti. Duplicate/copy yeni
+  `AssetId`, move aynı `AssetId`, deterministic suffix, folder create,
+  navigation history ve absolute `Import Here` destination regresyonları
+  kapsamda. Reimport/provenance ek geçişinde Assets/Extensions targeted matrisi
+  17/17; GUI Content Browser, controller ve modal matrisi 36/36 geçti.
+  2026-07-28 — Browser UX projection/loading/history diliminde Content Browser
+  render-model, workspace controller ve localization matrisi 40/40 geçti;
+  `HoroEditor` build'i başarılı. Drag/drop typed transfer ve F2/Delete
+  diliminde Content Browser render/controller matrisi 34/34 geçti; direct
+  copy/move identity, clipboard isolation ve relative-path rejection kapsandı.
+  Filesystem hardening diliminde portable case/name, non-ASCII, missing
+  companion, symlink escape, injected durability failure, degraded registry
+  rollback ve recoverable trash manifest regresyonları geçti. Linux/GCC ve
+  Windows/MSVC parity kanıtı [TST-001](#tst-001) kapsamında beklenir.
 - **Mimari:** [Project Model](./architecture/editor/project-model.md),
   [Asset Pipeline](./architecture/runtime/asset-pipeline.md).
 - **Bağımlılık:** [AST-001](#ast-001), [PRJ-001](#prj-001).
@@ -706,14 +800,24 @@ sonraki ticket kapsamındadır.
 
 ### EDT-004 — Console, Build Output ve Operations panelleri
 
-- **Durum:** Hazır
+- **Durum:** Yapılıyor
 - **Öncelik:** P1
 - **Özet:** Bottom panel tablarını typed log/build/job modellerine bağla; filtre,
   cancellation, progress ve source navigation davranışlarını tamamla.
+- **Tamamlanan dilim:** Logger kabul ettiği record'u terminal/JSONL sink'lerine
+  ek olarak process-owned `StructuredLogStore` içine fan-out eder. Store
+  thread-safe, revisioned, 4096 kayıtla bounded ve overwrite-oldest'tır.
+  Console salt okunur query capability tüketir; severity renk/çoklu filtre,
+  arama, scroll-back, tail-follow ve ISO-8601 UTC timestamp sunar.
+- **Kalan:** Build Output ve Operations modelleri, progress/cancellation
+  davranışları ve diagnostic source navigation.
 - **Kabul:** Panel state authoritative service değildir; bounded history ve
   thread-safe snapshot tüketir; hata satırı ilgili kaynağa güvenli yönlenir.
+- **Son doğrulama:** 2026-07-27 — structured log store/fan-out/concurrency 3/3,
+  Content Browser global dock render matrisi 5/5 ve `HoroEditor` build'i geçti.
 - **Mimari:** [Debug Console](./architecture/runtime/debug-console-and-overlays.md),
-  [Observability](./architecture/observability/observability.md).
+  [Observability Logging](./architecture/observability/observability-logging.md),
+  [Editor Panel Host](./architecture/editor/editor-panel-host.md).
 - **Bağımlılık:** [OBS-001](#obs-001), [RUN-001](#run-001).
 
 [↑ Kanbana dön](#kanban)
@@ -923,13 +1027,44 @@ sonraki ticket kapsamındadır.
 
 ### EXT-001 — Extension ve gameplay module host
 
-- **Durum:** Sonra
+- **Durum:** Yapılıyor
 - **Öncelik:** P3
 - **Özet:** Versioned ABI, manifest, capabilities, contribution registry ve
   unload/shutdown politikalarını çalışan host ile tamamla.
+- **Tamamlanan dilim:** Cross-platform dynamic-library abstraction, extension
+  manifest modeli/parser'ı, directory discovery ve RAII unload yapan ilk
+  `ExtensionManager` host iskeleti eklendi. C ABI giriş/çıkış struct'ları
+  `structSize` compatibility alanıyla tanımlandı. Canonical top-level ve legacy
+  nested manifestler package SemVer'ı ile versioned module descriptor'larını
+  doğrular; module version belirtilmezse package version effective version olur.
+  C ABI module identity/version alanları manifest binding'iyle doğrulanır.
+  Versioned `asset.importer` C ABI portu declarative settings, host-owned output
+  sink, cancellation ve optional RGBA8 preview callback'ini C++ adaptörüne
+  bağladı. Manifest-declared contribution/module binding'i ve atomic catalog
+  batch admission partial registration'ı engeller. Catalog snapshot'ları module
+  lease'i tuttuğu için manager release sonrası importer callback'leri güvenli
+  kalır. `examples/extensions/asset-importer-basic` gerçek loadable örnek
+  paketidir. Editor Settings içindeki mock plugin kartları gerçek `Extensions`
+  envanteriyle değiştirildi: compiled built-in importer paketi ve absolute
+  `~/.horo/extensions` altındaki kullanıcı paketleri sürüm/module/contribution
+  bilgileriyle listelenir. Bounded directory install, kalıcı local trust +
+  enable/disable tercihi, manifest reload, activation hatası ve restart-required
+  durumu çalışır; enabled native paketler editör başlangıcında immutable importer
+  catalog candidate'ına yüklenir.
+- **Kalan:** Engine range/platform/architecture ile explicit package resolution;
+  trust/permission ve dependency policy; multi-module package activation; diğer
+  contribution registration portları; ABI mismatch ve malicious/oversized
+  fixture matrisi; Linux/GCC ve Windows/MSVC dynamic-library doğrulaması;
+  package/signature/security entegrasyonu.
+- **Son doğrulama:** 2026-07-27 — macOS/AppleClang
+  `HoroExtensionManagerTests` 1/1 geçti. Gerçek `.dylib` fixture load/register,
+  import, preview, manager lease release sonrası callback ve
+  identity-preserving source/importer/module-changed reimport akışını kapsadı.
 - **Mimari:** [Extension System](./architecture/extensions/plugin-system.md),
   [Gameplay Module](./architecture/extensions/gameplay-module.md).
-- **Başlama koşulu:** [RUN-001](#run-001), [SEC-001](#sec-001), [PKG-001](#pkg-001).
+- **Başlama koşulu:** Dar host scaffolding'i tamamlanan [RUN-001](#run-001)
+  üzerinde ilerler; production activation için [SEC-001](#sec-001) ve
+  [PKG-001](#pkg-001) gerekir.
 
 [↑ Kanbana dön](#kanban)
 
@@ -1106,3 +1241,8 @@ Bu ilk kanban snapshot'ı 2026-07-17 tarihinde şu kanıtlarla oluşturuldu:
 - placeholder klasörlerde non-empty source kontrolü;
 - `ctest --test-dir build/skeleton --output-on-failure` sonucu: **47/47 geçti**;
 - mevcut local worktree korundu; kanban hiçbir değişikliği commit veya stage etmedi.
+
+Son durum 2026-07-27 tarihinde local worktree ve `build/gui` kanıtıyla
+yenilenmiştir: Asset Import, Content Browser ve Console birleşik targeted matrisi
+**60/60**; extension discovery/manifest executable'ı **1/1** geçmiş,
+`HoroEditor` ve `HoroExtensions` targetları build edilmiştir.

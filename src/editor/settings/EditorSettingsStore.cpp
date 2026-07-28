@@ -439,14 +439,6 @@ namespace Horo::Editor
                 s.autoCaptureOnStutter = *v;
             if (auto v = FindFloatValue(json, "stutterThresholdMs"); v.has_value())
                 s.stutterThresholdMs = *v;
-            if (auto v = FindBoolValue(json, "horoMcpBridgeEnabled"); v.has_value())
-                s.horoMcpBridgeEnabled = *v;
-            if (auto v = FindBoolValue(json, "fmodIntegrationEnabled"); v.has_value())
-                s.fmodIntegrationEnabled = *v;
-            if (auto v = FindBoolValue(json, "steamworksSdkEnabled"); v.has_value())
-                s.steamworksSdkEnabled = *v;
-            if (auto v = FindStringValue(json, "pluginDiscoveryPath"); v.has_value())
-                s.pluginDiscoveryPath = *v;
         }
 
         void ApplyJsonValues(const std::string& json, EditorSettings& s)
@@ -507,12 +499,6 @@ namespace Horo::Editor
             out << std::format(R"(    "stutterThresholdMs": {:.1f}
 )",
                                s.stutterThresholdMs);
-            out << "  },\n";
-            out << "  \"plugins\": {\n";
-            out << R"(    "horoMcpBridgeEnabled": )" << boolStr(s.horoMcpBridgeEnabled) << ",\n";
-            out << R"(    "fmodIntegrationEnabled": )" << boolStr(s.fmodIntegrationEnabled) << ",\n";
-            out << R"(    "steamworksSdkEnabled": )" << boolStr(s.steamworksSdkEnabled) << ",\n";
-            out << R"(    "pluginDiscoveryPath": ")" << EscapeJsonString(s.pluginDiscoveryPath) << "\"\n";
             out << "  }\n";
             out << "}\n";
         }
@@ -619,12 +605,6 @@ namespace Horo::Editor
             markInvalid("Texture streaming budget cannot be empty.");
             settings.textureStreamingBudget = "2048 MB";
         }
-        if (settings.pluginDiscoveryPath.empty())
-        {
-            markInvalid("Plugin discovery path cannot be empty.");
-            settings.pluginDiscoveryPath = "{project}/plugins";
-        }
-
         return valid;
     }
 

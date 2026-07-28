@@ -43,7 +43,6 @@ namespace
         doc.settings.uiFontFamily = "Avenir Next";
         doc.settings.codeFontFamily = "SF Mono";
         doc.settings.consoleLogLevel = EditorConsoleLogLevel::Debug;
-        doc.settings.pluginDiscoveryPath = "{project}/addons";
 
         std::string error;
         REQUIRE((SaveEditorSettingsDocument(&doc, &error)));
@@ -62,7 +61,6 @@ namespace
         REQUIRE((loaded.settings.uiFontFamily == "Avenir Next"));
         REQUIRE((loaded.settings.codeFontFamily == "SF Mono"));
         REQUIRE((loaded.settings.consoleLogLevel == EditorConsoleLogLevel::Debug));
-        REQUIRE((loaded.settings.pluginDiscoveryPath == "{project}/addons"));
     }
 
     TEST_CASE("Invalid Values Are Rejected On Save", "[unit][editor]")

@@ -9,6 +9,9 @@
 #include "Horo/Editor/Localization/LocalizationService.h"
 #include "Horo/Editor/ProjectCreationService.h"
 #include "Horo/Editor/SettingsModal.h"
+#include "Horo/Extensions/ExtensionInventory.h"
+#include "Horo/Extensions/ExtensionMarketplace.h"
+#include "Horo/Extensions/ExtensionManager.h"
 #include "Horo/Foundation/DataBus.h"
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Runtime/Input.h"
@@ -48,9 +51,12 @@ GuiScreenHost::GuiScreenHost(const EditorGuiContext &context, EditorModalHost &m
                              EngineDataBus &engineEvents, ProjectCreationService &creationService,
                              Input::InputRouter &inputRouter, const RendererAvailabilitySnapshot &rendererAvailability,
                              ScreenRegistry screenRegistry, WorkspacePanelRegistry workspacePanelRegistry,
-                             std::uintptr_t logoTexture)
+                             std::uintptr_t logoTexture, Extensions::ExtensionInventory* extensionInventory,
+                             Extensions::ExtensionMarketplaceService* extensionMarketplace)
     : context_(&context), modalHost_(&modalHost), settingsService_(&settingsService), localization_(&localization),
       engineEvents_(&engineEvents), creationService_(&creationService), logoTexture_(logoTexture),
+      extensionInventory_(extensionInventory),
+      extensionMarketplace_(extensionMarketplace),
       screenRegistry_(std::move(screenRegistry)), workspacePanelRegistry_(std::move(workspacePanelRegistry)),
       activeRoute_{GuiRouteKind::Welcome, WelcomeRouteParameters{}}
 {
@@ -67,6 +73,46 @@ GuiScreenHost::GuiScreenHost(const EditorGuiContext &context, EditorModalHost &m
     services_.Register<ScreenRegistry>(screenRegistry_);
     services_.Register<WorkspacePanelRegistry>(workspacePanelRegistry_);
     services_.Register<EditorStatusItemRegistry>(statusItemRegistry_);
+    if (extensionInventory_ != nullptr)
+        services_.Register<Extensions::ExtensionInventory>(*extensionInventory_);
+    if (extensionMarketplace_ != nullptr)
+        services_.Register<Extensions::ExtensionMarketplaceService>(*extensionMarketplace_);
+    importerCatalogCandidate_ = std::make_unique<Assets::AssetImporterCatalog>();
+    extensionManager_ = std::make_unique<Extensions::ExtensionManager>(importerCatalogCandidate_.get());
+    const bool enableBuiltIns =
+        extensionInventory_ == nullptr || extensionInventory_->IsEnabled("horo.builtin.assets");
+    if (enableBuiltIns)
+    {
+        const Result<void> registered = RegisterAllBuiltinImporters(*importerCatalogCandidate_);
+        if (registered.HasValue() && extensionInventory_ != nullptr)
+            extensionInventory_->MarkRuntimeActive("horo.builtin.assets");
+        else if (registered.HasError() && extensionInventory_ != nullptr)
+            extensionInventory_->SetLoadError("horo.builtin.assets", registered.ErrorValue().message);
+    }
+    if (extensionInventory_ != nullptr)
+    {
+        for (const auto& extension : extensionInventory_->Entries())
+        {
+            if (extension.origin != Extensions::ExtensionOrigin::UserInstalled ||
+                !extension.enabled || !extension.locallyTrusted)
+                continue;
+            Result<std::string> loaded =
+                extensionManager_->LoadExtension(extension.absoluteRootPath.string());
+            if (loaded.HasValue())
+                extensionInventory_->MarkRuntimeActive(extension.packageId);
+            else
+                extensionInventory_->SetLoadError(extension.packageId, loaded.ErrorValue().message);
+        }
+    }
+    auto published = importerCatalogCandidate_->Publish();
+    if (published.HasValue())
+        importerCatalog_ = std::move(published).Value();
+    if (!importerCatalog_)
+    {
+        LOG_ERROR("editor.asset_import", "Unable to publish the built-in asset importer catalog.");
+        importerCatalog_ = std::make_shared<const Assets::AssetImporterCatalogSnapshot>();
+    }
+    services_.RegisterConst<Assets::AssetImporterCatalogSnapshot>(*importerCatalog_);
     statusBar_ = std::make_unique<EditorStatusBar>(context, statusItemRegistry_);
     activeStatusPanelIds_.reserve(16);
 
@@ -506,28 +552,21 @@ void GuiScreenHost::DispatchMenuInvocation(const EditorMenuInvocation &invocatio
         if (context_&& modalHost_ &&!modalHost_->HasOpenModal()
         )
         {
-            // Build catalog with all built-in importers
-            Assets::AssetImporterCatalog catalog;
-            static bool s_registered = false;
-            if (!s_registered)
-            {
-                RegisterAllBuiltinImporters(catalog);
-                s_registered = true;
-            }
-            auto catSnapshot = catalog.Publish();
-            auto catPtr = catSnapshot.HasValue()
-                              ? catSnapshot.Value()
-                              : std::make_shared<Assets::AssetImporterCatalogSnapshot>();
-
             auto modal = std::make_unique<AssetImportModal>(
-                context_->theme.fonts, m_importJobs, catPtr);
+                context_->theme.fonts, m_importJobs, importerCatalog_, services_.TryGet<Assets::AssetRegistry>());
+            modal->SetProjectRoot(CurrentProjectRoot());
+            if (invocation.assetDestination.has_value())
+                modal->SetDefaultDestination(*invocation.assetDestination);
             static_cast<void>(modalHost_->OpenRoot(std::move(modal)));
         }
         return;
     case EditorMenuAction::OpenEditorSettings:
         if (context_ && settingsService_ && modalHost_)
         {
-            auto modal = std::make_unique<SettingsModal>(*context_, *settingsService_, logoTexture_);
+            auto modal =
+                std::make_unique<SettingsModal>(
+                    *context_, *settingsService_, logoTexture_,
+                    extensionInventory_, extensionMarketplace_);
             static_cast<void>(modalHost_->OpenRoot(std::move(modal)));
         }
         return;

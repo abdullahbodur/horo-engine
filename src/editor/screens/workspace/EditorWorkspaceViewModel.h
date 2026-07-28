@@ -6,6 +6,7 @@
 #include "Horo/Editor/WorkspacePanelHost.h"
 #include "editor/document/SceneDocument.h"
 #include "editor/project_model/EditorViewportModel.h"
+#include "editor/screens/workspace/ContentBrowserModel.h"
 
 #include <optional>
 #include <string>
@@ -73,6 +74,22 @@ namespace Horo::Editor
         CancelObjectTransformPreview,
         UpdateObjectTransform,
         UpdateObjectName,
+        NavigateContentBrowser,
+        NavigateContentBrowserBack,
+        NavigateContentBrowserForward,
+        NavigateContentBrowserUp,
+        RefreshContentBrowser,
+        RenameContentBrowserEntry,
+        DeleteContentBrowserEntry,
+        DuplicateContentBrowserAsset,
+        CopyContentBrowserAsset,
+        CutContentBrowserAsset,
+        PasteContentBrowserAsset,
+        TransferContentBrowserAsset,
+        CancelContentBrowserClipboard,
+        CreateContentBrowserFolder,
+        ReimportContentBrowserAsset,
+        RevealContentBrowserEntry,
         ChangeActivePanel,
         ReorderActivityBarItem,
         DockWorkspacePanel,
@@ -117,6 +134,21 @@ namespace Horo::Editor
         float aspect{1.0F};
     };
 
+    /** @brief Operation selected for a direct Content Browser asset transfer. */
+    enum class ContentBrowserTransferMode : std::uint8_t
+    {
+        Copy,
+        Move,
+    };
+
+    /** @brief Absolute source and destination carried by a Content Browser drag/drop request. */
+    struct ContentBrowserAssetTransferRequest
+    {
+        std::string absoluteSourcePath;
+        std::string absoluteDestinationDirectory;
+        ContentBrowserTransferMode mode{ContentBrowserTransferMode::Move};
+    };
+
     struct EditorWorkspaceViewCommandData
     {
         EditorWorkspaceViewCommand command = EditorWorkspaceViewCommand::None;
@@ -131,17 +163,41 @@ namespace Horo::Editor
         std::optional<EditorTransformTool> transformToolPayload = std::nullopt;
         std::optional<EditorTransformSpace> transformSpacePayload = std::nullopt;
         std::optional<std::string> stringPayload = std::nullopt;
+        std::optional<std::string> secondaryStringPayload = std::nullopt;
         std::optional<float> floatPayload = std::nullopt;
         std::optional<WorkspaceLayoutSize> layoutPayload = std::nullopt;
         std::optional<ActivityBarSlot> activityBarSlot = std::nullopt;
         std::optional<BottomDockSlot> bottomDockSlot = std::nullopt;
         std::optional<SideDockSlot> sideDockSlot = std::nullopt;
         std::optional<WorkspacePanelDropTarget> workspaceDropTarget = std::nullopt;
+        std::optional<ContentBrowserAssetTransferRequest> contentBrowserTransfer =
+            std::nullopt;
+    };
+
+    /** @brief Pending project-local Content Browser clipboard operation. */
+    enum class ContentBrowserClipboardMode : std::uint8_t
+    {
+        None,
+        Copy,
+        Move,
+    };
+
+    /** @brief Read-only projection of the controller-owned Content Browser clipboard. */
+    struct ContentBrowserClipboardState
+    {
+        ContentBrowserClipboardMode mode{ContentBrowserClipboardMode::None};
+        std::string absoluteSourcePath;
     };
 
     struct EditorWorkspaceViewModel
     {
         std::string projectRoot;
+        Assets::AssetRegistryRevision assetRegistryRevision{};
+        ContentBrowserDirectory contentBrowser;
+        std::string contentBrowserOperationError;
+        ContentBrowserClipboardState contentBrowserClipboard;
+        bool contentBrowserCanNavigateBack{false};
+        bool contentBrowserCanNavigateForward{false};
         DocumentRevision documentRevision;
         std::vector<SceneObject> objects;
         std::optional<SceneObjectId> hierarchyRevealObject;

@@ -2,6 +2,7 @@
 
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Foundation/Logging/LogContext.h"
+#include "Horo/Foundation/Logging/StructuredLogStore.h"
 
 #include <cerrno>
 #include <chrono>
@@ -13,6 +14,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 
 #if defined(__APPLE__) || defined(__linux__)
 #include <unistd.h>
@@ -101,11 +103,11 @@ namespace Horo::Log
         }
 
         /** @brief Formats a UTC timestamp as ISO-8601 with milliseconds. */
-        std::string NowUtc()
+        std::string FormatUtc(const std::chrono::system_clock::time_point timestamp)
         {
-            const auto now = std::chrono::system_clock::now();
-            const auto timeT = std::chrono::system_clock::to_time_t(now);
-            const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+            const auto timeT = std::chrono::system_clock::to_time_t(timestamp);
+            const auto ms =
+                std::chrono::duration_cast<std::chrono::milliseconds>(timestamp.time_since_epoch()) % 1000;
 
             std::tm tm{};
 #if defined(_WIN32)
@@ -256,6 +258,7 @@ namespace Horo::Log
             std::fclose(self.m_file);
             self.m_file = nullptr;
         }
+        self.m_structuredStore.reset();
     }
 
     Level Logger::GetLevel() noexcept
@@ -266,6 +269,13 @@ namespace Horo::Log
     void Logger::SetLevel(const Level level) noexcept
     {
         Instance().m_level = level;
+    }
+
+    /** @copydoc Logger::SetStructuredLogStore */
+    void Logger::SetStructuredLogStore(std::shared_ptr<StructuredLogStore> store)
+    {
+        std::lock_guard lock(LoggerMutex());
+        Instance().m_structuredStore = std::move(store);
     }
 
     void Logger::Write(std::string_view category, const Level level, std::string_view message)
@@ -312,6 +322,7 @@ namespace Horo::Log
         std::lock_guard lock(LoggerMutex());
 
         const auto seq = ++self.m_sequence;
+        const auto timestamp = std::chrono::system_clock::now();
         const auto elapsed =
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - self.m_startTime)
             .count();
@@ -330,7 +341,7 @@ namespace Horo::Log
                 self.m_file,
                 R"({"schemaVersion":1,"timestamp":"%s","elapsedMs":%lld,"sequence":%llu,"level":"%s","category":"%s","message":"%s","pid":%lld%s})"
                 "\n",
-                NowUtc().c_str(), static_cast<long long>(elapsed), static_cast<unsigned long long>(seq),
+                FormatUtc(timestamp).c_str(), static_cast<long long>(elapsed), static_cast<unsigned long long>(seq),
                 ToString(level),
                 JsonEscape(category).c_str(), JsonEscape(message).c_str(), static_cast<long long>(pid),
                 mdcJson.c_str());
@@ -345,6 +356,18 @@ namespace Horo::Log
                      static_cast<int>(category.size()),
                      category.data(), static_cast<int>(message.size()), message.data());
 #endif
+
+        if (self.m_structuredStore != nullptr)
+        {
+            self.m_structuredStore->Append(StructuredLogRecord{
+                .sequence = seq,
+                .timestampUtc = timestamp,
+                .level = level,
+                .category = std::string{category},
+                .message = std::string{message},
+                .context = std::move(mdcPrefix),
+            });
+        }
     }
 
     void Logger::DumpStartupInfo()

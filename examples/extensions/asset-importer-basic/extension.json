@@ -1,0 +1,23 @@
+{
+  "id": "com.horo.examples.asset-importer-basic",
+  "displayName": "Basic Asset Importer Example",
+  "description": "Minimal external importer and preview provider using Horo's versioned C ABI.",
+  "version": "1.0.0",
+  "kind": "asset_importer",
+  "author": "Horo Engine",
+  "modules": [
+    {
+      "id": "com.horo.examples.asset-importer-basic.native",
+      "version": "1.0.0",
+      "kind": "asset_importer",
+      "entry": "horo_asset_importer_basic"
+    }
+  ],
+  "contributions": [
+    {
+      "type": "asset.importer",
+      "id": "com.horo.examples.asset-importer-basic.raw",
+      "module": "com.horo.examples.asset-importer-basic.native"
+    }
+  ]
+}

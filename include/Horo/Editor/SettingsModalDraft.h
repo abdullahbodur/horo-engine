@@ -5,6 +5,12 @@
 #include <cstdint>
 #include <string>
 
+namespace Horo::Extensions
+{
+class ExtensionInventory;
+class ExtensionMarketplaceService;
+}
+
 namespace Horo::Editor
 {
 class EditorSettingsService;
@@ -20,7 +26,6 @@ struct SettingsState
     bool statusIsError = false;
     int activeTab = 0;
     std::uint64_t settingsRevision = 0;
-    float targetBodyH = 0.0F;
 
     struct GeneralTab
     {
@@ -76,6 +81,10 @@ struct SettingsState
         bool anonymousTelemetry = false;
     } diagnostics;
     int pluginSectionTab = 0;
+    Extensions::ExtensionInventory* extensionInventory = nullptr;
+    Extensions::ExtensionMarketplaceService* extensionMarketplace = nullptr;
+    std::string selectedExtensionId;
+    std::string marketplaceQuery;
     int selectedPlugin = 0;
     int pluginDetailTab[3] = {};
     std::string pluginFilter;

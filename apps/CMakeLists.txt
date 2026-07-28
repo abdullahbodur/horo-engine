@@ -48,6 +48,7 @@ if(HORO_BUILD_EDITOR_GUI)
             HoroEngine::RenderFrontend
             HoroEngine::Runtime
             HoroEngine::RuntimeScene
+            HoroEngine::Extensions
             HoroEngine::Platform
             HoroEngine::ProjectMigrations
             HoroEngine::InputSdl

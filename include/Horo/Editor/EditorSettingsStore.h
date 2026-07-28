@@ -97,11 +97,6 @@ struct EditorSettings
     bool autoCaptureOnStutter = false;
     float stutterThresholdMs = 33.3F;
 
-    bool horoMcpBridgeEnabled = true;
-    bool fmodIntegrationEnabled = true;
-    bool steamworksSdkEnabled = false;
-    std::string pluginDiscoveryPath = "{project}/plugins";
-
     bool operator==(const EditorSettings &) const = default;
 };
 

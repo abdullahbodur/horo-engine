@@ -15,8 +15,10 @@
 
 #include <algorithm>
 #include <cfloat>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -36,11 +38,9 @@ namespace Horo::Editor
             constexpr float SummaryH = 64.0f;
             constexpr float ImporterInfoH = 54.0f;
             constexpr float TabsH = 48.0f;
-            constexpr float FooterH = 62.0f;
-            constexpr float MetadataH = 28.0f;
+            constexpr float FooterH = Theme::Layout::FooterH;
             constexpr float SidebarW = 310.0f;
             constexpr float ViewportPad = 48.0f;
-            constexpr float ModalRadius = 8.0f;
             constexpr float SplitColumnGap = 16.0f;
         } // namespace ImportLayout
 
@@ -53,14 +53,6 @@ namespace Horo::Editor
             Destination,
             Count,
         };
-
-        /** @brief Draws a small uppercase field label above the next widget, matching HTML's <label>. */
-        void FieldLabelImport(const char* text, const Fonts& fonts)
-        {
-            PushFont(fonts.sansCompact);
-            ImGui::TextColored(Dim(), "%s", text);
-            PopFont(fonts.sansCompact);
-        }
 
         struct SplitColumns
         {
@@ -93,48 +85,6 @@ namespace Horo::Editor
             ImGui::SetCursorPos({columns.startX, endY});
         }
 
-        /**
-         * @brief Combo matching the HTML reference: the whole field is clickable and the
-         *        right-side indicator is a small stroked chevron instead of ImGui's filled triangle.
-         */
-        bool ImportCombo(const char* id, int* currentItem, const char* const items[], int itemCount)
-        {
-            const bool validSelection = currentItem != nullptr && *currentItem >= 0 && *currentItem < itemCount;
-            const char* preview = validSelection ? items[*currentItem] : "";
-            ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-            bool changed = false;
-            const bool open = ImGui::BeginCombo(id, preview, ImGuiComboFlags_NoArrowButton);
-
-            const ImVec2 fieldMin = ImGui::GetItemRectMin();
-            const ImVec2 fieldMax = ImGui::GetItemRectMax();
-            const float centerX = fieldMax.x - 16.0f;
-            const float centerY = (fieldMin.y + fieldMax.y) * 0.5f;
-            const ImU32 chevronColor = U32(ImGui::IsItemHovered() ? Text() : Dim());
-
-            drawList->AddLine({centerX - 4.0f, centerY - 2.0f},
-                              {centerX, centerY + 2.0f}, chevronColor, 1.5f);
-            drawList->AddLine({centerX, centerY + 2.0f},
-                              {centerX + 4.0f, centerY - 2.0f}, chevronColor, 1.5f);
-
-            if (open)
-            {
-                for (int itemIndex = 0; itemIndex < itemCount; ++itemIndex)
-                {
-                    const bool selected = validSelection && itemIndex == *currentItem;
-                    if (ImGui::Selectable(items[itemIndex], selected))
-                    {
-                        *currentItem = itemIndex;
-                        changed = true;
-                    }
-                    if (selected)
-                        ImGui::SetItemDefaultFocus();
-                }
-                ImGui::EndCombo();
-            }
-
-            return changed;
-        }
 
         /**
          * @brief Converts a Unicode codepoint to a UTF-8 string and renders it
@@ -277,18 +227,86 @@ namespace Horo::Editor
             return name;
         }
 
-        bool FixedWidthButton(const char* childId, float width, ButtonProps& props)
+        [[nodiscard]] std::optional<std::filesystem::path> OpenFolderSelectionDialog(const char* prompt)
         {
-            constexpr float buttonHeight = 36.0f;
-            props.fillAvailableWidth = true;
+#if defined(__APPLE__)
+            std::string command = "osascript -e 'POSIX path of (choose folder with prompt \"";
+            for (const char value : std::string_view(prompt ? prompt : "Select Folder"))
+            {
+                if (value == '"' || value == '\\' || value == '\'')
+                    command += '\\';
+                command += value;
+            }
+            command += "\")' 2>/dev/null";
+            FILE* pipe = popen(command.c_str(), "r");
+#elif defined(__linux__)
+            std::string command = "zenity --file-selection --directory --title=\"";
+            for (const char value : std::string_view(prompt ? prompt : "Select Folder"))
+            {
+                if (value == '"' || value == '\\' || value == '\'')
+                    command += '\\';
+                command += value;
+            }
+            command += "\" 2>/dev/null";
+            FILE* pipe = popen(command.c_str(), "r");
+#elif defined(_WIN32)
+            std::string command =
+                "powershell -NoProfile -Command \"Add-Type -AssemblyName System.Windows.Forms; $f = New-Object "
+                "System.Windows.Forms.FolderBrowserDialog; $f.Description = '";
+            for (const char value : std::string_view(prompt ? prompt : "Select Folder"))
+            {
+                if (value == '\'' || value == '"')
+                    command += '`';
+                command += value;
+            }
+            command += "'; if($f.ShowDialog() -eq 'OK'){ $f.SelectedPath }\" 2>nul";
+            FILE* pipe = _popen(command.c_str(), "r");
+#else
+            static_cast<void>(prompt);
+            return std::nullopt;
+#endif
+            if (!pipe)
+                return std::nullopt;
 
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0.0f, 0.0f});
-            ImGui::BeginChild(childId, ImVec2{width, buttonHeight}, false,
-                              ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-            const bool pressed = Button(props);
-            ImGui::EndChild();
-            ImGui::PopStyleVar();
-            return pressed;
+            std::string buffer(1024, '\0');
+            std::string result;
+            while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) != nullptr)
+                result += buffer.c_str();
+#if defined(_WIN32)
+            const int status = _pclose(pipe);
+#else
+            const int status = pclose(pipe);
+#endif
+            if (status != 0)
+                return std::nullopt;
+            while (!result.empty() && (result.back() == '\n' || result.back() == '\r'))
+                result.pop_back();
+            if (result.empty())
+                return std::nullopt;
+            return std::filesystem::path{result};
+        }
+
+        [[nodiscard]] std::optional<std::string> ProjectRelativeFolder(
+            const std::filesystem::path& projectRoot, const std::filesystem::path& selectedFolder)
+        {
+            if (projectRoot.empty())
+                return std::nullopt;
+
+            std::error_code error;
+            const auto canonicalRoot = std::filesystem::weakly_canonical(projectRoot, error);
+            if (error)
+                return std::nullopt;
+            const auto canonicalSelection = std::filesystem::weakly_canonical(selectedFolder, error);
+            if (error)
+                return std::nullopt;
+
+            const auto relative = canonicalSelection.lexically_relative(canonicalRoot);
+            if (relative.empty() || relative == ".")
+                return std::string{};
+            const auto first = relative.begin();
+            if (first != relative.end() && *first == "..")
+                return std::nullopt;
+            return relative.generic_string();
         }
 
         void DrawDashedRect(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, ImU32 color)
@@ -312,55 +330,6 @@ namespace Horo::Editor
         }
 
 
-        bool CompactCheckbox(const char* label, bool* value)
-        {
-            constexpr float boxSize = 14.0f;
-            constexpr float gap = 9.0f;
-
-            const ImVec2 labelSize = ImGui::CalcTextSize(label);
-            const float rowHeight = std::max(boxSize, labelSize.y);
-            const ImVec2 rowMin = ImGui::GetCursorScreenPos();
-            const float rowWidth = boxSize + gap + labelSize.x;
-
-            const bool pressed = ImGui::InvisibleButton(label, ImVec2{rowWidth, rowHeight});
-            if (pressed) *value = !*value;
-
-            ImDrawList* drawList = ImGui::GetWindowDrawList();
-            const ImVec2 boxMin{rowMin.x, rowMin.y + (rowHeight - boxSize) * 0.5f};
-            const ImVec2 boxMax{boxMin.x + boxSize, boxMin.y + boxSize};
-            const bool hovered = ImGui::IsItemHovered();
-
-            drawList->AddRectFilled(boxMin, boxMax, U32(*value ? Accent() : Bg3()), 3.0f);
-            drawList->AddRect(boxMin, boxMax, U32(hovered ? Accent() : Border()), 3.0f);
-            if (*value)
-            {
-                const ImU32 checkColor = U32(Bg0());
-                drawList->AddLine({boxMin.x + 3.0f, boxMin.y + 7.0f},
-                                  {boxMin.x + 6.0f, boxMin.y + 10.0f}, checkColor, 2.0f);
-                drawList->AddLine({boxMin.x + 6.0f, boxMin.y + 10.0f},
-                                  {boxMin.x + 11.0f, boxMin.y + 4.0f}, checkColor, 2.0f);
-            }
-
-            drawList->AddText({boxMax.x + gap, rowMin.y + (rowHeight - labelSize.y) * 0.5f}, U32(Text()), label);
-            return pressed;
-        }
-
-        void DrawLabeledDivider(const char* label, const Fonts& fonts)
-        {
-            PushFont(fonts.sansCompact);
-            const ImVec2 textSize = ImGui::CalcTextSize(label);
-            ImGui::TextColored(Dim(), "%s", label);
-            PopFont(fonts.sansCompact);
-
-            const ImVec2 min = ImGui::GetItemRectMin();
-            const ImVec2 max = ImGui::GetItemRectMax();
-            const float lineX = max.x + 12.0f;
-            const float right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
-            if (right > lineX)
-                ImGui::GetWindowDrawList()->AddLine({lineX, min.y + textSize.y * 0.5f},
-                                                    {right, min.y + textSize.y * 0.5f},
-                                                    U32(Border()), 1.0f);
-        }
     } // namespace
 
     ModalFrameResult DrawAssetImportModalPresentation(AssetImportModal& modal, const Fonts& fonts)
@@ -368,53 +337,25 @@ namespace Horo::Editor
         const auto& snap = modal.Snapshot();
         ModalFrameResult frameResult = ModalFrameResult::None();
 
-        const ImGuiViewport* vp = ImGui::GetMainViewport();
-        const float modalW = std::min(ImportLayout::ModalW, vp->WorkSize.x - ImportLayout::ViewportPad);
-        const float modalH = std::min(ImportLayout::ModalH, vp->WorkSize.y - ImportLayout::ViewportPad);
-        const ImVec2 modalPos{
-            vp->WorkPos.x + (vp->WorkSize.x - modalW) * 0.5f,
-            vp->WorkPos.y + (vp->WorkSize.y - modalH) * 0.5f
-        };
-
-        ImGui::SetNextWindowPos(modalPos, ImGuiCond_Always);
-        ImGui::SetNextWindowSize({modalW, modalH}, ImGuiCond_Always);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0.0f, 0.0f});
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{0.0f, 0.0f});
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, ImportLayout::ModalRadius);
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, Bg1());
-        ImGui::PushStyleColor(ImGuiCol_Border, Border());
-
-        ImGui::Begin("Asset Import", nullptr,
-                     ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove |
-                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar);
+        ScopedModalShell modalShell(
+            {
+                .id = "Asset Import",
+                .title = "Import New Asset...",
+                .requestedSize = {
+                    ImportLayout::ModalW, ImportLayout::ModalH},
+                .viewportPadding = ImportLayout::ViewportPad,
+                .headerHeight = ImportLayout::HeaderH,
+                .footerHeight = ImportLayout::FooterH,
+                .titleFontSize = 16.0F,
+            },
+            fonts);
+        if (modalShell.CloseRequested())
+            frameResult =
+                ModalFrameResult::RequestClose(
+                    ModalCloseReason::Cancelled);
 
         ImDrawList* dl = ImGui::GetWindowDrawList();
         std::size_t doneCount = 0, errorCount = 0, warningCount = 0;
-
-        // ════════════════════════════════════════════════
-        // HEADER
-        // ════════════════════════════════════════════════
-        {
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{22.0f, 0.0f});
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, Bg0());
-            ImGui::BeginChild("ImportHeader", ImVec2{0.0f, ImportLayout::HeaderH}, true,
-                              ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-
-            ImGui::SetCursorPosY((ImportLayout::HeaderH - ImGui::GetTextLineHeight()) * 0.5f);
-            PushFont(fonts.sansEmphasis);
-            ImGui::TextUnformatted("Import New Asset...");
-            PopFont(fonts.sansEmphasis);
-
-            ImGui::SameLine(ImGui::GetWindowWidth() - 46.0f);
-            ImGui::SetCursorPosY((ImportLayout::HeaderH - 24.0f) * 0.5f);
-            if (IconCloseButton("##ImportClose", ImVec2{24.0f, 24.0f}))
-                frameResult = ModalFrameResult::RequestClose(ModalCloseReason::Cancelled);
-
-            ImGui::EndChild();
-            ImGui::PopStyleColor();
-            ImGui::PopStyleVar();
-        }
 
         doneCount = 0;
         errorCount = 0;
@@ -467,15 +408,23 @@ namespace Horo::Editor
             }
 
             const ImVec2 pillPos = ImGui::GetCursorScreenPos();
-            const float pillH = 30.0f;
-            const float pillW = ImGui::CalcTextSize(statusText).x + 42.0f;
-            dl->AddRectFilled(pillPos, {pillPos.x + pillW, pillPos.y + pillH}, 15.0f,
-                              U32(ImVec4{0.02f, 0.65f, 0.99f, 0.18f}));
-            dl->AddCircleFilled({pillPos.x + 16.0f, pillPos.y + pillH * 0.5f}, 4.0f, U32(Accent()));
-            ImGui::SetCursorScreenPos({pillPos.x + 28.0f, pillPos.y + 6.0f});
-            PushFont(fonts.sansCompact);
-            ImGui::TextColored(Accent(), "%s", statusText);
-            PopFont(fonts.sansCompact);
+            BadgeTone statusTone = BadgeTone::Accent;
+            if (snap.phase == Assets::AssetImportPhase::ReadyToCommit ||
+                snap.phase == Assets::AssetImportPhase::Completed)
+                statusTone = BadgeTone::Success;
+            else if (snap.phase == Assets::AssetImportPhase::Failed)
+                statusTone = BadgeTone::Error;
+            else if (snap.phase == Assets::AssetImportPhase::Cancelled)
+                statusTone = BadgeTone::Neutral;
+            const BadgeProps statusBadge{
+                .label = statusText,
+                .tone = statusTone,
+                .size = BadgeSize::Medium,
+                .leadingIndicator = true,
+            };
+            constexpr float pillH = 30.0f;
+            const float pillW = BadgeWidth(statusBadge, fonts);
+            Badge(statusBadge, fonts);
 
             const float summaryY = pillPos.y + 1.0f;
             ImGui::SetCursorScreenPos({pillPos.x + pillW + 34.0f, summaryY});
@@ -489,8 +438,9 @@ namespace Horo::Editor
             const float trackW = 220.0f;
             const float total = static_cast<float>(snap.items.size());
             const float progress = total > 0.0f ? static_cast<float>(doneCount + errorCount) / total : 0.0f;
-            dl->AddRectFilled({trackX, trackY}, {trackX + trackW, trackY + 5.0f}, 2.5f, U32(Bg3()));
-            dl->AddRectFilled({trackX, trackY}, {trackX + trackW * progress, trackY + 5.0f}, 2.5f, U32(Accent()));
+            dl->AddRectFilled({trackX, trackY}, {trackX + trackW, trackY + 5.0f}, U32(Bg3()), 2.5f);
+            dl->AddRectFilled(
+                {trackX, trackY}, {trackX + trackW * progress, trackY + 5.0f}, U32(Accent()), 2.5f);
 
             ImGui::SetCursorScreenPos({trackX + trackW + 34.0f, summaryY});
             ImGui::TextColored(Dim(), "Warnings");
@@ -558,8 +508,9 @@ namespace Horo::Editor
         // ════════════════════════════════════════════════
         // BODY: sidebar + content
         // ════════════════════════════════════════════════
+        const float footerY = modalShell.FooterStartY();
         {
-            const float bodyH = ImGui::GetContentRegionAvail().y - ImportLayout::FooterH - ImportLayout::MetadataH;
+            const float bodyH = std::max(0.0f, footerY - ImGui::GetCursorPosY());
 
             // Sidebar
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{16.0f, 16.0f});
@@ -569,7 +520,7 @@ namespace Horo::Editor
                               ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
             ImDrawList* sidebarDrawList = ImGui::GetWindowDrawList();
 
-            DrawLabeledDivider("SOURCE", fonts);
+            LabeledSeparator("SOURCE", fonts);
             ImGui::Spacing();
 
             const float zoneW = ImGui::GetContentRegionAvail().x;
@@ -621,7 +572,7 @@ namespace Horo::Editor
             }
 
             ImGui::Dummy({0.0f, 12.0f});
-            DrawLabeledDivider("QUEUE", fonts);
+            LabeledSeparator("QUEUE", fonts);
             ImGui::Spacing();
 
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0.0f, 0.0f});
@@ -699,7 +650,7 @@ namespace Horo::Editor
                     if (!snap.items.empty() && snap.selectedItemIndex < snap.items.size())
                     {
                         const auto& sel = snap.items[snap.selectedItemIndex];
-                        DrawLabeledDivider("SELECTED FILE", fonts);
+                        LabeledSeparator("SELECTED FILE", fonts);
                         ImGui::Dummy({0.0f, 6.0f});
                         PushFont(fonts.sansCompact);
                         ImGui::TextColored(Dim(), "File");
@@ -722,70 +673,9 @@ namespace Horo::Editor
                         ImGui::Dummy({0.0f, 12.0f});
                     }
 
-                    DrawLabeledDivider("QUEUE", fonts);
-                    ImGui::Dummy({0.0f, 4.0f});
-
                     if (snap.items.empty())
                     {
-                        ImGui::TextColored(Dim(), "No files in queue. Drop files or use File > Import Assets...");
-                    }
-                    else
-                    {
-                        constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_BordersInnerH |
-                            ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings;
-                        ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2{10.0f, 9.0f});
-                        if (ImGui::BeginTable("QueueTable", 4, tableFlags))
-                        {
-                            ImGui::TableSetupColumn("##QueueFile", ImGuiTableColumnFlags_WidthStretch, 2.3f);
-                            ImGui::TableSetupColumn("##QueueType", ImGuiTableColumnFlags_WidthStretch, 0.7f);
-                            ImGui::TableSetupColumn("##QueueState", ImGuiTableColumnFlags_WidthStretch, 0.7f);
-                            ImGui::TableSetupColumn("##QueueProgress", ImGuiTableColumnFlags_WidthStretch, 0.5f);
-
-                            ImGui::TableNextRow(ImGuiTableRowFlags_None, 30.0f);
-                            static const char* kHeaders[] = {"FILE", "TYPE", "STATE", "PROGRESS"};
-                            PushFont(fonts.sansCompact);
-                            for (int column = 0; column < 4; ++column)
-                            {
-                                ImGui::TableSetColumnIndex(column);
-                                ImGui::TextColored(Dim(), "%s", kHeaders[column]);
-                            }
-                            PopFont(fonts.sansCompact);
-
-                            for (const auto& item : snap.items)
-                            {
-                                bool hasError = false;
-                                bool hasWarning = false;
-                                for (const auto& diagnostic : item.diagnostics)
-                                {
-                                    hasError |= diagnostic.severity == Assets::ImportDiagnostic::Severity::Error;
-                                    hasWarning |= diagnostic.severity == Assets::ImportDiagnostic::Severity::Warning;
-                                }
-
-                                ImGui::TableNextRow(ImGuiTableRowFlags_None, 38.0f);
-                                ImGui::TableSetColumnIndex(0);
-                                const std::string fileName = DisplayFileName(std::filesystem::path{
-                                    item.sourceFile.String()
-                                });
-                                ImGui::TextUnformatted(fileName.c_str());
-                                ImGui::TableSetColumnIndex(1);
-                                ImGui::TextColored(Dim(), "%s",
-                                                   AssetTypeLabel(std::filesystem::path{item.sourceFile.String()}));
-                                ImGui::TableSetColumnIndex(2);
-                                if (hasError)
-                                    ImGui::TextColored(ImVec4{0.83f, 0.32f, 0.29f, 1.0f}, "Error");
-                                else if (hasWarning)
-                                    ImGui::TextColored(ImVec4{0.91f, 0.64f, 0.24f, 1.0f}, "Warning");
-                                else if (item.result.has_value())
-                                    ImGui::TextColored(ImVec4{0.37f, 0.72f, 0.54f, 1.0f}, "Done");
-                                else
-                                    ImGui::TextColored(Dim(), "Pending");
-                                ImGui::TableSetColumnIndex(3);
-                                ImGui::TextColored(
-                                    Dim(), item.result.has_value() || hasWarning || hasError ? "100%%" : "—");
-                            }
-                            ImGui::EndTable();
-                        }
-                        ImGui::PopStyleVar();
+                        ImGui::TextColored(Dim(), "Select a file from the queue to view its overview.");
                     }
                     break;
                 }
@@ -907,7 +797,7 @@ namespace Horo::Editor
                     const auto& sel = snap.items[snap.selectedItemIndex];
 
                     // Show importer info
-                    DrawLabeledDivider("IMPORTER", fonts);
+                    LabeledSeparator("IMPORTER", fonts);
                     ImGui::Dummy({0.0f, 4.0f});
 
                     const auto* contrib = modal.Catalog().FindContributionByExtension(sel.sourceExtension);
@@ -945,13 +835,13 @@ namespace Horo::Editor
                     }
                     else
                     {
-                        DrawLabeledDivider("SETTINGS", fonts);
+                        LabeledSeparator("SETTINGS", fonts);
                         ImGui::Dummy({0.0f, 4.0f});
 
                         for (const auto& setting : contrib->settings)
                         {
                             PushFont(fonts.sansCompact);
-                            FieldLabelImport(setting.labelKey.c_str(), fonts);
+                            FieldLabel(setting.labelKey.c_str(), fonts);
 
                             // Use the item's persistent settings map, keyed by settingId.
                             auto& settingsMap = const_cast<Assets::AssetImportItem&>(sel).settings;
@@ -1037,16 +927,19 @@ namespace Horo::Editor
                 }
             case ImportTab::Destination:
                 {
-                    static char s_targetFolder[256] = "assets/Props/";
-                    static int s_namingConvention = 0;
-                    static int s_subfolderByType = 0;
-                    static int s_assetIdStrategy = 0;
-                    static bool s_createMetaSidecar = true;
-                    static bool s_overwriteWithoutPrompt = false;
+                    const bool hasSelection = !snap.items.empty() && snap.selectedItemIndex < snap.items.size();
 
-                    static const char* kNamingModes[] = {
-                        "Preserve source name", "Lowercase + underscore", "AssetId prefix"
-                    };
+                    // Get mutable reference to selected item for read/write
+                    auto* selItem = hasSelection
+                                        ? &const_cast<Assets::AssetImportItem&>(
+                                            snap.items[snap.selectedItemIndex])
+                                        : nullptr;
+
+                    int subfolderByType = selItem ? selItem->subfolderByType : 0;
+                    int assetIdStrategy = selItem ? selItem->assetIdStrategy : 0;
+                    bool createMetaSidecar = selItem ? selItem->createMetaSidecar : true;
+                    bool overwriteWithoutPrompt = selItem ? selItem->overwriteWithoutPrompt : false;
+
                     static const char* kSubfolderModes[] = {
                         "Meshes / Textures / Audio", "Mirror source structure", "Flat"
                     };
@@ -1054,41 +947,80 @@ namespace Horo::Editor
 
                     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0f, 7.0f});
 
-                    FieldLabelImport("TARGET FOLDER", fonts);
-                    Ui::InputTextControl("##TargetFolder", s_targetFolder, IM_ARRAYSIZE(s_targetFolder), fonts);
+                    FieldLabel("ASSET NAME", fonts);
+                    std::string assetName = selItem ? selItem->displayName : std::string{};
+                    if (Ui::InputTextControl("##AssetName", assetName, 256, fonts) && selItem)
+                        selItem->displayName = std::move(assetName);
                     ImGui::Dummy({0.0f, 6.0f});
 
-                    FieldLabelImport("NAMING CONVENTION", fonts);
-                    ImGui::SetNextItemWidth(-FLT_MIN);
-                    ImportCombo("##NamingConvention", &s_namingConvention, kNamingModes,
-                                IM_ARRAYSIZE(kNamingModes));
+                    FieldLabel("TARGET FOLDER", fonts);
+
+                    constexpr float browseButtonWidth = 38.0f;
+                    constexpr float browseGap = 8.0f;
+                    const float targetInputWidth =
+                        std::max(1.0f, ImGui::GetContentRegionAvail().x - browseButtonWidth - browseGap);
+                    std::string targetFolder = "assets";
+                    if (selItem && !selItem->destinationFolder.empty())
+                        targetFolder = selItem->destinationFolder;
+                    if (Ui::InputTextControl("##TargetFolder", targetFolder, 256, fonts, false, targetInputWidth) &&
+                        selItem)
+                        selItem->destinationFolder = std::move(targetFolder);
+                    ImGui::SameLine(0.0f, browseGap);
+                    if (IconButton({
+                            .id = "##BrowseTargetFolder",
+                            .glyph = IconButtonGlyph::Folder,
+                            .size = {
+                                browseButtonWidth,
+                                ImGui::GetFrameHeight()},
+                            .tooltip = "Browse project folders",
+                            .enabled = selItem != nullptr,
+                        }))
+                    {
+                        if (const auto selectedFolder = OpenFolderSelectionDialog("Select asset destination"))
+                        {
+                            if (const auto relative = ProjectRelativeFolder(modal.ProjectRoot(), *selectedFolder))
+                                selItem->destinationFolder = relative->empty() ? "assets" : *relative;
+                        }
+                    }
                     ImGui::Dummy({0.0f, 6.0f});
 
                     {
                         const SplitColumns columns = CurrentSplitColumns();
 
                         ImGui::BeginGroup();
-                        FieldLabelImport("SUBFOLDER BY TYPE", fonts);
+                        FieldLabel("SUBFOLDER BY TYPE", fonts);
                         ImGui::SetNextItemWidth(columns.width);
-                        ImportCombo("##SubfolderByType", &s_subfolderByType, kSubfolderModes,
-                                    IM_ARRAYSIZE(kSubfolderModes));
+                        if (Ui::ComboControl("##SubfolderByType", &subfolderByType, kSubfolderModes,
+                                             IM_ARRAYSIZE(kSubfolderModes), fonts))
+                        {
+                            if (selItem) selItem->subfolderByType = subfolderByType;
+                        }
                         ImGui::EndGroup();
 
                         MoveToSecondColumn(columns);
                         ImGui::BeginGroup();
-                        FieldLabelImport("ASSETID STRATEGY", fonts);
+                        FieldLabel("ASSETID STRATEGY", fonts);
                         ImGui::SetNextItemWidth(columns.width);
-                        ImportCombo("##AssetIdStrategy", &s_assetIdStrategy, kAssetIdModes,
-                                    IM_ARRAYSIZE(kAssetIdModes));
+                        if (Ui::ComboControl("##AssetIdStrategy", &assetIdStrategy, kAssetIdModes,
+                                             IM_ARRAYSIZE(kAssetIdModes), fonts))
+                        {
+                            if (selItem) selItem->assetIdStrategy = assetIdStrategy;
+                        }
                         ImGui::EndGroup();
 
                         FinishSplitColumns(columns);
                     }
 
                     ImGui::Dummy({0.0f, 12.0f});
-                    CompactCheckbox("Create .meta sidecar for each asset", &s_createMetaSidecar);
+                    if (Ui::CheckboxControl("Create .meta sidecar for each asset", &createMetaSidecar, fonts))
+                    {
+                        if (selItem) selItem->createMetaSidecar = createMetaSidecar;
+                    }
                     ImGui::Dummy({0.0f, 5.0f});
-                    CompactCheckbox("Overwrite existing assets without prompt", &s_overwriteWithoutPrompt);
+                    if (Ui::CheckboxControl("Overwrite existing assets without prompt", &overwriteWithoutPrompt, fonts))
+                    {
+                        if (selItem) selItem->overwriteWithoutPrompt = overwriteWithoutPrompt;
+                    }
 
                     ImGui::PopStyleVar();
                     break;
@@ -1105,13 +1037,11 @@ namespace Horo::Editor
         // FOOTER
         // ════════════════════════════════════════════════
         {
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{28.0f, 16.0f});
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, Bg0());
-            ImGui::BeginChild("ImportFooter", ImVec2{0.0f, ImportLayout::FooterH}, true,
-                              ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+            modalShell.BeginFooter({28.0F, 0.0F}, true);
 
-            constexpr float actionH = 36.0f;
-            ImGui::SetCursorPosY((ImportLayout::FooterH - actionH) * 0.5f);
+            constexpr float actionH = 32.0f;
+            const float actionY = (ImGui::GetWindowHeight() - actionH) * 0.5f;
+            ImGui::SetCursorPosY(actionY);
             PushFont(fonts.sansCompact);
             ImGui::AlignTextToFramePadding();
             std::string statusText = std::to_string(snap.items.size()) + " file(s)";
@@ -1124,63 +1054,127 @@ namespace Horo::Editor
             constexpr float cancelW = 100.0f;
             constexpr float importW = 100.0f;
             constexpr float gap = 12.0f;
-            const float actionsW = cancelW + importW + gap;
+            constexpr float presetW = 176.0f;
+            constexpr float presetAddW = 36.0f;
+            constexpr float presetGap = 6.0f;
+            constexpr float presetActionsGap = 18.0f;
+            const float actionsW =
+                presetW + presetAddW + presetGap + presetActionsGap + cancelW + importW + gap;
             ImGui::SameLine(ImGui::GetWindowWidth() - actionsW - 28.0f);
-            ImGui::SetCursorPosY((ImportLayout::FooterH - actionH) * 0.5f);
-
-            ButtonProps cancelProps{
-                .label = "Cancel", .variant = ButtonVariant::Secondary, .enabled = true
-            };
+            ImGui::SetCursorPosY(actionY);
 
             const bool hasSelected = !snap.items.empty() && snap.selectedItemIndex < snap.items.size();
             const auto* selItem = hasSelected ? &snap.items[snap.selectedItemIndex] : nullptr;
-            const bool canImport = selItem && !selItem->result.has_value() && !selItem->importerContributionId.empty();
+            const bool hasImporter = selItem && !selItem->importerContributionId.empty();
+            std::vector<std::string> presetNames =
+                hasImporter
+                    ? modal.PresetNames(snap.selectedItemIndex)
+                    : std::vector<std::string>{"Default"};
+            std::vector<const char*> presetLabels;
+            presetLabels.reserve(presetNames.size());
+            for (const auto& presetName : presetNames)
+                presetLabels.push_back(presetName.c_str());
+
+            int presetIndex = 0;
+            if (hasSelected)
+            {
+                const auto activePreset = modal.ActivePresetName(snap.selectedItemIndex);
+                const auto active = std::find(presetNames.begin(), presetNames.end(), activePreset);
+                if (active != presetNames.end())
+                    presetIndex = static_cast<int>(std::distance(presetNames.begin(), active));
+            }
+            ImGui::SetNextItemWidth(presetW);
+            if (Ui::ComboControl(
+                "##ImportPreset", &presetIndex, presetLabels.data(),
+                static_cast<int>(presetLabels.size()), fonts, false, actionH) && hasSelected)
+            {
+                static_cast<void>(modal.ApplyPreset(snap.selectedItemIndex, presetNames[presetIndex]));
+            }
+
+            ImGui::SameLine(0.0f, presetGap);
+            static char presetNameBuffer[96]{};
+            static bool presetNameError = false;
+            if (IconButton({
+                    .id = "##CreateImportPreset",
+                    .glyph = IconButtonGlyph::Plus,
+                    .size = {presetAddW, actionH},
+                    .tooltip =
+                        "Create preset from current importer settings",
+                    .enabled = hasImporter,
+                }))
+            {
+                presetNameBuffer[0] = '\0';
+                presetNameError = false;
+                ImGui::OpenPopup("Create Import Preset");
+            }
+
+            if (ImGui::BeginPopupModal(
+                "Create Import Preset", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+            {
+                FieldLabel("PRESET NAME", fonts);
+                static_cast<void>(Ui::InputTextControl(
+                    "##NewImportPresetName", presetNameBuffer, sizeof(presetNameBuffer), fonts, presetNameError,
+                    280.0f));
+                ImGui::Dummy({0.0f, 10.0f});
+
+                ButtonProps dismissPresetProps{
+                    .label = "Cancel",
+                    .size = {90.0f, actionH},
+                    .variant = ButtonVariant::Secondary,
+                };
+                if (Button(dismissPresetProps))
+                    ImGui::CloseCurrentPopup();
+                ImGui::SameLine(0.0f, gap);
+                ButtonProps createPresetProps{
+                    .label = "Create",
+                    .size = {90.0f, actionH},
+                    .variant = ButtonVariant::Primary,
+                    .enabled = presetNameBuffer[0] != '\0',
+                };
+                if (Button(createPresetProps))
+                {
+                    if (modal.CreatePreset(snap.selectedItemIndex, presetNameBuffer))
+                    {
+                        presetNameError = false;
+                        ImGui::CloseCurrentPopup();
+                    }
+                    else
+                    {
+                        presetNameError = true;
+                    }
+                }
+                if (presetNameError)
+                    ImGui::TextColored(ImVec4{0.83f, 0.32f, 0.29f, 1.0f}, "Use a unique preset name.");
+                ImGui::EndPopup();
+            }
+
+            ImGui::SameLine(0.0f, presetActionsGap);
+            ButtonProps cancelProps{
+                .label = "Cancel",
+                .size = {cancelW, actionH},
+                .variant = ButtonVariant::Secondary,
+                .enabled = true,
+            };
+            const bool canImport = selItem && !selItem->displayName.empty() && !selItem->result.has_value() &&
+                !selItem->importerContributionId.empty();
             ButtonProps importProps{
-                .label = "Import", .variant = ButtonVariant::Primary, .componentSize = ButtonSize::Medium,
-                .enabled = canImport
+                .label = "Import",
+                .size = {importW, actionH},
+                .variant = ButtonVariant::Primary,
+                .enabled = canImport,
             };
 
-            if (FixedWidthButton("##ImportCancel", cancelW, cancelProps))
+            if (Button(cancelProps))
                 frameResult = ModalFrameResult::RequestClose(ModalCloseReason::Cancelled);
             ImGui::SameLine(0.0f, gap);
-            if (FixedWidthButton("##ImportSelected", importW, importProps))
+            if (Button(importProps))
             {
                 CancellationToken cancellation;
                 static_cast<void>(modal.ImportSingleItem(snap.selectedItemIndex, cancellation));
             }
 
-            ImGui::EndChild();
-            ImGui::PopStyleColor();
-            ImGui::PopStyleVar();
+            modalShell.EndFooter();
         }
-
-        // ════════════════════════════════════════════════
-        // EMBEDDED METADATA STRIP
-        // ════════════════════════════════════════════════
-        {
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{14.0f, 0.0f});
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, Bg1());
-            ImGui::BeginChild("ImportMetadata", ImVec2{0.0f, ImportLayout::MetadataH}, true,
-                              ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-
-            const char* metadataText = "Metadata: embedded · Schema: v7 · Parallel: 4 workers";
-            PushFont(fonts.sansCompact);
-            const ImVec2 textSize = ImGui::CalcTextSize(metadataText);
-            ImGui::SetCursorPos({
-                std::max(14.0f, (ImGui::GetWindowWidth() - textSize.x) * 0.5f),
-                (ImportLayout::MetadataH - textSize.y) * 0.5f
-            });
-            ImGui::TextColored(Dim(), "%s", metadataText);
-            PopFont(fonts.sansCompact);
-
-            ImGui::EndChild();
-            ImGui::PopStyleColor();
-            ImGui::PopStyleVar();
-        }
-
-        ImGui::End();
-        ImGui::PopStyleColor(2);
-        ImGui::PopStyleVar(4);
 
         return frameResult;
     }

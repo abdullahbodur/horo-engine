@@ -10,11 +10,11 @@
 
 namespace Horo::Editor
 {
-/**
- * @brief Draws the host-owned Settings modal presentation without opening or closing an ImGui popup.
- * @return A close request for explicit Cancel or header-close controls, otherwise no action.
- */
-[[nodiscard]] ModalFrameResult DrawSettingsModalPresentation(SettingsState &state, EditorSettingsService &settings,
-                                                             LocalizationService &localization,
-                                                             const Theme::Fonts &fonts, ImTextureID logo);
+    /**
+     * @brief Draws the host-owned Settings modal presentation without opening or closing an ImGui popup.
+     * @return A close request for explicit Cancel or header-close controls, otherwise no action.
+     */
+    [[nodiscard]] ModalFrameResult DrawSettingsModalPresentation(SettingsState& state, EditorSettingsService& settings,
+                                                                 LocalizationService& localization,
+                                                                 const Theme::Fonts& fonts, ImTextureID logo);
 } // namespace Horo::Editor

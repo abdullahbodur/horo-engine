@@ -3,6 +3,7 @@
  */
 
 #include "ObjMeshImporter.h"
+#include "ObjMeshPreviewProvider.h"
 #include "../fbx_mesh/FbxMeshImporter.h"
 
 #include "Horo/Assets/AssetRegistry.h"
@@ -69,12 +70,14 @@ namespace Horo::Assets
             const auto slash2 = token.find('/', slash1 + 1);
             if (slash2 == std::string_view::npos)
             {
-                if (const std::string tcStr(token.substr(slash1 + 1)); !tcStr.empty()) fv.texcoordIndex =
-                    std::stoi(tcStr);
+                if (const std::string tcStr(token.substr(slash1 + 1)); !tcStr.empty())
+                    fv.texcoordIndex =
+                        std::stoi(tcStr);
                 return fv;
             }
-            if (const std::string tcStr(token.substr(slash1 + 1, slash2 - slash1 - 1)); !tcStr.empty()) fv.texcoordIndex
-                = std::stoi(tcStr);
+            if (const std::string tcStr(token.substr(slash1 + 1, slash2 - slash1 - 1)); !tcStr.empty())
+                fv.texcoordIndex
+                    = std::stoi(tcStr);
             if (const std::string nStr(token.substr(slash2 + 1)); !nStr.empty()) fv.normalIndex = std::stoi(nStr);
             return fv;
         }
@@ -169,7 +172,7 @@ namespace Horo::Assets
                 }
 
                 auto& payload = result.editorPayload;
-                WriteLE32(payload, 1);
+                WriteLE32(payload, 2);
                 WriteLE32(payload, static_cast<std::uint32_t>(obj.positions.size()));
                 WriteLE32(payload, static_cast<std::uint32_t>(obj.faces.size()));
                 WriteFloat(payload, minX);
@@ -204,6 +207,36 @@ namespace Horo::Assets
                     WriteFloat(payload, n.z);
                 }
 
+                std::vector<std::uint32_t> triangleIndices;
+                triangleIndices.reserve(obj.faces.size() * 3U);
+                const auto resolvePositionIndex = [&obj](const int index) -> std::optional<std::uint32_t>
+                {
+                    if (index == 0)
+                        return std::nullopt;
+                    const std::int64_t resolved = index > 0
+                                                      ? static_cast<std::int64_t>(index - 1)
+                                                      : static_cast<std::int64_t>(obj.positions.size()) + index;
+                    if (resolved < 0 || resolved >= static_cast<std::int64_t>(obj.positions.size()))
+                        return std::nullopt;
+                    return static_cast<std::uint32_t>(resolved);
+                };
+                for (const auto& face : obj.faces)
+                {
+                    if (face.size() != 3)
+                        continue;
+                    const auto a = resolvePositionIndex(face[0].positionIndex);
+                    const auto b = resolvePositionIndex(face[1].positionIndex);
+                    const auto c = resolvePositionIndex(face[2].positionIndex);
+                    if (!a || !b || !c)
+                        continue;
+                    triangleIndices.push_back(*a);
+                    triangleIndices.push_back(*b);
+                    triangleIndices.push_back(*c);
+                }
+                WriteLE32(payload, static_cast<std::uint32_t>(triangleIndices.size()));
+                for (const std::uint32_t index : triangleIndices)
+                    WriteLE32(payload, index);
+
                 return Result<PreparedAssetImport>::Success(std::move(result));
             }
         };
@@ -222,10 +255,12 @@ namespace Horo::Assets
         return catalog.Register(AssetImporterContribution{
             .contributionId = "horo.asset-importer.obj-mesh",
             .packageId = "horo.builtin.assets",
-            .moduleId = "horo.builtin.assets.importer",
+            .moduleId = "horo.builtin.assets.importer.obj",
+            .moduleVersion = "1.0.0",
             .version = "1.0.0",
             .fileExtensions = {"obj"},
             .assetTypes = {meshType.Value()},
+            .subfolderCategory = "Meshes",
             .settings = {
                 ImportSettingDescriptor{
                     .id = "coordinateSystem", .labelKey = "Coordinate System",
@@ -235,11 +270,13 @@ namespace Horo::Assets
                         {.id = "yup", .labelKey = "Y-up (engine)", .value = std::string{"Y-up (engine)"}},
                         {.id = "zup", .labelKey = "Z-up", .value = std::string{"Z-up"}},
                     },
+                    .includeInPresets = true,
                 },
                 ImportSettingDescriptor{
                     .id = "unitScale", .labelKey = "Unit Scale",
                     .descriptionKey = "Scale factor from source units to engine units.",
                     .kind = ImportSettingKind::Float, .defaultValue = 1.0, .minimum = 0.001, .maximum = 1000.0,
+                    .includeInPresets = true,
                 },
                 ImportSettingDescriptor{
                     .id = "importNormals", .labelKey = "Import Normals",
@@ -250,10 +287,14 @@ namespace Horo::Assets
                         {.id = "smooth", .labelKey = "Calculate smooth", .value = std::string{"Calculate smooth"}},
                         {.id = "flat", .labelKey = "Calculate flat", .value = std::string{"Calculate flat"}},
                     },
+                    .includeInPresets = true,
                 },
             },
             .builtIn = true,
             .strategy = CreateObjMeshImporter(),
+            .previewProvider =
+            CreateBuiltinMeshPreviewProvider(BuiltinMeshPreviewView::Isometric),
+            .previewFallback = AssetPreviewFallback::Mesh,
         });
     }
 

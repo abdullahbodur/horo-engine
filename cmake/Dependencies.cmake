@@ -13,6 +13,37 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
+set(HORO_UFBX_REVISION "83bc7cf44f76bc8622de63b809a42b5d557cd733")
+FetchContent_Declare(
+    ufbx
+    GIT_REPOSITORY https://github.com/ufbx/ufbx.git
+    GIT_TAG "${HORO_UFBX_REVISION}"
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(ufbx)
+
+if(HORO_ENABLE_EXTENSION_MARKETPLACE)
+    set(HORO_MINIZ_REVISION "174573d60290f447c13a2b1b3405de2b96e27d6c")
+    set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        miniz
+        GIT_REPOSITORY https://github.com/richgel999/miniz.git
+        GIT_TAG "${HORO_MINIZ_REVISION}"
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(miniz)
+    find_package(CURL REQUIRED)
+endif()
+
+add_library(HoroThirdPartyUfbx STATIC
+    ${ufbx_SOURCE_DIR}/ufbx.c
+)
+add_library(HoroThirdParty::Ufbx ALIAS HoroThirdPartyUfbx)
+target_include_directories(HoroThirdPartyUfbx
+    PUBLIC
+        ${ufbx_SOURCE_DIR}
+)
+
 if(BUILD_TESTING)
     set(HORO_CATCH2_REVISION "6ee0826dcae55ed1e06b2c5701981221e979e1e6")
     set(CATCH_INSTALL_DOCS OFF CACHE BOOL "" FORCE)
@@ -30,6 +61,7 @@ endif()
 if(HORO_BUILD_RENDER_OPENGL)
     find_package(OpenGL REQUIRED)
 endif()
+
 
 if(HORO_BUILD_EDITOR_GUI)
     set(HORO_SDL3_REVISION

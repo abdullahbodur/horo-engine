@@ -72,9 +72,7 @@ namespace Horo::Editor::Ui
         using namespace Theme;
 
         if (!props.enabled)
-        {
-            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.45F);
-        }
+            ImGui::BeginDisabled();
 
         if (props.variant == ButtonVariant::Primary)
         {
@@ -125,14 +123,12 @@ namespace Horo::Editor::Ui
 
         ImGui::PopStyleColor(4);
         if (!props.enabled)
-        {
-            ImGui::PopStyleVar();
-        }
+            ImGui::EndDisabled();
         if (pushedFramePadding)
         {
             ImGui::PopStyleVar(); // FramePadding from componentSize
         }
-        return clicked;
+        return props.enabled && clicked;
     }
 
     // ── ScopedCard ───────────────────────────────────────────────────────
@@ -180,6 +176,147 @@ namespace Horo::Editor::Ui
         return clicked;
     }
 
+    /** @copydoc NavigationIconButton */
+    [[nodiscard]] bool NavigationIconButton(
+        const char* id, const NavigationIcon icon, const ImVec2 size,
+        const bool enabled)
+    {
+        using namespace Theme;
+
+        ImGui::PushID(id);
+        const ImVec2 position = ImGui::GetCursorScreenPos();
+        ImGui::BeginDisabled(!enabled);
+        const bool clicked = ImGui::InvisibleButton("##navigation", size);
+        const bool hovered = enabled && ImGui::IsItemHovered();
+        const bool active = enabled && ImGui::IsItemActive();
+        ImGui::EndDisabled();
+
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        if (hovered || active)
+        {
+            ImVec4 surface = active ? Accent() : AccentSoft();
+            surface.w = active ? 0.22F : 0.16F;
+            drawList->AddRectFilled(
+                position, {position.x + size.x, position.y + size.y},
+                U32(surface), 4.0F);
+        }
+
+        ImVec4 iconColor = enabled ? (hovered ? Text() : Muted()) : Dim();
+        if (!enabled)
+            iconColor.w *= 0.48F;
+        const ImU32 color = U32(iconColor);
+        const ImVec2 center{
+            position.x + size.x * 0.5F,
+            position.y + size.y * 0.5F,
+        };
+        constexpr float halfWidth = 3.0F;
+        constexpr float halfHeight = 5.0F;
+        constexpr float thickness = 1.5F;
+        if (icon == NavigationIcon::Back)
+        {
+            drawList->AddLine(
+                {center.x + halfWidth, center.y - halfHeight},
+                {center.x - halfWidth, center.y}, color, thickness);
+            drawList->AddLine(
+                {center.x - halfWidth, center.y},
+                {center.x + halfWidth, center.y + halfHeight}, color, thickness);
+        }
+        else if (icon == NavigationIcon::Forward)
+        {
+            drawList->AddLine(
+                {center.x - halfWidth, center.y - halfHeight},
+                {center.x + halfWidth, center.y}, color, thickness);
+            drawList->AddLine(
+                {center.x + halfWidth, center.y},
+                {center.x - halfWidth, center.y + halfHeight}, color, thickness);
+        }
+        else
+        {
+            drawList->AddLine(
+                {center.x - halfHeight, center.y + halfWidth},
+                {center.x, center.y - halfWidth}, color, thickness);
+            drawList->AddLine(
+                {center.x, center.y - halfWidth},
+                {center.x + halfHeight, center.y + halfWidth}, color, thickness);
+        }
+
+        ImGui::PopID();
+        return enabled && clicked;
+    }
+
+    /** @copydoc IconButton */
+    bool IconButton(const IconButtonProps& props)
+    {
+        ImGui::PushID(props.id);
+        const ImVec2 position = ImGui::GetCursorScreenPos();
+        ImGui::BeginDisabled(!props.enabled);
+        const bool clicked =
+            ImGui::InvisibleButton("##icon-button", props.size);
+        const bool hovered = props.enabled && ImGui::IsItemHovered();
+        const bool active = props.enabled && ImGui::IsItemActive();
+        const bool focused = props.enabled && ImGui::IsItemFocused();
+        ImGui::EndDisabled();
+
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->AddRectFilled(
+            position,
+            {position.x + props.size.x, position.y + props.size.y},
+            Theme::U32(
+                active ? Theme::AccentSoft()
+                       : hovered || focused ? Theme::Hover() : Theme::Bg3()),
+            Theme::Layout::Radius);
+        drawList->AddRect(
+            position,
+            {position.x + props.size.x, position.y + props.size.y},
+            Theme::U32(
+                hovered || active || focused ? Theme::Accent()
+                                             : Theme::Border()),
+            Theme::Layout::Radius, 0,
+            hovered || active || focused ? 1.5F : 1.0F);
+
+        ImVec4 iconTone =
+            hovered || active || focused ? Theme::Accent() : Theme::Text();
+        if (!props.enabled)
+            iconTone.w *= 0.45F;
+        const ImU32 iconColor = Theme::U32(iconTone);
+        const ImVec2 center{
+            position.x + props.size.x * 0.5F,
+            position.y + props.size.y * 0.5F,
+        };
+        if (props.glyph == IconButtonGlyph::Plus)
+        {
+            drawList->AddLine(
+                {center.x - 5.0F, center.y},
+                {center.x + 5.0F, center.y}, iconColor, 1.6F);
+            drawList->AddLine(
+                {center.x, center.y - 5.0F},
+                {center.x, center.y + 5.0F}, iconColor, 1.6F);
+        }
+        else
+        {
+            const ImVec2 origin{center.x - 9.0F, center.y - 7.0F};
+            drawList->AddLine(
+                origin, {origin.x + 6.0F, origin.y}, iconColor, 1.5F);
+            drawList->AddLine(
+                {origin.x + 6.0F, origin.y},
+                {origin.x + 8.0F, origin.y + 2.0F}, iconColor, 1.5F);
+            drawList->AddRect(
+                {origin.x, origin.y + 2.0F},
+                {origin.x + 18.0F, origin.y + 12.0F},
+                iconColor, 2.0F, 0, 1.5F);
+            drawList->AddLine(
+                {origin.x, origin.y + 4.5F},
+                {origin.x + 18.0F, origin.y + 4.5F},
+                iconColor, 1.25F);
+        }
+
+        if (hovered && props.tooltip != nullptr &&
+            props.tooltip[0] != '\0')
+            ImGui::SetTooltip("%s", props.tooltip);
+        ImGui::PopID();
+        return props.enabled && clicked;
+    }
+
     // ── SectionTitle ─────────────────────────────────────────────────────
 
     void SectionTitle(const char* upperCaseLabel, const Theme::Fonts& fonts)
@@ -224,6 +361,139 @@ namespace Horo::Editor::Ui
         ImGui::PopStyleColor();
     }
 
+    /** @copydoc TextLink */
+    bool TextLink(const char* id, const char* label, ImFont* font, const float fontSize, const bool current)
+    {
+        ImFont* resolvedFont = font != nullptr ? font : ImGui::GetFont();
+        const ImVec2 position = ImGui::GetCursorScreenPos();
+        const ImVec2 textSize = resolvedFont->CalcTextSizeA(fontSize, FLT_MAX, 0.0F, label);
+        const ImVec2 hitSize{textSize.x, std::max(textSize.y, 20.0F)};
+        const bool activated = ImGui::InvisibleButton(id, hitSize);
+        const bool hovered = ImGui::IsItemHovered();
+        const bool focused = ImGui::IsItemFocused();
+        if (hovered)
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+
+        const ImU32 color = Theme::U32(
+            hovered || focused ? Theme::Accent() : (current ? Theme::Text() : Theme::Muted()));
+        const ImVec2 textPosition{position.x, position.y + (hitSize.y - textSize.y) * 0.5F};
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->AddText(resolvedFont, fontSize, textPosition, color, label);
+        if (hovered || focused)
+        {
+            drawList->AddLine(
+                {textPosition.x, textPosition.y + textSize.y + 1.0F},
+                {textPosition.x + textSize.x, textPosition.y + textSize.y + 1.0F}, color, 1.0F);
+        }
+        return activated;
+    }
+
+    // ── Badge / tag ──────────────────────────────────────────────────────
+
+    /** @copydoc BadgeToneColor */
+    ImVec4 BadgeToneColor(const BadgeTone tone)
+    {
+        switch (tone)
+        {
+        case BadgeTone::Accent:
+            return Theme::Accent();
+        case BadgeTone::Success:
+            return Theme::Ok();
+        case BadgeTone::Warning:
+            return Theme::Warn();
+        case BadgeTone::Error:
+            return Theme::Err();
+        case BadgeTone::Neutral:
+        default:
+            return Theme::Muted();
+        }
+    }
+
+    namespace
+    {
+        [[nodiscard]] ImVec2 MeasureBadge(
+            const BadgeProps& props, const Theme::Fonts& fonts)
+        {
+            const float horizontalPadding =
+                props.size == BadgeSize::Medium ? 12.0F : 9.0F;
+            const float verticalPadding =
+                props.size == BadgeSize::Medium ? 9.0F : 4.0F;
+            constexpr float indicatorWidth = 12.0F;
+            Theme::ScopedTextStyle textStyle(
+                fonts.sansCompact,
+                props.size == BadgeSize::Medium ? 12.0F : 10.5F,
+                Theme::FontPx::SansCompact);
+            const ImVec2 textSize = ImGui::CalcTextSize(props.label);
+            return {
+                textSize.x + horizontalPadding * 2.0F +
+                    (props.leadingIndicator ? indicatorWidth : 0.0F),
+                textSize.y + verticalPadding * 2.0F,
+            };
+        }
+    } // namespace
+
+    /** @copydoc BadgeWidth */
+    float BadgeWidth(const BadgeProps& props, const Theme::Fonts& fonts)
+    {
+        return MeasureBadge(props, fonts).x;
+    }
+
+    /** @copydoc Badge */
+    void Badge(const BadgeProps& props, const Theme::Fonts& fonts)
+    {
+        const float horizontalPadding =
+            props.size == BadgeSize::Medium ? 12.0F : 9.0F;
+        const float verticalPadding =
+            props.size == BadgeSize::Medium ? 9.0F : 4.0F;
+        constexpr float radius = 4.0F;
+        constexpr float inlineGap = 6.0F;
+        const ImVec4 color = BadgeToneColor(props.tone);
+        Theme::ScopedTextStyle textStyle(
+            fonts.sansCompact,
+            props.size == BadgeSize::Medium ? 12.0F : 10.5F,
+            Theme::FontPx::SansCompact);
+        const ImVec2 textSize = ImGui::CalcTextSize(props.label);
+        const ImVec2 badgeMin = ImGui::GetCursorScreenPos();
+        const ImVec2 badgeSize{
+            textSize.x + horizontalPadding * 2.0F +
+                (props.leadingIndicator ? 12.0F : 0.0F),
+            textSize.y + verticalPadding * 2.0F,
+        };
+        const ImVec2 badgeMax{
+            badgeMin.x + badgeSize.x, badgeMin.y + badgeSize.y};
+        float textX = badgeMin.x + horizontalPadding;
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+        ImVec4 surface = color;
+        surface.w = 0.10F;
+        ImVec4 border = color;
+        border.w = 0.28F;
+        drawList->AddRectFilled(
+            badgeMin, badgeMax, Theme::U32(surface), radius);
+        drawList->AddRect(
+            badgeMin, badgeMax, Theme::U32(border), radius);
+        if (props.leadingIndicator)
+        {
+            constexpr float indicatorRadius = 3.0F;
+            const ImVec2 center{
+                badgeMin.x + horizontalPadding + indicatorRadius,
+                badgeMin.y + badgeSize.y * 0.5F,
+            };
+            drawList->AddCircleFilled(
+                center, indicatorRadius, Theme::U32(color));
+            textX += 12.0F;
+        }
+        const ImVec2 textPosition{
+            textX,
+            badgeMin.y + (badgeSize.y - textSize.y) * 0.5F,
+        };
+        drawList->AddText(
+            ImGui::GetFont(), ImGui::GetFontSize(), textPosition,
+            Theme::U32(color), props.label);
+        ImGui::Dummy(badgeSize);
+        ImGui::SetCursorScreenPos({badgeMax.x + inlineGap, badgeMin.y});
+    }
+
     // ── DashedSeparator ──────────────────────────────────────────────────
 
     void DashedSeparator(const float dash, const float gap)
@@ -239,6 +509,32 @@ namespace Horo::Editor::Ui
             x = end + gap;
         }
         ImGui::Dummy({0.0F, 4.0F});
+    }
+
+    /** @copydoc LabeledSeparator */
+    void LabeledSeparator(
+        const char* label, const Theme::Fonts& fonts)
+    {
+        Theme::ScopedTextStyle textStyle(
+            fonts.sansCompact, 12.0F, Theme::FontPx::SansCompact);
+        const ImVec2 textSize = ImGui::CalcTextSize(label);
+        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
+        ImGui::TextUnformatted(label);
+        ImGui::PopStyleColor();
+
+        const ImVec2 minimum = ImGui::GetItemRectMin();
+        const ImVec2 maximum = ImGui::GetItemRectMax();
+        const float lineStart = maximum.x + 12.0F;
+        const float lineEnd =
+            ImGui::GetWindowPos().x +
+            ImGui::GetWindowContentRegionMax().x;
+        if (lineEnd > lineStart)
+        {
+            ImGui::GetWindowDrawList()->AddLine(
+                {lineStart, minimum.y + textSize.y * 0.5F},
+                {lineEnd, minimum.y + textSize.y * 0.5F},
+                Theme::U32(Theme::Border()), 1.0F);
+        }
     }
 
     // ── SettingGroup ─────────────────────────────────────────────────────
@@ -307,14 +603,14 @@ namespace Horo::Editor::Ui
 
     bool ComboControl(const char* id, int* value, const char* const items[], const int itemCount,
                       const Theme::Fonts& fonts,
-                      bool error)
+                      bool error, const float height)
     {
         const ComboItemSource source{.context = items, .label = ComboArrayLabel};
-        return ComboControl(id, value, itemCount, source, fonts, error);
+        return ComboControl(id, value, itemCount, source, fonts, error, height);
     }
 
     bool ComboControl(const char* id, int* value, const int itemCount, const ComboItemSource& source,
-                      const Theme::Fonts& fonts, bool error)
+                      const Theme::Fonts& fonts, bool error, const float height)
     {
         IM_ASSERT(source.label != nullptr);
         bool changed = false;
@@ -322,7 +618,7 @@ namespace Horo::Editor::Ui
 
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0F, 7.0F});
         const float fieldW = ImGui::CalcItemWidth();
-        const float fieldH = ImGui::GetFrameHeight();
+        const float fieldH = height > 0.0F ? height : ImGui::GetFrameHeight();
         ImGui::PopStyleVar();
 
         const ImVec2 fieldPos = ImGui::GetCursorScreenPos();
@@ -1014,6 +1310,171 @@ namespace Horo::Editor::Ui
         ImGui::PopStyleVar(3);
         ImGui::PopID();
         return clicked;
+    }
+
+    // ── Modal shell ──────────────────────────────────────────────────────
+
+    /** @copydoc ScopedModalShell::ScopedModalShell */
+    ScopedModalShell::ScopedModalShell(
+        const ModalShellProps& props, const Theme::Fonts& fonts)
+        : footerHeight_(props.footerHeight)
+    {
+        const ImGuiViewport* viewport = ImGui::GetMainViewport();
+        const float width = std::min(
+            props.requestedSize.x,
+            std::max(
+                props.minimumWidth,
+                viewport->WorkSize.x - props.viewportPadding));
+        const float height = std::min(
+            props.requestedSize.y,
+            std::max(
+                props.minimumHeight,
+                viewport->WorkSize.y - props.viewportPadding));
+        const ImVec2 position{
+            viewport->WorkPos.x + (viewport->WorkSize.x - width) * 0.5F,
+            viewport->WorkPos.y + (viewport->WorkSize.y - height) * 0.5F,
+        };
+
+        ImGui::SetNextWindowPos(position, ImGuiCond_Always);
+        ImGui::SetNextWindowSize({width, height}, ImGuiCond_Always);
+        ImGui::PushStyleVar(
+            ImGuiStyleVar_WindowPadding, ImVec2{0.0F, 0.0F});
+        ImGui::PushStyleVar(
+            ImGuiStyleVar_WindowRounding, Theme::Layout::RadiusModal);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0F);
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, Theme::Bg1());
+        ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
+        ImGui::Begin(
+            props.id, nullptr,
+            ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar |
+                ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                ImGuiWindowFlags_NoScrollbar |
+                ImGuiWindowFlags_NoScrollWithMouse);
+
+        ImGui::PushStyleVar(
+            ImGuiStyleVar_WindowPadding, ImVec2{22.0F, 0.0F});
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg0());
+        ImGui::BeginChild(
+            "##ModalHeader", {0.0F, props.headerHeight}, false,
+            ImGuiWindowFlags_AlwaysUseWindowPadding |
+                ImGuiWindowFlags_NoScrollbar |
+                ImGuiWindowFlags_NoScrollWithMouse);
+
+        constexpr float iconSize = 20.0F;
+        const float titleY =
+            (props.headerHeight - ImGui::GetTextLineHeight()) * 0.5F;
+        ImGui::SetCursorPosY(titleY);
+        if (props.logo != 0)
+        {
+            ImGui::Image(props.logo, {iconSize, iconSize});
+            ImGui::SameLine(0.0F, 10.0F);
+        }
+        else if (props.showBrandMark)
+        {
+            const ImVec2 mark = ImGui::GetCursorScreenPos();
+            ImGui::GetWindowDrawList()->AddRectFilled(
+                {mark.x + 4.0F, mark.y + 4.0F},
+                {mark.x + 14.0F, mark.y + 14.0F},
+                Theme::U32(Theme::Accent()), 2.0F);
+            ImGui::Dummy({iconSize, iconSize});
+            ImGui::SameLine(0.0F, 10.0F);
+        }
+        {
+            Theme::ScopedTextStyle titleStyle(
+                fonts.sansEmphasis, props.titleFontSize,
+                Theme::FontPx::SansEmphasis);
+            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
+            ImGui::TextUnformatted(props.title);
+            ImGui::PopStyleColor();
+        }
+
+        if (props.showClose)
+        {
+            constexpr ImVec2 closeSize{28.0F, 28.0F};
+            ImGui::SetCursorPos(
+                {ImGui::GetWindowWidth() - 50.0F,
+                 (props.headerHeight - closeSize.y) * 0.5F});
+            closeRequested_ =
+                IconCloseButton("##ModalClose", closeSize);
+        }
+
+        const ImVec2 headerPosition = ImGui::GetWindowPos();
+        ImGui::GetWindowDrawList()->AddLine(
+            {headerPosition.x,
+             headerPosition.y + props.headerHeight - 1.0F},
+            {headerPosition.x + ImGui::GetWindowWidth(),
+             headerPosition.y + props.headerHeight - 1.0F},
+            Theme::U32(Theme::Border()), 1.0F);
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+        ImGui::PopStyleVar();
+
+        bodyHeight_ = std::max(
+            0.0F,
+            ImGui::GetWindowHeight() - props.headerHeight -
+                props.footerHeight);
+        footerStartY_ =
+            ImGui::GetWindowContentRegionMax().y - props.footerHeight;
+        // Region placement is explicit, but descendants retain the active theme's
+        // normal ItemSpacing. Modal chrome must not collapse form/list spacing.
+        ImGui::SetCursorPos({0.0F, props.headerHeight});
+    }
+
+    /** @copydoc ScopedModalShell::~ScopedModalShell */
+    ScopedModalShell::~ScopedModalShell()
+    {
+        if (footerOpen_)
+            EndFooter();
+        ImGui::End();
+        ImGui::PopStyleColor(2);
+        ImGui::PopStyleVar(3);
+    }
+
+    /** @copydoc ScopedModalShell::BodyHeight */
+    float ScopedModalShell::BodyHeight() const noexcept
+    {
+        return bodyHeight_;
+    }
+
+    /** @copydoc ScopedModalShell::FooterStartY */
+    float ScopedModalShell::FooterStartY() const noexcept
+    {
+        return footerStartY_;
+    }
+
+    /** @copydoc ScopedModalShell::CloseRequested */
+    bool ScopedModalShell::CloseRequested() const noexcept
+    {
+        return closeRequested_;
+    }
+
+    /** @copydoc ScopedModalShell::BeginFooter */
+    void ScopedModalShell::BeginFooter(
+        const ImVec2 padding, const bool border)
+    {
+        IM_ASSERT(!footerOpen_);
+        ImGui::SetCursorPosY(footerStartY_);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, padding);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg0());
+        ImGui::BeginChild(
+            "##ModalFooter", {0.0F, footerHeight_}, border,
+            ImGuiWindowFlags_NoScrollbar |
+                ImGuiWindowFlags_NoScrollWithMouse);
+        const ImVec2 position = ImGui::GetWindowPos();
+        ImGui::GetWindowDrawList()->AddLine(
+            position, {position.x + ImGui::GetWindowWidth(), position.y},
+            Theme::U32(Theme::Border()), 1.0F);
+        footerOpen_ = true;
+    }
+
+    /** @copydoc ScopedModalShell::EndFooter */
+    void ScopedModalShell::EndFooter()
+    {
+        IM_ASSERT(footerOpen_);
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+        ImGui::PopStyleVar();
+        footerOpen_ = false;
     }
 
     // ── Dock UI ───────────────────────────────────────────────────────────

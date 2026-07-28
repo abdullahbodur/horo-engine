@@ -183,4 +183,20 @@ std::optional<EditorMenuInvocation> PollNativeEditorMenuAction() noexcept
     g_pendingInvocation.reset();
     return invocation;
 }
+
+/** @copydoc RevealInNativeFileManager */
+bool RevealInNativeFileManager(const std::filesystem::path& absolutePath) noexcept
+{
+    if (!absolutePath.is_absolute())
+        return false;
+    NSString* path = ToNSString(absolutePath.string());
+    if (path == nil)
+        return false;
+    NSURL* url = [NSURL fileURLWithPath:path];
+    [path release];
+    if (url == nil)
+        return false;
+    [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs:@[url]];
+    return true;
+}
 } // namespace Horo::Editor

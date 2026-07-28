@@ -23,8 +23,11 @@
 #include "Horo/Foundation/DataBus.h"
 #include "Horo/Foundation/JobSystem.h"
 #include "Horo/Foundation/Logging/Logger.h"
+#include "Horo/Foundation/Logging/StructuredLogStore.h"
 #include "Horo/Foundation/Paths.h"
 #include "Horo/Foundation/Platform.h"
+#include "Horo/Extensions/ExtensionInventory.h"
+#include "Horo/Extensions/ExtensionMarketplace.h"
 #include "Horo/Runtime/Input.h"
 #include "Horo/Runtime/Render/RenderFrontend.h"
 #include "Horo/Runtime/RuntimeHost.h"
@@ -667,6 +670,7 @@ struct RunEditorMainLoopParams
     IEditorGuiRenderer &guiRenderer;
     IEditorViewportRenderer &viewportRenderer;
     Render::RenderTargetHandle viewportTarget;
+    const Log::IStructuredLogQuery &logQuery;
 };
 
 class EditorRuntimeParticipant final : public Runtime::RuntimeLifecycleParticipant
@@ -940,6 +944,16 @@ std::optional<EditorRendererRestartRequest> RunEditorMainLoop(RunEditorMainLoopP
     RegisterEditorWorkspaceScreen(screenRegistry);
     WorkspacePanelRegistry workspacePanelRegistry;
     RegisterDefaultWorkspacePanels(workspacePanelRegistry);
+    Extensions::ExtensionInventory extensionInventory;
+    const Result<void> extensionInventoryRefresh = extensionInventory.Refresh();
+    if (extensionInventoryRefresh.HasError())
+    {
+        LOG_ERROR("editor.extensions", "Unable to refresh extension inventory: %s",
+                  extensionInventoryRefresh.ErrorValue().message.c_str());
+    }
+    Extensions::ExtensionMarketplaceService extensionMarketplace{
+        p.jobSystem, extensionInventory,
+        Extensions::ExtensionMarketplaceService::DefaultRegistryUrl()};
     GuiScreenHost screenHost{guiContext,
                              p.modalHost,
                              p.settings,
@@ -950,12 +964,19 @@ std::optional<EditorRendererRestartRequest> RunEditorMainLoop(RunEditorMainLoopP
                              p.rendererAvailability,
                              std::move(screenRegistry),
                              std::move(workspacePanelRegistry),
-                             (std::uintptr_t)(void *)(intptr_t)p.textures.logo};
+                             (std::uintptr_t)(void *)(intptr_t)p.textures.logo,
+                             extensionInventoryRefresh.HasValue() ? &extensionInventory : nullptr,
+                             extensionInventoryRefresh.HasValue() ? &extensionMarketplace : nullptr};
     screenHost.Services().Register<IEditorViewportRenderer>(p.viewportRenderer);
+    screenHost.Services().Register<IEditorGuiRenderer>(p.guiRenderer);
     screenHost.Services().Register<EditorViewportSceneState>(viewportSceneState);
     screenHost.Services().Register<Runtime::RuntimeSceneService>(*runtimeSceneService);
+    screenHost.Services().Register<Assets::AssetRegistry>(assetRegistry);
+    screenHost.Services().Register<ProjectMutationCoordinator>(mutationCoordinator);
+    screenHost.Services().Register<DurableFileSystem>(durableFiles);
     screenHost.Services().Register<ProjectOpenService>(projectOpenService);
     screenHost.Services().Register<RecentProjectInspectionService>(recentProjectInspection);
+    screenHost.Services().RegisterConst<Log::IStructuredLogQuery>(p.logQuery);
     if (const Result<void> started = screenHost.Start(std::move(p.initialRoute)); started.HasError())
     {
         LOG_ERROR("editor.screens", "Initial screen startup failed: %s", started.ErrorValue().message.c_str());
@@ -1020,6 +1041,8 @@ int RunEditorGuiApp(const int argc, char **argv)
 {
     // ── Bootstrap logging before any subsystem ───────────────────────
     Log::Logger::Init("~/.horo/logs", "horo-editor");
+    auto structuredLogStore = std::make_shared<Log::StructuredLogStore>(4096U);
+    Log::Logger::SetStructuredLogStore(structuredLogStore);
 
     // Setup base MDC for the whole application run
     Log::LogContext appCtx("app", "horo-editor", "run_id", "1");
@@ -1167,7 +1190,8 @@ int RunEditorGuiApp(const int argc, char **argv)
                                        *composition.frontend,
                                        *composition.guiRenderer,
                                        *composition.viewportRenderer,
-                                       composition.viewportTarget};
+                                       composition.viewportTarget,
+                                       *structuredLogStore};
     const std::optional<EditorRendererRestartRequest> rendererRestart = RunEditorMainLoop(loopParams);
 
     DestroyEditorTextures(textures, *composition.guiRenderer);

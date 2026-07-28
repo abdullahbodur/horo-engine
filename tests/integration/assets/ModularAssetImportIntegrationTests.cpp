@@ -5,6 +5,7 @@
 #include "Horo/Assets/AssetCookOutput.h"
 #include "Horo/Assets/AssetCookService.h"
 #include "Horo/Assets/AssetImportOperation.h"
+#include "Horo/Assets/AssetImportMetadata.h"
 #include "Horo/Assets/AssetImporter.h"
 #include "Horo/Assets/AssetProvider.h"
 #include "Horo/Assets/AssetRegistry.h"
@@ -12,6 +13,7 @@
 #include "Horo/Foundation/CancellationToken.h"
 #include "Horo/Foundation/JobSystem.h"
 #include "HeadlessMeshCooker.h"
+#include "ProjectAssetImportCommitter.h"
 
 #include <chrono>
 #include <filesystem>
@@ -99,6 +101,15 @@ class TestMeshImporter final : public IAssetImporter
     }
 };
 
+class FixedAssetIdGenerator final : public IAssetIdGenerator
+{
+  public:
+    [[nodiscard]] AssetId Generate() override
+    {
+        return Id("00112233-4455-6677-8899-aabbccddeeff");
+    }
+};
+
 } // namespace
 
 TEST_CASE("Full pipeline: create project, import, cook, load", "[native][integration][assets][pipeline]")
@@ -124,6 +135,7 @@ TEST_CASE("Full pipeline: create project, import, cook, load", "[native][integra
                      .contributionId = "test.mesh.obj",
                      .packageId = "test.pkg",
                      .moduleId = "test.mod",
+                     .moduleVersion = "1.0.0",
                      .version = "1.0.0",
                      .fileExtensions = {"obj"},
                      .assetTypes = {Type("core.mesh")},
@@ -146,31 +158,52 @@ TEST_CASE("Full pipeline: create project, import, cook, load", "[native][integra
     REQUIRE((startResult.HasValue()));
     REQUIRE((startResult.Value().items.size() == 1));
 
-    auto prepareResult = importOp.Prepare(cancellation);
+    auto prepareResult = importOp.ImportSingleItem(0, cancellation);
     REQUIRE((prepareResult.HasValue()));
-    REQUIRE((prepareResult.Value().phase == AssetImportPhase::ReadyToCommit));
 
-    // 4. Simulate registry registration (simplified: directly register)
-    // In production this goes through IAssetImportCommitter
+    // 4. Commit the imported payload, its identity sidecar, and the registry revision.
     AssetRegistry registry;
-    auto candidate = PrepareAssetRegistryCandidate(projectDir.path);
-    if (candidate.HasValue() && !candidate.Value().records.empty())
-    {
-        auto loadResult = LoadAssetRegistry(registry, projectDir.path,
-                                            AssetRegistryOpenMode::ReadOnly);
-        // Registry may not have the new asset if commit didn't run
-        // This is expected — full commit needs ProjectMutationCoordinator
-    }
+    auto item = prepareResult.Value().items[0];
+    REQUIRE((item.result.has_value()));
+    REQUIRE((!item.result->editorPayload.empty()));
+    item.displayName = "test_imported";
+    item.destinationFolder = "assets/imported";
+    item.createMetaSidecar = true;
+    item.supportsMetaSidecar = true;
 
-    // For the integration proof: verify importer produced editor payload
-    auto &item = prepareResult.Value().items[0];
-    if (item.result.has_value())
-    {
-        REQUIRE((!item.result->editorPayload.empty()));
-        // First 4 bytes are the MESH header
-        REQUIRE((item.result->editorPayload[0] == 'M'));
-        REQUIRE((item.result->editorPayload[1] == 'E'));
-    }
+    ProjectAssetImportCommitter committer{&registry};
+    FixedAssetIdGenerator idGenerator;
+    auto destination = ProjectPath::Parse(item.destinationFolder);
+    REQUIRE((destination.HasValue()));
+    auto committed = committer.Commit(
+        PreparedAssetImportBatch{
+            .operationId = "integration-import",
+            .projectRoot = projectDir.path,
+            .destinationFolder = std::move(destination).Value(),
+            .items = {item},
+        },
+        idGenerator, cancellation);
+    REQUIRE((committed.HasValue()));
+
+    const auto importedPath = projectDir.path / "assets/imported/test_imported.horoasset";
+    REQUIRE((std::filesystem::exists(importedPath)));
+    REQUIRE((std::filesystem::exists(importedPath.string() + ".horo")));
+    auto provenance = ReadAssetImportMetadata(
+        std::filesystem::absolute(importedPath.string() + ".horo"));
+    REQUIRE(provenance.HasValue());
+    REQUIRE(provenance.Value().importerContributionId == "test.mesh.obj");
+    REQUIRE(provenance.Value().importerVersion == "1.0.0");
+    REQUIRE(provenance.Value().importerModuleId == "test.mod");
+    REQUIRE(provenance.Value().importerModuleVersion == "1.0.0");
+    REQUIRE(provenance.Value().absoluteSourcePath.is_absolute());
+    REQUIRE(!provenance.Value().sourceHash.empty());
+    REQUIRE(provenance.Value().lastImportReasons ==
+            std::vector{AssetImportReason::InitialImport});
+    const AssetRegistrySnapshot importedSnapshot = registry.Snapshot();
+    REQUIRE((importedSnapshot.Records().size() == 1));
+    REQUIRE((importedSnapshot.Records()[0].sourcePath.String() ==
+             "assets/imported/test_imported.horoasset"));
+    REQUIRE((importedSnapshot.Records()[0].type.Value() == "core.mesh"));
 
     // 5. Cook integration: use the fixture project from Phase A
     const auto kFixtureProject = std::filesystem::path{PROJECT_SOURCE_DIR} /

@@ -59,6 +59,13 @@ permission checks, result storage, and teardown.
 10. Test registration, permission denial, event handling, workspace persistence,
    and teardown.
 
+Every module and every importer contribution declares an independent canonical
+semantic version. C++ importer adapters must populate both
+`AssetImporterContribution::moduleVersion` and
+`AssetImporterContribution::version`. Existing development adapters that only
+set `version` must add `moduleVersion` before registration; the host rejects an
+unversioned contribution instead of publishing ambiguous provenance.
+
 ## Manifest
 
 A minimal manifest for the Shader Tools package:
@@ -75,6 +82,7 @@ A minimal manifest for the Shader Tools package:
   "modules": [
     {
       "id": "com.vendor.shader-tools.native",
+      "version": "1.0.0",
       "kind": "native",
       "entry": "bin/${platform}-${arch}/horo_shader_tools"
     }
@@ -193,6 +201,15 @@ Rules:
 - Settings, errors, and events are declared before the module can use them.
 - Backend capabilities, UI surfaces, CLI/MCP tools, and commands are separate
   contributions even when implemented by the same module.
+- Asset importer form fields explicitly opt into user presets with
+  `includeInPresets`. Leave it false for source-specific names, identifiers,
+  paths, credentials, and any value that should not be replayed on another
+  asset.
+- An importer may attach an `IAssetPreviewProvider` to its contribution. The
+  provider receives the importer-owned editor payload and returns a bounded
+  RGBA8 image. It must not retain borrowed input, call ImGui, create GPU
+  resources, or mutate the project. Returning a failure selects the declared
+  mesh, image, audio, or generic host fallback.
 
 ## Package Shapes
 
@@ -225,29 +242,14 @@ External native editor/tool modules cross a C ABI. C++ STL types, exceptions,
 RTTI-dependent ownership, allocator ownership, and C++ object deletion do not
 cross this boundary.
 
+Use the concrete SDK declaration in
+`include/Horo/Extensions/ExtensionAbi.h`; do not reproduce private copies of
+the structs. The stable entry point is:
+
 ```c
-typedef struct HoroExtensionHostApiV1 HoroExtensionHostApiV1;
-typedef struct HoroExtensionModuleApiV1 HoroExtensionModuleApiV1;
-
-typedef enum HoroExtensionStatusCode {
-    HORO_EXTENSION_OK = 0,
-    HORO_EXTENSION_REJECTED = 1,
-    HORO_EXTENSION_INVALID_ARGUMENT = 2,
-    HORO_EXTENSION_UNSUPPORTED_API = 3,
-    HORO_EXTENSION_INTERNAL_ERROR = 4
-} HoroExtensionStatusCode;
-
-typedef struct HoroExtensionStatus {
-    uint32_t size;
-    HoroExtensionStatusCode code;
-    const char* error_domain;
-    const char* error_code;
-    const char* message;
-} HoroExtensionStatus;
-
 HORO_EXTENSION_EXPORT HoroExtensionStatus
-horo_extension_load_v1(const HoroExtensionHostApiV1* host,
-                       HoroExtensionModuleApiV1* module);
+horo_extension_load(const HoroExtensionHostApi* host,
+                    HoroExtensionModuleApi* module);
 ```
 
 ABI rules:
@@ -261,38 +263,25 @@ ABI rules:
 - Function tables are append-only within a major ABI version.
 - Pointers received from the host are borrowed for the documented call or handle
   lifetime only.
-- Dynamic library unload is not assumed safe. Disable/update/removal normally
-  applies on restart unless the module API proves live unload safety.
+- A successfully registered importer context is owned by the host adapter and
+  released exactly once through `destroyImporter`.
+- Dynamic library unload is deferred while any catalog snapshot retains an
+  importer or preview callback from that module.
 
 ## Module Registration
 
 The module load function should only publish factories for descriptors the host
 already validated from the manifest.
 
-```c
-HORO_EXTENSION_EXPORT HoroExtensionStatus
-horo_extension_load_v1(const HoroExtensionHostApiV1* host,
-                       HoroExtensionModuleApiV1* module) {
-    if (host == NULL || module == NULL) {
-        return HoroExtensionStatus_InvalidArgument();
-    }
+For a complete compiling implementation, use
+`examples/extensions/asset-importer-basic`. It registers an `.hraw` importer,
+one preset-compatible boolean setting, a versioned editor payload, and an RGBA8
+preview callback. Its `extension.json` declares the same package, module, and
+contribution IDs returned through the binary boundary.
 
-    if (host->version != HORO_EXTENSION_HOST_API_V1) {
-        return HoroExtensionStatus_UnsupportedApi();
-    }
-
-    module->size = sizeof(HoroExtensionModuleApiV1);
-    module->version = HORO_EXTENSION_MODULE_API_V1;
-    module->on_activate = ShaderTools_OnActivate;
-    module->on_deactivate = ShaderTools_OnDeactivate;
-    module->create_application_capability = ShaderTools_CreateCompileService;
-    module->create_editor_tab = ShaderTools_CreateEditorTab;
-    module->create_settings_page = ShaderTools_CreateSettingsPage;
-    module->execute_command = ShaderTools_ExecuteCommand;
-    module->execute_mcp_tool = ShaderTools_ExecuteMcpTool;
-    return HoroExtensionStatus_Ok();
-}
-```
+Build it with `-DHORO_BUILD_EXAMPLES=ON`. CMake places `extension.json` beside
+the platform library, so the resulting absolute directory can be passed
+directly to `ExtensionManager::LoadExtension`.
 
 Activation receives a module context containing only the capabilities approved by
 manifest, trust, project policy, and host availability.

@@ -385,6 +385,12 @@
     "settings.input.mappings_label": {
       "text": "Central Input Mapping"
     },
+    "settings.input.shortcut.click_to_record": {
+      "text": "Click to record"
+    },
+    "settings.input.shortcut.press_keys": {
+      "text": "Press keys..."
+    },
     "settings.language": {
       "text": "Language"
     },
@@ -422,7 +428,7 @@
       "text": "Network"
     },
     "settings.nav.plugins": {
-      "text": "Plugins"
+      "text": "Extensions"
     },
     "settings.nav.rendering": {
       "text": "Rendering"
@@ -482,7 +488,7 @@
       "text": "Platform"
     },
     "settings.plugins.description": {
-      "text": "Installed plugins expose settings, permissions, diagnostics, and manifest metadata. Project plugins override editor plugins only when trusted."
+      "text": "Extensions are versioned packages. Each package can contribute native modules such as asset importers and preview providers."
     },
     "settings.plugins.feedback.install_not_implemented": {
       "text": "Plugin installation dialog not yet implemented."
@@ -515,7 +521,7 @@
       "text": "Restart on enable"
     },
     "settings.plugins.runtime": {
-      "text": "Runtime & Discovery"
+      "text": "Runtime"
     },
     "settings.plugins.scope.editor": {
       "text": "Editor-wide"
@@ -546,6 +552,120 @@
     },
     "settings.plugins.status.vendor": {
       "text": "Verified Vendor"
+    },
+    "settings.extensions.active_count": {
+      "text": "Runtime active"
+    },
+    "settings.extensions.author": {
+      "text": "Author"
+    },
+    "settings.extensions.builtin_manifest": {
+      "text": "This extension is compiled into the editor and does not have an external manifest path."
+    },
+    "settings.extensions.contributions": {
+      "text": "Contributions"
+    },
+    "settings.extensions.details": {
+      "text": "EXTENSION DETAILS"
+    },
+    "settings.extensions.empty": {
+      "text": "No extension matches this filter."
+    },
+    "settings.extensions.feedback.installed": {
+      "text": "Extension installed in a disabled state. Enable it and restart the editor to load native modules."
+    },
+    "settings.extensions.feedback.restart": {
+      "text": "Activation preference saved. Restart the editor to apply the runtime change."
+    },
+    "settings.extensions.filter": {
+      "text": "Filter extensions..."
+    },
+    "settings.extensions.install_root": {
+      "text": "Absolute installation root"
+    },
+    "settings.extensions.installed_count": {
+      "text": "Installed packages"
+    },
+    "settings.extensions.installed_heading": {
+      "text": "INSTALLED EXTENSIONS"
+    },
+    "settings.extensions.lifecycle": {
+      "text": "ACTIVATION LIFECYCLE"
+    },
+    "settings.extensions.marketplace": {
+      "text": "Marketplace"
+    },
+    "settings.extensions.marketplace.empty": {
+      "text": "No compatible extensions match this search."
+    },
+    "settings.extensions.marketplace.installing": {
+      "text": "Installing..."
+    },
+    "settings.extensions.marketplace.installed": {
+      "text": "Installed"
+    },
+    "settings.extensions.marketplace.search": {
+      "text": "Search marketplace..."
+    },
+    "settings.extensions.marketplace.search.action": {
+      "text": "Search"
+    },
+    "settings.extensions.marketplace.searching": {
+      "text": "Searching the extension registry..."
+    },
+    "settings.extensions.marketplace.unavailable": {
+      "text": "The extension marketplace is unavailable in this editor composition."
+    },
+    "settings.extensions.manifest": {
+      "text": "Absolute manifest"
+    },
+    "settings.extensions.modules": {
+      "text": "Modules"
+    },
+    "settings.extensions.none": {
+      "text": "None declared"
+    },
+    "settings.extensions.origin": {
+      "text": "Origin"
+    },
+    "settings.extensions.origin.builtin": {
+      "text": "Built-in"
+    },
+    "settings.extensions.origin.user": {
+      "text": "User installed"
+    },
+    "settings.extensions.package_id": {
+      "text": "Package ID"
+    },
+    "settings.extensions.pending_count": {
+      "text": "Pending restart"
+    },
+    "settings.extensions.restart_required": {
+      "text": "Restart required"
+    },
+    "settings.extensions.select_folder": {
+      "text": "Select an extension package folder"
+    },
+    "settings.extensions.select_prompt": {
+      "text": "Select an extension from the list to inspect its package, modules, contributions, and manifest."
+    },
+    "settings.extensions.status.active": {
+      "text": "Active"
+    },
+    "settings.extensions.status.inactive": {
+      "text": "Inactive"
+    },
+    "settings.extensions.tab.manifest": {
+      "text": "Manifest"
+    },
+    "settings.extensions.tab.overview": {
+      "text": "Overview"
+    },
+    "settings.extensions.total": {
+      "text": "total"
+    },
+    "settings.extensions.unavailable": {
+      "text": "The extension inventory service is unavailable in this editor composition."
     },
     "settings.plugins.steam.desc": {
       "text": "Steam achievements, overlay, networking sockets, and build metadata."
@@ -740,18 +860,19 @@
     "workspace.global_dock.tab.audio": {"text": "Audio"},
     "workspace.global_dock.tab.network": {"text": "Net"},
     "workspace.global_dock.tab.localization": {"text": "L10n"},
-    "workspace.global_dock.preview.console": {"text": "Console preview"},
     "workspace.global_dock.preview.mcp": {"text": "MCP preview"},
     "workspace.global_dock.preview.performance": {"text": "Performance preview"},
     "workspace.global_dock.preview.physics": {"text": "Physics debug preview"},
     "workspace.global_dock.preview.audio": {"text": "Audio mixer preview"},
     "workspace.global_dock.preview.network": {"text": "Network debug preview"},
     "workspace.global_dock.preview.localization": {"text": "Localization preview"},
-    "workspace.global_dock.console.session_started": {"text": "Editor session started. Revision r112."},
-    "workspace.global_dock.console.texture_converted": {"text": "T Wall Old: texture format deprecated, auto-converted."},
-    "workspace.global_dock.console.scene_loaded": {"text": "Scene loaded: Room (11 objects, 4 components)."},
-    "workspace.global_dock.console.missing_animation": {"text": "PF Enemy: missing animation state machine reference."},
-    "workspace.global_dock.console.selection": {"text": "floor 000 selected."},
+    "workspace.global_dock.console.filter.error": {"text": "Error"},
+    "workspace.global_dock.console.filter.warn": {"text": "Warn"},
+    "workspace.global_dock.console.filter.info": {"text": "Info"},
+    "workspace.global_dock.console.filter.debug": {"text": "Debug"},
+    "workspace.global_dock.console.filter.trace": {"text": "Trace"},
+    "workspace.global_dock.console.search": {"text": "Search"},
+    "workspace.global_dock.console.empty": {"text": "No logs match the active filters."},
     "workspace.global_dock.mcp.bridge": {"text": "horo.mcp.bridge@0.4.0 — active"},
     "workspace.global_dock.mcp.tools": {"text": "scene.query, scene.select, scene.move, asset.list, build.trigger"},
     "workspace.global_dock.mcp.awaiting": {"text": "Awaiting tool call…"},
@@ -771,6 +892,82 @@
     "workspace.global_dock.localization.strings": {"text": "1,247 translated · 0 missing · 18 fuzzy"},
     "workspace.global_dock.localization.fonts": {"text": "Noto Sans · RTL: ✓ · CJK: ✓"},
     "workspace.content_browser.assets_root": {"text": "assets/"},
+    "workspace.content_browser.empty": {"text": "This folder is empty."},
+    "workspace.content_browser.loading": {"text": "Loading assets..."},
+    "workspace.content_browser.unavailable": {"text": "This asset folder could not be read."},
+    "workspace.content_browser.no_results": {"text": "No assets match the current filters."},
+    "workspace.content_browser.search": {"text": "Search current folder..."},
+    "workspace.content_browser.filter.all_types": {"text": "All types"},
+    "workspace.content_browser.sort.name": {"text": "Name"},
+    "workspace.content_browser.sort.type": {"text": "Type"},
+    "workspace.content_browser.action.rename": {"text": "Rename"},
+    "workspace.content_browser.action.delete": {"text": "Delete"},
+    "workspace.content_browser.action.asset_info": {"text": "Asset Info"},
+    "workspace.content_browser.action.duplicate": {"text": "Duplicate"},
+    "workspace.content_browser.action.copy": {"text": "Copy"},
+    "workspace.content_browser.action.cut": {"text": "Cut / Move"},
+    "workspace.content_browser.action.paste_here": {"text": "Paste Here"},
+    "workspace.content_browser.action.move_here": {"text": "Move Here"},
+    "workspace.content_browser.action.create_folder": {"text": "Create Folder"},
+    "workspace.content_browser.action.import_here": {"text": "Import Here"},
+    "workspace.content_browser.action.refresh": {"text": "Refresh"},
+    "workspace.content_browser.action.reimport": {"text": "Reimport"},
+    "workspace.content_browser.action.reveal": {"text": "Reveal in File Manager"},
+    "workspace.content_browser.action.copy_path": {"text": "Copy Absolute Path"},
+    "workspace.content_browser.action.cancel": {"text": "Cancel"},
+    "workspace.content_browser.action.close": {"text": "Close"},
+    "workspace.content_browser.create_folder.title": {"text": "Create Folder"},
+    "workspace.content_browser.create_folder.name": {"text": "Folder name"},
+    "workspace.content_browser.info.title": {"text": "Asset Info"},
+    "workspace.content_browser.info.directory": {"text": "Directory"},
+    "workspace.content_browser.info.asset": {"text": "Asset"},
+    "workspace.content_browser.info.path": {"text": "Absolute path"},
+    "workspace.content_browser.info.type": {"text": "Asset type"},
+    "workspace.content_browser.info.asset_id": {"text": "Asset ID"},
+    "workspace.content_browser.info.registration": {"text": "Registry"},
+    "workspace.content_browser.info.registered": {"text": "Registered"},
+    "workspace.content_browser.info.unregistered": {"text": "Unregistered"},
+    "workspace.content_browser.info.size": {"text": "Payload size"},
+    "workspace.content_browser.info.importer": {"text": "Importer"},
+    "workspace.content_browser.info.module": {"text": "Module"},
+    "workspace.content_browser.info.source": {"text": "Import source"},
+    "workspace.content_browser.info.reimport_status": {"text": "Reimport"},
+    "workspace.content_browser.info.reimport_manual": {"text": "Available (manual)"},
+    "workspace.content_browser.info.reimport_source_changed": {"text": "Source changed"},
+    "workspace.content_browser.info.reimport_source_stale": {"text": "Source may have changed"},
+    "workspace.content_browser.info.reimport_importer_changed": {"text": "Importer changed"},
+    "workspace.content_browser.info.reimport_module_changed": {"text": "Module changed"},
+    "workspace.content_browser.info.last_import_reason": {"text": "Last import reason"},
+    "workspace.content_browser.info.import_reason_initial": {"text": "Initial import"},
+    "workspace.content_browser.info.import_reason_manual": {"text": "Manual reimport"},
+    "workspace.content_browser.info.metadata": {"text": "Metadata"},
+    "workspace.content_browser.info.none": {"text": "Not available"},
+    "workspace.content_browser.rename.title": {"text": "Rename Asset Entry"},
+    "workspace.content_browser.rename.name": {"text": "NAME"},
+    "workspace.content_browser.delete.title": {"text": "Delete Asset Entry"},
+    "workspace.content_browser.delete.message": {"text": "This entry will be removed from the Assets directory and moved to the project's recoverable local trash."},
+    "workspace.content_browser.delete.dependencies": {"text": "Direct dependencies"},
+    "workspace.content_browser.delete.dependency_warning": {"text": "This asset records dependencies. Deleting it does not delete those referenced assets."},
+    "workspace.content_browser.operation.unavailable": {"text": "Asset operations are unavailable in this editor composition."},
+    "workspace.content_browser.operation.invalid_name": {"text": "Choose a valid file or folder name."},
+    "workspace.content_browser.operation.invalid_target": {"text": "The selected asset entry is no longer available."},
+    "workspace.content_browser.operation.name_exists": {"text": "An entry with that name already exists."},
+    "workspace.content_browser.operation.busy": {"text": "Another project write is active. Try again shortly."},
+    "workspace.content_browser.operation.rename_failed": {"text": "The asset entry could not be renamed."},
+    "workspace.content_browser.operation.delete_failed": {"text": "The asset entry could not be moved to project trash."},
+    "workspace.content_browser.operation.registry_failed": {"text": "The asset changed, but the Asset Registry could not be refreshed."},
+    "workspace.content_browser.operation.clipboard_empty": {"text": "There is no asset to paste."},
+    "workspace.content_browser.operation.asset_required": {"text": "This operation requires a registered asset."},
+    "workspace.content_browser.operation.copy_failed": {"text": "The asset could not be copied."},
+    "workspace.content_browser.operation.move_failed": {"text": "The asset could not be moved."},
+    "workspace.content_browser.operation.create_folder_failed": {"text": "The folder could not be created."},
+    "workspace.content_browser.operation.same_folder": {"text": "The asset is already in this folder."},
+    "workspace.content_browser.operation.companion_invalid": {"text": "The asset metadata or companion-file set is missing or unsafe."},
+    "workspace.content_browser.operation.rollback_failed": {"text": "The operation failed and could not be fully rolled back. Inspect the project files before continuing."},
+    "workspace.content_browser.operation.reimport_unavailable": {"text": "This asset does not record a reimport source."},
+    "workspace.content_browser.operation.reimport_importer_missing": {"text": "The importer module recorded by this asset is not available."},
+    "workspace.content_browser.operation.reimport_failed": {"text": "The asset could not be reimported; the previous payload was preserved."},
+    "workspace.content_browser.operation.reveal_unavailable": {"text": "File Manager integration is unavailable on this platform."},
     "workspace.content_browser.scenes": {"text": "scenes"},
     "workspace.content_browser.models": {"text": "models"},
     "workspace.content_browser.textures": {"text": "textures"},

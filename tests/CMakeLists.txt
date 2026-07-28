@@ -124,6 +124,11 @@ add_executable(HoroFoundationSha256Tests
 )
 target_compile_features(HoroFoundationSha256Tests PRIVATE cxx_std_20)
 target_link_libraries(HoroFoundationSha256Tests PRIVATE HoroEngine::Foundation)
+add_executable(HoroStructuredLogStoreTests
+        unit/foundation/StructuredLogStoreTests.cpp
+)
+target_compile_features(HoroStructuredLogStoreTests PRIVATE cxx_std_20)
+target_link_libraries(HoroStructuredLogStoreTests PRIVATE HoroEngine::Foundation Threads::Threads)
 
 set(HORO_FOUNDATION_PUBLIC_HEADER_COMPILE_SOURCE
         ${CMAKE_CURRENT_BINARY_DIR}/HoroFoundationPublicHeaderCompile.cpp)
@@ -376,6 +381,16 @@ if (HORO_BUILD_EDITOR_GUI)
             HoroEngine::Gui
             HoroThirdParty::ImGui
     )
+    add_executable(HoroEditorUiComponentsRenderTests
+            unit/editor/EditorUiComponentsRenderTests.cpp
+    )
+
+    target_compile_features(HoroEditorUiComponentsRenderTests PRIVATE cxx_std_20)
+    target_link_libraries(HoroEditorUiComponentsRenderTests
+            PRIVATE
+            HoroEngine::Gui
+            HoroThirdParty::ImGui
+    )
     add_executable(HoroViewportPanelRenderTests
             unit/editor/ViewportPanelRenderTests.cpp
     )
@@ -558,9 +573,11 @@ target_compile_features(HoroAssetImporterCatalogTests PRIVATE cxx_std_20)
 target_link_libraries(HoroAssetImporterCatalogTests PRIVATE HoroEngine::Assets)
 add_executable(HoroAssetImportOperationTests
         unit/runtime/assets/AssetImportOperationTests.cpp
+        unit/runtime/assets/AssetReimportTests.cpp
 )
 target_compile_features(HoroAssetImportOperationTests PRIVATE cxx_std_20)
-target_link_libraries(HoroAssetImportOperationTests PRIVATE HoroEngine::Assets HoroEngine::Foundation)
+target_link_libraries(HoroAssetImportOperationTests PRIVATE
+        HoroEngine::Assets HoroEngine::Foundation HoroEngine::Platform)
 add_executable(HoroObjMeshImporterTests
         unit/runtime/assets/ObjMeshImporterTests.cpp
 )
@@ -568,6 +585,17 @@ target_compile_features(HoroObjMeshImporterTests PRIVATE cxx_std_20)
 target_link_libraries(HoroObjMeshImporterTests PRIVATE HoroEngine::Assets)
 target_include_directories(HoroObjMeshImporterTests PRIVATE
         ${PROJECT_SOURCE_DIR}/src/runtime/assets/importer/builtin/obj_mesh
+)
+add_executable(HoroFbxMeshImporterTests
+        unit/runtime/assets/FbxMeshImporterTests.cpp
+)
+target_compile_features(HoroFbxMeshImporterTests PRIVATE cxx_std_20)
+target_link_libraries(HoroFbxMeshImporterTests PRIVATE HoroEngine::Assets)
+target_compile_definitions(HoroFbxMeshImporterTests PRIVATE
+        HORO_UFBX_TEST_DATA_DIR="${ufbx_SOURCE_DIR}/data"
+)
+target_include_directories(HoroFbxMeshImporterTests PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/runtime/assets/importer/builtin/fbx_mesh
 )
 add_executable(HoroModularAssetImportIntegrationTests
         integration/assets/ModularAssetImportIntegrationTests.cpp
@@ -577,6 +605,7 @@ target_compile_definitions(HoroModularAssetImportIntegrationTests PRIVATE PROJEC
 target_link_libraries(HoroModularAssetImportIntegrationTests PRIVATE HoroEngine::Assets HoroEngine::Foundation)
 target_include_directories(HoroModularAssetImportIntegrationTests PRIVATE
         ${PROJECT_SOURCE_DIR}/src/runtime/assets/cooker/builtin
+        ${PROJECT_SOURCE_DIR}/src/runtime/assets/importer
 )
 function(horo_add_public_header_compile_target target owning_target)
     set(generated_sources)
@@ -600,6 +629,8 @@ horo_add_public_header_compile_target(HoroRuntimePublicHeaderCompile HoroEngine:
 )
 horo_add_public_header_compile_target(HoroAssetsPublicHeaderCompile HoroEngine::Assets
         Horo/Assets/AssetId.h
+        Horo/Assets/AssetImporter.h
+        Horo/Assets/AssetPreview.h
         Horo/Assets/AssetRegistry.h
         Horo/Assets/AssetProvider.h
         Horo/Assets/AssetCook.h
@@ -620,6 +651,19 @@ horo_add_public_header_compile_target(HoroEditorServicesPublicHeaderCompile Horo
         Horo/Editor/ProjectOpenService.h
         Horo/Editor/RecentProjectInspectionService.h
 )
+
+add_executable(HoroExtensionManagerTests
+        unit/extensions/ExtensionManagerTests.cpp
+)
+target_compile_features(HoroExtensionManagerTests PRIVATE cxx_std_20)
+target_link_libraries(HoroExtensionManagerTests PRIVATE HoroEngine::Extensions Catch2::Catch2WithMain)
+if(TARGET HoroAssetImporterBasicExample)
+    add_dependencies(HoroExtensionManagerTests HoroAssetImporterBasicExample)
+    target_compile_definitions(HoroExtensionManagerTests PRIVATE
+            HORO_BASIC_EXTENSION_DIR="$<TARGET_FILE_DIR:HoroAssetImporterBasicExample>"
+    )
+endif()
+add_test(NAME HoroExtensionManagerTests COMMAND HoroExtensionManagerTests)
 
 if (HORO_BUILD_RENDER_OPENGL)
     add_executable(HoroRenderOpenGLTests
@@ -717,6 +761,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroSceneMathTests
         HoroFoundationStringTests
         HoroFoundationSha256Tests
+        HoroStructuredLogStoreTests
         HoroPrimitiveMeshTests
         HoroEditorWelcomeControllerTests
         HoroEditorModalHostTests
@@ -748,6 +793,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroHierarchyPanelRenderTests
         HoroInspectorPanelRenderTests
         HoroContentBrowserPanelRenderTests
+        HoroEditorUiComponentsRenderTests
         HoroViewportPanelRenderTests
         HoroDataBusTests
         HoroFoundationResultTests
@@ -777,6 +823,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroAssetImportOperationTests
         HoroModularAssetImportIntegrationTests
         HoroObjMeshImporterTests
+        HoroFbxMeshImporterTests
         HoroRenderOpenGLTests
         HoroRenderMetalTests
 )

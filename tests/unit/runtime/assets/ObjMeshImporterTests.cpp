@@ -4,6 +4,7 @@
 #include "Horo/Foundation/CancellationToken.h"
 #include "ObjMeshImporter.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -15,6 +16,13 @@ namespace
 {
 using namespace Horo;
 using namespace Horo::Assets;
+
+AssetTypeId Type(const std::string_view value)
+{
+    auto parsed = AssetTypeId::Parse(value);
+    REQUIRE(parsed.HasValue());
+    return parsed.Value();
+}
 
 /** @brief Helper: import a string as OBJ and return the editor payload bytes. */
 Result<std::vector<std::uint8_t>> ImportString(const char *objSource)
@@ -70,14 +78,20 @@ f 1 2 3
     auto &payload = result.Value();
     REQUIRE(payload.size() > 28); // header at minimum
 
-    // Schema version = 1
-    REQUIRE(ReadLE32(payload, 0) == 1);
+    // Schema version 2 carries preview topology after the vertex streams.
+    REQUIRE(ReadLE32(payload, 0) == 2);
 
     // Vertex count = 3
     REQUIRE(ReadLE32(payload, 4) == 3);
 
     // Face count = 1
     REQUIRE(ReadLE32(payload, 8) == 1);
+
+    // Three topology indices follow the 48-byte header and 36-byte position stream.
+    REQUIRE(ReadLE32(payload, 84) == 3);
+    REQUIRE(ReadLE32(payload, 88) == 0);
+    REQUIRE(ReadLE32(payload, 92) == 1);
+    REQUIRE(ReadLE32(payload, 96) == 2);
 }
 
 TEST_CASE("OBJ importer registers with catalog", "[native]")
@@ -122,9 +136,45 @@ f 1/1/1 2/2/1 3/3/1
     REQUIRE(result.HasValue());
 
     auto &payload = result.Value();
-    REQUIRE(ReadLE32(payload, 0) == 1);
+    REQUIRE(ReadLE32(payload, 0) == 2);
     REQUIRE(ReadLE32(payload, 4) == 3); // vertices
     REQUIRE(ReadLE32(payload, 8) == 1); // faces
+}
+
+TEST_CASE("OBJ importer contribution produces a valid RGBA preview", "[native]")
+{
+    const char* obj = R"(
+v 0 0 0
+v 1 0 0
+v 0 1 0
+f 1 2 3
+)";
+    auto imported = ImportString(obj);
+    REQUIRE(imported.HasValue());
+
+    AssetImporterCatalog catalog;
+    REQUIRE((RegisterObjMeshImporter(catalog).HasValue()));
+    auto snapshot = catalog.Publish();
+    REQUIRE(snapshot.HasValue());
+    const AssetImporterContribution* contribution =
+        snapshot.Value()->FindPreviewContribution(Type("core.mesh"));
+    REQUIRE(contribution != nullptr);
+    REQUIRE(contribution->previewProvider != nullptr);
+    auto preview = contribution->previewProvider->GeneratePreview(
+        AssetPreviewInput{
+            .editorPayload = imported.Value(),
+            .absoluteAssetPath = "/tmp/triangle.horoasset",
+            .assetType = Type("core.mesh"),
+            .width = 64,
+            .height = 64,
+        },
+        CancellationToken{});
+    REQUIRE(preview.HasValue());
+    REQUIRE(preview.Value().IsValid());
+    REQUIRE((std::ranges::any_of(preview.Value().pixels, [](const std::uint8_t value)
+    {
+        return value != 0;
+    })));
 }
 
 TEST_CASE("OBJ importer produces deterministic output", "[native]")

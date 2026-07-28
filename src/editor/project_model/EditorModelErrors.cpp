@@ -1,13 +1,16 @@
 #include "EditorModelErrors.h"
 
-namespace Horo::Editor {
-    namespace {
+namespace Horo::Editor
+{
+    namespace
+    {
         const ErrorDomainId SceneDocumentDomain{"horo.editor.scene_document"};
         const ErrorDomainId SelectionDomain{"horo.editor.selection"};
         const ErrorDomainId ViewportDomain{"horo.editor.viewport"};
     } // namespace
 
-    namespace SceneDocumentErrors {
+    namespace SceneDocumentErrors
+    {
         const ErrorCodeDescriptor HistoryEntryTooLarge{
             .domain = SceneDocumentDomain,
             .code = ErrorCode{"scene_document.history_entry_too_large"},
@@ -145,7 +148,8 @@ namespace Horo::Editor {
         };
     } // namespace SceneDocumentErrors
 
-    namespace SelectionErrors {
+    namespace SelectionErrors
+    {
         const ErrorCodeDescriptor InvalidPrimary{
             .domain = SelectionDomain,
             .code = ErrorCode{"editor.selection.invalid_primary"},
@@ -166,7 +170,8 @@ namespace Horo::Editor {
         };
     } // namespace SelectionErrors
 
-    namespace ViewportModelErrors {
+    namespace ViewportModelErrors
+    {
         const ErrorCodeDescriptor InvalidCamera{
             .domain = ViewportDomain,
             .code = ErrorCode{"editor.viewport.invalid_camera"},

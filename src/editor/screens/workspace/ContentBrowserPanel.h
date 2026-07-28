@@ -4,9 +4,16 @@
 #include <imgui.h>
 
 #include "Horo/Editor/IWorkspacePanel.h"
+#include "Horo/Foundation/Logging/StructuredLogStore.h"
+#include "editor/screens/workspace/ContentBrowserModel.h"
 
 #include <array>
 #include <cstdint>
+#include <optional>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace Horo::Editor
 {
@@ -62,13 +69,9 @@ namespace Horo::Editor
             return {};
         }
 
-        void OnAttach(PanelContext& ctx) override
-        {
-        }
+        void OnAttach(PanelContext& ctx) override;
 
-        void OnDetach() override
-        {
-        }
+        void OnDetach() override;
 
         void DrawIcon(ImDrawList* dl, const ImVec2& pos, const ImVec2& size, ImU32 color) override;
 
@@ -82,6 +85,35 @@ namespace Horo::Editor
         }
 
     private:
+        [[nodiscard]] bool RefreshConsoleSnapshot();
+        void RebuildConsoleFilter();
+        void DrawConsolePane(const ImVec2& contentOrigin, float contentWidth,
+                             const EditorGuiContext& context);
+
         GlobalDockTab activeTab_{GlobalDockTab::Assets};
+        std::optional<ContentBrowserEntry> popupEntry_;
+        std::string selectedAssetPath_;
+        std::array<char, 160> assetSearch_{};
+        std::string assetTypeFilter_;
+        ContentBrowserSortField assetSortField_{
+            ContentBrowserSortField::Name};
+        ContentBrowserSortDirection assetSortDirection_{
+            ContentBrowserSortDirection::Ascending};
+        std::array<char, 256> renameBuffer_{};
+        std::array<char, 256> createFolderBuffer_{};
+        bool openAssetInfo_{false};
+        bool openRename_{false};
+        bool openDeleteConfirmation_{false};
+        bool openCreateFolder_{false};
+        IEditorGuiRenderer* guiRenderer_{nullptr};
+        const Log::IStructuredLogQuery* logQuery_{nullptr};
+        Log::StructuredLogSnapshot consoleSnapshot_;
+        std::uint64_t consoleRevision_{};
+        std::array<bool, 5> consoleLevelEnabled_{true, true, true, true, true};
+        std::array<char, 160> consoleSearch_{};
+        std::vector<std::size_t> consoleFilteredIndices_;
+        bool consoleFilterDirty_{true};
+        bool consoleInitialFollowTail_{true};
+        std::unordered_map<std::string, std::pair<std::uint64_t, std::uintptr_t>> previewTextures_;
     };
 } // namespace Horo::Editor

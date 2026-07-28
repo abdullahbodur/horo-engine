@@ -9,6 +9,12 @@
 #include <cstdint>
 #include <memory>
 
+namespace Horo::Extensions
+{
+class ExtensionInventory;
+class ExtensionMarketplaceService;
+}
+
 namespace Horo::Editor
 {
 /** @brief Host-owned editor settings workflow and its transient settings draft. */
@@ -17,8 +23,17 @@ class SettingsModal final : public EditorModal
   public:
     static constexpr std::uint64_t kModalId = 0x53455454494E4753ULL;
 
-    /** @brief Constructs the settings workflow with only its settings authority and presentation assets. */
-    SettingsModal(const EditorGuiContext &context, EditorSettingsService &settings, std::uintptr_t logo) noexcept;
+    /**
+     * @brief Constructs the settings workflow with its settings and optional extension authorities.
+     * @param context Borrowed editor presentation context.
+     * @param settings Authoritative editor-settings service.
+     * @param logo Presentation logo texture.
+     * @param extensionInventory Optional installed-extension inventory.
+     * @param extensionMarketplace Optional registry-backed extension marketplace.
+     */
+    SettingsModal(const EditorGuiContext &context, EditorSettingsService &settings, std::uintptr_t logo,
+                  Extensions::ExtensionInventory* extensionInventory = nullptr,
+                  Extensions::ExtensionMarketplaceService* extensionMarketplace = nullptr) noexcept;
 
     [[nodiscard]] ModalId Id() const override;
     [[nodiscard]] ModalPresentation Presentation() const override;
@@ -37,6 +52,8 @@ class SettingsModal final : public EditorModal
     const EditorGuiContext &m_context;
     EditorSettingsService &m_settings;
     std::uintptr_t m_logo = 0;
+    Extensions::ExtensionInventory* m_extensionInventory = nullptr;
+    Extensions::ExtensionMarketplaceService* m_extensionMarketplace = nullptr;
     EditorDataBus *m_events = nullptr;
     SettingsState m_draft;
     bool m_revertedPublished = false;

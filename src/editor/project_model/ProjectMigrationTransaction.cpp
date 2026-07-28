@@ -1050,8 +1050,8 @@ namespace Horo::Editor
         candidate.PreserveForRecovery();
         const bool cancellationDeferred = request.cancellation.IsCancellationRequested();
         if (cancellationDeferred)
-            LOG_WARN("editor.project_migration.transaction", "Cancellation deferred during publication operation=%s.",
-                     operationId.c_str());
+        LOG_WARN("editor.project_migration.transaction", "Cancellation deferred during publication operation=%s.",
+                 operationId.c_str());
         if (auto published = Publish(files_, request.projectRoot, operationRoot, journal); published.HasError())
             return Result<ProjectMigrationTransactionResult>::Failure(
                 Failure(ProjectErrors::MigrationPublishFailed, published.ErrorValue().message));
@@ -1069,8 +1069,8 @@ namespace Horo::Editor
             static_cast<void>(CleanupCommittedMigrations(request.projectRoot));
         }
         if (cleanupDeferred)
-            LOG_WARN("editor.project_migration.transaction", "Committed cleanup deferred operation=%s.",
-                     operationId.c_str());
+        LOG_WARN("editor.project_migration.transaction", "Committed cleanup deferred operation=%s.",
+                 operationId.c_str());
         LOG_INFO("editor.project_migration.transaction", "Migration transaction committed operation=%s.",
                  operationId.c_str());
         LOG_DEBUG("editor.project_migration.transaction",
@@ -1166,8 +1166,8 @@ namespace Horo::Editor
             {
                 auto finalized = MoveToCleanup(files_, projectRoot, operationRoot, journal.Value().operationId);
                 if (finalized.HasValue())
-                    LOG_INFO("editor.project_migration.recovery", "Recovery completed operation=%s action=%s.",
-                             journal.Value().operationId.c_str(), RecoveryActionName(snapshot.action));
+                LOG_INFO("editor.project_migration.recovery", "Recovery completed operation=%s action=%s.",
+                         journal.Value().operationId.c_str(), RecoveryActionName(snapshot.action));
                 return finalized;
             }
             std::filesystem::remove_all(operationRoot, error);
@@ -1192,8 +1192,8 @@ namespace Horo::Editor
                 return result;
             auto moved = MoveToCleanup(files_, projectRoot, operationRoot, recovered.operationId);
             if (moved.HasValue())
-                LOG_INFO("editor.project_migration.recovery", "Recovery completed operation=%s action=%s.",
-                         recovered.operationId.c_str(), RecoveryActionName(snapshot.action));
+            LOG_INFO("editor.project_migration.recovery", "Recovery completed operation=%s action=%s.",
+                     recovered.operationId.c_str(), RecoveryActionName(snapshot.action));
             return moved;
         }
         for (auto iterator = journal.Value().records.rbegin(); iterator != journal.Value().records.rend(); ++iterator)

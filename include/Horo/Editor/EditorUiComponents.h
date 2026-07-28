@@ -69,6 +69,49 @@ class ScopedCard
 /** @brief Draws an icon-only close button using vector strokes, not glyph text. */
 [[nodiscard]] bool IconCloseButton(const char *id, ImVec2 size);
 
+/** @brief Direction rendered by the compact navigation icon button. */
+enum class NavigationIcon : std::uint8_t
+{
+    Back,
+    Forward,
+    Up,
+};
+
+/**
+ * @brief Draws a borderless navigation button with a compact hover surface.
+ * @param id Stable UI identity.
+ * @param icon Directional icon to render.
+ * @param size Exact interaction bounds.
+ * @param enabled Whether the action may be invoked.
+ * @return True when an enabled button was activated.
+ */
+[[nodiscard]] bool NavigationIconButton(
+    const char *id, NavigationIcon icon, ImVec2 size, bool enabled = true);
+
+/** @brief Vector glyph supported by the shared compact icon button. */
+enum class IconButtonGlyph : std::uint8_t
+{
+    Plus,
+    Folder,
+};
+
+/** @brief Input contract for a shared compact icon-only action. */
+struct IconButtonProps
+{
+    const char* id = "";
+    IconButtonGlyph glyph = IconButtonGlyph::Plus;
+    ImVec2 size = {32.0F, 32.0F};
+    const char* tooltip = "";
+    bool enabled = true;
+};
+
+/**
+ * @brief Draws a themed icon-only action with hover, focus, and tooltip states.
+ * @param props Stable identity, glyph, geometry, tooltip, and enabled state.
+ * @return True when the enabled action was activated.
+ */
+[[nodiscard]] bool IconButton(const IconButtonProps& props);
+
 // ── Typography primitives ────────────────────────────────────────────
 
 /** @brief Draws an uppercase section label. */
@@ -83,10 +126,78 @@ void Hint(const char *text, const Theme::Fonts &fonts);
 /** @brief Renders an error string wrapped under a field. */
 void ErrorText(const char *text, const Theme::Fonts &fonts);
 
+/**
+ * @brief Draws compact clickable text without a button surface.
+ * @param id Stable UI identity.
+ * @param label Visible link text.
+ * @param font Font used for measurement and rendering.
+ * @param fontSize Visible text size.
+ * @param current Whether the link represents the current destination.
+ * @return True when activated.
+ */
+[[nodiscard]] bool TextLink(const char* id, const char* label, ImFont* font, float fontSize, bool current = false);
+
+// ── Badge / tag primitives ───────────────────────────────────────────
+
+/** @brief Semantic visual tone for reusable badges and tags. */
+enum class BadgeTone : std::uint8_t
+{
+    Neutral,
+    Accent,
+    Success,
+    Warning,
+    Error,
+};
+
+/** @brief Shared geometry presets for badges and status pills. */
+enum class BadgeSize : std::uint8_t
+{
+    Small,
+    Medium,
+};
+
+/** @brief Input contract for the shared compact badge/tag primitive. */
+struct BadgeProps
+{
+    const char* label = ""; /**< Visible badge text. */
+    BadgeTone tone = BadgeTone::Neutral; /**< Semantic color treatment. */
+    BadgeSize size = BadgeSize::Small; /**< Shared geometry preset. */
+    bool leadingIndicator = false; /**< Whether to draw a status dot before the label. */
+};
+
+/**
+ * @brief Draws a compact, vertically centred badge and advances the inline cursor.
+ * @param props Visible content and semantic presentation.
+ * @param fonts Editor typography handles.
+ */
+void Badge(const BadgeProps& props, const Theme::Fonts& fonts);
+
+/**
+ * @brief Returns the exact horizontal space consumed by @ref Badge.
+ * @param props Visible content and semantic presentation.
+ * @param fonts Editor typography handles.
+ * @return Width in logical UI pixels.
+ */
+[[nodiscard]] float BadgeWidth(const BadgeProps& props, const Theme::Fonts& fonts);
+
+/**
+ * @brief Resolves the semantic foreground color used by a badge tone.
+ * @param tone Semantic badge state.
+ * @return Theme-derived foreground color.
+ */
+[[nodiscard]] ImVec4 BadgeToneColor(BadgeTone tone);
+
 // ── Separator ────────────────────────────────────────────────────────
 
 /** @brief Draws a dashed horizontal separator across available width. */
 void DashedSeparator(float dash = 4.0F, float gap = 3.0F);
+
+/**
+ * @brief Draws a compact label followed by a horizontal separator.
+ * @param label Visible separator label.
+ * @param fonts Editor typography handles.
+ */
+void LabeledSeparator(const char* label, const Theme::Fonts& fonts);
 
 // ── Settings / form row primitives ───────────────────────────────────
 
@@ -164,7 +275,7 @@ struct ComboItemSource
 
 /** @brief Renders a styled dropdown with optional error styling. Returns true if the selection changed. */
 [[nodiscard]] bool ComboControl(const char *id, int *value, const char *const items[], int itemCount,
-                                const Theme::Fonts &fonts, bool error = false);
+                                const Theme::Fonts &fonts, bool error = false, float height = 0.0F);
 
 /**
  * @brief Renders the shared dropdown design for entries projected from a typed model.
@@ -174,10 +285,11 @@ struct ComboItemSource
  * @param source Non-owning entry callbacks valid for the duration of this call.
  * @param fonts Editor typography handles.
  * @param error Whether to render the field in its error state.
+ * @param height Explicit field height, or zero to use the shared default.
  * @return True when an enabled entry changed the selection.
  */
 [[nodiscard]] bool ComboControl(const char *id, int *value, int itemCount, const ComboItemSource &source,
-                                const Theme::Fonts &fonts, bool error = false);
+                                const Theme::Fonts &fonts, bool error = false, float height = 0.0F);
 
 /**
  * @brief Renders an input text field with shared frame styling and optional error state.
@@ -289,6 +401,149 @@ void ShortcutDisplay(const char *a, const char *b, const char *c, const Theme::F
 
 /** @brief Draws a colour-theme chip (swatch dot + label). Returns true when clicked. */
 [[nodiscard]] bool ThemeChip(const char *label, ImVec4 swatch, bool active, const Theme::Fonts &fonts);
+
+// ── Modal layout primitives ──────────────────────────────────────────
+
+/** @brief Shared geometry and chrome configuration for an editor workflow modal. */
+struct ModalShellProps
+{
+    const char* id = "EditorModal"; /**< Stable ImGui window identity. */
+    const char* title = ""; /**< Visible title-bar text. */
+    ImVec2 requestedSize = {Theme::Layout::ModalW, Theme::Layout::ModalH};
+    float viewportPadding = 48.0F;
+    float minimumWidth = 360.0F;
+    float minimumHeight = 360.0F;
+    float headerHeight = Theme::Layout::HeaderH;
+    float footerHeight = Theme::Layout::FooterH;
+    ImTextureID logo = 0;
+    bool showBrandMark = false;
+    bool showClose = true;
+    float titleFontSize = 14.0F;
+};
+
+/**
+ * @brief RAII modal window with shared positioning, title bar, body geometry,
+ *        footer surface, and close action.
+ *
+ * Exclusive focus and close policy remain owned by EditorModalHost. This
+ * component owns presentation only.
+ */
+class ScopedModalShell
+{
+  public:
+    /**
+     * @brief Begins a modal window and draws its shared title-bar chrome.
+     * @param props Modal identity, geometry, title, and optional brand treatment.
+     * @param fonts Editor typography handles.
+     */
+    ScopedModalShell(const ModalShellProps& props, const Theme::Fonts& fonts);
+
+    /** @brief Ends any open footer and releases the modal ImGui style stack. */
+    ~ScopedModalShell();
+
+    ScopedModalShell(const ScopedModalShell&) = delete;
+    ScopedModalShell& operator=(const ScopedModalShell&) = delete;
+
+    /** @brief Returns the vertical space between title bar and footer. */
+    [[nodiscard]] float BodyHeight() const noexcept;
+
+    /** @brief Returns the local Y coordinate where the footer begins. */
+    [[nodiscard]] float FooterStartY() const noexcept;
+
+    /** @brief Returns true when the title-bar close action was activated. */
+    [[nodiscard]] bool CloseRequested() const noexcept;
+
+    /**
+     * @brief Begins the shared fixed footer surface.
+     * @param padding Inner footer padding.
+     * @param border Whether the footer child owns a border.
+     */
+    void BeginFooter(ImVec2 padding, bool border = false);
+
+    /** @brief Ends the footer surface opened by @ref BeginFooter. */
+    void EndFooter();
+
+  private:
+    float bodyHeight_{};
+    float footerStartY_{};
+    float footerHeight_{};
+    bool closeRequested_{};
+    bool footerOpen_{};
+};
+
+/** @brief Presentation configuration for a modal sidebar/content split. */
+struct ModalSplitPaneProps
+{
+    const char* id = "ModalSplitPane";
+    ImVec2 size = {0.0F, 0.0F};
+    float leadingWidth = Theme::Layout::SidebarW;
+    float gap = 0.0F;
+    ImVec2 leadingPadding = {
+        Theme::Layout::SidebarPadX, Theme::Layout::SidebarPadY};
+    ImVec2 contentPadding = {
+        Theme::Layout::BodyPadX, Theme::Layout::BodyPadY};
+    ImVec4 leadingBackground = Theme::Bg0();
+    ImVec4 contentBackground = Theme::Bg1();
+    bool drawDivider = true;
+    bool leadingScrollable = false;
+    bool contentScrollable = true;
+};
+
+/**
+ * @brief Draws an optional-navigation modal layout without retaining callbacks.
+ * @param props Split geometry and semantic surfaces.
+ * @param drawLeading Draws sidebar/navigation content.
+ * @param drawContent Draws the primary pane content.
+ */
+template <typename LeadingFn, typename ContentFn>
+void ModalSplitPane(
+    const ModalSplitPaneProps& props, LeadingFn&& drawLeading,
+    ContentFn&& drawContent)
+{
+    ImGui::PushID(props.id);
+    const ImGuiWindowFlags leadingFlags =
+        props.leadingScrollable
+            ? ImGuiWindowFlags_AlwaysUseWindowPadding
+            : ImGuiWindowFlags_AlwaysUseWindowPadding |
+                  ImGuiWindowFlags_NoScrollbar |
+                  ImGuiWindowFlags_NoScrollWithMouse;
+    const ImGuiWindowFlags contentFlags =
+        props.contentScrollable
+            ? ImGuiWindowFlags_AlwaysUseWindowPadding
+            : ImGuiWindowFlags_AlwaysUseWindowPadding |
+                  ImGuiWindowFlags_NoScrollbar |
+                  ImGuiWindowFlags_NoScrollWithMouse;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, props.leadingPadding);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, props.leadingBackground);
+    ImGui::BeginChild(
+        "##leading", {props.leadingWidth, props.size.y}, false, leadingFlags);
+    drawLeading();
+    const ImVec2 leadingPosition = ImGui::GetWindowPos();
+    const ImVec2 leadingSize = ImGui::GetWindowSize();
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar();
+
+    if (props.drawDivider)
+    {
+        ImGui::GetWindowDrawList()->AddLine(
+            {leadingPosition.x + leadingSize.x - 1.0F, leadingPosition.y},
+            {leadingPosition.x + leadingSize.x - 1.0F,
+             leadingPosition.y + leadingSize.y},
+            Theme::U32(Theme::Border()), 1.0F);
+    }
+
+    ImGui::SameLine(0.0F, props.gap);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, props.contentPadding);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, props.contentBackground);
+    ImGui::BeginChild("##content", {0.0F, props.size.y}, false, contentFlags);
+    drawContent();
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar();
+    ImGui::PopID();
+}
 
 // ── Dock UI ───────────────────────────────────────────────────────────
 

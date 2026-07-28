@@ -197,6 +197,40 @@ Editor workspace state is stored in `.horo/editor_workspace.json`. It includes:
 - selected objects
 - per-tab persisted UI state
 
+### Content Browser projection
+
+The Content Browser consumes an immutable, current-directory projection built
+from the absolute project asset root and the authoritative Asset Registry
+snapshot. Disk enumeration, registry identity, importer provenance, and preview
+resolution belong to that projection; search text, the selected asset-type
+filter, and name/type sort preferences are panel-owned presentation state.
+Filtering and sorting return indices into the immutable directory snapshot and
+never mutate registry or filesystem order.
+
+Directory projection state is explicit (`Loading`, `Ready`, or `Error`). A
+manual synchronous refresh first publishes `Loading`, yields a presentation
+frame, and performs the bounded scan on the following workspace update. Registry
+revision and authored mutation refreshes rebuild the projection and reconcile
+back/forward history against existing absolute directories. Missing current
+directories safely fall back to the absolute asset root. Selection is retained
+only while its absolute entry remains visible in the current directory query.
+
+Asset-card drag/drop carries only an absolute source path and a typed copy/move
+intent into the workspace controller. Folder cards contribute absolute
+destination directories; the panel never mutates the filesystem directly.
+Normal drop uses the identity-preserving move operation, while `Cmd/Ctrl` drop
+uses the new-identity copy operation. Context-menu, clipboard, drag/drop, `F2`,
+and `Delete` entry points converge on the same typed mutation and confirmation
+paths.
+
+Authored Content Browser mutations validate portable entry names,
+case-folded destination collisions, non-symlink companion sets, and canonical
+asset-root containment before acquiring the shared project mutation lease.
+Copy uses durable filesystem primitives; move, rename, and delete explicitly
+roll back completed renames when I/O durability or a complete Asset Registry
+publication fails. Delete publishes a unique project-local trash entry with a
+durable `trash.json` manifest that records every original absolute path.
+
 ```json
 {
   "schemaVersion": 1,
