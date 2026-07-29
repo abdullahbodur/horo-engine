@@ -457,8 +457,13 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/screens/workspace/panels/viewport/ViewportPanel.cpp
             editor/screens/workspace/WorkspacePanelRegistry.cpp
             editor/screens/workspace/DefaultWorkspacePanels.cpp
+            editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserActions.cpp
+            editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserCards.cpp
+            editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserDialogs.cpp
+            editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserGrid.cpp
             editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserInteractionSession.cpp
             editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserPane.cpp
+            editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserToolbar.cpp
             editor/screens/workspace/panels/global_dock/panes/audio/GlobalDockAudioPane.cpp
             editor/screens/workspace/panels/global_dock/panes/console/GlobalDockConsolePane.cpp
             editor/screens/workspace/panels/global_dock/panes/localization/GlobalDockLocalizationPane.cpp

@@ -1,11 +1,7 @@
 #pragma once
 
+#include "editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserCards.h"
 #include "editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserInteractionSession.h"
-
-#include <cstdint>
-#include <string>
-#include <unordered_map>
-#include <utility>
 
 struct ImVec2;
 
@@ -28,7 +24,6 @@ namespace Horo::Editor {
 
     private:
         AssetBrowserInteractionSession m_interactionSession;
-        IEditorGuiRenderer *m_guiRenderer{nullptr};
-        std::unordered_map<std::string, std::pair<std::uint64_t, std::uintptr_t>> m_previewTextures;
+        AssetBrowserCardRenderer m_cardRenderer;
     };
 }  // namespace Horo::Editor

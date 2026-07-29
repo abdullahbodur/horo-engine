@@ -1,0 +1,150 @@
+#include "editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserActions.h"
+
+#include "Horo/Editor/EditorGuiContext.h"
+#include "Horo/Editor/EditorUiComponents.h"
+#include "Horo/Editor/Localization/ILocalizationService.h"
+#include "editor/screens/workspace/EditorWorkspaceViewModel.h"
+#include "editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserInteractionSession.h"
+
+#include <algorithm>
+#include <ranges>
+
+namespace Horo::Editor {
+    /** @copydoc DrawAssetBrowserBackgroundActions */
+    void DrawAssetBrowserBackgroundActions(const EditorWorkspaceViewModel &viewModel, AssetBrowserInteractionSession &interactionSession,
+                                           EditorWorkspaceViewCommandData &command, const EditorGuiContext &context) {
+        if (!Ui::BeginContextWindowMenu("##ContentBrowserBackgroundMenu"))
+            return;
+
+        const ContentBrowserDirectory &directory = viewModel.contentBrowser;
+        const ILocalizationService &localization = context.localization;
+        const bool clipboardAvailable = viewModel.contentBrowserClipboard.mode != ContentBrowserClipboardMode::None;
+        ImGui::BeginDisabled(!clipboardAvailable);
+        if (Ui::ContextMenuItem(localization
+                                    .Get("editor", viewModel.contentBrowserClipboard.mode == ContentBrowserClipboardMode::Move
+                                                       ? "workspace.content_browser.action.move_here"
+                                                       : "workspace.content_browser.action.paste_here")
+                                    .c_str(),
+                                "Ctrl+V", context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.paste")) {
+            command = AssetBrowserInteractionSession::Paste(directory.absoluteCurrentPath);
+        }
+        ImGui::EndDisabled();
+        Ui::ContextMenuSeparator();
+        if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.create_folder").c_str(), nullptr,
+                                context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.create")) {
+            interactionSession.OpenCreateFolder();
+        }
+        if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.import_here").c_str(), nullptr,
+                                context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.import")) {
+            command = AssetBrowserInteractionSession::ImportHere(directory.absoluteCurrentPath);
+        }
+        if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.refresh").c_str(), nullptr,
+                                context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.refresh")) {
+            command = AssetBrowserInteractionSession::Refresh();
+        }
+        Ui::EndContextMenu();
+    }
+
+    /** @copydoc DrawAssetBrowserEntryActions */
+    void DrawAssetBrowserEntryActions(const ContentBrowserEntry &entry, const EditorWorkspaceViewModel &viewModel,
+                                      AssetBrowserInteractionSession &interactionSession, EditorWorkspaceViewCommandData &command,
+                                      const EditorGuiContext &context) {
+        if (!Ui::BeginContextMenu("##ContentBrowserCardMenu"))
+            return;
+
+        const ILocalizationService &localization = context.localization;
+        if (entry.kind == ContentBrowserEntryKind::Asset) {
+            if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.duplicate").c_str(), "Ctrl+D",
+                                    context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.duplicate")) {
+                command = AssetBrowserInteractionSession::Duplicate(entry.absolutePath);
+            }
+            if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.copy").c_str(), "Ctrl+C",
+                                    context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.copy")) {
+                command = AssetBrowserInteractionSession::Copy(entry.absolutePath);
+            }
+            if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.cut").c_str(), "Ctrl+X",
+                                    context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.cut")) {
+                command = AssetBrowserInteractionSession::Cut(entry.absolutePath);
+            }
+            Ui::ContextMenuSeparator();
+        } else {
+            const bool clipboardAvailable = viewModel.contentBrowserClipboard.mode != ContentBrowserClipboardMode::None;
+            ImGui::BeginDisabled(!clipboardAvailable);
+            if (Ui::ContextMenuItem(localization
+                                        .Get("editor", viewModel.contentBrowserClipboard.mode == ContentBrowserClipboardMode::Move
+                                                           ? "workspace.content_browser.action.move_here"
+                                                           : "workspace.content_browser.action.paste_here")
+                                        .c_str(),
+                                    nullptr, context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.paste")) {
+                command = AssetBrowserInteractionSession::Paste(entry.absolutePath);
+            }
+            ImGui::EndDisabled();
+            if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.import_here").c_str(), nullptr,
+                                    context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.import")) {
+                command = AssetBrowserInteractionSession::ImportHere(entry.absolutePath);
+            }
+            Ui::ContextMenuSeparator();
+        }
+        if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.rename").c_str(), "F2", context.theme.fonts,
+                                Ui::ContextMenuItemTone::Normal, "action.rename")) {
+            interactionSession.OpenRename(entry);
+        }
+        if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.asset_info").c_str(), nullptr,
+                                context.theme.fonts)) {
+            interactionSession.OpenInfo(entry);
+        }
+        if (entry.kind == ContentBrowserEntryKind::Asset) {
+            ImGui::BeginDisabled(!entry.canReimport);
+            if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.reimport").c_str(), nullptr,
+                                    context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.refresh")) {
+                command = AssetBrowserInteractionSession::Reimport(entry.absolutePath);
+            }
+            ImGui::EndDisabled();
+        }
+        if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.reveal").c_str(), nullptr,
+                                context.theme.fonts)) {
+            command = AssetBrowserInteractionSession::Reveal(entry.absolutePath);
+        }
+        if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.copy_path").c_str(), nullptr,
+                                context.theme.fonts)) {
+            ImGui::SetClipboardText(entry.absolutePath.c_str());
+        }
+        Ui::ContextMenuSeparator();
+        if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.delete").c_str(), "Delete",
+                                context.theme.fonts, Ui::ContextMenuItemTone::Danger, "action.delete")) {
+            interactionSession.OpenDelete(entry);
+        }
+        Ui::EndContextMenu();
+    }
+
+    /** @copydoc HandleAssetBrowserShortcuts */
+    void HandleAssetBrowserShortcuts(const std::vector<std::size_t> &visibleEntries, const EditorWorkspaceViewModel &viewModel,
+                                     AssetBrowserInteractionSession &interactionSession, EditorWorkspaceViewCommandData &command) {
+        const ImGuiIO &io = ImGui::GetIO();
+        if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) || io.WantTextInput || ImGui::IsAnyItemActive())
+            return;
+
+        AssetBrowserInteractionState &state = interactionSession.State();
+        const ContentBrowserDirectory &directory = viewModel.contentBrowser;
+        const auto selected = std::ranges::find(visibleEntries, state.selectedAbsolutePath, [&directory](const std::size_t entryIndex) {
+            return directory.entries[entryIndex].absolutePath;
+        });
+        const bool selectedAsset = selected != visibleEntries.end() && directory.entries[*selected].kind == ContentBrowserEntryKind::Asset;
+        const bool commandModifier = io.KeyCtrl || io.KeySuper;
+        if (selected != visibleEntries.end() && ImGui::IsKeyPressed(ImGuiKey_F2))
+            interactionSession.OpenRename(directory.entries[*selected]);
+        else if (selected != visibleEntries.end() && ImGui::IsKeyPressed(ImGuiKey_Delete))
+            interactionSession.OpenDelete(directory.entries[*selected]);
+        else if (commandModifier && selectedAsset && ImGui::IsKeyPressed(ImGuiKey_D))
+            command = AssetBrowserInteractionSession::Duplicate(state.selectedAbsolutePath);
+        else if (commandModifier && selectedAsset && ImGui::IsKeyPressed(ImGuiKey_C))
+            command = AssetBrowserInteractionSession::Copy(state.selectedAbsolutePath);
+        else if (commandModifier && selectedAsset && ImGui::IsKeyPressed(ImGuiKey_X))
+            command = AssetBrowserInteractionSession::Cut(state.selectedAbsolutePath);
+        else if (commandModifier && ImGui::IsKeyPressed(ImGuiKey_V) &&
+                 viewModel.contentBrowserClipboard.mode != ContentBrowserClipboardMode::None)
+            command = AssetBrowserInteractionSession::Paste(directory.absoluteCurrentPath);
+        else if (ImGui::IsKeyPressed(ImGuiKey_Escape) && viewModel.contentBrowserClipboard.mode != ContentBrowserClipboardMode::None)
+            command = AssetBrowserInteractionSession::CancelClipboard();
+    }
+}  // namespace Horo::Editor
