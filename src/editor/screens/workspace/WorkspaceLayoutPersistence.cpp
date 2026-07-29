@@ -5,23 +5,36 @@
 #include <sstream>
 #include <system_error>
 
-namespace Horo::Editor
-{
-    namespace
-    {
-        class Parser
-        {
-        public:
-            explicit Parser(const std::string_view text) : m_text(text)
-            {
+namespace Horo::Editor {
+    namespace {
+        constexpr std::string_view LegacyContentBrowserPanelId = "horo.content_browser";
+        constexpr std::string_view GlobalDockPanelId = "horo.global_dock";
+
+        /**
+         * @brief Migrates the former Content Browser host identity at the persistence boundary.
+         * @param value Persisted panel identity or node identity to normalize.
+         */
+        void NormalizeLegacyGlobalDockIdentity(std::string &value) {
+            if (value == LegacyContentBrowserPanelId) {
+                value = GlobalDockPanelId;
+                return;
             }
 
-            std::optional<WorkspaceLayout> Parse(std::string& error)
-            {
+            std::size_t offset = 0;
+            while ((offset = value.find(LegacyContentBrowserPanelId, offset)) != std::string::npos) {
+                value.replace(offset, LegacyContentBrowserPanelId.size(), GlobalDockPanelId);
+                offset += GlobalDockPanelId.size();
+            }
+        }
+
+        class Parser {
+        public:
+            explicit Parser(const std::string_view text) : m_text(text) {}
+
+            std::optional<WorkspaceLayout> Parse(std::string &error) {
                 WorkspaceLayout layout;
                 Skip();
-                if (!ObjectStart() || !Key("schemaVersion") || !UInt(layout.schemaVersion) || !Comma() || !Key("root"))
-                {
+                if (!ObjectStart() || !Key("schemaVersion") || !UInt(layout.schemaVersion) || !Comma() || !Key("root")) {
                     error = "invalid workspace document header";
                     return std::nullopt;
                 }
@@ -29,8 +42,7 @@ namespace Horo::Editor
                 if (!root || !ObjectEnd())
                     return std::nullopt;
                 layout.root = std::move(*root);
-                if (layout.schemaVersion != WorkspaceLayoutPersistence::CurrentSchemaVersion)
-                {
+                if (layout.schemaVersion != WorkspaceLayoutPersistence::CurrentSchemaVersion) {
                     error = "unsupported workspace schema version";
                     return std::nullopt;
                 }
@@ -44,15 +56,13 @@ namespace Horo::Editor
             std::size_t m_pos = 0;
             WorkspaceLayout m_layout;
 
-            void Skip()
-            {
+            void Skip() {
                 while (m_pos < m_text.size() &&
-                    (m_text[m_pos] == ' ' || m_text[m_pos] == '\n' || m_text[m_pos] == '\r' || m_text[m_pos] == '\t'))
+                       (m_text[m_pos] == ' ' || m_text[m_pos] == '\n' || m_text[m_pos] == '\r' || m_text[m_pos] == '\t'))
                     ++m_pos;
             }
 
-            bool Take(const char c)
-            {
+            bool Take(const char c) {
                 Skip();
                 if (m_pos >= m_text.size() || m_text[m_pos] != c)
                     return false;
@@ -60,54 +70,45 @@ namespace Horo::Editor
                 return true;
             }
 
-            bool ObjectStart()
-            {
+            bool ObjectStart() {
                 return Take('{');
             }
 
-            bool ObjectEnd()
-            {
+            bool ObjectEnd() {
                 return Take('}');
             }
 
-            bool Comma()
-            {
+            bool Comma() {
                 return Take(',');
             }
 
-            bool Key(const char* key)
-            {
+            bool Key(const char *key) {
                 std::string value;
                 return String(value) && Take(':') && value == key;
             }
 
-            bool String(std::string& out)
-            {
+            bool String(std::string &out) {
                 Skip();
                 if (m_pos >= m_text.size() || m_text[m_pos++] != '"')
                     return false;
                 out.clear();
-                while (m_pos < m_text.size())
-                {
+                while (m_pos < m_text.size()) {
                     const char c = m_text[m_pos++];
                     if (c == '"')
                         return true;
-                    if (c == '\\' && m_pos < m_text.size())
-                    {
+                    if (c == '\\' && m_pos < m_text.size()) {
                         const char escaped = m_text[m_pos++];
                         out += escaped == 'n' ? '\n' : escaped;
-                    }
-                    else
+                    } else
                         out += c;
                 }
                 return false;
             }
 
-            bool UInt(std::uint32_t& out)
-            {
+            bool UInt(std::uint32_t &out) {
                 Skip();
-                const char* begin = m_text.data() + m_pos;
-                const char* end = m_text.data() + m_text.size();
+                const char *begin = m_text.data() + m_pos;
+                const char *end = m_text.data() + m_text.size();
                 auto [ptr, ec] = std::from_chars(begin, end, out);
                 if (ec != std::errc{})
                     return false;
@@ -115,113 +116,95 @@ namespace Horo::Editor
                 return true;
             }
 
-            bool Float(float& out)
-            {
+            bool Float(float &out) {
                 Skip();
                 const std::size_t start = m_pos;
                 while (m_pos < m_text.size() &&
-                    (m_text[m_pos] == '-' || m_text[m_pos] == '.' || (m_text[m_pos] >= '0' && m_text[m_pos] <= '9')))
+                       (m_text[m_pos] == '-' || m_text[m_pos] == '.' || (m_text[m_pos] >= '0' && m_text[m_pos] <= '9')))
                     ++m_pos;
-                try
-                {
+                try {
                     out = std::stof(std::string(m_text.substr(start, m_pos - start)));
                     return true;
-                }
-                catch (...)
-                {
+                } catch (...) {
                     return false;
                 }
             }
 
-            std::optional<LayoutNode> Node(std::string& error)
-            {
-                if (!ObjectStart())
-                {
+            std::optional<LayoutNode> Node(std::string &error) {
+                if (!ObjectStart()) {
                     error = "node must be an object";
                     return std::nullopt;
                 }
-                if (!Key("type"))
-                {
+                if (!Key("type")) {
                     error = "node type missing";
                     return std::nullopt;
                 }
                 std::string type;
-                if (!String(type) || !Comma() || !Key("id"))
-                {
+                if (!String(type) || !Comma() || !Key("id")) {
                     error = "node identity missing";
                     return std::nullopt;
                 }
                 std::string id;
-                if (!String(id) || !Comma())
-                {
+                if (!String(id) || !Comma()) {
                     error = "node id invalid";
                     return std::nullopt;
                 }
-                if (type == "panel")
-                {
-                    if (!Key("panel"))
-                    {
+                NormalizeLegacyGlobalDockIdentity(id);
+                if (type == "panel") {
+                    if (!Key("panel")) {
                         error = "panel identity missing";
                         return std::nullopt;
                     }
                     std::string panel;
-                    if (!String(panel) || !ObjectEnd())
-                    {
+                    if (!String(panel) || !ObjectEnd()) {
                         error = "panel node invalid";
                         return std::nullopt;
                     }
+                    NormalizeLegacyGlobalDockIdentity(panel);
                     return LayoutNode(PanelNode{std::move(id), std::move(panel)});
                 }
-                if (type == "stack")
-                {
-                    if (!Key("tabs"))
-                    {
+                if (type == "stack") {
+                    if (!Key("tabs")) {
                         error = "stack tabs missing";
                         return std::nullopt;
                     }
-                    if (!Take('['))
-                    {
+                    if (!Take('[')) {
                         error = "stack tabs invalid";
                         return std::nullopt;
                     }
                     TabStackNode stack{std::move(id)};
                     Skip();
-                    if (!Take(']'))
-                    {
-                        while (true)
-                        {
+                    if (!Take(']')) {
+                        while (true) {
                             std::string tab;
-                            if (!String(tab))
-                            {
+                            if (!String(tab)) {
                                 error = "tab invalid";
                                 return std::nullopt;
                             }
+                            NormalizeLegacyGlobalDockIdentity(tab);
                             stack.tabs.push_back(std::move(tab));
                             if (Take(']'))
                                 break;
-                            if (!Comma())
-                            {
+                            if (!Comma()) {
                                 error = "tab separator missing";
                                 return std::nullopt;
                             }
                         }
                     }
-                    if (!Comma() || !Key("active") || !String(stack.activeTab.emplace()) || !ObjectEnd())
-                    {
+                    if (!Comma() || !Key("active") || !String(stack.activeTab.emplace()) || !ObjectEnd()) {
                         error = "stack active tab invalid";
                         return std::nullopt;
                     }
+                    NormalizeLegacyGlobalDockIdentity(*stack.activeTab);
                     return LayoutNode(std::move(stack));
                 }
-                if (type != "split" || !Key("axis"))
-                {
+                if (type != "split" || !Key("axis")) {
                     error = "unknown node type";
                     return std::nullopt;
                 }
                 std::string axis;
                 float ratio = 0.5F;
-                if (!String(axis) || !Comma() || !Key("ratio") || !Float(ratio) || !Comma() || !Key("first"))
-                {
+                if (!String(axis) || !Comma() || !Key("ratio") || !Float(ratio) || !Comma() || !Key("first")) {
                     error = "split properties invalid";
                     return std::nullopt;
                 }
@@ -231,20 +214,16 @@ namespace Horo::Editor
                 const auto second = Node(error);
                 if (!second || !ObjectEnd())
                     return std::nullopt;
-                return LayoutNode(SplitNode{
-                    std::move(id),
-                    axis == "vertical" ? WorkspaceSplitAxis::Vertical : WorkspaceSplitAxis::Horizontal,
-                    ratio, 160.0F, 160.0F, std::make_unique<LayoutNode>(std::move(*first)),
-                    std::make_unique<LayoutNode>(std::move(*second))
-                });
+                return LayoutNode(SplitNode{std::move(id),
+                                            axis == "vertical" ? WorkspaceSplitAxis::Vertical : WorkspaceSplitAxis::Horizontal, ratio,
+                                            160.0F, 160.0F, std::make_unique<LayoutNode>(std::move(*first)),
+                                            std::make_unique<LayoutNode>(std::move(*second))});
             }
         };
 
-        std::string Escape(const std::string_view value)
-        {
+        std::string Escape(const std::string_view value) {
             std::string out;
-            for (const char c : value)
-            {
+            for (const char c : value) {
                 if (c == '"' || c == '\\')
                     out += '\\';
                 out += c;
@@ -252,44 +231,33 @@ namespace Horo::Editor
             return out;
         }
 
-        void WriteNode(std::ostringstream& out, const LayoutNode& node)
-        {
-            std::visit(
-                [&](const auto& value)
-                {
-                    using T = std::decay_t<decltype(value)>;
-                    if constexpr (std::is_same_v<T, PanelNode>)
-                        out << "{\"type\":\"panel\",\"id\":\"" << Escape(value.id) << "\",\"panel\":\"" << Escape(
-                                value.panel)
-                            << "\"}";
-                    else if constexpr (std::is_same_v<T, TabStackNode>)
-                    {
-                        out << "{\"type\":\"stack\",\"id\":\"" << Escape(value.id) << "\",\"tabs\":[";
-                        for (std::size_t i = 0; i < value.tabs.size(); ++i)
-                        {
-                            if (i)
-                                out << ',';
-                            out << '\"' << Escape(value.tabs[i]) << '\"';
-                        }
-                        out << "],\"active\":\"" << Escape(value.activeTab.value_or("")) << "\"}";
+        void WriteNode(std::ostringstream &out, const LayoutNode &node) {
+            std::visit([&](const auto &value) {
+                using T = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<T, PanelNode>)
+                    out << "{\"type\":\"panel\",\"id\":\"" << Escape(value.id) << "\",\"panel\":\"" << Escape(value.panel) << "\"}";
+                else if constexpr (std::is_same_v<T, TabStackNode>) {
+                    out << "{\"type\":\"stack\",\"id\":\"" << Escape(value.id) << "\",\"tabs\":[";
+                    for (std::size_t i = 0; i < value.tabs.size(); ++i) {
+                        if (i)
+                            out << ',';
+                        out << '\"' << Escape(value.tabs[i]) << '\"';
                     }
-                    else
-                    {
-                        out << "{\"type\":\"split\",\"id\":\"" << Escape(value.id) << "\",\"axis\":\""
-                            << (value.axis == WorkspaceSplitAxis::Vertical ? "vertical" : "horizontal")
-                            << "\",\"ratio\":" << value.ratio << ",\"first\":";
-                        WriteNode(out, *value.first);
-                        out << ",\"second\":";
-                        WriteNode(out, *value.second);
-                        out << '}';
-                    }
-                },
-                node.value);
+                    out << "],\"active\":\"" << Escape(value.activeTab.value_or("")) << "\"}";
+                } else {
+                    out << "{\"type\":\"split\",\"id\":\"" << Escape(value.id) << "\",\"axis\":\""
+                        << (value.axis == WorkspaceSplitAxis::Vertical ? "vertical" : "horizontal") << "\",\"ratio\":" << value.ratio
+                        << ",\"first\":";
+                    WriteNode(out, *value.first);
+                    out << ",\"second\":";
+                    WriteNode(out, *value.second);
+                    out << '}';
+                }
+            }, node.value);
         }
-    } // namespace
+    }  // namespace
 
-    std::string WorkspaceLayoutPersistence::Serialize(const WorkspaceLayout& layout)
-    {
+    std::string WorkspaceLayoutPersistence::Serialize(const WorkspaceLayout &layout) {
         std::ostringstream out;
         out << "{\"schemaVersion\":" << CurrentSchemaVersion << ",\"root\":";
         WriteNode(out, layout.root);
@@ -297,9 +265,7 @@ namespace Horo::Editor
         return out.str();
     }
 
-    std::optional<WorkspaceLayout> WorkspaceLayoutPersistence::Deserialize(
-        const std::string_view json, std::string* error)
-    {
+    std::optional<WorkspaceLayout> WorkspaceLayoutPersistence::Deserialize(const std::string_view json, std::string *error) {
         std::string local;
         Parser parser(json);
         auto result = parser.Parse(local);
@@ -308,13 +274,10 @@ namespace Horo::Editor
         return result;
     }
 
-    bool WorkspaceLayoutPersistence::Save(const std::filesystem::path& path, const WorkspaceLayout& layout,
-                                          std::string* error)
-    {
+    bool WorkspaceLayoutPersistence::Save(const std::filesystem::path &path, const WorkspaceLayout &layout, std::string *error) {
         std::error_code ec;
         std::filesystem::create_directories(path.parent_path(), ec);
-        if (ec)
-        {
+        if (ec) {
             if (error)
                 *error = ec.message();
             return false;
@@ -323,15 +286,13 @@ namespace Horo::Editor
         std::ofstream out(temp, std::ios::binary | std::ios::trunc);
         out << Serialize(layout);
         out.close();
-        if (!out)
-        {
+        if (!out) {
             if (error)
                 *error = "workspace write failed";
             return false;
         }
         std::filesystem::rename(temp, path, ec);
-        if (ec)
-        {
+        if (ec) {
             std::filesystem::remove(path, ec);
             std::filesystem::rename(temp, path, ec);
         }
@@ -340,12 +301,9 @@ namespace Horo::Editor
         return !ec;
     }
 
-    std::optional<WorkspaceLayout> WorkspaceLayoutPersistence::Load(const std::filesystem::path& path,
-                                                                    std::string* error)
-    {
+    std::optional<WorkspaceLayout> WorkspaceLayoutPersistence::Load(const std::filesystem::path &path, std::string *error) {
         const std::ifstream in(path, std::ios::binary);
-        if (!in)
-        {
+        if (!in) {
             if (error)
                 *error = "workspace file not found";
             return std::nullopt;
@@ -354,4 +312,4 @@ namespace Horo::Editor
         buffer << in.rdbuf();
         return Deserialize(buffer.str(), error);
     }
-} // namespace Horo::Editor
+}  // namespace Horo::Editor

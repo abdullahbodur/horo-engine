@@ -29,6 +29,5 @@ namespace Horo::Editor {
      * @param absolutePath Existing absolute file or directory path.
      * @return True when the platform accepted the reveal request.
      */
-    [[nodiscard]] bool RevealInNativeFileManager(
-        const std::filesystem::path& absolutePath) noexcept;
-} // namespace Horo::Editor
+    [[nodiscard]] bool RevealInNativeFileManager(const std::filesystem::path &absolutePath) noexcept;
+}  // namespace Horo::Editor

@@ -3,8 +3,6 @@
 #include "Horo/Assets/AssetImportMetadata.h"
 #include "Horo/Foundation/PathUtils.h"
 
-#include <nlohmann/json.hpp>
-
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -14,21 +12,19 @@
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <system_error>
 #include <utility>
 
-namespace Horo::Editor
-{
-    namespace
-    {
+namespace Horo::Editor {
+    namespace {
         constexpr std::uintmax_t kMaximumLegacyMetadataBytes = 1024U * 1024U;
         constexpr std::uintmax_t kMaximumMeshPreviewPayloadBytes = 64U * 1024U * 1024U;
         constexpr std::size_t kMaximumMeshPreviewPoints = 2048U;
         constexpr std::streamoff kMeshPositionPayloadOffset = 48;
 
-        [[nodiscard]] std::filesystem::path NormalizeAbsolute(const std::filesystem::path& path)
-        {
+        [[nodiscard]] std::filesystem::path NormalizeAbsolute(const std::filesystem::path &path) {
             std::error_code error;
             std::filesystem::path absolutePath = std::filesystem::absolute(path, error);
             if (error)
@@ -39,13 +35,10 @@ namespace Horo::Editor
             return error ? absolutePath : canonicalPath;
         }
 
-        [[nodiscard]] bool HasPathPrefix(const std::filesystem::path& root,
-                                         const std::filesystem::path& candidate)
-        {
+        [[nodiscard]] bool HasPathPrefix(const std::filesystem::path &root, const std::filesystem::path &candidate) {
             auto rootPart = root.begin();
             auto candidatePart = candidate.begin();
-            while (rootPart != root.end() && candidatePart != candidate.end())
-            {
+            while (rootPart != root.end() && candidatePart != candidate.end()) {
                 if (*rootPart != *candidatePart)
                     return false;
                 ++rootPart;
@@ -54,10 +47,8 @@ namespace Horo::Editor
             return rootPart == root.end();
         }
 
-        [[nodiscard]] std::vector<ContentBrowserBreadcrumb> BuildBreadcrumbs(
-            const std::filesystem::path& root,
-            const std::filesystem::path& current)
-        {
+        [[nodiscard]] std::vector<ContentBrowserBreadcrumb> BuildBreadcrumbs(const std::filesystem::path &root,
+                                                                             const std::filesystem::path &current) {
             std::vector<ContentBrowserBreadcrumb> breadcrumbs;
             breadcrumbs.push_back(ContentBrowserBreadcrumb{
                 .label = root.filename().string(),
@@ -68,8 +59,7 @@ namespace Horo::Editor
 
             std::filesystem::path accumulated = root;
             const std::filesystem::path descendant = current.lexically_relative(root);
-            for (const auto& segment : descendant)
-            {
+            for (const auto &segment : descendant) {
                 if (segment.empty() || segment == ".")
                     continue;
                 accumulated /= segment;
@@ -81,18 +71,15 @@ namespace Horo::Editor
             return breadcrumbs;
         }
 
-        [[nodiscard]] std::string LowercaseExtension(const std::filesystem::path& path)
-        {
+        [[nodiscard]] std::string LowercaseExtension(const std::filesystem::path &path) {
             std::string extension = path.extension().string();
-            std::ranges::transform(extension, extension.begin(), [](const unsigned char character)
-            {
+            std::ranges::transform(extension, extension.begin(), [](const unsigned char character) {
                 return static_cast<char>(std::tolower(character));
             });
             return extension;
         }
 
-        [[nodiscard]] std::string AssetDisplayName(const std::filesystem::path& path)
-        {
+        [[nodiscard]] std::string AssetDisplayName(const std::filesystem::path &path) {
             std::filesystem::path displayPath = path.filename();
             if (LowercaseExtension(displayPath) == ".horoasset")
                 displayPath.replace_extension();
@@ -101,8 +88,7 @@ namespace Horo::Editor
             return displayPath.filename().string();
         }
 
-        [[nodiscard]] bool IsHiddenSidecar(const std::filesystem::path& path)
-        {
+        [[nodiscard]] bool IsHiddenSidecar(const std::filesystem::path &path) {
             const std::string extension = LowercaseExtension(path);
             if (extension == ".meta")
                 return true;
@@ -115,16 +101,13 @@ namespace Horo::Editor
             return std::filesystem::is_regular_file(sourcePath, error) && !error;
         }
 
-        struct LegacyMetadata
-        {
+        struct LegacyMetadata {
             std::string assetType;
             std::filesystem::path absoluteMetadataPath;
             std::string sourceExtension;
         };
 
-        [[nodiscard]] std::optional<LegacyMetadata> ReadLegacyMetadata(
-            const std::filesystem::path& assetPath)
-        {
+        [[nodiscard]] std::optional<LegacyMetadata> ReadLegacyMetadata(const std::filesystem::path &assetPath) {
             std::filesystem::path metadataPath = assetPath;
             metadataPath += ".meta";
             std::error_code error;
@@ -139,8 +122,7 @@ namespace Horo::Editor
             input.read(contents.data(), static_cast<std::streamsize>(contents.size()));
             if (input.gcount() != static_cast<std::streamsize>(contents.size()))
                 return std::nullopt;
-            try
-            {
+            try {
                 const nlohmann::json metadata = nlohmann::json::parse(contents);
                 if (!metadata.is_object() || !metadata.contains("type") || !metadata["type"].is_string())
                     return std::nullopt;
@@ -154,16 +136,12 @@ namespace Horo::Editor
                     .absoluteMetadataPath = NormalizeAbsolute(metadataPath),
                     .sourceExtension = std::move(sourceExtension),
                 };
-            }
-            catch (const nlohmann::json::exception&)
-            {
+            } catch (const nlohmann::json::exception &) {
                 return std::nullopt;
             }
         }
 
-        [[nodiscard]] std::string ReadMetadataString(
-            const std::filesystem::path& metadataPath, const std::string_view key)
-        {
+        [[nodiscard]] std::string ReadMetadataString(const std::filesystem::path &metadataPath, const std::string_view key) {
             std::error_code error;
             const std::uintmax_t size = std::filesystem::file_size(metadataPath, error);
             if (error || size == 0 || size > kMaximumLegacyMetadataBytes)
@@ -175,52 +153,41 @@ namespace Horo::Editor
             input.read(contents.data(), static_cast<std::streamsize>(contents.size()));
             if (input.gcount() != static_cast<std::streamsize>(contents.size()))
                 return {};
-            try
-            {
+            try {
                 const nlohmann::json metadata = nlohmann::json::parse(contents);
                 const auto found = metadata.find(key);
-                return found != metadata.end() && found->is_string()
-                    ? found->get<std::string>()
-                    : std::string{};
-            }
-            catch (const nlohmann::json::exception&)
-            {
+                return found != metadata.end() && found->is_string() ? found->get<std::string>() : std::string{};
+            } catch (const nlohmann::json::exception &) {
                 return {};
             }
         }
 
-        [[nodiscard]] std::uint32_t ReadLittleEndian32(const std::array<std::byte, 4>& bytes)
-        {
+        [[nodiscard]] std::uint32_t ReadLittleEndian32(const std::array<std::byte, 4> &bytes) {
             return static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[0])) |
-                (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[1])) << 8U) |
-                (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[2])) << 16U) |
-                (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[3])) << 24U);
+                   (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[1])) << 8U) |
+                   (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[2])) << 16U) |
+                   (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[3])) << 24U);
         }
 
-        [[nodiscard]] bool ReadLittleEndian32(std::ifstream& input, std::uint32_t& output)
-        {
+        [[nodiscard]] bool ReadLittleEndian32(std::ifstream &input, std::uint32_t &output) {
             std::array<std::byte, 4> bytes{};
-            input.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+            input.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
             if (!input)
                 return false;
             output = ReadLittleEndian32(bytes);
             return true;
         }
 
-        [[nodiscard]] float ReadLittleEndianFloat(const std::array<std::byte, 4>& bytes)
-        {
+        [[nodiscard]] float ReadLittleEndianFloat(const std::array<std::byte, 4> &bytes) {
             const std::uint32_t raw = ReadLittleEndian32(bytes);
             return std::bit_cast<float>(raw);
         }
 
-        [[nodiscard]] std::vector<ContentBrowserMeshPreviewPoint> ReadMeshPreview(
-            const std::filesystem::path& assetPath)
-        {
+        [[nodiscard]] std::vector<ContentBrowserMeshPreviewPoint> ReadMeshPreview(const std::filesystem::path &assetPath) {
             std::error_code error;
             const std::uintmax_t payloadSize = std::filesystem::file_size(assetPath, error);
             if (error || payloadSize < static_cast<std::uintmax_t>(kMeshPositionPayloadOffset) ||
-                payloadSize > kMaximumMeshPreviewPayloadBytes)
-            {
+                payloadSize > kMaximumMeshPreviewPayloadBytes) {
                 return {};
             }
 
@@ -228,35 +195,29 @@ namespace Horo::Editor
             std::uint32_t schemaVersion = 0;
             std::uint32_t positionCount = 0;
             std::uint32_t faceCount = 0;
-            if (!input || !ReadLittleEndian32(input, schemaVersion) ||
-                !ReadLittleEndian32(input, positionCount) || !ReadLittleEndian32(input, faceCount) ||
-                schemaVersion != 1 || positionCount == 0)
-            {
+            if (!input || !ReadLittleEndian32(input, schemaVersion) || !ReadLittleEndian32(input, positionCount) ||
+                !ReadLittleEndian32(input, faceCount) || schemaVersion != 1 || positionCount == 0) {
                 return {};
             }
             static_cast<void>(faceCount);
 
             const std::uintmax_t requiredSize =
-                static_cast<std::uintmax_t>(kMeshPositionPayloadOffset) +
-                static_cast<std::uintmax_t>(positionCount) * 3U * sizeof(float);
+                static_cast<std::uintmax_t>(kMeshPositionPayloadOffset) + static_cast<std::uintmax_t>(positionCount) * 3U * sizeof(float);
             if (requiredSize > payloadSize)
                 return {};
 
-            const std::size_t sampleCount =
-                std::min<std::size_t>(positionCount, kMaximumMeshPreviewPoints);
+            const std::size_t sampleCount = std::min<std::size_t>(positionCount, kMaximumMeshPreviewPoints);
             std::vector<ContentBrowserMeshPreviewPoint> points;
             points.reserve(sampleCount);
-            for (std::size_t sample = 0; sample < sampleCount; ++sample)
-            {
-                const std::uint32_t positionIndex = sampleCount == positionCount
-                    ? static_cast<std::uint32_t>(sample)
-                    : static_cast<std::uint32_t>(
-                        (static_cast<std::uint64_t>(sample) * positionCount) / sampleCount);
+            for (std::size_t sample = 0; sample < sampleCount; ++sample) {
+                const std::uint32_t positionIndex =
+                    sampleCount == positionCount
+                        ? static_cast<std::uint32_t>(sample)
+                        : static_cast<std::uint32_t>((static_cast<std::uint64_t>(sample) * positionCount) / sampleCount);
                 input.seekg(kMeshPositionPayloadOffset +
-                    static_cast<std::streamoff>(positionIndex) * 3 *
-                        static_cast<std::streamoff>(sizeof(float)));
+                            static_cast<std::streamoff>(positionIndex) * 3 * static_cast<std::streamoff>(sizeof(float)));
                 std::array<std::byte, 12> bytes{};
-                input.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+                input.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
                 if (!input)
                     return {};
                 std::array<std::byte, 4> component{};
@@ -272,9 +233,7 @@ namespace Horo::Editor
             return points;
         }
 
-        [[nodiscard]] std::vector<std::uint8_t> ReadBoundedPayload(
-            const std::filesystem::path& assetPath)
-        {
+        [[nodiscard]] std::vector<std::uint8_t> ReadBoundedPayload(const std::filesystem::path &assetPath) {
             std::error_code error;
             const std::uintmax_t payloadSize = std::filesystem::file_size(assetPath, error);
             if (error || payloadSize == 0 || payloadSize > kMaximumMeshPreviewPayloadBytes)
@@ -283,19 +242,16 @@ namespace Horo::Editor
             if (!input)
                 return {};
             std::vector<std::uint8_t> payload(static_cast<std::size_t>(payloadSize));
-            input.read(reinterpret_cast<char*>(payload.data()), static_cast<std::streamsize>(payload.size()));
+            input.read(reinterpret_cast<char *>(payload.data()), static_cast<std::streamsize>(payload.size()));
             if (input.gcount() != static_cast<std::streamsize>(payload.size()))
                 return {};
             return payload;
         }
 
-        [[nodiscard]] Assets::AssetPreviewFallback InferFallback(const std::string_view assetType)
-        {
+        [[nodiscard]] Assets::AssetPreviewFallback InferFallback(const std::string_view assetType) {
             if (assetType.find("mesh") != std::string_view::npos)
                 return Assets::AssetPreviewFallback::Mesh;
-            if (assetType.find("texture") != std::string_view::npos ||
-                assetType.find("image") != std::string_view::npos)
-            {
+            if (assetType.find("texture") != std::string_view::npos || assetType.find("image") != std::string_view::npos) {
                 return Assets::AssetPreviewFallback::Image;
             }
             if (assetType.find("audio") != std::string_view::npos)
@@ -303,63 +259,41 @@ namespace Horo::Editor
             return Assets::AssetPreviewFallback::Generic;
         }
 
-        [[nodiscard]] bool ContainsCaseInsensitive(
-            const std::string_view text, const std::string_view needle)
-        {
+        [[nodiscard]] bool ContainsCaseInsensitive(const std::string_view text, const std::string_view needle) {
             if (needle.empty())
                 return true;
             if (needle.size() > text.size())
                 return false;
-            return std::search(
-                       text.begin(), text.end(), needle.begin(), needle.end(),
-                       [](const char left, const char right)
-                       {
-                           return std::tolower(
-                                      static_cast<unsigned char>(left)) ==
-                               std::tolower(
-                                      static_cast<unsigned char>(right));
-                       }) != text.end();
+            return std::search(text.begin(), text.end(), needle.begin(), needle.end(), [](const char left, const char right) {
+                return std::tolower(static_cast<unsigned char>(left)) == std::tolower(static_cast<unsigned char>(right));
+            }) != text.end();
         }
 
-        [[nodiscard]] int CompareCaseInsensitive(
-            const std::string_view left, const std::string_view right)
-        {
-            const auto mismatch = std::mismatch(
-                left.begin(), left.end(), right.begin(), right.end(),
-                [](const char lhs, const char rhs)
-                {
-                    return std::tolower(static_cast<unsigned char>(lhs)) ==
-                        std::tolower(static_cast<unsigned char>(rhs));
-                });
-            if (mismatch.first == left.end() ||
-                mismatch.second == right.end())
-            {
+        [[nodiscard]] int CompareCaseInsensitive(const std::string_view left, const std::string_view right) {
+            const auto mismatch = std::mismatch(left.begin(), left.end(), right.begin(), right.end(), [](const char lhs, const char rhs) {
+                return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs));
+            });
+            if (mismatch.first == left.end() || mismatch.second == right.end()) {
                 if (left.size() == right.size())
                     return left.compare(right);
                 return left.size() < right.size() ? -1 : 1;
             }
-            const auto lhs = std::tolower(
-                static_cast<unsigned char>(*mismatch.first));
-            const auto rhs = std::tolower(
-                static_cast<unsigned char>(*mismatch.second));
+            const auto lhs = std::tolower(static_cast<unsigned char>(*mismatch.first));
+            const auto rhs = std::tolower(static_cast<unsigned char>(*mismatch.second));
             return lhs < rhs ? -1 : 1;
         }
-    } // namespace
+    }  // namespace
 
     /** @copydoc IsContentBrowserDirectoryTargetAllowed */
-    bool IsContentBrowserDirectoryTargetAllowed(const std::filesystem::path& absoluteRoot,
-                                                const std::filesystem::path& absoluteTarget)
-    {
+    bool IsContentBrowserDirectoryTargetAllowed(const std::filesystem::path &absoluteRoot, const std::filesystem::path &absoluteTarget) {
         if (!absoluteRoot.is_absolute() || !absoluteTarget.is_absolute())
             return false;
 
         std::error_code error;
-        const std::filesystem::path lexicalTarget =
-            std::filesystem::absolute(absoluteTarget, error).lexically_normal();
+        const std::filesystem::path lexicalTarget = std::filesystem::absolute(absoluteTarget, error).lexically_normal();
         if (error)
             return false;
-        const std::filesystem::file_status lexicalStatus =
-            std::filesystem::symlink_status(lexicalTarget, error);
+        const std::filesystem::file_status lexicalStatus = std::filesystem::symlink_status(lexicalTarget, error);
         if (error || std::filesystem::is_symlink(lexicalStatus))
             return false;
 
@@ -373,17 +307,14 @@ namespace Horo::Editor
     }
 
     /** @copydoc BuildContentBrowserDirectory */
-    ContentBrowserDirectory BuildContentBrowserDirectory(
-        const std::filesystem::path& absoluteProjectRoot,
-        const std::filesystem::path& requestedAbsoluteDirectory,
-        const Assets::AssetRegistrySnapshot& snapshot,
-        const Assets::AssetImporterCatalogSnapshot* importerCatalog)
-    {
+    ContentBrowserDirectory BuildContentBrowserDirectory(const std::filesystem::path &absoluteProjectRoot,
+                                                         const std::filesystem::path &requestedAbsoluteDirectory,
+                                                         const Assets::AssetRegistrySnapshot &snapshot,
+                                                         const Assets::AssetImporterCatalogSnapshot *importerCatalog) {
         const std::filesystem::path projectRoot = NormalizeAbsolute(absoluteProjectRoot);
         const std::filesystem::path assetRoot = NormalizeAbsolute(projectRoot / "assets");
-        std::filesystem::path currentDirectory = requestedAbsoluteDirectory.empty()
-                                                    ? assetRoot
-                                                    : NormalizeAbsolute(requestedAbsoluteDirectory);
+        std::filesystem::path currentDirectory =
+            requestedAbsoluteDirectory.empty() ? assetRoot : NormalizeAbsolute(requestedAbsoluteDirectory);
         if (!IsContentBrowserDirectoryTargetAllowed(assetRoot, currentDirectory))
             currentDirectory = assetRoot;
 
@@ -393,53 +324,41 @@ namespace Horo::Editor
             .breadcrumbs = BuildBreadcrumbs(assetRoot, currentDirectory),
             .loadState = ContentBrowserLoadState::Loading,
         };
-        if (!IsContentBrowserDirectoryTargetAllowed(assetRoot, currentDirectory))
-        {
+        if (!IsContentBrowserDirectoryTargetAllowed(assetRoot, currentDirectory)) {
             directory.loadState = ContentBrowserLoadState::Error;
             return directory;
         }
 
-        std::map<std::filesystem::path, const Assets::AssetRecord*> registeredAssets;
-        for (const auto& record : snapshot.Records())
-        {
-            const std::filesystem::path absoluteAsset =
-                NormalizeAbsolute(Foundation::Paths::Resolve(projectRoot, record.sourcePath));
+        std::map<std::filesystem::path, const Assets::AssetRecord *> registeredAssets;
+        for (const auto &record : snapshot.Records()) {
+            const std::filesystem::path absoluteAsset = NormalizeAbsolute(Foundation::Paths::Resolve(projectRoot, record.sourcePath));
             if (!absoluteAsset.empty() && HasPathPrefix(assetRoot, absoluteAsset))
                 registeredAssets.try_emplace(absoluteAsset, &record);
         }
 
         std::error_code error;
-        std::filesystem::directory_iterator iterator{
-            currentDirectory, std::filesystem::directory_options::skip_permission_denied, error
-        };
+        std::filesystem::directory_iterator iterator{currentDirectory, std::filesystem::directory_options::skip_permission_denied, error};
         const std::filesystem::directory_iterator end;
-        while (!error && iterator != end)
-        {
-            const std::filesystem::directory_entry& diskEntry = *iterator;
+        while (!error && iterator != end) {
+            const std::filesystem::directory_entry &diskEntry = *iterator;
             const std::filesystem::file_status status = diskEntry.symlink_status(error);
             if (error)
                 break;
 
             const std::filesystem::path absoluteEntry = NormalizeAbsolute(diskEntry.path());
-            if (absoluteEntry.empty() || !HasPathPrefix(assetRoot, absoluteEntry) ||
-                std::filesystem::is_symlink(status))
-            {
+            if (absoluteEntry.empty() || !HasPathPrefix(assetRoot, absoluteEntry) || std::filesystem::is_symlink(status)) {
                 iterator.increment(error);
                 continue;
             }
 
-            if (std::filesystem::is_directory(status))
-            {
+            if (std::filesystem::is_directory(status)) {
                 directory.entries.push_back(ContentBrowserEntry{
                     .kind = ContentBrowserEntryKind::Directory,
                     .absolutePath = absoluteEntry.string(),
                     .displayName = absoluteEntry.filename().string(),
                 });
-            }
-            else if (std::filesystem::is_regular_file(status))
-            {
-                if (IsHiddenSidecar(absoluteEntry))
-                {
+            } else if (std::filesystem::is_regular_file(status)) {
+                if (IsHiddenSidecar(absoluteEntry)) {
                     iterator.increment(error);
                     continue;
                 }
@@ -452,19 +371,15 @@ namespace Horo::Editor
                 std::string legacySourceExtension;
                 std::error_code sizeError;
                 entry.byteSize = diskEntry.file_size(sizeError);
-                if (const auto registered = registeredAssets.find(absoluteEntry);
-                    registered != registeredAssets.end())
-                {
-                    const Assets::AssetRecord& record = *registered->second;
+                if (const auto registered = registeredAssets.find(absoluteEntry); registered != registeredAssets.end()) {
+                    const Assets::AssetRecord &record = *registered->second;
                     entry.assetId = record.id.ToString();
                     entry.assetType = record.type.Value();
                     entry.registered = true;
-                    entry.absoluteMetadataPath =
-                        NormalizeAbsolute(Foundation::Paths::Resolve(projectRoot, record.metadataPath)).string();
+                    entry.absoluteMetadataPath = NormalizeAbsolute(Foundation::Paths::Resolve(projectRoot, record.metadataPath)).string();
                     auto metadata = Assets::ReadAssetImportMetadata(entry.absoluteMetadataPath);
-                    if (metadata.HasValue())
-                    {
-                        const Assets::AssetImportMetadata& provenance = metadata.Value();
+                    if (metadata.HasValue()) {
+                        const Assets::AssetImportMetadata &provenance = metadata.Value();
                         entry.importerContributionId = provenance.importerContributionId;
                         entry.importerVersion = provenance.importerVersion;
                         entry.importerModuleId = provenance.importerModuleId;
@@ -472,54 +387,37 @@ namespace Horo::Editor
                         entry.absoluteImportSourcePath = provenance.absoluteSourcePath.string();
                         entry.sourceHash = provenance.sourceHash;
                         entry.lastImportReasons = provenance.lastImportReasons;
-                        entry.dependencyCount =
-                            provenance.dependencies.size();
+                        entry.dependencyCount = provenance.dependencies.size();
 
                         std::error_code sourceError;
-                        const auto sourceStatus =
-                            std::filesystem::symlink_status(provenance.absoluteSourcePath, sourceError);
-                        if (!sourceError && !std::filesystem::is_symlink(sourceStatus) &&
-                            std::filesystem::is_regular_file(sourceStatus))
-                        {
-                            const std::uintmax_t sourceSize =
-                                std::filesystem::file_size(provenance.absoluteSourcePath, sourceError);
-                            const auto sourceWriteTime =
-                                std::filesystem::last_write_time(provenance.absoluteSourcePath, sourceError);
-                            entry.sourceChanged = !sourceError &&
-                                ((provenance.sourceByteSize != 0 &&
-                                  sourceSize != provenance.sourceByteSize) ||
-                                 (provenance.sourceLastWriteTime != 0 &&
-                                  sourceWriteTime.time_since_epoch().count() !=
-                                      provenance.sourceLastWriteTime));
+                        const auto sourceStatus = std::filesystem::symlink_status(provenance.absoluteSourcePath, sourceError);
+                        if (!sourceError && !std::filesystem::is_symlink(sourceStatus) && std::filesystem::is_regular_file(sourceStatus)) {
+                            const std::uintmax_t sourceSize = std::filesystem::file_size(provenance.absoluteSourcePath, sourceError);
+                            const auto sourceWriteTime = std::filesystem::last_write_time(provenance.absoluteSourcePath, sourceError);
+                            entry.sourceChanged =
+                                !sourceError && ((provenance.sourceByteSize != 0 && sourceSize != provenance.sourceByteSize) ||
+                                                 (provenance.sourceLastWriteTime != 0 &&
+                                                  sourceWriteTime.time_since_epoch().count() != provenance.sourceLastWriteTime));
                         }
+                    } else {
+                        entry.importerContributionId = ReadMetadataString(entry.absoluteMetadataPath, "importerContributionId");
                     }
-                    else
-                    {
-                        entry.importerContributionId = ReadMetadataString(
-                            entry.absoluteMetadataPath, "importerContributionId");
-                    }
-                }
-                else if (const auto legacy = ReadLegacyMetadata(absoluteEntry))
-                {
+                } else if (const auto legacy = ReadLegacyMetadata(absoluteEntry)) {
                     entry.assetType = legacy->assetType;
                     entry.absoluteMetadataPath = legacy->absoluteMetadataPath.string();
                     legacySourceExtension = legacy->sourceExtension;
                 }
 
                 entry.previewFallback = InferFallback(entry.assetType);
-                if (importerCatalog != nullptr && !entry.assetType.empty())
-                {
+                if (importerCatalog != nullptr && !entry.assetType.empty()) {
                     const auto parsedType = Assets::AssetTypeId::Parse(entry.assetType);
-                    const Assets::AssetImporterContribution* contribution =
+                    const Assets::AssetImporterContribution *contribution =
                         !entry.importerContributionId.empty()
                             ? importerCatalog->FindById(entry.importerContributionId)
                             : (!legacySourceExtension.empty()
-                                ? importerCatalog->FindContributionByExtension(legacySourceExtension)
-                                : (parsedType.HasValue()
-                                    ? importerCatalog->FindPreviewContribution(parsedType.Value())
-                                    : nullptr));
-                    if (contribution != nullptr)
-                    {
+                                   ? importerCatalog->FindContributionByExtension(legacySourceExtension)
+                                   : (parsedType.HasValue() ? importerCatalog->FindPreviewContribution(parsedType.Value()) : nullptr));
+                    if (contribution != nullptr) {
                         entry.importerContributionId = contribution->contributionId;
                         if (entry.importerModuleId.empty())
                             entry.importerModuleId = contribution->moduleId;
@@ -530,28 +428,20 @@ namespace Horo::Editor
                         entry.activeImporterVersion = contribution->version;
                         entry.activeImporterModuleId = contribution->moduleId;
                         entry.activeImporterModuleVersion = contribution->moduleVersion;
-                        entry.importerChanged =
-                            entry.importerVersion != contribution->version;
+                        entry.importerChanged = entry.importerVersion != contribution->version;
                         entry.moduleChanged =
-                            entry.importerModuleId != contribution->moduleId ||
-                            entry.importerModuleVersion != contribution->moduleVersion;
+                            entry.importerModuleId != contribution->moduleId || entry.importerModuleVersion != contribution->moduleVersion;
                         std::error_code sourceError;
-                        const auto sourceStatus = std::filesystem::symlink_status(
-                            entry.absoluteImportSourcePath, sourceError);
-                        entry.canReimport =
-                            !entry.absoluteImportSourcePath.empty() &&
-                            std::filesystem::path{entry.absoluteImportSourcePath}.is_absolute() &&
-                            !sourceError && !std::filesystem::is_symlink(sourceStatus) &&
-                            std::filesystem::is_regular_file(sourceStatus);
-                        entry.previewFallback = contribution->previewFallback ==
-                            Assets::AssetPreviewFallback::Automatic
-                                ? entry.previewFallback
-                                : contribution->previewFallback;
-                        if (contribution->previewProvider != nullptr)
-                        {
+                        const auto sourceStatus = std::filesystem::symlink_status(entry.absoluteImportSourcePath, sourceError);
+                        entry.canReimport = !entry.absoluteImportSourcePath.empty() &&
+                                            std::filesystem::path{entry.absoluteImportSourcePath}.is_absolute() && !sourceError &&
+                                            !std::filesystem::is_symlink(sourceStatus) && std::filesystem::is_regular_file(sourceStatus);
+                        entry.previewFallback = contribution->previewFallback == Assets::AssetPreviewFallback::Automatic
+                                                    ? entry.previewFallback
+                                                    : contribution->previewFallback;
+                        if (contribution->previewProvider != nullptr) {
                             const std::vector<std::uint8_t> payload = ReadBoundedPayload(absoluteEntry);
-                            if (!payload.empty())
-                            {
+                            if (!payload.empty()) {
                                 auto generated = contribution->previewProvider->GeneratePreview(
                                     Assets::AssetPreviewInput{
                                         .editorPayload = payload,
@@ -574,12 +464,8 @@ namespace Horo::Editor
             iterator.increment(error);
         }
         directory.readable = !error;
-        directory.loadState =
-            error ? ContentBrowserLoadState::Error
-                  : ContentBrowserLoadState::Ready;
-        std::ranges::sort(directory.entries, [](const ContentBrowserEntry& left,
-                                                const ContentBrowserEntry& right)
-        {
+        directory.loadState = error ? ContentBrowserLoadState::Error : ContentBrowserLoadState::Ready;
+        std::ranges::sort(directory.entries, [](const ContentBrowserEntry &left, const ContentBrowserEntry &right) {
             if (left.kind != right.kind)
                 return left.kind == ContentBrowserEntryKind::Directory;
             return left.displayName < right.displayName;
@@ -588,64 +474,38 @@ namespace Horo::Editor
     }
 
     /** @copydoc ProjectContentBrowserEntries */
-    std::vector<std::size_t> ProjectContentBrowserEntries(
-        const ContentBrowserDirectory& directory,
-        const ContentBrowserEntryQuery& query)
-    {
+    std::vector<std::size_t> ProjectContentBrowserEntries(const ContentBrowserDirectory &directory, const ContentBrowserEntryQuery &query) {
         std::vector<std::size_t> indices;
         indices.reserve(directory.entries.size());
-        for (std::size_t index = 0; index < directory.entries.size(); ++index)
-        {
-            const ContentBrowserEntry& entry = directory.entries[index];
+        for (std::size_t index = 0; index < directory.entries.size(); ++index) {
+            const ContentBrowserEntry &entry = directory.entries[index];
             if (!ContainsCaseInsensitive(entry.displayName, query.name))
                 continue;
-            if (entry.kind == ContentBrowserEntryKind::Asset &&
-                !query.assetType.empty() &&
-                entry.assetType != query.assetType)
-            {
+            if (entry.kind == ContentBrowserEntryKind::Asset && !query.assetType.empty() && entry.assetType != query.assetType) {
                 continue;
             }
             indices.push_back(index);
         }
 
-        std::ranges::sort(
-            indices,
-            [&directory, &query](
-                const std::size_t leftIndex,
-                const std::size_t rightIndex)
-            {
-                const ContentBrowserEntry& left =
-                    directory.entries[leftIndex];
-                const ContentBrowserEntry& right =
-                    directory.entries[rightIndex];
-                if (left.kind != right.kind)
-                {
-                    return left.kind ==
-                        ContentBrowserEntryKind::Directory;
-                }
+        std::ranges::sort(indices, [&directory, &query](const std::size_t leftIndex, const std::size_t rightIndex) {
+            const ContentBrowserEntry &left = directory.entries[leftIndex];
+            const ContentBrowserEntry &right = directory.entries[rightIndex];
+            if (left.kind != right.kind) {
+                return left.kind == ContentBrowserEntryKind::Directory;
+            }
 
-                int comparison = 0;
-                if (query.sortField == ContentBrowserSortField::Type &&
-                    left.kind == ContentBrowserEntryKind::Asset)
-                {
-                    comparison = CompareCaseInsensitive(
-                        left.assetType, right.assetType);
-                }
-                if (comparison == 0)
-                {
-                    comparison = CompareCaseInsensitive(
-                        left.displayName, right.displayName);
-                }
-                if (comparison == 0)
-                {
-                    comparison = left.absolutePath.compare(
-                        right.absolutePath);
-                }
-                return query.sortDirection ==
-                               ContentBrowserSortDirection::Ascending
-                    ? comparison < 0
-                    : comparison > 0;
-            });
+            int comparison = 0;
+            if (query.sortField == ContentBrowserSortField::Type && left.kind == ContentBrowserEntryKind::Asset) {
+                comparison = CompareCaseInsensitive(left.assetType, right.assetType);
+            }
+            if (comparison == 0) {
+                comparison = CompareCaseInsensitive(left.displayName, right.displayName);
+            }
+            if (comparison == 0) {
+                comparison = left.absolutePath.compare(right.absolutePath);
+            }
+            return query.sortDirection == ContentBrowserSortDirection::Ascending ? comparison < 0 : comparison > 0;
+        });
         return indices;
     }
-} // namespace Horo::Editor
+}  // namespace Horo::Editor

@@ -15,6 +15,15 @@ generation-safe `ProjectSessionCandidate` is ready or a renderer restart
 continuation is returned. Failure exposes Retry/Back without constructing a
 workspace against staged state.
 
+After compatibility and any required migration complete, project-open resolves
+`settings.defaultScene` to an absolute project-contained `.horo` path and performs
+bounded read, schema, object, and document-invariant validation on the operation
+worker. Missing files, parent traversal, symlink escape, unreadable or oversized
+content, unsupported schema, and invalid document topology fail the loading
+operation before derived-state publication or workspace construction. Workspace
+entry repeats the authoritative load boundary and must propagate a typed
+initialization error instead of silently constructing a fallback scene.
+
 `EditorWorkspace` is not a root-path entry point. Its route carries a non-zero
 `ProjectSessionCandidateId`. `OnEnter()` reserves the candidate, constructs the
 controller and attaches panels, then consumes the candidate exactly once. A

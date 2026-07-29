@@ -4,22 +4,18 @@
 
 #include "Horo/Editor/EditorTheme.h"
 
-#include <imgui.h>
-
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
 #include <cstring>
 #include <format>
+#include <imgui.h>
 #include <string>
 #include <vector>
 
-namespace Horo::Editor::Ui
-{
-    namespace
-    {
-        void PushControlStyle()
-        {
+namespace Horo::Editor::Ui {
+    namespace {
+        void PushControlStyle() {
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0F, 5.0F});
             ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::Layout::Radius);
             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
@@ -30,14 +26,55 @@ namespace Horo::Editor::Ui
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
         }
 
-        void PopControlStyle()
-        {
+        void PopControlStyle() {
             ImGui::PopStyleColor(5);
             ImGui::PopStyleVar(3);
         }
 
-        void PushContextPopupWindowStyle()
-        {
+        struct PropertyRowLayout {
+            ImVec2 position;
+            float width{0.0F};
+            float height{32.0F};
+            float controlX{0.0F};
+            float controlWidth{0.0F};
+        };
+
+        [[nodiscard]] PropertyRowLayout BeginPropertyRow(const char *label, const Theme::Fonts &fonts) {
+            const ImVec2 position = ImGui::GetCursorScreenPos();
+            const float width = ImGui::GetContentRegionAvail().x;
+            constexpr float height = 32.0F;
+            constexpr float horizontalPadding = 14.0F;
+            constexpr float minimumControlWidth = 90.0F;
+            const float availableLabelWidth = std::max(56.0F, width - horizontalPadding * 2.0F - minimumControlWidth);
+            const float measuredLabelWidth = fonts.sans->CalcTextSizeA(fonts.sans->FontSize, FLT_MAX, 0.0F, label).x + 8.0F;
+            const float labelWidth = std::clamp(std::max(width * 0.38F, measuredLabelWidth), 56.0F, std::min(130.0F, availableLabelWidth));
+
+            ImVec4 borderLight = Theme::Border();
+            borderLight.w = 0.5F;
+            ImGui::GetWindowDrawList()->AddLine({position.x, position.y + height - 1.0F}, {position.x + width, position.y + height - 1.0F},
+                                                ImGui::GetColorU32(borderLight), 1.0F);
+            ImDrawList *drawList = ImGui::GetWindowDrawList();
+            drawList->PushClipRect({position.x + horizontalPadding, position.y},
+                                   {position.x + horizontalPadding + labelWidth - 4.0F, position.y + height}, true);
+            drawList->AddText(fonts.sans, fonts.sans->FontSize, {position.x + horizontalPadding, position.y + 8.0F},
+                              Theme::U32(Theme::Muted()), label);
+            drawList->PopClipRect();
+
+            const float controlX = position.x + horizontalPadding + labelWidth;
+            return {
+                .position = position,
+                .width = width,
+                .height = height,
+                .controlX = controlX,
+                .controlWidth = std::max(1.0F, width - horizontalPadding * 2.0F - labelWidth),
+            };
+        }
+
+        void EndPropertyRow(const PropertyRowLayout &layout) {
+            ImGui::SetCursorScreenPos({layout.position.x, layout.position.y + layout.height});
+        }
+
+        void PushContextPopupWindowStyle() {
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {8.0F, 8.0F});
             ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, Theme::Layout::Radius);
             ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 1.0F);
@@ -45,44 +82,37 @@ namespace Horo::Editor::Ui
             ImGui::PushStyleColor(ImGuiCol_Border, Theme::BorderStrong());
         }
 
-        void PopContextPopupWindowStyle()
-        {
+        void PopContextPopupWindowStyle() {
             ImGui::PopStyleColor(2);
             ImGui::PopStyleVar(3);
         }
 
-        void PushContextMenuRowStyle()
-        {
+        void PushContextMenuRowStyle() {
             // Context menus can be opened from tightly packed lists whose ItemSpacing is
             // intentionally zero. Keep that presentation detail from collapsing menu
             // rows and their hover/selection bounds down to the text height.
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {0.0F, 6.0F});
         }
 
-        void PopContextMenuRowStyle()
-        {
+        void PopContextMenuRowStyle() {
             ImGui::PopStyleVar();
         }
-    } // namespace
+    }  // namespace
 
     // ── Button ───────────────────────────────────────────────────────────
 
-    [[nodiscard]] bool Button(const ButtonProps& props)
-    {
+    [[nodiscard]] bool Button(const ButtonProps &props) {
         using namespace Theme;
 
         if (!props.enabled)
             ImGui::BeginDisabled();
 
-        if (props.variant == ButtonVariant::Primary)
-        {
+        if (props.variant == ButtonVariant::Primary) {
             ImGui::PushStyleColor(ImGuiCol_Button, Accent());
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, AccentHover());
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, AccentActive());
             ImGui::PushStyleColor(ImGuiCol_Text, DarkText());
-        }
-        else
-        {
+        } else {
             ImGui::PushStyleColor(ImGuiCol_Button, Bg3());
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, AccentSoft());
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{Accent().x, Accent().y, Accent().z, 0.24F});
@@ -92,26 +122,23 @@ namespace Horo::Editor::Ui
         // Apply size preset if no explicit size given
         ImVec2 actualSize = props.size;
         bool pushedFramePadding = false;
-        if (actualSize.x == 0.0F && actualSize.y == 0.0F)
-        {
+        if (actualSize.x == 0.0F && actualSize.y == 0.0F) {
             pushedFramePadding = true;
-            switch (props.componentSize)
-            {
-            case ButtonSize::Small:
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0f, 6.0f});
-                break;
-            case ButtonSize::Medium:
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{14.0f, 9.0f});
-                break;
-            case ButtonSize::Large:
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{18.0f, 12.0f});
-                break;
+            switch (props.componentSize) {
+                case ButtonSize::Small:
+                    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0f, 6.0f});
+                    break;
+                case ButtonSize::Medium:
+                    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{14.0f, 9.0f});
+                    break;
+                case ButtonSize::Large:
+                    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{18.0f, 12.0f});
+                    break;
             }
         }
 
         // fillAvailableWidth
-        if (props.fillAvailableWidth)
-        {
+        if (props.fillAvailableWidth) {
             actualSize.x = ImGui::GetContentRegionAvail().x;
         }
 
@@ -124,30 +151,25 @@ namespace Horo::Editor::Ui
         ImGui::PopStyleColor(4);
         if (!props.enabled)
             ImGui::EndDisabled();
-        if (pushedFramePadding)
-        {
-            ImGui::PopStyleVar(); // FramePadding from componentSize
+        if (pushedFramePadding) {
+            ImGui::PopStyleVar();  // FramePadding from componentSize
         }
         return props.enabled && clicked;
     }
 
     // ── ScopedCard ───────────────────────────────────────────────────────
 
-    ScopedCard::ScopedCard(const char* id, const ImVec2 size, const float padX, const float padY, const ImVec4 bg,
-                           const bool autoResizeY)
-    {
+    ScopedCard::ScopedCard(const char *id, const ImVec2 size, const float padX, const float padY, const ImVec4 bg, const bool autoResizeY) {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{padX, padY});
         ImGui::PushStyleColor(ImGuiCol_ChildBg, bg);
         ImGuiChildFlags childFlags = ImGuiChildFlags_Borders;
-        if (autoResizeY)
-        {
+        if (autoResizeY) {
             childFlags |= (ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysAutoResize);
         }
         ImGui::BeginChild(id, size, childFlags, ImGuiWindowFlags_NoScrollbar);
     }
 
-    ScopedCard::~ScopedCard()
-    {
+    ScopedCard::~ScopedCard() {
         ImGui::EndChild();
         ImGui::PopStyleColor();
         ImGui::PopStyleVar();
@@ -155,8 +177,7 @@ namespace Horo::Editor::Ui
 
     // ── IconCloseButton ──────────────────────────────────────────────────
 
-    [[nodiscard]] bool IconCloseButton(const char* id, const ImVec2 size)
-    {
+    [[nodiscard]] bool IconCloseButton(const char *id, const ImVec2 size) {
         using namespace Theme;
 
         ImGui::PushID(id);
@@ -164,7 +185,7 @@ namespace Horo::Editor::Ui
         const bool clicked = ImGui::InvisibleButton("##close", size);
         const bool hovered = ImGui::IsItemHovered();
 
-        auto* dl = ImGui::GetWindowDrawList();
+        auto *dl = ImGui::GetWindowDrawList();
         constexpr float pad = 4.0F;
         const ImVec2 a{pos.x + pad, pos.y + pad};
         const ImVec2 b{pos.x + size.x - pad, pos.y + size.y - pad};
@@ -177,10 +198,7 @@ namespace Horo::Editor::Ui
     }
 
     /** @copydoc NavigationIconButton */
-    [[nodiscard]] bool NavigationIconButton(
-        const char* id, const NavigationIcon icon, const ImVec2 size,
-        const bool enabled)
-    {
+    [[nodiscard]] bool NavigationIconButton(const char *id, const NavigationIcon icon, const ImVec2 size, const bool enabled) {
         using namespace Theme;
 
         ImGui::PushID(id);
@@ -191,14 +209,11 @@ namespace Horo::Editor::Ui
         const bool active = enabled && ImGui::IsItemActive();
         ImGui::EndDisabled();
 
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        if (hovered || active)
-        {
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        if (hovered || active) {
             ImVec4 surface = active ? Accent() : AccentSoft();
             surface.w = active ? 0.22F : 0.16F;
-            drawList->AddRectFilled(
-                position, {position.x + size.x, position.y + size.y},
-                U32(surface), 4.0F);
+            drawList->AddRectFilled(position, {position.x + size.x, position.y + size.y}, U32(surface), 4.0F);
         }
 
         ImVec4 iconColor = enabled ? (hovered ? Text() : Muted()) : Dim();
@@ -212,32 +227,15 @@ namespace Horo::Editor::Ui
         constexpr float halfWidth = 3.0F;
         constexpr float halfHeight = 5.0F;
         constexpr float thickness = 1.5F;
-        if (icon == NavigationIcon::Back)
-        {
-            drawList->AddLine(
-                {center.x + halfWidth, center.y - halfHeight},
-                {center.x - halfWidth, center.y}, color, thickness);
-            drawList->AddLine(
-                {center.x - halfWidth, center.y},
-                {center.x + halfWidth, center.y + halfHeight}, color, thickness);
-        }
-        else if (icon == NavigationIcon::Forward)
-        {
-            drawList->AddLine(
-                {center.x - halfWidth, center.y - halfHeight},
-                {center.x + halfWidth, center.y}, color, thickness);
-            drawList->AddLine(
-                {center.x + halfWidth, center.y},
-                {center.x - halfWidth, center.y + halfHeight}, color, thickness);
-        }
-        else
-        {
-            drawList->AddLine(
-                {center.x - halfHeight, center.y + halfWidth},
-                {center.x, center.y - halfWidth}, color, thickness);
-            drawList->AddLine(
-                {center.x, center.y - halfWidth},
-                {center.x + halfHeight, center.y + halfWidth}, color, thickness);
+        if (icon == NavigationIcon::Back) {
+            drawList->AddLine({center.x + halfWidth, center.y - halfHeight}, {center.x - halfWidth, center.y}, color, thickness);
+            drawList->AddLine({center.x - halfWidth, center.y}, {center.x + halfWidth, center.y + halfHeight}, color, thickness);
+        } else if (icon == NavigationIcon::Forward) {
+            drawList->AddLine({center.x - halfWidth, center.y - halfHeight}, {center.x + halfWidth, center.y}, color, thickness);
+            drawList->AddLine({center.x + halfWidth, center.y}, {center.x - halfWidth, center.y + halfHeight}, color, thickness);
+        } else {
+            drawList->AddLine({center.x - halfHeight, center.y + halfWidth}, {center.x, center.y - halfWidth}, color, thickness);
+            drawList->AddLine({center.x, center.y - halfWidth}, {center.x + halfHeight, center.y + halfWidth}, color, thickness);
         }
 
         ImGui::PopID();
@@ -245,37 +243,27 @@ namespace Horo::Editor::Ui
     }
 
     /** @copydoc IconButton */
-    bool IconButton(const IconButtonProps& props)
-    {
+    bool IconButton(const IconButtonProps &props) {
         ImGui::PushID(props.id);
         const ImVec2 position = ImGui::GetCursorScreenPos();
         ImGui::BeginDisabled(!props.enabled);
-        const bool clicked =
-            ImGui::InvisibleButton("##icon-button", props.size);
+        const bool clicked = ImGui::InvisibleButton("##icon-button", props.size);
         const bool hovered = props.enabled && ImGui::IsItemHovered();
         const bool active = props.enabled && ImGui::IsItemActive();
         const bool focused = props.enabled && ImGui::IsItemFocused();
         ImGui::EndDisabled();
 
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        drawList->AddRectFilled(
-            position,
-            {position.x + props.size.x, position.y + props.size.y},
-            Theme::U32(
-                active ? Theme::AccentSoft()
-                       : hovered || focused ? Theme::Hover() : Theme::Bg3()),
-            Theme::Layout::Radius);
-        drawList->AddRect(
-            position,
-            {position.x + props.size.x, position.y + props.size.y},
-            Theme::U32(
-                hovered || active || focused ? Theme::Accent()
-                                             : Theme::Border()),
-            Theme::Layout::Radius, 0,
-            hovered || active || focused ? 1.5F : 1.0F);
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        drawList->AddRectFilled(position, {position.x + props.size.x, position.y + props.size.y},
+                                Theme::U32(active               ? Theme::AccentSoft()
+                                           : hovered || focused ? Theme::Hover()
+                                                                : Theme::Bg3()),
+                                Theme::Layout::Radius);
+        drawList->AddRect(position, {position.x + props.size.x, position.y + props.size.y},
+                          Theme::U32(hovered || active || focused ? Theme::Accent() : Theme::Border()), Theme::Layout::Radius, 0,
+                          hovered || active || focused ? 1.5F : 1.0F);
 
-        ImVec4 iconTone =
-            hovered || active || focused ? Theme::Accent() : Theme::Text();
+        ImVec4 iconTone = hovered || active || focused ? Theme::Accent() : Theme::Text();
         if (!props.enabled)
             iconTone.w *= 0.45F;
         const ImU32 iconColor = Theme::U32(iconTone);
@@ -283,35 +271,18 @@ namespace Horo::Editor::Ui
             position.x + props.size.x * 0.5F,
             position.y + props.size.y * 0.5F,
         };
-        if (props.glyph == IconButtonGlyph::Plus)
-        {
-            drawList->AddLine(
-                {center.x - 5.0F, center.y},
-                {center.x + 5.0F, center.y}, iconColor, 1.6F);
-            drawList->AddLine(
-                {center.x, center.y - 5.0F},
-                {center.x, center.y + 5.0F}, iconColor, 1.6F);
-        }
-        else
-        {
+        if (props.glyph == IconButtonGlyph::Plus) {
+            drawList->AddLine({center.x - 5.0F, center.y}, {center.x + 5.0F, center.y}, iconColor, 1.6F);
+            drawList->AddLine({center.x, center.y - 5.0F}, {center.x, center.y + 5.0F}, iconColor, 1.6F);
+        } else {
             const ImVec2 origin{center.x - 9.0F, center.y - 7.0F};
-            drawList->AddLine(
-                origin, {origin.x + 6.0F, origin.y}, iconColor, 1.5F);
-            drawList->AddLine(
-                {origin.x + 6.0F, origin.y},
-                {origin.x + 8.0F, origin.y + 2.0F}, iconColor, 1.5F);
-            drawList->AddRect(
-                {origin.x, origin.y + 2.0F},
-                {origin.x + 18.0F, origin.y + 12.0F},
-                iconColor, 2.0F, 0, 1.5F);
-            drawList->AddLine(
-                {origin.x, origin.y + 4.5F},
-                {origin.x + 18.0F, origin.y + 4.5F},
-                iconColor, 1.25F);
+            drawList->AddLine(origin, {origin.x + 6.0F, origin.y}, iconColor, 1.5F);
+            drawList->AddLine({origin.x + 6.0F, origin.y}, {origin.x + 8.0F, origin.y + 2.0F}, iconColor, 1.5F);
+            drawList->AddRect({origin.x, origin.y + 2.0F}, {origin.x + 18.0F, origin.y + 12.0F}, iconColor, 2.0F, 0, 1.5F);
+            drawList->AddLine({origin.x, origin.y + 4.5F}, {origin.x + 18.0F, origin.y + 4.5F}, iconColor, 1.25F);
         }
 
-        if (hovered && props.tooltip != nullptr &&
-            props.tooltip[0] != '\0')
+        if (hovered && props.tooltip != nullptr && props.tooltip[0] != '\0')
             ImGui::SetTooltip("%s", props.tooltip);
         ImGui::PopID();
         return props.enabled && clicked;
@@ -319,8 +290,7 @@ namespace Horo::Editor::Ui
 
     // ── SectionTitle ─────────────────────────────────────────────────────
 
-    void SectionTitle(const char* upperCaseLabel, const Theme::Fonts& fonts)
-    {
+    void SectionTitle(const char *upperCaseLabel, const Theme::Fonts &fonts) {
         Theme::ScopedTextStyle ts(fonts.sansEmphasis, 18.0F, Theme::FontPx::SansEmphasis);
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
         ImGui::TextUnformatted(upperCaseLabel);
@@ -329,8 +299,7 @@ namespace Horo::Editor::Ui
 
     // ── FieldLabel ───────────────────────────────────────────────────────
 
-    void FieldLabel(const char* upperCaseLabel, const Theme::Fonts& fonts)
-    {
+    void FieldLabel(const char *upperCaseLabel, const Theme::Fonts &fonts) {
         Theme::ScopedTextStyle ts(fonts.sansEmphasis, 12.0F, Theme::FontPx::SansEmphasis);
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
         ImGui::TextUnformatted(upperCaseLabel);
@@ -339,8 +308,7 @@ namespace Horo::Editor::Ui
 
     // ── Hint ─────────────────────────────────────────────────────────────
 
-    void Hint(const char* text, const Theme::Fonts& fonts)
-    {
+    void Hint(const char *text, const Theme::Fonts &fonts) {
         Theme::ScopedTextStyle ts(fonts.sans, 12.0F, Theme::FontPx::Sans);
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
@@ -351,8 +319,7 @@ namespace Horo::Editor::Ui
 
     // ── ErrorText ────────────────────────────────────────────────────────
 
-    void ErrorText(const char* text, const Theme::Fonts& fonts)
-    {
+    void ErrorText(const char *text, const Theme::Fonts &fonts) {
         Theme::ScopedTextStyle ts(fonts.sansCompact, 12.0F, Theme::FontPx::SansCompact);
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Err());
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
@@ -362,9 +329,8 @@ namespace Horo::Editor::Ui
     }
 
     /** @copydoc TextLink */
-    bool TextLink(const char* id, const char* label, ImFont* font, const float fontSize, const bool current)
-    {
-        ImFont* resolvedFont = font != nullptr ? font : ImGui::GetFont();
+    bool TextLink(const char *id, const char *label, ImFont *font, const float fontSize, const bool current) {
+        ImFont *resolvedFont = font != nullptr ? font : ImGui::GetFont();
         const ImVec2 position = ImGui::GetCursorScreenPos();
         const ImVec2 textSize = resolvedFont->CalcTextSizeA(fontSize, FLT_MAX, 0.0F, label);
         const ImVec2 hitSize{textSize.x, std::max(textSize.y, 20.0F)};
@@ -374,16 +340,13 @@ namespace Horo::Editor::Ui
         if (hovered)
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
-        const ImU32 color = Theme::U32(
-            hovered || focused ? Theme::Accent() : (current ? Theme::Text() : Theme::Muted()));
+        const ImU32 color = Theme::U32(hovered || focused ? Theme::Accent() : (current ? Theme::Text() : Theme::Muted()));
         const ImVec2 textPosition{position.x, position.y + (hitSize.y - textSize.y) * 0.5F};
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
         drawList->AddText(resolvedFont, fontSize, textPosition, color, label);
-        if (hovered || focused)
-        {
-            drawList->AddLine(
-                {textPosition.x, textPosition.y + textSize.y + 1.0F},
-                {textPosition.x + textSize.x, textPosition.y + textSize.y + 1.0F}, color, 1.0F);
+        if (hovered || focused) {
+            drawList->AddLine({textPosition.x, textPosition.y + textSize.y + 1.0F},
+                              {textPosition.x + textSize.x, textPosition.y + textSize.y + 1.0F}, color, 1.0F);
         }
         return activated;
     }
@@ -391,119 +354,92 @@ namespace Horo::Editor::Ui
     // ── Badge / tag ──────────────────────────────────────────────────────
 
     /** @copydoc BadgeToneColor */
-    ImVec4 BadgeToneColor(const BadgeTone tone)
-    {
-        switch (tone)
-        {
-        case BadgeTone::Accent:
-            return Theme::Accent();
-        case BadgeTone::Success:
-            return Theme::Ok();
-        case BadgeTone::Warning:
-            return Theme::Warn();
-        case BadgeTone::Error:
-            return Theme::Err();
-        case BadgeTone::Neutral:
-        default:
-            return Theme::Muted();
+    ImVec4 BadgeToneColor(const BadgeTone tone) {
+        switch (tone) {
+            case BadgeTone::Accent:
+                return Theme::Accent();
+            case BadgeTone::Success:
+                return Theme::Ok();
+            case BadgeTone::Warning:
+                return Theme::Warn();
+            case BadgeTone::Error:
+                return Theme::Err();
+            case BadgeTone::Neutral:
+            default:
+                return Theme::Muted();
         }
     }
 
-    namespace
-    {
-        [[nodiscard]] ImVec2 MeasureBadge(
-            const BadgeProps& props, const Theme::Fonts& fonts)
-        {
-            const float horizontalPadding =
-                props.size == BadgeSize::Medium ? 12.0F : 9.0F;
-            const float verticalPadding =
-                props.size == BadgeSize::Medium ? 9.0F : 4.0F;
+    namespace {
+        [[nodiscard]] ImVec2 MeasureBadge(const BadgeProps &props, const Theme::Fonts &fonts) {
+            const float horizontalPadding = props.size == BadgeSize::Medium ? 12.0F : 9.0F;
+            const float verticalPadding = props.size == BadgeSize::Medium ? 9.0F : 4.0F;
             constexpr float indicatorWidth = 12.0F;
-            Theme::ScopedTextStyle textStyle(
-                fonts.sansCompact,
-                props.size == BadgeSize::Medium ? 12.0F : 10.5F,
-                Theme::FontPx::SansCompact);
+            Theme::ScopedTextStyle textStyle(fonts.sansCompact, props.size == BadgeSize::Medium ? 12.0F : 10.5F,
+                                             Theme::FontPx::SansCompact);
             const ImVec2 textSize = ImGui::CalcTextSize(props.label);
             return {
-                textSize.x + horizontalPadding * 2.0F +
-                    (props.leadingIndicator ? indicatorWidth : 0.0F),
+                textSize.x + horizontalPadding * 2.0F + (props.leadingIndicator ? indicatorWidth : 0.0F),
                 textSize.y + verticalPadding * 2.0F,
             };
         }
-    } // namespace
+    }  // namespace
 
     /** @copydoc BadgeWidth */
-    float BadgeWidth(const BadgeProps& props, const Theme::Fonts& fonts)
-    {
+    float BadgeWidth(const BadgeProps &props, const Theme::Fonts &fonts) {
         return MeasureBadge(props, fonts).x;
     }
 
     /** @copydoc Badge */
-    void Badge(const BadgeProps& props, const Theme::Fonts& fonts)
-    {
-        const float horizontalPadding =
-            props.size == BadgeSize::Medium ? 12.0F : 9.0F;
-        const float verticalPadding =
-            props.size == BadgeSize::Medium ? 9.0F : 4.0F;
+    void Badge(const BadgeProps &props, const Theme::Fonts &fonts) {
+        const float horizontalPadding = props.size == BadgeSize::Medium ? 12.0F : 9.0F;
+        const float verticalPadding = props.size == BadgeSize::Medium ? 9.0F : 4.0F;
         constexpr float radius = 4.0F;
         constexpr float inlineGap = 6.0F;
         const ImVec4 color = BadgeToneColor(props.tone);
-        Theme::ScopedTextStyle textStyle(
-            fonts.sansCompact,
-            props.size == BadgeSize::Medium ? 12.0F : 10.5F,
-            Theme::FontPx::SansCompact);
+        Theme::ScopedTextStyle textStyle(fonts.sansCompact, props.size == BadgeSize::Medium ? 12.0F : 10.5F, Theme::FontPx::SansCompact);
         const ImVec2 textSize = ImGui::CalcTextSize(props.label);
         const ImVec2 badgeMin = ImGui::GetCursorScreenPos();
         const ImVec2 badgeSize{
-            textSize.x + horizontalPadding * 2.0F +
-                (props.leadingIndicator ? 12.0F : 0.0F),
+            textSize.x + horizontalPadding * 2.0F + (props.leadingIndicator ? 12.0F : 0.0F),
             textSize.y + verticalPadding * 2.0F,
         };
-        const ImVec2 badgeMax{
-            badgeMin.x + badgeSize.x, badgeMin.y + badgeSize.y};
+        const ImVec2 badgeMax{badgeMin.x + badgeSize.x, badgeMin.y + badgeSize.y};
         float textX = badgeMin.x + horizontalPadding;
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
 
         ImVec4 surface = color;
         surface.w = 0.10F;
         ImVec4 border = color;
         border.w = 0.28F;
-        drawList->AddRectFilled(
-            badgeMin, badgeMax, Theme::U32(surface), radius);
-        drawList->AddRect(
-            badgeMin, badgeMax, Theme::U32(border), radius);
-        if (props.leadingIndicator)
-        {
+        drawList->AddRectFilled(badgeMin, badgeMax, Theme::U32(surface), radius);
+        drawList->AddRect(badgeMin, badgeMax, Theme::U32(border), radius);
+        if (props.leadingIndicator) {
             constexpr float indicatorRadius = 3.0F;
             const ImVec2 center{
                 badgeMin.x + horizontalPadding + indicatorRadius,
                 badgeMin.y + badgeSize.y * 0.5F,
             };
-            drawList->AddCircleFilled(
-                center, indicatorRadius, Theme::U32(color));
+            drawList->AddCircleFilled(center, indicatorRadius, Theme::U32(color));
             textX += 12.0F;
         }
         const ImVec2 textPosition{
             textX,
             badgeMin.y + (badgeSize.y - textSize.y) * 0.5F,
         };
-        drawList->AddText(
-            ImGui::GetFont(), ImGui::GetFontSize(), textPosition,
-            Theme::U32(color), props.label);
+        drawList->AddText(ImGui::GetFont(), ImGui::GetFontSize(), textPosition, Theme::U32(color), props.label);
         ImGui::Dummy(badgeSize);
         ImGui::SetCursorScreenPos({badgeMax.x + inlineGap, badgeMin.y});
     }
 
     // ── DashedSeparator ──────────────────────────────────────────────────
 
-    void DashedSeparator(const float dash, const float gap)
-    {
+    void DashedSeparator(const float dash, const float gap) {
         const ImVec2 p = ImGui::GetCursorScreenPos();
         const float w = ImGui::GetContentRegionAvail().x;
-        auto* dl = ImGui::GetWindowDrawList();
+        auto *dl = ImGui::GetWindowDrawList();
         float x = p.x;
-        while (x < p.x + w)
-        {
+        while (x < p.x + w) {
             const float end = std::min(x + dash, p.x + w);
             dl->AddLine({x, p.y}, {end, p.y}, Theme::U32(Theme::Border()), 1.0F);
             x = end + gap;
@@ -512,11 +448,8 @@ namespace Horo::Editor::Ui
     }
 
     /** @copydoc LabeledSeparator */
-    void LabeledSeparator(
-        const char* label, const Theme::Fonts& fonts)
-    {
-        Theme::ScopedTextStyle textStyle(
-            fonts.sansCompact, 12.0F, Theme::FontPx::SansCompact);
+    void LabeledSeparator(const char *label, const Theme::Fonts &fonts) {
+        Theme::ScopedTextStyle textStyle(fonts.sansCompact, 12.0F, Theme::FontPx::SansCompact);
         const ImVec2 textSize = ImGui::CalcTextSize(label);
         ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
         ImGui::TextUnformatted(label);
@@ -525,24 +458,17 @@ namespace Horo::Editor::Ui
         const ImVec2 minimum = ImGui::GetItemRectMin();
         const ImVec2 maximum = ImGui::GetItemRectMax();
         const float lineStart = maximum.x + 12.0F;
-        const float lineEnd =
-            ImGui::GetWindowPos().x +
-            ImGui::GetWindowContentRegionMax().x;
-        if (lineEnd > lineStart)
-        {
-            ImGui::GetWindowDrawList()->AddLine(
-                {lineStart, minimum.y + textSize.y * 0.5F},
-                {lineEnd, minimum.y + textSize.y * 0.5F},
-                Theme::U32(Theme::Border()), 1.0F);
+        const float lineEnd = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+        if (lineEnd > lineStart) {
+            ImGui::GetWindowDrawList()->AddLine({lineStart, minimum.y + textSize.y * 0.5F}, {lineEnd, minimum.y + textSize.y * 0.5F},
+                                                Theme::U32(Theme::Border()), 1.0F);
         }
     }
 
     // ── SettingGroup ─────────────────────────────────────────────────────
 
-    void SettingGroup(const char* label, const Theme::Fonts& fonts, const bool first)
-    {
-        if (!first)
-        {
+    void SettingGroup(const char *label, const Theme::Fonts &fonts, const bool first) {
+        if (!first) {
             ImGui::Dummy({0.0F, 18.0F});
         }
 
@@ -559,41 +485,35 @@ namespace Horo::Editor::Ui
 
     // ── ComboControl ─────────────────────────────────────────────────────
 
-    [[nodiscard]] const char* ComboArrayLabel(const void* context, const int index)
-    {
-        return static_cast<const char*const *>(context)[index];
+    [[nodiscard]] const char *ComboArrayLabel(const void *context, const int index) {
+        return static_cast<const char *const *>(context)[index];
     }
 
-    bool DrawComboRow(const int index, int* value, const ComboItemSource& source, const Theme::Fonts& fonts)
-    {
+    bool DrawComboRow(const int index, int *value, const ComboItemSource &source, const Theme::Fonts &fonts) {
         ImGui::PushID(index);
         const bool isSelected = (*value == index);
         const bool isEnabled = source.enabled == nullptr || source.enabled(source.context, index);
         const ImVec2 rowMin = ImGui::GetCursorScreenPos();
         constexpr float rowH = 28.0F;
         const float rowW = ImGui::GetContentRegionAvail().x;
-        const std::string rowId =
-            std::string(source.label(source.context, index)) + "###combo_option_" + std::to_string(index);
+        const std::string rowId = std::string(source.label(source.context, index)) + "###combo_option_" + std::to_string(index);
         ImGui::InvisibleButton(rowId.c_str(), {rowW, rowH});
         const bool rowHovered = ImGui::IsItemHovered();
         const bool clicked = isEnabled && ImGui::IsItemClicked();
-        if (clicked)
-        {
+        if (clicked) {
             *value = index;
             ImGui::CloseCurrentPopup();
         }
-        auto* drawList = ImGui::GetWindowDrawList();
+        auto *drawList = ImGui::GetWindowDrawList();
         if (rowHovered || isSelected)
             drawList->AddRectFilled(rowMin, {rowMin.x + rowW, rowMin.y + rowH}, Theme::U32(Theme::Hover()));
         drawList->AddText(fonts.sansCompact ? fonts.sansCompact : ImGui::GetFont(), 14.0F,
                           {rowMin.x + 14.0F, rowMin.y + (rowH - 14.0F) * 0.5F},
                           Theme::U32(isEnabled ? (isSelected ? Theme::Text() : Theme::Muted()) : Theme::Dim()),
                           source.label(source.context, index));
-        if (!isEnabled && rowHovered && source.disabledTooltip != nullptr)
-        {
-            const char* const tooltip = source.disabledTooltip(source.context, index);
-            if (tooltip != nullptr && tooltip[0] != '\0')
-            {
+        if (!isEnabled && rowHovered && source.disabledTooltip != nullptr) {
+            const char *const tooltip = source.disabledTooltip(source.context, index);
+            if (tooltip != nullptr && tooltip[0] != '\0') {
                 ImGui::SetTooltip("%s", tooltip);
             }
         }
@@ -601,17 +521,14 @@ namespace Horo::Editor::Ui
         return clicked;
     }
 
-    bool ComboControl(const char* id, int* value, const char* const items[], const int itemCount,
-                      const Theme::Fonts& fonts,
-                      bool error, const float height)
-    {
+    bool ComboControl(const char *id, int *value, const char *const items[], const int itemCount, const Theme::Fonts &fonts, bool error,
+                      const float height) {
         const ComboItemSource source{.context = items, .label = ComboArrayLabel};
         return ComboControl(id, value, itemCount, source, fonts, error, height);
     }
 
-    bool ComboControl(const char* id, int* value, const int itemCount, const ComboItemSource& source,
-                      const Theme::Fonts& fonts, bool error, const float height)
-    {
+    bool ComboControl(const char *id, int *value, const int itemCount, const ComboItemSource &source, const Theme::Fonts &fonts, bool error,
+                      const float height) {
         IM_ASSERT(source.label != nullptr);
         bool changed = false;
         ImGui::PushID(id);
@@ -630,21 +547,19 @@ namespace Horo::Editor::Ui
         const std::string popupId = std::string("##popup_") + id;
         const bool popupOpen = ImGui::IsPopupOpen(popupId.c_str());
 
-        auto* dl = ImGui::GetWindowDrawList();
-        dl->AddRectFilled(fieldPos, {fieldPos.x + fieldW, fieldPos.y + fieldH},
-                          Theme::U32(fieldHovered ? Theme::Hover() : Theme::Bg3()), Theme::Layout::Radius);
+        auto *dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled(fieldPos, {fieldPos.x + fieldW, fieldPos.y + fieldH}, Theme::U32(fieldHovered ? Theme::Hover() : Theme::Bg3()),
+                          Theme::Layout::Radius);
         const ImVec4 borderColor = error ? Theme::Err() : Theme::Border();
         const ImVec4 popupBorderColor = popupOpen ? Theme::Accent() : borderColor;
-        dl->AddRect(fieldPos, {fieldPos.x + fieldW, fieldPos.y + fieldH}, Theme::U32(popupBorderColor),
-                    Theme::Layout::Radius, 0, popupOpen ? 1.5F : 1.0F);
+        dl->AddRect(fieldPos, {fieldPos.x + fieldW, fieldPos.y + fieldH}, Theme::U32(popupBorderColor), Theme::Layout::Radius, 0,
+                    popupOpen ? 1.5F : 1.0F);
 
         // Selected value label
         {
-            ImFont* font = fonts.sansCompact ? fonts.sansCompact : ImGui::GetFont();
-            const char* label = (*value >= 0 && *value < itemCount) ? source.label(source.context, *value) : "";
-            dl->AddText(font, 15.0F, {fieldPos.x + 10.0F, fieldPos.y + (fieldH - 15.0F) * 0.5F},
-                        Theme::U32(Theme::Text()),
-                        label);
+            ImFont *font = fonts.sansCompact ? fonts.sansCompact : ImGui::GetFont();
+            const char *label = (*value >= 0 && *value < itemCount) ? source.label(source.context, *value) : "";
+            dl->AddText(font, 15.0F, {fieldPos.x + 10.0F, fieldPos.y + (fieldH - 15.0F) * 0.5F}, Theme::U32(Theme::Text()), label);
         }
 
         // Right-side arrow
@@ -668,22 +583,18 @@ namespace Horo::Editor::Ui
         ImGui::PushStyleColor(ImGuiCol_PopupBg, Theme::Bg2());
         ImGui::PushStyleColor(ImGuiCol_Border, Theme::BorderStrong());
 
-        if (ImGui::BeginPopup(popupId.c_str(), ImGuiWindowFlags_NoMove))
-        {
+        if (ImGui::BeginPopup(popupId.c_str(), ImGuiWindowFlags_NoMove)) {
             const ImVec2 pMin = ImGui::GetWindowPos();
             const ImVec2 pMax = {pMin.x + ImGui::GetWindowWidth(), pMin.y + ImGui::GetWindowHeight()};
 
-            auto* bgdl = ImGui::GetBackgroundDrawList();
+            auto *bgdl = ImGui::GetBackgroundDrawList();
             constexpr int shadowLayers = 12;
-            for (int i = shadowLayers; i >= 1; --i)
-            {
+            for (int i = shadowLayers; i >= 1; --i) {
                 const float t = static_cast<float>(i) / static_cast<float>(shadowLayers);
                 const float spread = 16.0F * t;
                 const float alpha = 0.45F * (1.0F - t) * 0.11F;
-                bgdl->AddRectFilled({pMin.x - spread, pMin.y + 3.0F - spread * 0.25F},
-                                    {pMax.x + spread, pMax.y + 3.0F + spread},
-                                    Theme::U32(ImVec4{0.0F, 0.0F, 0.0F, alpha}),
-                                    6.0F + spread);
+                bgdl->AddRectFilled({pMin.x - spread, pMin.y + 3.0F - spread * 0.25F}, {pMax.x + spread, pMax.y + 3.0F + spread},
+                                    Theme::U32(ImVec4{0.0F, 0.0F, 0.0F, alpha}), 6.0F + spread);
             }
 
             for (int i = 0; i < itemCount; ++i)
@@ -700,9 +611,7 @@ namespace Horo::Editor::Ui
     // ── InputTextControl ─────────────────────────────────────────────────
 
     /** @copydoc InputTextControl(const char *, char *, size_t, const Theme::Fonts &, bool, float) */
-    bool InputTextControl(const char* id, char* buffer, const size_t bufferSize, const Theme::Fonts& fonts, bool error,
-                          const float width)
-    {
+    bool InputTextControl(const char *id, char *buffer, const size_t bufferSize, const Theme::Fonts &fonts, bool error, const float width) {
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0F, 7.0F});
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::Layout::Radius);
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
@@ -720,19 +629,15 @@ namespace Horo::Editor::Ui
         }
         ImGui::PopItemWidth();
 
-        if (ImGui::IsItemActive())
-        {
+        if (ImGui::IsItemActive()) {
             const ImVec2 pMin = ImGui::GetItemRectMin();
             const ImVec2 pMax = ImGui::GetItemRectMax();
             ImGui::GetWindowDrawList()->AddRect(pMin, pMax, Theme::U32(error ? Theme::ErrSoft() : Theme::AccentSoft()),
                                                 Theme::Layout::Radius + 2.0F, 0, 2.0F);
-        }
-        else if (ImGui::IsItemHovered())
-        {
+        } else if (ImGui::IsItemHovered()) {
             const ImVec2 pMin = ImGui::GetItemRectMin();
             const ImVec2 pMax = ImGui::GetItemRectMax();
-            ImGui::GetWindowDrawList()->AddRect(pMin, pMax, Theme::U32(Theme::BorderStrong()), Theme::Layout::Radius, 0,
-                                                1.0F);
+            ImGui::GetWindowDrawList()->AddRect(pMin, pMax, Theme::U32(Theme::BorderStrong()), Theme::Layout::Radius, 0, 1.0F);
         }
 
         ImGui::PopStyleColor(5);
@@ -741,10 +646,8 @@ namespace Horo::Editor::Ui
     }
 
     /** @copydoc InputTextControl(const char *, std::string &, size_t, const Theme::Fonts &, bool, float) */
-    bool InputTextControl(const char* id, std::string& value, const size_t maxSize, const Theme::Fonts& fonts,
-                          bool error,
-                          const float width)
-    {
+    bool InputTextControl(const char *id, std::string &value, const size_t maxSize, const Theme::Fonts &fonts, bool error,
+                          const float width) {
         if (maxSize == 0)
             return false;
         value.resize(std::min(value.size(), maxSize - 1));
@@ -755,8 +658,69 @@ namespace Horo::Editor::Ui
         return changed;
     }
 
-    bool ColorHexControl(const char* id, std::string& value, const size_t maxSize, const Theme::Fonts& fonts)
-    {
+    /** @copydoc SelectableTextBlock */
+    bool SelectableTextBlock(const char *id, char *buffer, const size_t bufferSize,
+                             const std::span<const SelectableTextLineLayout> lineLayouts, const float alignedColumnX, const float width) {
+        if (buffer == nullptr || bufferSize == 0U)
+            return false;
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {0.0F, 1.0F});
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0F);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0F);
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, IM_COL32(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, IM_COL32(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_TextSelectedBg, Theme::AccentSoft());
+
+        const float lineHeight = ImGui::GetFontSize();
+        const float blockHeight = std::max(lineHeight + 2.0F, lineHeight * static_cast<float>(lineLayouts.size()) + 2.0F);
+        const float resolvedWidth = width < 0.0F ? ImGui::GetContentRegionAvail().x : width;
+        static_cast<void>(ImGui::InputTextMultiline(id, buffer, bufferSize, {resolvedWidth, blockHeight},
+                                                    ImGuiInputTextFlags_ReadOnly | ImGuiInputTextFlags_NoHorizontalScroll));
+        const bool active = ImGui::IsItemActive();
+        const ImVec2 itemMin = ImGui::GetItemRectMin();
+        const ImVec2 textOrigin{itemMin.x, itemMin.y + 1.0F};
+
+        ImGui::PopStyleColor(6);
+        ImGui::PopStyleVar(3);
+
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        const float visibleMinY = ImGui::GetWindowPos().y;
+        const float visibleMaxY = visibleMinY + ImGui::GetWindowHeight();
+        drawList->PushClipRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), true);
+
+        const char *lineBegin = buffer;
+        for (std::size_t lineIndex = 0; lineIndex < lineLayouts.size(); ++lineIndex) {
+            const char *lineEnd = std::strchr(lineBegin, '\n');
+            if (lineEnd == nullptr)
+                lineEnd = buffer + std::strlen(buffer);
+
+            const float lineY = textOrigin.y + lineHeight * static_cast<float>(lineIndex);
+            if (lineY + lineHeight >= visibleMinY && lineY <= visibleMaxY) {
+                const SelectableTextLineLayout &layout = lineLayouts[lineIndex];
+                const ImU32 color = ImGui::ColorConvertFloat4ToU32(layout.color);
+                const std::size_t lineByteCount = static_cast<std::size_t>(lineEnd - lineBegin);
+                const std::size_t columnOffset = std::min(layout.alignedColumnByteOffset, lineByteCount);
+                if (columnOffset > 0U && alignedColumnX > 0.0F) {
+                    const char *columnBegin = lineBegin + columnOffset;
+                    drawList->AddText(ImGui::GetFont(), lineHeight, {textOrigin.x, lineY}, color, lineBegin, columnBegin);
+                    drawList->AddText(ImGui::GetFont(), lineHeight, {textOrigin.x + alignedColumnX, lineY}, color, columnBegin, lineEnd);
+                } else {
+                    drawList->AddText(ImGui::GetFont(), lineHeight, {textOrigin.x, lineY}, color, lineBegin, lineEnd);
+                }
+            }
+
+            if (*lineEnd == '\0')
+                break;
+            lineBegin = lineEnd + 1;
+        }
+        drawList->PopClipRect();
+        return active;
+    }
+
+    bool ColorHexControl(const char *id, std::string &value, const size_t maxSize, const Theme::Fonts &fonts) {
         if (maxSize == 0)
             return false;
         value.resize(std::min(value.size(), maxSize - 1));
@@ -769,8 +733,7 @@ namespace Horo::Editor::Ui
 
     // ── ColorHexControl ───────────────────────────────────────────────────
 
-    [[nodiscard]] int HexDigit(const char value)
-    {
+    [[nodiscard]] int HexDigit(const char value) {
         if (value >= '0' && value <= '9')
             return value - '0';
         if (value >= 'a' && value <= 'f')
@@ -780,27 +743,20 @@ namespace Horo::Editor::Ui
         return -1;
     }
 
-    [[nodiscard]] bool ParseHexColor(const char* text, ImVec4& out)
-    {
+    [[nodiscard]] bool ParseHexColor(const char *text, ImVec4 &out) {
         if (text == nullptr || text[0] != '#' || text[7] != '\0')
             return false;
-        const std::array<int, 6> digits = {
-            HexDigit(text[1]), HexDigit(text[2]), HexDigit(text[3]),
-            HexDigit(text[4]), HexDigit(text[5]), HexDigit(text[6])
-        };
+        const std::array<int, 6> digits = {HexDigit(text[1]), HexDigit(text[2]), HexDigit(text[3]),
+                                           HexDigit(text[4]), HexDigit(text[5]), HexDigit(text[6])};
         for (const int digit : digits)
             if (digit < 0)
                 return false;
-        out = ImVec4{
-            static_cast<float>(digits[0] * 16 + digits[1]) / 255.0F,
-            static_cast<float>(digits[2] * 16 + digits[3]) / 255.0F,
-            static_cast<float>(digits[4] * 16 + digits[5]) / 255.0F, 1.0F
-        };
+        out = ImVec4{static_cast<float>(digits[0] * 16 + digits[1]) / 255.0F, static_cast<float>(digits[2] * 16 + digits[3]) / 255.0F,
+                     static_cast<float>(digits[4] * 16 + digits[5]) / 255.0F, 1.0F};
         return true;
     }
 
-    void WriteCanonicalColor(char* buffer, const size_t bufferSize, const ImVec4 color)
-    {
+    void WriteCanonicalColor(char *buffer, const size_t bufferSize, const ImVec4 color) {
         if (buffer == nullptr || bufferSize == 0)
             return;
         const auto red = static_cast<int>(color.x * 255.0F + 0.5F);
@@ -812,25 +768,23 @@ namespace Horo::Editor::Ui
         buffer[count] = '\0';
     }
 
-    bool ColorHexControl(const char* id, char* buffer, const size_t bufferSize, const Theme::Fonts& fonts)
-    {
-        const auto pack = [](const ImVec4 color) { return ImGui::ColorConvertFloat4ToU32(color); };
-        const auto unpack = [](const ImU32 color) { return ImGui::ColorConvertU32ToFloat4(color); };
+    bool ColorHexControl(const char *id, char *buffer, const size_t bufferSize, const Theme::Fonts &fonts) {
+        const auto pack = [](const ImVec4 color) {
+            return ImGui::ColorConvertFloat4ToU32(color);
+        };
+        const auto unpack = [](const ImU32 color) {
+            return ImGui::ColorConvertU32ToFloat4(color);
+        };
 
         ImGui::PushID(id);
-        ImGuiStorage* const storage = ImGui::GetStateStorage();
+        ImGuiStorage *const storage = ImGui::GetStateStorage();
         const ImGuiID lastValidKey = ImGui::GetID("last-valid-color");
         ImVec4 current{};
-        if (ParseHexColor(buffer, current))
-        {
+        if (ParseHexColor(buffer, current)) {
             storage->SetInt(lastValidKey, static_cast<int>(pack(current)));
-        }
-        else if (storage->GetInt(lastValidKey, 0) != 0)
-        {
+        } else if (storage->GetInt(lastValidKey, 0) != 0) {
             current = unpack(static_cast<ImU32>(storage->GetInt(lastValidKey)));
-        }
-        else
-        {
+        } else {
             current = Theme::Accent();
             storage->SetInt(lastValidKey, static_cast<int>(pack(current)));
         }
@@ -839,10 +793,9 @@ namespace Horo::Editor::Ui
         constexpr ImVec2 swatchSize{34.0F, 34.0F};
         ImGui::InvisibleButton("swatch", swatchSize);
         const bool openPicker = ImGui::IsItemClicked();
-        ImDrawList* const drawList = ImGui::GetWindowDrawList();
+        ImDrawList *const drawList = ImGui::GetWindowDrawList();
         const ImVec2 swatchEnd{swatchPosition.x + swatchSize.x, swatchPosition.y + swatchSize.y};
-        drawList->AddRectFilled(swatchPosition, swatchEnd, ImGui::ColorConvertFloat4ToU32(current),
-                                Theme::Layout::Radius);
+        drawList->AddRectFilled(swatchPosition, swatchEnd, ImGui::ColorConvertFloat4ToU32(current), Theme::Layout::Radius);
         drawList->AddRect(swatchPosition, swatchEnd, Theme::U32(Theme::Border()), Theme::Layout::Radius);
         if (openPicker)
             ImGui::OpenPopup("picker");
@@ -853,8 +806,7 @@ namespace Horo::Editor::Ui
         bool validChange = false;
         {
             Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F, Theme::FontPx::SansCompact);
-            if (ImGui::InputText("hex", buffer, bufferSize) && ParseHexColor(buffer, current))
-            {
+            if (ImGui::InputText("hex", buffer, bufferSize) && ParseHexColor(buffer, current)) {
                 storage->SetInt(lastValidKey, static_cast<int>(pack(current)));
                 validChange = true;
             }
@@ -862,12 +814,10 @@ namespace Horo::Editor::Ui
         ImGui::PopItemWidth();
         PopControlStyle();
 
-        if (ImGui::BeginPopup("picker"))
-        {
+        if (ImGui::BeginPopup("picker")) {
             ImGui::TextUnformatted("Accent color");
             ImGui::Separator();
-            if (ImGui::ColorPicker3("##color-picker", &current.x, ImGuiColorEditFlags_NoSidePreview))
-            {
+            if (ImGui::ColorPicker3("##color-picker", &current.x, ImGuiColorEditFlags_NoSidePreview)) {
                 WriteCanonicalColor(buffer, bufferSize, current);
                 storage->SetInt(lastValidKey, static_cast<int>(pack(current)));
                 validChange = true;
@@ -880,8 +830,7 @@ namespace Horo::Editor::Ui
 
     // ── InputIntControl ──────────────────────────────────────────────────
 
-    void InputIntControl(const char* id, int* value, const Theme::Fonts& fonts)
-    {
+    void InputIntControl(const char *id, int *value, const Theme::Fonts &fonts) {
         PushControlStyle();
         ImGui::PushItemWidth(-1.0F);
         {
@@ -894,8 +843,7 @@ namespace Horo::Editor::Ui
 
     // ── InputFloatControl ────────────────────────────────────────────────
 
-    void InputFloatControl(const char* id, float* value, const Theme::Fonts& fonts)
-    {
+    void InputFloatControl(const char *id, float *value, const Theme::Fonts &fonts) {
         PushControlStyle();
         ImGui::PushItemWidth(-1.0F);
         {
@@ -908,9 +856,8 @@ namespace Horo::Editor::Ui
 
     // ── SliderIntControl ─────────────────────────────────────────────────
 
-    void SliderIntControl(const char* id, int* value, const int minValue, const int maxValue,
-                          const SliderValueFormat format, const Theme::Fonts& fonts, const int step)
-    {
+    void SliderIntControl(const char *id, int *value, const int minValue, const int maxValue, const SliderValueFormat format,
+                          const Theme::Fonts &fonts, const int step) {
         ImGui::PushID(id);
         constexpr float TrackW = Theme::Layout::ControlW - 54.0F;
         constexpr float TrackH = 4.0F;
@@ -922,25 +869,21 @@ namespace Horo::Editor::Ui
         const bool active = ImGui::IsItemActive();
         const bool hovered = ImGui::IsItemHovered();
 
-        if (active && maxValue > minValue)
-        {
+        if (active && maxValue > minValue) {
             const float mouseT = (ImGui::GetIO().MousePos.x - pos.x) / TrackW;
             const float clampedT = std::clamp(mouseT, 0.0F, 1.0F);
             const float rawValue = static_cast<float>(minValue) + clampedT * static_cast<float>(maxValue - minValue);
             const int snapped =
-                minValue +
-                static_cast<int>(std::round((rawValue - static_cast<float>(minValue)) / static_cast<float>(step))) *
-                step;
+                minValue + static_cast<int>(std::round((rawValue - static_cast<float>(minValue)) / static_cast<float>(step))) * step;
             *value = std::clamp(snapped, minValue, maxValue);
         }
 
         float t = 0.0F;
-        if (maxValue > minValue)
-        {
+        if (maxValue > minValue) {
             t = static_cast<float>(*value - minValue) / static_cast<float>(maxValue - minValue);
         }
         const float trackY = pos.y + (HitH - TrackH) * 0.5F;
-        auto* dl = ImGui::GetWindowDrawList();
+        auto *dl = ImGui::GetWindowDrawList();
         dl->AddRectFilled({pos.x, trackY}, {pos.x + TrackW, trackY + TrackH}, Theme::U32(Theme::BorderStrong()), 2.0F);
         dl->AddRectFilled({pos.x, trackY}, {pos.x + TrackW * t, trackY + TrackH}, Theme::U32(Theme::Accent()), 2.0F);
 
@@ -953,20 +896,19 @@ namespace Horo::Editor::Ui
 
         std::string text;
         using enum SliderValueFormat;
-        switch (format)
-        {
-        case Minutes:
-            text = std::format("{} min", *value);
-            break;
-        case Percent:
-            text = std::format("{}%", *value);
-            break;
-        case Milliseconds:
-            text = std::format("{} ms", *value);
-            break;
-        case Integer:
-            text = std::format("{}", *value);
-            break;
+        switch (format) {
+            case Minutes:
+                text = std::format("{} min", *value);
+                break;
+            case Percent:
+                text = std::format("{}%", *value);
+                break;
+            case Milliseconds:
+                text = std::format("{} ms", *value);
+                break;
+            case Integer:
+                text = std::format("{}", *value);
+                break;
         }
         {
             Theme::ScopedTextStyle ts(fonts.sansCompact, 14.0F, Theme::FontPx::SansCompact);
@@ -981,34 +923,29 @@ namespace Horo::Editor::Ui
 
     // ── ToggleControl ────────────────────────────────────────────────────
 
-    [[nodiscard]] bool ToggleControl(const char* id, bool* value, const Theme::Fonts& fonts, const bool showLabel)
-    {
+    [[nodiscard]] bool ToggleControl(const char *id, bool *value, const Theme::Fonts &fonts, const bool showLabel) {
         ImGui::PushID(id);
         const ImVec2 pos = ImGui::GetCursorScreenPos();
         constexpr ImVec2 size{36.0F, 20.0F};
         ImGui::InvisibleButton("toggle", size);
         const bool clicked = ImGui::IsItemClicked();
-        if (clicked)
-        {
+        if (clicked) {
             *value = !*value;
         }
 
         const bool hovered = ImGui::IsItemHovered();
-        auto* dl = ImGui::GetWindowDrawList();
+        auto *dl = ImGui::GetWindowDrawList();
         ImVec4 bg = Theme::Bg3();
         if (*value)
             bg = Theme::Accent();
         else if (hovered)
             bg = Theme::Hover();
         dl->AddRectFilled(pos, {pos.x + size.x, pos.y + size.y}, Theme::U32(bg), 10.0F);
-        dl->AddRect(pos, {pos.x + size.x, pos.y + size.y}, Theme::U32(*value ? Theme::Accent() : Theme::Border()),
-                    10.0F);
+        dl->AddRect(pos, {pos.x + size.x, pos.y + size.y}, Theme::U32(*value ? Theme::Accent() : Theme::Border()), 10.0F);
         const float knobX = *value ? pos.x + 21.0F : pos.x + 3.0F;
-        dl->AddCircleFilled({knobX + 6.0F, pos.y + 10.0F}, 6.0F, Theme::U32(*value ? ImVec4{1, 1, 1, 1} : Theme::Dim()),
-                            16);
+        dl->AddCircleFilled({knobX + 6.0F, pos.y + 10.0F}, 6.0F, Theme::U32(*value ? ImVec4{1, 1, 1, 1} : Theme::Dim()), 16);
 
-        if (showLabel)
-        {
+        if (showLabel) {
             ImGui::SameLine(0.0F, 10.0F);
             Theme::ScopedTextStyle ts(fonts.sans, 13.0F, Theme::FontPx::Sans);
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::Muted());
@@ -1021,8 +958,7 @@ namespace Horo::Editor::Ui
 
     // ── CheckboxControl ──────────────────────────────────────────────────
 
-    [[nodiscard]] bool CheckboxControl(const char* label, bool* value, const Theme::Fonts& fonts)
-    {
+    [[nodiscard]] bool CheckboxControl(const char *label, bool *value, const Theme::Fonts &fonts) {
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{0.0F, 0.0F});
         ImGui::PushStyleVar(ImGuiStyleVar_ItemInnerSpacing, ImVec2{8.0F, 0.0F});
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::Layout::Radius);
@@ -1047,8 +983,7 @@ namespace Horo::Editor::Ui
 
     // ── PluginRow ────────────────────────────────────────────────────────
 
-    void DrawPluginRowContent(const char* version, const char* description, bool* enabled, const Theme::Fonts& fonts)
-    {
+    void DrawPluginRowContent(const char *version, const char *description, bool *enabled, const Theme::Fonts &fonts) {
         const float cursorY = ImGui::GetCursorPosY();
         ImGui::SetCursorPosY(cursorY + 4.0F);
         {
@@ -1070,26 +1005,20 @@ namespace Horo::Editor::Ui
         (void)ToggleControl("plugin-toggle", enabled, fonts, false);
     }
 
-    void PluginRow(const char* name, const char* version, const char* description, bool* enabled,
-                   const Theme::Fonts& fonts)
-    {
-        SettingRow(name, nullptr, fonts, [version, description, enabled, &fonts]()
-        {
+    void PluginRow(const char *name, const char *version, const char *description, bool *enabled, const Theme::Fonts &fonts) {
+        SettingRow(name, nullptr, fonts, [version, description, enabled, &fonts]() {
             DrawPluginRowContent(version, description, enabled, fonts);
         });
     }
 
     // ── ShortcutDisplay ──────────────────────────────────────────────────
 
-    void ShortcutDisplay(const char* a, const char* b, const char* c, const Theme::Fonts& fonts)
-    {
-        const std::array<const char*, 3> keys = {a, b, c};
-        for (int i = 0; i < 3; ++i)
-        {
+    void ShortcutDisplay(const char *a, const char *b, const char *c, const Theme::Fonts &fonts) {
+        const std::array<const char *, 3> keys = {a, b, c};
+        for (int i = 0; i < 3; ++i) {
             if (keys[i] == nullptr || keys[i][0] == '\0')
                 continue;
-            if (i > 0)
-            {
+            if (i > 0) {
                 ImGui::SameLine(0.0F, 4.0F);
                 {
                     Theme::ScopedTextStyle plus(fonts.sansCompact, 12.0F, Theme::FontPx::SansCompact);
@@ -1116,8 +1045,7 @@ namespace Horo::Editor::Ui
 
     // ── ShortcutRecorder ──────────────────────────────────────────────────
 
-    [[nodiscard]] bool StoreShortcut(ImGuiKey key, const ImGuiIO& io, std::string& keysOut)
-    {
+    [[nodiscard]] bool StoreShortcut(ImGuiKey key, const ImGuiIO &io, std::string &keysOut) {
         std::string combo;
         if (io.KeyCtrl || io.KeySuper)
             combo += "Ctrl+";
@@ -1130,64 +1058,52 @@ namespace Horo::Editor::Ui
         return true;
     }
 
-    [[nodiscard]] bool PollShortcutInput(bool* listening, std::string& keysOut)
-    {
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
-        {
+    [[nodiscard]] bool PollShortcutInput(bool *listening, std::string &keysOut) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
             *listening = false;
             return false;
         }
-        const auto& io = ImGui::GetIO();
+        const auto &io = ImGui::GetIO();
         for (int key = ImGuiKey_A; key <= ImGuiKey_Z; ++key)
-            if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false))
-            {
+            if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false)) {
                 *listening = false;
                 return StoreShortcut(static_cast<ImGuiKey>(key), io, keysOut);
             }
         for (int key = ImGuiKey_F1; key <= ImGuiKey_F12; ++key)
-            if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false))
-            {
+            if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key), false)) {
                 *listening = false;
                 return StoreShortcut(static_cast<ImGuiKey>(key), io, keysOut);
             }
-        static constexpr std::array<ImGuiKey, 13> specialKeys = {
-            ImGuiKey_Space, ImGuiKey_Tab, ImGuiKey_Backspace, ImGuiKey_Delete, ImGuiKey_Enter,
-            ImGuiKey_Home, ImGuiKey_End, ImGuiKey_LeftArrow, ImGuiKey_RightArrow, ImGuiKey_UpArrow,
-            ImGuiKey_DownArrow, ImGuiKey_PageUp, ImGuiKey_PageDown
-        };
+        static constexpr std::array<ImGuiKey, 13> specialKeys = {ImGuiKey_Space,   ImGuiKey_Tab,       ImGuiKey_Backspace,
+                                                                 ImGuiKey_Delete,  ImGuiKey_Enter,     ImGuiKey_Home,
+                                                                 ImGuiKey_End,     ImGuiKey_LeftArrow, ImGuiKey_RightArrow,
+                                                                 ImGuiKey_UpArrow, ImGuiKey_DownArrow, ImGuiKey_PageUp,
+                                                                 ImGuiKey_PageDown};
         for (const auto key : specialKeys)
-            if (ImGui::IsKeyPressed(key, false))
-            {
+            if (ImGui::IsKeyPressed(key, false)) {
                 *listening = false;
                 return StoreShortcut(key, io, keysOut);
             }
         return false;
     }
 
-    struct ShortcutRecorderText
-    {
-        const char* placeholder;
-        const char* listening;
+    struct ShortcutRecorderText {
+        const char *placeholder;
+        const char *listening;
     };
 
-    void DrawShortcutContent(ImDrawList* drawList, const Theme::Fonts& fonts, const bool listening,
-                             const char* keysLabel,
-                             const ImVec2 cursor, const ImVec2 size, const ShortcutRecorderText text)
-    {
+    void DrawShortcutContent(ImDrawList *drawList, const Theme::Fonts &fonts, const bool listening, const char *keysLabel,
+                             const ImVec2 cursor, const ImVec2 size, const ShortcutRecorderText text) {
         using namespace Theme;
-        if (listening)
-        {
+        if (listening) {
             const ImVec2 textSize = ImGui::CalcTextSize(text.listening);
-            drawList->AddText(fonts.sansCompact, 11.0F,
-                              {cursor.x + (size.x - textSize.x) * 0.5F, cursor.y + (size.y - textSize.y) * 0.5F},
+            drawList->AddText(fonts.sansCompact, 11.0F, {cursor.x + (size.x - textSize.x) * 0.5F, cursor.y + (size.y - textSize.y) * 0.5F},
                               U32(Accent()), text.listening);
             return;
         }
-        if (keysLabel == nullptr || keysLabel[0] == '\0')
-        {
+        if (keysLabel == nullptr || keysLabel[0] == '\0') {
             const ImVec2 textSize = ImGui::CalcTextSize(text.placeholder);
-            drawList->AddText(fonts.sansCompact, 11.0F,
-                              {cursor.x + (size.x - textSize.x) * 0.5F, cursor.y + (size.y - textSize.y) * 0.5F},
+            drawList->AddText(fonts.sansCompact, 11.0F, {cursor.x + (size.x - textSize.x) * 0.5F, cursor.y + (size.y - textSize.y) * 0.5F},
                               U32(Dim()), text.placeholder);
             return;
         }
@@ -1195,8 +1111,7 @@ namespace Horo::Editor::Ui
         const std::string label{keysLabel};
         std::vector<std::string> parts;
         std::size_t pos = 0;
-        while (pos < label.size())
-        {
+        while (pos < label.size()) {
             const auto next = label.find('+', pos);
             parts.push_back(label.substr(pos, next - pos));
             if (next == std::string::npos)
@@ -1204,8 +1119,7 @@ namespace Horo::Editor::Ui
             pos = next + 1;
         }
         float totalWidth = 0.0F;
-        for (std::size_t index = 0; index < parts.size(); ++index)
-        {
+        for (std::size_t index = 0; index < parts.size(); ++index) {
             totalWidth += ImGui::CalcTextSize(parts[index].c_str()).x + 10.0F;
             if (index + 1 < parts.size())
                 totalWidth += 8.0F;
@@ -1213,9 +1127,8 @@ namespace Horo::Editor::Ui
 
         float x = cursor.x + (size.x - totalWidth) * 0.5F;
         const float y = cursor.y + (size.y - 14.0F) * 0.5F;
-        for (std::size_t index = 0; index < parts.size(); ++index)
-        {
-            const auto& part = parts[index];
+        for (std::size_t index = 0; index < parts.size(); ++index) {
+            const auto &part = parts[index];
             const ImVec2 textSize = ImGui::CalcTextSize(part.c_str());
             const ImVec2 chipMin{x, y};
             const ImVec2 chipMax{x + textSize.x + 10.0F, y + 18.0F};
@@ -1223,18 +1136,15 @@ namespace Horo::Editor::Ui
             drawList->AddRect(chipMin, chipMax, U32(BorderStrong()), 3.0F, 0, 1.0F);
             drawList->AddText(fonts.sansCompact, 10.5F, {x + 5.0F, y + 2.0F}, U32(Text()), part.c_str());
             x += textSize.x + 10.0F;
-            if (index + 1 < parts.size())
-            {
+            if (index + 1 < parts.size()) {
                 drawList->AddText(fonts.sansCompact, 10.0F, {x + 2.0F, y + 2.0F}, U32(Dim()), "+");
                 x += 12.0F;
             }
         }
     }
 
-    [[nodiscard]] bool ShortcutRecorder(const char* id, const char* keysLabel, bool* listening, std::string& keysOut,
-                                        const Theme::Fonts& fonts, const char* placeholderText,
-                                        const char* listeningText)
-    {
+    [[nodiscard]] bool ShortcutRecorder(const char *id, const char *keysLabel, bool *listening, std::string &keysOut,
+                                        const Theme::Fonts &fonts, const char *placeholderText, const char *listeningText) {
         using namespace Theme;
         ImGui::PushID(id);
 
@@ -1249,19 +1159,17 @@ namespace Horo::Editor::Ui
         const ImVec2 size = {width, 28.0F};
 
         // Dashed border background
-        auto* dl = ImGui::GetWindowDrawList();
+        auto *dl = ImGui::GetWindowDrawList();
         const ImU32 borderCol = *listening ? U32(Accent()) : U32(BorderStrong());
-        const ImU32 bgCol = *listening
-                                ? ImGui::GetColorU32(ImVec4{Accent().x, Accent().y, Accent().z, 0.06F})
-                                : U32(ImVec4{0.0F, 0.0F, 0.0F, 0.0F});
+        const ImU32 bgCol =
+            *listening ? ImGui::GetColorU32(ImVec4{Accent().x, Accent().y, Accent().z, 0.06F}) : U32(ImVec4{0.0F, 0.0F, 0.0F, 0.0F});
 
         dl->AddRectFilled(cursor, {cursor.x + size.x, cursor.y + size.y}, bgCol, Layout::Radius);
 
         // Draw dashed border manually (4px dash segments)
         const ImU32 dashCol = borderCol;
         constexpr float r = Layout::Radius;
-        const auto drawDashRect = [dl, dashCol, r](ImVec2 p0, ImVec2 p1)
-        {
+        const auto drawDashRect = [dl, dashCol, r](ImVec2 p0, ImVec2 p1) {
             // Simple solid border for now — dashed is complex in ImDrawList
             dl->AddRect(p0, p1, dashCol, r, 0, 1.0F);
         };
@@ -1271,13 +1179,11 @@ namespace Horo::Editor::Ui
         ImGui::SetCursorScreenPos(cursor);
         ImGui::InvisibleButton("recorder", size);
 
-        if (ImGui::IsItemClicked() && !(*listening))
-        {
+        if (ImGui::IsItemClicked() && !(*listening)) {
             *listening = true;
         }
 
-        DrawShortcutContent(dl, fonts, *listening, keysLabel, cursor, size,
-                            ShortcutRecorderText{placeholderText, listeningText});
+        DrawShortcutContent(dl, fonts, *listening, keysLabel, cursor, size, ShortcutRecorderText{placeholderText, listeningText});
 
         ImGui::PopID();
         return recorded;
@@ -1285,8 +1191,7 @@ namespace Horo::Editor::Ui
 
     // ── ThemeChip ────────────────────────────────────────────────────────
 
-    [[nodiscard]] bool ThemeChip(const char* label, const ImVec4 swatch, const bool active, const Theme::Fonts& fonts)
-    {
+    [[nodiscard]] bool ThemeChip(const char *label, const ImVec4 swatch, const bool active, const Theme::Fonts &fonts) {
         ImGui::PushID(label);
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{12.0F, 7.0F});
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::Layout::Radius);
@@ -1315,21 +1220,10 @@ namespace Horo::Editor::Ui
     // ── Modal shell ──────────────────────────────────────────────────────
 
     /** @copydoc ScopedModalShell::ScopedModalShell */
-    ScopedModalShell::ScopedModalShell(
-        const ModalShellProps& props, const Theme::Fonts& fonts)
-        : footerHeight_(props.footerHeight)
-    {
-        const ImGuiViewport* viewport = ImGui::GetMainViewport();
-        const float width = std::min(
-            props.requestedSize.x,
-            std::max(
-                props.minimumWidth,
-                viewport->WorkSize.x - props.viewportPadding));
-        const float height = std::min(
-            props.requestedSize.y,
-            std::max(
-                props.minimumHeight,
-                viewport->WorkSize.y - props.viewportPadding));
+    ScopedModalShell::ScopedModalShell(const ModalShellProps &props, const Theme::Fonts &fonts) : footerHeight_(props.footerHeight) {
+        const ImGuiViewport *viewport = ImGui::GetMainViewport();
+        const float width = std::min(props.requestedSize.x, std::max(props.minimumWidth, viewport->WorkSize.x - props.viewportPadding));
+        const float height = std::min(props.requestedSize.y, std::max(props.minimumHeight, viewport->WorkSize.y - props.viewportPadding));
         const ImVec2 position{
             viewport->WorkPos.x + (viewport->WorkSize.x - width) * 0.5F,
             viewport->WorkPos.y + (viewport->WorkSize.y - height) * 0.5F,
@@ -1337,92 +1231,63 @@ namespace Horo::Editor::Ui
 
         ImGui::SetNextWindowPos(position, ImGuiCond_Always);
         ImGui::SetNextWindowSize({width, height}, ImGuiCond_Always);
-        ImGui::PushStyleVar(
-            ImGuiStyleVar_WindowPadding, ImVec2{0.0F, 0.0F});
-        ImGui::PushStyleVar(
-            ImGuiStyleVar_WindowRounding, Theme::Layout::RadiusModal);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0.0F, 0.0F});
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Theme::Layout::RadiusModal);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0F);
         ImGui::PushStyleColor(ImGuiCol_WindowBg, Theme::Bg1());
         ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
-        ImGui::Begin(
-            props.id, nullptr,
-            ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar |
-                ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
-                ImGuiWindowFlags_NoScrollbar |
-                ImGuiWindowFlags_NoScrollWithMouse);
+        ImGui::Begin(props.id, nullptr,
+                     ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                         ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
-        ImGui::PushStyleVar(
-            ImGuiStyleVar_WindowPadding, ImVec2{22.0F, 0.0F});
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{22.0F, 0.0F});
         ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg0());
-        ImGui::BeginChild(
-            "##ModalHeader", {0.0F, props.headerHeight}, false,
-            ImGuiWindowFlags_AlwaysUseWindowPadding |
-                ImGuiWindowFlags_NoScrollbar |
-                ImGuiWindowFlags_NoScrollWithMouse);
+        ImGui::BeginChild("##ModalHeader", {0.0F, props.headerHeight}, false,
+                          ImGuiWindowFlags_AlwaysUseWindowPadding | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
         constexpr float iconSize = 20.0F;
-        const float titleY =
-            (props.headerHeight - ImGui::GetTextLineHeight()) * 0.5F;
+        const float titleY = (props.headerHeight - ImGui::GetTextLineHeight()) * 0.5F;
         ImGui::SetCursorPosY(titleY);
-        if (props.logo != 0)
-        {
+        if (props.logo != 0) {
             ImGui::Image(props.logo, {iconSize, iconSize});
             ImGui::SameLine(0.0F, 10.0F);
-        }
-        else if (props.showBrandMark)
-        {
+        } else if (props.showBrandMark) {
             const ImVec2 mark = ImGui::GetCursorScreenPos();
-            ImGui::GetWindowDrawList()->AddRectFilled(
-                {mark.x + 4.0F, mark.y + 4.0F},
-                {mark.x + 14.0F, mark.y + 14.0F},
-                Theme::U32(Theme::Accent()), 2.0F);
+            ImGui::GetWindowDrawList()->AddRectFilled({mark.x + 4.0F, mark.y + 4.0F}, {mark.x + 14.0F, mark.y + 14.0F},
+                                                      Theme::U32(Theme::Accent()), 2.0F);
             ImGui::Dummy({iconSize, iconSize});
             ImGui::SameLine(0.0F, 10.0F);
         }
         {
-            Theme::ScopedTextStyle titleStyle(
-                fonts.sansEmphasis, props.titleFontSize,
-                Theme::FontPx::SansEmphasis);
+            Theme::ScopedTextStyle titleStyle(fonts.sansEmphasis, props.titleFontSize, Theme::FontPx::SansEmphasis);
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
             ImGui::TextUnformatted(props.title);
             ImGui::PopStyleColor();
         }
 
-        if (props.showClose)
-        {
+        if (props.showClose) {
             constexpr ImVec2 closeSize{28.0F, 28.0F};
-            ImGui::SetCursorPos(
-                {ImGui::GetWindowWidth() - 50.0F,
-                 (props.headerHeight - closeSize.y) * 0.5F});
-            closeRequested_ =
-                IconCloseButton("##ModalClose", closeSize);
+            ImGui::SetCursorPos({ImGui::GetWindowWidth() - 50.0F, (props.headerHeight - closeSize.y) * 0.5F});
+            closeRequested_ = IconCloseButton("##ModalClose", closeSize);
         }
 
         const ImVec2 headerPosition = ImGui::GetWindowPos();
-        ImGui::GetWindowDrawList()->AddLine(
-            {headerPosition.x,
-             headerPosition.y + props.headerHeight - 1.0F},
-            {headerPosition.x + ImGui::GetWindowWidth(),
-             headerPosition.y + props.headerHeight - 1.0F},
-            Theme::U32(Theme::Border()), 1.0F);
+        ImGui::GetWindowDrawList()->AddLine({headerPosition.x, headerPosition.y + props.headerHeight - 1.0F},
+                                            {headerPosition.x + ImGui::GetWindowWidth(), headerPosition.y + props.headerHeight - 1.0F},
+                                            Theme::U32(Theme::Border()), 1.0F);
         ImGui::EndChild();
         ImGui::PopStyleColor();
         ImGui::PopStyleVar();
 
-        bodyHeight_ = std::max(
-            0.0F,
-            ImGui::GetWindowHeight() - props.headerHeight -
-                props.footerHeight);
-        footerStartY_ =
-            ImGui::GetWindowContentRegionMax().y - props.footerHeight;
+        bodyHeight_ = std::max(0.0F, ImGui::GetWindowHeight() - props.headerHeight - props.footerHeight);
+        footerStartY_ = ImGui::GetWindowContentRegionMax().y - props.footerHeight;
         // Region placement is explicit, but descendants retain the active theme's
         // normal ItemSpacing. Modal chrome must not collapse form/list spacing.
         ImGui::SetCursorPos({0.0F, props.headerHeight});
     }
 
     /** @copydoc ScopedModalShell::~ScopedModalShell */
-    ScopedModalShell::~ScopedModalShell()
-    {
+    ScopedModalShell::~ScopedModalShell() {
         if (footerOpen_)
             EndFooter();
         ImGui::End();
@@ -1431,45 +1296,36 @@ namespace Horo::Editor::Ui
     }
 
     /** @copydoc ScopedModalShell::BodyHeight */
-    float ScopedModalShell::BodyHeight() const noexcept
-    {
+    float ScopedModalShell::BodyHeight() const noexcept {
         return bodyHeight_;
     }
 
     /** @copydoc ScopedModalShell::FooterStartY */
-    float ScopedModalShell::FooterStartY() const noexcept
-    {
+    float ScopedModalShell::FooterStartY() const noexcept {
         return footerStartY_;
     }
 
     /** @copydoc ScopedModalShell::CloseRequested */
-    bool ScopedModalShell::CloseRequested() const noexcept
-    {
+    bool ScopedModalShell::CloseRequested() const noexcept {
         return closeRequested_;
     }
 
     /** @copydoc ScopedModalShell::BeginFooter */
-    void ScopedModalShell::BeginFooter(
-        const ImVec2 padding, const bool border)
-    {
+    void ScopedModalShell::BeginFooter(const ImVec2 padding, const bool border) {
         IM_ASSERT(!footerOpen_);
         ImGui::SetCursorPosY(footerStartY_);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, padding);
         ImGui::PushStyleColor(ImGuiCol_ChildBg, Theme::Bg0());
-        ImGui::BeginChild(
-            "##ModalFooter", {0.0F, footerHeight_}, border,
-            ImGuiWindowFlags_NoScrollbar |
-                ImGuiWindowFlags_NoScrollWithMouse);
+        ImGui::BeginChild("##ModalFooter", {0.0F, footerHeight_}, border,
+                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
         const ImVec2 position = ImGui::GetWindowPos();
-        ImGui::GetWindowDrawList()->AddLine(
-            position, {position.x + ImGui::GetWindowWidth(), position.y},
-            Theme::U32(Theme::Border()), 1.0F);
+        ImGui::GetWindowDrawList()->AddLine(position, {position.x + ImGui::GetWindowWidth(), position.y}, Theme::U32(Theme::Border()),
+                                            1.0F);
         footerOpen_ = true;
     }
 
     /** @copydoc ScopedModalShell::EndFooter */
-    void ScopedModalShell::EndFooter()
-    {
+    void ScopedModalShell::EndFooter() {
         IM_ASSERT(footerOpen_);
         ImGui::EndChild();
         ImGui::PopStyleColor();
@@ -1479,9 +1335,8 @@ namespace Horo::Editor::Ui
 
     // ── Dock UI ───────────────────────────────────────────────────────────
 
-    int DrawDockTabs(const std::span<const char*const> tabs, int activeTab, const Theme::Fonts& fonts)
-    {
-        ImDrawList* dl = ImGui::GetWindowDrawList();
+    int DrawDockTabs(const std::span<const char *const> tabs, int activeTab, const Theme::Fonts &fonts) {
+        ImDrawList *dl = ImGui::GetWindowDrawList();
         const ImVec2 pos = ImGui::GetCursorScreenPos();
         const float w = ImGui::GetContentRegionAvail().x;
 
@@ -1490,25 +1345,21 @@ namespace Horo::Editor::Ui
         // Background (--bg-darkest)
         dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + tabH), Theme::U32(Theme::Bg0()));
         // Bottom border (--border)
-        dl->AddLine(ImVec2(pos.x, pos.y + tabH - 1.0f), ImVec2(pos.x + w, pos.y + tabH - 1.0f),
-                    Theme::U32(Theme::Border()),
-                    1.0f);
+        dl->AddLine(ImVec2(pos.x, pos.y + tabH - 1.0f), ImVec2(pos.x + w, pos.y + tabH - 1.0f), Theme::U32(Theme::Border()), 1.0f);
 
         int clickedTab = -1;
 
         ImGui::SetCursorScreenPos(pos);
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
 
-        for (size_t i = 0; i < tabs.size(); ++i)
-        {
+        for (size_t i = 0; i < tabs.size(); ++i) {
             const bool isActive = (static_cast<int>(i) == activeTab);
 
             const ImVec2 textSize = ImGui::CalcTextSize(tabs[i]);
-            auto buttonSize = ImVec2(textSize.x + 26.0f, tabH); // padding 13px * 2
+            auto buttonSize = ImVec2(textSize.x + 26.0f, tabH);  // padding 13px * 2
 
             const ImVec2 p = ImGui::GetCursorScreenPos();
-            if (ImGui::InvisibleButton(tabs[i], buttonSize))
-            {
+            if (ImGui::InvisibleButton(tabs[i], buttonSize)) {
                 clickedTab = static_cast<int>(i);
             }
 
@@ -1517,17 +1368,16 @@ namespace Horo::Editor::Ui
             if (isActive)
                 textColor = Theme::Text();
             else if (hovered)
-                textColor = Theme::Dim(); // hover color
+                textColor = Theme::Dim();  // hover color
 
             // Draw text
-            dl->AddText(fonts.sansCompact, fonts.sansCompact->FontSize, ImVec2(p.x + 13.0f, p.y + 6.0f),
-                        ImGui::GetColorU32(textColor), tabs[i]);
+            dl->AddText(fonts.sansCompact, fonts.sansCompact->FontSize, ImVec2(p.x + 13.0f, p.y + 6.0f), ImGui::GetColorU32(textColor),
+                        tabs[i]);
 
             // Active underline
-            if (isActive)
-            {
-                dl->AddLine(ImVec2(p.x, p.y + tabH - 1.5f), ImVec2(p.x + buttonSize.x, p.y + tabH - 1.5f),
-                            Theme::U32(Theme::Accent()), 2.0f);
+            if (isActive) {
+                dl->AddLine(ImVec2(p.x, p.y + tabH - 1.5f), ImVec2(p.x + buttonSize.x, p.y + tabH - 1.5f), Theme::U32(Theme::Accent()),
+                            2.0f);
             }
 
             ImGui::SameLine();
@@ -1539,89 +1389,157 @@ namespace Horo::Editor::Ui
         return clickedTab != -1 ? clickedTab : activeTab;
     }
 
-    void DrawObjTitle(const char* title, const char* badgeText, ImVec4 badgeBg, ImVec4 badgeFg,
-                      const Theme::Fonts& fonts)
-    {
-        ImDrawList* dl = ImGui::GetWindowDrawList();
+    void DrawObjTitle(const char *title, const char *badgeText, ImVec4 badgeBg, ImVec4 badgeFg, const Theme::Fonts &fonts) {
+        ImDrawList *dl = ImGui::GetWindowDrawList();
         const ImVec2 pos = ImGui::GetCursorScreenPos();
         const float w = ImGui::GetContentRegionAvail().x;
         constexpr float h = 38.0f;
 
         // border-bottom
-        dl->AddLine(ImVec2(pos.x, pos.y + h - 1.0f), ImVec2(pos.x + w, pos.y + h - 1.0f), Theme::U32(Theme::Border()),
-                    1.0f);
+        dl->AddLine(ImVec2(pos.x, pos.y + h - 1.0f), ImVec2(pos.x + w, pos.y + h - 1.0f), Theme::U32(Theme::Border()), 1.0f);
 
-        dl->AddText(fonts.sans, fonts.sans->FontSize, ImVec2(pos.x + 14.0f, pos.y + 10.0f), Theme::U32(Theme::Text()),
-                    title);
+        dl->AddText(fonts.sans, fonts.sans->FontSize, ImVec2(pos.x + 14.0f, pos.y + 10.0f), Theme::U32(Theme::Text()), title);
 
         // Badge
         ImVec2 badgeSize = ImGui::CalcTextSize(badgeText);
-        badgeSize.x += 12.0f; // padding 6px
-        badgeSize.y += 6.0f; // padding 3px
+        badgeSize.x += 12.0f;  // padding 6px
+        badgeSize.y += 6.0f;   // padding 3px
 
         const auto badgePos = ImVec2(pos.x + w - 14.0f - badgeSize.x, pos.y + 10.0f);
-        dl->AddRectFilled(badgePos, ImVec2(badgePos.x + badgeSize.x, badgePos.y + badgeSize.y),
-                          ImGui::GetColorU32(badgeBg),
-                          4.0f);
+        dl->AddRectFilled(badgePos, ImVec2(badgePos.x + badgeSize.x, badgePos.y + badgeSize.y), ImGui::GetColorU32(badgeBg), 4.0f);
         dl->AddText(fonts.sansCompact, fonts.sansCompact->FontSize, ImVec2(badgePos.x + 6.0f, badgePos.y + 3.0f),
                     ImGui::GetColorU32(badgeFg), badgeText);
 
         ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + h));
     }
 
-    void DrawPropSection(const char* label, const Theme::Fonts& fonts)
-    {
-        ImDrawList* dl = ImGui::GetWindowDrawList();
+    /** @copydoc DrawEditableObjTitle */
+    TextEditResult DrawEditableObjTitle(const char *id, std::string &value, const size_t maximumBytes, const char *badgeText,
+                                        const ImVec4 badgeBg, const ImVec4 badgeFg, const Theme::Fonts &fonts, const bool error) {
+        TextEditResult result;
+        if (maximumBytes == 0)
+            return result;
+
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        const ImVec2 position = ImGui::GetCursorScreenPos();
+        const float width = ImGui::GetContentRegionAvail().x;
+        constexpr float height = 38.0F;
+        constexpr float horizontalPadding = 14.0F;
+        constexpr float controlGap = 8.0F;
+        constexpr float controlPaddingX = 9.0F;
+        constexpr float controlPaddingY = 3.0F;
+
+        const float badgeFontSize = fonts.sansCompact->FontSize;
+        const ImVec2 badgeTextSize = fonts.sansCompact->CalcTextSizeA(badgeFontSize, 1000.0F, 0.0F, badgeText);
+        const ImVec2 badgeSize{
+            std::min(badgeTextSize.x + 12.0F, std::max(1.0F, width * 0.38F)),
+            badgeTextSize.y + 6.0F,
+        };
+        const ImVec2 badgePosition{
+            position.x + width - horizontalPadding - badgeSize.x,
+            position.y + (height - badgeSize.y) * 0.5F,
+        };
+        const float controlWidth = std::max(1.0F, badgePosition.x - controlGap - (position.x + horizontalPadding));
+        const float effectiveFontHeight = fonts.sans->FontSize * Theme::Scale(fonts.sans->FontSize, Theme::FontPx::Sans);
+        const float controlHeight = effectiveFontHeight + controlPaddingY * 2.0F;
+        const float controlOffsetY = std::max(0.0F, (height - controlHeight) * 0.5F);
+
+        value.resize(std::min(value.size(), maximumBytes));
+        value.resize(maximumBytes, '\0');
+        ImGui::SetCursorScreenPos({position.x + horizontalPadding, position.y + controlOffsetY});
+        ImGui::PushID(id);
+        ImGui::PushItemWidth(controlWidth);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{controlPaddingX, controlPaddingY});
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::Layout::Radius);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0F);
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Hover());
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Hover());
+        ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
+        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
+        if (error) {
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::ErrSoft());
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::ErrSoft());
+            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::ErrSoft());
+            ImGui::PushStyleColor(ImGuiCol_Border, Theme::Err());
+        }
+        bool submitted = false;
+        {
+            Theme::ScopedTextStyle textStyle(fonts.sans, fonts.sans->FontSize, Theme::FontPx::Sans);
+            submitted = ImGui::InputText("##value", value.data(), value.size() + 1,
+                                         ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+        }
+        result.changed = ImGui::IsItemEdited();
+        result.active = ImGui::IsItemActive();
+        const bool deactivated = ImGui::IsItemDeactivated();
+        result.cancelled = (result.active || deactivated) && ImGui::IsKeyPressed(ImGuiKey_Escape, false);
+        result.committed = !result.cancelled && (submitted || deactivated);
+        if (error)
+            ImGui::PopStyleColor(4);
+        ImGui::PopStyleColor(5);
+        ImGui::PopStyleVar(3);
+        ImGui::PopItemWidth();
+        ImGui::PopID();
+
+        const auto nullPosition = value.find('\0');
+        value.resize(nullPosition == std::string::npos ? value.size() : nullPosition);
+
+        drawList->AddRectFilled(badgePosition, {badgePosition.x + badgeSize.x, badgePosition.y + badgeSize.y}, ImGui::GetColorU32(badgeBg),
+                                4.0F);
+        drawList->PushClipRect({badgePosition.x + 6.0F, badgePosition.y},
+                               {badgePosition.x + badgeSize.x - 6.0F, badgePosition.y + badgeSize.y}, true);
+        drawList->AddText(fonts.sansCompact, badgeFontSize,
+                          {badgePosition.x + 6.0F, badgePosition.y + (badgeSize.y - badgeTextSize.y) * 0.5F}, ImGui::GetColorU32(badgeFg),
+                          badgeText);
+        drawList->PopClipRect();
+        drawList->AddLine({position.x, position.y + height - 1.0F}, {position.x + width, position.y + height - 1.0F},
+                          Theme::U32(Theme::Border()), 1.0F);
+        ImGui::SetCursorScreenPos({position.x, position.y + height});
+        return result;
+    }
+
+    void DrawPropSection(const char *label, const Theme::Fonts &fonts) {
+        ImDrawList *dl = ImGui::GetWindowDrawList();
         const ImVec2 pos = ImGui::GetCursorScreenPos();
         const float w = ImGui::GetContentRegionAvail().x;
         constexpr float h = 28.0f;
 
         // background & border
         dl->AddRectFilled(pos, ImVec2(pos.x + w, pos.y + h), Theme::U32(Theme::Bg0()));
-        dl->AddLine(ImVec2(pos.x, pos.y + h - 1.0f), ImVec2(pos.x + w, pos.y + h - 1.0f), Theme::U32(Theme::Border()),
-                    1.0f);
+        dl->AddLine(ImVec2(pos.x, pos.y + h - 1.0f), ImVec2(pos.x + w, pos.y + h - 1.0f), Theme::U32(Theme::Border()), 1.0f);
 
-        dl->AddText(fonts.sansCompact, fonts.sansCompact->FontSize, ImVec2(pos.x + 14.0f, pos.y + 8.0f),
-                    Theme::U32(Theme::Muted()), label);
+        dl->AddText(fonts.sansCompact, fonts.sansCompact->FontSize, ImVec2(pos.x + 14.0f, pos.y + 8.0f), Theme::U32(Theme::Muted()), label);
 
         ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + h));
     }
 
-    void DrawPropRow(const char* label, const char* value, const Theme::Fonts& fonts)
-    {
-        ImDrawList* dl = ImGui::GetWindowDrawList();
+    void DrawPropRow(const char *label, const char *value, const Theme::Fonts &fonts) {
+        ImDrawList *dl = ImGui::GetWindowDrawList();
         const ImVec2 pos = ImGui::GetCursorScreenPos();
         const float w = ImGui::GetContentRegionAvail().x;
         constexpr float h = 28.0f;
 
         ImVec4 borderLight = Theme::Border();
         borderLight.w = 0.5f;
-        dl->AddLine(ImVec2(pos.x, pos.y + h - 1.0f), ImVec2(pos.x + w, pos.y + h - 1.0f),
-                    ImGui::GetColorU32(borderLight),
-                    1.0f);
+        dl->AddLine(ImVec2(pos.x, pos.y + h - 1.0f), ImVec2(pos.x + w, pos.y + h - 1.0f), ImGui::GetColorU32(borderLight), 1.0f);
 
-        dl->AddText(fonts.sans, fonts.sans->FontSize, ImVec2(pos.x + 14.0f, pos.y + 6.0f), Theme::U32(Theme::Muted()),
-                    label);
+        dl->AddText(fonts.sans, fonts.sans->FontSize, ImVec2(pos.x + 14.0f, pos.y + 6.0f), Theme::U32(Theme::Muted()), label);
 
         constexpr float labelW = 80.0f;
         const auto inputPos = ImVec2(pos.x + 14.0f + labelW, pos.y + 4.0f);
         const auto inputSize = ImVec2(w - 28.0f - labelW, h - 8.0f);
 
-        dl->AddRectFilled(inputPos, ImVec2(inputPos.x + inputSize.x, inputPos.y + inputSize.y),
-                          Theme::U32(Theme::Bg0()),
-                          4.0f);
-        dl->AddRect(inputPos, ImVec2(inputPos.x + inputSize.x, inputPos.y + inputSize.y), Theme::U32(Theme::Border()),
-                    4.0f);
+        dl->AddRectFilled(inputPos, ImVec2(inputPos.x + inputSize.x, inputPos.y + inputSize.y), Theme::U32(Theme::Bg0()), 4.0f);
+        dl->AddRect(inputPos, ImVec2(inputPos.x + inputSize.x, inputPos.y + inputSize.y), Theme::U32(Theme::Border()), 4.0f);
 
-        dl->AddText(fonts.sansCompact, fonts.sansCompact->FontSize, ImVec2(inputPos.x + 8.0f, inputPos.y + 2.0f),
-                    Theme::U32(Theme::Text()), value);
+        dl->AddText(fonts.sansCompact, fonts.sansCompact->FontSize, ImVec2(inputPos.x + 8.0f, inputPos.y + 2.0f), Theme::U32(Theme::Text()),
+                    value);
 
         ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + h));
     }
 
     /** @copydoc BeginContextMenu */
-    bool BeginContextMenu(const char* id)
-    {
+    bool BeginContextMenu(const char *id) {
         ImGui::SetNextWindowSizeConstraints({220.0F, 0.0F}, {340.0F, FLT_MAX});
         PushContextPopupWindowStyle();
         const bool open = ImGui::BeginPopupContextItem(id, ImGuiPopupFlags_MouseButtonRight);
@@ -1630,40 +1548,34 @@ namespace Horo::Editor::Ui
     }
 
     /** @copydoc BeginContextWindowMenu */
-    bool BeginContextWindowMenu(const char* id)
-    {
+    bool BeginContextWindowMenu(const char *id) {
         ImGui::SetNextWindowSizeConstraints({220.0F, 0.0F}, {340.0F, FLT_MAX});
         PushContextPopupWindowStyle();
-        const bool open = ImGui::BeginPopupContextWindow(id, ImGuiPopupFlags_MouseButtonRight |
-                                                         ImGuiPopupFlags_NoOpenOverItems);
+        const bool open = ImGui::BeginPopupContextWindow(id, ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems);
         PopContextPopupWindowStyle();
         return open;
     }
 
     /** @copydoc EndContextMenu */
-    void EndContextMenu()
-    {
+    void EndContextMenu() {
         ImGui::EndPopup();
     }
 
     /** @copydoc ContextMenuItem */
-    bool ContextMenuItem(const char* label, const char* shortcut, const Theme::Fonts& fonts,
-                         const ContextMenuItemTone tone, const std::string_view iconToken)
-    {
+    bool ContextMenuItem(const char *label, const char *shortcut, const Theme::Fonts &fonts, const ContextMenuItemTone tone,
+                         const std::string_view iconToken) {
         static_cast<void>(fonts);
         static_cast<void>(iconToken);
         ImGui::PushStyleColor(ImGuiCol_Header, Theme::Hover());
         ImGui::PushStyleColor(ImGuiCol_HeaderHovered, Theme::Hover());
         ImGui::PushStyleColor(ImGuiCol_HeaderActive, Theme::AccentSoft());
-        if (tone == ContextMenuItemTone::Danger)
-        {
+        if (tone == ContextMenuItemTone::Danger) {
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::Err());
         }
         PushContextMenuRowStyle();
         const bool activated = ImGui::MenuItem(label, shortcut);
         PopContextMenuRowStyle();
-        if (tone == ContextMenuItemTone::Danger)
-        {
+        if (tone == ContextMenuItemTone::Danger) {
             ImGui::PopStyleColor();
         }
         ImGui::PopStyleColor(3);
@@ -1671,8 +1583,7 @@ namespace Horo::Editor::Ui
     }
 
     /** @copydoc BeginContextSubmenu */
-    bool BeginContextSubmenu(const char* label, const Theme::Fonts& fonts, const std::string_view iconToken)
-    {
+    bool BeginContextSubmenu(const char *label, const Theme::Fonts &fonts, const std::string_view iconToken) {
         static_cast<void>(fonts);
         static_cast<void>(iconToken);
         ImGui::PushStyleColor(ImGuiCol_Header, Theme::Hover());
@@ -1694,18 +1605,14 @@ namespace Horo::Editor::Ui
     }
 
     /** @copydoc EndContextSubmenu */
-    void EndContextSubmenu()
-    {
+    void EndContextSubmenu() {
         ImGui::EndMenu();
     }
 
     /** @copydoc DrawEditorIcon */
-    void DrawEditorIcon(ImDrawList* drawList, const std::string_view iconToken, const ImVec2 position,
-                        const ImVec2 size,
-                        const ImU32 color)
-    {
-        if (drawList == nullptr || iconToken.empty())
-        {
+    void DrawEditorIcon(ImDrawList *drawList, const std::string_view iconToken, const ImVec2 position, const ImVec2 size,
+                        const ImU32 color) {
+        if (drawList == nullptr || iconToken.empty()) {
             return;
         }
         const float x = position.x;
@@ -1713,81 +1620,50 @@ namespace Horo::Editor::Ui
         const float w = size.x;
         const float h = size.y;
         const ImVec2 center{x + w * 0.5F, y + h * 0.5F};
-        if (iconToken == "action.create")
-        {
+        if (iconToken == "action.create") {
             drawList->AddLine({center.x, y + 2.0F}, {center.x, y + h - 2.0F}, color, 1.5F);
             drawList->AddLine({x + 2.0F, center.y}, {x + w - 2.0F, center.y}, color, 1.5F);
-        }
-        else if (iconToken == "action.rename")
-        {
+        } else if (iconToken == "action.rename") {
             drawList->AddLine({x + 3.0F, y + h - 3.0F}, {x + w - 3.0F, y + 3.0F}, color, 2.0F);
-            drawList->AddTriangleFilled({x + 1.0F, y + h - 1.0F}, {x + 5.0F, y + h - 3.0F},
-                                        {x + 3.0F, y + h - 5.0F}, color);
-        }
-        else if (iconToken == "action.duplicate")
-        {
+            drawList->AddTriangleFilled({x + 1.0F, y + h - 1.0F}, {x + 5.0F, y + h - 3.0F}, {x + 3.0F, y + h - 5.0F}, color);
+        } else if (iconToken == "action.duplicate") {
             drawList->AddRect({x + 1.0F, y + 1.0F}, {x + w - 5.0F, y + h - 5.0F}, color, 1.0F, 0, 1.2F);
             drawList->AddRect({x + 5.0F, y + 5.0F}, {x + w - 1.0F, y + h - 1.0F}, color, 1.0F, 0, 1.2F);
-        }
-        else if (iconToken == "action.delete")
-        {
+        } else if (iconToken == "action.delete") {
             drawList->AddRect({x + 4.0F, y + 5.0F}, {x + w - 4.0F, y + h - 1.0F}, color, 1.0F, 0, 1.3F);
             drawList->AddLine({x + 2.0F, y + 4.0F}, {x + w - 2.0F, y + 4.0F}, color, 1.3F);
             drawList->AddLine({x + 6.0F, y + 1.0F}, {x + w - 6.0F, y + 1.0F}, color, 1.3F);
-        }
-        else if (iconToken == "primitive.camera")
-        {
+        } else if (iconToken == "primitive.camera") {
             drawList->AddRect({x + 1.0F, y + 4.0F}, {x + w * 0.68F, y + h - 3.0F}, color, 2.0F, 0, 1.4F);
-            drawList->AddTriangle({x + w * 0.68F, y + 6.0F}, {x + w - 1.0F, y + 3.0F},
-                                  {x + w - 1.0F, y + h - 2.0F}, color, 1.4F);
-        }
-        else if (iconToken == "primitive.audio_source")
-        {
+            drawList->AddTriangle({x + w * 0.68F, y + 6.0F}, {x + w - 1.0F, y + 3.0F}, {x + w - 1.0F, y + h - 2.0F}, color, 1.4F);
+        } else if (iconToken == "primitive.audio_source") {
             drawList->AddTriangleFilled({x + 1.0F, center.y}, {x + 6.0F, y + 4.0F}, {x + 6.0F, y + h - 4.0F}, color);
             drawList->AddCircle(center, w * 0.30F, color, 16, 1.3F);
             drawList->AddCircle(center, w * 0.48F, color, 16, 1.3F);
-        }
-        else if (iconToken.starts_with("primitive.light") || iconToken == "create.group.lights")
-        {
+        } else if (iconToken.starts_with("primitive.light") || iconToken == "create.group.lights") {
             drawList->AddCircle(center, w * 0.27F, color, 16, 1.4F);
             drawList->AddLine({center.x, y}, {center.x, y + 3.0F}, color, 1.2F);
             drawList->AddLine({center.x, y + h - 3.0F}, {center.x, y + h}, color, 1.2F);
             drawList->AddLine({x, center.y}, {x + 3.0F, center.y}, color, 1.2F);
             drawList->AddLine({x + w - 3.0F, center.y}, {x + w, center.y}, color, 1.2F);
-        }
-        else if (iconToken == "primitive.sphere")
-        {
+        } else if (iconToken == "primitive.sphere") {
             drawList->AddCircle(center, w * 0.43F, color, 18, 1.4F);
             drawList->AddEllipse(center, {w * 0.18F, h * 0.43F}, color, 0.0F, 18, 1.0F);
-        }
-        else if (iconToken == "primitive.capsule")
-        {
+        } else if (iconToken == "primitive.capsule") {
             drawList->AddRect({x + w * 0.25F, y + 1.0F}, {x + w * 0.75F, y + h - 1.0F}, color, w * 0.25F, 0, 1.4F);
-        }
-        else if (iconToken == "primitive.cylinder")
-        {
+        } else if (iconToken == "primitive.cylinder") {
             drawList->AddEllipse({center.x, y + 3.5F}, {w * 0.38F, 2.5F}, color, 0.0F, 16, 1.2F);
             drawList->AddEllipse({center.x, y + h - 3.5F}, {w * 0.38F, 2.5F}, color, 0.0F, 16, 1.2F);
             drawList->AddLine({x + w * 0.12F, y + 3.5F}, {x + w * 0.12F, y + h - 3.5F}, color, 1.2F);
             drawList->AddLine({x + w * 0.88F, y + 3.5F}, {x + w * 0.88F, y + h - 3.5F}, color, 1.2F);
-        }
-        else if (iconToken == "primitive.cone")
-        {
-            drawList->AddTriangle({center.x, y + 1.0F}, {x + 2.0F, y + h - 3.0F}, {x + w - 2.0F, y + h - 3.0F}, color,
-                                  1.4F);
+        } else if (iconToken == "primitive.cone") {
+            drawList->AddTriangle({center.x, y + 1.0F}, {x + 2.0F, y + h - 3.0F}, {x + w - 2.0F, y + h - 3.0F}, color, 1.4F);
             drawList->AddEllipse({center.x, y + h - 3.0F}, {w * 0.38F, 2.0F}, color, 0.0F, 16, 1.0F);
-        }
-        else if (iconToken == "primitive.plane")
-        {
-            drawList->AddQuad({center.x, y + 2.0F}, {x + w - 1.0F, center.y}, {center.x, y + h - 2.0F},
-                              {x + 1.0F, center.y}, color, 1.4F);
-        }
-        else if (iconToken == "primitive.quad" || iconToken == "primitive.trigger_volume")
-        {
+        } else if (iconToken == "primitive.plane") {
+            drawList->AddQuad({center.x, y + 2.0F}, {x + w - 1.0F, center.y}, {center.x, y + h - 2.0F}, {x + 1.0F, center.y}, color, 1.4F);
+        } else if (iconToken == "primitive.quad" || iconToken == "primitive.trigger_volume") {
             drawList->AddRect({x + 2.0F, y + 2.0F}, {x + w - 2.0F, y + h - 2.0F}, color, 1.0F, 0, 1.4F);
-        }
-        else
-        {
+        } else {
             drawList->AddRect({x + 2.0F, y + 3.0F}, {x + w - 3.0F, y + h - 2.0F}, color, 1.0F, 0, 1.3F);
             drawList->AddLine({x + 2.0F, y + 3.0F}, {center.x, y}, color, 1.1F);
             drawList->AddLine({x + w - 3.0F, y + 3.0F}, {center.x, y}, color, 1.1F);
@@ -1795,36 +1671,58 @@ namespace Horo::Editor::Ui
     }
 
     /** @copydoc ContextMenuSeparator */
-    void ContextMenuSeparator()
-    {
+    void ContextMenuSeparator() {
         ImGui::Separator();
     }
 
-    /** @copydoc DrawFloat3PropRow */
-    Float3PropertyEditResult DrawFloat3PropRow(const char* label, const char* id, std::array<float, 3>& value,
-                                               const Theme::Fonts& fonts, const float speed)
-    {
-        const ImVec2 pos = ImGui::GetCursorScreenPos();
-        const float width = ImGui::GetContentRegionAvail().x;
-        constexpr float height = 32.0F;
-        constexpr float horizontalPadding = 14.0F;
-        const float labelWidth = std::clamp(width * 0.38F, 56.0F, 80.0F);
+    /** @copydoc DrawComboPropRow */
+    bool DrawComboPropRow(const char *label, const char *id, int &value, const std::span<const char *const> entries,
+                          const Theme::Fonts &fonts) {
+        const PropertyRowLayout layout = BeginPropertyRow(label, fonts);
+        ImGui::SetCursorScreenPos({layout.controlX, layout.position.y + 3.0F});
+        ImGui::PushItemWidth(layout.controlWidth);
+        const bool changed = ComboControl(id, &value, entries.data(), static_cast<int>(entries.size()), fonts, false, 26.0F);
+        ImGui::PopItemWidth();
+        EndPropertyRow(layout);
+        return changed;
+    }
 
-        ImVec4 borderLight = Theme::Border();
-        borderLight.w = 0.5F;
-        ImGui::GetWindowDrawList()->AddLine({pos.x, pos.y + height - 1.0F}, {pos.x + width, pos.y + height - 1.0F},
-                                            ImGui::GetColorU32(borderLight), 1.0F);
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        drawList->PushClipRect({pos.x + horizontalPadding, pos.y},
-                               {pos.x + horizontalPadding + labelWidth - 4.0F, pos.y + height}, true);
-        drawList->AddText(fonts.sans, fonts.sans->FontSize, {pos.x + horizontalPadding, pos.y + 8.0F},
-                          Theme::U32(Theme::Muted()), label);
-        drawList->PopClipRect();
-
-        const float controlWidth = std::max(1.0F, width - horizontalPadding * 2.0F - labelWidth);
-        ImGui::SetCursorScreenPos({pos.x + horizontalPadding + labelWidth, pos.y + 3.0F});
+    /** @copydoc DrawFloatPropRow */
+    PropertyEditResult DrawFloatPropRow(const char *label, const char *id, float &value, const Theme::Fonts &fonts, const float speed,
+                                        const float minimum, const float maximum, const bool error, const char *format) {
+        const PropertyRowLayout layout = BeginPropertyRow(label, fonts);
+        ImGui::SetCursorScreenPos({layout.controlX, layout.position.y + 3.0F});
         ImGui::PushID(id);
-        ImGui::PushItemWidth(controlWidth);
+        ImGui::PushItemWidth(layout.controlWidth);
+        PushControlStyle();
+        if (error) {
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::ErrSoft());
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::ErrSoft());
+            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::ErrSoft());
+            ImGui::PushStyleColor(ImGuiCol_Border, Theme::Err());
+        }
+        PropertyEditResult result;
+        {
+            Theme::ScopedTextStyle textStyle(fonts.sansCompact, 14.0F, Theme::FontPx::SansCompact);
+            result.changed = ImGui::DragFloat("##value", &value, speed, minimum, maximum, format);
+            result.committed = ImGui::IsItemDeactivatedAfterEdit();
+        }
+        if (error)
+            ImGui::PopStyleColor(4);
+        PopControlStyle();
+        ImGui::PopItemWidth();
+        ImGui::PopID();
+        EndPropertyRow(layout);
+        return result;
+    }
+
+    /** @copydoc DrawFloat3PropRow */
+    Float3PropertyEditResult DrawFloat3PropRow(const char *label, const char *id, std::array<float, 3> &value, const Theme::Fonts &fonts,
+                                               const float speed) {
+        const PropertyRowLayout layout = BeginPropertyRow(label, fonts);
+        ImGui::SetCursorScreenPos({layout.controlX, layout.position.y + 3.0F});
+        ImGui::PushID(id);
+        ImGui::PushItemWidth(layout.controlWidth);
         PushControlStyle();
         Float3PropertyEditResult result;
         {
@@ -1835,7 +1733,7 @@ namespace Horo::Editor::Ui
         PopControlStyle();
         ImGui::PopItemWidth();
         ImGui::PopID();
-        ImGui::SetCursorScreenPos({pos.x, pos.y + height});
+        EndPropertyRow(layout);
         return result;
     }
-} // namespace Horo::Editor::Ui
+}  // namespace Horo::Editor::Ui

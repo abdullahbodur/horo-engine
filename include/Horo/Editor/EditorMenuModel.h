@@ -7,20 +7,20 @@
 #include <string_view>
 #include <vector>
 
-namespace Horo::Editor
-{
+namespace Horo::Editor {
 /**
  * @file EditorMenuModel.h
  * @brief Platform-neutral editor application menu hierarchy.
  */
 
 /** @brief Stable editor actions emitted by native and in-window menu renderers. */
-enum class EditorMenuAction
-{
+enum class EditorMenuAction {
     None,
     NewProject,
     OpenProject,
     SaveScene,
+    SaveSceneAs,
+    SaveSceneCopyAs,
     Undo,
     Redo,
     OpenEditorSettings,
@@ -30,24 +30,22 @@ enum class EditorMenuAction
 };
 
 /** @brief Typed command emitted by every platform menu adapter. */
-struct EditorMenuInvocation
-{
+struct EditorMenuInvocation {
     EditorMenuAction action{EditorMenuAction::None}; /**< Requested application command. */
-    std::optional<Runtime::PrimitiveId> primitive; /**< Optional primitive selected by Create. */
-    std::optional<std::filesystem::path> assetDestination; /**< Absolute Import Assets destination override. */
+    std::optional<Runtime::PrimitiveId> primitive;   /**< Optional primitive selected by Create. */
+    std::optional<std::filesystem::path>
+        assetDestination; /**< Absolute Import Assets destination override. */
 };
 
 /** @brief Structural kind of one menu model entry. */
-enum class EditorMenuItemKind
-{
+enum class EditorMenuItemKind {
     Command,
     Separator,
     Submenu,
 };
 
 /** @brief Platform-neutral menu item including localization, command, and child metadata. */
-struct EditorMenuItem
-{
+struct EditorMenuItem {
     EditorMenuItemKind kind{EditorMenuItemKind::Command};
     std::string_view labelKey;
     EditorMenuAction action{EditorMenuAction::None};
@@ -60,8 +58,7 @@ struct EditorMenuItem
 };
 
 /** @brief Complete ordered application menu hierarchy shared by every platform renderer. */
-struct EditorMenuModel
-{
+struct EditorMenuModel {
     std::vector<EditorMenuItem> menus;
 };
 

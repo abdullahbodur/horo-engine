@@ -336,6 +336,9 @@ endif ()
 
 add_library(HoroEditorServices STATIC
         editor/EditorServiceErrors.cpp
+        editor/document/SceneDocumentComparison.cpp
+        editor/document/SceneDocumentPersistence.cpp
+        editor/document/SceneFileWatchService.cpp
         editor/screens/welcome/WelcomeController.cpp
         editor/screens/project_creation/ProjectCreationController.cpp
         editor/screens/workspace/ContentBrowserModel.cpp
@@ -439,19 +442,32 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/modals/settings/SettingsModal.cpp
             editor/modals/asset_import/AssetImportModal.cpp
             editor/modals/asset_import/AssetImportModalPresentation.cpp
+            editor/modals/scene_compare/SceneConflictCompareModal.cpp
             editor/screens/welcome/WelcomeView.cpp
             editor/screens/welcome/WelcomeScreen.cpp
             editor/screens/project_creation/ProjectCreationView.cpp
             editor/screens/project_creation/ProjectCreationScreen.cpp
             editor/screens/project_loading/ProjectLoadingView.cpp
             editor/screens/project_loading/ProjectLoadingScreen.cpp
-            editor/screens/workspace/HierarchyPanel.cpp
-            editor/screens/workspace/InspectorPanel.cpp
-            editor/screens/workspace/InputMappingPanel.cpp
-            editor/screens/workspace/ViewportPanel.cpp
+            editor/screens/workspace/panels/hierarchy/HierarchyEditSession.cpp
+            editor/screens/workspace/panels/hierarchy/HierarchyPanel.cpp
+            editor/screens/workspace/panels/inspector/InspectorEditSession.cpp
+            editor/screens/workspace/panels/inspector/InspectorPanel.cpp
+            editor/screens/workspace/panels/input_mapping/InputMappingPanel.cpp
+            editor/screens/workspace/panels/viewport/ViewportPanel.cpp
             editor/screens/workspace/WorkspacePanelRegistry.cpp
             editor/screens/workspace/DefaultWorkspacePanels.cpp
-            editor/screens/workspace/ContentBrowserPanel.cpp
+            editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserInteractionSession.cpp
+            editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserPane.cpp
+            editor/screens/workspace/panels/global_dock/panes/audio/GlobalDockAudioPane.cpp
+            editor/screens/workspace/panels/global_dock/panes/console/GlobalDockConsolePane.cpp
+            editor/screens/workspace/panels/global_dock/panes/localization/GlobalDockLocalizationPane.cpp
+            editor/screens/workspace/panels/global_dock/panes/mcp/GlobalDockMcpPane.cpp
+            editor/screens/workspace/panels/global_dock/panes/network/GlobalDockNetworkPane.cpp
+            editor/screens/workspace/panels/global_dock/panes/performance/GlobalDockPerformancePane.cpp
+            editor/screens/workspace/panels/global_dock/panes/physics/GlobalDockPhysicsPane.cpp
+            editor/screens/workspace/panels/global_dock/panes/shared/GlobalDockStatusPane.cpp
+            editor/screens/workspace/panels/global_dock/GlobalDockPanel.cpp
             editor/screens/workspace/EditorWorkspaceController.cpp
             editor/screens/workspace/EditorWorkspaceView.cpp
             editor/screens/workspace/EditorWorkspaceScreen.cpp
@@ -515,14 +531,8 @@ target_include_directories(HoroExtensions
 )
 target_link_libraries(HoroExtensions
         PUBLIC HoroEngine::Foundation HoroEngine::Platform HoroEngine::Assets
-        PRIVATE nlohmann_json::nlohmann_json
+        PRIVATE nlohmann_json::nlohmann_json CURL::libcurl miniz
 )
-target_compile_definitions(HoroExtensions PRIVATE
-        HORO_ENABLE_EXTENSION_MARKETPLACE=$<BOOL:${HORO_ENABLE_EXTENSION_MARKETPLACE}>
-)
-if(HORO_ENABLE_EXTENSION_MARKETPLACE)
-    target_link_libraries(HoroExtensions PRIVATE CURL::libcurl miniz)
-endif()
 
 if (HORO_BUILD_EDITOR_GUI)
     target_link_libraries(HoroGui PRIVATE HoroEngine::Extensions)

@@ -1,26 +1,24 @@
 #pragma once
 
-#include "Horo/Editor/WelcomeController.h"
 #include "Horo/Editor/EditorGuiContext.h"
+#include "Horo/Editor/WelcomeController.h"
+
 #include <imgui.h>
 
-namespace Horo::Editor
-{
+namespace Horo::Editor {
     struct GuiContentRegion;
 
     /** @brief Texture handles required by the welcome view renderer. */
-    struct WelcomeViewAssets
-    {
+    struct WelcomeViewAssets {
         ImTextureID logo = 0;
     };
 
     /** @brief Commands emitted by the welcome view renderer. */
-    enum class WelcomeViewCommand
-    {
+    enum class WelcomeViewCommand {
         None,
         NewProject,
         OpenSettings,
-        OpenRecentProject, ///< @see WelcomeViewResult::openRecentIndex
+        OpenRecentProject,  ///< @see WelcomeViewResult::openRecentIndex
         OpenProject,
     };
 
@@ -31,8 +29,7 @@ namespace Horo::Editor
      * `OpenRecentProject`), the associated index into
      * `WelcomeViewModel::recentProjects`.
      */
-    struct WelcomeViewResult
-    {
+    struct WelcomeViewResult {
         WelcomeViewCommand command = WelcomeViewCommand::None;
         /// Zero-based index into WelcomeViewModel::recentProjects.
         /// Valid only when command == OpenRecentProject.
@@ -46,8 +43,6 @@ namespace Horo::Editor
      * @param assets Texture handles used by the view.
      * @return Result describing the user action that occurred this frame.
      */
-    [[nodiscard]] WelcomeViewResult DrawWelcomeView(const WelcomeViewModel& viewModel,
-                                                    const EditorGuiContext& ctx,
-                                                    const WelcomeViewAssets& assets,
-                                                    const GuiContentRegion& contentRegion);
-} // namespace Horo::Editor
+    [[nodiscard]] WelcomeViewResult DrawWelcomeView(const WelcomeViewModel &viewModel, const EditorGuiContext &ctx,
+                                                    const WelcomeViewAssets &assets, const GuiContentRegion &contentRegion);
+}  // namespace Horo::Editor

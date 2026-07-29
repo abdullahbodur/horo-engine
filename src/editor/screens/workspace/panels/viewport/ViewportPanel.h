@@ -1,60 +1,50 @@
 #pragma once
 
 #include "Horo/Editor/EditorGuiContext.h"
+#include "Horo/Editor/IWorkspacePanel.h"
 #include "editor/renderer/EditorViewportRenderer.h"
 #include "editor/screens/workspace/EditorWorkspaceViewModel.h"
 
 #include <imgui.h>
-
 #include <optional>
 
-#include "Horo/Editor/IWorkspacePanel.h"
-
-namespace Horo::Editor
-{
-    class ViewportPanel final : public IWorkspacePanel, public Input::IInputCaptureOwner
-    {
+namespace Horo::Editor {
+    class ViewportPanel final : public IWorkspacePanel, public Input::IInputCaptureOwner {
     public:
-        [[nodiscard]] std::string GetId() const override
-        {
+        [[nodiscard]] std::string GetId() const override {
             return "horo.viewport";
         }
 
-        [[nodiscard]] std::string GetDisplayName() const override
-        {
+        [[nodiscard]] std::string GetDisplayName() const override {
             return "horo.panel.viewport.title";
         }
 
-        [[nodiscard]] WorkspaceDockArea GetDefaultDockArea() const override
-        {
+        [[nodiscard]] WorkspaceDockArea GetDefaultDockArea() const override {
             return WorkspaceDockArea::Document;
         }
 
-        [[nodiscard]] std::vector<std::string> GetObservedEventTypes() const override
-        {
+        [[nodiscard]] std::vector<std::string> GetObservedEventTypes() const override {
             return {"SceneDocumentChangedEvent", "SelectionChangedEvent"};
         }
 
-        void OnAttach(PanelContext& ctx) override;
+        void OnAttach(PanelContext &ctx) override;
         void OnDetach() override;
         void OnInputCaptureCancelled(Input::CaptureCancellationReason reason) noexcept override;
 
-        void DrawIcon(ImDrawList* dl, const ImVec2& pos, const ImVec2& size, ImU32 color) override;
+        void DrawIcon(ImDrawList *dl, const ImVec2 &pos, const ImVec2 &size, ImU32 color) override;
 
-        void DrawPanel(const ImVec2& pos, const ImVec2& size, const EditorWorkspaceViewModel& vm,
-                       EditorWorkspaceViewCommandData& cmd, const EditorGuiContext& ctx) override;
+        void DrawPanel(const ImVec2 &pos, const ImVec2 &size, const EditorWorkspaceViewModel &vm, EditorWorkspaceViewCommandData &cmd,
+                       const EditorGuiContext &ctx) override;
 
     private:
-        enum class NavigationMode
-        {
+        enum class NavigationMode {
             None,
             Fly,
             Pan,
             Orbit,
         };
 
-        struct TransformGizmoDrag
-        {
+        struct TransformGizmoDrag {
             SceneObjectId object;
             EditorTransformTool tool{EditorTransformTool::Move};
             EditorTransformSpace space{EditorTransformSpace::Local};
@@ -76,17 +66,17 @@ namespace Horo::Editor
 
         [[nodiscard]] bool BeginCapture(Input::PointerButton button);
         void FinishCapture() noexcept;
-        void DrawInteraction(ImDrawList* drawList, const ImVec2& origin, float width, float height, bool hovered,
-                             const EditorWorkspaceViewModel& viewModel, EditorWorkspaceViewCommandData& command,
-                             const EditorGuiContext& context, float deltaSeconds);
+        void DrawInteraction(ImDrawList *drawList, const ImVec2 &origin, float width, float height, bool hovered,
+                             const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &command,
+                             const EditorGuiContext &context, float deltaSeconds);
 
-        IEditorViewportRenderer* viewportRenderer_{nullptr};
-        Input::InputRouter* inputRouter_{nullptr};
-        Input::InputContextToken* workspaceInputContext_{nullptr};
+        IEditorViewportRenderer *viewportRenderer_{nullptr};
+        Input::InputRouter *inputRouter_{nullptr};
+        Input::InputContextToken *workspaceInputContext_{nullptr};
         Input::InputContextToken toolInputContext_;
         Input::PointerCaptureToken pointerCapture_;
         NavigationMode navigationMode_{NavigationMode::None};
         std::optional<TransformGizmoDrag> gizmoDrag_;
         bool cancelTransformOnNextDraw_{false};
     };
-} // namespace Horo::Editor
+}  // namespace Horo::Editor

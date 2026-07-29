@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "ViewportPanel.h"
+#include "editor/screens/workspace/panels/viewport/ViewportPanel.h"
 
 #include "Horo/Editor/EditorDataBus.h"
 #include "Horo/Editor/EditorSettingsService.h"

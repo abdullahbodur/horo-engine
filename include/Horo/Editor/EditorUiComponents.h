@@ -318,6 +318,30 @@ struct ComboItemSource
                                     bool error = false, float width = -1.0F);
 
 /**
+ * @brief Presentation metadata for one line in a selectable text block.
+ */
+struct SelectableTextLineLayout
+{
+    ImVec4 color{}; /**< Text color for the complete line. */
+    std::size_t alignedColumnByteOffset{
+        0U}; /**< Optional byte offset drawn at the block's shared aligned column. */
+};
+
+/**
+ * @brief Renders a frameless read-only text block with native multi-line selection and copy support.
+ * @param id Stable UI identity.
+ * @param buffer Mutable null-terminated storage retained unchanged by the read-only control.
+ * @param bufferSize Capacity of @p buffer, including the null terminator.
+ * @param lineLayouts Presentation metadata for each newline-delimited line in @p buffer.
+ * @param alignedColumnX Shared horizontal column offset used by non-zero line layout offsets.
+ * @param width Requested interaction width; negative values fill the remaining content width.
+ * @return True while the text selection surface owns keyboard focus.
+ */
+[[nodiscard]] bool SelectableTextBlock(const char *id, char *buffer, size_t bufferSize,
+                                       std::span<const SelectableTextLineLayout> lineLayouts,
+                                       float alignedColumnX = 0.0F, float width = -1.0F);
+
+/**
  * @brief Draws a hex color input paired with a clickable swatch and anchored picker popup.
  *
  * @param id Stable UI identity.
@@ -550,6 +574,32 @@ void ModalSplitPane(
 int DrawDockTabs(std::span<const char *const> tabs, int activeTab, const Theme::Fonts &fonts);
 
 void DrawObjTitle(const char *title, const char *badgeText, ImVec4 badgeBg, ImVec4 badgeFg, const Theme::Fonts &fonts);
+
+/** @brief Interaction result returned by a shared editable text surface. */
+struct TextEditResult
+{
+    bool changed{false}; /**< Text changed during the current frame. */
+    bool committed{false}; /**< Enter or focus loss completed the interaction. */
+    bool cancelled{false}; /**< Escape requested restoration of the caller-owned draft. */
+    bool active{false}; /**< The text widget owns keyboard focus after this frame. */
+};
+
+/**
+ * @brief Draws an editable object title with a right-aligned type badge.
+ * @param id Stable UI identity scoped by the caller.
+ * @param value Mutable caller-owned title draft.
+ * @param maximumBytes Maximum UTF-8 content bytes, excluding the null terminator.
+ * @param badgeText Read-only type badge.
+ * @param badgeBg Badge background color.
+ * @param badgeFg Badge foreground color.
+ * @param fonts Editor typography handles.
+ * @param error Whether to render the title field in its validation-error state.
+ * @return Per-frame text interaction state.
+ */
+[[nodiscard]] TextEditResult DrawEditableObjTitle(
+    const char *id, std::string &value, size_t maximumBytes, const char *badgeText,
+    ImVec4 badgeBg, ImVec4 badgeFg, const Theme::Fonts &fonts, bool error = false);
+
 void DrawPropSection(const char *label, const Theme::Fonts &fonts);
 void DrawPropRow(const char *label, const char *value, const Theme::Fonts &fonts);
 
@@ -599,11 +649,44 @@ void DrawEditorIcon(ImDrawList *drawList, std::string_view iconToken, ImVec2 pos
 void ContextMenuSeparator();
 
 /** @brief Interaction result returned by an editable inspector property row. */
-struct Float3PropertyEditResult
+struct PropertyEditResult
 {
     bool changed{false}; /**< Value changed during the current frame. */
     bool committed{false}; /**< The current edit interaction completed with a changed value. */
 };
+
+using Float3PropertyEditResult = PropertyEditResult;
+
+/**
+ * @brief Draws a shared Inspector row for selecting one localized enum entry.
+ * @param label Localized property label.
+ * @param id Stable UI identity scoped by the caller.
+ * @param value Mutable selected entry index.
+ * @param entries Localized entries in typed enum order.
+ * @param fonts Editor typography handles.
+ * @return True when selection changed and should be committed.
+ */
+[[nodiscard]] bool DrawComboPropRow(
+    const char *label, const char *id, int &value,
+    std::span<const char *const> entries, const Theme::Fonts &fonts);
+
+/**
+ * @brief Draws a shared Inspector row for editing one floating-point value.
+ * @param label Localized property label.
+ * @param id Stable UI identity scoped by the caller.
+ * @param value Mutable floating-point draft.
+ * @param fonts Editor typography handles.
+ * @param speed Mouse-drag increment.
+ * @param minimum Inclusive drag minimum, or zero with @p maximum zero for no clamp.
+ * @param maximum Inclusive drag maximum, or zero with @p minimum zero for no clamp.
+ * @param error Whether to render the control in its validation-error state.
+ * @param format Display format forwarded to ImGui.
+ * @return Per-frame change and interaction-commit state.
+ */
+[[nodiscard]] PropertyEditResult DrawFloatPropRow(
+    const char *label, const char *id, float &value, const Theme::Fonts &fonts,
+    float speed = 0.05F, float minimum = 0.0F, float maximum = 0.0F,
+    bool error = false, const char *format = "%.2f");
 
 /**
  * @brief Draws a shared inspector row for editing three floating-point axis values.

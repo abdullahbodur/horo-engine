@@ -355,6 +355,15 @@ if (HORO_BUILD_EDITOR_GUI)
             HoroEngine::Gui
             HoroThirdParty::ImGui
     )
+    add_executable(HoroHierarchyEditSessionTests
+            unit/editor/HierarchyEditSessionTests.cpp
+    )
+
+    target_compile_features(HoroHierarchyEditSessionTests PRIVATE cxx_std_20)
+    target_link_libraries(HoroHierarchyEditSessionTests
+            PRIVATE
+            HoroEngine::Gui
+    )
     add_executable(HoroInspectorPanelRenderTests
             unit/editor/InspectorPanelRenderTests.cpp
     )
@@ -368,18 +377,41 @@ if (HORO_BUILD_EDITOR_GUI)
             HoroEngine::Gui
             HoroThirdParty::ImGui
     )
-    add_executable(HoroContentBrowserPanelRenderTests
-            unit/editor/ContentBrowserPanelRenderTests.cpp
+    add_executable(HoroInspectorEditSessionTests
+            unit/editor/InspectorEditSessionTests.cpp
     )
 
-    target_compile_features(HoroContentBrowserPanelRenderTests PRIVATE cxx_std_20)
-    target_include_directories(HoroContentBrowserPanelRenderTests PRIVATE
+    target_compile_features(HoroInspectorEditSessionTests PRIVATE cxx_std_20)
+    target_include_directories(HoroInspectorEditSessionTests PRIVATE
             ${PROJECT_SOURCE_DIR}/src/editor/screens/workspace
     )
-    target_link_libraries(HoroContentBrowserPanelRenderTests
+    target_link_libraries(HoroInspectorEditSessionTests
+            PRIVATE
+            HoroEngine::Gui
+    )
+    add_executable(HoroGlobalDockPanelRenderTests
+            unit/editor/GlobalDockPanelRenderTests.cpp
+    )
+
+    target_compile_features(HoroGlobalDockPanelRenderTests PRIVATE cxx_std_20)
+    target_include_directories(HoroGlobalDockPanelRenderTests PRIVATE
+            ${PROJECT_SOURCE_DIR}/src/editor/screens/workspace
+    )
+    target_link_libraries(HoroGlobalDockPanelRenderTests
             PRIVATE
             HoroEngine::Gui
             HoroThirdParty::ImGui
+    )
+    add_executable(HoroAssetBrowserInteractionSessionTests
+            unit/editor/AssetBrowserInteractionSessionTests.cpp
+    )
+
+    target_compile_features(
+            HoroAssetBrowserInteractionSessionTests PRIVATE cxx_std_20
+    )
+    target_link_libraries(HoroAssetBrowserInteractionSessionTests
+            PRIVATE
+            HoroEngine::Gui
     )
     add_executable(HoroEditorUiComponentsRenderTests
             unit/editor/EditorUiComponentsRenderTests.cpp
@@ -468,6 +500,11 @@ add_executable(HoroSceneDocumentTests
 )
 target_compile_features(HoroSceneDocumentTests PRIVATE cxx_std_20)
 target_link_libraries(HoroSceneDocumentTests PRIVATE HoroEngine::EditorRenderExtraction)
+add_executable(HoroSceneDocumentPersistenceTests
+        unit/editor/SceneDocumentPersistenceTests.cpp
+)
+target_compile_features(HoroSceneDocumentPersistenceTests PRIVATE cxx_std_20)
+target_link_libraries(HoroSceneDocumentPersistenceTests PRIVATE HoroEngine::EditorServices)
 add_executable(HoroEditorViewportPickingTests
         unit/editor/EditorViewportPickingTests.cpp
 )
@@ -791,8 +828,11 @@ set(HORO_CATCH_TEST_TARGETS
         HoroEditorSelectionModelTests
         HoroEditorViewportModelTests
         HoroHierarchyPanelRenderTests
+        HoroHierarchyEditSessionTests
+        HoroInspectorEditSessionTests
         HoroInspectorPanelRenderTests
-        HoroContentBrowserPanelRenderTests
+        HoroGlobalDockPanelRenderTests
+        HoroAssetBrowserInteractionSessionTests
         HoroEditorUiComponentsRenderTests
         HoroViewportPanelRenderTests
         HoroDataBusTests
@@ -805,6 +845,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroPlatformTests
         HoroEditorViewportSceneTests
         HoroSceneDocumentTests
+        HoroSceneDocumentPersistenceTests
         HoroEditorViewportPickingTests
         HoroRenderBackendRegistryTests
         HoroRenderFrontendTests

@@ -6,9 +6,8 @@
 
 namespace Horo::Editor {
     namespace {
-        [[nodiscard]] HierarchyNode *FindNode(std::vector<std::unique_ptr<HierarchyNode> > &nodes,
-                                              const HierarchyNodeId id) noexcept {
-            for (const auto &node: nodes) {
+        [[nodiscard]] HierarchyNode *FindNode(std::vector<std::unique_ptr<HierarchyNode>> &nodes, const HierarchyNodeId id) noexcept {
+            for (const auto &node : nodes) {
                 if (node->id == id) {
                     return node.get();
                 }
@@ -19,9 +18,9 @@ namespace Horo::Editor {
             return nullptr;
         }
 
-        [[nodiscard]] const HierarchyNode *FindNode(const std::vector<std::unique_ptr<HierarchyNode> > &nodes,
+        [[nodiscard]] const HierarchyNode *FindNode(const std::vector<std::unique_ptr<HierarchyNode>> &nodes,
                                                     const HierarchyNodeId id) noexcept {
-            for (const auto &node: nodes) {
+            for (const auto &node : nodes) {
                 if (node->id == id) {
                     return node.get();
                 }
@@ -36,18 +35,22 @@ namespace Horo::Editor {
             if (root.id == id) {
                 return true;
             }
-            return std::ranges::any_of(root.children, [id](const auto &child) { return ContainsNode(*child, id); });
+            return std::ranges::any_of(root.children, [id](const auto &child) {
+                return ContainsNode(*child, id);
+            });
         }
 
-        [[nodiscard]] std::unique_ptr<HierarchyNode> ExtractNode(std::vector<std::unique_ptr<HierarchyNode> > &nodes,
+        [[nodiscard]] std::unique_ptr<HierarchyNode> ExtractNode(std::vector<std::unique_ptr<HierarchyNode>> &nodes,
                                                                  const HierarchyNodeId id) noexcept {
-            const auto direct = std::ranges::find_if(nodes, [id](const auto &node) { return node->id == id; });
+            const auto direct = std::ranges::find_if(nodes, [id](const auto &node) {
+                return node->id == id;
+            });
             if (direct != nodes.end()) {
                 std::unique_ptr<HierarchyNode> extracted = std::move(*direct);
                 nodes.erase(direct);
                 return extracted;
             }
-            for (const auto &node: nodes) {
+            for (const auto &node : nodes) {
                 if (std::unique_ptr<HierarchyNode> extracted = ExtractNode(node->children, id)) {
                     return extracted;
                 }
@@ -55,16 +58,14 @@ namespace Horo::Editor {
             return nullptr;
         }
 
-        [[nodiscard]] std::optional<HierarchyNodeId> FindParentId(
-            const std::vector<std::unique_ptr<HierarchyNode> > &nodes,
-            const HierarchyNodeId id,
-            const std::optional<HierarchyNodeId> parent) noexcept {
-            for (const auto &node: nodes) {
+        [[nodiscard]] std::optional<HierarchyNodeId> FindParentId(const std::vector<std::unique_ptr<HierarchyNode>> &nodes,
+                                                                  const HierarchyNodeId id,
+                                                                  const std::optional<HierarchyNodeId> parent) noexcept {
+            for (const auto &node : nodes) {
                 if (node->id == id) {
                     return parent;
                 }
-                const std::optional<HierarchyNodeId> found = FindParentId(node->children, id, node->id);
-                if (found.has_value()) {
+                if (const std::optional<HierarchyNodeId> found = FindParentId(node->children, id, node->id); found.has_value()) {
                     return found;
                 }
             }
@@ -95,23 +96,22 @@ namespace Horo::Editor {
             return false;
         }
 
-        void AppendExpandedRows(const HierarchyNode &node, const std::uint32_t depth,
-                                std::vector<HierarchyVisibleRow> &output) {
+        void AppendExpandedRows(const HierarchyNode &node, const std::uint32_t depth, std::vector<HierarchyVisibleRow> &output) {
             output.push_back(HierarchyVisibleRow{.node = &node, .depth = depth});
             if (!node.expanded) {
                 return;
             }
-            for (const auto &child: node.children) {
+            for (const auto &child : node.children) {
                 AppendExpandedRows(*child, depth + 1, output);
             }
         }
 
-        [[nodiscard]] bool AppendFilteredRows(const HierarchyNode &node, const std::uint32_t depth,
-                                              const std::string_view query, std::vector<HierarchyVisibleRow> &output) {
+        [[nodiscard]] bool AppendFilteredRows(const HierarchyNode &node, const std::uint32_t depth, const std::string_view query,
+                                              std::vector<HierarchyVisibleRow> &output) {
             const std::size_t rowStart = output.size();
             output.push_back(HierarchyVisibleRow{.node = &node, .depth = depth});
             bool descendantMatched = false;
-            for (const auto &child: node.children) {
+            for (const auto &child : node.children) {
                 descendantMatched = AppendFilteredRows(*child, depth + 1, query, output) || descendantMatched;
             }
             if (ContainsCaseInsensitive(node.name, query) || descendantMatched) {
@@ -122,7 +122,9 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] std::string TrimName(const std::string_view name) {
-            const auto isWhitespace = [](const unsigned char character) { return std::isspace(character) != 0; };
+            const auto isWhitespace = [](const unsigned char character) {
+                return std::isspace(character) != 0;
+            };
             const auto first = std::ranges::find_if_not(name, isWhitespace);
             const auto last = std::find_if_not(name.rbegin(), name.rend(), isWhitespace).base();
             if (first >= last) {
@@ -130,10 +132,10 @@ namespace Horo::Editor {
             }
             return std::string(first, last);
         }
-    } // namespace
+    }  // namespace
 
     /** @copydoc HierarchyModel::Roots */
-    const std::vector<std::unique_ptr<HierarchyNode> > &HierarchyModel::Roots() const noexcept {
+    const std::vector<std::unique_ptr<HierarchyNode>> &HierarchyModel::Roots() const noexcept {
         return roots_;
     }
 
@@ -148,14 +150,13 @@ namespace Horo::Editor {
     }
 
     /** @copydoc HierarchyModel::AddNode */
-    HierarchyNodeId HierarchyModel::AddNode(const std::optional<HierarchyNodeId> parent, std::string name,
-                                            const HierarchyNodeType type) {
+    HierarchyNodeId HierarchyModel::AddNode(const std::optional<HierarchyNodeId> parent, std::string name, const HierarchyNodeType type) {
         name = TrimName(name);
         if (name.empty() || name.size() > 128) {
             return 0;
         }
 
-        std::vector<std::unique_ptr<HierarchyNode> > *destination = &roots_;
+        std::vector<std::unique_ptr<HierarchyNode>> *destination = &roots_;
         if (parent.has_value()) {
             HierarchyNode *parentNode = Find(*parent);
             if (parentNode == nullptr) {
@@ -188,17 +189,17 @@ namespace Horo::Editor {
     /** @copydoc HierarchyModel::Replace */
     void HierarchyModel::Replace(const std::span<const HierarchyNodeInput> nodes) {
         std::vector<HierarchyNodeId> collapsed;
-        for (const HierarchyNodeInput &input: nodes) {
+        for (const HierarchyNodeInput &input : nodes) {
             if (const HierarchyNode *existing = Find(input.id); existing != nullptr && !existing->expanded) {
                 collapsed.push_back(input.id);
             }
         }
 
-        std::vector<std::unique_ptr<HierarchyNode> > owned;
+        std::vector<std::unique_ptr<HierarchyNode>> owned;
         owned.reserve(nodes.size());
         std::unordered_map<HierarchyNodeId, HierarchyNode *> byId;
         byId.reserve(nodes.size());
-        for (const HierarchyNodeInput &input: nodes) {
+        for (const HierarchyNodeInput &input : nodes) {
             if (input.id == 0 || byId.contains(input.id)) {
                 owned.push_back(nullptr);
                 continue;
@@ -275,9 +276,8 @@ namespace Horo::Editor {
     }
 
     /** @copydoc HierarchyModel::Reparent */
-    HierarchyMutationResult HierarchyModel::Reparent(const HierarchyNodeId id,
-                                                     const std::optional<HierarchyNodeId> newParent) noexcept {
-        HierarchyNode *source = Find(id);
+    HierarchyMutationResult HierarchyModel::Reparent(const HierarchyNodeId id, const std::optional<HierarchyNodeId> newParent) noexcept {
+        const HierarchyNode *source = Find(id);
         if (source == nullptr) {
             return HierarchyMutationResult::NotFound;
         }
@@ -312,10 +312,9 @@ namespace Horo::Editor {
     }
 
     /** @copydoc HierarchyModel::BuildVisibleRows */
-    void HierarchyModel::BuildVisibleRows(const std::string_view query,
-                                          std::vector<HierarchyVisibleRow> &output) const {
+    void HierarchyModel::BuildVisibleRows(const std::string_view query, std::vector<HierarchyVisibleRow> &output) const {
         output.clear();
-        for (const auto &root: roots_) {
+        for (const auto &root : roots_) {
             if (query.empty()) {
                 AppendExpandedRows(*root, 0, output);
             } else {
@@ -341,4 +340,4 @@ namespace Horo::Editor {
         static_cast<void>(model.Select(floor));
         return model;
     }
-} // namespace Horo::Editor
+}  // namespace Horo::Editor

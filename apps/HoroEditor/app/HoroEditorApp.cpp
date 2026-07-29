@@ -960,6 +960,7 @@ std::optional<EditorRendererRestartRequest> RunEditorMainLoop(RunEditorMainLoopP
                              p.localization,
                              p.engineEvents,
                              p.projectCreationService,
+                             p.jobSystem,
                              p.inputRouter,
                              p.rendererAvailability,
                              std::move(screenRegistry),

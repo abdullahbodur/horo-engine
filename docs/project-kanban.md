@@ -12,7 +12,7 @@ sözleşmelerin uygulanma ve doğrulanma durumunu özetler.
 
 | Yapılıyor                                                                                          | İncelenecek                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Hazır                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Bağımlı                                                                                                                                                                                                                                                                       | Sonra                                                                                                                                                                                                                                                                                                                                 | Tamamlandı                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 |----------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [EDT-004 · Console, output ve operations panelleri](#edt-004)<br>[EXT-001 · Extension ve gameplay module host](#ext-001) | [EDT-003 · Content Browser asset işlemleri](#edt-003)<br>[FND-001A · TaskGroup structured concurrency](#fnd-001a)<br>[PRJ-001A · Shared project mutation](#prj-001a)<br>[FND-001 · Foundation kontrat denetimi](#fnd-001)<br>[INP-001 · Input entegrasyon denetimi](#inp-001)<br>[MTH-001 · Scene math ve viewport denetimi](#mth-001)<br>[DOC-001 · Scene document kalıcılık denetimi](#doc-001)<br>[RND-002 · OpenGL/Metal parity denetimi](#rnd-002)<br>[TST-001 · Test matrisi ve CI denetimi](#tst-001)<br>[TST-002 · Dear ImGui UI automation](#tst-002) | [MAT-001 · Material ve shader temeli](#mat-001)<br>[EDT-002 · Inspector authoring](#edt-002)<br>[PRJ-001 · Project save/open/recovery](#prj-001)<br>[CLI-001 · Headless CLI host](#cli-001)<br>[MCP-001 · MCP host ve tool registry](#mcp-001)<br>[OBS-001 · Observability temeli](#obs-001)<br>[SEC-001 · Runtime güvenlik politikaları](#sec-001) | [MIG-001F · Subsystem/provider adoption](#mig-001f)<br>[GME-001 · Play mode ve gameplay runtime](#gme-001)<br>[PHY-001 · Physics runtime](#phy-001)<br>[AUD-001 · Audio runtime](#aud-001)<br>[PKG-001 · Package sistemi](#pkg-001)<br>[REL-001 · Release pipeline](#rel-001) | [NET-001 · Networking](#net-001)<br>[GUI-001 · Runtime Game UI/HUD](#gui-001)<br>[PLT-001 · Platform services](#plt-001)<br>[PFB-001 · Prefab sistemi](#pfb-001)<br>[ADV-001 · Advanced renderer özellikleri](#adv-001)<br>[ADV-002 · Gelişmiş dünya sistemleri](#adv-002) | [MIG-001 · Project migration architecture](#mig-001)<br>[MIG-001A · Version ve compatibility foundation](#mig-001a)<br>[MIG-001B · Migration registry ve planner](#mig-001b)<br>[MIG-001C · Transaction ve recovery](#mig-001c)<br>[MIG-001D · Project-open entegrasyonu](#mig-001d)<br>[MIG-001E · Welcome compatibility görünümü](#mig-001e)<br>[MIG-001F-01 · Project settings migration adoption](#mig-001f-01)<br>[RUN-001 · Runtime lifecycle ve frame scheduler](#run-001)<br>[ARC-001 · Desired tree ve target uyumu](#arc-001)<br>[EDT-001 · Editor vertical slice sağlamlaştırma](#edt-001)<br>[RND-001 · Generic renderer resource geçişi](#rnd-001)<br>[SCN-001 · Scene runtime ve ECS temeli](#scn-001)<br>[AST-001 · Asset pipeline temeli](#ast-001)<br>[AST-001A · Asset registry ve provider baseline](#ast-001a)<br>[AST-001B · Runtime scene asset resolution](#ast-001b)<br>[AST-001C · headless-null cooking ve cache](#ast-001c)<br>[AST-001D · Modular import ve GUI modal](#ast-001d)<br>[BAS-001 · Foundation primitives](#bas-001)<br>[BAS-002 · Scene math baseline](#bas-002)<br>[BAS-003 · Runtime input baseline](#bas-003)<br>[BAS-004 · Editor host ve workspace baseline](#bas-004)<br>[BAS-005 · Hierarchy create ve typed primitives](#bas-005)<br>[BAS-006 · Procedural mesh ve viewport baseline](#bas-006)<br>[BAS-007 · macOS app identity](#bas-007) |
+| [EDT-004 · Console, output ve operations panelleri](#edt-004)<br>[EXT-001 · Extension ve gameplay module host](#ext-001)<br>[EDT-002 · Inspector authoring](#edt-002) | [EDT-003 · Content Browser asset işlemleri](#edt-003)<br>[FND-001A · TaskGroup structured concurrency](#fnd-001a)<br>[PRJ-001A · Shared project mutation](#prj-001a)<br>[PRJ-001 · Project save/open/recovery](#prj-001)<br>[FND-001 · Foundation kontrat denetimi](#fnd-001)<br>[INP-001 · Input entegrasyon denetimi](#inp-001)<br>[MTH-001 · Scene math ve viewport denetimi](#mth-001)<br>[RND-002 · OpenGL/Metal parity denetimi](#rnd-002)<br>[TST-001 · Test matrisi ve CI denetimi](#tst-001)<br>[TST-002 · Dear ImGui UI automation](#tst-002) | [MAT-001 · Material ve shader temeli](#mat-001)<br>[CLI-001 · Headless CLI host](#cli-001)<br>[MCP-001 · MCP host ve tool registry](#mcp-001)<br>[OBS-001 · Observability temeli](#obs-001)<br>[SEC-001 · Runtime güvenlik politikaları](#sec-001) | [MIG-001F · Subsystem/provider adoption](#mig-001f)<br>[GME-001 · Play mode ve gameplay runtime](#gme-001)<br>[PHY-001 · Physics runtime](#phy-001)<br>[AUD-001 · Audio runtime](#aud-001)<br>[PKG-001 · Package sistemi](#pkg-001)<br>[REL-001 · Release pipeline](#rel-001) | [NET-001 · Networking](#net-001)<br>[GUI-001 · Runtime Game UI/HUD](#gui-001)<br>[PLT-001 · Platform services](#plt-001)<br>[PFB-001 · Prefab sistemi](#pfb-001)<br>[ADV-001 · Advanced renderer özellikleri](#adv-001)<br>[ADV-002 · Gelişmiş dünya sistemleri](#adv-002) | [MIG-001 · Project migration architecture](#mig-001)<br>[MIG-001A · Version ve compatibility foundation](#mig-001a)<br>[MIG-001B · Migration registry ve planner](#mig-001b)<br>[MIG-001C · Transaction ve recovery](#mig-001c)<br>[MIG-001D · Project-open entegrasyonu](#mig-001d)<br>[MIG-001E · Welcome compatibility görünümü](#mig-001e)<br>[MIG-001F-01 · Project settings migration adoption](#mig-001f-01)<br>[RUN-001 · Runtime lifecycle ve frame scheduler](#run-001)<br>[ARC-001 · Desired tree ve target uyumu](#arc-001)<br>[EDT-001 · Editor vertical slice sağlamlaştırma](#edt-001)<br>[RND-001 · Generic renderer resource geçişi](#rnd-001)<br>[SCN-001 · Scene runtime ve ECS temeli](#scn-001)<br>[AST-001 · Asset pipeline temeli](#ast-001)<br>[AST-001A · Asset registry ve provider baseline](#ast-001a)<br>[AST-001B · Runtime scene asset resolution](#ast-001b)<br>[AST-001C · headless-null cooking ve cache](#ast-001c)<br>[AST-001D · Modular import ve GUI modal](#ast-001d)<br>[BAS-001 · Foundation primitives](#bas-001)<br>[BAS-002 · Scene math baseline](#bas-002)<br>[BAS-003 · Runtime input baseline](#bas-003)<br>[BAS-004 · Editor host ve workspace baseline](#bas-004)<br>[BAS-005 · Hierarchy create ve typed primitives](#bas-005)<br>[BAS-006 · Procedural mesh ve viewport baseline](#bas-006)<br>[BAS-007 · macOS app identity](#bas-007)<br>[DOC-001 · Scene document kalıcılık denetimi](#doc-001) |
 
 ## Durum Sözleşmesi
 
@@ -391,7 +391,7 @@ ticket kapsamındadır.
 
 ### DOC-001 — Scene document ve command kalıcılık denetimi
 
-- **Durum:** İncelenecek
+- **Durum:** Tamamlandı
 - **Öncelik:** P0
 - **Özet:** Typed scene object/component snapshot, duplicate, undo/redo, dirty
   state, save boundary ve crash recovery sözleşmelerini gerçek document modeliyle
@@ -402,6 +402,15 @@ ticket kapsamındadır.
   [Project Model](./architecture/editor/project-model.md).
 - **Bağımlılık:** [BAS-005](#bas-005). Bulgular [PRJ-001](#prj-001) kapsamını
   kesinleştirir.
+- **Kanıt:** `SceneDocument::LoadSaved`, schema-versioned deterministic scene
+  serialization, typed component/primitive round-trip ve malformed/version-skewed
+  load failure regresyonlarına ek olarak validated recovery içeriğini yeni dirty
+  session olarak kuran explicit restore ile history'yi kesen external reload
+  sınırları eklendi. Bounded history en eski transaction'ı document state'ini
+  değiştirmeden düşürüyor; scene watcher reset'i tamamlanmış eski generation
+  sonucunu owner thread'e yayınlamıyor.
+- **Son doğrulama:** 2026-07-28 — macOS/AppleClang targeted scene document
+  15/15 ve scene persistence/watch 16/16 testleri geçti.
 
 [↑ Kanbana dön](#kanban)
 
@@ -695,7 +704,7 @@ ticket kapsamındadır.
 
 ### EDT-002 — Inspector typed authoring
 
-- **Durum:** Hazır
+- **Durum:** Yapılıyor
 - **Öncelik:** P1
 - **Özet:** Transform ve typed scene component'lerini shared controls üzerinden
   düzenleyen, multi-selection ve validation destekli Inspector akışını tamamla.
@@ -704,6 +713,26 @@ ticket kapsamındadır.
 - **Mimari:** [Editor Panel Host](./architecture/editor/editor-panel-host.md),
   [Editor Document Model](./architecture/editor/editor-document-model.md).
 - **Bağımlılık:** [DOC-001](#doc-001).
+- **Tamamlanan dilimler:** Single-selection Inspector gerçek typed object kind
+  projection'ını gösterir. Shared editable title üzerinden object name,
+  document'in canonical 1–128 byte validation kontratıyla tek semantic rename
+  command üretir; no-op rename history oluşturmaz ve undo ile geri alınır.
+  Position, rotation ve scale shared float kontrolleri sürükleme sırasında
+  document'i değiştirmeyen viewport preview üretir; obje ve gizmo eksenleri aynı
+  transient world transformunu takip eder. Etkileşim sonunda tek semantic
+  transform command ve tek undo kaydı commit edilir. Escape, selection değişimi
+  veya başka workspace komutu transient preview'ı geri alır. Non-finite değerler
+  UI sınırında reddedilir. Typed Camera editorü projection, perspective field of
+  view, orthographic height ve near/far clipping plane değerlerini shared
+  Inspector controls ile düzenler; document sınırındaki canonical validation,
+  no-op koruması ve undo/redo tek typed component command üzerinde birleşir.
+  Mock Mesh Renderer ve Static Flags satırları kaldırıldı.
+- **Kalan:** Typed Light/Trigger/Audio component editörleri,
+  multi-selection mixed values ve batch transaction; narrow/localized layout
+  matrisi.
+- **Son doğrulama:** 2026-07-29 — Inspector render interaction ve workspace
+  controller, shared UI, document ve localization targeted matrisi 66/66 geçti;
+  `HoroEditor` build edildi.
 
 [↑ Kanbana dön](#kanban)
 
@@ -826,7 +855,7 @@ ticket kapsamındadır.
 
 ### PRJ-001 — Project save, open, autosave ve recovery
 
-- **Durum:** Hazır
+- **Durum:** İncelenecek
 - **Öncelik:** P0
 - **Özet:** Project metadata ve creation temelini atomic document save, recent
   project, workspace persistence, autosave journal ve crash recovery ile tamamla.
@@ -835,6 +864,48 @@ ticket kapsamındadır.
 - **Mimari:** [Project Model](./architecture/editor/project-model.md),
   [Editor Document Model](./architecture/editor/editor-document-model.md).
 - **Bağımlılık:** [DOC-001](#doc-001), [EDT-001](#edt-001).
+- **Kanıt:** `settings.defaultScene` proje-içi absolute hedefe çözülüyor;
+  workspace gerçek scene JSON yükleyip aynı authored state ile yeniden açılıyor.
+  Save shared `ProjectMutationCoordinator` lease'i altında sibling durable temp
+  dosya ve atomic replace kullanıyor; başarısız replace canonical dosyayı ve dirty
+  state'i koruyor. Ayarlardaki interval ile coalesce edilen autosave canonical
+  dosyadan ayrı, bounded ve checksum doğrulamalı recovery kaydı yazıyor; başarısız
+  yazılar bounded backoff kullanıyor. Startup yalnızca kaydı sınıflandırıyor ve
+  kullanıcı Restore/Discard seçmeden canonical state'i değiştirmiyor. Canonical
+  byte fingerprint'i load/save sınırında izleniyor; Save hazırlamadan önce ve
+  atomic replace öncesinde dış değişikliği tekrar denetleyip explicit
+  Reload/Overwrite seçimi olmadan dosyayı değiştirmiyor. Enjekte edilen
+  `JobSystem` üzerinde tek bounded fingerprint işi tutan background scene watch
+  clean document dışarıdan değiştiğinde owner thread'i bloklamadan aynı explicit
+  Reload/Overwrite bildirimi üretir; save/reload yeni baseline kurarken stale
+  watcher neslini iptal eder. Conflict bar'daki Compare akışı immutable document
+  snapshot'ını owner thread'de yakalar; bounded canonical load/parse ve typed
+  object karşılaştırmasını modal-owned background job'da yürütür. Scrollable,
+  localized modal diskte eklenen/silinen ve stable ID ile değiştirilen nesneleri
+  name, parent, transform, primitive ve component alanlarıyla sınıflandırır.
+  Save As ve Save Copy As ortak absolute project-path doğrulaması, `.horo`
+  extension kontratı, explicit overwrite onayı ve destination fingerprint yarış
+  kontrolü kullanır. Save As aktif document kimliğini yalnızca destination
+  durable olduktan sonra değiştirip watcher/recovery baseline'ını yeniler; Save
+  Copy As ise aktif path, dirty state, saved revision, watcher ve recovery
+  state'ine dokunmadan bağımsız kopya üretir. Project-open, migration sonrasında
+  ve derived-state publication öncesinde configured default scene için bounded
+  read, project containment, `.horo`, schema ve semantic document doğrulaması
+  yapar; başarısızlık loading ekranında Retry/Back durumuna geçer ve workspace
+  kurulmaz. Workspace girişindeki tekrar yükleme de sessiz fallback yerine typed
+  initialization failure üretir. Terminal project-open operasyonuna ekran leave
+  sırasında gelen cancel isteği artık idempotent no-op'tur; hazır session'ı
+  değiştirmez ve yanlış cancellation warning'i üretmez.
+- **Son doğrulama:** 2026-07-28 — macOS/AppleClang `HoroGui` ve targeted
+  `HoroEditor` release target'ı ile persistence/localization/workspace/menu/host
+  lifecycle testleri 61/61 geçti; Save As/Save Copy As için
+  destination-exists, invalid path, write race ve document identity
+  regresyonları eklendi. Workspace background işleri için gereken `JobSystem`
+  composition kaydı release-build null dereference regresyonuyla korunuyor.
+  Default-scene preflight diliminde project-open, persistence, controller ve host
+  lifecycle matrisi 55/55; migration integration 2/2 ve localization matrisi
+  6/6 geçti; `HoroEditor` release target'ı build edildi. Terminal cancel
+  regresyonuyla project-open matrisi ayrıca 2/2 geçti.
 
 [↑ Kanbana dön](#kanban)
 

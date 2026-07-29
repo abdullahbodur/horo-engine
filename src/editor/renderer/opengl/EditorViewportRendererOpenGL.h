@@ -4,11 +4,9 @@
 
 #include <unordered_map>
 
-namespace Horo::Editor
-{
+namespace Horo::Editor {
 /** @brief OpenGL editor adapter that renders backend-neutral editor scene instances into an offscreen target. */
-class EditorViewportRendererOpenGL final : public IEditorViewportRenderer
-{
+class EditorViewportRendererOpenGL final : public IEditorViewportRenderer {
   public:
     EditorViewportRendererOpenGL() = default;
     ~EditorViewportRendererOpenGL() override;
@@ -30,8 +28,7 @@ class EditorViewportRendererOpenGL final : public IEditorViewportRenderer
 
   private:
     [[nodiscard]] Result<void> CreateProgram();
-    struct GpuMesh
-    {
+    struct GpuMesh {
         std::uint32_t vertexArray{0};
         std::uint32_t vertexBuffer{0};
         std::uint32_t indexBuffer{0};

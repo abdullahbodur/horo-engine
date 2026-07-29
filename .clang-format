@@ -1,6 +1,20 @@
 BasedOnStyle: Microsoft
+Language: Cpp
+Standard: Latest
 
-# Forces opening braces onto the same line (K&R/OTBS style)
+# Indentation
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
+ConstructorInitializerIndentWidth: 4
+NamespaceIndentation: All
+IndentCaseLabels: true
+IndentCaseBlocks: false
+IndentAccessModifiers: false
+AccessModifierOffset: -4
+
+# Braces: K&R / OTBS
 BreakBeforeBraces: Custom
 BraceWrapping:
   AfterCaseLabel: false
@@ -21,14 +35,73 @@ BraceWrapping:
   SplitEmptyRecord: false
   SplitEmptyNamespace: false
 
-# Prevent single-line block overrides
+# Short statements
 AllowShortBlocksOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: Empty
 AllowShortIfStatementsOnASingleLine: Never
-
-# Lambda settings
-LambdaBodyIndentation: OuterScope
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
 AllowShortLambdasOnASingleLine: None
 
-# Layout & Alignment
-ColumnLimit: 100
-AlignAfterOpenBracket: true
+# Function calls and declarations
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+BinPackArguments: true
+BinPackParameters: true
+
+BreakAfterReturnType: None
+PenaltyReturnTypeOnItsOwnLine: 1000000
+PenaltyBreakBeforeFirstCallParameter: 1000000
+
+# Alignment and wrapping
+ColumnLimit: 140
+AlignAfterOpenBracket: Align
+AlignOperands: Align
+AlignConsecutiveAssignments: None
+AlignConsecutiveDeclarations: None
+AlignConsecutiveMacros: Consecutive
+BreakBeforeBinaryOperators: None
+BreakBeforeTernaryOperators: true
+
+# Pointers and references
+DerivePointerAlignment: false
+PointerAlignment: Right
+ReferenceAlignment: Pointer
+
+# Constructor initializers
+PackConstructorInitializers: BinPack
+BreakConstructorInitializers: BeforeColon
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+
+# Lambda
+LambdaBodyIndentation: OuterScope
+
+# Spacing
+SpaceBeforeParens: ControlStatements
+SpaceBeforeAssignmentOperators: true
+SpaceAfterCStyleCast: false
+SpacesInAngles: Never
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+Cpp11BracedListStyle: true
+
+# Empty lines
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
+SeparateDefinitionBlocks: Always
+
+# Includes
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+SortUsingDeclarations: Lexicographic
+
+# Comments
+ReflowComments: true
+SpacesBeforeTrailingComments: 2
+
+# Miscellaneous
+FixNamespaceComments: true
+CompactNamespaces: false
+RemoveBracesLLVM: false
+InsertBraces: false

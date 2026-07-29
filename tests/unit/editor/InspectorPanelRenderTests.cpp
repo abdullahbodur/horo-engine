@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "InspectorPanel.h"
+#include "editor/screens/workspace/panels/inspector/InspectorPanel.h"
 
 #include "Horo/Editor/EditorDataBus.h"
 #include "Horo/Editor/EditorSettingsService.h"
@@ -77,17 +77,62 @@ TEST_CASE("Inspector Panel Render Tests", "[unit][editor]")
     EditorWorkspaceViewCommandData command;
     InspectorPanel panel;
 
-    ImGui::NewFrame();
-    ImGui::SetNextWindowPos(ImVec2(0.0F, 0.0F));
-    ImGui::SetNextWindowSize(ImVec2(280.0F, 440.0F));
-    ImGui::Begin("InspectorRenderTest", nullptr,
-                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove);
-    panel.DrawPanel(ImGui::GetCursorScreenPos(), ImVec2(260.0F, 400.0F), viewModel, command, context);
-    ImGui::End();
-    ImGui::Render();
+    const auto drawFrame = [&]
+    {
+        ImGui::NewFrame();
+        ImGui::SetNextWindowPos(ImVec2(0.0F, 0.0F));
+        ImGui::SetNextWindowSize(ImVec2(280.0F, 440.0F));
+        ImGui::Begin("InspectorRenderTest", nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove);
+        panel.DrawPanel(ImGui::GetCursorScreenPos(), ImVec2(260.0F, 400.0F), viewModel, command, context);
+        ImGui::End();
+        ImGui::Render();
+    };
+
+    io.AddFocusEvent(true);
+    io.AddMousePosEvent(170.0F, 116.0F);
+    io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+    drawFrame();
 
     REQUIRE((command.command == EditorWorkspaceViewCommand::None));
     REQUIRE((panel.GetObservedEventTypes() ==
         std::vector<std::string>({"SceneDocumentChangedEvent", "SelectionChangedEvent"})));
+
+    command = {};
+    io.AddMousePosEvent(60.0F, 50.0F);
+    drawFrame();
+    command = {};
+    io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    drawFrame();
+    io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+    io.AddInputCharactersUTF8("Hero");
+    drawFrame();
+    REQUIRE(io.WantTextInput);
+    REQUIRE((command.command == EditorWorkspaceViewCommand::None));
+    command = {};
+    io.AddMousePosEvent(170.0F, 116.0F);
+    drawFrame();
+    command = {};
+    io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    drawFrame();
+    REQUIRE((command.command == EditorWorkspaceViewCommand::UpdateObjectName));
+    REQUIRE((command.objectPayload == SceneObjectId{7}));
+    REQUIRE((command.stringPayload == "Hero"));
+
+    command = {};
+    io.AddMousePosEvent(200.0F, 116.0F);
+    drawFrame();
+    REQUIRE((command.command == EditorWorkspaceViewCommand::PreviewObjectTransform));
+    REQUIRE((command.objectPayload == SceneObjectId{7}));
+    REQUIRE((command.transformPayload.has_value()));
+    REQUIRE((command.transformPayload->translation.x != 1.0F));
+
+    command = {};
+    io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+    drawFrame();
+    REQUIRE((command.command == EditorWorkspaceViewCommand::CommitObjectTransform));
+    REQUIRE((command.objectPayload == SceneObjectId{7}));
+    REQUIRE((command.transformPayload.has_value()));
+
     ImGui::DestroyContext();
 }

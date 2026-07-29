@@ -7,10 +7,8 @@
 
 #include "editor/modals/asset_import/AssetImportModalPresentation.h"
 
-namespace Horo::Editor
-{
-    ModalFrameResult AssetImportModal::Draw()
-    {
+namespace Horo::Editor {
+    ModalFrameResult AssetImportModal::Draw() {
         return DrawAssetImportModalPresentation(*this, m_fonts);
     }
-} // namespace Horo::Editor
+}  // namespace Horo::Editor

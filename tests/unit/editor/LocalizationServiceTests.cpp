@@ -158,6 +158,38 @@ namespace
             "workspace.content_browser.sort.name",
             "workspace.content_browser.sort.type",
         };
+        constexpr std::array recoveryKeys{
+            "workspace.recovery.available",
+            "workspace.recovery.restore",
+            "workspace.recovery.discard",
+        };
+        constexpr std::array projectLoadingKeys{
+            "project_loading.status.loading_scene",
+            "project_loading.error.scene",
+        };
+        constexpr std::array sceneConflictKeys{
+            "workspace.scene_conflict.available",
+            "workspace.scene_conflict.compare",
+            "workspace.scene_conflict.reload",
+            "workspace.scene_conflict.overwrite",
+            "workspace.scene_compare.title",
+            "workspace.scene_compare.description",
+            "workspace.scene_compare.loading",
+            "workspace.scene_compare.failed",
+            "workspace.scene_compare.added",
+            "workspace.scene_compare.removed",
+            "workspace.scene_compare.modified",
+            "workspace.scene_compare.summary.added",
+            "workspace.scene_compare.summary.removed",
+            "workspace.scene_compare.summary.modified",
+            "workspace.scene_compare.field.name",
+            "workspace.scene_compare.field.id",
+            "workspace.scene_compare.field.parent",
+            "workspace.scene_compare.field.transform",
+            "workspace.scene_compare.field.primitive",
+            "workspace.scene_compare.field.components",
+            "workspace.scene_compare.empty",
+        };
         const auto assertGlobalDockKeysExist = [&globalDockKeys](const Horo::Editor::LocalizationService& service)
         {
             for (const char* key : globalDockKeys)
@@ -173,6 +205,24 @@ namespace
                         (!service.Get("editor", key)
                               .starts_with("[missing:")));
                 }
+            };
+        const auto assertRecoveryKeysExist =
+            [&recoveryKeys](const Horo::Editor::LocalizationService& service)
+            {
+                for (const char* key : recoveryKeys)
+                    REQUIRE((!service.Get("editor", key).starts_with("[missing:")));
+            };
+        const auto assertProjectLoadingKeysExist =
+            [&projectLoadingKeys](const Horo::Editor::LocalizationService& service)
+            {
+                for (const char* key : projectLoadingKeys)
+                    REQUIRE((!service.Get("editor", key).starts_with("[missing:")));
+            };
+        const auto assertSceneConflictKeysExist =
+            [&sceneConflictKeys](const Horo::Editor::LocalizationService& service)
+            {
+                for (const char* key : sceneConflictKeys)
+                    REQUIRE((!service.Get("editor", key).starts_with("[missing:")));
             };
 
         const std::filesystem::path enPath = "assets/localization/editor/en-US.json";
@@ -196,6 +246,9 @@ namespace
         REQUIRE((service.Get("editor", "workspace.global_dock.tab.localization") == "L10n"));
         assertGlobalDockKeysExist(service);
         assertContentBrowserKeysExist(service);
+        assertRecoveryKeysExist(service);
+        assertProjectLoadingKeysExist(service);
+        assertSceneConflictKeysExist(service);
 
         REQUIRE((service.Prepare(Horo::Editor::LocaleTag{"tr-TR"}, &error)));
         REQUIRE((service.ActivatePrepared(&error)));
@@ -208,5 +261,8 @@ namespace
         REQUIRE((service.Get("editor", "workspace.global_dock.tab.localization") == "L10n"));
         assertGlobalDockKeysExist(service);
         assertContentBrowserKeysExist(service);
+        assertRecoveryKeysExist(service);
+        assertProjectLoadingKeysExist(service);
+        assertSceneConflictKeysExist(service);
     }
 } // namespace

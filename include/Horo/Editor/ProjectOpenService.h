@@ -70,6 +70,7 @@ enum class ProjectOpenPhase : std::uint8_t
     PlanningMigration,
     Migrating,
     UpdatingProjectMetadata,
+    ValidatingDefaultScene,
     RebuildingDerivedState,
     RendererPreflight,
     PreparingWorkspace,
@@ -176,8 +177,10 @@ class ProjectOpenService
     /** @brief Reads an immutable operation projection. @param operation Generation-safe identity. @return Snapshot or
      * empty when stale. */
     [[nodiscard]] std::optional<ProjectOpenProgressSnapshot> Query(ProjectOpenOperationId operation) const;
-    /** @brief Requests cooperative cancellation. @param operation Operation identity. @return Success or stale-ID
-     * error. */
+    /** @brief Requests cooperative cancellation; terminal operations are an idempotent no-op.
+     * @param operation Operation identity.
+     * @return Success or stale-ID error.
+     */
     [[nodiscard]] Result<void> RequestCancel(ProjectOpenOperationId operation);
     /** @brief Reserves a ready session for transactional workspace construction. */
     [[nodiscard]] Result<ProjectSessionActivationLease> ReserveSession(ProjectSessionCandidateId session);

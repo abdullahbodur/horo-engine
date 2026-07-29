@@ -6,11 +6,9 @@
 
 #include <vector>
 
-namespace Horo::Editor
-{
+namespace Horo::Editor {
 /** @brief Dear ImGui SDL3/OpenGL implementation for the editor composition. */
-class EditorGuiRendererOpenGL final : public IEditorGuiRenderer
-{
+class EditorGuiRendererOpenGL final : public IEditorGuiRenderer {
   public:
     /** @brief Borrows the SDL window and initialized OpenGL context. */
     EditorGuiRendererOpenGL(SDL_Window &window, SDL_GLContext context) noexcept;

@@ -13,62 +13,71 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
-namespace Horo::Editor
-{
+namespace Horo::Editor {
+    inline constexpr std::size_t MaximumSceneObjectNameBytes = 128;
+
+    /**
+     * @brief Reports whether a scene object name satisfies the authored document contract.
+     * @param name UTF-8 name measured in persisted bytes.
+     * @return True when the name is non-empty and fits the bounded document field.
+     */
+    [[nodiscard]] bool IsValidSceneObjectName(std::string_view name) noexcept;
+
+    /**
+     * @brief Reports whether authored camera values satisfy document and runtime conversion constraints.
+     * @param camera Camera component value to validate.
+     * @return True when projection-specific values and clipping planes are finite and ordered.
+     */
+    [[nodiscard]] bool IsValidCameraComponent(const Runtime::CameraComponent &camera) noexcept;
+
     /** @brief Stable identity of an authored scene object within one document session. */
-    struct SceneObjectId
-    {
+    struct SceneObjectId {
         std::uint64_t value{0};
 
         /** @brief Reports whether this ID can identify an object. */
-        [[nodiscard]] constexpr bool IsValid() const noexcept
-        {
+        [[nodiscard]] constexpr bool IsValid() const noexcept {
             return value != 0;
         }
 
-        [[nodiscard]] constexpr auto operator<=>(const SceneObjectId&) const noexcept = default;
+        [[nodiscard]] constexpr auto operator<=>(const SceneObjectId &) const noexcept = default;
     };
 
     /** @brief Monotonic committed revision of a scene document. */
-    struct DocumentRevision
-    {
+    struct DocumentRevision {
         std::uint64_t value{0};
 
-        [[nodiscard]] constexpr auto operator<=>(const DocumentRevision&) const noexcept = default;
+        [[nodiscard]] constexpr auto operator<=>(const DocumentRevision &) const noexcept = default;
     };
 
     /** @brief Immutable identity of one committed authored content state. */
-    struct DocumentStateId
-    {
+    struct DocumentStateId {
         std::uint64_t value{0};
 
         /** @brief Reports whether this identity denotes a committed document state. */
-        [[nodiscard]] constexpr bool IsValid() const noexcept
-        {
+        [[nodiscard]] constexpr bool IsValid() const noexcept {
             return value != 0;
         }
 
-        [[nodiscard]] constexpr auto operator<=>(const DocumentStateId&) const noexcept = default;
+        [[nodiscard]] constexpr auto operator<=>(const DocumentStateId &) const noexcept = default;
     };
 
     using PrimitiveMeshDescriptor = Runtime::PrimitiveMeshDescriptor;
 
     /** @brief Typed authored component values attached to one scene object. */
-    struct SceneObjectComponentSet
-    {
+    struct SceneObjectComponentSet {
         std::optional<Runtime::CameraComponent> camera;
         std::optional<Runtime::LightComponent> light;
         std::optional<Runtime::TriggerVolumeComponent> triggerVolume;
         std::optional<Runtime::AudioSourceComponent> audioSource;
 
-        [[nodiscard]] constexpr auto operator<=>(const SceneObjectComponentSet&) const noexcept = default;
+        [[nodiscard]] constexpr auto operator<=>(const SceneObjectComponentSet &) const noexcept = default;
     };
 
     /** @brief Immutable value snapshot of one authored scene object. */
-    struct SceneObjectSnapshot
-    {
+    struct SceneObjectSnapshot {
         SceneObjectId id;
         std::optional<SceneObjectId> parent;
         std::string name;
@@ -78,28 +87,26 @@ namespace Horo::Editor
     };
 
     /** @brief Immutable value snapshot of an entire committed scene document. */
-    struct SceneDocumentSnapshot
-    {
+    struct SceneDocumentSnapshot {
         DocumentRevision revision;
         DocumentStateId state;
         std::vector<SceneObjectSnapshot> objects;
     };
 
     /** @brief One transient local-transform override keyed by stable scene-object identity. */
-    struct SceneObjectTransformPreview
-    {
+    struct SceneObjectTransformPreview {
         SceneObjectId object;
         Math::Transform localTransform;
 
-        [[nodiscard]] constexpr bool operator==(const SceneObjectTransformPreview&) const noexcept = default;
+        [[nodiscard]] constexpr bool operator==(const SceneObjectTransformPreview &) const noexcept = default;
     };
 
     /** @brief Semantic category of one committed document transition. */
-    enum class DocumentChangeKind : std::uint8_t
-    {
+    enum class DocumentChangeKind : std::uint8_t {
         Created,
         Renamed,
         TransformChanged,
+        ComponentChanged,
         Duplicated,
         Deleted,
         Undone,
@@ -108,8 +115,7 @@ namespace Horo::Editor
     };
 
     /** @brief Typed request to create one authored scene object. */
-    struct CreateSceneObjectCommand
-    {
+    struct CreateSceneObjectCommand {
         std::string name;
         std::optional<SceneObjectId> parent;
         Math::Transform localTransform;
@@ -118,42 +124,42 @@ namespace Horo::Editor
     };
 
     /** @brief Catalog-based request shared by editor creation adapters. */
-    struct PrimitiveCreationRequest
-    {
+    struct PrimitiveCreationRequest {
         Runtime::PrimitiveId primitive;
         std::optional<SceneObjectId> parent;
     };
 
     /** @brief Typed request to rename an authored scene object. */
-    struct RenameSceneObjectCommand
-    {
+    struct RenameSceneObjectCommand {
         SceneObjectId object;
         std::string name;
     };
 
     /** @brief Typed request to replace an object's local transform. */
-    struct SetSceneObjectTransformCommand
-    {
+    struct SetSceneObjectTransformCommand {
         SceneObjectId object;
         Math::Transform localTransform;
     };
 
+    /** @brief Typed request to replace an existing core camera component. */
+    struct SetSceneObjectCameraCommand {
+        SceneObjectId object;
+        Runtime::CameraComponent camera;
+    };
+
     /** @brief Typed request to duplicate one object without duplicating its children. */
-    struct DuplicateSceneObjectCommand
-    {
+    struct DuplicateSceneObjectCommand {
         SceneObjectId source;
         std::string name;
     };
 
     /** @brief Typed request to delete one object and its complete descendant subtree. */
-    struct DeleteSceneObjectCommand
-    {
+    struct DeleteSceneObjectCommand {
         SceneObjectId object;
     };
 
     /** @brief Result metadata returned after a committed scene command. */
-    struct SceneCommandResult
-    {
+    struct SceneCommandResult {
         SceneObjectId object;
         DocumentRevision revision;
         DocumentStateId state;
@@ -165,17 +171,16 @@ namespace Horo::Editor
     class SceneDocumentCommandExecutor;
 
     /** @brief Bounded semantic undo/redo history owned by one editor document session. */
-    class EditorHistory final
-    {
+    class EditorHistory final {
     public:
         /** @brief Creates an empty history with bounded item and memory budgets. */
         EditorHistory();
 
         ~EditorHistory();
 
-        EditorHistory(const EditorHistory&) = delete;
+        EditorHistory(const EditorHistory &) = delete;
 
-        EditorHistory& operator=(const EditorHistory&) = delete;
+        EditorHistory &operator=(const EditorHistory &) = delete;
 
         /** @brief Reports whether one committed transaction can be undone. */
         [[nodiscard]] bool CanUndo() const noexcept;
@@ -193,8 +198,7 @@ namespace Horo::Editor
     };
 
     /** @brief Authoritative scene authoring storage exposed publicly through immutable queries. */
-    class SceneDocument final
-    {
+    class SceneDocument final {
     public:
         /** @brief Returns the current committed document revision. */
         [[nodiscard]] DocumentRevision Revision() const noexcept;
@@ -221,6 +225,12 @@ namespace Horo::Editor
         /** @brief Returns the immutable identity of the currently visible authored state. */
         [[nodiscard]] DocumentStateId State() const noexcept;
 
+        /** @brief Returns the revision captured by the last successful canonical save. */
+        [[nodiscard]] DocumentRevision SavedRevision() const noexcept;
+
+        /** @brief Returns the authored state identity written by the last successful canonical save. */
+        [[nodiscard]] DocumentStateId SavedState() const noexcept;
+
         /**
          * @brief Marks a captured revision/state pair as durably saved without changing current content.
          * @param revision Monotonic revision captured by the successful save operation.
@@ -228,6 +238,23 @@ namespace Horo::Editor
          * @return Success or an error when the pair cannot belong to this document session.
          */
         [[nodiscard]] Result<void> MarkSaved(DocumentRevision revision, DocumentStateId state);
+
+        /**
+         * @brief Replaces the document at an explicit durable-load boundary.
+         * @param objects Fully parsed object values from one validated scene document.
+         * @return Success after installing a clean baseline, or a typed validation error.
+         *
+         * This operation clears the current authored state but does not own editor history;
+         * the document-session owner must clear its history at the same load boundary.
+         */
+        [[nodiscard]] Result<void> LoadSaved(std::vector<SceneObjectSnapshot> objects);
+
+        /**
+         * @brief Installs validated recovery content as a new dirty editor session.
+         * @param objects Fully parsed object values from a trusted recovery-service result.
+         * @return Success with recovered content dirty relative to the saved baseline, or a typed validation error.
+         */
+        [[nodiscard]] Result<void> LoadRecovered(std::vector<SceneObjectSnapshot> objects);
 
     private:
         friend class SceneDocumentCommandExecutor;
@@ -242,26 +269,28 @@ namespace Horo::Editor
     };
 
     /** @brief Sole mutation boundary for the minimum typed scene command set. */
-    class SceneDocumentCommandExecutor final
-    {
+    class SceneDocumentCommandExecutor final {
     public:
         /** @brief Creates an executor that commits commands against @p document. */
-        explicit SceneDocumentCommandExecutor(SceneDocument& document, EditorHistory& history) noexcept;
+        explicit SceneDocumentCommandExecutor(SceneDocument &document, EditorHistory &history) noexcept;
 
         /** @brief Validates and atomically commits a create-object command. */
-        [[nodiscard]] Result<SceneCommandResult> Execute(const CreateSceneObjectCommand& command);
+        [[nodiscard]] Result<SceneCommandResult> Execute(const CreateSceneObjectCommand &command);
 
         /** @brief Validates and atomically commits a rename-object command. */
-        [[nodiscard]] Result<SceneCommandResult> Execute(const RenameSceneObjectCommand& command);
+        [[nodiscard]] Result<SceneCommandResult> Execute(const RenameSceneObjectCommand &command);
 
         /** @brief Validates and atomically commits a transform command. */
-        [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneObjectTransformCommand& command);
+        [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneObjectTransformCommand &command);
+
+        /** @brief Validates and atomically commits an existing camera component. */
+        [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneObjectCameraCommand &command);
 
         /** @brief Validates and atomically commits a shallow duplicate-object command. */
-        [[nodiscard]] Result<SceneCommandResult> Execute(const DuplicateSceneObjectCommand& command);
+        [[nodiscard]] Result<SceneCommandResult> Execute(const DuplicateSceneObjectCommand &command);
 
         /** @brief Validates and atomically deletes an object subtree. */
-        [[nodiscard]] Result<SceneCommandResult> Execute(const DeleteSceneObjectCommand& command);
+        [[nodiscard]] Result<SceneCommandResult> Execute(const DeleteSceneObjectCommand &command);
 
         /** @brief Reverts the newest committed semantic history entry. */
         [[nodiscard]] Result<SceneCommandResult> Undo();
@@ -270,13 +299,12 @@ namespace Horo::Editor
         [[nodiscard]] Result<SceneCommandResult> Redo();
 
     private:
-        SceneDocument& m_document;
-        EditorHistory& m_history;
+        SceneDocument &m_document;
+        EditorHistory &m_history;
     };
 
     /** @brief Notification published after document content or save-state authority commits. */
-    struct SceneDocumentChangedEvent
-    {
+    struct SceneDocumentChangedEvent {
         static constexpr auto HoroEventTypeName = "SceneDocumentChangedEvent";
 
         DocumentRevision revision;
@@ -287,21 +315,20 @@ namespace Horo::Editor
     };
 
     /** @brief Validates catalog creation requests and commits one typed document command. */
-    class CreateSceneObjectUseCase final
-    {
+    class CreateSceneObjectUseCase final {
     public:
         /** @brief Creates a catalog primitive through the supplied document mutation boundary. */
-        CreateSceneObjectUseCase(SceneDocument& document, SceneDocumentCommandExecutor& executor) noexcept;
+        CreateSceneObjectUseCase(SceneDocument &document, SceneDocumentCommandExecutor &executor) noexcept;
 
         /**
          * @brief Validates and creates one catalog primitive.
          * @param request Stable primitive identity and optional parent.
          * @return Committed command metadata or a typed validation error.
          */
-        [[nodiscard]] Result<SceneCommandResult> Execute(const PrimitiveCreationRequest& request);
+        [[nodiscard]] Result<SceneCommandResult> Execute(const PrimitiveCreationRequest &request);
 
     private:
-        SceneDocument& m_document;
-        SceneDocumentCommandExecutor& m_executor;
+        SceneDocument &m_document;
+        SceneDocumentCommandExecutor &m_executor;
     };
-} // namespace Horo::Editor
+}  // namespace Horo::Editor

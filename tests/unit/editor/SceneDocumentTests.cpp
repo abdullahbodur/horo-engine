@@ -132,6 +132,57 @@ namespace
         REQUIRE((document.Objects().back().components.camera.has_value()));
     }
 
+    TEST_CASE(
+        "Camera Component Editing Is Validated And Survives History",
+        "[unit][editor]")
+    {
+        using namespace Horo;
+        using namespace Horo::Editor;
+        using namespace Horo::Runtime;
+        SceneDocument document;
+        EditorHistory history;
+        SceneDocumentCommandExecutor commands{document, history};
+        CreateSceneObjectUseCase create{document, commands};
+
+        const auto created =
+            create.Execute({PrimitiveId{"primitive.object.camera"}, std::nullopt});
+        REQUIRE((created.HasValue()));
+        const CameraComponent original = *document.Objects().front().components.camera;
+        const DocumentRevision initialRevision = document.Revision();
+
+        CameraComponent edited = original;
+        edited.projection = CameraProjection::Orthographic;
+        edited.orthographicHeight = 18.0F;
+        edited.nearPlane = 0.25F;
+        edited.farPlane = 2400.0F;
+        const auto committed =
+            commands.Execute(SetSceneObjectCameraCommand{created.Value().object, edited});
+        REQUIRE((committed.HasValue()));
+        REQUIRE((committed.Value().committed));
+        REQUIRE((committed.Value().kind == DocumentChangeKind::ComponentChanged));
+        REQUIRE((document.Revision().value == initialRevision.value + 1));
+        REQUIRE((*document.Objects().front().components.camera == edited));
+
+        const auto noOp =
+            commands.Execute(SetSceneObjectCameraCommand{created.Value().object, edited});
+        REQUIRE((noOp.HasValue()));
+        REQUIRE((!noOp.Value().committed));
+        REQUIRE((document.Revision().value == initialRevision.value + 1));
+
+        CameraComponent invalid = edited;
+        invalid.farPlane = invalid.nearPlane;
+        const auto rejected =
+            commands.Execute(SetSceneObjectCameraCommand{created.Value().object, invalid});
+        REQUIRE((rejected.HasError()));
+        REQUIRE((document.Revision().value == initialRevision.value + 1));
+        REQUIRE((*document.Objects().front().components.camera == edited));
+
+        REQUIRE((commands.Undo().HasValue()));
+        REQUIRE((*document.Objects().front().components.camera == original));
+        REQUIRE((commands.Redo().HasValue()));
+        REQUIRE((*document.Objects().front().components.camera == edited));
+    }
+
     TEST_CASE (
     "Failed Commands Do Not Mutate Or Advance Revision"
     ,
@@ -392,6 +443,39 @@ namespace
         const auto redo = commands.Redo();
         REQUIRE((redo.HasError()));
         REQUIRE((redo.ErrorValue().code.Value() == "scene_document.nothing_to_redo"));
+    }
+
+    TEST_CASE (
+    "History Evicts Oldest Transactions Without Changing Current Document"
+    ,
+    "[unit][editor][history]"
+    )
+    {
+        using namespace Horo::Editor;
+        SceneDocument document;
+        EditorHistory history;
+        SceneDocumentCommandExecutor commands{document, history};
+        const auto created = commands.Execute(CreateSceneObjectCommand{.name = "Initial"});
+        REQUIRE((created.HasValue()));
+
+        for (std::size_t index = 0; index < 257; ++index)
+        {
+            REQUIRE((commands.Execute(
+                RenameSceneObjectCommand{created.Value().object, "Name " + std::to_string(index)}).HasValue()));
+        }
+        REQUIRE((document.Snapshot().objects.front().name == "Name 256"));
+
+        for (std::size_t index = 0; index < 256; ++index)
+        {
+            REQUIRE((commands.Undo().HasValue()));
+        }
+        REQUIRE((document.Snapshot().objects.front().name == "Name 0"));
+        const DocumentRevision revisionBeforeRejectedUndo = document.Revision();
+        const auto exhausted = commands.Undo();
+        REQUIRE((exhausted.HasError()));
+        REQUIRE((exhausted.ErrorValue().code.Value() == "scene_document.nothing_to_undo"));
+        REQUIRE((document.Revision() == revisionBeforeRejectedUndo));
+        REQUIRE((document.Snapshot().objects.front().name == "Name 0"));
     }
 
     TEST_CASE (

@@ -2,14 +2,12 @@
 
 #include "Horo/Editor/EditorTheme.h"
 
-namespace Horo::Editor
-{
+namespace Horo::Editor {
     /** @brief Smallest readable text size in the global dock, matching its tab labels. */
     inline constexpr float kGlobalDockMinimumFontSize = Theme::FontPx::SansCompact;
 
     /** @brief Responsive grid metrics matching the workspace HTML asset-grid contract. */
-    struct ContentBrowserGridMetrics
-    {
+    struct AssetBrowserGridMetrics {
         std::size_t columns{1};
         float cardWidth{1.0F};
     };
@@ -19,5 +17,5 @@ namespace Horo::Editor
      * @param availableWidth Width available to the grid after outer padding.
      * @return Column count and equal card width using the canonical six-pixel gap.
      */
-    [[nodiscard]] ContentBrowserGridMetrics ComputeContentBrowserGridMetrics(float availableWidth) noexcept;
-} // namespace Horo::Editor
+    [[nodiscard]] AssetBrowserGridMetrics ComputeAssetBrowserGridMetrics(float availableWidth) noexcept;
+}  // namespace Horo::Editor

@@ -5,11 +5,9 @@
 
 #include <memory>
 
-namespace Horo::Editor
-{
+namespace Horo::Editor {
 /** @brief Metal editor adapter that renders backend-neutral editor scene instances into an offscreen target. */
-class EditorViewportRendererMetal final : public IEditorViewportRenderer
-{
+class EditorViewportRendererMetal final : public IEditorViewportRenderer {
   public:
     /** @brief Borrows the initialized runtime Metal bridge used by the editor composition. */
     explicit EditorViewportRendererMetal(Render::MetalEditorGraphicsBridge &graphicsBridge) noexcept;

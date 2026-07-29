@@ -8,13 +8,11 @@
 
 #include <string>
 
-namespace Horo::Editor
-{
+namespace Horo::Editor {
     struct GuiContentRegion;
 
     /** @brief Transient ImGui state retained by the ProjectCreation route view presentation. */
-    struct ProjectCreationViewState
-    {
+    struct ProjectCreationViewState {
         bool initialized = false;
         int step = 1;
         bool confirmingDiscard = false;
@@ -40,8 +38,7 @@ namespace Horo::Editor
     };
 
     /** @brief Command emitted by the ProjectCreation route view presentation. */
-    enum class ProjectCreationViewCommand
-    {
+    enum class ProjectCreationViewCommand {
         None,
         ReturnToWelcome,
         CreateProject,
@@ -56,9 +53,8 @@ namespace Horo::Editor
      * @param logo Optional logo texture shown in the header.
      * @return Typed navigation command requested during this frame.
      */
-    [[nodiscard]] ProjectCreationViewCommand DrawProjectCreationView(
-        ProjectCreationController& controller, ProjectCreationViewState& state, const EditorGuiContext& ctx,
-        Input::InputRouter& inputRouter, const RendererAvailabilitySnapshot& rendererAvailability,
-        const GuiContentRegion& contentRegion,
-        ImTextureID logo = 0);
-} // namespace Horo::Editor
+    [[nodiscard]] ProjectCreationViewCommand DrawProjectCreationView(ProjectCreationController &controller, ProjectCreationViewState &state,
+                                                                     const EditorGuiContext &ctx, Input::InputRouter &inputRouter,
+                                                                     const RendererAvailabilitySnapshot &rendererAvailability,
+                                                                     const GuiContentRegion &contentRegion, ImTextureID logo = 0);
+}  // namespace Horo::Editor

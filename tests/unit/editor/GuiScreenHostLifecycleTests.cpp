@@ -117,8 +117,9 @@ namespace
 
         GuiScreenHost host{
             gui, modals, settings, localization, engineEvents,
-            creation, input, renderers, std::move(screens), std::move(panels)
+            creation, jobs, input, renderers, std::move(screens), std::move(panels)
         };
+        REQUIRE((&host.Services().Get<JobSystem>() == &jobs));
         REQUIRE((stats.enters == 0));
         REQUIRE((host.Navigate(GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}}).HasError()));
         host.Services().Register(stats);

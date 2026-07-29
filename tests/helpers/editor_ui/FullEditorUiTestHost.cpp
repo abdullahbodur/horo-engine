@@ -180,7 +180,7 @@ namespace Horo::Tests
             Editor::RegisterDefaultWorkspacePanels(panels);
             screenHost =
                 std::make_unique<Editor::GuiScreenHost>(gui, modals, settings, localization, engineEvents, creation,
-                                                        input,
+                                                        jobs, input,
                                                         rendererAvailability, std::move(screens), std::move(panels));
             screenHost->Services().Register<Editor::IEditorViewportRenderer>(viewportRenderer);
             screenHost->Services().Register<Editor::EditorViewportSceneState>(viewportScene);

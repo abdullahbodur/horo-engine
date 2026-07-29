@@ -8,8 +8,7 @@ namespace Horo::Editor {
     }
 
     /** @copydoc InstallNativeEditorMenuBar */
-    void InstallNativeEditorMenuBar(const EditorMenuModel &, const ILocalizationService &) {
-    }
+    void InstallNativeEditorMenuBar(const EditorMenuModel &, const ILocalizationService &) {}
 
     /** @copydoc PollNativeEditorMenuAction */
     std::optional<EditorMenuInvocation> PollNativeEditorMenuAction() noexcept {
@@ -17,8 +16,8 @@ namespace Horo::Editor {
     }
 
     /** @copydoc RevealInNativeFileManager */
-    bool RevealInNativeFileManager(const std::filesystem::path&) noexcept {
+    bool RevealInNativeFileManager(const std::filesystem::path &) noexcept {
         return false;
     }
-} // namespace Horo::Editor
+}  // namespace Horo::Editor
 #endif

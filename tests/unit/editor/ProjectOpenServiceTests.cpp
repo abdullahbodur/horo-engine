@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <fstream>
 #include <iterator>
+#include <string_view>
 #include <thread>
 
 namespace
@@ -30,13 +31,17 @@ namespace
             std::error_code error;
             std::filesystem::remove_all(root, error);
             std::filesystem::create_directories(root / ".horo");
+            std::filesystem::create_directories(root / "assets/scenes");
             const auto* decision = BuiltInReleaseCompatibilityRegistry().Find(CurrentEngineReleaseVersion());
             std::ofstream out(root / ".horo/project.json");
             out << "{\"horoVersion\":\"" << FormatHoroVersion(decision->release.value) << "\",\"persistentContract\":\""
                 << FormatPersistentContractHash(decision->persistentContract)
                 << "\",\"projectId\":\"test-project\",\"name\":\"Open Test\","
                 "\"projectVersion\":\"0.1.0\",\"createdAt\":\"2026-07-19T00:00:00Z\","
-                "\"settings\":{\"renderBackend\":\"opengl\"}}\n";
+                "\"settings\":{\"renderBackend\":\"opengl\","
+                "\"defaultScene\":\"assets/scenes/main.horo\"}}\n";
+            std::ofstream(root / "assets/scenes/main.horo")
+                << R"({"schemaVersion":1,"objects":[]})";
         }
 
         ~TempProject()
@@ -58,6 +63,17 @@ namespace
                 std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() /
                 "fixtures/projects/horo_0_0_1_compression";
             std::filesystem::copy(fixture, root, std::filesystem::copy_options::recursive);
+            nlohmann::json metadata;
+            {
+                std::ifstream input(root / ".horo/project.json");
+                input >> metadata;
+            }
+            metadata["settings"]["defaultScene"] = "assets/scenes/main.horo";
+            std::ofstream(root / ".horo/project.json", std::ios::trunc)
+                << metadata.dump(2) << '\n';
+            std::filesystem::create_directories(root / "assets/scenes");
+            std::ofstream(root / "assets/scenes/main.horo")
+                << R"({"schemaVersion":1,"objects":[]})";
         }
 
         ~LegacyProject()
@@ -152,6 +168,12 @@ TEST_CASE("Project Open Service Tests", "[unit][editor]")
     REQUIRE((snapshot.outcome == ProjectOpenOutcome::ReadyToActivate));
     REQUIRE((snapshot.progress == 1.0F));
     REQUIRE((snapshot.readySession.has_value()));
+    const auto readySession = snapshot.readySession;
+    REQUIRE((service.RequestCancel(started.Value().Id()).HasValue()));
+    const auto afterTerminalCancel = service.Query(started.Value().Id());
+    REQUIRE((afterTerminalCancel.has_value()));
+    REQUIRE((afterTerminalCancel->outcome == ProjectOpenOutcome::ReadyToActivate));
+    REQUIRE((afterTerminalCancel->readySession == readySession));
 
     {
         auto reservation = service.ReserveSession(*snapshot.readySession);
@@ -263,5 +285,74 @@ TEST_CASE("Project Open Service Tests", "[unit][editor]")
     REQUIRE((ReadText(invalidLegacy.root / ".horo/project.json") == invalidBefore));
     REQUIRE((!std::filesystem::exists(invalidLegacy.root / ".horo/migration_history.json")));
     invalidOpen.Shutdown();
+    jobs.Shutdown(ShutdownPolicy::Drain);
+}
+
+TEST_CASE("Project open validates the default scene before workspace preparation",
+          "[unit][editor][scene-preflight]")
+{
+    TempProject project;
+    NativeDurableFileSystem files;
+    SystemWallClock clock;
+    JobSystem jobs{{.workerCount = 3, .maxQueuedJobs = 32}};
+    ProjectMutationCoordinator mutations{files};
+    ProjectMigrationTransactionService transactions{files, clock, mutations, jobs};
+    ProjectOpenPreflightService preflight{transactions};
+    RendererAvailabilitySnapshot renderers{
+        {{"opengl", "OpenGL", RendererAvailabilityState::Active, {}}}, "opengl"};
+    ProjectOpenService service{jobs, files, preflight, mutations, transactions, renderers};
+
+    const auto open = [&]() {
+        auto started = service.Start({
+            .projectRoot = project.root,
+            .expectedProjectName = "Open Test",
+            .engineBuildIdentity = "test",
+        });
+        REQUIRE((started.HasValue()));
+        return PumpToTerminal(service, started.Value().Id());
+    };
+    const auto requireSceneFailure = [](const ProjectOpenProgressSnapshot &snapshot) {
+        REQUIRE((snapshot.outcome == ProjectOpenOutcome::Failed));
+        REQUIRE((snapshot.phase == ProjectOpenPhase::Failed));
+        REQUIRE((snapshot.diagnostic.has_value()));
+        REQUIRE((snapshot.diagnostic->code.Value() == "project.open.scene_preflight_failed"));
+        REQUIRE((!snapshot.readySession.has_value()));
+    };
+
+    std::filesystem::remove(project.root / "assets/scenes/main.horo");
+    requireSceneFailure(open());
+
+    std::ofstream(project.root / "assets/scenes/main.horo", std::ios::trunc)
+        << "{ malformed";
+    requireSceneFailure(open());
+
+    std::ofstream(project.root / "assets/scenes/main.horo", std::ios::trunc)
+        << R"({"schemaVersion":99,"objects":[]})";
+    requireSceneFailure(open());
+
+    constexpr std::string_view duplicateObjectScene =
+        R"({"schemaVersion":1,"objects":[)"
+        R"({"id":1,"parent":null,"name":"A","transform":{"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1]},"primitiveMesh":null,"components":{}},)"
+        R"({"id":1,"parent":null,"name":"B","transform":{"translation":[0,0,0],"rotation":[0,0,0,1],"scale":[1,1,1]},"primitiveMesh":null,"components":{}}]})";
+    std::ofstream(project.root / "assets/scenes/main.horo", std::ios::trunc)
+        << duplicateObjectScene;
+    requireSceneFailure(open());
+
+    nlohmann::json metadata = ReadJson(project.root / ".horo/project.json");
+    metadata["settings"]["defaultScene"] = "../outside.horo";
+    std::ofstream(project.root / ".horo/project.json", std::ios::trunc)
+        << metadata.dump(2) << '\n';
+    requireSceneFailure(open());
+
+    metadata["settings"]["defaultScene"] = "assets/scenes/main.horo";
+    std::ofstream(project.root / ".horo/project.json", std::ios::trunc)
+        << metadata.dump(2) << '\n';
+    std::ofstream(project.root / "assets/scenes/main.horo", std::ios::trunc)
+        << R"({"schemaVersion":1,"objects":[]})";
+    const ProjectOpenProgressSnapshot valid = open();
+    REQUIRE((valid.outcome == ProjectOpenOutcome::ReadyToActivate));
+    REQUIRE((valid.readySession.has_value()));
+
+    service.Shutdown();
     jobs.Shutdown(ShutdownPolicy::Drain);
 }

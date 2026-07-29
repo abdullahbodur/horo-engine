@@ -1,15 +1,12 @@
 #include "Horo/Editor/EditorSettingsService.h"
-#include "Horo/Editor/SettingsModalDraft.h"
-
 #include "Horo/Editor/EditorSettingsStore.h"
+#include "Horo/Editor/SettingsModalDraft.h"
 
 #include <algorithm>
 
-namespace Horo::Editor
-{
+namespace Horo::Editor {
     /** @copydoc SettingsModal.h */
-    [[nodiscard]] EditorSettings CollectDraftSettings(const SettingsState& st)
-    {
+    [[nodiscard]] EditorSettings CollectDraftSettings(const SettingsState &st) {
         EditorSettings out{};
         out.startupBehavior = static_cast<EditorStartupBehavior>(std::clamp(st.general.startupAction, 0, 2));
         out.autoSaveIntervalMinutes = st.general.autoSaveInterval;
@@ -49,8 +46,7 @@ namespace Horo::Editor
     }
 
     /** @copydoc SettingsModal.h */
-    void ApplySettingsToDraft(SettingsState& st, const EditorSettings& settings)
-    {
+    void ApplySettingsToDraft(SettingsState &st, const EditorSettings &settings) {
         st.general.startupAction = static_cast<int>(settings.startupBehavior);
         st.general.autoSaveInterval = settings.autoSaveIntervalMinutes;
         st.general.confirmExit = settings.confirmExitWithUnsavedChanges;
@@ -84,12 +80,10 @@ namespace Horo::Editor
         st.diagnostics.writeLogToFile = settings.writeLogToFile;
         st.diagnostics.autoCaptureStutter = settings.autoCaptureOnStutter;
         st.diagnostics.stutterThresholdMs = settings.stutterThresholdMs;
-
     }
 
     /** @copydoc SettingsModal.h */
-    void LoadSettingsForModal(SettingsState& state, const EditorSettingsService& settings)
-    {
+    void LoadSettingsForModal(SettingsState &state, const EditorSettingsService &settings) {
         const EditorSettingsSnapshot snapshot = settings.Snapshot();
         state.committed = snapshot.settings;
         state.settingsRevision = snapshot.revision;
@@ -101,13 +95,11 @@ namespace Horo::Editor
     }
 
     /** @copydoc SettingsModal.h */
-    [[nodiscard]] bool ApplySettings(SettingsState& state, EditorSettingsService& settings)
-    {
+    [[nodiscard]] bool ApplySettings(SettingsState &state, EditorSettingsService &settings) {
         const EditorSettings draft = CollectDraftSettings(state);
         const Result<EditorSettingsSnapshot> result =
             settings.Commit(EditorSettingsDraft{.baseRevision = state.settingsRevision, .settings = draft});
-        if (result.HasError())
-        {
+        if (result.HasError()) {
             state.statusMessage = result.ErrorValue().message;
             state.statusIsError = true;
             state.dirty = true;
@@ -122,4 +114,4 @@ namespace Horo::Editor
         state.statusIsError = false;
         return true;
     }
-} // namespace Horo::Editor
+}  // namespace Horo::Editor

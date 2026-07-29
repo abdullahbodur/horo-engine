@@ -26,14 +26,14 @@ namespace
     )
     {
         WorkspacePanelHost host;
-        REQUIRE((host.OpenPanel("horo.content_browser", "workspace.document").Succeeded()));
-        REQUIRE((host.Layout().FindTabStack("workspace.document")->activeTab == "horo.content_browser"));
+        REQUIRE((host.OpenPanel("horo.global_dock", "workspace.document").Succeeded()));
+        REQUIRE((host.Layout().FindTabStack("workspace.document")->activeTab == "horo.global_dock"));
 
-        REQUIRE((host.MovePanel("horo.content_browser", TabPlacement{"workspace.left", 1}).Succeeded()));
+        REQUIRE((host.MovePanel("horo.global_dock", TabPlacement{"workspace.left", 1}).Succeeded()));
         const auto* left = host.Layout().FindTabStack("workspace.left");
         REQUIRE((left != nullptr));
         REQUIRE((left->tabs.size() == 2));
-        REQUIRE((left->tabs[1] == "horo.content_browser"));
+        REQUIRE((left->tabs[1] == "horo.global_dock"));
     }
 
     TEST_CASE (
@@ -54,8 +54,8 @@ namespace
     )
     {
         WorkspacePanelHost host;
-        REQUIRE((host.OpenPanel("horo.content_browser", "workspace.document").Succeeded()));
-        REQUIRE((host.ClosePanel("horo.content_browser").Succeeded()));
+        REQUIRE((host.OpenPanel("horo.global_dock", "workspace.document").Succeeded()));
+        REQUIRE((host.ClosePanel("horo.global_dock").Succeeded()));
         const auto* document = host.Layout().FindTabStack("workspace.document");
         REQUIRE((document != nullptr));
         REQUIRE((document->activeTab == "horo.viewport"));
@@ -69,10 +69,10 @@ namespace
     )
     {
         WorkspacePanelHost host;
-        REQUIRE((host.DockPanel("horo.content_browser", "workspace.document", WorkspacePanelHost::DropKind::SplitBottom)
+        REQUIRE((host.DockPanel("horo.global_dock", "workspace.document", WorkspacePanelHost::DropKind::SplitBottom)
             .Succeeded()));
         REQUIRE((host.Layout().FindNode("workspace.document") != nullptr));
-        REQUIRE((host.Layout().FindNode("workspace.document.split.horo.content_browser") != nullptr));
+        REQUIRE((host.Layout().FindNode("workspace.document.split.horo.global_dock") != nullptr));
         REQUIRE((host.Layout().Validate().empty()));
     }
 } // namespace

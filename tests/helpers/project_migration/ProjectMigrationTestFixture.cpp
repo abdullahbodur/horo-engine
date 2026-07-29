@@ -146,6 +146,22 @@ ProjectMigrationTestFixture::ProjectMigrationTestFixture()
     std::error_code error;
     std::filesystem::copy(fixture, root_, std::filesystem::copy_options::recursive, error);
     REQUIRE_FALSE((error));
+    nlohmann::json metadata = nlohmann::json::parse(ReadText(root_ / ".horo/project.json"));
+    metadata["settings"]["defaultScene"] = "assets/scenes/main.horo";
+    {
+        std::ofstream output(root_ / ".horo/project.json", std::ios::binary | std::ios::trunc);
+        REQUIRE((output.good()));
+        output << metadata.dump(2) << '\n';
+        REQUIRE((output.good()));
+    }
+    std::filesystem::create_directories(root_ / "assets/scenes", error);
+    REQUIRE_FALSE((error));
+    {
+        std::ofstream scene(root_ / "assets/scenes/main.horo", std::ios::binary);
+        REQUIRE((scene.good()));
+        scene << R"({"schemaVersion":1,"objects":[]})";
+        REQUIRE((scene.good()));
+    }
     std::filesystem::create_directories(logRoot_, error);
     REQUIRE_FALSE((error));
 }

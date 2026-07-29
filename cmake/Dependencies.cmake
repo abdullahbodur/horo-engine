@@ -22,60 +22,76 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(ufbx)
 
-if(HORO_ENABLE_EXTENSION_MARKETPLACE)
-    set(HORO_MINIZ_REVISION "174573d60290f447c13a2b1b3405de2b96e27d6c")
-    set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(_HORO_BUILD_TESTING "${BUILD_TESTING}")
+set(HORO_MINIZ_REVISION "174573d60290f447c13a2b1b3405de2b96e27d6c")
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    miniz
+    GIT_REPOSITORY https://github.com/richgel999/miniz.git
+    GIT_TAG "${HORO_MINIZ_REVISION}"
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(miniz)
+
+# The extension marketplace is part of every editor distribution. Build its
+# HTTPS stack from pinned sources so users do not need a separately installed
+# libcurl SDK. Prefer the native Windows trust store through Schannel; use the
+# portable Mbed TLS backend on other targets.
+if(NOT WIN32)
+    set(HORO_MBEDTLS_REVISION "5b64a9fdb979c8971561ec78221b528e3cc4e00a")
+    set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
+    set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(
-        miniz
-        GIT_REPOSITORY https://github.com/richgel999/miniz.git
-        GIT_TAG "${HORO_MINIZ_REVISION}"
+        MbedTLS
+        GIT_REPOSITORY https://github.com/Mbed-TLS/mbedtls.git
+        GIT_TAG "${HORO_MBEDTLS_REVISION}"
         GIT_SHALLOW TRUE
     )
-    FetchContent_MakeAvailable(miniz)
+    FetchContent_MakeAvailable(MbedTLS)
 
-    # Build the marketplace HTTPS stack from pinned sources so enabling the
-    # editor does not require a separately installed libcurl SDK. Prefer the
-    # native Windows trust store through Schannel; use the portable
-    # Mbed TLS backend on other targets.
-    if(NOT WIN32)
-        set(HORO_MBEDTLS_REVISION "5b64a9fdb979c8971561ec78221b528e3cc4e00a")
-        set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
-        set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
-        FetchContent_Declare(
-            MbedTLS
-            GIT_REPOSITORY https://github.com/Mbed-TLS/mbedtls.git
-            GIT_TAG "${HORO_MBEDTLS_REVISION}"
-            GIT_SHALLOW TRUE
-        )
-        FetchContent_MakeAvailable(MbedTLS)
-    endif()
-
-    set(HORO_CURL_REVISION "6e3f8dc1f173b47de9a68516ce4b95bf25598c2f")
-    set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
-    set(BUILD_LIBCURL_DOCS OFF CACHE BOOL "" FORCE)
-    set(BUILD_MISC_DOCS OFF CACHE BOOL "" FORCE)
-    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-    set(BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
-    set(CURL_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
-    set(CURL_USE_LIBPSL OFF CACHE BOOL "" FORCE)
-    set(HTTP_ONLY ON CACHE BOOL "" FORCE)
-    if(WIN32)
-        set(CURL_USE_SCHANNEL ON CACHE BOOL "" FORCE)
-    else()
-        set(CURL_USE_MBEDTLS ON CACHE BOOL "" FORCE)
-    endif()
-    set(_HORO_BUILD_TESTING "${BUILD_TESTING}")
-    set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-    FetchContent_Declare(
-        CURL
-        GIT_REPOSITORY https://github.com/curl/curl.git
-        GIT_TAG "${HORO_CURL_REVISION}"
-        GIT_SHALLOW TRUE
-    )
-    FetchContent_MakeAvailable(CURL)
-    set(BUILD_TESTING "${_HORO_BUILD_TESTING}" CACHE BOOL "" FORCE)
-    unset(_HORO_BUILD_TESTING)
+    # curl discovers TLS providers through find_package(), while Mbed TLS is
+    # already part of this build through FetchContent. Give curl's find module
+    # the populated targets instead of requiring a second system SDK.
+    set(MBEDTLS_INCLUDE_DIR "${mbedtls_SOURCE_DIR}/include" CACHE PATH "" FORCE)
+    set(MBEDTLS_LIBRARY "MbedTLS::mbedtls" CACHE STRING "" FORCE)
+    set(MBEDX509_LIBRARY "MbedTLS::mbedx509" CACHE STRING "" FORCE)
+    set(MBEDCRYPTO_LIBRARY "MbedTLS::mbedcrypto" CACHE STRING "" FORCE)
+    # The pinned revision provides this API. Avoid curl's isolated
+    # try_compile() losing visibility of the parent FetchContent targets.
+    set(HAVE_MBEDTLS_DES_CRYPT_ECB ON CACHE BOOL "" FORCE)
+    set(CURL_USE_CMAKECONFIG OFF CACHE BOOL "" FORCE)
 endif()
+
+set(HORO_CURL_REVISION "6e3f8dc1f173b47de9a68516ce4b95bf25598c2f")
+set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
+set(BUILD_LIBCURL_DOCS OFF CACHE BOOL "" FORCE)
+set(BUILD_MISC_DOCS OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
+set(CURL_DISABLE_INSTALL ON CACHE BOOL "" FORCE)
+set(CURL_ZLIB OFF CACHE STRING "" FORCE)
+set(CURL_BROTLI OFF CACHE STRING "" FORCE)
+set(CURL_ZSTD OFF CACHE STRING "" FORCE)
+set(CURL_USE_LIBPSL OFF CACHE BOOL "" FORCE)
+set(CURL_USE_LIBSSH2 OFF CACHE BOOL "" FORCE)
+set(USE_LIBIDN2 OFF CACHE BOOL "" FORCE)
+set(USE_NGHTTP2 OFF CACHE BOOL "" FORCE)
+set(HTTP_ONLY ON CACHE BOOL "" FORCE)
+if(WIN32)
+    set(CURL_USE_SCHANNEL ON CACHE BOOL "" FORCE)
+else()
+    set(CURL_USE_MBEDTLS ON CACHE BOOL "" FORCE)
+endif()
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    CURL
+    GIT_REPOSITORY https://github.com/curl/curl.git
+    GIT_TAG "${HORO_CURL_REVISION}"
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(CURL)
+set(BUILD_TESTING "${_HORO_BUILD_TESTING}" CACHE BOOL "" FORCE)
+unset(_HORO_BUILD_TESTING)
 
 add_library(HoroThirdPartyUfbx STATIC
     ${ufbx_SOURCE_DIR}/ufbx.c

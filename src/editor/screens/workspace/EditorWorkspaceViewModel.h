@@ -13,11 +13,9 @@
 #include <unordered_map>
 #include <vector>
 
-namespace Horo::Editor
-{
+namespace Horo::Editor {
     /** @brief Typed presentation kind projected from authored scene components. */
-    enum class SceneObjectKind : std::uint8_t
-    {
+    enum class SceneObjectKind : std::uint8_t {
         Mesh,
         Empty,
         Camera,
@@ -27,18 +25,17 @@ namespace Horo::Editor
     };
 
     /** @brief Read-only presentation projection of one authored scene object. */
-    struct SceneObject
-    {
+    struct SceneObject {
         SceneObjectId id;
         std::optional<SceneObjectId> parent;
         std::string name;
         SceneObjectKind kind{SceneObjectKind::Empty};
         Math::Transform localTransform;
+        SceneObjectComponentSet components;
     };
 
     /** @brief Active viewport interaction tool exposed by the workspace toolbar. */
-    enum class EditorTransformTool
-    {
+    enum class EditorTransformTool {
         Select,
         Move,
         Rotate,
@@ -46,17 +43,22 @@ namespace Horo::Editor
     };
 
     /** @brief Orientation basis used by viewport transform handles. */
-    enum class EditorTransformSpace
-    {
+    enum class EditorTransformSpace {
         Local,
         World,
     };
 
-    enum class EditorWorkspaceViewCommand
-    {
+    enum class EditorWorkspaceViewCommand {
         None,
         ReturnToWelcome,
         SaveScene,
+        SaveSceneAs,
+        SaveSceneCopyAs,
+        CompareExternalScene,
+        ReloadExternalScene,
+        OverwriteExternalScene,
+        RestoreSceneRecovery,
+        DiscardSceneRecovery,
         UndoScene,
         RedoScene,
         CreatePrimitive,
@@ -72,8 +74,8 @@ namespace Horo::Editor
         PreviewObjectTransform,
         CommitObjectTransform,
         CancelObjectTransformPreview,
-        UpdateObjectTransform,
         UpdateObjectName,
+        UpdateCameraComponent,
         NavigateContentBrowser,
         NavigateContentBrowserBack,
         NavigateContentBrowserForward,
@@ -96,61 +98,52 @@ namespace Horo::Editor
         ResizePanel,
     };
 
-    enum class BottomDockMode
-    {
+    enum class BottomDockMode {
         Full,
         Split,
     };
 
-    enum class BottomDockSlot
-    {
+    enum class BottomDockSlot {
         Left,
         Right,
     };
 
-    enum class SideDockMode
-    {
+    enum class SideDockMode {
         Full,
         Split,
     };
 
-    enum class SideDockSlot
-    {
+    enum class SideDockSlot {
         Top,
         Bottom,
     };
 
-    struct WorkspacePanelDropTarget
-    {
+    struct WorkspacePanelDropTarget {
         std::string targetNodeId;
         WorkspacePanelHost::DropKind kind = WorkspacePanelHost::DropKind::TabCenter;
     };
 
     /** @brief Normalized viewport click forwarded to the workspace controller for scene picking. */
-    struct ViewportPickRequest
-    {
+    struct ViewportPickRequest {
         float normalizedX{0.0F};
         float normalizedY{0.0F};
         float aspect{1.0F};
     };
 
     /** @brief Operation selected for a direct Content Browser asset transfer. */
-    enum class ContentBrowserTransferMode : std::uint8_t
-    {
+    enum class ContentBrowserTransferMode : std::uint8_t {
         Copy,
         Move,
     };
 
     /** @brief Absolute source and destination carried by a Content Browser drag/drop request. */
-    struct ContentBrowserAssetTransferRequest
-    {
+    struct ContentBrowserAssetTransferRequest {
         std::string absoluteSourcePath;
         std::string absoluteDestinationDirectory;
         ContentBrowserTransferMode mode{ContentBrowserTransferMode::Move};
     };
 
-    struct EditorWorkspaceViewCommandData
-    {
+    struct EditorWorkspaceViewCommandData {
         EditorWorkspaceViewCommand command = EditorWorkspaceViewCommand::None;
         std::optional<EditorMenuInvocation> menuInvocation = std::nullopt;
         std::optional<int> targetIndex = std::nullopt;
@@ -160,6 +153,7 @@ namespace Horo::Editor
         std::optional<ViewportPickRequest> viewportPickPayload = std::nullopt;
         std::optional<EditorViewportNavigationDelta> viewportNavigationPayload = std::nullopt;
         std::optional<Runtime::CameraProjection> viewportProjectionPayload = std::nullopt;
+        std::optional<Runtime::CameraComponent> cameraPayload = std::nullopt;
         std::optional<EditorTransformTool> transformToolPayload = std::nullopt;
         std::optional<EditorTransformSpace> transformSpacePayload = std::nullopt;
         std::optional<std::string> stringPayload = std::nullopt;
@@ -170,27 +164,23 @@ namespace Horo::Editor
         std::optional<BottomDockSlot> bottomDockSlot = std::nullopt;
         std::optional<SideDockSlot> sideDockSlot = std::nullopt;
         std::optional<WorkspacePanelDropTarget> workspaceDropTarget = std::nullopt;
-        std::optional<ContentBrowserAssetTransferRequest> contentBrowserTransfer =
-            std::nullopt;
+        std::optional<ContentBrowserAssetTransferRequest> contentBrowserTransfer = std::nullopt;
     };
 
     /** @brief Pending project-local Content Browser clipboard operation. */
-    enum class ContentBrowserClipboardMode : std::uint8_t
-    {
+    enum class ContentBrowserClipboardMode : std::uint8_t {
         None,
         Copy,
         Move,
     };
 
     /** @brief Read-only projection of the controller-owned Content Browser clipboard. */
-    struct ContentBrowserClipboardState
-    {
+    struct ContentBrowserClipboardState {
         ContentBrowserClipboardMode mode{ContentBrowserClipboardMode::None};
         std::string absoluteSourcePath;
     };
 
-    struct EditorWorkspaceViewModel
-    {
+    struct EditorWorkspaceViewModel {
         std::string projectRoot;
         Assets::AssetRegistryRevision assetRegistryRevision{};
         ContentBrowserDirectory contentBrowser;
@@ -207,9 +197,12 @@ namespace Horo::Editor
         EditorTransformSpace activeTransformSpace{EditorTransformSpace::Local};
         EditorViewportCamera viewportCamera;
         std::optional<Math::Mat4> primarySelectionWorldTransform;
+        std::optional<Math::Mat4> primarySelectionPreviewWorldTransform;
         std::optional<Math::Mat4> primarySelectionParentWorldTransform;
         std::optional<Math::Aabb> primarySelectionWorldBounds;
         bool isDirty = false;
+        bool sceneExternalConflict = false;
+        bool recoveryAvailable = false;
         bool canUndo = false;
         bool canRedo = false;
         float fps = 0.0F;
@@ -222,7 +215,7 @@ namespace Horo::Editor
         std::string activeRightBottomPanelId;
         SideDockMode leftDockMode = SideDockMode::Full;
         SideDockMode rightDockMode = SideDockMode::Full;
-        std::string activeBottomPanelId = "horo.content_browser";
+        std::string activeBottomPanelId = "horo.global_dock";
         std::string activeBottomLeftPanelId;
         std::string activeBottomRightPanelId;
         BottomDockMode bottomDockMode = BottomDockMode::Full;
@@ -237,4 +230,4 @@ namespace Horo::Editor
         ActivityBarLayout activityBarLayout;
         WorkspacePanelHost workspacePanelHost;
     };
-} // namespace Horo::Editor
+}  // namespace Horo::Editor

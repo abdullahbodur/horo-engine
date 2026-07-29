@@ -4,8 +4,7 @@
 
 #include <Horo/Editor/DesignSystem/DesignTokens.h>
 
-namespace Horo::Editor::Theme
-{
+namespace Horo::Editor::Theme {
 // ─────────────────────────────────────────────────────────────────────────
 // Active Design Tokens (runtime-switchable)
 // ─────────────────────────────────────────────────────────────────────────
@@ -14,107 +13,83 @@ namespace Horo::Editor::Theme
 // ─────────────────────────────────────────────────────────────────────────
 // Palette — exact match for the CSS custom properties in the HTML mockups:
 // ─────────────────────────────────────────────────────────────────────────
-[[nodiscard]] inline ImVec4 Bg0()
-{
+[[nodiscard]] inline ImVec4 Bg0() {
     return GetActiveTokens().colors.surfaceRoot;
 }
-[[nodiscard]] inline ImVec4 Bg1()
-{
+[[nodiscard]] inline ImVec4 Bg1() {
     return GetActiveTokens().colors.surfaceWindow;
 }
-[[nodiscard]] inline ImVec4 Bg2()
-{
+[[nodiscard]] inline ImVec4 Bg2() {
     return GetActiveTokens().colors.surfacePanel;
 }
-[[nodiscard]] inline ImVec4 Bg3()
-{
+[[nodiscard]] inline ImVec4 Bg3() {
     return GetActiveTokens().colors.surfaceRaised;
 }
-[[nodiscard]] inline ImVec4 Hover()
-{
+[[nodiscard]] inline ImVec4 Hover() {
     return GetActiveTokens().colors.surfaceHover;
 }
-[[nodiscard]] inline ImVec4 Border()
-{
+[[nodiscard]] inline ImVec4 Border() {
     return GetActiveTokens().colors.border;
 }
-[[nodiscard]] inline ImVec4 BorderStrong()
-{
+[[nodiscard]] inline ImVec4 BorderStrong() {
     return GetActiveTokens().colors.borderStrong;
 }
-[[nodiscard]] inline ImVec4 Text()
-{
+[[nodiscard]] inline ImVec4 Text() {
     return GetActiveTokens().colors.textPrimary;
 }
-[[nodiscard]] inline ImVec4 Muted()
-{
+[[nodiscard]] inline ImVec4 Muted() {
     return GetActiveTokens().colors.textMuted;
 }
-[[nodiscard]] inline ImVec4 Dim()
-{
+[[nodiscard]] inline ImVec4 Dim() {
     return GetActiveTokens().colors.textDim;
 }
-[[nodiscard]] inline ImVec4 Accent()
-{
+[[nodiscard]] inline ImVec4 Accent() {
     return GetActiveTokens().colors.actionPrimary;
 }
-[[nodiscard]] inline ImVec4 AccentHover()
-{
+[[nodiscard]] inline ImVec4 AccentHover() {
     return GetActiveTokens().colors.actionPrimaryHover;
 }
-[[nodiscard]] inline ImVec4 AccentActive()
-{
+[[nodiscard]] inline ImVec4 AccentActive() {
     return GetActiveTokens().colors.actionPrimaryActive;
 }
-[[nodiscard]] inline ImVec4 AccentSoft()
-{
+[[nodiscard]] inline ImVec4 AccentSoft() {
     return GetActiveTokens().colors.actionPrimarySoft;
 }
-[[nodiscard]] inline ImVec4 Ok()
-{
+[[nodiscard]] inline ImVec4 Ok() {
     return GetActiveTokens().colors.statusOk;
 }
-[[nodiscard]] inline ImVec4 Warn()
-{
+[[nodiscard]] inline ImVec4 Warn() {
     return GetActiveTokens().colors.statusWarn;
 }
-[[nodiscard]] inline ImVec4 Err()
-{
+[[nodiscard]] inline ImVec4 Err() {
     return GetActiveTokens().colors.statusError;
 }
 
-[[nodiscard]] inline ImVec4 ErrSoft()
-{
-    return {GetActiveTokens().colors.statusError.x, GetActiveTokens().colors.statusError.y,
-            GetActiveTokens().colors.statusError.z, 0.12F};
+[[nodiscard]] inline ImVec4 ErrSoft() {
+    return {GetActiveTokens().colors.statusError.x, GetActiveTokens().colors.statusError.y, GetActiveTokens().colors.statusError.z, 0.12F};
 }
 
-[[nodiscard]] inline ImVec4 DarkText()
-{
+[[nodiscard]] inline ImVec4 DarkText() {
     return GetActiveTokens().colors.textOnActionPrimary;
 }
-[[nodiscard]] inline ImVec4 Shadow()
-{
+[[nodiscard]] inline ImVec4 Shadow() {
     return {0.000F, 0.000F, 0.000F, 0.550F};
 }
 
-[[nodiscard]] inline ImU32 U32(const ImVec4 &c)
-{
+[[nodiscard]] inline ImU32 U32(const ImVec4 &c) {
     return ImGui::GetColorU32(c);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
 // Fonts — the three font atlas entries loaded by the application
 // ─────────────────────────────────────────────────────────────────────────
-struct Fonts
-{
+struct Fonts {
     ImFont *sans = nullptr;         // InterVariable, standard body size.
     ImFont *sansCompact = nullptr;  // InterVariable, compact metadata size.
     ImFont *sansEmphasis = nullptr; // InterVariable, emphasis size.
 };
 
-namespace FontPx
-{
+namespace FontPx {
 constexpr float Sans = 15.0F;
 constexpr float SansCompact = 13.0F;
 constexpr float SansEmphasis = 15.0F;
@@ -122,33 +97,27 @@ constexpr float SansEmphasis = 15.0F;
 
 // Converts arbitrary HTML/CSS font sizes to the fixed atlas sizes we have
 // using the required SetWindowFontScale() multiplier.
-[[nodiscard]] constexpr float Scale(float targetPx, float basePx)
-{
+[[nodiscard]] constexpr float Scale(float targetPx, float basePx) {
     return targetPx / basePx;
 }
 
-inline void PushFont(ImFont *f)
-{
+inline void PushFont(ImFont *f) {
     if (f)
         ImGui::PushFont(f);
 }
 
-inline void PopFont(ImFont *f)
-{
+inline void PopFont(ImFont *f) {
     if (f)
         ImGui::PopFont();
 }
 
 // RAII: pushes a font when non-null and guarantees the matching pop.
-struct ScopedFont
-{
+struct ScopedFont {
     ImFont *font;
-    explicit ScopedFont(ImFont *f) : font(f)
-    {
+    explicit ScopedFont(ImFont *f) : font(f) {
         PushFont(font);
     }
-    ~ScopedFont()
-    {
+    ~ScopedFont() {
         PopFont(font);
     }
     ScopedFont(const ScopedFont &) = delete;
@@ -156,14 +125,11 @@ struct ScopedFont
 };
 
 // RAII: applies a window-local font scale and always restores 1.0 at scope exit.
-struct ScopedFontScale
-{
-    explicit ScopedFontScale(float scale)
-    {
+struct ScopedFontScale {
+    explicit ScopedFontScale(float scale) {
         ImGui::SetWindowFontScale(scale);
     }
-    ~ScopedFontScale()
-    {
+    ~ScopedFontScale() {
         ImGui::SetWindowFontScale(1.0F);
     }
     ScopedFontScale(const ScopedFontScale &) = delete;
@@ -173,21 +139,18 @@ struct ScopedFontScale
 // Shortcut: pushes `font` and scales it to the target HTML pixel size,
 // then automatically restores both at scope exit.
 //   Example: ScopedTextStyle ts(f.sansCompact, /*targetPx=*/11.0f, Theme::FontPx::SansCompact);
-struct ScopedTextStyle
-{
+struct ScopedTextStyle {
     ScopedFont font;
     ScopedFontScale scale;
 
-    ScopedTextStyle(ImFont *f, float targetPx, float basePx) : font(f), scale(Scale(targetPx, basePx))
-    {
+    ScopedTextStyle(ImFont *f, float targetPx, float basePx) : font(f), scale(Scale(targetPx, basePx)) {
     }
 };
 
 // ─────────────────────────────────────────────────────────────────────────
 // Layout metrics — pixel values matching the HTML mockups
 // ─────────────────────────────────────────────────────────────────────────
-namespace Layout
-{
+namespace Layout {
 constexpr float Radius = 4.0F;      // --radius
 constexpr float RadiusCard = 6.0F;  // .template { border-radius: 6px }
 constexpr float RadiusModal = 8.0F; // .modal / .welcome-card { border-radius: 8px }

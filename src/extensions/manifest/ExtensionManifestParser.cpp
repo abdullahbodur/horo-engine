@@ -49,8 +49,8 @@ namespace Horo::Extensions
                 const std::size_t end = prerelease.find('.', identifierStart);
                 const std::string_view identifier = prerelease.substr(
                     identifierStart, end == std::string_view::npos
-                        ? prerelease.size() - identifierStart
-                        : end - identifierStart);
+                                         ? prerelease.size() - identifierStart
+                                         : end - identifierStart);
                 if (identifier.empty() ||
                     !std::ranges::all_of(identifier, [](const unsigned char character)
                     {
@@ -104,16 +104,16 @@ namespace Horo::Extensions
                 return Result<ExtensionManifest>::Failure(
                     MakeError(ExtensionErrors::InvalidManifest,
                               "Package 'version' must be canonical semantic version text."));
-            
+
             if (package.contains("kind") && package["kind"].is_string())
                 manifest.kind = package["kind"].get<std::string>();
-            
+
             if (package.contains("displayName") && package["displayName"].is_string())
                 manifest.displayName = package["displayName"].get<std::string>();
-            
+
             if (package.contains("description") && package["description"].is_string())
                 manifest.description = package["description"].get<std::string>();
-            
+
             if (package.contains("author") && package["author"].is_string())
                 manifest.author = package["author"].get<std::string>();
 
@@ -158,9 +158,9 @@ namespace Horo::Extensions
                             MakeError(ExtensionErrors::InvalidManifest,
                                       "Every extension module requires a canonical semantic version."));
                     if (std::ranges::any_of(manifest.modules, [&parsed](const ExtensionModuleManifest& existing)
-                        {
-                            return existing.id == parsed.id;
-                        }))
+                    {
+                        return existing.id == parsed.id;
+                    }))
                     {
                         return Result<ExtensionManifest>::Failure(
                             MakeError(ExtensionErrors::InvalidManifest,
@@ -202,15 +202,15 @@ namespace Horo::Extensions
                     };
                     if (parsed.type.empty() || parsed.id.empty() ||
                         !std::ranges::any_of(manifest.modules,
-                            [&parsed](const ExtensionModuleManifest& module)
-                            {
-                                return module.id == parsed.module;
-                            }) ||
+                                             [&parsed](const ExtensionModuleManifest& module)
+                                             {
+                                                 return module.id == parsed.module;
+                                             }) ||
                         std::ranges::any_of(manifest.contributions,
-                            [&parsed](const ExtensionContributionManifest& existing)
-                            {
-                                return existing.id == parsed.id;
-                            }))
+                                            [&parsed](const ExtensionContributionManifest& existing)
+                                            {
+                                                return existing.id == parsed.id;
+                                            }))
                     {
                         return Result<ExtensionManifest>::Failure(
                             MakeError(ExtensionErrors::InvalidManifest,

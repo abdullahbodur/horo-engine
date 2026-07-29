@@ -4,11 +4,9 @@
 
 #include <SDL3/SDL.h>
 
-namespace Horo::Editor
-{
+namespace Horo::Editor {
 /** @brief SDL3 implementation of the OpenGL module's native-free presentation port. */
-class SdlOpenGLPresentationPort final : public Render::IOpenGLPresentationPort
-{
+class SdlOpenGLPresentationPort final : public Render::IOpenGLPresentationPort {
   public:
     /** @brief Borrows the platform window; the window must outlive this port and renderer frontend. */
     explicit SdlOpenGLPresentationPort(SDL_Window &window) noexcept;

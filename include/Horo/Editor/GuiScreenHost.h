@@ -230,10 +230,25 @@ class GuiScreenHost
   public:
     /**
      * @brief Constructs the screen host with required application service references.
+     * @param context Immutable GUI theme, localization, and event context.
+     * @param modalHost Root modal lifecycle owner.
+     * @param settingsService Committed editor-settings authority.
+     * @param localization Active editor localization service.
+     * @param engineEvents Engine-wide event bus.
+     * @param creationService Project creation operation service.
+     * @param jobs Application job system borrowed by screen-owned background work.
+     * @param inputRouter Application input-context router.
+     * @param rendererAvailability Immutable renderer availability projection.
+     * @param screenRegistry Registered top-level screen factories.
+     * @param workspacePanelRegistry Registered workspace panel factories.
+     * @param logoTexture Optional renderer-owned editor logo texture.
+     * @param extensionInventory Optional installed-extension inventory.
+     * @param extensionMarketplace Optional extension marketplace service.
      */
     explicit GuiScreenHost(const EditorGuiContext &context, EditorModalHost &modalHost,
                            EditorSettingsService &settingsService, LocalizationService &localization,
                            EngineDataBus &engineEvents, ProjectCreationService &creationService,
+                           JobSystem &jobs,
                            Input::InputRouter &inputRouter, const RendererAvailabilitySnapshot &rendererAvailability,
                            ScreenRegistry screenRegistry, WorkspacePanelRegistry workspacePanelRegistry,
                            std::uintptr_t logoTexture = 0,

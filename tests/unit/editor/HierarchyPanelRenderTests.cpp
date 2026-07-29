@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "HierarchyPanel.h"
+#include "editor/screens/workspace/panels/hierarchy/HierarchyPanel.h"
 
 #include "Horo/Editor/EditorDataBus.h"
 #include "Horo/Editor/EditorSettingsService.h"

@@ -10,86 +10,66 @@
 #include <string>
 #include <utility>
 
-namespace Horo::Editor
-{
-    namespace
-    {
-        [[nodiscard]] Error SettingsError(const ErrorCodeDescriptor &descriptor, std::string message)
-        {
+namespace Horo::Editor {
+    namespace {
+        [[nodiscard]] Error SettingsError(const ErrorCodeDescriptor &descriptor, std::string message) {
             return MakeError(descriptor, std::move(message));
         }
-    } // namespace
+    }  // namespace
 
     /** @copydoc EditorSettingsService::EditorSettingsService */
-    EditorSettingsService::EditorSettingsService(EditorSettings initialSettings, ConfigurationService& configuration,
-                                                 EditorDataBus& events, LocalizationService& localization)
-        : m_committed(std::move(initialSettings)), m_configuration(configuration), m_events(events),
-          m_localization(localization)
-    {
+    EditorSettingsService::EditorSettingsService(EditorSettings initialSettings, ConfigurationService &configuration, EditorDataBus &events,
+                                                 LocalizationService &localization)
+        : m_committed(std::move(initialSettings)), m_configuration(configuration), m_events(events), m_localization(localization) {
         (void)ValidateEditorSettings(m_committed, nullptr);
     }
 
     /** @copydoc EditorSettingsService::Snapshot */
-    EditorSettingsSnapshot EditorSettingsService::Snapshot() const noexcept
-    {
+    EditorSettingsSnapshot EditorSettingsService::Snapshot() const noexcept {
         return EditorSettingsSnapshot{.settings = m_committed, .revision = m_revision};
     }
 
     /** @copydoc EditorSettingsService::Commit */
-    Result<EditorSettingsSnapshot> EditorSettingsService::Commit(const EditorSettingsDraft& draft)
-    {
-        if (draft.baseRevision != m_revision)
-        {
-            return Result<EditorSettingsSnapshot>::Failure(
-                SettingsError(SettingsErrors::DraftStale, "Editor settings draft is stale."));
+    Result<EditorSettingsSnapshot> EditorSettingsService::Commit(const EditorSettingsDraft &draft) {
+        if (draft.baseRevision != m_revision) {
+            return Result<EditorSettingsSnapshot>::Failure(SettingsError(SettingsErrors::DraftStale, "Editor settings draft is stale."));
         }
 
         EditorSettings candidate = draft.settings;
-        if (std::string validationError; !ValidateEditorSettings(candidate, &validationError))
-        {
-            return Result<EditorSettingsSnapshot>::Failure(
-                SettingsError(SettingsErrors::ValidationFailed, std::move(validationError)));
+        if (std::string validationError; !ValidateEditorSettings(candidate, &validationError)) {
+            return Result<EditorSettingsSnapshot>::Failure(SettingsError(SettingsErrors::ValidationFailed, std::move(validationError)));
         }
 
         const bool languageChanged = candidate.languageTag != m_committed.languageTag;
-        if (languageChanged)
-        {
+        if (languageChanged) {
             const auto locale = LocaleTag::Parse(candidate.languageTag);
             LocalizationError localizationError;
-            if (!locale.has_value() || !m_localization.Prepare(*locale, &localizationError))
-            {
+            if (!locale.has_value() || !m_localization.Prepare(*locale, &localizationError)) {
                 return Result<EditorSettingsSnapshot>::Failure(
                     SettingsError(SettingsErrors::ValidationFailed, std::move(localizationError.message)));
             }
         }
 
         const ConfigurationSnapshot configurationSnapshot = m_configuration.Snapshot();
-        const ConfigurationDraft appearanceDraft = MakeEditorAppearanceConfigurationDraft(
-            configurationSnapshot, candidate);
-        if (const Result<void> result = m_configuration.Validate(appearanceDraft); result.HasError())
-        {
+        const ConfigurationDraft appearanceDraft = MakeEditorAppearanceConfigurationDraft(configurationSnapshot, candidate);
+        if (const Result<void> result = m_configuration.Validate(appearanceDraft); result.HasError()) {
             return Result<EditorSettingsSnapshot>::Failure(result.ErrorValue());
         }
 
         EditorSettingsDocument document{.settings = candidate};
-        if (std::string persistenceError; !SaveEditorSettingsDocument(&document, &persistenceError))
-        {
-            return Result<EditorSettingsSnapshot>::Failure(
-                SettingsError(SettingsErrors::PersistenceFailed, std::move(persistenceError)));
+        if (std::string persistenceError; !SaveEditorSettingsDocument(&document, &persistenceError)) {
+            return Result<EditorSettingsSnapshot>::Failure(SettingsError(SettingsErrors::PersistenceFailed, std::move(persistenceError)));
         }
 
-        if (languageChanged)
-        {
+        if (languageChanged) {
             LocalizationError localizationError;
-            if (!m_localization.ActivatePrepared(&localizationError))
-            {
+            if (!m_localization.ActivatePrepared(&localizationError)) {
                 return Result<EditorSettingsSnapshot>::Failure(
                     SettingsError(SettingsErrors::ValidationFailed, std::move(localizationError.message)));
             }
         }
 
-        if (const Result<void> result = m_configuration.Commit(appearanceDraft); result.HasError())
-        {
+        if (const Result<void> result = m_configuration.Commit(appearanceDraft); result.HasError()) {
             return Result<EditorSettingsSnapshot>::Failure(result.ErrorValue());
         }
 
@@ -103,4 +83,4 @@ namespace Horo::Editor
         });
         return Result<EditorSettingsSnapshot>::Success(activated);
     }
-} // namespace Horo::Editor
+}  // namespace Horo::Editor

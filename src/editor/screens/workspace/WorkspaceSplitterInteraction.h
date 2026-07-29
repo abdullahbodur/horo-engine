@@ -1,13 +1,12 @@
 #pragma once
 
-#include <span>
 #include "Horo/Runtime/Input.h"
 
-namespace Horo::Editor
-{
+#include <span>
+
+namespace Horo::Editor {
     /** @brief Identifies one workspace panel resize seam. */
-    enum class WorkspaceSplitterId : std::uint8_t
-    {
+    enum class WorkspaceSplitterId : std::uint8_t {
         None,
         Left,
         Right,
@@ -15,16 +14,14 @@ namespace Horo::Editor
     };
 
     /** @brief Pointer movement axis controlled by a workspace splitter. */
-    enum class WorkspaceSplitterAxis : std::uint8_t
-    {
+    enum class WorkspaceSplitterAxis : std::uint8_t {
         None,
         Horizontal,
         Vertical,
     };
 
     /** @brief Screen-space hit region for one workspace splitter. */
-    struct WorkspaceSplitterRegion
-    {
+    struct WorkspaceSplitterRegion {
         WorkspaceSplitterId id{WorkspaceSplitterId::None};
         WorkspaceSplitterAxis axis{WorkspaceSplitterAxis::None};
         float minX{0.0F};
@@ -34,8 +31,7 @@ namespace Horo::Editor
     };
 
     /** @brief Per-frame pointer snapshot consumed by splitter interaction. */
-    struct WorkspaceSplitterPointerInput
-    {
+    struct WorkspaceSplitterPointerInput {
         float x{0.0F};
         float y{0.0F};
         float deltaX{0.0F};
@@ -45,8 +41,7 @@ namespace Horo::Editor
     };
 
     /** @brief Splitter hover, capture, and resize delta for one frame. */
-    struct WorkspaceSplitterInteractionResult
-    {
+    struct WorkspaceSplitterInteractionResult {
         WorkspaceSplitterId hovered{WorkspaceSplitterId::None};
         WorkspaceSplitterId active{WorkspaceSplitterId::None};
         WorkspaceSplitterAxis axis{WorkspaceSplitterAxis::None};
@@ -56,8 +51,7 @@ namespace Horo::Editor
     /**
      * @brief Owns pointer capture for workspace panel resize seams without relying on ImGui window hit order.
      */
-    class WorkspaceSplitterInteraction final : public Input::IInputCaptureOwner
-    {
+    class WorkspaceSplitterInteraction final : public Input::IInputCaptureOwner {
     public:
         /**
          * @brief Advances splitter hover and drag capture from a pointer snapshot.
@@ -66,9 +60,8 @@ namespace Horo::Editor
          * @return Interaction result for cursor selection and panel resize dispatch.
          */
         [[nodiscard]] WorkspaceSplitterInteractionResult Update(std::span<const WorkspaceSplitterRegion> regions,
-                                                                const WorkspaceSplitterPointerInput& input,
-                                                                Input::InputRouter& router,
-                                                                Input::InputContextToken& context);
+                                                                const WorkspaceSplitterPointerInput &input, Input::InputRouter &router,
+                                                                Input::InputContextToken &context);
 
         void OnInputCaptureCancelled(Input::CaptureCancellationReason reason) noexcept override;
 
@@ -76,8 +69,7 @@ namespace Horo::Editor
          * @brief Reports whether a resize seam currently owns the primary pointer drag.
          * @return True from seam press until release or seam removal.
          */
-        [[nodiscard]] bool OwnsPrimaryPointer() const noexcept
-        {
+        [[nodiscard]] bool OwnsPrimaryPointer() const noexcept {
             return active_ != WorkspaceSplitterId::None;
         }
 
@@ -85,4 +77,4 @@ namespace Horo::Editor
         WorkspaceSplitterId active_{WorkspaceSplitterId::None};
         Input::PointerCaptureToken capture_;
     };
-} // namespace Horo::Editor
+}  // namespace Horo::Editor

@@ -13,11 +13,9 @@
 
 #include <vector>
 
-namespace Horo::Editor
-{
+namespace Horo::Editor {
     /** @brief Owning viewport render data extracted from one activated runtime scene revision. */
-    struct EditorViewportSceneSnapshot
-    {
+    struct EditorViewportSceneSnapshot {
         DocumentRevision documentRevision;
         Runtime::SceneRuntimeId runtimeSceneId;
         EditorViewportCamera camera;
@@ -30,8 +28,7 @@ namespace Horo::Editor
     };
 
     /** @brief Composition-owned handoff of the active screen's latest immutable viewport snapshot. */
-    class EditorViewportSceneState final
-    {
+    class EditorViewportSceneState final {
     public:
         void Replace(EditorViewportSceneSnapshot snapshot);
         void Clear() noexcept;
@@ -42,24 +39,23 @@ namespace Horo::Editor
     };
 
     /** @brief Resolved object and parent world matrices used by editor manipulation tools. */
-    struct SceneObjectWorldTransforms
-    {
+    struct SceneObjectWorldTransforms {
         Math::Mat4 localToWorld{Math::Mat4::Identity()};
         Math::Mat4 parentToWorld{Math::Mat4::Identity()};
     };
 
     /** @brief Resolves world and parent matrices from an immutable runtime scene view. */
     [[nodiscard]] Result<SceneObjectWorldTransforms> ResolveSceneObjectWorldTransforms(Runtime::RuntimeSceneView scene,
-        SceneObjectId object);
+                                                                                       SceneObjectId object);
 
     /** @brief Extracts supported renderable instances from an immutable runtime scene view. */
     [[nodiscard]] Result<EditorViewportSceneSnapshot> ExtractEditorViewportScene(Runtime::RuntimeSceneView scene,
-        DocumentRevision documentRevision,
-        const EditorViewportCamera& camera,
-        Runtime::PrimitiveMeshCache& meshCache);
+                                                                                 DocumentRevision documentRevision,
+                                                                                 const EditorViewportCamera &camera,
+                                                                                 Runtime::PrimitiveMeshCache &meshCache);
 
     /** @brief Applies one editor-owned transient transform overlay without mutating runtime state. */
-    [[nodiscard]] Result<void> ApplyEditorViewportTransformPreview(
-        Runtime::RuntimeSceneView scene, const std::optional<SceneObjectTransformPreview>& preview,
-        EditorViewportSceneSnapshot& snapshot);
-} // namespace Horo::Editor
+    [[nodiscard]] Result<void> ApplyEditorViewportTransformPreview(Runtime::RuntimeSceneView scene,
+                                                                   const std::optional<SceneObjectTransformPreview> &preview,
+                                                                   EditorViewportSceneSnapshot &snapshot);
+}  // namespace Horo::Editor
