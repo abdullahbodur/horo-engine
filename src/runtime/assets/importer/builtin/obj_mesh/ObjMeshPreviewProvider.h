@@ -10,17 +10,16 @@
 #include <memory>
 
 namespace Horo::Assets {
-/** @brief Selects the canonical camera used by the built-in mesh preview provider. */
-enum class BuiltinMeshPreviewView {
-    Isometric,
-    NegativeX,
-};
+    /** @brief Selects the canonical camera used by the built-in mesh preview provider. */
+    enum class BuiltinMeshPreviewView {
+        Isometric,
+        NegativeX,
+    };
 
-/**
- * @brief Creates the built-in mesh-payload preview provider.
- * @param view Canonical camera selected for the source format.
- * @return Shared immutable preview provider.
- */
-[[nodiscard]] std::shared_ptr<const IAssetPreviewProvider> CreateBuiltinMeshPreviewProvider(
-    BuiltinMeshPreviewView view);
-} // namespace Horo::Assets
+    /**
+     * @brief Creates the built-in mesh-payload preview provider.
+     * @param view Canonical camera selected for the source format.
+     * @return Shared immutable preview provider.
+     */
+    [[nodiscard]] std::shared_ptr<const IAssetPreviewProvider> CreateBuiltinMeshPreviewProvider(BuiltinMeshPreviewView view);
+}  // namespace Horo::Assets

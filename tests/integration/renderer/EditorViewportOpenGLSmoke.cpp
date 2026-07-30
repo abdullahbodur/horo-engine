@@ -12,10 +12,7 @@
 
 #include <array>
 #include <cmath>
-#include <filesystem>
-#include <fstream>
 #include <memory>
-#include <span>
 #include <vector>
 
 namespace
@@ -29,32 +26,12 @@ namespace
         REQUIRE((condition));
     }
 
-    void WritePpm(const std::filesystem::path& path, const std::span<const std::uint8_t> rgba,
-                  const std::uint32_t width,
-                  const std::uint32_t height)
-    {
-        std::ofstream output(path, std::ios::binary | std::ios::trunc);
-        Check(output.is_open());
-        output << "P6\n" << width << ' ' << height << "\n255\n";
-        for (std::uint32_t y = 0; y < height; ++y)
-        {
-            const std::uint32_t sourceY = height - 1 - y;
-            for (std::uint32_t x = 0; x < width; ++x)
-            {
-                const std::size_t offset = (static_cast<std::size_t>(sourceY) * width + x) * 4;
-                output.write(reinterpret_cast<const char*>(rgba.data() + offset), 3);
-            }
-        }
-        Check(output.good());
-    }
 } // namespace
 
 TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]")
 {
     constexpr std::uint32_t width = 512;
     constexpr std::uint32_t height = 384;
-    const std::filesystem::path outputPath = "horo-viewport-primitives.ppm";
-
     Check(SDL_Init(SDL_INIT_VIDEO));
     Check(SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1));
     Check(SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24));
@@ -130,8 +107,16 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]")
             });
         meshLeases.push_back(std::move(meshLease));
     }
+    const std::array lights{
+        RenderLight{
+            .kind = RenderLightKind::Directional,
+            .direction = Math::Normalize(Math::Vec3{0.5F, -1.0F, -0.5F}),
+            .color = {1.0F, 0.95F, 0.88F},
+            .intensity = 2.0F,
+        },
+    };
     const EditorViewportSceneView viewportScene{
-        .camera = {}, .meshResources = meshResources, .instances = viewportInstances
+        .camera = {}, .meshResources = meshResources, .instances = viewportInstances, .lights = lights
     };
 
     GLint initializedVertexArray = 0;
@@ -159,7 +144,7 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]")
                 .extent = {width, height},
                 .scene = RenderSceneView{
                     ToRenderCamera(viewportScene.camera), viewportScene.meshResources,
-                    viewportScene.instances
+                    viewportScene.instances, viewportScene.lights
                 },
             },
         },
@@ -247,8 +232,6 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]")
     Check(coloredPixels > 10000);
     const std::size_t center = (static_cast<std::size_t>(height / 2) * width + width / 2) * 4;
     Check(pixels[center] < 150 && pixels[center + 1] > 130 && pixels[center + 2] > 150);
-    WritePpm(outputPath, pixels, width, height);
-
     Check(frame.Present().HasValue());
     frontend->DetachStaticMeshPassExecutor(viewport);
     Check(frontend->ReleaseOffscreenTarget(viewportTarget).HasValue());

@@ -37,7 +37,8 @@ namespace Horo::Editor {
                                  "Viewport pick snapshot contains an invalid scene object identity."));
         }
 
-        const Result<Math::Ray> ray = BuildEditorViewportRay(scene.camera, query.normalizedX, query.normalizedY, query.aspect);
+        const Result<Math::Ray> ray =
+            BuildEditorViewportRay(scene.camera, query.normalizedX, query.normalizedY, query.aspect, query.depthRange);
         if (ray.HasError())
             return Result<EditorViewportPickResult>::Failure(ray.ErrorValue());
 

@@ -384,7 +384,18 @@ satisfy the same lifecycle and viewport parity suite defined by
 Selected editor instances carry backend-neutral tint and strength values; both
 executors apply the same semantics without querying editor selection state directly.
 The temporary typed `core.materials.default` resolution uses the shared neutral
-viewport shader. It is not the general material, PBR, or lighting system.
+viewport material and a bounded forward-preview lighting path. Render extraction
+emits at most sixteen immutable world-space Directional, Point, or Spot light
+values; both editor executors consume the same color, intensity, range, cone, and
+normal-transform semantics. The first non-zero Directional light receives a
+scene-bounds-fitted, texel-snapped 2048² orthographic shadow view with 3×3 PCF;
+that selection and matrix are backend-neutral while native shadow resources remain
+private to each executor. This is a viewport-quality baseline, not the general
+material/PBR, clustered-lighting, cascaded-shadow, or punctual-shadow system.
+The selected Light's influence geometry is also backend-neutral: Directional,
+Point, and Spot line lists are built from the same immutable render snapshot,
+then depth-tested without writing scene depth in each executor. Always-visible,
+constant-pixel Light markers are composed and picked by the editor GUI layer.
 
 Changing a project's renderer is a restart operation, not live migration of GPU
 objects. The project setting records a canonical backend identifier; the host

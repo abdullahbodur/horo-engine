@@ -3,11 +3,11 @@
  */
 
 #include "ObjMeshImporter.h"
-#include "ObjMeshPreviewProvider.h"
-#include "../fbx_mesh/FbxMeshImporter.h"
 
-#include "Horo/Assets/AssetRegistry.h"
 #include "../../../AssetErrors.h"
+#include "../fbx_mesh/FbxMeshImporter.h"
+#include "Horo/Assets/AssetRegistry.h"
+#include "ObjMeshPreviewProvider.h"
 
 #include <algorithm>
 #include <cctype>
@@ -19,37 +19,30 @@
 #include <string_view>
 #include <vector>
 
-namespace Horo::Assets
-{
-    namespace
-    {
-        void WriteLE32(std::vector<std::uint8_t>& out, std::uint32_t value)
-        {
+namespace Horo::Assets {
+    namespace {
+        void WriteLE32(std::vector<std::uint8_t> &out, std::uint32_t value) {
             for (int i = 0; i < 4; ++i)
                 out.push_back(static_cast<std::uint8_t>((value >> (i * 8)) & 0xFF));
         }
 
-        void WriteFloat(std::vector<std::uint8_t>& out, float value)
-        {
+        void WriteFloat(std::vector<std::uint8_t> &out, float value) {
             std::uint32_t raw;
             std::memcpy(&raw, &value, sizeof(raw));
             WriteLE32(out, raw);
         }
 
-        struct Vec3
-        {
+        struct Vec3 {
             float x = 0, y = 0, z = 0;
         };
 
-        struct FaceVertex
-        {
+        struct FaceVertex {
             int positionIndex = -1;
             int texcoordIndex = -1;
             int normalIndex = -1;
         };
 
-        struct ObjData
-        {
+        struct ObjData {
             std::vector<Vec3> positions;
             std::vector<Vec3> texcoords;
             std::vector<Vec3> normals;
@@ -57,80 +50,73 @@ namespace Horo::Assets
             std::vector<std::string> warnings;
         };
 
-        FaceVertex ParseFaceVertex(std::string_view token)
-        {
+        FaceVertex ParseFaceVertex(std::string_view token) {
             FaceVertex fv;
             const auto slash1 = token.find('/');
-            if (slash1 == std::string_view::npos)
-            {
+            if (slash1 == std::string_view::npos) {
                 fv.positionIndex = std::stoi(std::string(token));
                 return fv;
             }
             fv.positionIndex = std::stoi(std::string(token.substr(0, slash1)));
             const auto slash2 = token.find('/', slash1 + 1);
-            if (slash2 == std::string_view::npos)
-            {
+            if (slash2 == std::string_view::npos) {
                 if (const std::string tcStr(token.substr(slash1 + 1)); !tcStr.empty())
-                    fv.texcoordIndex =
-                        std::stoi(tcStr);
+                    fv.texcoordIndex = std::stoi(tcStr);
                 return fv;
             }
             if (const std::string tcStr(token.substr(slash1 + 1, slash2 - slash1 - 1)); !tcStr.empty())
-                fv.texcoordIndex
-                    = std::stoi(tcStr);
-            if (const std::string nStr(token.substr(slash2 + 1)); !nStr.empty()) fv.normalIndex = std::stoi(nStr);
+                fv.texcoordIndex = std::stoi(tcStr);
+            if (const std::string nStr(token.substr(slash2 + 1)); !nStr.empty())
+                fv.normalIndex = std::stoi(nStr);
             return fv;
         }
 
-        Result<ObjData> ParseObj(std::string_view source)
-        {
+        Result<ObjData> ParseObj(std::string_view source) {
             ObjData data;
             std::istringstream stream{std::string(source)};
             std::string line;
             int lineNumber = 0;
 
-            while (std::getline(stream, line))
-            {
+            while (std::getline(stream, line)) {
                 ++lineNumber;
-                while (!line.empty() && std::isspace(static_cast<unsigned char>(line.front()))) line.erase(0, 1);
-                while (!line.empty() && std::isspace(static_cast<unsigned char>(line.back()))) line.pop_back();
-                if (line.empty() || line[0] == '#') continue;
+                while (!line.empty() && std::isspace(static_cast<unsigned char>(line.front())))
+                    line.erase(0, 1);
+                while (!line.empty() && std::isspace(static_cast<unsigned char>(line.back())))
+                    line.pop_back();
+                if (line.empty() || line[0] == '#')
+                    continue;
 
                 std::istringstream ls(line);
                 std::string token;
                 ls >> token;
 
-                if (token == "v")
-                {
+                if (token == "v") {
                     Vec3 v;
-                    if (!(ls >> v.x >> v.y >> v.z)) continue;
+                    if (!(ls >> v.x >> v.y >> v.z))
+                        continue;
                     data.positions.push_back(v);
-                }
-                else if (token == "vt")
-                {
+                } else if (token == "vt") {
                     Vec3 vt;
                     vt.z = 0.0f;
                     ls >> vt.x >> vt.y;
                     data.texcoords.push_back(vt);
-                }
-                else if (token == "vn")
-                {
+                } else if (token == "vn") {
                     Vec3 vn;
-                    if (!(ls >> vn.x >> vn.y >> vn.z)) continue;
+                    if (!(ls >> vn.x >> vn.y >> vn.z))
+                        continue;
                     data.normals.push_back(vn);
-                }
-                else if (token == "f")
-                {
+                } else if (token == "f") {
                     std::vector<FaceVertex> face;
                     std::string faceToken;
-                    while (ls >> faceToken) face.push_back(ParseFaceVertex(faceToken));
-                    if (face.size() < 3) continue;
-                    if (face.size() > 3)
-                    {
+                    while (ls >> faceToken)
+                        face.push_back(ParseFaceVertex(faceToken));
+                    if (face.size() < 3)
+                        continue;
+                    if (face.size() > 3) {
                         for (std::size_t i = 1; i + 1 < face.size(); ++i)
                             data.faces.push_back({face[0], face[i], face[i + 1]});
-                    }
-                    else data.faces.push_back(std::move(face));
+                    } else
+                        data.faces.push_back(std::move(face));
                 }
             }
 
@@ -139,30 +125,25 @@ namespace Horo::Assets
             return Result<ObjData>::Success(std::move(data));
         }
 
-        class ObjMeshImporter final : public IAssetImporter
-        {
+        class ObjMeshImporter final : public IAssetImporter {
         public:
-            [[nodiscard]] Result<PreparedAssetImport> Import(
-                const AssetImportInput& input,
-                const CancellationToken& cancellation) const override
-            {
+            [[nodiscard]] Result<PreparedAssetImport> Import(const AssetImportInput &input,
+                                                             const CancellationToken &cancellation) const override {
                 if (cancellation.IsCancellationRequested())
                     return Result<PreparedAssetImport>::Failure(MakeError(ImportErrors::ImportCancelled));
 
-                std::string_view source(reinterpret_cast<const char*>(input.sourceBytes.data()),
-                                        input.sourceBytes.size());
+                std::string_view source(reinterpret_cast<const char *>(input.sourceBytes.data()), input.sourceBytes.size());
                 auto objResult = ParseObj(source);
                 if (objResult.HasError())
                     return Result<PreparedAssetImport>::Failure(objResult.ErrorValue());
 
-                const auto& obj = objResult.Value();
+                const auto &obj = objResult.Value();
                 PreparedAssetImport result;
                 result.type = AssetTypeId::Parse("core.mesh").Value();
 
                 float minX = obj.positions[0].x, minY = obj.positions[0].y, minZ = obj.positions[0].z;
                 float maxX = minX, maxY = minY, maxZ = minZ;
-                for (const auto& p : obj.positions)
-                {
+                for (const auto &p : obj.positions) {
                     minX = std::min(minX, p.x);
                     maxX = std::max(maxX, p.x);
                     minY = std::min(minY, p.y);
@@ -171,7 +152,7 @@ namespace Horo::Assets
                     maxZ = std::max(maxZ, p.z);
                 }
 
-                auto& payload = result.editorPayload;
+                auto &payload = result.editorPayload;
                 WriteLE32(payload, 2);
                 WriteLE32(payload, static_cast<std::uint32_t>(obj.positions.size()));
                 WriteLE32(payload, static_cast<std::uint32_t>(obj.faces.size()));
@@ -189,19 +170,16 @@ namespace Horo::Assets
                 WriteLE32(payload, tcSize);
                 WriteLE32(payload, nSize);
 
-                for (const auto& p : obj.positions)
-                {
+                for (const auto &p : obj.positions) {
                     WriteFloat(payload, p.x);
                     WriteFloat(payload, p.y);
                     WriteFloat(payload, p.z);
                 }
-                for (const auto& t : obj.texcoords)
-                {
+                for (const auto &t : obj.texcoords) {
                     WriteFloat(payload, t.x);
                     WriteFloat(payload, t.y);
                 }
-                for (const auto& n : obj.normals)
-                {
+                for (const auto &n : obj.normals) {
                     WriteFloat(payload, n.x);
                     WriteFloat(payload, n.y);
                     WriteFloat(payload, n.z);
@@ -209,19 +187,16 @@ namespace Horo::Assets
 
                 std::vector<std::uint32_t> triangleIndices;
                 triangleIndices.reserve(obj.faces.size() * 3U);
-                const auto resolvePositionIndex = [&obj](const int index) -> std::optional<std::uint32_t>
-                {
+                const auto resolvePositionIndex = [&obj](const int index) -> std::optional<std::uint32_t> {
                     if (index == 0)
                         return std::nullopt;
-                    const std::int64_t resolved = index > 0
-                                                      ? static_cast<std::int64_t>(index - 1)
-                                                      : static_cast<std::int64_t>(obj.positions.size()) + index;
+                    const std::int64_t resolved =
+                        index > 0 ? static_cast<std::int64_t>(index - 1) : static_cast<std::int64_t>(obj.positions.size()) + index;
                     if (resolved < 0 || resolved >= static_cast<std::int64_t>(obj.positions.size()))
                         return std::nullopt;
                     return static_cast<std::uint32_t>(resolved);
                 };
-                for (const auto& face : obj.faces)
-                {
+                for (const auto &face : obj.faces) {
                     if (face.size() != 3)
                         continue;
                     const auto a = resolvePositionIndex(face[0].positionIndex);
@@ -240,17 +215,16 @@ namespace Horo::Assets
                 return Result<PreparedAssetImport>::Success(std::move(result));
             }
         };
-    } // namespace
+    }  // namespace
 
-    std::shared_ptr<const IAssetImporter> CreateObjMeshImporter()
-    {
+    std::shared_ptr<const IAssetImporter> CreateObjMeshImporter() {
         return std::make_shared<const ObjMeshImporter>();
     }
 
-    Result<void> RegisterObjMeshImporter(AssetImporterCatalog& catalog)
-    {
+    Result<void> RegisterObjMeshImporter(AssetImporterCatalog &catalog) {
         auto meshType = AssetTypeId::Parse("core.mesh");
-        if (meshType.HasError()) return Result<void>::Failure(meshType.ErrorValue());
+        if (meshType.HasError())
+            return Result<void>::Failure(meshType.ErrorValue());
 
         return catalog.Register(AssetImporterContribution{
             .contributionId = "horo.asset-importer.obj-mesh",
@@ -261,48 +235,58 @@ namespace Horo::Assets
             .fileExtensions = {"obj"},
             .assetTypes = {meshType.Value()},
             .subfolderCategory = "Meshes",
-            .settings = {
-                ImportSettingDescriptor{
-                    .id = "coordinateSystem", .labelKey = "Coordinate System",
-                    .descriptionKey = "Target coordinate system.", .kind = ImportSettingKind::Choice,
-                    .defaultValue = std::string{"Y-up (engine)"},
-                    .choices = {
-                        {.id = "yup", .labelKey = "Y-up (engine)", .value = std::string{"Y-up (engine)"}},
-                        {.id = "zup", .labelKey = "Z-up", .value = std::string{"Z-up"}},
+            .settings =
+                {
+                    ImportSettingDescriptor{
+                        .id = "coordinateSystem",
+                        .labelKey = "Coordinate System",
+                        .descriptionKey = "Target coordinate system.",
+                        .kind = ImportSettingKind::Choice,
+                        .defaultValue = std::string{"Y-up (engine)"},
+                        .choices =
+                            {
+                                {.id = "yup", .labelKey = "Y-up (engine)", .value = std::string{"Y-up (engine)"}},
+                                {.id = "zup", .labelKey = "Z-up", .value = std::string{"Z-up"}},
+                            },
+                        .includeInPresets = true,
                     },
-                    .includeInPresets = true,
-                },
-                ImportSettingDescriptor{
-                    .id = "unitScale", .labelKey = "Unit Scale",
-                    .descriptionKey = "Scale factor from source units to engine units.",
-                    .kind = ImportSettingKind::Float, .defaultValue = 1.0, .minimum = 0.001, .maximum = 1000.0,
-                    .includeInPresets = true,
-                },
-                ImportSettingDescriptor{
-                    .id = "importNormals", .labelKey = "Import Normals",
-                    .descriptionKey = "How vertex normals are determined.", .kind = ImportSettingKind::Choice,
-                    .defaultValue = std::string{"Import from source"},
-                    .choices = {
-                        {.id = "import", .labelKey = "Import from source", .value = std::string{"Import from source"}},
-                        {.id = "smooth", .labelKey = "Calculate smooth", .value = std::string{"Calculate smooth"}},
-                        {.id = "flat", .labelKey = "Calculate flat", .value = std::string{"Calculate flat"}},
+                    ImportSettingDescriptor{
+                        .id = "unitScale",
+                        .labelKey = "Unit Scale",
+                        .descriptionKey = "Scale factor from source units to engine units.",
+                        .kind = ImportSettingKind::Float,
+                        .defaultValue = 1.0,
+                        .minimum = 0.001,
+                        .maximum = 1000.0,
+                        .includeInPresets = true,
                     },
-                    .includeInPresets = true,
+                    ImportSettingDescriptor{
+                        .id = "importNormals",
+                        .labelKey = "Import Normals",
+                        .descriptionKey = "How vertex normals are determined.",
+                        .kind = ImportSettingKind::Choice,
+                        .defaultValue = std::string{"Import from source"},
+                        .choices =
+                            {
+                                {.id = "import", .labelKey = "Import from source", .value = std::string{"Import from source"}},
+                                {.id = "smooth", .labelKey = "Calculate smooth", .value = std::string{"Calculate smooth"}},
+                                {.id = "flat", .labelKey = "Calculate flat", .value = std::string{"Calculate flat"}},
+                            },
+                        .includeInPresets = true,
+                    },
                 },
-            },
             .builtIn = true,
             .strategy = CreateObjMeshImporter(),
-            .previewProvider =
-            CreateBuiltinMeshPreviewProvider(BuiltinMeshPreviewView::Isometric),
+            .previewProvider = CreateBuiltinMeshPreviewProvider(BuiltinMeshPreviewView::Isometric),
             .previewFallback = AssetPreviewFallback::Mesh,
         });
     }
 
-    Result<void> RegisterAllBuiltinImporters(AssetImporterCatalog& catalog)
-    {
+    Result<void> RegisterAllBuiltinImporters(AssetImporterCatalog &catalog) {
         auto r = RegisterObjMeshImporter(catalog);
-        if (r.HasError()) return r;
+        if (r.HasError())
+            return r;
         r = RegisterFbxMeshImporter(catalog);
         return r;
     }
-} // namespace Horo::Assets
+}  // namespace Horo::Assets

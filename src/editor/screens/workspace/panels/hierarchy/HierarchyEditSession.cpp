@@ -17,7 +17,7 @@ namespace Horo::Editor {
                     return HierarchyNodeType::TriggerVolume;
                 case SceneObjectKind::AudioSource:
                     return HierarchyNodeType::AudioSource;
-                case SceneObjectKind::Empty:
+                case SceneObjectKind::GameObject:
                     return HierarchyNodeType::Empty;
             }
             return HierarchyNodeType::Empty;
@@ -68,6 +68,12 @@ namespace Horo::Editor {
         } else {
             m_model.ClearSelection();
         }
+        m_selectedObjects = viewModel.selectedObjects;
+        if (m_selectedObjects.empty() && viewModel.primarySelection.has_value())
+            m_selectedObjects.push_back(*viewModel.primarySelection);
+        if (!m_selectionAnchor.has_value() && viewModel.primarySelection.has_value()) {
+            m_selectionAnchor = viewModel.primarySelection->value;
+        }
     }
 
     /** @copydoc HierarchyEditSession::VisibleRows */
@@ -86,6 +92,11 @@ namespace Horo::Editor {
         return m_model.SelectedId();
     }
 
+    /** @copydoc HierarchyEditSession::IsSelected */
+    bool HierarchyEditSession::IsSelected(const HierarchyNodeId id) const noexcept {
+        return std::ranges::find(m_selectedObjects, SceneObjectId{id}) != m_selectedObjects.end();
+    }
+
     /** @copydoc HierarchyEditSession::Select */
     void HierarchyEditSession::Select(const HierarchyNodeId id) noexcept {
         static_cast<void>(m_model.Select(id));
@@ -99,8 +110,50 @@ namespace Horo::Editor {
     }
 
     /** @copydoc HierarchyEditSession::SelectCommand */
-    EditorWorkspaceViewCommandData HierarchyEditSession::SelectCommand(const HierarchyNodeId id) {
-        return MakeObjectCommand(EditorWorkspaceViewCommand::SelectObject, id);
+    EditorWorkspaceViewCommandData HierarchyEditSession::SelectCommand(const HierarchyNodeId id, const HierarchySelectionGesture gesture) {
+        std::vector<SceneObjectId> selected;
+        const SceneObjectId clicked{id};
+        if (gesture == HierarchySelectionGesture::Toggle) {
+            selected = m_selectedObjects;
+            const auto existing = std::ranges::find(selected, clicked);
+            if (existing == selected.end()) {
+                selected.push_back(clicked);
+            } else {
+                selected.erase(existing);
+            }
+            m_selectionAnchor = id;
+        } else if (gesture == HierarchySelectionGesture::Range && m_selectionAnchor.has_value()) {
+            const auto anchor = std::ranges::find_if(m_visibleRows, [this](const HierarchyVisibleRow &row) {
+                return row.node != nullptr && row.node->id == *m_selectionAnchor;
+            });
+            const auto target = std::ranges::find_if(m_visibleRows, [id](const HierarchyVisibleRow &row) {
+                return row.node != nullptr && row.node->id == id;
+            });
+            if (anchor != m_visibleRows.end() && target != m_visibleRows.end()) {
+                const auto first = std::min(anchor, target);
+                const auto last = std::max(anchor, target);
+                selected.reserve(static_cast<std::size_t>(std::distance(first, last)) + 1);
+                for (auto row = first; row != std::next(last); ++row) {
+                    selected.push_back(SceneObjectId{row->node->id});
+                }
+            }
+        }
+        if (selected.empty() && gesture != HierarchySelectionGesture::Toggle) {
+            selected.push_back(clicked);
+            m_selectionAnchor = id;
+        }
+
+        std::optional<SceneObjectId> primary;
+        if (std::ranges::find(selected, clicked) != selected.end()) {
+            primary = clicked;
+        } else if (!selected.empty()) {
+            primary = selected.back();
+        }
+
+        EditorWorkspaceViewCommandData result;
+        result.command = EditorWorkspaceViewCommand::SelectObject;
+        result.objectSelection = ObjectSelectionRequest{.objects = std::move(selected), .primary = primary};
+        return result;
     }
 
     /** @copydoc HierarchyEditSession::CreateCommand */

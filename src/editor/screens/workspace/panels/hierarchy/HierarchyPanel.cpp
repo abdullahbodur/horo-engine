@@ -163,7 +163,7 @@ namespace Horo::Editor {
             const ImVec2 rowMax{rowMin.x + listWidth, rowMin.y + kRowHeight};
             ImGui::InvisibleButton("Hierarchy object###hierarchy_object_row", ImVec2(listWidth, kRowHeight));
             const bool hovered = ImGui::IsItemHovered();
-            const bool selected = editSession_.SelectedId() == node.id;
+            const bool selected = editSession_.IsSelected(node.id);
 
             if (selected) {
                 drawList->AddRectFilled(rowMin, rowMax, Theme::U32(Theme::AccentSoft()), Theme::Layout::Radius);
@@ -200,13 +200,20 @@ namespace Horo::Editor {
                     editSession_.ToggleExpanded(node.id);
                 } else {
                     editSession_.Select(node.id);
-                    cmd = HierarchyEditSession::SelectCommand(node.id);
+                    const ImGuiIO &io = ImGui::GetIO();
+                    const HierarchySelectionGesture gesture =
+                        io.KeyShift
+                            ? HierarchySelectionGesture::Range
+                            : ((io.KeyCtrl || io.KeySuper) ? HierarchySelectionGesture::Toggle : HierarchySelectionGesture::Replace);
+                    cmd = editSession_.SelectCommand(node.id, gesture);
                 }
             }
 
             if (workspaceEligible && ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
-                editSession_.Select(node.id);
-                cmd = HierarchyEditSession::SelectCommand(node.id);
+                if (!editSession_.IsSelected(node.id)) {
+                    editSession_.Select(node.id);
+                    cmd = editSession_.SelectCommand(node.id, HierarchySelectionGesture::Replace);
+                }
             }
             if (Ui::BeginContextMenu("##HierarchyContext")) {
                 if (workspaceEligible &&

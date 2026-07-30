@@ -1,7 +1,7 @@
 #include "Horo/Editor/EditorConfiguration.h"
 
 #include <cassert>
-#include <cstdint>
+#include <exception>
 #include <string>
 
 namespace Horo::Editor {
@@ -21,7 +21,11 @@ namespace Horo::Editor {
                 .reloadPolicy = ReloadPolicy::NextFrame,
                 .sensitivity = SettingSensitivity::Public,
             };
-            assert(schema.Register(descriptor).HasValue());
+            const Result<void> registered = schema.Register(descriptor);
+            assert(registered.HasValue());
+            if (registered.HasError()) {
+                std::terminate();
+            }
         }
     }  // namespace
 
@@ -56,9 +60,14 @@ namespace Horo::Editor {
         RegisterAppearanceDescriptor(schema, kThemeKey, SettingValueType::String,
                                      std::string{ToConfigurationThemeValue(settings.themePreset)});
         RegisterAppearanceDescriptor(schema, kAccentColorKey, SettingValueType::String, settings.accentColorHex);
-        RegisterAppearanceDescriptor(schema, kUiScaleKey, SettingValueType::Integer, settings.uiScalePercent);
-        RegisterAppearanceDescriptor(schema, kCodeFontSizeKey, SettingValueType::Integer, settings.codeFontSizePx);
-        assert(schema.Seal().HasValue());
+        RegisterAppearanceDescriptor(schema, kUiScaleKey, SettingValueType::Integer, static_cast<std::int64_t>(settings.uiScalePercent));
+        RegisterAppearanceDescriptor(schema, kCodeFontSizeKey, SettingValueType::Integer,
+                                     static_cast<std::int64_t>(settings.codeFontSizePx));
+        const Result<void> sealed = schema.Seal();
+        assert(sealed.HasValue());
+        if (sealed.HasError()) {
+            std::terminate();
+        }
         return ConfigurationService{std::move(schema), events};
     }
 

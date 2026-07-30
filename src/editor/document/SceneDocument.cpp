@@ -34,6 +34,22 @@ namespace Horo::Editor {
         return camera.orthographicHeight > 0.0F;
     }
 
+    /** @copydoc IsValidLightComponent */
+    bool IsValidLightComponent(const Runtime::LightComponent &light) noexcept {
+        const bool kindValid = light.kind == Runtime::LightKind::Directional || light.kind == Runtime::LightKind::Point ||
+                               light.kind == Runtime::LightKind::Spot;
+        return kindValid && Math::IsFinite(light.color) && light.color.x >= 0.0F && light.color.y >= 0.0F &&
+               light.color.z >= 0.0F && std::isfinite(light.intensity) && light.intensity >= 0.0F &&
+               std::isfinite(light.range) && light.range >= 0.0F && std::isfinite(light.innerConeRadians) &&
+               light.innerConeRadians >= 0.0F && std::isfinite(light.outerConeRadians) &&
+               light.outerConeRadians >= light.innerConeRadians && light.outerConeRadians <= Math::Pi;
+    }
+
+    /** @copydoc IsValidAudioSourceComponent */
+    bool IsValidAudioSourceComponent(const Runtime::AudioSourceComponent &audioSource) noexcept {
+        return std::isfinite(audioSource.gain) && audioSource.gain >= 0.0F;
+    }
+
     namespace {
         constexpr std::size_t kMaximumHistoryEntries = 256;
         constexpr std::size_t kMaximumHistoryBytes = 4U * 1024U * 1024U;
@@ -56,10 +72,46 @@ namespace Horo::Editor {
             Math::Transform after;
         };
 
+        struct TransformedObjectsDelta {
+            std::vector<TransformedObjectDelta> objects;
+        };
+
         struct CameraChangedDelta {
             SceneObjectId object;
             Runtime::CameraComponent before;
             Runtime::CameraComponent after;
+        };
+
+        struct LightChangedDelta {
+            SceneObjectId object;
+            Runtime::LightComponent before;
+            Runtime::LightComponent after;
+        };
+
+        struct TriggerVolumeChangedDelta {
+            SceneObjectId object;
+            Runtime::TriggerVolumeComponent before;
+            Runtime::TriggerVolumeComponent after;
+        };
+
+        struct AudioSourceChangedDelta {
+            SceneObjectId object;
+            Runtime::AudioSourceComponent before;
+            Runtime::AudioSourceComponent after;
+        };
+
+        struct ComponentAddedDelta {
+            SceneObjectId object;
+            ComponentType type;
+        };
+
+        struct ComponentRemovedDelta {
+            SceneObjectId object;
+            ComponentType type;
+            std::optional<Runtime::CameraComponent> camera;
+            std::optional<Runtime::LightComponent> light;
+            std::optional<Runtime::TriggerVolumeComponent> triggerVolume;
+            std::optional<Runtime::AudioSourceComponent> audioSource;
         };
 
         struct IndexedSceneObject {
@@ -72,8 +124,9 @@ namespace Horo::Editor {
             std::vector<IndexedSceneObject> objects;
         };
 
-        using SceneCommandDelta =
-            std::variant<CreatedObjectDelta, RenamedObjectDelta, TransformedObjectDelta, CameraChangedDelta, DeletedObjectsDelta>;
+        using SceneCommandDelta = std::variant<CreatedObjectDelta, RenamedObjectDelta, TransformedObjectDelta, TransformedObjectsDelta,
+                                               CameraChangedDelta, LightChangedDelta, TriggerVolumeChangedDelta, AudioSourceChangedDelta,
+                                               ComponentAddedDelta, ComponentRemovedDelta, DeletedObjectsDelta>;
 
         struct HistoryRecord {
             DocumentStateId beforeState;
@@ -125,8 +178,7 @@ namespace Horo::Editor {
             }
             if (components.light.has_value()) {
                 const Runtime::LightComponent &light = *components.light;
-                if (!Math::IsFinite(light.color) || !std::isfinite(light.intensity) || !std::isfinite(light.range) ||
-                    !std::isfinite(light.innerConeRadians) || !std::isfinite(light.outerConeRadians)) {
+                if (!IsValidLightComponent(light)) {
                     return Result<void>::Failure(
                         MakeDocumentError(SceneDocumentErrors::InvalidLight, "Light authoring values are invalid."));
                 }
@@ -151,6 +203,8 @@ namespace Horo::Editor {
                         bytes += object.object.name.size();
                     }
                     return bytes;
+                } else if constexpr (std::is_same_v<Delta, TransformedObjectsDelta>) {
+                    return sizeof(Delta) + typedDelta.objects.size() * sizeof(TransformedObjectDelta);
                 } else {
                     return sizeof(Delta);
                 }
@@ -164,6 +218,8 @@ namespace Horo::Editor {
                     return typedDelta.object.id;
                 } else if constexpr (std::is_same_v<Delta, DeletedObjectsDelta>) {
                     return typedDelta.root;
+                } else if constexpr (std::is_same_v<Delta, TransformedObjectsDelta>) {
+                    return typedDelta.objects.empty() ? SceneObjectId{} : typedDelta.objects.front().object;
                 } else {
                     return typedDelta.object;
                 }
@@ -180,8 +236,38 @@ namespace Horo::Editor {
                     FindObject(objects, typedDelta.object)->name = typedDelta.after;
                 } else if constexpr (std::is_same_v<Delta, TransformedObjectDelta>) {
                     FindObject(objects, typedDelta.object)->localTransform = typedDelta.after;
+                } else if constexpr (std::is_same_v<Delta, TransformedObjectsDelta>) {
+                    for (const TransformedObjectDelta &object : typedDelta.objects) {
+                        FindObject(objects, object.object)->localTransform = object.after;
+                    }
                 } else if constexpr (std::is_same_v<Delta, CameraChangedDelta>) {
                     FindObject(objects, typedDelta.object)->components.camera = typedDelta.after;
+                } else if constexpr (std::is_same_v<Delta, LightChangedDelta>) {
+                    FindObject(objects, typedDelta.object)->components.light = typedDelta.after;
+                } else if constexpr (std::is_same_v<Delta, TriggerVolumeChangedDelta>) {
+                    FindObject(objects, typedDelta.object)->components.triggerVolume = typedDelta.after;
+                } else if constexpr (std::is_same_v<Delta, AudioSourceChangedDelta>) {
+                    if (const auto object = FindObject(objects, typedDelta.object); object != objects.end()) {
+                        object->components.audioSource = typedDelta.after;
+                    }
+                } else if constexpr (std::is_same_v<Delta, ComponentAddedDelta>) {
+                    if (const auto object = FindObject(objects, typedDelta.object); object != objects.end()) {
+                        switch (typedDelta.type) {
+                            case ComponentType::Camera: object->components.camera = Runtime::CameraComponent{}; break;
+                            case ComponentType::Light: object->components.light = Runtime::LightComponent{}; break;
+                            case ComponentType::TriggerVolume: object->components.triggerVolume = Runtime::TriggerVolumeComponent{}; break;
+                            case ComponentType::AudioSource: object->components.audioSource = Runtime::AudioSourceComponent{}; break;
+                        }
+                    }
+                } else if constexpr (std::is_same_v<Delta, ComponentRemovedDelta>) {
+                    if (const auto object = FindObject(objects, typedDelta.object); object != objects.end()) {
+                        switch (typedDelta.type) {
+                            case ComponentType::Camera: object->components.camera = std::nullopt; break;
+                            case ComponentType::Light: object->components.light = std::nullopt; break;
+                            case ComponentType::TriggerVolume: object->components.triggerVolume = std::nullopt; break;
+                            case ComponentType::AudioSource: object->components.audioSource = std::nullopt; break;
+                        }
+                    }
                 } else {
                     std::erase_if(objects, [&typedDelta](const SceneObjectSnapshot &object) {
                         return std::ranges::find_if(typedDelta.objects, [&object](const IndexedSceneObject &removed) {
@@ -203,8 +289,38 @@ namespace Horo::Editor {
                     FindObject(objects, typedDelta.object)->name = typedDelta.before;
                 } else if constexpr (std::is_same_v<Delta, TransformedObjectDelta>) {
                     FindObject(objects, typedDelta.object)->localTransform = typedDelta.before;
+                } else if constexpr (std::is_same_v<Delta, TransformedObjectsDelta>) {
+                    for (const TransformedObjectDelta &object : typedDelta.objects) {
+                        FindObject(objects, object.object)->localTransform = object.before;
+                    }
                 } else if constexpr (std::is_same_v<Delta, CameraChangedDelta>) {
                     FindObject(objects, typedDelta.object)->components.camera = typedDelta.before;
+                } else if constexpr (std::is_same_v<Delta, LightChangedDelta>) {
+                    FindObject(objects, typedDelta.object)->components.light = typedDelta.before;
+                } else if constexpr (std::is_same_v<Delta, TriggerVolumeChangedDelta>) {
+                    FindObject(objects, typedDelta.object)->components.triggerVolume = typedDelta.before;
+                } else if constexpr (std::is_same_v<Delta, AudioSourceChangedDelta>) {
+                    if (const auto object = FindObject(objects, typedDelta.object); object != objects.end()) {
+                        object->components.audioSource = typedDelta.before;
+                    }
+                } else if constexpr (std::is_same_v<Delta, ComponentAddedDelta>) {
+                    if (const auto object = FindObject(objects, typedDelta.object); object != objects.end()) {
+                        switch (typedDelta.type) {
+                            case ComponentType::Camera: object->components.camera = std::nullopt; break;
+                            case ComponentType::Light: object->components.light = std::nullopt; break;
+                            case ComponentType::TriggerVolume: object->components.triggerVolume = std::nullopt; break;
+                            case ComponentType::AudioSource: object->components.audioSource = std::nullopt; break;
+                        }
+                    }
+                } else if constexpr (std::is_same_v<Delta, ComponentRemovedDelta>) {
+                    if (const auto object = FindObject(objects, typedDelta.object); object != objects.end()) {
+                        switch (typedDelta.type) {
+                            case ComponentType::Camera: object->components.camera = typedDelta.camera; break;
+                            case ComponentType::Light: object->components.light = typedDelta.light; break;
+                            case ComponentType::TriggerVolume: object->components.triggerVolume = typedDelta.triggerVolume; break;
+                            case ComponentType::AudioSource: object->components.audioSource = typedDelta.audioSource; break;
+                        }
+                    }
                 } else {
                     for (const IndexedSceneObject &removed : typedDelta.objects) {
                         const std::size_t index = std::min(removed.index, objects.size());
@@ -484,29 +600,68 @@ namespace Horo::Editor {
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneObjectTransformCommand&) */
     Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const SetSceneObjectTransformCommand &command) {
-        if (!IsValid(command.localTransform)) {
-            return Result<SceneCommandResult>::Failure(
-                MakeDocumentError(SceneDocumentErrors::InvalidTransform, "Scene object transform must be finite."));
-        }
-        const auto object = FindObject(m_document.m_objects, command.object);
-        if (object == m_document.m_objects.end()) {
-            return Result<SceneCommandResult>::Failure(
-                MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
-        }
-        if (object->localTransform == command.localTransform) {
+        return Execute(SetSceneObjectTransformsCommand{{
+            SceneObjectTransformUpdate{.object = command.object, .localTransform = command.localTransform},
+        }});
+    }
+
+    /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneObjectTransformsCommand&) */
+    Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const SetSceneObjectTransformsCommand &command) {
+        if (command.updates.empty()) {
             return Result<SceneCommandResult>::Success(
-                SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::TransformChanged, {}, false});
+                SceneCommandResult{{}, m_document.m_revision, m_document.m_state, DocumentChangeKind::TransformChanged, {}, false});
         }
 
-        SceneCommandDelta delta = TransformedObjectDelta{object->id, object->localTransform, command.localTransform};
-        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
+        std::vector<TransformedObjectDelta> changed;
+        changed.reserve(command.updates.size());
+        std::vector<SceneObjectId> seen;
+        seen.reserve(command.updates.size());
+        for (const SceneObjectTransformUpdate &update : command.updates) {
+            if (!update.object.IsValid() || !IsValid(update.localTransform)) {
+                return Result<SceneCommandResult>::Failure(
+                    MakeDocumentError(SceneDocumentErrors::InvalidTransform, "Batch transform values must be finite."));
+            }
+            if (std::ranges::find(seen, update.object) != seen.end()) {
+                return Result<SceneCommandResult>::Failure(
+                    MakeDocumentError(SceneDocumentErrors::InvalidTransform, "Batch transform object identities must be unique."));
+            }
+            seen.push_back(update.object);
+            const auto object = FindObject(m_document.m_objects, update.object);
+            if (object == m_document.m_objects.end()) {
+                return Result<SceneCommandResult>::Failure(
+                    MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Batch transform object does not exist."));
+            }
+            if (object->localTransform != update.localTransform) {
+                changed.push_back(TransformedObjectDelta{object->id, object->localTransform, update.localTransform});
+            }
+        }
+        if (changed.empty()) {
+            return Result<SceneCommandResult>::Success(SceneCommandResult{command.updates.front().object,
+                                                                          m_document.m_revision,
+                                                                          m_document.m_state,
+                                                                          DocumentChangeKind::TransformChanged,
+                                                                          {},
+                                                                          false});
+        }
+
+        SceneCommandDelta delta = TransformedObjectsDelta{std::move(changed)};
+        const std::vector<TransformedObjectDelta> &deltaObjects = std::get<TransformedObjectsDelta>(delta).objects;
+        std::vector<SceneObjectId> affected;
+        affected.reserve(deltaObjects.size());
+        for (const TransformedObjectDelta &object : deltaObjects) {
+            affected.push_back(object.object);
+        }
+        if (const Result<void> validHistory = ValidateHistoryDelta(delta, affected.size()); validHistory.HasError()) {
+            return Result<SceneCommandResult>::Failure(validHistory.ErrorValue());
+        }
+        const std::size_t memoryBytes = EstimateMemoryBytes(delta, affected.size());
         const DocumentStateId beforeState = m_document.m_state;
         ApplyDelta(m_document.m_objects, delta);
         ++m_document.m_revision.value;
         m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
-        std::vector affected{object->id};
+        const SceneObjectId primary = affected.front();
         PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
-        return Result<SceneCommandResult>::Success(SceneCommandResult{command.object, m_document.m_revision, m_document.m_state,
+        return Result<SceneCommandResult>::Success(SceneCommandResult{primary, m_document.m_revision, m_document.m_state,
                                                                       DocumentChangeKind::TransformChanged, std::move(affected), true});
     }
 
@@ -538,6 +693,173 @@ namespace Horo::Editor {
         m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
         std::vector affected{object->id};
         PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
+        return Result<SceneCommandResult>::Success(SceneCommandResult{command.object, m_document.m_revision, m_document.m_state,
+                                                                      DocumentChangeKind::ComponentChanged, std::move(affected), true});
+    }
+
+    /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneObjectLightCommand&) */
+    Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const SetSceneObjectLightCommand &command) {
+        if (!IsValidLightComponent(command.light)) {
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::InvalidLight, "Light authoring values are invalid."));
+        }
+        const auto object = FindObject(m_document.m_objects, command.object);
+        if (object == m_document.m_objects.end()) {
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
+        }
+        if (!object->components.light.has_value()) {
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::InvalidLight, "Scene object has no light component."));
+        }
+        if (*object->components.light == command.light) {
+            return Result<SceneCommandResult>::Success(
+                SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
+        }
+
+        SceneCommandDelta delta = LightChangedDelta{object->id, *object->components.light, command.light};
+        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
+        const DocumentStateId beforeState = m_document.m_state;
+        ApplyDelta(m_document.m_objects, delta);
+        ++m_document.m_revision.value;
+        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
+        std::vector affected{object->id};
+        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
+        return Result<SceneCommandResult>::Success(SceneCommandResult{command.object, m_document.m_revision, m_document.m_state,
+                                                                      DocumentChangeKind::ComponentChanged, std::move(affected), true});
+    }
+
+    /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneObjectTriggerVolumeCommand&) */
+    Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const SetSceneObjectTriggerVolumeCommand &command) {
+        const auto object = FindObject(m_document.m_objects, command.object);
+        if (object == m_document.m_objects.end()) {
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
+        }
+        if (!object->components.triggerVolume.has_value()) {
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::InvalidTriggerVolume, "Scene object has no trigger volume component."));
+        }
+        if (*object->components.triggerVolume == command.triggerVolume) {
+            return Result<SceneCommandResult>::Success(
+                SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
+        }
+
+        SceneCommandDelta delta = TriggerVolumeChangedDelta{object->id, *object->components.triggerVolume, command.triggerVolume};
+        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
+        const DocumentStateId beforeState = m_document.m_state;
+        ApplyDelta(m_document.m_objects, delta);
+        ++m_document.m_revision.value;
+        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
+        std::vector affected{object->id};
+        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
+        return Result<SceneCommandResult>::Success(SceneCommandResult{command.object, m_document.m_revision, m_document.m_state,
+                                                                      DocumentChangeKind::ComponentChanged, std::move(affected), true});
+    }
+
+    /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneObjectAudioSourceCommand&) */
+    Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const SetSceneObjectAudioSourceCommand &command) {
+        if (!IsValidAudioSourceComponent(command.audioSource)) {
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::InvalidAudioSource, "Audio source gain must be finite and non-negative."));
+        }
+        const auto object = FindObject(m_document.m_objects, command.object);
+        if (object == m_document.m_objects.end()) {
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
+        }
+        if (!object->components.audioSource.has_value()) {
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::InvalidAudioSource, "Scene object has no audio source component."));
+        }
+        if (*object->components.audioSource == command.audioSource) {
+            return Result<SceneCommandResult>::Success(
+                SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
+        }
+
+        SceneCommandDelta delta = AudioSourceChangedDelta{object->id, *object->components.audioSource, command.audioSource};
+        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
+        const DocumentStateId beforeState = m_document.m_state;
+        ApplyDelta(m_document.m_objects, delta);
+        ++m_document.m_revision.value;
+        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
+        std::vector affected{object->id};
+        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
+        return Result<SceneCommandResult>::Success(SceneCommandResult{command.object, m_document.m_revision, m_document.m_state,
+                                                                      DocumentChangeKind::ComponentChanged, std::move(affected), true});
+    }
+
+    /** @copydoc SceneDocumentCommandExecutor::Execute(const AddSceneObjectComponentCommand&) */
+    Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const AddSceneObjectComponentCommand &command) {
+        const auto object = FindObject(m_document.m_objects, command.object);
+        if (object == m_document.m_objects.end()) {
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
+        }
+        
+        bool hasComponent = false;
+        switch (command.type) {
+            case ComponentType::Camera: hasComponent = object->components.camera.has_value(); break;
+            case ComponentType::Light: hasComponent = object->components.light.has_value(); break;
+            case ComponentType::TriggerVolume: hasComponent = object->components.triggerVolume.has_value(); break;
+            case ComponentType::AudioSource: hasComponent = object->components.audioSource.has_value(); break;
+        }
+
+        if (hasComponent) {
+            return Result<SceneCommandResult>::Success(
+                SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
+        }
+
+        SceneCommandDelta delta = ComponentAddedDelta{object->id, command.type};
+        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
+        const DocumentStateId beforeState = m_document.m_state;
+        ApplyDelta(m_document.m_objects, delta);
+        ++m_document.m_revision.value;
+        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
+        std::vector affected{object->id};
+        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
+
+        return Result<SceneCommandResult>::Success(SceneCommandResult{command.object, m_document.m_revision, m_document.m_state,
+                                                                      DocumentChangeKind::ComponentChanged, std::move(affected), true});
+    }
+
+    /** @copydoc SceneDocumentCommandExecutor::Execute(const RemoveSceneObjectComponentCommand&) */
+    Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const RemoveSceneObjectComponentCommand &command) {
+        const auto object = FindObject(m_document.m_objects, command.object);
+        if (object == m_document.m_objects.end()) {
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
+        }
+        
+        bool hasComponent = false;
+        switch (command.type) {
+            case ComponentType::Camera: hasComponent = object->components.camera.has_value(); break;
+            case ComponentType::Light: hasComponent = object->components.light.has_value(); break;
+            case ComponentType::TriggerVolume: hasComponent = object->components.triggerVolume.has_value(); break;
+            case ComponentType::AudioSource: hasComponent = object->components.audioSource.has_value(); break;
+        }
+
+        if (!hasComponent) {
+            return Result<SceneCommandResult>::Success(
+                SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
+        }
+
+        SceneCommandDelta delta = ComponentRemovedDelta{
+            object->id,
+            command.type,
+            object->components.camera,
+            object->components.light,
+            object->components.triggerVolume,
+            object->components.audioSource
+        };
+        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
+        const DocumentStateId beforeState = m_document.m_state;
+        ApplyDelta(m_document.m_objects, delta);
+        ++m_document.m_revision.value;
+        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
+        std::vector affected{object->id};
+        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
+
         return Result<SceneCommandResult>::Success(SceneCommandResult{command.object, m_document.m_revision, m_document.m_state,
                                                                       DocumentChangeKind::ComponentChanged, std::move(affected), true});
     }

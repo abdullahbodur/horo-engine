@@ -59,7 +59,9 @@ namespace
         const LightComponent &light = *components.light;
         if (!Math::IsFinite(light.color) || !std::isfinite(light.intensity) || !std::isfinite(light.range) ||
             !std::isfinite(light.innerConeRadians) || !std::isfinite(light.outerConeRadians) || light.intensity < 0 ||
-            light.range < 0 || light.innerConeRadians < 0 || light.outerConeRadians < light.innerConeRadians)
+            light.color.x < 0 || light.color.y < 0 || light.color.z < 0 || light.range < 0 ||
+            light.innerConeRadians < 0 || light.outerConeRadians < light.innerConeRadians ||
+            light.outerConeRadians > Math::Pi)
             return false;
     }
     return !components.audioSource ||

@@ -697,6 +697,48 @@ pointer is captured. Releasing the pointer submits one transform command through
 frames increment viewport revision but do not increment document revision,
 publish document-change events, dirty the scene, or create undo entries.
 
+The active viewport renderer reports its typed clip-depth convention through
+`IEditorViewportRenderer`. `ViewportPanel` forwards that value to gizmo
+projection, pointer-ray construction, and picking commands. These consumers do
+not inspect or branch on a concrete renderer identifier.
+
+The viewport grid is world-space editor presentation, not a screen-space ImGui
+decoration and not authored scene content. `ViewportPanel` forwards the committed
+grid-visibility setting through the editor-private viewport renderer contract.
+Shared allocation-free geometry generation places the grid on the world XZ plane,
+snaps it to world cells around the camera target, and selects a minor spacing from
+the `1/2/5 × 10ⁿ` sequence. Perspective spacing derives from target distance and
+vertical field of view; orthographic spacing derives from orthographic height.
+Concrete adapters draw the same geometry before scene meshes with depth testing
+enabled and depth writes disabled, allowing scene geometry to cover the grid
+without making the grid a document object or picking target.
+
+Viewport implementation responsibilities are split by lifetime and authority:
+
+- `ViewportPanel` composes the render-target surface and presentation overlays;
+- `EditorViewportGridGeometry` owns bounded adaptive world-grid generation
+  without per-frame heap allocation or backend-native types;
+- `ViewportInteractionController` arbitrates mutually exclusive gizmo and
+  navigation sessions and emits typed workspace commands;
+- `ViewportInteractionCapture` owns routed pointer-capture tokens and guarantees
+  deterministic cancellation before panel detachment;
+- `ViewportNavigationController` maps input snapshots to camera, focus, and
+  picking commands without mutating viewport state;
+- `TransformGizmoGeometry` owns screen projection, handle drawing, and hit
+  testing;
+- `TransformGizmoController` owns only pointer-derived transient drag state and
+  emits preview, commit, or cancellation commands;
+- `TransformGizmoMath` validates drag inputs and evaluates local/world
+  Move/Rotate/Scale results without ImGui, document mutation, or silent
+  decomposition fallback.
+
+These components remain editor-presentation adapters. `EditorViewportModel`,
+`EditorSelectionModel`, `SceneDocument`, and `EditorHistory` remain the
+authorities. Geometry drawing and input mapping must not commit scene state
+directly. Singular parents, non-finite input, and unrepresentable transform
+updates terminate the transient preview through a typed error; they must not
+substitute identity axes or commit a partial result.
+
 ### Right Dock
 
 Visible as the Properties panel.
@@ -707,6 +749,19 @@ Visible as the Properties panel.
   - Reads selection from: `EditorSelectionModel`
   - Subscribes to: selection and document notifications
   - Executes: undoable editor commands when values are edited
+
+The Inspector projects the complete ordered object selection and a separate
+primary object identity. A transform axis is presented as mixed when selected
+objects disagree on that axis. Dragging a mixed axis applies the primary draft's
+delta relative to each selected object's authored axis value, preserving their
+spacing and per-object offsets. Editing a uniform axis keeps absolute assignment
+semantics. Every untouched translation, rotation, and scale axis retains each
+object's authored value. The presentation reducer emits one typed batch preview
+during drag and one atomic document command on commit. The document executor
+validates the complete update set before mutation, drops unchanged entries, and
+records at most one undo transaction. Escape, selection or revision changes,
+and competing workspace commands clear the whole transient preview set without
+mutating the document.
 
 ### Bottom Dock
 

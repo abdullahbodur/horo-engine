@@ -64,8 +64,6 @@ namespace Horo::Editor {
     }
 
     bool SettingsModal::ApplyDraft() {
-        const bool ok = ApplySettings(m_draft, m_settings);
-        LOG_INFO("editor.settings", "Settings applied (success=%s, revision=%llu).", ok ? "yes" : "no", m_settings.Snapshot().revision);
-        return ok;
+        return ApplySettings(m_draft, m_settings);
     }
 }  // namespace Horo::Editor

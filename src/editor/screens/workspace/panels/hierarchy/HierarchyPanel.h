@@ -5,7 +5,6 @@
 #include "editor/screens/workspace/panels/hierarchy/HierarchyEditSession.h"
 
 #include <array>
-#include <imgui.h>
 #include <optional>
 
 namespace Horo::Editor {

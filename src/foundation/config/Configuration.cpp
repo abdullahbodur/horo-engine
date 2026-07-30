@@ -1,15 +1,48 @@
 #include "Horo/Foundation/Configuration.h"
+
 #include "../FoundationErrors.h"
 
 #include <fstream>
 #include <regex>
 #include <sstream>
+#include <string_view>
 
 namespace Horo {
     namespace {
+        [[nodiscard]] std::string_view SettingTypeName(const SettingValueType type) noexcept {
+            switch (type) {
+                case SettingValueType::Boolean:
+                    return "boolean";
+                case SettingValueType::Integer:
+                    return "integer";
+                case SettingValueType::String:
+                    return "string";
+            }
+            return "unknown";
+        }
+
+        [[nodiscard]] std::string_view SettingValueTypeName(const SettingValue &value) noexcept {
+            if (std::holds_alternative<bool>(value))
+                return "boolean";
+            if (std::holds_alternative<std::int64_t>(value))
+                return "integer";
+            return "string";
+        }
+
+        [[nodiscard]] Error InvalidConfigurationValue(const SettingKey &key, const SettingValue &value,
+                                                      const SettingDescriptor *descriptor) {
+            if (descriptor == nullptr) {
+                return MakeError(ConfigurationErrors::ValueInvalid,
+                                 "Configuration key '" + key.Value() + "' is not registered in the active schema.");
+            }
+            return MakeError(ConfigurationErrors::ValueInvalid, "Configuration key '" + key.Value() + "' expects " +
+                                                                    std::string{SettingTypeName(descriptor->type)} + " but received " +
+                                                                    std::string{SettingValueTypeName(value)} + ".");
+        }
+
         [[nodiscard]] std::string EscapeJsonString(const std::string_view value) {
             std::ostringstream escaped;
-            for (const unsigned char character: value) {
+            for (const unsigned char character : value) {
                 switch (character) {
                     case '"':
                         escaped << "\\\"";
@@ -90,7 +123,7 @@ namespace Horo {
             }
             return output;
         }
-    } // namespace
+    }  // namespace
 
     /** @copydoc ConfigurationSnapshot::Revision */
     ConfigurationRevision ConfigurationSnapshot::Revision() const noexcept {
@@ -120,7 +153,7 @@ namespace Horo {
         json << "  \"revision\": " << m_data->revision << ",\n";
         json << "  \"values\": {\n";
         bool first = true;
-        for (const auto &[key, value]: m_data->values) {
+        for (const auto &[key, value] : m_data->values) {
             if (!first) {
                 json << ",\n";
             }
@@ -153,8 +186,7 @@ namespace Horo {
 
     /** @copydoc ConfigurationSchema::Register */
     Result<void> ConfigurationSchema::Register(const SettingDescriptor &descriptor) {
-        if (m_sealed || m_descriptors.contains(descriptor.key) || !
-            MatchesType(descriptor.type, descriptor.defaultValue)) {
+        if (m_sealed || m_descriptors.contains(descriptor.key) || !MatchesType(descriptor.type, descriptor.defaultValue)) {
             return Result<void>::Failure(ErrorFor(ConfigurationErrors::SchemaInvalid));
         }
         m_descriptors.try_emplace(descriptor.key, descriptor);
@@ -175,7 +207,7 @@ namespace Horo {
         : m_schema(std::move(schema)), m_events(events) {
         assert(m_schema.m_sealed);
         auto initial = std::make_shared<ConfigurationSnapshot::Data>();
-        for (const auto &[key, descriptor]: m_schema.m_descriptors) {
+        for (const auto &[key, descriptor] : m_schema.m_descriptors) {
             initial->values.try_emplace(key, descriptor.defaultValue);
         }
         m_active = std::move(initial);
@@ -193,11 +225,13 @@ namespace Horo {
         if (draft.baseRevision != m_active->revision) {
             return Result<void>::Failure(ConfigurationSchema::ErrorFor(ConfigurationErrors::DraftStale));
         }
-        for (const auto &[key, value]: draft.proposedValues) {
+        for (const auto &[key, value] : draft.proposedValues) {
             const auto descriptor = m_schema.m_descriptors.find(key);
-            if (descriptor == m_schema.m_descriptors.end() ||
-                !ConfigurationSchema::MatchesType(descriptor->second.type, value)) {
-                return Result<void>::Failure(ConfigurationSchema::ErrorFor(ConfigurationErrors::ValueInvalid));
+            if (descriptor == m_schema.m_descriptors.end()) {
+                return Result<void>::Failure(InvalidConfigurationValue(key, value, nullptr));
+            }
+            if (!ConfigurationSchema::MatchesType(descriptor->second.type, value)) {
+                return Result<void>::Failure(InvalidConfigurationValue(key, value, &descriptor->second));
             }
         }
         return Result<void>::Success();
@@ -211,11 +245,13 @@ namespace Horo {
                 return Result<void>::Failure(ConfigurationSchema::ErrorFor(ConfigurationErrors::DraftStale));
             }
             auto candidate = std::make_shared<ConfigurationSnapshot::Data>(*m_active);
-            for (const auto &[key, value]: draft.proposedValues) {
+            for (const auto &[key, value] : draft.proposedValues) {
                 const auto descriptor = m_schema.m_descriptors.find(key);
-                if (descriptor == m_schema.m_descriptors.end() ||
-                    !ConfigurationSchema::MatchesType(descriptor->second.type, value)) {
-                    return Result<void>::Failure(ConfigurationSchema::ErrorFor(ConfigurationErrors::ValueInvalid));
+                if (descriptor == m_schema.m_descriptors.end()) {
+                    return Result<void>::Failure(InvalidConfigurationValue(key, value, nullptr));
+                }
+                if (!ConfigurationSchema::MatchesType(descriptor->second.type, value)) {
+                    return Result<void>::Failure(InvalidConfigurationValue(key, value, &descriptor->second));
                 }
                 candidate->values[key] = value;
             }
@@ -225,7 +261,7 @@ namespace Horo {
         if (m_events != nullptr) {
             ConfigurationChangedEvent event{.revision = Snapshot().Revision()};
             event.changedKeys.reserve(draft.proposedValues.size());
-            for (const auto &[key, _]: draft.proposedValues) {
+            for (const auto &[key, _] : draft.proposedValues) {
                 event.changedKeys.push_back(key);
             }
             m_events->Publish(event);
@@ -259,8 +295,7 @@ namespace Horo {
         }
 
         // Match key-value pairs: "key": value
-        const std::regex kvRegex(
-            R"regex("([^"\\]*(?:\\.[^"\\]*)*)"\s*:\s*(true|false|-?\d+|"([^"\\]*(?:\\.[^"\\]*)*)"))regex");
+        const std::regex kvRegex(R"regex("([^"\\]*(?:\\.[^"\\]*)*)"\s*:\s*(true|false|-?\d+|"([^"\\]*(?:\\.[^"\\]*)*)"))regex");
         auto begin = std::sregex_iterator(targetString.begin(), targetString.end(), kvRegex);
         auto end = std::sregex_iterator();
 
@@ -328,4 +363,4 @@ namespace Horo {
         }
         return Result<void>::Success();
     }
-} // namespace Horo
+}  // namespace Horo

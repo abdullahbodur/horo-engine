@@ -4,11 +4,17 @@
 #include "editor/screens/workspace/EditorWorkspaceViewModel.h"
 
 #include <optional>
-#include <string>
 #include <string_view>
 #include <vector>
 
 namespace Horo::Editor {
+    /** @brief User gesture used to derive one complete hierarchy selection request. */
+    enum class HierarchySelectionGesture : std::uint8_t {
+        Replace,
+        Toggle,
+        Range,
+    };
+
     /**
      * @brief Owns Hierarchy projection state and reduces semantic actions.
      *
@@ -29,14 +35,22 @@ namespace Horo::Editor {
         /** @brief Returns the selected projected hierarchy node ID. */
         [[nodiscard]] std::optional<HierarchyNodeId> SelectedId() const noexcept;
 
+        /** @brief Reports whether one projected node belongs to the complete selection. */
+        [[nodiscard]] bool IsSelected(HierarchyNodeId id) const noexcept;
+
         /** @brief Selects an existing projected node. */
         void Select(HierarchyNodeId id) noexcept;
 
         /** @brief Toggles expansion for an existing projected node. */
         void ToggleExpanded(HierarchyNodeId id) noexcept;
 
-        /** @brief Creates a typed object-selection command. */
-        [[nodiscard]] static EditorWorkspaceViewCommandData SelectCommand(HierarchyNodeId id);
+        /**
+         * @brief Creates a typed complete object-selection command from one hierarchy gesture.
+         * @param id Clicked projected object.
+         * @param gesture Replace, command-toggle, or visible-row range gesture.
+         * @return Typed selection command carrying the complete replacement set.
+         */
+        [[nodiscard]] EditorWorkspaceViewCommandData SelectCommand(HierarchyNodeId id, HierarchySelectionGesture gesture);
 
         /** @brief Creates a typed primitive-creation command. */
         [[nodiscard]] static EditorWorkspaceViewCommandData CreateCommand(Runtime::PrimitiveId primitive,
@@ -58,5 +72,7 @@ namespace Horo::Editor {
         DocumentRevision m_projectedRevision{};
         DocumentRevision m_handledRevealRevision{};
         bool m_projectionInitialized{false};
+        std::vector<SceneObjectId> m_selectedObjects;
+        std::optional<HierarchyNodeId> m_selectionAnchor;
     };
 }  // namespace Horo::Editor

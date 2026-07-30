@@ -277,6 +277,8 @@ target_link_libraries(HoroEditorModel
 
 add_library(HoroEditorViewportScene STATIC
         editor/renderer/EditorViewportScene.cpp
+        editor/renderer/grid/EditorViewportGridGeometry.cpp
+        editor/screens/workspace/panels/viewport/visualizers/light/LightVisualizerGeometry.cpp
 )
 add_library(HoroEngine::EditorViewportScene ALIAS HoroEditorViewportScene)
 
@@ -454,7 +456,14 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/screens/workspace/panels/inspector/InspectorEditSession.cpp
             editor/screens/workspace/panels/inspector/InspectorPanel.cpp
             editor/screens/workspace/panels/input_mapping/InputMappingPanel.cpp
-            editor/screens/workspace/panels/viewport/ViewportPanel.cpp
+        editor/screens/workspace/panels/viewport/ViewportPanel.cpp
+        editor/screens/workspace/panels/viewport/visualizers/light/LightMarkerLayer.cpp
+            editor/screens/workspace/panels/viewport/gizmo/TransformGizmoController.cpp
+            editor/screens/workspace/panels/viewport/gizmo/TransformGizmoGeometry.cpp
+            editor/screens/workspace/panels/viewport/gizmo/TransformGizmoMath.cpp
+            editor/screens/workspace/panels/viewport/interaction/ViewportInteractionCapture.cpp
+            editor/screens/workspace/panels/viewport/interaction/ViewportInteractionController.cpp
+            editor/screens/workspace/panels/viewport/navigation/ViewportNavigationController.cpp
             editor/screens/workspace/WorkspacePanelRegistry.cpp
             editor/screens/workspace/DefaultWorkspacePanels.cpp
             editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserActions.cpp

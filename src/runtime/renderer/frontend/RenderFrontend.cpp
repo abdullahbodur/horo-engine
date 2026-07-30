@@ -1,4 +1,5 @@
 #include "Horo/Runtime/Render/RenderFrontend.h"
+
 #include "RenderFrontendErrors.h"
 
 #include <string>
@@ -9,7 +10,7 @@ namespace Horo::Render {
         [[nodiscard]] Error MakeFrontendError(const ErrorCodeDescriptor &descriptor, std::string message) {
             return MakeError(descriptor, std::move(message));
         }
-    } // namespace
+    }  // namespace
 
     /** @copydoc RenderFrameScope::~RenderFrameScope */
     RenderFrameScope::~RenderFrameScope() {
@@ -43,51 +44,47 @@ namespace Horo::Render {
     /** @copydoc RenderFrameScope::Execute */
     Result<void> RenderFrameScope::Execute(const std::span<const RenderPassDescriptor> orderedPasses) {
         if (backend_ == nullptr) {
-            return Result<void>::Failure(
-                MakeFrontendError(FrontendErrors::FrameNotActive, "Renderer frame scope no longer owns a frame."));
+            return Result<void>::Failure(MakeFrontendError(FrontendErrors::FrameNotActive, "Renderer frame scope no longer owns a frame."));
         }
         if (executed_) {
-            return Result<void>::Failure(MakeFrontendError(FrontendErrors::FrameAlreadyExecuted,
-                                                           "Renderer frame scope has already executed its pass sequence."));
+            return Result<void>::Failure(
+                MakeFrontendError(FrontendErrors::FrameAlreadyExecuted, "Renderer frame scope has already executed its pass sequence."));
         }
 
         try {
-            for (const RenderPassDescriptor &pass: orderedPasses) {
+            for (const RenderPassDescriptor &pass : orderedPasses) {
                 if (pass.primaryOutput.has_value() && pass.staticMesh.has_value()) {
                     Abort();
-                    return Result<void>::Failure(MakeFrontendError(
-                        FrontendErrors::AmbiguousPassWorkload,
-                        "A render pass cannot bind primary-output and static-mesh workloads together."));
+                    return Result<void>::Failure(
+                        MakeFrontendError(FrontendErrors::AmbiguousPassWorkload,
+                                          "A render pass cannot bind primary-output and static-mesh workloads together."));
                 }
                 if (!pass.staticMesh.has_value()) {
                     continue;
                 }
                 if (owner_->staticMeshPassExecutor_ == nullptr) {
                     Abort();
-                    return Result<void>::Failure(MakeFrontendError(
-                        FrontendErrors::StaticMeshExecutorMissing,
-                        "Static-mesh pass requires an attached backend executor."));
+                    return Result<void>::Failure(MakeFrontendError(FrontendErrors::StaticMeshExecutorMissing,
+                                                                   "Static-mesh pass requires an attached backend executor."));
                 }
                 if (!pass.staticMesh->IsValid()) {
                     Abort();
-                    return Result<void>::Failure(MakeFrontendError(
-                        FrontendErrors::InvalidStaticMeshPass, "Static-mesh pass descriptor is invalid."));
+                    return Result<void>::Failure(
+                        MakeFrontendError(FrontendErrors::InvalidStaticMeshPass, "Static-mesh pass descriptor is invalid."));
                 }
                 if (!owner_->IsLiveTarget(pass.staticMesh->target, pass.staticMesh->extent)) {
                     Abort();
-                    return Result<void>::Failure(MakeFrontendError(
-                        FrontendErrors::StaleRenderTarget,
-                        "Static-mesh pass references a stale target or mismatched target extent."));
+                    return Result<void>::Failure(
+                        MakeFrontendError(FrontendErrors::StaleRenderTarget,
+                                          "Static-mesh pass references a stale target or mismatched target extent."));
                 }
-                const Result<void> staticMeshExecuted =
-                        owner_->staticMeshPassExecutor_->ExecuteStaticMeshPass(*pass.staticMesh);
+                const Result<void> staticMeshExecuted = owner_->staticMeshPassExecutor_->ExecuteStaticMeshPass(*pass.staticMesh);
                 if (staticMeshExecuted.HasError()) {
                     Abort();
                     return Result<void>::Failure(staticMeshExecuted.ErrorValue());
                 }
             }
-            const Result<void> executed =
-                    backend_->Execute(RenderExecutionPlan{.frame = frame_, .orderedPasses = orderedPasses});
+            const Result<void> executed = backend_->Execute(RenderExecutionPlan{.frame = frame_, .orderedPasses = orderedPasses});
             if (executed.HasError()) {
                 Abort();
                 return Result<void>::Failure(executed.ErrorValue());
@@ -96,20 +93,18 @@ namespace Horo::Render {
             return Result<void>::Success();
         } catch (...) {
             Abort();
-            return Result<void>::Failure(
-                MakeFrontendError(FrontendErrors::FrameException, "Renderer backend frame operation threw."));
+            return Result<void>::Failure(MakeFrontendError(FrontendErrors::FrameException, "Renderer backend frame operation threw."));
         }
     }
 
     /** @copydoc RenderFrameScope::Present */
     Result<void> RenderFrameScope::Present() {
         if (backend_ == nullptr) {
-            return Result<void>::Failure(
-                MakeFrontendError(FrontendErrors::FrameNotActive, "Renderer frame scope no longer owns a frame."));
+            return Result<void>::Failure(MakeFrontendError(FrontendErrors::FrameNotActive, "Renderer frame scope no longer owns a frame."));
         }
         if (!executed_) {
-            return Result<void>::Failure(MakeFrontendError(FrontendErrors::FrameNotExecuted,
-                                                           "Renderer frame scope must execute before presentation."));
+            return Result<void>::Failure(
+                MakeFrontendError(FrontendErrors::FrameNotExecuted, "Renderer frame scope must execute before presentation."));
         }
 
         try {
@@ -122,8 +117,7 @@ namespace Horo::Render {
             return Result<void>::Success();
         } catch (...) {
             Abort();
-            return Result<void>::Failure(
-                MakeFrontendError(FrontendErrors::FrameException, "Renderer backend frame operation threw."));
+            return Result<void>::Failure(MakeFrontendError(FrontendErrors::FrameException, "Renderer backend frame operation threw."));
         }
     }
 
@@ -155,12 +149,11 @@ namespace Horo::Render {
     }
 
     /** @copydoc RenderFrontend::Create */
-    Result<std::unique_ptr<RenderFrontend> > RenderFrontend::Create(const RenderBackendRegistry &registry,
-                                                                    const RenderBackendId &backendId,
-                                                                    const RenderBackendConfig &config) {
+    Result<std::unique_ptr<RenderFrontend>> RenderFrontend::Create(const RenderBackendRegistry &registry, const RenderBackendId &backendId,
+                                                                   const RenderBackendConfig &config) {
         auto createdBackend = registry.Create(backendId);
         if (createdBackend.HasError()) {
-            return Result<std::unique_ptr<RenderFrontend> >::Failure(createdBackend.ErrorValue());
+            return Result<std::unique_ptr<RenderFrontend>>::Failure(createdBackend.ErrorValue());
         }
 
         std::unique_ptr<IRenderBackend> backend = std::move(createdBackend).Value();
@@ -168,16 +161,15 @@ namespace Horo::Render {
             const Result<void> initialized = backend->Initialize(config);
             if (initialized.HasError()) {
                 backend->Shutdown();
-                return Result<std::unique_ptr<RenderFrontend> >::Failure(initialized.ErrorValue());
+                return Result<std::unique_ptr<RenderFrontend>>::Failure(initialized.ErrorValue());
             }
         } catch (...) {
             backend->Shutdown();
-            return Result<std::unique_ptr<RenderFrontend> >::Failure(
+            return Result<std::unique_ptr<RenderFrontend>>::Failure(
                 MakeFrontendError(FrontendErrors::InitializeException, "Renderer backend initialization threw."));
         }
 
-        return Result<std::unique_ptr<RenderFrontend> >::Success(
-            std::unique_ptr<RenderFrontend>{new RenderFrontend(std::move(backend))});
+        return Result<std::unique_ptr<RenderFrontend>>::Success(std::unique_ptr<RenderFrontend>{new RenderFrontend(std::move(backend))});
     }
 
     /** @copydoc RenderFrontend::~RenderFrontend */
@@ -196,8 +188,8 @@ namespace Horo::Render {
     /** @copydoc RenderFrontend::BeginFrame */
     Result<RenderFrameScope> RenderFrontend::BeginFrame(const FrameDescriptor &descriptor) {
         if (activeFrameScope_ != nullptr) {
-            return Result<RenderFrameScope>::Failure(MakeFrontendError(
-                FrontendErrors::FrameAlreadyActive, "Renderer frontend already owns an active frame scope."));
+            return Result<RenderFrameScope>::Failure(
+                MakeFrontendError(FrontendErrors::FrameAlreadyActive, "Renderer frontend already owns an active frame scope."));
         }
 
         try {
@@ -210,8 +202,8 @@ namespace Horo::Render {
             const FrameToken frame = begun.Value();
             if (!frame.IsValid()) {
                 backend_->AbortActiveFrame();
-                return Result<RenderFrameScope>::Failure(MakeFrontendError(
-                    FrontendErrors::InvalidFrameToken, "Renderer backend returned an invalid frame token."));
+                return Result<RenderFrameScope>::Failure(
+                    MakeFrontendError(FrontendErrors::InvalidFrameToken, "Renderer backend returned an invalid frame token."));
             }
             return Result<RenderFrameScope>::Success(RenderFrameScope{*this, *backend_, frame});
         } catch (...) {
@@ -222,8 +214,7 @@ namespace Horo::Render {
     }
 
     /** @copydoc RenderFrontend::SubmitFrame */
-    Result<void> RenderFrontend::SubmitFrame(const FrameDescriptor &descriptor,
-                                             const std::span<const RenderPassDescriptor> orderedPasses) {
+    Result<void> RenderFrontend::SubmitFrame(const FrameDescriptor &descriptor, const std::span<const RenderPassDescriptor> orderedPasses) {
         auto begun = BeginFrame(descriptor);
         if (begun.HasError()) {
             return Result<void>::Failure(begun.ErrorValue());
@@ -240,28 +231,26 @@ namespace Horo::Render {
     /** @copydoc RenderFrontend::Resize */
     Result<void> RenderFrontend::Resize(const FramebufferExtent extent) {
         if (activeFrameScope_ != nullptr) {
-            return Result<void>::Failure(MakeFrontendError(FrontendErrors::ResizeDuringFrame,
-                                                           "Renderer output cannot be resized during an active frame."));
+            return Result<void>::Failure(
+                MakeFrontendError(FrontendErrors::ResizeDuringFrame, "Renderer output cannot be resized during an active frame."));
         }
 
         try {
             return backend_->Resize(extent);
         } catch (...) {
-            return Result<void>::Failure(
-                MakeFrontendError(FrontendErrors::ResizeException, "Renderer backend resize operation threw."));
+            return Result<void>::Failure(MakeFrontendError(FrontendErrors::ResizeException, "Renderer backend resize operation threw."));
         }
     }
 
     /** @copydoc RenderFrontend::AttachStaticMeshPassExecutor */
     Result<void> RenderFrontend::AttachStaticMeshPassExecutor(IStaticMeshPassExecutor &executor) {
         if (activeFrameScope_ != nullptr) {
-            return Result<void>::Failure(MakeFrontendError(
-                FrontendErrors::ExecutorChangeDuringFrame, "Render pass executor cannot change during a frame."));
+            return Result<void>::Failure(
+                MakeFrontendError(FrontendErrors::ExecutorChangeDuringFrame, "Render pass executor cannot change during a frame."));
         }
         if (staticMeshPassExecutor_ != nullptr && staticMeshPassExecutor_ != &executor) {
-            return Result<void>::Failure(MakeFrontendError(
-                FrontendErrors::StaticMeshExecutorAlreadyAttached,
-                "A static-mesh pass executor is already attached."));
+            return Result<void>::Failure(
+                MakeFrontendError(FrontendErrors::StaticMeshExecutorAlreadyAttached, "A static-mesh pass executor is already attached."));
         }
         staticMeshPassExecutor_ = &executor;
         return Result<void>::Success();
@@ -284,22 +273,19 @@ namespace Horo::Render {
             if (!record.live) {
                 record.live = true;
                 record.extent = extent;
-                return Result<RenderTargetHandle>::Success(
-                    RenderTargetHandle{static_cast<std::uint32_t>(index), record.generation});
+                return Result<RenderTargetHandle>::Success(RenderTargetHandle{static_cast<std::uint32_t>(index), record.generation});
             }
         }
         targets_.push_back(TargetRecord{.extent = extent, .generation = 1, .live = true});
-        return Result<RenderTargetHandle>::Success(
-            RenderTargetHandle{static_cast<std::uint32_t>(targets_.size() - 1), 1});
+        return Result<RenderTargetHandle>::Success(RenderTargetHandle{static_cast<std::uint32_t>(targets_.size() - 1), 1});
     }
 
     /** @copydoc RenderFrontend::ResizeOffscreenTarget */
-    Result<void> RenderFrontend::ResizeOffscreenTarget(const RenderTargetHandle target,
-                                                       const FramebufferExtent extent) {
+    Result<void> RenderFrontend::ResizeOffscreenTarget(const RenderTargetHandle target, const FramebufferExtent extent) {
         if (!extent.IsValid() || target.index >= targets_.size() || !targets_[target.index].live ||
             targets_[target.index].generation != target.generation)
-            return Result<void>::Failure(MakeFrontendError(
-                FrontendErrors::StaleRenderTarget, "Offscreen target handle or extent is invalid."));
+            return Result<void>::Failure(
+                MakeFrontendError(FrontendErrors::StaleRenderTarget, "Offscreen target handle or extent is invalid."));
         targets_[target.index].extent = extent;
         return Result<void>::Success();
     }
@@ -307,12 +293,10 @@ namespace Horo::Render {
     /** @copydoc RenderFrontend::ReleaseOffscreenTarget */
     Result<void> RenderFrontend::ReleaseOffscreenTarget(const RenderTargetHandle target) {
         if (activeFrameScope_ != nullptr)
-            return Result<void>::Failure(MakeFrontendError(
-                FrontendErrors::TargetReleaseDuringFrame, "Offscreen target cannot be released during a frame."));
-        if (target.index >= targets_.size() || !targets_[target.index].live ||
-            targets_[target.index].generation != target.generation)
-            return Result<void>::Failure(MakeFrontendError(
-                FrontendErrors::StaleRenderTarget, "Offscreen target handle is stale."));
+            return Result<void>::Failure(
+                MakeFrontendError(FrontendErrors::TargetReleaseDuringFrame, "Offscreen target cannot be released during a frame."));
+        if (target.index >= targets_.size() || !targets_[target.index].live || targets_[target.index].generation != target.generation)
+            return Result<void>::Failure(MakeFrontendError(FrontendErrors::StaleRenderTarget, "Offscreen target handle is stale."));
         TargetRecord &record = targets_[target.index];
         record.live = false;
         record.extent = {};
@@ -323,12 +307,9 @@ namespace Horo::Render {
     }
 
     bool RenderFrontend::IsLiveTarget(const RenderTargetHandle target, const FramebufferExtent extent) const noexcept {
-        return target.index < targets_.size() && targets_[target.index].live &&
-               targets_[target.index].generation == target.generation &&
-               targets_[target.index].extent.width == extent.width &&
-               targets_[target.index].extent.height == extent.height;
+        return target.index < targets_.size() && targets_[target.index].live && targets_[target.index].generation == target.generation &&
+               targets_[target.index].extent.width == extent.width && targets_[target.index].extent.height == extent.height;
     }
 
-    RenderFrontend::RenderFrontend(std::unique_ptr<IRenderBackend> backend) noexcept : backend_(std::move(backend)) {
-    }
-} // namespace Horo::Render
+    RenderFrontend::RenderFrontend(std::unique_ptr<IRenderBackend> backend) noexcept : backend_(std::move(backend)) {}
+}  // namespace Horo::Render

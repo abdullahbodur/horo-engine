@@ -4,7 +4,9 @@
 #include "Horo/Editor/EditorMenuModel.h"
 #include "Horo/Editor/EditorWorkspaceEvents.h"
 #include "Horo/Editor/WorkspacePanelHost.h"
+#include "Horo/Runtime/Render/RenderScene.h"
 #include "editor/document/SceneDocument.h"
+#include "editor/project_model/EditorTransformTool.h"
 #include "editor/project_model/EditorViewportModel.h"
 #include "editor/screens/workspace/ContentBrowserModel.h"
 
@@ -17,7 +19,7 @@ namespace Horo::Editor {
     /** @brief Typed presentation kind projected from authored scene components. */
     enum class SceneObjectKind : std::uint8_t {
         Mesh,
-        Empty,
+        GameObject,
         Camera,
         Light,
         TriggerVolume,
@@ -29,23 +31,15 @@ namespace Horo::Editor {
         SceneObjectId id;
         std::optional<SceneObjectId> parent;
         std::string name;
-        SceneObjectKind kind{SceneObjectKind::Empty};
+        SceneObjectKind kind{SceneObjectKind::GameObject};
         Math::Transform localTransform;
         SceneObjectComponentSet components;
     };
 
-    /** @brief Active viewport interaction tool exposed by the workspace toolbar. */
-    enum class EditorTransformTool {
-        Select,
-        Move,
-        Rotate,
-        Scale,
-    };
-
-    /** @brief Orientation basis used by viewport transform handles. */
-    enum class EditorTransformSpace {
-        Local,
-        World,
+    /** @brief One world-space Light marker projected from the current viewport render snapshot. */
+    struct ViewportLightPresentation {
+        SceneObjectId object;
+        Render::RenderLight light;
     };
 
     enum class EditorWorkspaceViewCommand {
@@ -74,8 +68,15 @@ namespace Horo::Editor {
         PreviewObjectTransform,
         CommitObjectTransform,
         CancelObjectTransformPreview,
+        PreviewLightComponent,
+        CancelLightComponentPreview,
         UpdateObjectName,
         UpdateCameraComponent,
+        UpdateLightComponent,
+        UpdateTriggerVolumeComponent,
+        UpdateAudioSourceComponent,
+        AddComponentToObject,
+        RemoveComponentFromObject,
         NavigateContentBrowser,
         NavigateContentBrowserBack,
         NavigateContentBrowserForward,
@@ -123,11 +124,19 @@ namespace Horo::Editor {
         WorkspacePanelHost::DropKind kind = WorkspacePanelHost::DropKind::TabCenter;
     };
 
-    /** @brief Normalized viewport click forwarded to the workspace controller for scene picking. */
+    /** @brief Normalized viewport click and renderer clip-depth convention forwarded for scene picking. */
     struct ViewportPickRequest {
         float normalizedX{0.0F};
         float normalizedY{0.0F};
         float aspect{1.0F};
+        Math::ClipDepthRange depthRange{Math::ClipDepthRange::NegativeOneToOne};
+        bool toggleSelection{false}; /**< Toggle the hit object instead of replacing the selection. */
+    };
+
+    /** @brief Complete stable object-selection replacement requested by a UI adapter. */
+    struct ObjectSelectionRequest {
+        std::vector<SceneObjectId> objects;
+        std::optional<SceneObjectId> primary;
     };
 
     /** @brief Operation selected for a direct Content Browser asset transfer. */
@@ -146,14 +155,20 @@ namespace Horo::Editor {
     struct EditorWorkspaceViewCommandData {
         EditorWorkspaceViewCommand command = EditorWorkspaceViewCommand::None;
         std::optional<EditorMenuInvocation> menuInvocation = std::nullopt;
+        std::optional<ObjectSelectionRequest> objectSelection = std::nullopt;
         std::optional<int> targetIndex = std::nullopt;
         std::optional<SceneObjectId> objectPayload = std::nullopt;
         std::optional<Runtime::PrimitiveId> primitivePayload = std::nullopt;
         std::optional<Math::Transform> transformPayload = std::nullopt;
+        std::optional<std::vector<SceneObjectTransformUpdate>> transformUpdates = std::nullopt;
         std::optional<ViewportPickRequest> viewportPickPayload = std::nullopt;
         std::optional<EditorViewportNavigationDelta> viewportNavigationPayload = std::nullopt;
         std::optional<Runtime::CameraProjection> viewportProjectionPayload = std::nullopt;
         std::optional<Runtime::CameraComponent> cameraPayload = std::nullopt;
+        std::optional<Runtime::LightComponent> lightPayload = std::nullopt;
+        std::optional<Runtime::TriggerVolumeComponent> triggerVolumePayload = std::nullopt;
+        std::optional<Runtime::AudioSourceComponent> audioSourcePayload = std::nullopt;
+        std::optional<ComponentType> componentTypePayload = std::nullopt;
         std::optional<EditorTransformTool> transformToolPayload = std::nullopt;
         std::optional<EditorTransformSpace> transformSpacePayload = std::nullopt;
         std::optional<std::string> stringPayload = std::nullopt;
@@ -193,6 +208,7 @@ namespace Horo::Editor {
         std::optional<SceneObjectId> hierarchyRevealObject;
         DocumentRevision hierarchyRevealRevision{};
         std::optional<SceneObjectId> primarySelection;
+        std::vector<SceneObjectId> selectedObjects;
         EditorTransformTool activeTransformTool{EditorTransformTool::Select};
         EditorTransformSpace activeTransformSpace{EditorTransformSpace::Local};
         EditorViewportCamera viewportCamera;
@@ -200,6 +216,7 @@ namespace Horo::Editor {
         std::optional<Math::Mat4> primarySelectionPreviewWorldTransform;
         std::optional<Math::Mat4> primarySelectionParentWorldTransform;
         std::optional<Math::Aabb> primarySelectionWorldBounds;
+        std::vector<ViewportLightPresentation> viewportLights;
         bool isDirty = false;
         bool sceneExternalConflict = false;
         bool recoveryAvailable = false;

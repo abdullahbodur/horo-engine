@@ -4,6 +4,7 @@
  */
 
 #include "FbxMeshImporter.h"
+
 #include "../../../AssetErrors.h"
 #include "../obj_mesh/ObjMeshPreviewProvider.h"
 #include "FbxMeshParser.h"
@@ -18,50 +19,41 @@
 #include <memory>
 #include <vector>
 
-namespace Horo::Assets
-{
-    namespace
-    {
-        void WriteLE32(std::vector<std::uint8_t>& out, std::uint32_t v)
-        {
+namespace Horo::Assets {
+    namespace {
+        void WriteLE32(std::vector<std::uint8_t> &out, std::uint32_t v) {
             for (int i = 0; i < 4; ++i)
                 out.push_back(static_cast<std::uint8_t>((v >> (i * 8)) & 0xFF));
         }
 
-        void WriteFloat(std::vector<std::uint8_t>& out, const float value)
-        {
+        void WriteFloat(std::vector<std::uint8_t> &out, const float value) {
             WriteLE32(out, std::bit_cast<std::uint32_t>(value));
         }
 
-        class FbxMeshImporter final : public IAssetImporter
-        {
+        class FbxMeshImporter final : public IAssetImporter {
         public:
-            [[nodiscard]] Result<PreparedAssetImport> Import(
-                const AssetImportInput& input, const CancellationToken& cancellation) const override
-            {
+            [[nodiscard]] Result<PreparedAssetImport> Import(const AssetImportInput &input,
+                                                             const CancellationToken &cancellation) const override {
                 if (cancellation.IsCancellationRequested())
                     return Result<PreparedAssetImport>::Failure(MakeError(ImportErrors::ImportCancelled));
 
                 auto parsed = ParseFbxMesh(input.sourceBytes);
                 if (parsed.HasError())
                     return Result<PreparedAssetImport>::Failure(parsed.ErrorValue());
-                const FbxMeshGeometry& geometry = parsed.Value();
+                const FbxMeshGeometry &geometry = parsed.Value();
                 if (geometry.positions.size() > std::numeric_limits<std::uint32_t>::max() ||
-                    geometry.triangleIndices.size() > std::numeric_limits<std::uint32_t>::max())
-                {
+                    geometry.triangleIndices.size() > std::numeric_limits<std::uint32_t>::max()) {
                     return Result<PreparedAssetImport>::Failure(MakeError(ImportErrors::FbxMalformed));
                 }
 
                 PreparedAssetImport result;
                 result.type = AssetTypeId::Parse("core.mesh").Value();
-                auto& payload = result.editorPayload;
+                auto &payload = result.editorPayload;
 
                 std::array<float, 3> minimum = geometry.positions.front();
                 std::array<float, 3> maximum = minimum;
-                for (const auto& position : geometry.positions)
-                {
-                    for (std::size_t component = 0; component < position.size(); ++component)
-                    {
+                for (const auto &position : geometry.positions) {
+                    for (std::size_t component = 0; component < position.size(); ++component) {
                         minimum[component] = std::min(minimum[component], position[component]);
                         maximum[component] = std::max(maximum[component], position[component]);
                     }
@@ -81,8 +73,7 @@ namespace Horo::Assets
                 WriteLE32(payload, static_cast<std::uint32_t>(positionByteCount));
                 WriteLE32(payload, 0);
                 WriteLE32(payload, 0);
-                for (const auto& position : geometry.positions)
-                {
+                for (const auto &position : geometry.positions) {
                     for (const float component : position)
                         WriteFloat(payload, component);
                 }
@@ -92,15 +83,13 @@ namespace Horo::Assets
                 return Result<PreparedAssetImport>::Success(std::move(result));
             }
         };
-    } // namespace
+    }  // namespace
 
-    std::shared_ptr<const IAssetImporter> CreateFbxMeshImporter()
-    {
+    std::shared_ptr<const IAssetImporter> CreateFbxMeshImporter() {
         return std::make_shared<const FbxMeshImporter>();
     }
 
-    Result<void> RegisterFbxMeshImporter(AssetImporterCatalog& catalog)
-    {
+    Result<void> RegisterFbxMeshImporter(AssetImporterCatalog &catalog) {
         auto mt = AssetTypeId::Parse("core.mesh");
         if (mt.HasError())
             return Result<void>::Failure(mt.ErrorValue());
@@ -115,64 +104,55 @@ namespace Horo::Assets
             .assetTypes = {mt.Value()},
             .subfolderCategory = "Meshes",
             .settings =
-            {
-                ImportSettingDescriptor{
-                    .id = "coordinateSystem",
-                    .labelKey = "Coordinate System",
-                    .descriptionKey = "Target coordinate system.",
-                    .kind = ImportSettingKind::Choice,
-                    .defaultValue = std::string{"Y-up (engine)"},
-                    .choices =
-                    {
-                        {
-                            .id = "yup",
-                            .labelKey = "Y-up (engine)",
-                            .value = std::string{"Y-up (engine)"}
-                        },
-                        {.id = "zup", .labelKey = "Z-up", .value = std::string{"Z-up"}},
+                {
+                    ImportSettingDescriptor{
+                        .id = "coordinateSystem",
+                        .labelKey = "Coordinate System",
+                        .descriptionKey = "Target coordinate system.",
+                        .kind = ImportSettingKind::Choice,
+                        .defaultValue = std::string{"Y-up (engine)"},
+                        .choices =
+                            {
+                                {.id = "yup", .labelKey = "Y-up (engine)", .value = std::string{"Y-up (engine)"}},
+                                {.id = "zup", .labelKey = "Z-up", .value = std::string{"Z-up"}},
+                            },
+                        .includeInPresets = true,
                     },
-                    .includeInPresets = true,
-                },
-                ImportSettingDescriptor{
-                    .id = "importMaterials",
-                    .labelKey = "Import Materials",
-                    .descriptionKey = "Create material assets from FBX slots.",
-                    .kind = ImportSettingKind::Boolean,
-                    .defaultValue = true,
-                    .includeInPresets = true,
-                },
-                ImportSettingDescriptor{
-                    .id = "importAnimations",
-                    .labelKey = "Import Animations",
-                    .descriptionKey = "Extract animation clips from FBX.",
-                    .kind = ImportSettingKind::Boolean,
-                    .defaultValue = false,
-                    .includeInPresets = true,
-                },
-                ImportSettingDescriptor{
-                    .id = "meshCompression",
-                    .labelKey = "Mesh Compression",
-                    .descriptionKey = "Compression for cooked mesh data.",
-                    .kind = ImportSettingKind::Choice,
-                    .defaultValue = std::string{"None"},
-                    .choices =
-                    {
-                        {.id = "none", .labelKey = "None", .value = std::string{"None"}},
-                        {.id = "draco", .labelKey = "Draco", .value = std::string{"Draco"}},
-                        {
-                            .id = "meshopt",
-                            .labelKey = "MeshOpt",
-                            .value = std::string{"MeshOpt"}
-                        },
+                    ImportSettingDescriptor{
+                        .id = "importMaterials",
+                        .labelKey = "Import Materials",
+                        .descriptionKey = "Create material assets from FBX slots.",
+                        .kind = ImportSettingKind::Boolean,
+                        .defaultValue = true,
+                        .includeInPresets = true,
                     },
-                    .includeInPresets = true,
+                    ImportSettingDescriptor{
+                        .id = "importAnimations",
+                        .labelKey = "Import Animations",
+                        .descriptionKey = "Extract animation clips from FBX.",
+                        .kind = ImportSettingKind::Boolean,
+                        .defaultValue = false,
+                        .includeInPresets = true,
+                    },
+                    ImportSettingDescriptor{
+                        .id = "meshCompression",
+                        .labelKey = "Mesh Compression",
+                        .descriptionKey = "Compression for cooked mesh data.",
+                        .kind = ImportSettingKind::Choice,
+                        .defaultValue = std::string{"None"},
+                        .choices =
+                            {
+                                {.id = "none", .labelKey = "None", .value = std::string{"None"}},
+                                {.id = "draco", .labelKey = "Draco", .value = std::string{"Draco"}},
+                                {.id = "meshopt", .labelKey = "MeshOpt", .value = std::string{"MeshOpt"}},
+                            },
+                        .includeInPresets = true,
+                    },
                 },
-            },
             .builtIn = true,
             .strategy = CreateFbxMeshImporter(),
-            .previewProvider =
-            CreateBuiltinMeshPreviewProvider(BuiltinMeshPreviewView::NegativeX),
+            .previewProvider = CreateBuiltinMeshPreviewProvider(BuiltinMeshPreviewView::NegativeX),
             .previewFallback = AssetPreviewFallback::Mesh,
         });
     }
-} // namespace Horo::Assets
+}  // namespace Horo::Assets

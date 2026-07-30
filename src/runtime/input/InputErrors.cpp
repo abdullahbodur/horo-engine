@@ -1,9 +1,7 @@
 #include "InputErrors.h"
 
-namespace Horo::Input::Errors
-{
-    namespace
-    {
+namespace Horo::Input::Errors {
+    namespace {
         const ErrorDomainId Domain{"horo.input"};
     }
 
@@ -97,4 +95,4 @@ namespace Horo::Input::Errors
         .retryable = false,
         .userActionable = true,
     };
-} // namespace Horo::Input::Errors
+}  // namespace Horo::Input::Errors

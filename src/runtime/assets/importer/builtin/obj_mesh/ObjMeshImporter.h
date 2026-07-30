@@ -9,13 +9,12 @@
 
 #include <memory>
 
-namespace Horo::Assets
-{
+namespace Horo::Assets {
 
-[[nodiscard]] std::shared_ptr<const IAssetImporter> CreateObjMeshImporter();
-[[nodiscard]] Result<void> RegisterObjMeshImporter(AssetImporterCatalog &catalog);
+    [[nodiscard]] std::shared_ptr<const IAssetImporter> CreateObjMeshImporter();
+    [[nodiscard]] Result<void> RegisterObjMeshImporter(AssetImporterCatalog &catalog);
 
-/** @brief Registers all built-in importers into the catalog. */
-[[nodiscard]] Result<void> RegisterAllBuiltinImporters(AssetImporterCatalog &catalog);
+    /** @brief Registers all built-in importers into the catalog. */
+    [[nodiscard]] Result<void> RegisterAllBuiltinImporters(AssetImporterCatalog &catalog);
 
-} // namespace Horo::Assets
+}  // namespace Horo::Assets

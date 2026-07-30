@@ -1,6 +1,7 @@
 /** @copydoc Logger.h */
 
 #include "Horo/Foundation/Logging/Logger.h"
+
 #include "Horo/Foundation/Logging/LogContext.h"
 #include "Horo/Foundation/Logging/StructuredLogStore.h"
 
@@ -30,18 +31,14 @@
 #include <windows.h>
 #endif
 
-namespace Horo::Log
-{
-    namespace
-    {
-        std::mutex& LoggerMutex()
-        {
+namespace Horo::Log {
+    namespace {
+        std::mutex &LoggerMutex() {
             static std::mutex mutex;
             return mutex;
         }
 
-        std::string ResolvePlatform()
-        {
+        std::string ResolvePlatform() {
 #if defined(__APPLE__)
             return "macOS";
 #elif defined(__linux__)
@@ -53,8 +50,7 @@ namespace Horo::Log
 #endif
         }
 
-        std::string ResolveArch()
-        {
+        std::string ResolveArch() {
 #if defined(__x86_64__) || defined(_M_X64)
             return "x86_64";
 #elif defined(__aarch64__) || defined(_M_ARM64)
@@ -64,8 +60,7 @@ namespace Horo::Log
 #endif
         }
 
-        int ResolveCpuCount()
-        {
+        int ResolveCpuCount() {
 #if defined(__APPLE__) || defined(__linux__)
             return static_cast<int>(std::thread::hardware_concurrency());
 #elif defined(_WIN32)
@@ -78,12 +73,10 @@ namespace Horo::Log
         }
 
         /** @brief Returns the log directory, creating it if needed. Expands ~ to $HOME. */
-        std::string ResolveLogDir(std::string_view dir)
-        {
+        std::string ResolveLogDir(std::string_view dir) {
             std::string resolved{dir};
-            if (!resolved.empty() && resolved[0] == '~')
-            {
-                const char* home = std::getenv("HOME");
+            if (!resolved.empty() && resolved[0] == '~') {
+                const char *home = std::getenv("HOME");
                 if (home == nullptr)
                     home = std::getenv("USERPROFILE");
                 if (home != nullptr)
@@ -92,8 +85,7 @@ namespace Horo::Log
             const std::filesystem::path path{resolved};
             if (path.empty() || path.is_relative())
                 return {};
-            for (const auto& component : path)
-            {
+            for (const auto &component : path) {
                 if (component == "..")
                     return {};
             }
@@ -103,11 +95,9 @@ namespace Horo::Log
         }
 
         /** @brief Formats a UTC timestamp as ISO-8601 with milliseconds. */
-        std::string FormatUtc(const std::chrono::system_clock::time_point timestamp)
-        {
+        std::string FormatUtc(const std::chrono::system_clock::time_point timestamp) {
             const auto timeT = std::chrono::system_clock::to_time_t(timestamp);
-            const auto ms =
-                std::chrono::duration_cast<std::chrono::milliseconds>(timestamp.time_since_epoch()) % 1000;
+            const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(timestamp.time_since_epoch()) % 1000;
 
             std::tm tm{};
 #if defined(_WIN32)
@@ -116,76 +106,68 @@ namespace Horo::Log
             gmtime_r(&timeT, &tm);
 #endif
 
-            return std::format("{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}.{:03d}Z", tm.tm_year + 1900, tm.tm_mon + 1,
-                               tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, ms.count());
+            return std::format("{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}.{:03d}Z", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+                               tm.tm_hour, tm.tm_min, tm.tm_sec, ms.count());
         }
 
         /** @brief JSON-escapes a string value, including control characters outside \\n \\r \\t. */
-        std::string JsonEscape(std::string_view s)
-        {
+        std::string JsonEscape(std::string_view s) {
             static constexpr char kHex[] = "0123456789abcdef";
 
             std::string out;
             out.reserve(s.size() + 4);
-            for (const unsigned char c : s)
-            {
-                switch (c)
-                {
-                case '"':
-                    out += R"(\")";
-                    break;
-                case '\\':
-                    out += R"(\\)";
-                    break;
-                case '\n':
-                    out += "\\n";
-                    break;
-                case '\r':
-                    out += "\\r";
-                    break;
-                case '\t':
-                    out += "\\t";
-                    break;
-                case '\b':
-                    out += "\\b";
-                    break;
-                case '\f':
-                    out += "\\f";
-                    break;
-                default:
-                    if (c < 0x20)
-                    {
-                        // Any other control character: emit \u00XX so the
-                        // record stays valid JSON.
-                        out += "\\u00";
-                        const auto byte = static_cast<std::byte>(c);
-                        out += kHex[std::to_integer<unsigned>(byte >> 4) & 0xFU];
-                        out += kHex[std::to_integer<unsigned>(byte) & 0xFU];
-                    }
-                    else
-                    {
-                        out += static_cast<char>(c);
-                    }
-                    break;
+            for (const unsigned char c : s) {
+                switch (c) {
+                    case '"':
+                        out += R"(\")";
+                        break;
+                    case '\\':
+                        out += R"(\\)";
+                        break;
+                    case '\n':
+                        out += "\\n";
+                        break;
+                    case '\r':
+                        out += "\\r";
+                        break;
+                    case '\t':
+                        out += "\\t";
+                        break;
+                    case '\b':
+                        out += "\\b";
+                        break;
+                    case '\f':
+                        out += "\\f";
+                        break;
+                    default:
+                        if (c < 0x20) {
+                            // Any other control character: emit \u00XX so the
+                            // record stays valid JSON.
+                            out += "\\u00";
+                            const auto byte = static_cast<std::byte>(c);
+                            out += kHex[std::to_integer<unsigned>(byte >> 4) & 0xFU];
+                            out += kHex[std::to_integer<unsigned>(byte) & 0xFU];
+                        } else {
+                            out += static_cast<char>(c);
+                        }
+                        break;
                 }
             }
             return out;
         }
-    } // namespace
+    }  // namespace
 
-    Logger& Logger::Instance()
-    {
+    Logger &Logger::Instance() {
         static Logger logger;
         return logger;
     }
 
-    void Logger::Init(std::string_view logDir, std::string_view baseName)
-    {
-        auto& self = Instance();
+    void Logger::Init(std::string_view logDir, std::string_view baseName) {
+        auto &self = Instance();
         std::lock_guard lock(LoggerMutex());
 
         if (self.m_file != nullptr)
-            return; // already initialised
+            return;  // already initialised
 
         const std::filesystem::path dir = ResolveLogDir(logDir);
         const std::filesystem::path path = dir / (std::string{baseName} + ".jsonl");
@@ -194,19 +176,16 @@ namespace Horo::Log
         self.m_startTime = std::chrono::steady_clock::now();
         self.m_sequence = 0;
 
-        if (self.m_file == nullptr)
-        {
+        if (self.m_file == nullptr) {
             // Don't fail silently: a logger that can't write should still
             // tell someone. Every subsequent Write() call is a no-op until
             // this is fixed.
-            std::fprintf(stderr, "[Logger] failed to open log file \"%s\" for append (errno=%d): %s\n", path.c_str(),
-                         errno,
+            std::fprintf(stderr, "[Logger] failed to open log file \"%s\" for append (errno=%d): %s\n", path.c_str(), errno,
                          std::strerror(errno));
         }
 
         // Respect HORO_LOG_LEVEL env var
-        if (const char* env = std::getenv("HORO_LOG_LEVEL"))
-        {
+        if (const char *env = std::getenv("HORO_LOG_LEVEL")) {
             using enum Level;
             const std::string_view sv{env};
             if (sv == "trace")
@@ -226,8 +205,7 @@ namespace Horo::Log
         }
 
         // Bootstrap log — goes to stderr if file not yet open
-        if (self.m_file != nullptr)
-        {
+        if (self.m_file != nullptr) {
             std::fprintf(
                 self.m_file,
                 R"({"schemaVersion":1,"level":"info","category":"observability.startup","message":"Logger initialised","path":"%s"})"
@@ -237,17 +215,13 @@ namespace Horo::Log
         }
     }
 
-    void Logger::Shutdown()
-    {
-        auto& self = Instance();
+    void Logger::Shutdown() {
+        auto &self = Instance();
         std::lock_guard lock(LoggerMutex());
 
-        if (self.m_file != nullptr)
-        {
+        if (self.m_file != nullptr) {
             const auto elapsed =
-                std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::steady_clock::now() - self.m_startTime)
-                .count();
+                std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - self.m_startTime).count();
 
             std::fprintf(
                 self.m_file,
@@ -261,25 +235,21 @@ namespace Horo::Log
         self.m_structuredStore.reset();
     }
 
-    Level Logger::GetLevel() noexcept
-    {
+    Level Logger::GetLevel() noexcept {
         return Instance().m_level;
     }
 
-    void Logger::SetLevel(const Level level) noexcept
-    {
+    void Logger::SetLevel(const Level level) noexcept {
         Instance().m_level = level;
     }
 
     /** @copydoc Logger::SetStructuredLogStore */
-    void Logger::SetStructuredLogStore(std::shared_ptr<StructuredLogStore> store)
-    {
+    void Logger::SetStructuredLogStore(std::shared_ptr<StructuredLogStore> store) {
         std::lock_guard lock(LoggerMutex());
         Instance().m_structuredStore = std::move(store);
     }
 
-    void Logger::Write(std::string_view category, const Level level, std::string_view message)
-    {
+    void Logger::Write(std::string_view category, const Level level, std::string_view message) {
         // Enforce the configured level here too, not just in the LOG_* macros —
         // Write() is a public entry point and can be called directly.
         if (level < Instance().m_level || Instance().m_level == Level::Off)
@@ -291,16 +261,13 @@ namespace Horo::Log
         // Build "mdc":{...} JSON fragment (empty string if no active context).
         std::string mdcJson;
         std::string mdcPrefix;
-        if (!mdcFields.empty())
-        {
+        if (!mdcFields.empty()) {
             mdcJson.reserve(64);
             mdcPrefix.reserve(64);
             mdcJson += ",\"mdc\":{";
             mdcPrefix += " [";
-            for (std::size_t i = 0; i < mdcFields.size(); ++i)
-            {
-                if (i > 0)
-                {
+            for (std::size_t i = 0; i < mdcFields.size(); ++i) {
+                if (i > 0) {
                     mdcJson += ',';
                     mdcPrefix += ", ";
                 }
@@ -318,14 +285,13 @@ namespace Horo::Log
             mdcPrefix += ']';
         }
 
-        auto& self = Instance();
+        auto &self = Instance();
         std::lock_guard lock(LoggerMutex());
 
         const auto seq = ++self.m_sequence;
         const auto timestamp = std::chrono::system_clock::now();
         const auto elapsed =
-            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - self.m_startTime)
-            .count();
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - self.m_startTime).count();
 
         const auto pid =
 #if defined(_WIN32)
@@ -335,16 +301,13 @@ namespace Horo::Log
 #endif
 
         // Write JSONL record
-        if (self.m_file != nullptr)
-        {
+        if (self.m_file != nullptr) {
             std::fprintf(
                 self.m_file,
                 R"({"schemaVersion":1,"timestamp":"%s","elapsedMs":%lld,"sequence":%llu,"level":"%s","category":"%s","message":"%s","pid":%lld%s})"
                 "\n",
-                FormatUtc(timestamp).c_str(), static_cast<long long>(elapsed), static_cast<unsigned long long>(seq),
-                ToString(level),
-                JsonEscape(category).c_str(), JsonEscape(message).c_str(), static_cast<long long>(pid),
-                mdcJson.c_str());
+                FormatUtc(timestamp).c_str(), static_cast<long long>(elapsed), static_cast<unsigned long long>(seq), ToString(level),
+                JsonEscape(category).c_str(), JsonEscape(message).c_str(), static_cast<long long>(pid), mdcJson.c_str());
             std::fflush(self.m_file);
         }
 
@@ -352,13 +315,11 @@ namespace Horo::Log
         // NOTE: string_view is not guaranteed null-terminated, so it must never
         // be passed to a bare "%s" — use "%.*s" with an explicit length instead.
 #ifndef NDEBUG
-        std::fprintf(stderr, "[%s]%s %.*s: %.*s\n", ToString(level), mdcPrefix.c_str(),
-                     static_cast<int>(category.size()),
-                     category.data(), static_cast<int>(message.size()), message.data());
+        std::fprintf(stderr, "[%s]%s %.*s: %.*s\n", ToString(level), mdcPrefix.c_str(), static_cast<int>(category.size()), category.data(),
+                     static_cast<int>(message.size()), message.data());
 #endif
 
-        if (self.m_structuredStore != nullptr)
-        {
+        if (self.m_structuredStore != nullptr) {
             self.m_structuredStore->Append(StructuredLogRecord{
                 .sequence = seq,
                 .timestampUtc = timestamp,
@@ -370,8 +331,7 @@ namespace Horo::Log
         }
     }
 
-    void Logger::DumpStartupInfo()
-    {
+    void Logger::DumpStartupInfo() {
         LOG_INFO("observability.startup", "Process started");
 
         // Platform
@@ -389,8 +349,7 @@ namespace Horo::Log
 
         // Compiler
 #if defined(__clang__)
-        LOG_INFO("observability.startup", "Compiler: Clang %d.%d.%d", __clang_major__, __clang_minor__,
-                 __clang_patchlevel__);
+        LOG_INFO("observability.startup", "Compiler: Clang %d.%d.%d", __clang_major__, __clang_minor__, __clang_patchlevel__);
 #elif defined(__GNUC__)
         LOG_INFO("observability.startup", "Compiler: GCC %d.%d", __GNUC__, __GNUC_MINOR__);
 #elif defined(_MSC_VER)
@@ -407,4 +366,4 @@ namespace Horo::Log
         // Log level
         LOG_INFO("observability.startup", "Log level: %s", ToString(Logger::GetLevel()));
     }
-} // namespace Horo::Log
+}  // namespace Horo::Log

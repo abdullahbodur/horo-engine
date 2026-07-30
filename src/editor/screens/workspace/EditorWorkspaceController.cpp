@@ -877,10 +877,15 @@ namespace Horo::Editor {
 
     void EditorWorkspaceController::ProcessCommand(const EditorWorkspaceViewCommandData &cmd) {
         // A transient overlay must not survive the interaction or workspace action that owns it.
-        if (m_viewport.Current().transformPreview.has_value() && cmd.command != EditorWorkspaceViewCommand::PreviewObjectTransform &&
+        if (!m_viewport.Current().transformPreviews.empty() && cmd.command != EditorWorkspaceViewCommand::PreviewObjectTransform &&
             cmd.command != EditorWorkspaceViewCommand::CommitObjectTransform &&
             cmd.command != EditorWorkspaceViewCommand::CancelObjectTransformPreview) {
             CancelObjectTransformPreview();
+        }
+        if (m_viewport.Current().lightPreview.has_value() && cmd.command != EditorWorkspaceViewCommand::PreviewLightComponent &&
+            cmd.command != EditorWorkspaceViewCommand::UpdateLightComponent &&
+            cmd.command != EditorWorkspaceViewCommand::CancelLightComponentPreview) {
+            CancelLightComponentPreview();
         }
         switch (cmd.command) {
             case EditorWorkspaceViewCommand::None:
@@ -930,8 +935,15 @@ namespace Horo::Editor {
                     HandleDeleteObject(*cmd.objectPayload);
                 break;
             case EditorWorkspaceViewCommand::SelectObject:
-                if (cmd.objectPayload.has_value()) {
-                    const Result<void> selected = m_selection.SetObjects({*cmd.objectPayload}, *cmd.objectPayload);
+                if (cmd.objectSelection.has_value() || cmd.objectPayload.has_value()) {
+                    ObjectSelectionRequest request;
+                    if (cmd.objectSelection.has_value()) {
+                        request = *cmd.objectSelection;
+                    } else {
+                        request.objects = {*cmd.objectPayload};
+                        request.primary = *cmd.objectPayload;
+                    }
+                    const Result<void> selected = m_selection.SetObjects(std::move(request.objects), request.primary);
                     if (selected.HasError()) {
                         LOG_ERROR("editor.selection", "Select object failed: %s", selected.ErrorValue().message.c_str());
                     }
@@ -942,8 +954,12 @@ namespace Horo::Editor {
                 if (cmd.viewportPickPayload.has_value()) {
                     const ViewportPickRequest &request = *cmd.viewportPickPayload;
                     const Result<EditorViewportPickResult> picked =
-                        PickEditorViewportScene(m_viewportScene,
-                                                EditorViewportPickQuery{request.normalizedX, request.normalizedY, request.aspect});
+                        PickEditorViewportScene(m_viewportScene, EditorViewportPickQuery{
+                                                                     .normalizedX = request.normalizedX,
+                                                                     .normalizedY = request.normalizedY,
+                                                                     .aspect = request.aspect,
+                                                                     .depthRange = request.depthRange,
+                                                                 });
                     if (picked.HasError()) {
                         LOG_ERROR("editor.viewport_picking", "Viewport pick failed: %s", picked.ErrorValue().message.c_str());
                         break;
@@ -955,11 +971,26 @@ namespace Horo::Editor {
                     }
                     if (picked.Value().object) {
                         const SceneObjectId object = *picked.Value().object;
-                        const Result<void> selected = m_selection.SetObjects({object}, object);
+                        std::vector<SceneObjectId> objects;
+                        std::optional<SceneObjectId> primary = object;
+                        if (request.toggleSelection) {
+                            objects = m_selection.Current().objects;
+                            const auto existing = std::ranges::find(objects, object);
+                            if (existing == objects.end()) {
+                                objects.push_back(object);
+                            } else {
+                                objects.erase(existing);
+                                primary = objects.empty() ? std::nullopt : std::optional{objects.back()};
+                            }
+                        } else {
+                            objects.push_back(object);
+                        }
+                        const Result<void> selected = m_selection.SetObjects(std::move(objects), primary);
                         if (selected.HasError())
                             LOG_ERROR("editor.selection", "Viewport selection failed: %s", selected.ErrorValue().message.c_str());
-                    } else
+                    } else if (!request.toggleSelection) {
                         m_selection.Clear();
+                    }
                     RefreshSelectionProjection();
                 }
                 break;
@@ -1007,12 +1038,17 @@ namespace Horo::Editor {
                 }
                 break;
             case EditorWorkspaceViewCommand::PreviewObjectTransform:
-                if (cmd.objectPayload.has_value() && cmd.transformPayload.has_value()) {
+                if (cmd.transformUpdates.has_value()) {
+                    PreviewObjectTransforms(*cmd.transformUpdates);
+                } else if (cmd.objectPayload.has_value() && cmd.transformPayload.has_value()) {
                     PreviewObjectTransform(*cmd.objectPayload, *cmd.transformPayload);
                 }
                 break;
             case EditorWorkspaceViewCommand::CommitObjectTransform:
-                if (cmd.objectPayload.has_value() && cmd.transformPayload.has_value()) {
+                if (cmd.transformUpdates.has_value()) {
+                    HandleDocumentCommandResult(m_documentCommands.Execute(SetSceneObjectTransformsCommand{*cmd.transformUpdates}),
+                                                "Transform objects");
+                } else if (cmd.objectPayload.has_value() && cmd.transformPayload.has_value()) {
                     HandleDocumentCommandResult(m_documentCommands.Execute(
                                                     SetSceneObjectTransformCommand{*cmd.objectPayload, *cmd.transformPayload}),
                                                 "Transform object");
@@ -1020,6 +1056,13 @@ namespace Horo::Editor {
                 break;
             case EditorWorkspaceViewCommand::CancelObjectTransformPreview:
                 CancelObjectTransformPreview();
+                break;
+            case EditorWorkspaceViewCommand::PreviewLightComponent:
+                if (cmd.objectPayload.has_value() && cmd.lightPayload.has_value())
+                    PreviewLightComponent(*cmd.objectPayload, *cmd.lightPayload);
+                break;
+            case EditorWorkspaceViewCommand::CancelLightComponentPreview:
+                CancelLightComponentPreview();
                 break;
             case EditorWorkspaceViewCommand::UpdateObjectName:
                 if (cmd.objectPayload.has_value() && cmd.stringPayload.has_value()) {
@@ -1033,6 +1076,41 @@ namespace Horo::Editor {
                     HandleDocumentCommandResult(m_documentCommands.Execute(
                                                     SetSceneObjectCameraCommand{*cmd.objectPayload, *cmd.cameraPayload}),
                                                 "Update camera");
+                }
+                break;
+            case EditorWorkspaceViewCommand::UpdateLightComponent:
+                if (cmd.objectPayload.has_value() && cmd.lightPayload.has_value()) {
+                    HandleDocumentCommandResult(m_documentCommands.Execute(
+                                                    SetSceneObjectLightCommand{*cmd.objectPayload, *cmd.lightPayload}),
+                                                "Update light");
+                }
+                break;
+            case EditorWorkspaceViewCommand::UpdateTriggerVolumeComponent:
+                if (cmd.objectPayload.has_value() && cmd.triggerVolumePayload.has_value()) {
+                    HandleDocumentCommandResult(m_documentCommands.Execute(
+                                                    SetSceneObjectTriggerVolumeCommand{*cmd.objectPayload, *cmd.triggerVolumePayload}),
+                                                "Update trigger volume");
+                }
+                break;
+            case EditorWorkspaceViewCommand::UpdateAudioSourceComponent:
+                if (cmd.objectPayload.has_value() && cmd.audioSourcePayload.has_value()) {
+                    HandleDocumentCommandResult(m_documentCommands.Execute(
+                                                    SetSceneObjectAudioSourceCommand{*cmd.objectPayload, *cmd.audioSourcePayload}),
+                                                "Update audio source");
+                }
+                break;
+            case EditorWorkspaceViewCommand::AddComponentToObject:
+                if (cmd.objectPayload.has_value() && cmd.componentTypePayload.has_value()) {
+                    HandleDocumentCommandResult(m_documentCommands.Execute(
+                                                    AddSceneObjectComponentCommand{*cmd.objectPayload, *cmd.componentTypePayload}),
+                                                "Add component");
+                }
+                break;
+            case EditorWorkspaceViewCommand::RemoveComponentFromObject:
+                if (cmd.objectPayload.has_value() && cmd.componentTypePayload.has_value()) {
+                    HandleDocumentCommandResult(m_documentCommands.Execute(
+                                                    RemoveSceneObjectComponentCommand{*cmd.objectPayload, *cmd.componentTypePayload}),
+                                                "Remove component");
                 }
                 break;
             case EditorWorkspaceViewCommand::NavigateContentBrowser:
@@ -1366,14 +1444,18 @@ namespace Horo::Editor {
     void EditorWorkspaceController::HandleDocumentCommandResult(Result<SceneCommandResult> result, const char *operation) {
         if (result.HasError()) {
             LOG_ERROR("editor.scene_document", "%s failed: %s", operation, result.ErrorValue().message.c_str());
+            CancelObjectTransformPreview();
+            CancelLightComponentPreview();
             return;
         }
         const SceneCommandResult &committed = result.Value();
         if (!committed.committed) {
             CancelObjectTransformPreview();
+            CancelLightComponentPreview();
             return;
         }
         m_viewport.ClearTransformPreview();
+        m_viewport.ClearLightPreview();
         m_dataBus.Publish(SceneDocumentChangedEvent{committed.revision, committed.state, committed.kind, m_document.IsDirty(),
                                                     committed.affectedObjects});
         m_selection.Reconcile();
@@ -1381,19 +1463,29 @@ namespace Horo::Editor {
     }
 
     void EditorWorkspaceController::PreviewObjectTransform(const SceneObjectId object, const Math::Transform &transform) {
+        const SceneObjectTransformUpdate update{object, transform};
+        PreviewObjectTransforms(std::span{&update, 1});
+    }
+
+    void EditorWorkspaceController::PreviewObjectTransforms(const std::span<const SceneObjectTransformUpdate> updates) {
         const std::optional<Runtime::RuntimeSceneView> active = m_runtimeScene.ActiveScene();
-        if (!active || m_viewportScene.runtimeSceneId != active->RuntimeId())
+        if (!active || m_viewportScene.runtimeSceneId != active->RuntimeId() || updates.empty())
             return;
-        const SceneObjectTransformPreview preview{object, transform};
-        const std::optional<SceneObjectTransformPreview> previousPreview = m_viewport.Current().transformPreview;
-        Result<void> applied = ApplyEditorViewportTransformPreview(*active, preview, m_viewportScene);
+
+        std::vector<SceneObjectTransformPreview> previews;
+        previews.reserve(updates.size());
+        for (const SceneObjectTransformUpdate &update : updates)
+            previews.push_back(SceneObjectTransformPreview{update.object, update.localTransform});
+
+        const std::vector<SceneObjectTransformPreview> previousPreviews = m_viewport.Current().transformPreviews;
+        Result<void> applied = ApplyEditorViewportTransformPreview(*active, previews, m_viewportScene);
         if (applied.HasError()) {
             LOG_ERROR("editor.viewport", "Transform preview failed: %s", applied.ErrorValue().message.c_str());
             return;
         }
-        Result<void> committed = m_viewport.SetTransformPreview(preview);
+        Result<void> committed = m_viewport.SetTransformPreviews(previews);
         if (committed.HasError()) {
-            const Result<void> restored = ApplyEditorViewportTransformPreview(*active, previousPreview, m_viewportScene);
+            const Result<void> restored = ApplyEditorViewportTransformPreview(*active, previousPreviews, m_viewportScene);
             if (restored.HasError()) {
                 LOG_ERROR("editor.viewport", "Transform preview rollback failed: %s", restored.ErrorValue().message.c_str());
             }
@@ -1401,26 +1493,70 @@ namespace Horo::Editor {
             return;
         }
         m_viewModel.primarySelectionPreviewWorldTransform.reset();
-        if (m_viewModel.primarySelection == object && m_viewModel.primarySelectionParentWorldTransform.has_value()) {
-            m_viewModel.primarySelectionPreviewWorldTransform =
-                Math::Multiply(*m_viewModel.primarySelectionParentWorldTransform, transform.ToMatrix());
+        if (m_viewModel.primarySelection.has_value()) {
+            const auto instance = std::ranges::find(m_viewportScene.instanceObjects, *m_viewModel.primarySelection);
+            if (instance != m_viewportScene.instanceObjects.end()) {
+                const std::size_t index = static_cast<std::size_t>(std::distance(m_viewportScene.instanceObjects.begin(), instance));
+                m_viewModel.primarySelectionPreviewWorldTransform = m_viewportScene.instances[index].localToWorld;
+            }
         }
+        RefreshViewportLightProjection();
     }
 
     void EditorWorkspaceController::CancelObjectTransformPreview() {
-        if (!m_viewport.Current().transformPreview.has_value()) {
+        if (m_viewport.Current().transformPreviews.empty()) {
             return;
         }
         const std::optional<Runtime::RuntimeSceneView> active = m_runtimeScene.ActiveScene();
         if (!active || m_viewportScene.runtimeSceneId != active->RuntimeId())
             return;
-        const Result<void> restored = ApplyEditorViewportTransformPreview(*active, {}, m_viewportScene);
+        const Result<void> restored =
+            ApplyEditorViewportTransformPreview(*active, std::span<const SceneObjectTransformPreview>{}, m_viewportScene);
         if (restored.HasError()) {
             LOG_ERROR("editor.viewport", "Transform preview cancellation failed: %s", restored.ErrorValue().message.c_str());
             return;
         }
         m_viewport.ClearTransformPreview();
         m_viewModel.primarySelectionPreviewWorldTransform.reset();
+        RefreshViewportLightProjection();
+    }
+
+    void EditorWorkspaceController::PreviewLightComponent(const SceneObjectId object, const Runtime::LightComponent &light) {
+        const std::optional<Runtime::RuntimeSceneView> active = m_runtimeScene.ActiveScene();
+        if (!active || m_viewportScene.runtimeSceneId != active->RuntimeId())
+            return;
+
+        const SceneObjectLightPreview preview{object, light};
+        const std::optional<SceneObjectLightPreview> previousPreview = m_viewport.Current().lightPreview;
+        Result<void> applied = ApplyEditorViewportLightPreview(*active, &preview, m_viewportScene);
+        if (applied.HasError()) {
+            LOG_ERROR("editor.viewport", "Light preview failed: %s", applied.ErrorValue().message.c_str());
+            return;
+        }
+        Result<void> committed = m_viewport.SetLightPreview(preview);
+        if (committed.HasError()) {
+            const SceneObjectLightPreview *previous = previousPreview.has_value() ? &*previousPreview : nullptr;
+            const Result<void> restored = ApplyEditorViewportLightPreview(*active, previous, m_viewportScene);
+            if (restored.HasError())
+                LOG_ERROR("editor.viewport", "Light preview rollback failed: %s", restored.ErrorValue().message.c_str());
+            LOG_ERROR("editor.viewport", "Light preview state failed: %s", committed.ErrorValue().message.c_str());
+        }
+        RefreshViewportLightProjection();
+    }
+
+    void EditorWorkspaceController::CancelLightComponentPreview() {
+        if (!m_viewport.Current().lightPreview.has_value())
+            return;
+        const std::optional<Runtime::RuntimeSceneView> active = m_runtimeScene.ActiveScene();
+        if (!active || m_viewportScene.runtimeSceneId != active->RuntimeId())
+            return;
+        const Result<void> restored = ApplyEditorViewportLightPreview(*active, nullptr, m_viewportScene);
+        if (restored.HasError()) {
+            LOG_ERROR("editor.viewport", "Light preview cancellation failed: %s", restored.ErrorValue().message.c_str());
+            return;
+        }
+        m_viewport.ClearLightPreview();
+        RefreshViewportLightProjection();
     }
 
     void EditorWorkspaceController::RefreshSceneProjections() {
@@ -1429,18 +1565,31 @@ namespace Horo::Editor {
         m_viewModel.objects.clear();
         m_viewModel.objects.reserve(documentSnapshot.objects.size());
         for (const SceneObjectSnapshot &object : documentSnapshot.objects) {
-            SceneObjectKind kind = SceneObjectKind::Empty;
+            int componentCount = 0;
+            SceneObjectKind singleComponentKind = SceneObjectKind::GameObject;
+
             if (object.primitiveMesh.has_value()) {
-                kind = SceneObjectKind::Mesh;
-            } else if (object.components.camera.has_value()) {
-                kind = SceneObjectKind::Camera;
-            } else if (object.components.light.has_value()) {
-                kind = SceneObjectKind::Light;
-            } else if (object.components.triggerVolume.has_value()) {
-                kind = SceneObjectKind::TriggerVolume;
-            } else if (object.components.audioSource.has_value()) {
-                kind = SceneObjectKind::AudioSource;
+                componentCount++;
+                singleComponentKind = SceneObjectKind::Mesh;
             }
+            if (object.components.camera.has_value()) {
+                componentCount++;
+                singleComponentKind = SceneObjectKind::Camera;
+            }
+            if (object.components.light.has_value()) {
+                componentCount++;
+                singleComponentKind = SceneObjectKind::Light;
+            }
+            if (object.components.triggerVolume.has_value()) {
+                componentCount++;
+                singleComponentKind = SceneObjectKind::TriggerVolume;
+            }
+            if (object.components.audioSource.has_value()) {
+                componentCount++;
+                singleComponentKind = SceneObjectKind::AudioSource;
+            }
+
+            SceneObjectKind kind = (componentCount == 1) ? singleComponentKind : SceneObjectKind::GameObject;
             m_viewModel.objects.push_back(SceneObject{.id = object.id,
                                                       .parent = object.parent,
                                                       .name = object.name,
@@ -1489,6 +1638,18 @@ namespace Horo::Editor {
             return;
         }
         m_viewportScene = std::move(extracted).Value();
+        if (!m_viewport.Current().transformPreviews.empty()) {
+            const Result<void> reapplied =
+                ApplyEditorViewportTransformPreview(*active, m_viewport.Current().transformPreviews, m_viewportScene);
+            if (reapplied.HasError())
+                LOG_ERROR("editor.viewport", "Transform preview reapply failed: %s", reapplied.ErrorValue().message.c_str());
+        }
+        if (m_viewport.Current().lightPreview.has_value()) {
+            const Result<void> reapplied = ApplyEditorViewportLightPreview(*active, &*m_viewport.Current().lightPreview, m_viewportScene);
+            if (reapplied.HasError())
+                LOG_ERROR("editor.viewport", "Light preview reapply failed: %s", reapplied.ErrorValue().message.c_str());
+        }
+        RefreshViewportLightProjection();
         m_activeRuntimeRevision = active->DefinitionRevision();
         if (m_queuedDefinitionRevision == m_activeRuntimeRevision)
             m_queuedDefinitionRevision = {};
@@ -2260,6 +2421,7 @@ namespace Horo::Editor {
     void EditorWorkspaceController::RefreshSelectionProjection() {
         const SelectionSnapshot &selection = m_selection.Current();
         m_viewModel.primarySelection = selection.primary;
+        m_viewModel.selectedObjects = selection.objects;
         m_viewModel.viewportCamera = m_viewportScene.camera;
         m_viewModel.primarySelectionWorldTransform.reset();
         m_viewModel.primarySelectionPreviewWorldTransform.reset();
@@ -2286,6 +2448,17 @@ namespace Horo::Editor {
                 if (bounds.HasValue())
                     m_viewModel.primarySelectionWorldBounds = bounds.Value();
             }
+        }
+    }
+
+    void EditorWorkspaceController::RefreshViewportLightProjection() {
+        m_viewModel.viewportLights.clear();
+        if (m_viewportScene.lights.size() != m_viewportScene.lightObjects.size())
+            return;
+        m_viewModel.viewportLights.reserve(m_viewportScene.lights.size());
+        for (std::size_t index = 0; index < m_viewportScene.lights.size(); ++index) {
+            m_viewModel.viewportLights.push_back(
+                ViewportLightPresentation{m_viewportScene.lightObjects[index], m_viewportScene.lights[index]});
         }
     }
 }  // namespace Horo::Editor

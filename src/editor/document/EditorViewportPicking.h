@@ -11,11 +11,12 @@
 #include <optional>
 
 namespace Horo::Editor {
-    /** @brief Normalized viewport position and aspect ratio captured by the viewport panel. */
+    /** @brief Normalized viewport position, aspect ratio, and renderer clip-depth convention captured by the viewport panel. */
     struct EditorViewportPickQuery {
         float normalizedX{0.0F};
         float normalizedY{0.0F};
         float aspect{1.0F};
+        Math::ClipDepthRange depthRange{Math::ClipDepthRange::NegativeOneToOne};
     };
 
     /** @brief Picking payload tagged with the runtime scene that produced it. */

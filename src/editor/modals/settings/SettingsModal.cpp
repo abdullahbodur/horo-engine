@@ -1833,7 +1833,6 @@ namespace Horo::Editor {
                         .font = ctx.theme.fonts.sansCompact,
                         .baseFontSize = FontPx::SansCompact})) {
                 (void)ApplySettings(st, settings);
-                LOG_INFO("editor.settings", "Settings applied via Apply button.");
             }
 
             return requestClose;

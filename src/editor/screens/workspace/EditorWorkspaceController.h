@@ -144,7 +144,11 @@ namespace Horo::Editor {
         void HandleDeleteObject(SceneObjectId object);
         void HandleDocumentCommandResult(Result<SceneCommandResult> result, const char *operation);
         void PreviewObjectTransform(SceneObjectId object, const Math::Transform &transform);
+        void PreviewObjectTransforms(std::span<const SceneObjectTransformUpdate> updates);
         void CancelObjectTransformPreview();
+        void PreviewLightComponent(SceneObjectId object, const Runtime::LightComponent &light);
+        void CancelLightComponentPreview();
+        void RefreshViewportLightProjection();
         void RefreshSelectionProjection();
         void NavigateContentBrowser(const std::filesystem::path &absoluteDirectory, bool recordHistory);
         void NavigateContentBrowserBack();

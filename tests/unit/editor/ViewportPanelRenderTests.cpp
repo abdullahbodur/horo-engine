@@ -1,30 +1,23 @@
-#include <catch2/catch_test_macros.hpp>
-
-#include "editor/screens/workspace/panels/viewport/ViewportPanel.h"
-
 #include "Horo/Editor/EditorDataBus.h"
 #include "Horo/Editor/EditorSettingsService.h"
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/Localization/ILocalizationService.h"
 #include "Horo/Foundation/DataBus.h"
 #include "editor/renderer/EditorViewportRenderer.h"
+#include "editor/screens/workspace/panels/viewport/ViewportPanel.h"
 
+#include <catch2/catch_test_macros.hpp>
 #include <imgui.h>
-
 #include <string>
 #include <string_view>
 #include <unordered_map>
 
-namespace
-{
-    class TestLocalization final : public Horo::Editor::ILocalizationService
-    {
+namespace {
+    class TestLocalization final : public Horo::Editor::ILocalizationService {
     public:
-        [[nodiscard]] const std::string& Get(const std::string_view, const std::string_view localKey) const override
-        {
+        [[nodiscard]] const std::string &Get(const std::string_view, const std::string_view localKey) const override {
             std::string_view value = localKey;
-            if (localKey == "workspace.viewport.object_count")
-            {
+            if (localKey == "workspace.viewport.object_count") {
                 value = "{} objects";
             }
             const auto [entry, inserted] = values_.try_emplace(std::string(localKey), value);
@@ -36,26 +29,33 @@ namespace
         mutable std::unordered_map<std::string, std::string> values_;
     };
 
-    class FakeViewportRenderer final : public Horo::Editor::IEditorViewportRenderer
-    {
+    class FakeViewportRenderer final : public Horo::Editor::IEditorViewportRenderer {
     public:
-        void RequestExtent(const Horo::Editor::EditorViewportExtent extent) noexcept override
-        {
+        void RequestExtent(const Horo::Editor::EditorViewportExtent extent) noexcept override {
             requestedExtent = extent;
         }
 
-        [[nodiscard]] Horo::Editor::EditorViewportExtent RequestedExtent() const noexcept override
-        {
+        void RequestGrid(const Horo::Editor::EditorViewportGridOptions options) noexcept override {
+            gridOptions = options;
+        }
+
+        void RequestLightVisualizer(Horo::Editor::EditorViewportLightVisualizerOptions options) noexcept override {
+            lightVisualizerOptions = std::move(options);
+        }
+
+        [[nodiscard]] Horo::Editor::EditorViewportExtent RequestedExtent() const noexcept override {
             return requestedExtent;
         }
 
-        [[nodiscard]] Horo::Result<void> ExecuteStaticMeshPass(const Horo::Render::StaticMeshPassDescriptor&) override
-        {
+        [[nodiscard]] Horo::Math::ClipDepthRange ClipDepthRange() const noexcept override {
+            return depthRange;
+        }
+
+        [[nodiscard]] Horo::Result<void> ExecuteStaticMeshPass(const Horo::Render::StaticMeshPassDescriptor &) override {
             return Horo::Result<void>::Success();
         }
 
-        [[nodiscard]] Horo::Editor::EditorViewportTextureView TextureView() const noexcept override
-        {
+        [[nodiscard]] Horo::Editor::EditorViewportTextureView TextureView() const noexcept override {
             return Horo::Editor::EditorViewportTextureView{
                 .textureId = textureId,
                 .u0 = 0.25F,
@@ -65,24 +65,25 @@ namespace
             };
         }
 
-        [[nodiscard]] bool IsReady() const noexcept override
-        {
+        [[nodiscard]] bool IsReady() const noexcept override {
             return true;
         }
 
         Horo::Editor::EditorViewportExtent requestedExtent{};
+        Horo::Editor::EditorViewportGridOptions gridOptions{};
+        Horo::Editor::EditorViewportLightVisualizerOptions lightVisualizerOptions{};
+        Horo::Math::ClipDepthRange depthRange{Horo::Math::ClipDepthRange::ZeroToOne};
         static constexpr std::uintptr_t textureId = 42;
     };
-} // namespace
+}  // namespace
 
-TEST_CASE("Viewport Panel Render Tests", "[unit][editor]")
-{
+TEST_CASE("Viewport Panel Render Tests", "[unit][editor]") {
     using namespace Horo;
     using namespace Horo::Editor;
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO();
+    ImGuiIO &io = ImGui::GetIO();
     io.DisplaySize = ImVec2(640.0F, 480.0F);
     io.DisplayFramebufferScale = ImVec2(2.0F, 2.0F);
     io.DeltaTime = 1.0F / 60.0F;
@@ -92,24 +93,21 @@ TEST_CASE("Viewport Panel Render Tests", "[unit][editor]")
     EngineDataBus engineEvents;
     EditorDataBus editorEvents;
     TestLocalization localization;
-    ImFont* defaultFont = io.Fonts->Fonts.front();
+    ImFont *defaultFont = io.Fonts->Fonts.front();
     const Theme::Fonts fonts{.sans = defaultFont, .sansCompact = defaultFont, .sansEmphasis = defaultFont};
     const ThemeContext theme{.fonts = fonts};
-    const EditorSettingsSnapshot settings{};
-    const EditorGuiContext context{
-        .engineEvents = engineEvents,
-        .editorEvents = editorEvents,
-        .localization = localization,
-        .theme = theme,
-        .settings = settings
-    };
+    EditorSettingsSnapshot settings{};
+    const EditorGuiContext context{.engineEvents = engineEvents,
+                                   .editorEvents = editorEvents,
+                                   .localization = localization,
+                                   .theme = theme,
+                                   .settings = settings};
     EditorWorkspaceViewModel viewModel;
     EditorWorkspaceViewCommandData command;
     FakeViewportRenderer renderer;
     Input::RawInputCollector inputCollector;
     Input::InputRouter inputRouter;
-    auto workspaceInput =
-        inputRouter.PushContext(Input::InputContextId{"editor.workspace"}, Input::InputContextKind::EditorWorkspace);
+    auto workspaceInput = inputRouter.PushContext(Input::InputContextId{"editor.workspace"}, Input::InputContextKind::EditorWorkspace);
     ViewportPanel panel;
     PanelContext panelContext{
         .dataBus = editorEvents,
@@ -121,8 +119,7 @@ TEST_CASE("Viewport Panel Render Tests", "[unit][editor]")
 
     Input::FrameNumber inputFrame = 1;
 
-    const auto drawFrame = [&]
-    {
+    const auto drawFrame = [&] {
         ImGui::NewFrame();
         inputCollector.BeginFrame(inputFrame++);
         inputCollector.SetPointerPosition(io.MousePos.x, io.MousePos.y);
@@ -170,11 +167,13 @@ TEST_CASE("Viewport Panel Render Tests", "[unit][editor]")
 
     REQUIRE((renderer.requestedExtent.width == 800));
     REQUIRE((renderer.requestedExtent.height == 504));
+    REQUIRE((renderer.gridOptions.visible));
     REQUIRE((command.command == EditorWorkspaceViewCommand::PickViewport));
     REQUIRE((command.viewportPickPayload.has_value()));
     REQUIRE((command.viewportPickPayload->normalizedX > 0.0F && command.viewportPickPayload->normalizedX < 1.0F));
     REQUIRE((command.viewportPickPayload->normalizedY > 0.0F && command.viewportPickPayload->normalizedY < 1.0F));
     REQUIRE((command.viewportPickPayload->aspect > 1.0F));
+    REQUIRE((command.viewportPickPayload->depthRange == Math::ClipDepthRange::ZeroToOne));
 
     command = {};
     io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
@@ -241,10 +240,8 @@ TEST_CASE("Viewport Panel Render Tests", "[unit][editor]")
     REQUIRE((command.command == EditorWorkspaceViewCommand::CommitObjectTransform));
 
     viewModel.activeTransformSpace = EditorTransformSpace::World;
-    const Math::Transform parentTransform{
-        .rotation = Math::Quaternion::FromEulerRadians({0.0F, 0.35F, 0.0F}),
-        .scale = {2.0F, 0.75F, 1.5F}
-    };
+    const Math::Transform parentTransform{.rotation = Math::Quaternion::FromEulerRadians({0.0F, 0.35F, 0.0F}),
+                                          .scale = {2.0F, 0.75F, 1.5F}};
     viewModel.primarySelectionParentWorldTransform = parentTransform.ToMatrix();
     viewModel.primarySelectionWorldTransform =
         Math::Multiply(parentTransform.ToMatrix(), viewModel.objects.front().localTransform.ToMatrix());
@@ -282,8 +279,7 @@ TEST_CASE("Viewport Panel Render Tests", "[unit][editor]")
     REQUIRE((command.transformPayload->scale.x < -1.0F));
     REQUIRE((command.transformPayload->scale.y > 1.0F));
     command = {};
-    auto modalContext =
-        inputRouter.PushContext(Input::InputContextId{"test.modal"}, Input::InputContextKind::ModalRoot);
+    auto modalContext = inputRouter.PushContext(Input::InputContextId{"test.modal"}, Input::InputContextKind::ModalRoot);
     drawFrame();
     REQUIRE((command.command == EditorWorkspaceViewCommand::CancelObjectTransformPreview));
     modalContext.Reset();
@@ -294,22 +290,54 @@ TEST_CASE("Viewport Panel Render Tests", "[unit][editor]")
     bool foundViewportTexture = false;
     bool foundAdapterUv0 = false;
     bool foundAdapterUv1 = false;
-    const ImDrawData* drawData = ImGui::GetDrawData();
-    for (int listIndex = 0; listIndex < drawData->CmdListsCount; ++listIndex)
-    {
-        const ImDrawList* drawList = drawData->CmdLists[listIndex];
-        for (const ImDrawCmd& drawCommand : drawList->CmdBuffer)
-        {
+    const ImDrawData *drawData = ImGui::GetDrawData();
+    for (int listIndex = 0; listIndex < drawData->CmdListsCount; ++listIndex) {
+        const ImDrawList *drawList = drawData->CmdLists[listIndex];
+        for (const ImDrawCmd &drawCommand : drawList->CmdBuffer) {
             foundViewportTexture = foundViewportTexture || drawCommand.GetTexID() == FakeViewportRenderer::textureId;
         }
-        for (const ImDrawVert& vertex : drawList->VtxBuffer)
-        {
+        for (const ImDrawVert &vertex : drawList->VtxBuffer) {
             foundAdapterUv0 = foundAdapterUv0 || (vertex.uv.x == 0.25F && vertex.uv.y == 0.75F);
             foundAdapterUv1 = foundAdapterUv1 || (vertex.uv.x == 0.75F && vertex.uv.y == 0.25F);
         }
     }
     REQUIRE((foundViewportTexture));
     REQUIRE((foundAdapterUv0 && foundAdapterUv1));
+
+    settings.settings.gridOverlay = false;
+    drawFrame();
+    REQUIRE_FALSE((renderer.gridOptions.visible));
+
+    viewModel.viewportLights = {
+        ViewportLightPresentation{
+            .object = SceneObjectId{2},
+            .light =
+                Render::RenderLight{
+                    .kind = Render::RenderLightKind::Spot,
+                    .position = {0.0F, 0.0F, 0.0F},
+                    .direction = {0.0F, -1.0F, 0.0F},
+                },
+        },
+    };
+    viewModel.primarySelection.reset();
+    command = {};
+    io.AddMousePosEvent(200.0F, 154.0F);
+    io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+    drawFrame();
+    command = {};
+    io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    drawFrame();
+    REQUIRE((command.command == EditorWorkspaceViewCommand::SelectObject));
+    REQUIRE((command.objectPayload == SceneObjectId{2}));
+    io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+
+    viewModel.primarySelection = SceneObjectId{2};
+    drawFrame();
+    REQUIRE((renderer.lightVisualizerOptions.selectedLight.has_value()));
+    REQUIRE((renderer.lightVisualizerOptions.selectedLight->kind == Render::RenderLightKind::Spot));
+    viewModel.primarySelection.reset();
+    drawFrame();
+    REQUIRE_FALSE((renderer.lightVisualizerOptions.selectedLight.has_value()));
 
     panel.OnDetach();
     ImGui::DestroyContext();

@@ -87,8 +87,16 @@ TEST_CASE("Editor Viewport Metal Smoke", "[integration][renderer][gpu]")
              {.tint = {0.12F, 0.72F, 1.0F}, .tintStrength = index == 0 ? 0.65F : 0.0F}});
         meshLeases.push_back(std::move(meshLease));
     }
+    const std::array lights{
+        Render::RenderLight{
+            .kind = Render::RenderLightKind::Directional,
+            .direction = Math::Normalize(Math::Vec3{0.5F, -1.0F, -0.5F}),
+            .color = {1.0F, 0.95F, 0.88F},
+            .intensity = 2.0F,
+        },
+    };
     const EditorViewportSceneView viewportScene{
-        .camera = {}, .meshResources = meshResources, .instances = viewportInstances};
+        .camera = {}, .meshResources = meshResources, .instances = viewportInstances, .lights = lights};
     Check(frontend->AttachStaticMeshPassExecutor(viewport).HasValue());
     auto viewportTargetResult = frontend->CreateOffscreenTarget({128, 128});
     Check(viewportTargetResult.HasValue());
@@ -109,7 +117,7 @@ TEST_CASE("Editor Viewport Metal Smoke", "[integration][renderer][gpu]")
                     .target = viewportTarget,
                     .extent = {128, 128},
                     .scene = RenderSceneView{ToRenderCamera(viewportScene.camera), viewportScene.meshResources,
-                                             viewportScene.instances},
+                                             viewportScene.instances, viewportScene.lights},
                 },
         },
         RenderPassDescriptor{

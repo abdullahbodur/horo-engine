@@ -14,11 +14,10 @@ namespace Horo::Runtime {
         [[nodiscard]] bool IsPositive(const Duration value) noexcept {
             return value > kZero;
         }
-    } // namespace
+    }  // namespace
 
     /** @copydoc FrameClock::FrameClock */
-    FrameClock::FrameClock(Clock &clock) noexcept : clock_(&clock) {
-    }
+    FrameClock::FrameClock(Clock &clock) noexcept : clock_(&clock) {}
 
     /** @copydoc FrameClock::Sample */
     Duration FrameClock::Sample() noexcept {
@@ -40,21 +39,17 @@ namespace Horo::Runtime {
     }
 
     /** @copydoc FrameScheduler::Create */
-    Result<std::unique_ptr<FrameScheduler> > FrameScheduler::Create(Clock &clock, FrameSchedulerConfig config) {
+    Result<std::unique_ptr<FrameScheduler>> FrameScheduler::Create(Clock &clock, FrameSchedulerConfig config) {
         if (!IsPositive(config.fixedStep) || !IsPositive(config.maximumFrameDelta) || config.maximumCatchUpSteps == 0) {
-            return Result<std::unique_ptr<FrameScheduler> >::Failure(MakeError(RuntimeErrors::InvalidSchedulerConfig));
+            return Result<std::unique_ptr<FrameScheduler>>::Failure(MakeError(RuntimeErrors::InvalidSchedulerConfig));
         }
-        return Result<std::unique_ptr<FrameScheduler> >::Success(
-            std::unique_ptr<FrameScheduler>(new FrameScheduler(clock, config)));
+        return Result<std::unique_ptr<FrameScheduler>>::Success(std::unique_ptr<FrameScheduler>(new FrameScheduler(clock, config)));
     }
 
-    FrameScheduler::FrameScheduler(Clock &clock, const FrameSchedulerConfig config) noexcept
-        : clock_(clock), config_(config) {
-    }
+    FrameScheduler::FrameScheduler(Clock &clock, const FrameSchedulerConfig config) noexcept : clock_(clock), config_(config) {}
 
     /** @copydoc FrameScheduler::RunFrame */
-    Result<void> FrameScheduler::RunFrame(RuntimeLifecycle &lifecycle, const CancellationToken &cancellation,
-                                          const bool suspended) {
+    Result<void> FrameScheduler::RunFrame(RuntimeLifecycle &lifecycle, const CancellationToken &cancellation, const bool suspended) {
         ++frameNumber_;
         Duration rawDelta = suspended ? Duration{} : clock_.Sample();
         Duration variableDelta = rawDelta;
@@ -68,15 +63,13 @@ namespace Horo::Runtime {
             ++statistics_.maximumDeltaClampCount;
         }
 
-        FrameContext frameContext{
-            .frameNumber = frameNumber_,
-            .variableDelta = variableDelta,
-            .interpolationAlpha = 0.0,
-            .completedSimulationTick = completedSimulationTick_,
-            .droppedSimulationTime = {},
-            .realDeltaWasClamped = clamped,
-            .cancellation = cancellation
-        };
+        FrameContext frameContext{.frameNumber = frameNumber_,
+                                  .variableDelta = variableDelta,
+                                  .interpolationAlpha = 0.0,
+                                  .completedSimulationTick = completedSimulationTick_,
+                                  .droppedSimulationTime = {},
+                                  .realDeltaWasClamped = clamped,
+                                  .cancellation = cancellation};
 
         const auto dispatch = [&](const RuntimePhase phase) -> Result<void> {
             if (cancellation.IsCancellationRequested())
@@ -113,11 +106,9 @@ namespace Horo::Runtime {
         while (accumulator_ >= config_.fixedStep && executedSteps < config_.maximumCatchUpSteps) {
             if (cancellation.IsCancellationRequested())
                 return CancelledResult();
-            const FixedStepContext fixedContext{
-                .simulationTick = completedSimulationTick_ + 1,
-                .fixedDelta = config_.fixedStep,
-                .cancellation = cancellation
-            };
+            const FixedStepContext fixedContext{.simulationTick = completedSimulationTick_ + 1,
+                                                .fixedDelta = config_.fixedStep,
+                                                .cancellation = cancellation};
             Result<void> result = lifecycle.DispatchFixedUpdate(fixedContext);
             if (result.HasError())
                 return result;
@@ -130,11 +121,8 @@ namespace Horo::Runtime {
         }
 
         if (accumulator_ >= config_.fixedStep) {
-            const std::uint64_t droppedSteps =
-                    static_cast<std::uint64_t>(accumulator_.ToNanoseconds() / config_.fixedStep.ToNanoseconds());
-            const Duration dropped =
-                    Duration::FromNanoseconds(
-                        static_cast<std::int64_t>(droppedSteps) * config_.fixedStep.ToNanoseconds());
+            const std::uint64_t droppedSteps = static_cast<std::uint64_t>(accumulator_.ToNanoseconds() / config_.fixedStep.ToNanoseconds());
+            const Duration dropped = Duration::FromNanoseconds(static_cast<std::int64_t>(droppedSteps) * config_.fixedStep.ToNanoseconds());
             accumulator_ -= dropped;
             frameContext.droppedSimulationTime = dropped;
             statistics_.totalDroppedSimulationTime += dropped;
@@ -144,8 +132,7 @@ namespace Horo::Runtime {
 
         frameContext.completedSimulationTick = completedSimulationTick_;
         frameContext.interpolationAlpha =
-                static_cast<double>(accumulator_.ToNanoseconds()) / static_cast<double>(config_.fixedStep.
-                    ToNanoseconds());
+            static_cast<double>(accumulator_.ToNanoseconds()) / static_cast<double>(config_.fixedStep.ToNanoseconds());
 
         if (Result<void> result = dispatch(RuntimePhase::VariableUpdate); result.HasError())
             return result;
@@ -177,4 +164,4 @@ namespace Horo::Runtime {
     FrameSchedulerStatistics FrameScheduler::Statistics() const noexcept {
         return statistics_;
     }
-} // namespace Horo::Runtime
+}  // namespace Horo::Runtime

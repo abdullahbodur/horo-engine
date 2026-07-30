@@ -7,12 +7,56 @@
 
 #include "Horo/Runtime/Render/Mesh.h"
 
+#include <cstddef>
 #include <cmath>
 #include <cstdint>
 #include <span>
 
 namespace Horo::Render
 {
+/** @brief Maximum punctual and directional lights accepted by the baseline forward viewport path. */
+inline constexpr std::size_t MaximumForwardLights = 16;
+
+/** @brief Backend-neutral light families supported by the baseline forward lighting path. */
+enum class RenderLightKind : std::uint8_t
+{
+    Directional,
+    Point,
+    Spot,
+};
+
+/**
+ * @brief One immutable world-space light value extracted for a render view.
+ *
+ * Direction points from the light into the scene. Spot cone values are stored
+ * as cosines so concrete backends do not reinterpret authored angle units.
+ */
+struct RenderLight
+{
+    RenderLightKind kind{RenderLightKind::Directional};
+    Math::Vec3 position{};
+    Math::Vec3 direction{0.0F, 0.0F, -1.0F};
+    Math::Vec3 color{1.0F, 1.0F, 1.0F};
+    float intensity{1.0F};
+    float range{10.0F};
+    float innerConeCosine{0.9396926F};
+    float outerConeCosine{0.7071068F};
+
+    /** @brief Reports whether the light has finite, normalized, and ordered render values. */
+    [[nodiscard]] bool IsValid() const noexcept
+    {
+        const bool kindValid = kind == RenderLightKind::Directional || kind == RenderLightKind::Point ||
+                               kind == RenderLightKind::Spot;
+        const float directionLength = Math::Length(direction);
+        return kindValid && Math::IsFinite(position) && Math::IsFinite(direction) && Math::IsFinite(color) &&
+               color.x >= 0.0F && color.y >= 0.0F && color.z >= 0.0F &&
+               std::isfinite(directionLength) && Math::NearlyEqual(directionLength, 1.0F, 0.001F) &&
+               std::isfinite(intensity) && intensity >= 0.0F && std::isfinite(range) && range >= 0.0F &&
+               std::isfinite(innerConeCosine) && std::isfinite(outerConeCosine) &&
+               innerConeCosine >= outerConeCosine && innerConeCosine <= 1.0F && outerConeCosine >= -1.0F;
+    }
+};
+
 /** @brief Generation-safe identity of one immutable mesh resource. */
 struct RenderMeshHandle
 {
@@ -135,16 +179,20 @@ struct RenderSceneView
     RenderCameraView camera;
     std::span<const RenderMeshResourceView> meshResources;
     std::span<const RenderStaticMeshInstance> instances;
+    std::span<const RenderLight> lights;
 
     [[nodiscard]] bool IsValid() const noexcept
     {
-        if (!camera.IsValid())
+        if (!camera.IsValid() || lights.size() > MaximumForwardLights)
             return false;
         for (const RenderMeshResourceView &resource : meshResources)
             if (!resource.IsValid())
                 return false;
         for (const RenderStaticMeshInstance &instance : instances)
             if (!instance.IsValid())
+                return false;
+        for (const RenderLight &light : lights)
+            if (!light.IsValid())
                 return false;
         return true;
     }

@@ -1,41 +1,30 @@
-#include <catch2/catch_test_macros.hpp>
-
 #include "Horo/Runtime/Scene/PrimitiveCatalog.h"
 #include "editor/document/EditorViewportSceneExtractor.h"
 #include "editor/document/RuntimeSceneConversion.h"
 #include "editor/document/SceneDocument.h"
 
 #include <array>
+#include <catch2/catch_test_macros.hpp>
 #include <cmath>
 #include <limits>
 #include <memory>
 
-namespace
-{
-    [[nodiscard]] std::unique_ptr<Horo::Runtime::RuntimeScene> MakeRuntimeScene(
-        const Horo::Editor::SceneDocument& document)
-    {
-        auto definition =
-            Horo::Editor::ConvertSceneDocumentToRuntime(document.Snapshot(), Horo::Runtime::SceneDefinitionId{1});
+namespace {
+    [[nodiscard]] std::unique_ptr<Horo::Runtime::RuntimeScene> MakeRuntimeScene(const Horo::Editor::SceneDocument &document) {
+        auto definition = Horo::Editor::ConvertSceneDocumentToRuntime(document.Snapshot(), Horo::Runtime::SceneDefinitionId{1});
         REQUIRE((definition.HasValue()));
         auto scene = Horo::Runtime::RuntimeScene::Create(definition.Value(), Horo::Runtime::SceneRuntimeId{1});
         REQUIRE((scene.HasValue()));
         return std::move(scene).Value();
     }
 
-    [[nodiscard]] bool NearlyEqual(const float lhs, const float rhs) noexcept
-    {
+    [[nodiscard]] bool NearlyEqual(const float lhs, const float rhs) noexcept {
         return std::fabs(lhs - rhs) < 0.0001F;
     }
 
-    TEST_CASE (
-    "Catalog Owns Stable Core Primitive Ids"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Catalog Owns Stable Core Primitive Ids", "[unit][editor]") {
         using namespace Horo::Runtime;
-        const PrimitiveDescriptor* box = PrimitiveCatalog::Find("primitive.mesh.box");
+        const PrimitiveDescriptor *box = PrimitiveCatalog::Find("primitive.mesh.box");
         REQUIRE((box != nullptr));
         REQUIRE((box->id == PrimitiveId{"primitive.mesh.box"}));
         REQUIRE((box->id.IsValid()));
@@ -52,12 +41,7 @@ namespace
         REQUIRE((PrimitiveCatalog::Find("primitive.mesh.missing") == nullptr));
     }
 
-    TEST_CASE (
-    "Catalog Creation Use Case Creates Every Core Hierarchy Primitive"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Catalog Creation Use Case Creates Every Core Hierarchy Primitive", "[unit][editor]") {
         using namespace Horo;
         using namespace Horo::Editor;
         using namespace Horo::Runtime;
@@ -67,16 +51,14 @@ namespace
         CreateSceneObjectUseCase create{document, commands};
 
         std::size_t creatableCount = 0;
-        for (const PrimitiveDescriptor& descriptor : PrimitiveCatalog::All())
-        {
-            if (descriptor.creationGroup == PrimitiveCreationGroup::NotCreatable)
-            {
+        for (const PrimitiveDescriptor &descriptor : PrimitiveCatalog::All()) {
+            if (descriptor.creationGroup == PrimitiveCreationGroup::NotCreatable) {
                 continue;
             }
             const auto created = create.Execute(PrimitiveCreationRequest{descriptor.id, std::nullopt});
             REQUIRE((created.HasValue()));
             ++creatableCount;
-            const SceneObjectSnapshot& object = document.Objects().back();
+            const SceneObjectSnapshot &object = document.Objects().back();
             REQUIRE((object.name == descriptor.defaultObjectName));
             REQUIRE((object.primitiveMesh.has_value() == descriptor.meshType.has_value()));
             if (descriptor.sceneObjectType == SceneObjectPrimitiveType::Camera)
@@ -96,18 +78,12 @@ namespace
         REQUIRE((document.Objects().size() == 14));
 
         const DocumentRevision revision = document.Revision();
-        REQUIRE(
-            (create.Execute(PrimitiveCreationRequest{PrimitiveId{"primitive.collider.box"}, std::nullopt}).HasError()));
+        REQUIRE((create.Execute(PrimitiveCreationRequest{PrimitiveId{"primitive.collider.box"}, std::nullopt}).HasError()));
         REQUIRE((create.Execute(PrimitiveCreationRequest{PrimitiveId{"primitive.missing"}, std::nullopt}).HasError()));
         REQUIRE((document.Revision() == revision));
     }
 
-    TEST_CASE (
-    "Creation Names Are Unique Per Sibling And Typed Components Survive History"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Creation Names Are Unique Per Sibling And Typed Components Survive History", "[unit][editor]") {
         using namespace Horo;
         using namespace Horo::Editor;
         using namespace Horo::Runtime;
@@ -132,10 +108,7 @@ namespace
         REQUIRE((document.Objects().back().components.camera.has_value()));
     }
 
-    TEST_CASE(
-        "Camera Component Editing Is Validated And Survives History",
-        "[unit][editor]")
-    {
+    TEST_CASE("Camera Component Editing Is Validated And Survives History", "[unit][editor]") {
         using namespace Horo;
         using namespace Horo::Editor;
         using namespace Horo::Runtime;
@@ -144,8 +117,7 @@ namespace
         SceneDocumentCommandExecutor commands{document, history};
         CreateSceneObjectUseCase create{document, commands};
 
-        const auto created =
-            create.Execute({PrimitiveId{"primitive.object.camera"}, std::nullopt});
+        const auto created = create.Execute({PrimitiveId{"primitive.object.camera"}, std::nullopt});
         REQUIRE((created.HasValue()));
         const CameraComponent original = *document.Objects().front().components.camera;
         const DocumentRevision initialRevision = document.Revision();
@@ -155,24 +127,21 @@ namespace
         edited.orthographicHeight = 18.0F;
         edited.nearPlane = 0.25F;
         edited.farPlane = 2400.0F;
-        const auto committed =
-            commands.Execute(SetSceneObjectCameraCommand{created.Value().object, edited});
+        const auto committed = commands.Execute(SetSceneObjectCameraCommand{created.Value().object, edited});
         REQUIRE((committed.HasValue()));
         REQUIRE((committed.Value().committed));
         REQUIRE((committed.Value().kind == DocumentChangeKind::ComponentChanged));
         REQUIRE((document.Revision().value == initialRevision.value + 1));
         REQUIRE((*document.Objects().front().components.camera == edited));
 
-        const auto noOp =
-            commands.Execute(SetSceneObjectCameraCommand{created.Value().object, edited});
+        const auto noOp = commands.Execute(SetSceneObjectCameraCommand{created.Value().object, edited});
         REQUIRE((noOp.HasValue()));
         REQUIRE((!noOp.Value().committed));
         REQUIRE((document.Revision().value == initialRevision.value + 1));
 
         CameraComponent invalid = edited;
         invalid.farPlane = invalid.nearPlane;
-        const auto rejected =
-            commands.Execute(SetSceneObjectCameraCommand{created.Value().object, invalid});
+        const auto rejected = commands.Execute(SetSceneObjectCameraCommand{created.Value().object, invalid});
         REQUIRE((rejected.HasError()));
         REQUIRE((document.Revision().value == initialRevision.value + 1));
         REQUIRE((*document.Objects().front().components.camera == edited));
@@ -183,12 +152,102 @@ namespace
         REQUIRE((*document.Objects().front().components.camera == edited));
     }
 
-    TEST_CASE (
-    "Failed Commands Do Not Mutate Or Advance Revision"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Light Component Editing Is Validated And Survives History", "[unit][editor]") {
+        using namespace Horo;
+        using namespace Horo::Editor;
+        using namespace Horo::Runtime;
+        SceneDocument document;
+        EditorHistory history;
+        SceneDocumentCommandExecutor commands{document, history};
+        CreateSceneObjectUseCase create{document, commands};
+
+        const auto created = create.Execute({PrimitiveId{"primitive.object.light_point"}, std::nullopt});
+        REQUIRE((created.HasValue()));
+        const LightComponent original = *document.Objects().front().components.light;
+        const DocumentRevision initialRevision = document.Revision();
+
+        LightComponent edited = original;
+        edited.kind = LightKind::Spot;
+        edited.color = {0.25F, 0.5F, 0.75F};
+        edited.intensity = 3.5F;
+        edited.range = 42.0F;
+        edited.innerConeRadians = 0.3F;
+        edited.outerConeRadians = 0.8F;
+        const auto committed = commands.Execute(SetSceneObjectLightCommand{created.Value().object, edited});
+        REQUIRE((committed.HasValue()));
+        REQUIRE((committed.Value().committed));
+        REQUIRE((committed.Value().kind == DocumentChangeKind::ComponentChanged));
+        REQUIRE((document.Revision().value == initialRevision.value + 1));
+        REQUIRE((*document.Objects().front().components.light == edited));
+
+        const auto noOp = commands.Execute(SetSceneObjectLightCommand{created.Value().object, edited});
+        REQUIRE((noOp.HasValue()));
+        REQUIRE((!noOp.Value().committed));
+        REQUIRE((document.Revision().value == initialRevision.value + 1));
+
+        LightComponent invalid = edited;
+        invalid.outerConeRadians = invalid.innerConeRadians - 0.1F;
+        const auto rejected = commands.Execute(SetSceneObjectLightCommand{created.Value().object, invalid});
+        REQUIRE((rejected.HasError()));
+        REQUIRE((document.Revision().value == initialRevision.value + 1));
+        REQUIRE((*document.Objects().front().components.light == edited));
+
+        invalid = edited;
+        invalid.color.x = -0.1F;
+        REQUIRE((commands.Execute(SetSceneObjectLightCommand{created.Value().object, invalid}).HasError()));
+        invalid = edited;
+        invalid.outerConeRadians = Math::Pi + 0.1F;
+        REQUIRE((commands.Execute(SetSceneObjectLightCommand{created.Value().object, invalid}).HasError()));
+        REQUIRE((document.Revision().value == initialRevision.value + 1));
+        REQUIRE((*document.Objects().front().components.light == edited));
+
+        REQUIRE((commands.Undo().HasValue()));
+        REQUIRE((*document.Objects().front().components.light == original));
+        REQUIRE((commands.Redo().HasValue()));
+        REQUIRE((*document.Objects().front().components.light == edited));
+    }
+
+    TEST_CASE("Batch Transform Commits Atomically Into One History Entry", "[unit][editor]") {
+        using namespace Horo;
+        using namespace Horo::Editor;
+        SceneDocument document;
+        EditorHistory history;
+        SceneDocumentCommandExecutor commands{document, history};
+
+        const auto first = commands.Execute(CreateSceneObjectCommand{.name = "First"});
+        const auto second = commands.Execute(CreateSceneObjectCommand{.name = "Second"});
+        REQUIRE((first.HasValue() && second.HasValue()));
+
+        const DocumentRevision beforeRevision = document.Revision();
+        const SetSceneObjectTransformsCommand batch{{
+            SceneObjectTransformUpdate{
+                .object = first.Value().object,
+                .localTransform = Math::Transform{.translation = {2.0F, 0.0F, 0.0F}},
+            },
+            SceneObjectTransformUpdate{
+                .object = second.Value().object,
+                .localTransform = Math::Transform{.translation = {0.0F, 3.0F, 0.0F}},
+            },
+        }};
+        const Result<SceneCommandResult> committed = commands.Execute(batch);
+        REQUIRE((committed.HasValue()));
+        REQUIRE((committed.Value().committed));
+        REQUIRE((committed.Value().affectedObjects == std::vector{first.Value().object, second.Value().object}));
+        REQUIRE((document.Revision().value == beforeRevision.value + 1));
+        REQUIRE((document.Objects()[0].localTransform.translation.x == 2.0F));
+        REQUIRE((document.Objects()[1].localTransform.translation.y == 3.0F));
+
+        REQUIRE((commands.Undo().HasValue()));
+        REQUIRE((document.Objects()[0].localTransform.translation == Math::Vec3{}));
+        REQUIRE((document.Objects()[1].localTransform.translation == Math::Vec3{}));
+
+        REQUIRE((commands.Redo().HasValue()));
+        REQUIRE((document.Objects()[0].localTransform.translation.x == 2.0F));
+        REQUIRE((document.Objects()[1].localTransform.translation.y == 3.0F));
+        REQUIRE((!history.CanRedo()));
+    }
+
+    TEST_CASE("Failed Commands Do Not Mutate Or Advance Revision", "[unit][editor]") {
         using namespace Horo::Editor;
         SceneDocument document;
         EditorHistory history;
@@ -203,12 +262,7 @@ namespace
         REQUIRE((!document.IsDirty()));
     }
 
-    TEST_CASE (
-    "Euler Conversion Preserves The Composed Rotation"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Euler Conversion Preserves The Composed Rotation", "[unit][editor]") {
         using namespace Horo::Math;
         const Vec3 authored{0.31F, -0.47F, 0.22F};
         const Quaternion rotation = Quaternion::FromEulerRadians(authored);
@@ -219,18 +273,12 @@ namespace
 
         const Mat4 originalMatrix = Transform{.rotation = rotation}.ToMatrix();
         const Mat4 recoveredMatrix = Transform{.rotation = Quaternion::FromEulerRadians(recovered)}.ToMatrix();
-        for (std::size_t index = 0; index < originalMatrix.values.size(); ++index)
-        {
+        for (std::size_t index = 0; index < originalMatrix.values.size(); ++index) {
             REQUIRE((NearlyEqual(originalMatrix.values[index], recoveredMatrix.values[index])));
         }
     }
 
-    TEST_CASE (
-    "Affine Inverse Restores Transformed Points"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Affine Inverse Restores Transformed Points", "[unit][editor]") {
         using namespace Horo::Math;
         const Mat4 matrix =
             Transform{
@@ -238,7 +286,7 @@ namespace
                 .rotation = Quaternion::FromEulerRadians({0.2F, -0.4F, 0.3F}),
                 .scale = {2.0F, 1.5F, 0.5F},
             }
-            .ToMatrix();
+                .ToMatrix();
         const Horo::Result<Mat4> inverse = TryInverseAffine(matrix);
         REQUIRE((inverse.HasValue()));
         const Vec3 point{0.7F, -1.2F, 2.4F};
@@ -249,12 +297,7 @@ namespace
         REQUIRE((TryInverseAffine(Transform{.scale = {0.0F, 1.0F, 1.0F}}.ToMatrix()).HasError()));
     }
 
-    TEST_CASE (
-    "Commands Create Stable Objects And Track Saved Revision"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Commands Create Stable Objects And Track Saved Revision", "[unit][editor]") {
         using namespace Horo::Editor;
         SceneDocument document;
         EditorHistory history;
@@ -277,12 +320,7 @@ namespace
         REQUIRE((document.Snapshot().objects.front().name == "Hero Box"));
     }
 
-    TEST_CASE (
-    "Unchanged Transform Does Not Create A History Entry"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Unchanged Transform Does Not Create A History Entry", "[unit][editor]") {
         using namespace Horo::Editor;
         SceneDocument document;
         EditorHistory history;
@@ -293,9 +331,7 @@ namespace
         const SceneDocumentSnapshot before = document.Snapshot();
 
         const auto unchanged =
-            commands.Execute(SetSceneObjectTransformCommand{
-                created.Value().object, before.objects.front().localTransform
-            });
+            commands.Execute(SetSceneObjectTransformCommand{created.Value().object, before.objects.front().localTransform});
         REQUIRE((unchanged.HasValue()));
         REQUIRE((!unchanged.Value().committed));
         REQUIRE((document.Revision() == before.revision));
@@ -303,12 +339,7 @@ namespace
         REQUIRE((!history.CanUndo()));
     }
 
-    TEST_CASE (
-    "Extraction Resolves Hierarchy Into World Matrices"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Extraction Resolves Hierarchy Into World Matrices", "[unit][editor]") {
         using namespace Horo;
         using namespace Horo::Editor;
         SceneDocument document;
@@ -329,8 +360,7 @@ namespace
         REQUIRE((child.HasValue()));
 
         const auto runtimeScene = MakeRuntimeScene(document);
-        const auto extracted =
-            ExtractEditorViewportScene(runtimeScene->View(), document.Revision(), EditorViewportCamera{}, meshCache);
+        const auto extracted = ExtractEditorViewportScene(runtimeScene->View(), document.Revision(), EditorViewportCamera{}, meshCache);
         REQUIRE((extracted.HasValue()));
         REQUIRE((extracted.Value().documentRevision == document.Revision()));
         REQUIRE((extracted.Value().instances.size() == 1));
@@ -351,40 +381,116 @@ namespace
             .object = parent.Value().object,
             .localTransform = Math::Transform{.translation = {5.0F, 0.0F, 0.0F}},
         };
-        REQUIRE((ApplyEditorViewportTransformPreview(runtimeScene->View(), preview, previewScene).HasValue()));
+        const std::array previews{preview};
+        REQUIRE((ApplyEditorViewportTransformPreview(runtimeScene->View(), previews, previewScene).HasValue()));
         const Math::Vec3 previewOrigin = Math::TransformPoint(previewScene.instances.front().localToWorld, {});
         REQUIRE((NearlyEqual(previewOrigin.x, 5.0F) && NearlyEqual(previewOrigin.y, 3.0F)));
         REQUIRE((document.Revision() == extracted.Value().documentRevision));
 
-        REQUIRE((ApplyEditorViewportTransformPreview(runtimeScene->View(), {}, previewScene).HasValue()));
+        const std::array hierarchyPreviews{
+            preview,
+            SceneObjectTransformPreview{
+                .object = child.Value().object,
+                .localTransform = Math::Transform{.translation = {0.0F, 7.0F, 0.0F}},
+            },
+        };
+        REQUIRE((ApplyEditorViewportTransformPreview(runtimeScene->View(), hierarchyPreviews, previewScene).HasValue()));
+        const Math::Vec3 hierarchyPreviewOrigin = Math::TransformPoint(previewScene.instances.front().localToWorld, {});
+        REQUIRE((NearlyEqual(hierarchyPreviewOrigin.x, 5.0F) && NearlyEqual(hierarchyPreviewOrigin.y, 7.0F)));
+
+        const std::span<const SceneObjectTransformPreview> noPreviews;
+        REQUIRE((ApplyEditorViewportTransformPreview(runtimeScene->View(), noPreviews, previewScene).HasValue()));
         const Math::Vec3 restoredOrigin = Math::TransformPoint(previewScene.instances.front().localToWorld, {});
         REQUIRE((NearlyEqual(restoredOrigin.x, 2.0F) && NearlyEqual(restoredOrigin.y, 3.0F)));
     }
 
-    TEST_CASE (
-    "Delete Removes Complete Subtree"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Extraction Produces World Space Lights And Applies Transform Preview", "[unit][editor]") {
+        using namespace Horo;
+        using namespace Horo::Editor;
+        SceneDocument document;
+        EditorHistory history;
+        SceneDocumentCommandExecutor commands{document, history};
+        Runtime::PrimitiveMeshCache meshCache;
+
+        const auto parent = commands.Execute(CreateSceneObjectCommand{
+            .name = "Light Rig",
+            .localTransform = Math::Transform{.translation = {2.0F, 0.0F, 0.0F}},
+        });
+        REQUIRE((parent.HasValue()));
+        SceneObjectComponentSet components;
+        components.light = Runtime::LightComponent{
+            .kind = Runtime::LightKind::Spot,
+            .color = {0.5F, 0.75F, 1.0F},
+            .intensity = 3.0F,
+            .range = 24.0F,
+            .innerConeRadians = 0.25F,
+            .outerConeRadians = 0.75F,
+        };
+        const auto lightObject = commands.Execute(CreateSceneObjectCommand{
+            .name = "Spot",
+            .parent = parent.Value().object,
+            .localTransform =
+                Math::Transform{
+                    .translation = {0.0F, 3.0F, 0.0F},
+                    .rotation = Math::Quaternion::FromAxisAngle({0.0F, 1.0F, 0.0F}, Math::Pi * 0.5F),
+                },
+            .components = components,
+        });
+        REQUIRE((lightObject.HasValue()));
+
+        const auto runtimeScene = MakeRuntimeScene(document);
+        const auto extracted = ExtractEditorViewportScene(runtimeScene->View(), document.Revision(), EditorViewportCamera{}, meshCache);
+        REQUIRE((extracted.HasValue()));
+        REQUIRE((extracted.Value().lights.size() == 1));
+        REQUIRE((extracted.Value().lightObjects == std::vector{lightObject.Value().object}));
+        const Render::RenderLight &light = extracted.Value().lights.front();
+        REQUIRE((light.kind == Render::RenderLightKind::Spot));
+        REQUIRE((Math::NearlyEqual(light.position, Math::Vec3{2.0F, 3.0F, 0.0F})));
+        REQUIRE((NearlyEqual(light.innerConeCosine, std::cos(0.25F))));
+        REQUIRE((NearlyEqual(light.outerConeCosine, std::cos(0.75F))));
+        REQUIRE((light.IsValid()));
+
+        EditorViewportSceneSnapshot preview = extracted.Value();
+        const std::array previews{
+            SceneObjectTransformPreview{
+                .object = parent.Value().object,
+                .localTransform = Math::Transform{.translation = {5.0F, 0.0F, 0.0F}},
+            },
+            SceneObjectTransformPreview{
+                .object = lightObject.Value().object,
+                .localTransform = Math::Transform{.translation = {0.0F, 4.0F, 0.0F}},
+            },
+        };
+        REQUIRE((ApplyEditorViewportTransformPreview(runtimeScene->View(), previews, preview).HasValue()));
+        REQUIRE((Math::NearlyEqual(preview.lights.front().position, Math::Vec3{5.0F, 4.0F, 0.0F})));
+        REQUIRE((Math::NearlyEqual(preview.lights.front().direction, Math::Vec3{0.0F, 0.0F, -1.0F})));
+
+        Runtime::LightComponent previewComponent = *components.light;
+        previewComponent.intensity = 9.0F;
+        previewComponent.range = 40.0F;
+        previewComponent.innerConeRadians = 0.4F;
+        const SceneObjectLightPreview lightPreview{lightObject.Value().object, previewComponent};
+        REQUIRE((ApplyEditorViewportLightPreview(runtimeScene->View(), &lightPreview, preview).HasValue()));
+        REQUIRE((NearlyEqual(preview.lights.front().intensity, 9.0F)));
+        REQUIRE((NearlyEqual(preview.lights.front().range, 40.0F)));
+        REQUIRE((NearlyEqual(preview.lights.front().innerConeCosine, std::cos(0.4F))));
+        REQUIRE((ApplyEditorViewportLightPreview(runtimeScene->View(), nullptr, preview).HasValue()));
+        REQUIRE((NearlyEqual(preview.lights.front().intensity, components.light->intensity)));
+    }
+
+    TEST_CASE("Delete Removes Complete Subtree", "[unit][editor]") {
         using namespace Horo::Editor;
         SceneDocument document;
         EditorHistory history;
         SceneDocumentCommandExecutor commands{document, history};
         const auto parent = commands.Execute(CreateSceneObjectCommand{.name = "Parent"});
         REQUIRE((parent.HasValue()));
-        REQUIRE(
-            (commands.Execute(CreateSceneObjectCommand{.name = "Child", .parent = parent.Value().object}).HasValue()));
+        REQUIRE((commands.Execute(CreateSceneObjectCommand{.name = "Child", .parent = parent.Value().object}).HasValue()));
         REQUIRE((commands.Execute(DeleteSceneObjectCommand{parent.Value().object}).HasValue()));
         REQUIRE((document.Snapshot().objects.empty()));
     }
 
-    TEST_CASE (
-    "Undo Redo Preserve Monotonic Revision And Saved State Identity"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Undo Redo Preserve Monotonic Revision And Saved State Identity", "[unit][editor]") {
         using namespace Horo::Editor;
         SceneDocument document;
         EditorHistory history;
@@ -416,12 +522,7 @@ namespace
         REQUIRE((document.Snapshot().objects.front().name == "Renamed"));
     }
 
-    TEST_CASE (
-    "Undo Delete Restores Subtree And New Edit Clears Redo"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Undo Delete Restores Subtree And New Edit Clears Redo", "[unit][editor]") {
         using namespace Horo::Editor;
         SceneDocument document;
         EditorHistory history;
@@ -445,12 +546,7 @@ namespace
         REQUIRE((redo.ErrorValue().code.Value() == "scene_document.nothing_to_redo"));
     }
 
-    TEST_CASE (
-    "History Evicts Oldest Transactions Without Changing Current Document"
-    ,
-    "[unit][editor][history]"
-    )
-    {
+    TEST_CASE("History Evicts Oldest Transactions Without Changing Current Document", "[unit][editor][history]") {
         using namespace Horo::Editor;
         SceneDocument document;
         EditorHistory history;
@@ -458,15 +554,12 @@ namespace
         const auto created = commands.Execute(CreateSceneObjectCommand{.name = "Initial"});
         REQUIRE((created.HasValue()));
 
-        for (std::size_t index = 0; index < 257; ++index)
-        {
-            REQUIRE((commands.Execute(
-                RenameSceneObjectCommand{created.Value().object, "Name " + std::to_string(index)}).HasValue()));
+        for (std::size_t index = 0; index < 257; ++index) {
+            REQUIRE((commands.Execute(RenameSceneObjectCommand{created.Value().object, "Name " + std::to_string(index)}).HasValue()));
         }
         REQUIRE((document.Snapshot().objects.front().name == "Name 256"));
 
-        for (std::size_t index = 0; index < 256; ++index)
-        {
+        for (std::size_t index = 0; index < 256; ++index) {
             REQUIRE((commands.Undo().HasValue()));
         }
         REQUIRE((document.Snapshot().objects.front().name == "Name 0"));
@@ -478,38 +571,30 @@ namespace
         REQUIRE((document.Snapshot().objects.front().name == "Name 0"));
     }
 
-    TEST_CASE (
-    "Extraction Uses All Primitive Meshes And Deduplicates Descriptors"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Extraction Uses All Primitive Meshes And Deduplicates Descriptors", "[unit][editor]") {
         using namespace Horo;
         using namespace Horo::Editor;
-        constexpr std::array types{
-            Runtime::PrimitiveMeshType::Box, Runtime::PrimitiveMeshType::Sphere,
-            Runtime::PrimitiveMeshType::Capsule, Runtime::PrimitiveMeshType::Cylinder,
-            Runtime::PrimitiveMeshType::Cone, Runtime::PrimitiveMeshType::Plane,
-            Runtime::PrimitiveMeshType::Quad
-        };
+        constexpr std::array types{Runtime::PrimitiveMeshType::Box,     Runtime::PrimitiveMeshType::Sphere,
+                                   Runtime::PrimitiveMeshType::Capsule, Runtime::PrimitiveMeshType::Cylinder,
+                                   Runtime::PrimitiveMeshType::Cone,    Runtime::PrimitiveMeshType::Plane,
+                                   Runtime::PrimitiveMeshType::Quad};
         SceneDocument document;
         EditorHistory history;
         SceneDocumentCommandExecutor commands{document, history};
-        for (std::size_t index = 0; index < types.size(); ++index)
-        {
+        for (std::size_t index = 0; index < types.size(); ++index) {
             REQUIRE((commands
-                .Execute(CreateSceneObjectCommand{
-                    .name = "Primitive " + std::to_string(index),
-                    .primitiveMesh = Runtime::PrimitiveMeshDescriptor::Defaults(types[index]),
-                    })
-                .HasValue()));
+                         .Execute(CreateSceneObjectCommand{
+                             .name = "Primitive " + std::to_string(index),
+                             .primitiveMesh = Runtime::PrimitiveMeshDescriptor::Defaults(types[index]),
+                         })
+                         .HasValue()));
         }
         REQUIRE((commands
-            .Execute(CreateSceneObjectCommand{
-                .name = "Second Box",
-                .primitiveMesh = Runtime::PrimitiveMeshDescriptor::Defaults(Runtime::PrimitiveMeshType::Box),
-                })
-            .HasValue()));
+                     .Execute(CreateSceneObjectCommand{
+                         .name = "Second Box",
+                         .primitiveMesh = Runtime::PrimitiveMeshDescriptor::Defaults(Runtime::PrimitiveMeshType::Box),
+                     })
+                     .HasValue()));
         Runtime::PrimitiveMeshCache meshCache;
         const auto runtimeScene = MakeRuntimeScene(document);
         const auto extracted = ExtractEditorViewportScene(runtimeScene->View(), document.Revision(), {}, meshCache);
@@ -521,19 +606,13 @@ namespace
         REQUIRE((extracted.Value().View().IsValid()));
     }
 
-    TEST_CASE (
-    "Primitive Parameters Survive Snapshot Duplicate And History"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Primitive Parameters Survive Snapshot Duplicate And History", "[unit][editor]") {
         using namespace Horo;
         using namespace Horo::Editor;
         SceneDocument document;
         EditorHistory history;
         SceneDocumentCommandExecutor commands{document, history};
-        Runtime::PrimitiveMeshDescriptor sphere =
-            Runtime::PrimitiveMeshDescriptor::Defaults(Runtime::PrimitiveMeshType::Sphere);
+        Runtime::PrimitiveMeshDescriptor sphere = Runtime::PrimitiveMeshDescriptor::Defaults(Runtime::PrimitiveMeshType::Sphere);
         sphere.parameters = Runtime::SphereMeshParameters{.radius = 1.25F, .slices = 12, .stacks = 6};
         const auto created = commands.Execute(CreateSceneObjectCommand{.name = "Sphere", .primitiveMesh = sphere});
         REQUIRE((created.HasValue()));
@@ -549,4 +628,4 @@ namespace
         snapshot = document.Snapshot();
         REQUIRE((snapshot.objects.size() == 2 && snapshot.objects[1].primitiveMesh == sphere));
     }
-} // namespace
+}  // namespace

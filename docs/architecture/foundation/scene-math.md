@@ -44,6 +44,14 @@ decomposition preserves valid negative scale where representable. When parented
 non-uniform scale introduces shear, decomposition returns the deterministic
 nearest representable TRS; singular or non-finite input is rejected.
 
+Editor transform-gizmo evaluation is a UI-independent consumer of these
+contracts. A drag begins only after its local/world transforms, parent inverse,
+axis, and pointer scale are validated. Local and world Move/Rotate/Scale
+evaluation returns a typed result. Negative authored scale signs are preserved
+when a world-space result is projected back to local TRS. Singular parents and
+failed decomposition cancel the transient preview instead of falling back to
+identity axes or committing a partial transform.
+
 ## Camera Projection
 
 `Runtime::CameraProjection` is the shared authored/editor projection enum.
@@ -53,9 +61,12 @@ contract. `ClipDepthRange::NegativeOneToOne` maps near/far to `-1/1` for OpenGL.
 infinite-far projections are not part of this contract.
 
 Renderer MVP construction, CPU picking, gizmo projection, and screen-ray
-construction consume the same view-projection matrix. Perspective rays originate
-at the camera position. Orthographic rays originate at the applicable near-plane
-point.
+construction consume the same explicit clip-depth range. The active editor
+viewport adapter supplies that typed value: OpenGL reports
+`NegativeOneToOne`, while Metal and Vulkan report `ZeroToOne`. Editor consumers
+must not infer the convention from a backend name or silently assume OpenGL.
+Perspective rays originate at the camera position. Orthographic rays originate
+at the applicable near-plane point.
 
 ## Bounds And Editor Viewport
 
@@ -71,10 +82,18 @@ narrower horizontal/vertical field of view; orthographic framing adjusts vertica
 height. Missing or non-renderable selection is a no-op and creates no history or
 document revision.
 
+Editor world grids use the same camera units and XZ ground plane as scene
+transforms. Adaptive minor spacing is selected from a stable `1/2/5 × 10ⁿ`
+sequence using visible world height and viewport pixel height. Grid generation
+is bounded and allocation-free on the frame path; it never changes scene,
+selection, picking, or document state.
+
 ## Verification
 
 Tests cover vector and quaternion validity, `T * R * S`, hierarchy composition,
 affine/general inverse, negative and non-uniform scale, shear projection, both
 clip-depth conventions, project/unproject, perspective and orthographic rays,
 ray-plane and ray-AABB behavior, transformed bounds, focus framing, scale-aware
-navigation, picking, and transform-gizmo preview/commit/cancel behavior.
+navigation, picking, transform-gizmo preview/commit/cancel behavior, and
+UI-independent gizmo evaluation under singular, negative-scale, and rotated
+non-uniform parents.

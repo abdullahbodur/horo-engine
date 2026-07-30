@@ -10,6 +10,7 @@
 #include <cstring>
 #include <format>
 #include <imgui.h>
+#include <numbers>
 #include <string>
 #include <vector>
 
@@ -1498,7 +1499,7 @@ namespace Horo::Editor::Ui {
         return result;
     }
 
-    void DrawPropSection(const char *label, const Theme::Fonts &fonts) {
+    bool DrawPropSection(const char *label, const Theme::Fonts &fonts, bool removable) {
         ImDrawList *dl = ImGui::GetWindowDrawList();
         const ImVec2 pos = ImGui::GetCursorScreenPos();
         const float w = ImGui::GetContentRegionAvail().x;
@@ -1510,7 +1511,21 @@ namespace Horo::Editor::Ui {
 
         dl->AddText(fonts.sansCompact, fonts.sansCompact->FontSize, ImVec2(pos.x + 14.0f, pos.y + 8.0f), Theme::U32(Theme::Muted()), label);
 
+        bool removeRequested = false;
+        if (removable) {
+            ImGui::SetCursorScreenPos(ImVec2(pos.x + w - 24.0f, pos.y + 6.0f));
+            ImGui::PushID(label);
+            if (ImGui::InvisibleButton("##remove", ImVec2(16.0f, 16.0f))) {
+                removeRequested = true;
+            }
+            const bool hovered = ImGui::IsItemHovered();
+            ImU32 iconColor = Theme::U32(hovered ? Theme::Err() : Theme::Muted());
+            DrawEditorIcon(dl, "action.delete", ImVec2(pos.x + w - 24.0f, pos.y + 6.0f), ImVec2(16.0f, 16.0f), iconColor);
+            ImGui::PopID();
+        }
+
         ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + h));
+        return removeRequested;
     }
 
     void DrawPropRow(const char *label, const char *value, const Theme::Fonts &fonts) {
@@ -1559,6 +1574,23 @@ namespace Horo::Editor::Ui {
     /** @copydoc EndContextMenu */
     void EndContextMenu() {
         ImGui::EndPopup();
+    }
+
+    /** @copydoc BeginMenuPopup */
+    bool BeginMenuPopup(const char *id) {
+        ImGui::SetNextWindowSizeConstraints({220.0F, 0.0F}, {340.0F, FLT_MAX});
+        PushContextPopupWindowStyle();
+        const bool open = ImGui::BeginPopup(id);
+        if (!open) {
+            PopContextPopupWindowStyle();
+        }
+        return open;
+    }
+
+    /** @copydoc EndMenuPopup */
+    void EndMenuPopup() {
+        ImGui::EndPopup();
+        PopContextPopupWindowStyle();
     }
 
     /** @copydoc ContextMenuItem */
@@ -1640,6 +1672,18 @@ namespace Horo::Editor::Ui {
             drawList->AddTriangleFilled({x + 1.0F, center.y}, {x + 6.0F, y + 4.0F}, {x + 6.0F, y + h - 4.0F}, color);
             drawList->AddCircle(center, w * 0.30F, color, 16, 1.3F);
             drawList->AddCircle(center, w * 0.48F, color, 16, 1.3F);
+        } else if (iconToken == "primitive.light_spot") {
+            drawList->AddCircleFilled({x + w * 0.30F, center.y}, w * 0.16F, color, 14);
+            drawList->AddQuad({x + w * 0.36F, y + h * 0.34F}, {x + w - 1.0F, y + 2.0F},
+                              {x + w - 1.0F, y + h - 2.0F}, {x + w * 0.36F, y + h * 0.66F}, color, 1.4F);
+        } else if (iconToken == "primitive.light_directional") {
+            drawList->AddCircle(center, w * 0.22F, color, 16, 1.4F);
+            for (int ray = 0; ray < 4; ++ray) {
+                const float angle = static_cast<float>(ray) * std::numbers::pi_v<float> * 0.5F;
+                const ImVec2 direction{std::cos(angle), std::sin(angle)};
+                drawList->AddLine({center.x + direction.x * w * 0.32F, center.y + direction.y * h * 0.32F},
+                                  {center.x + direction.x * w * 0.48F, center.y + direction.y * h * 0.48F}, color, 1.3F);
+            }
         } else if (iconToken.starts_with("primitive.light") || iconToken == "create.group.lights") {
             drawList->AddCircle(center, w * 0.27F, color, 16, 1.4F);
             drawList->AddLine({center.x, y}, {center.x, y + 3.0F}, color, 1.2F);
@@ -1716,22 +1760,72 @@ namespace Horo::Editor::Ui {
         return result;
     }
 
-    /** @copydoc DrawFloat3PropRow */
-    Float3PropertyEditResult DrawFloat3PropRow(const char *label, const char *id, std::array<float, 3> &value, const Theme::Fonts &fonts,
-                                               const float speed) {
+    /** @copydoc DrawColor3PropRow */
+    PropertyEditResult DrawColor3PropRow(const char *label, const char *id, std::array<float, 3> &value, const Theme::Fonts &fonts,
+                                         const bool error) {
         const PropertyRowLayout layout = BeginPropertyRow(label, fonts);
         ImGui::SetCursorScreenPos({layout.controlX, layout.position.y + 3.0F});
         ImGui::PushID(id);
         ImGui::PushItemWidth(layout.controlWidth);
         PushControlStyle();
+        if (error) {
+            ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::ErrSoft());
+            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::ErrSoft());
+            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::ErrSoft());
+            ImGui::PushStyleColor(ImGuiCol_Border, Theme::Err());
+        }
+        PropertyEditResult result;
+        {
+            Theme::ScopedTextStyle textStyle(fonts.sansCompact, 14.0F, Theme::FontPx::SansCompact);
+            constexpr ImGuiColorEditFlags flags = ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_Float | ImGuiColorEditFlags_DisplayRGB |
+                                                  ImGuiColorEditFlags_PickerHueWheel;
+            result.changed = ImGui::ColorEdit3("##value", value.data(), flags);
+            result.committed = ImGui::IsItemDeactivatedAfterEdit();
+        }
+        if (error)
+            ImGui::PopStyleColor(4);
+        PopControlStyle();
+        ImGui::PopItemWidth();
+        ImGui::PopID();
+        EndPropertyRow(layout);
+        return result;
+    }
+
+    /** @copydoc DrawFloat3PropRow */
+    Float3PropertyEditResult DrawFloat3PropRow(const char *label, const char *id, std::array<float, 3> &value, const Theme::Fonts &fonts,
+                                               const float speed, const std::array<bool, 3> &mixed) {
+        const PropertyRowLayout layout = BeginPropertyRow(label, fonts);
+        ImGui::SetCursorScreenPos({layout.controlX, layout.position.y + 3.0F});
+        ImGui::PushID(id);
+        PushControlStyle();
         Float3PropertyEditResult result;
         {
             Theme::ScopedTextStyle textStyle(fonts.sansCompact, 14.0F, Theme::FontPx::SansCompact);
-            result.changed = ImGui::DragFloat3("##value", value.data(), speed, 0.0F, 0.0F, "%.2f");
-            result.committed = ImGui::IsItemDeactivatedAfterEdit();
+            constexpr float axisGap = 3.0F;
+            const float axisWidth = std::max(1.0F, (layout.controlWidth - axisGap * 2.0F) / 3.0F);
+            for (std::size_t axis = 0; axis < value.size(); ++axis) {
+                if (axis != 0)
+                    ImGui::SameLine(0.0F, axisGap);
+                ImGui::PushID(static_cast<int>(axis));
+                ImGui::SetNextItemWidth(axisWidth);
+                result.changedAxes[axis] = ImGui::DragFloat("##value", &value[axis], speed, 0.0F, 0.0F, "%.2f");
+                result.changed = result.changed || result.changedAxes[axis];
+                result.committed = result.committed || ImGui::IsItemDeactivatedAfterEdit();
+                if (mixed[axis] && !result.changedAxes[axis] && !ImGui::IsItemActive()) {
+                    const ImVec2 minimum = ImGui::GetItemRectMin();
+                    const ImVec2 maximum = ImGui::GetItemRectMax();
+                    ImDrawList *drawList = ImGui::GetWindowDrawList();
+                    drawList->AddRectFilled(minimum, maximum, ImGui::GetColorU32(ImGuiCol_FrameBg), ImGui::GetStyle().FrameRounding);
+                    drawList->AddRect(minimum, maximum, ImGui::GetColorU32(ImGuiCol_Border), ImGui::GetStyle().FrameRounding);
+                    const ImVec2 textSize = ImGui::CalcTextSize("—");
+                    drawList->AddText({minimum.x + (maximum.x - minimum.x - textSize.x) * 0.5F,
+                                       minimum.y + (maximum.y - minimum.y - textSize.y) * 0.5F},
+                                      ImGui::GetColorU32(Theme::Dim()), "—");
+                }
+                ImGui::PopID();
+            }
         }
         PopControlStyle();
-        ImGui::PopItemWidth();
         ImGui::PopID();
         EndPropertyRow(layout);
         return result;

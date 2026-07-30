@@ -33,6 +33,20 @@ namespace Horo::Editor {
      */
     [[nodiscard]] bool IsValidCameraComponent(const Runtime::CameraComponent &camera) noexcept;
 
+    /**
+     * @brief Reports whether authored light values satisfy document and runtime conversion constraints.
+     * @param light Light component value to validate.
+     * @return True when kind, color, intensity, range, and cone values are valid.
+     */
+    [[nodiscard]] bool IsValidLightComponent(const Runtime::LightComponent &light) noexcept;
+
+    /**
+     * @brief Reports whether authored audio source values satisfy document constraints.
+     * @param audioSource Audio source component value to validate.
+     * @return True when gain is finite and non-negative.
+     */
+    [[nodiscard]] bool IsValidAudioSourceComponent(const Runtime::AudioSourceComponent &audioSource) noexcept;
+
     /** @brief Stable identity of an authored scene object within one document session. */
     struct SceneObjectId {
         std::uint64_t value{0};
@@ -101,6 +115,14 @@ namespace Horo::Editor {
         [[nodiscard]] constexpr bool operator==(const SceneObjectTransformPreview &) const noexcept = default;
     };
 
+    /** @brief One transient Light-component override keyed by stable scene-object identity. */
+    struct SceneObjectLightPreview {
+        SceneObjectId object;
+        Runtime::LightComponent light;
+
+        [[nodiscard]] constexpr bool operator==(const SceneObjectLightPreview &) const noexcept = default;
+    };
+
     /** @brief Semantic category of one committed document transition. */
     enum class DocumentChangeKind : std::uint8_t {
         Created,
@@ -141,11 +163,68 @@ namespace Horo::Editor {
         Math::Transform localTransform;
     };
 
+    /** @brief One object-local transform replacement inside a batch edit. */
+    struct SceneObjectTransformUpdate {
+        SceneObjectId object;
+        Math::Transform localTransform;
+
+        [[nodiscard]] constexpr bool operator==(const SceneObjectTransformUpdate &) const noexcept = default;
+    };
+
+    /**
+     * @brief Typed request to atomically replace multiple object-local transforms.
+     *
+     * The executor validates the complete set before mutation and records at most
+     * one semantic history entry for the batch.
+     */
+    struct SetSceneObjectTransformsCommand {
+        std::vector<SceneObjectTransformUpdate> updates;
+    };
+
     /** @brief Typed request to replace an existing core camera component. */
     struct SetSceneObjectCameraCommand {
         SceneObjectId object;
         Runtime::CameraComponent camera;
     };
+
+    /** @brief Typed request to replace an existing core light component. */
+    struct SetSceneObjectLightCommand {
+        SceneObjectId object;
+        Runtime::LightComponent light;
+    };
+
+    /** @brief Typed request to replace an existing trigger volume component. */
+    struct SetSceneObjectTriggerVolumeCommand {
+        SceneObjectId object;
+        Runtime::TriggerVolumeComponent triggerVolume;
+    };
+
+    /** @brief Typed request to replace an existing audio source component. */
+    struct SetSceneObjectAudioSourceCommand {
+        SceneObjectId object;
+        Runtime::AudioSourceComponent audioSource;
+    };
+
+    /** @brief Types of optional authored components on a scene object. */
+    enum class ComponentType : std::uint8_t {
+        Camera,
+        Light,
+        TriggerVolume,
+        AudioSource
+    };
+
+    /** @brief Typed request to add a default-initialized component to an object. */
+    struct AddSceneObjectComponentCommand {
+        SceneObjectId object;
+        ComponentType type;
+    };
+
+    /** @brief Typed request to remove a component from an object. */
+    struct RemoveSceneObjectComponentCommand {
+        SceneObjectId object;
+        ComponentType type;
+    };
+
 
     /** @brief Typed request to duplicate one object without duplicating its children. */
     struct DuplicateSceneObjectCommand {
@@ -283,8 +362,22 @@ namespace Horo::Editor {
         /** @brief Validates and atomically commits a transform command. */
         [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneObjectTransformCommand &command);
 
+        /** @brief Validates and atomically commits one batch transform command. */
+        [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneObjectTransformsCommand &command);
+
         /** @brief Validates and atomically commits an existing camera component. */
         [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneObjectCameraCommand &command);
+
+        /** @brief Validates and atomically commits an existing light component. */
+        [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneObjectLightCommand &command);
+
+        /** @brief Validates and atomically commits an existing trigger volume component. */
+        [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneObjectTriggerVolumeCommand &command);
+
+        /** @brief Validates and atomically commits an existing audio source component. */
+        [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneObjectAudioSourceCommand &command);
+        [[nodiscard]] Result<SceneCommandResult> Execute(const AddSceneObjectComponentCommand &command);
+        [[nodiscard]] Result<SceneCommandResult> Execute(const RemoveSceneObjectComponentCommand &command);
 
         /** @brief Validates and atomically commits a shallow duplicate-object command. */
         [[nodiscard]] Result<SceneCommandResult> Execute(const DuplicateSceneObjectCommand &command);

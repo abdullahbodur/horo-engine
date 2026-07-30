@@ -846,7 +846,8 @@ class EditorRuntimeParticipant final : public Runtime::RuntimeLifecycleParticipa
                     .extent = {viewportExtent.width, viewportExtent.height},
                     .scene = Render::RenderSceneView{.camera = ToRenderCamera(viewportScene.camera),
                                                      .meshResources = viewportScene.meshResources,
-                                                     .instances = viewportScene.instances}}};
+                                                     .instances = viewportScene.instances,
+                                                     .lights = viewportScene.lights}}};
         }
         passes_[passCount_++] = Render::RenderPassDescriptor{
             .id = Render::RenderPassId{2},

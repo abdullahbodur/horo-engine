@@ -436,6 +436,17 @@ if (HORO_BUILD_EDITOR_GUI)
             HoroEngine::Gui
             HoroThirdParty::ImGui
     )
+    add_executable(HoroTransformGizmoMathTests
+            unit/editor/TransformGizmoMathTests.cpp
+    )
+    target_compile_features(HoroTransformGizmoMathTests PRIVATE cxx_std_20)
+    target_link_libraries(HoroTransformGizmoMathTests
+            PRIVATE
+            HoroEngine::Gui
+    )
+    horo_register_catch_test(HoroTransformGizmoMathTests
+            LABELS "unit;editor;viewport;gizmo"
+    )
 endif ()
 
 add_executable(HoroDataBusTests

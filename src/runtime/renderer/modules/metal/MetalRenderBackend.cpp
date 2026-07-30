@@ -6,59 +6,43 @@
 #include <string>
 #include <utility>
 
-namespace Horo::Render
-{
-    namespace
-    {
-        [[nodiscard]] Error MakeMetalError(const ErrorCodeDescriptor &descriptor, std::string message)
-        {
+namespace Horo::Render {
+    namespace {
+        [[nodiscard]] Error MakeMetalError(const ErrorCodeDescriptor &descriptor, std::string message) {
             return MakeError(descriptor, std::move(message));
         }
 
-        struct MetalPresentationLease
-        {
+        struct MetalPresentationLease {
             bool claimed{false};
         };
 
-        class MetalRenderBackend final : public IRenderBackend
-        {
+        class MetalRenderBackend final : public IRenderBackend {
         public:
             MetalRenderBackend(std::unique_ptr<Detail::IMetalRuntime> runtime,
                                std::shared_ptr<MetalPresentationLease> presentationLease) noexcept
-                : runtime_(std::move(runtime)), presentationLease_(std::move(presentationLease))
-            {
-            }
+                : runtime_(std::move(runtime)), presentationLease_(std::move(presentationLease)) {}
 
-            ~MetalRenderBackend() override
-            {
+            ~MetalRenderBackend() override {
                 Shutdown();
             }
 
             /** @copydoc IRenderBackend::Initialize */
-            Result<void> Initialize(const RenderBackendConfig& config) override
-            {
-                if (initialized_)
-                {
+            Result<void> Initialize(const RenderBackendConfig &config) override {
+                if (initialized_) {
                     return Result<void>::Failure(
-                        MakeMetalError(MetalBackendErrors::AlreadyInitialized,
-                                       "Renderer backend is already initialized."));
+                        MakeMetalError(MetalBackendErrors::AlreadyInitialized, "Renderer backend is already initialized."));
                 }
-                if (!config.IsValid())
-                {
+                if (!config.IsValid()) {
                     return Result<void>::Failure(
                         MakeMetalError(MetalBackendErrors::InvalidConfig, "Metal backend configuration is invalid."));
                 }
-                if (config.maxFramesInFlight < 2 || config.maxFramesInFlight > 3)
-                {
-                    return Result<void>::Failure(
-                        MakeMetalError(MetalBackendErrors::UnsupportedFramesInFlight,
-                                       "Metal interactive presentation supports two or three frames in flight."));
+                if (config.maxFramesInFlight < 2 || config.maxFramesInFlight > 3) {
+                    return Result<void>::Failure(MakeMetalError(MetalBackendErrors::UnsupportedFramesInFlight,
+                                                                "Metal interactive presentation supports two or three frames in flight."));
                 }
-                if (presentationLease_->claimed)
-                {
-                    return Result<void>::Failure(
-                        MakeMetalError(MetalBackendErrors::PresentationInUse,
-                                       "Metal presentation attachment is already owned by another backend."));
+                if (presentationLease_->claimed) {
+                    return Result<void>::Failure(MakeMetalError(MetalBackendErrors::PresentationInUse,
+                                                                "Metal presentation attachment is already owned by another backend."));
                 }
 
                 presentationLease_->claimed = true;
@@ -71,8 +55,7 @@ namespace Horo::Render
                     .maxFramesInFlight = config.maxFramesInFlight,
                     .presentMode = config.presentMode,
                 });
-                if (created.HasError())
-                {
+                if (created.HasError()) {
                     runtime_->Shutdown();
                     runtimeInitialized_ = false;
                     ReleasePresentationLease();
@@ -84,38 +67,31 @@ namespace Horo::Render
             }
 
             /** @copydoc IRenderBackend::Capabilities */
-            const RenderBackendCapabilities& Capabilities() const noexcept override
-            {
+            const RenderBackendCapabilities &Capabilities() const noexcept override {
                 return capabilities_;
             }
 
             /** @copydoc IRenderBackend::BeginFrame */
-            Result<FrameToken> BeginFrame(const FrameDescriptor& descriptor) override
-            {
-                if (!initialized_)
-                {
+            Result<FrameToken> BeginFrame(const FrameDescriptor &descriptor) override {
+                if (!initialized_) {
                     return Result<FrameToken>::Failure(
                         MakeMetalError(MetalBackendErrors::NotInitialized, "Renderer backend is not initialized."));
                 }
-                if (frameActive_)
-                {
+                if (frameActive_) {
                     return Result<FrameToken>::Failure(
                         MakeMetalError(MetalBackendErrors::FrameAlreadyActive, "A renderer frame is already active."));
                 }
-                if (descriptor.frameNumber == 0 || !descriptor.outputExtent.IsValid())
-                {
-                    return Result<FrameToken>::Failure(MakeMetalError(MetalBackendErrors::InvalidFrameDescriptor,
-                                                                      "Frame number and output extent must be valid."));
+                if (descriptor.frameNumber == 0 || !descriptor.outputExtent.IsValid()) {
+                    return Result<FrameToken>::Failure(
+                        MakeMetalError(MetalBackendErrors::InvalidFrameDescriptor, "Frame number and output extent must be valid."));
                 }
-                if (nextFrameToken_ == std::numeric_limits<std::uint64_t>::max())
-                {
+                if (nextFrameToken_ == std::numeric_limits<std::uint64_t>::max()) {
                     return Result<FrameToken>::Failure(
                         MakeMetalError(MetalBackendErrors::FrameTokenExhausted, "Frame token space is exhausted."));
                 }
 
                 const Result<void> begun = runtime_->BeginFrame(descriptor.outputExtent);
-                if (begun.HasError())
-                {
+                if (begun.HasError()) {
                     return Result<FrameToken>::Failure(begun.ErrorValue());
                 }
 
@@ -125,23 +101,18 @@ namespace Horo::Render
             }
 
             /** @copydoc IRenderBackend::Execute */
-            Result<void> Execute(const RenderExecutionPlan& plan) override
-            {
+            Result<void> Execute(const RenderExecutionPlan &plan) override {
                 const Result<void> valid = ValidatePlan(plan);
-                if (valid.HasError())
-                {
+                if (valid.HasError()) {
                     return valid;
                 }
 
-                for (const RenderPassDescriptor& pass : plan.orderedPasses)
-                {
-                    if (!pass.primaryOutput.has_value())
-                    {
+                for (const RenderPassDescriptor &pass : plan.orderedPasses) {
+                    if (!pass.primaryOutput.has_value()) {
                         continue;
                     }
                     const Result<void> encoded = runtime_->ExecutePrimaryOutput(*pass.primaryOutput);
-                    if (encoded.HasError())
-                    {
+                    if (encoded.HasError()) {
                         return Result<void>::Failure(encoded.ErrorValue());
                     }
                 }
@@ -149,17 +120,14 @@ namespace Horo::Render
             }
 
             /** @copydoc IRenderBackend::Present */
-            Result<void> Present(const FrameToken frame) override
-            {
+            Result<void> Present(const FrameToken frame) override {
                 const Result<void> state = ValidateActiveFrame(frame);
-                if (state.HasError())
-                {
+                if (state.HasError()) {
                     return state;
                 }
 
                 const Result<void> presented = runtime_->Present();
-                if (presented.HasError())
-                {
+                if (presented.HasError()) {
                     return Result<void>::Failure(presented.ErrorValue());
                 }
 
@@ -169,19 +137,15 @@ namespace Horo::Render
             }
 
             /** @copydoc IRenderBackend::AbortFrame */
-            void AbortFrame(const FrameToken frame) noexcept override
-            {
-                if (frameActive_ && frame == activeFrame_)
-                {
+            void AbortFrame(const FrameToken frame) noexcept override {
+                if (frameActive_ && frame == activeFrame_) {
                     AbortActiveFrame();
                 }
             }
 
             /** @copydoc IRenderBackend::AbortActiveFrame */
-            void AbortActiveFrame() noexcept override
-            {
-                if (frameActive_)
-                {
+            void AbortActiveFrame() noexcept override {
+                if (frameActive_) {
                     runtime_->AbortFrame();
                     frameActive_ = false;
                     activeFrame_ = {};
@@ -189,108 +153,85 @@ namespace Horo::Render
             }
 
             /** @copydoc IRenderBackend::Resize */
-            Result<void> Resize(const FramebufferExtent extent) override
-            {
-                if (!initialized_)
-                {
+            Result<void> Resize(const FramebufferExtent extent) override {
+                if (!initialized_) {
                     return Result<void>::Failure(
                         MakeMetalError(MetalBackendErrors::NotInitialized, "Renderer backend is not initialized."));
                 }
-                if (!extent.IsValid())
-                {
+                if (!extent.IsValid()) {
                     return Result<void>::Failure(
                         MakeMetalError(MetalBackendErrors::InvalidExtent, "Renderer output extent must be non-zero."));
                 }
-                if (frameActive_)
-                {
-                    return Result<void>::Failure(MakeMetalError(MetalBackendErrors::FrameActive,
-                                                                "Renderer output cannot resize while a frame is active."));
+                if (frameActive_) {
+                    return Result<void>::Failure(
+                        MakeMetalError(MetalBackendErrors::FrameActive, "Renderer output cannot resize while a frame is active."));
                 }
                 return runtime_->Resize(extent);
             }
 
             /** @copydoc IRenderBackend::Shutdown */
-            void Shutdown() noexcept override
-            {
+            void Shutdown() noexcept override {
                 AbortActiveFrame();
                 initialized_ = false;
                 DestroyRuntime();
             }
 
         private:
-            [[nodiscard]] Result<void> ValidateActiveFrame(const FrameToken frame) const
-            {
-                if (!initialized_)
-                {
+            [[nodiscard]] Result<void> ValidateActiveFrame(const FrameToken frame) const {
+                if (!initialized_) {
                     return Result<void>::Failure(
                         MakeMetalError(MetalBackendErrors::NotInitialized, "Renderer backend is not initialized."));
                 }
-                if (!frameActive_)
-                {
-                    return Result<void>::Failure(
-                        MakeMetalError(MetalBackendErrors::NoActiveFrame, "No renderer frame is active."));
+                if (!frameActive_) {
+                    return Result<void>::Failure(MakeMetalError(MetalBackendErrors::NoActiveFrame, "No renderer frame is active."));
                 }
-                if (frame != activeFrame_)
-                {
+                if (frame != activeFrame_) {
                     return Result<void>::Failure(
-                        MakeMetalError(MetalBackendErrors::FrameTokenMismatch,
-                                       "Frame token does not match the active frame."));
+                        MakeMetalError(MetalBackendErrors::FrameTokenMismatch, "Frame token does not match the active frame."));
                 }
                 return Result<void>::Success();
             }
 
-            [[nodiscard]] Result<void> ValidatePlan(const RenderExecutionPlan& plan) const
-            {
+            [[nodiscard]] Result<void> ValidatePlan(const RenderExecutionPlan &plan) const {
                 const Result<void> state = ValidateActiveFrame(plan.frame);
-                if (state.HasError())
-                {
+                if (state.HasError()) {
                     return state;
                 }
 
-                for (std::size_t index = 0; index < plan.orderedPasses.size(); ++index)
-                {
-                    const RenderPassDescriptor& pass = plan.orderedPasses[index];
-                    if (!pass.id.IsValid())
-                    {
-                        return Result<void>::Failure(MakeMetalError(MetalBackendErrors::InvalidExecutionPlan,
-                                                                    "Execution plan contains an invalid render pass ID."));
+                for (std::size_t index = 0; index < plan.orderedPasses.size(); ++index) {
+                    const RenderPassDescriptor &pass = plan.orderedPasses[index];
+                    if (!pass.id.IsValid()) {
+                        return Result<void>::Failure(
+                            MakeMetalError(MetalBackendErrors::InvalidExecutionPlan, "Execution plan contains an invalid render pass ID."));
                     }
-                    if (pass.kind != RenderPassKind::Graphics)
-                    {
+                    if (pass.kind != RenderPassKind::Graphics) {
                         return Result<void>::Failure(MakeMetalError(MetalBackendErrors::UnsupportedPassKind,
                                                                     "Initial Metal backend supports graphics passes only."));
                     }
-                    for (std::size_t previous = 0; previous < index; ++previous)
-                    {
-                        if (pass.id == plan.orderedPasses[previous].id)
-                        {
+                    for (std::size_t previous = 0; previous < index; ++previous) {
+                        if (pass.id == plan.orderedPasses[previous].id) {
                             return Result<void>::Failure(MakeMetalError(MetalBackendErrors::InvalidExecutionPlan,
                                                                         "Execution plan contains duplicate render pass IDs."));
                         }
                     }
-                    if (pass.primaryOutput.has_value() && !pass.primaryOutput->IsValid())
-                    {
-                        return Result<void>::Failure(MakeMetalError(MetalBackendErrors::InvalidExecutionPlan,
-                                                                    "Primary output attachment operations are invalid."));
+                    if (pass.primaryOutput.has_value() && !pass.primaryOutput->IsValid()) {
+                        return Result<void>::Failure(
+                            MakeMetalError(MetalBackendErrors::InvalidExecutionPlan, "Primary output attachment operations are invalid."));
                     }
                 }
                 return Result<void>::Success();
             }
 
-            void DestroyRuntime() noexcept
-            {
-                if (runtimeInitialized_)
-                {
+            void DestroyRuntime() noexcept {
+                if (runtimeInitialized_) {
                     runtime_->Shutdown();
                     runtimeInitialized_ = false;
                 }
                 ReleasePresentationLease();
             }
 
-            void ReleasePresentationLease() noexcept
-            {
-                if (ownsPresentationLease_)
-                {
+            void ReleasePresentationLease() noexcept {
+                if (ownsPresentationLease_) {
                     presentationLease_->claimed = false;
                     ownsPresentationLease_ = false;
                 }
@@ -315,22 +256,17 @@ namespace Horo::Render
             bool frameActive_{false};
         };
 
-        class MetalBackendProvider final : public IRenderBackendProvider
-        {
+        class MetalBackendProvider final : public IRenderBackendProvider {
         public:
-            MetalBackendProvider(IMetalPresentationPort& presentationPort, MetalEditorGraphicsBridge& editorGraphicsBridge,
-                                 const Detail::IMetalRuntimeFactory& runtimeFactory)
-                : presentationPort_(&presentationPort), editorGraphicsBridge_(&editorGraphicsBridge),
-                  runtimeFactory_(&runtimeFactory), presentationLease_(std::make_shared<MetalPresentationLease>())
-            {
-            }
+            MetalBackendProvider(IMetalPresentationPort &presentationPort, MetalEditorGraphicsBridge &editorGraphicsBridge,
+                                 const Detail::IMetalRuntimeFactory &runtimeFactory)
+                : presentationPort_(&presentationPort), editorGraphicsBridge_(&editorGraphicsBridge), runtimeFactory_(&runtimeFactory),
+                  presentationLease_(std::make_shared<MetalPresentationLease>()) {}
 
             /** @copydoc IRenderBackendProvider::Create */
-            Result<std::unique_ptr<IRenderBackend>> Create() const override
-            {
+            Result<std::unique_ptr<IRenderBackend>> Create() const override {
                 auto runtime = runtimeFactory_->Create(*presentationPort_, *editorGraphicsBridge_);
-                if (runtime.HasError())
-                {
+                if (runtime.HasError()) {
                     return Result<std::unique_ptr<IRenderBackend>>::Failure(runtime.ErrorValue());
                 }
                 return Result<std::unique_ptr<IRenderBackend>>::Success(
@@ -338,130 +274,110 @@ namespace Horo::Render
             }
 
         private:
-            IMetalPresentationPort* presentationPort_{nullptr};
-            MetalEditorGraphicsBridge* editorGraphicsBridge_{nullptr};
-            const Detail::IMetalRuntimeFactory* runtimeFactory_{nullptr};
+            IMetalPresentationPort *presentationPort_{nullptr};
+            MetalEditorGraphicsBridge *editorGraphicsBridge_{nullptr};
+            const Detail::IMetalRuntimeFactory *runtimeFactory_{nullptr};
             std::shared_ptr<MetalPresentationLease> presentationLease_;
         };
 
-        class MetalRuntimeFactory final : public Detail::IMetalRuntimeFactory
-        {
+        class MetalRuntimeFactory final : public Detail::IMetalRuntimeFactory {
         public:
-            Result<std::unique_ptr<Detail::IMetalRuntime>> Create(
-                IMetalPresentationPort& presentationPort,
-                MetalEditorGraphicsBridge& editorGraphicsBridge) const override
-            {
+            Result<std::unique_ptr<Detail::IMetalRuntime>> Create(IMetalPresentationPort &presentationPort,
+                                                                  MetalEditorGraphicsBridge &editorGraphicsBridge) const override {
                 return Detail::CreateMetalRuntime(presentationPort, editorGraphicsBridge);
             }
         };
-    } // namespace
+    }  // namespace
 
     /** @copydoc GetMetalRenderBackendModuleInfo */
-    const RenderBackendModuleInfo& GetMetalRenderBackendModuleInfo() noexcept
-    {
+    const RenderBackendModuleInfo &GetMetalRenderBackendModuleInfo() noexcept {
         static const RenderBackendModuleInfo info{
             .id = RenderBackendId{"metal"},
             .displayName = "Metal",
             .windowRequirements =
-            RenderHostWindowRequirements{
-                .presentation = RenderPresentationKind::Metal,
-                .resizable = true,
-                .highPixelDensity = true,
-            },
+                RenderHostWindowRequirements{
+                    .presentation = RenderPresentationKind::Metal,
+                    .resizable = true,
+                    .highPixelDensity = true,
+                },
             .supportsInteractivePresentation = true,
         };
         return info;
     }
 
     /** @copydoc MetalEditorGraphicsBridge::Device */
-    void* MetalEditorGraphicsBridge::Device() const noexcept
-    {
+    void *MetalEditorGraphicsBridge::Device() const noexcept {
         return device_;
     }
 
     /** @copydoc MetalEditorGraphicsBridge::CommandQueue */
-    void* MetalEditorGraphicsBridge::CommandQueue() const noexcept
-    {
+    void *MetalEditorGraphicsBridge::CommandQueue() const noexcept {
         return commandQueue_;
     }
 
     /** @copydoc MetalEditorGraphicsBridge::CurrentCommandBuffer */
-    void* MetalEditorGraphicsBridge::CurrentCommandBuffer() const noexcept
-    {
+    void *MetalEditorGraphicsBridge::CurrentCommandBuffer() const noexcept {
         return commandBuffer_;
     }
 
     /** @copydoc MetalEditorGraphicsBridge::CurrentRenderPassDescriptor */
-    void* MetalEditorGraphicsBridge::CurrentRenderPassDescriptor() const noexcept
-    {
+    void *MetalEditorGraphicsBridge::CurrentRenderPassDescriptor() const noexcept {
         return renderPassDescriptor_;
     }
 
     /** @copydoc MetalEditorGraphicsBridge::CurrentRenderEncoder */
-    void* MetalEditorGraphicsBridge::CurrentRenderEncoder() const noexcept
-    {
+    void *MetalEditorGraphicsBridge::CurrentRenderEncoder() const noexcept {
         return renderEncoder_;
     }
 
     /** @copydoc MetalEditorGraphicsBridge::WaitUntilIdle */
-    void MetalEditorGraphicsBridge::WaitUntilIdle() noexcept
-    {
-        if (waitUntilIdle_ != nullptr)
-        {
+    void MetalEditorGraphicsBridge::WaitUntilIdle() noexcept {
+        if (waitUntilIdle_ != nullptr) {
             waitUntilIdle_(waitContext_);
         }
     }
 
     /** @copydoc RegisterMetalRenderBackend */
-    Result<void> RegisterMetalRenderBackend(RenderBackendRegistry& registry, IMetalPresentationPort& presentationPort,
-                                            MetalEditorGraphicsBridge& editorGraphicsBridge)
-    {
+    Result<void> RegisterMetalRenderBackend(RenderBackendRegistry &registry, IMetalPresentationPort &presentationPort,
+                                            MetalEditorGraphicsBridge &editorGraphicsBridge) {
         static const MetalRuntimeFactory runtimeFactory;
-        return Detail::RegisterMetalRenderBackendWithRuntimeFactory(registry, presentationPort, editorGraphicsBridge,
-                                                                    runtimeFactory);
+        return Detail::RegisterMetalRenderBackendWithRuntimeFactory(registry, presentationPort, editorGraphicsBridge, runtimeFactory);
     }
 
-    namespace Detail
-    {
-        void MetalEditorGraphicsAccess::PublishPersistent(
-            MetalEditorGraphicsBridge& bridge, void* device, void* commandQueue, void* waitContext,
-            MetalEditorGraphicsBridge::WaitUntilIdleFunction wait) noexcept
-        {
+    namespace Detail {
+        void MetalEditorGraphicsAccess::PublishPersistent(MetalEditorGraphicsBridge &bridge, void *device, void *commandQueue,
+                                                          void *waitContext,
+                                                          MetalEditorGraphicsBridge::WaitUntilIdleFunction wait) noexcept {
             bridge.device_ = device;
             bridge.commandQueue_ = commandQueue;
             bridge.waitContext_ = waitContext;
             bridge.waitUntilIdle_ = wait;
         }
 
-        void MetalEditorGraphicsAccess::PublishFrame(MetalEditorGraphicsBridge& bridge, void* commandBuffer,
-                                                     void* renderPassDescriptor, void* renderEncoder) noexcept
-        {
+        void MetalEditorGraphicsAccess::PublishFrame(MetalEditorGraphicsBridge &bridge, void *commandBuffer, void *renderPassDescriptor,
+                                                     void *renderEncoder) noexcept {
             bridge.commandBuffer_ = commandBuffer;
             bridge.renderPassDescriptor_ = renderPassDescriptor;
             bridge.renderEncoder_ = renderEncoder;
         }
 
-        void MetalEditorGraphicsAccess::ClearFrame(MetalEditorGraphicsBridge& bridge) noexcept
-        {
+        void MetalEditorGraphicsAccess::ClearFrame(MetalEditorGraphicsBridge &bridge) noexcept {
             PublishFrame(bridge, nullptr, nullptr, nullptr);
         }
 
-        void MetalEditorGraphicsAccess::Clear(MetalEditorGraphicsBridge& bridge) noexcept
-        {
+        void MetalEditorGraphicsAccess::Clear(MetalEditorGraphicsBridge &bridge) noexcept {
             ClearFrame(bridge);
             PublishPersistent(bridge, nullptr, nullptr, nullptr, nullptr);
         }
 
-        Result<void> RegisterMetalRenderBackendWithRuntimeFactory(
-            RenderBackendRegistry& registry, IMetalPresentationPort& presentationPort,
-            MetalEditorGraphicsBridge& editorGraphicsBridge, const IMetalRuntimeFactory& runtimeFactory)
-        {
+        Result<void> RegisterMetalRenderBackendWithRuntimeFactory(RenderBackendRegistry &registry, IMetalPresentationPort &presentationPort,
+                                                                  MetalEditorGraphicsBridge &editorGraphicsBridge,
+                                                                  const IMetalRuntimeFactory &runtimeFactory) {
             return registry.Register(RenderBackendDescriptor{
                 .id = RenderBackendId{"metal"},
                 .displayName = "Metal",
-                .provider = std::make_unique<MetalBackendProvider>(presentationPort, editorGraphicsBridge,
-                                                                  runtimeFactory),
+                .provider = std::make_unique<MetalBackendProvider>(presentationPort, editorGraphicsBridge, runtimeFactory),
             });
         }
-    } // namespace Detail
-} // namespace Horo::Render
+    }  // namespace Detail
+}  // namespace Horo::Render

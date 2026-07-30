@@ -11,6 +11,7 @@
 #include "editor/document/SceneDocument.h"
 #include "editor/renderer/EditorViewportScene.h"
 
+#include <span>
 #include <vector>
 
 namespace Horo::Editor {
@@ -23,6 +24,8 @@ namespace Horo::Editor {
         std::vector<EditorViewportMeshResourceView> meshResources;
         std::vector<EditorViewportInstance> instances;
         std::vector<SceneObjectId> instanceObjects;
+        std::vector<Render::RenderLight> lights;
+        std::vector<SceneObjectId> lightObjects;
 
         [[nodiscard]] EditorViewportSceneView View() const noexcept;
     };
@@ -54,8 +57,18 @@ namespace Horo::Editor {
                                                                                  const EditorViewportCamera &camera,
                                                                                  Runtime::PrimitiveMeshCache &meshCache);
 
-    /** @brief Applies one editor-owned transient transform overlay without mutating runtime state. */
+    /** @brief Applies editor-owned transient transform overlays without mutating runtime state. */
     [[nodiscard]] Result<void> ApplyEditorViewportTransformPreview(Runtime::RuntimeSceneView scene,
-                                                                   const std::optional<SceneObjectTransformPreview> &preview,
+                                                                   std::span<const SceneObjectTransformPreview> previews,
                                                                    EditorViewportSceneSnapshot &snapshot);
+
+    /**
+     * @brief Applies or clears one editor-owned transient Light-component overlay.
+     * @param scene Active immutable runtime scene.
+     * @param preview Light override, or null to restore authored runtime values.
+     * @param snapshot Owning viewport snapshot updated in place.
+     * @return Success, or a typed extraction error without a document mutation.
+     */
+    [[nodiscard]] Result<void> ApplyEditorViewportLightPreview(Runtime::RuntimeSceneView scene, const SceneObjectLightPreview *preview,
+                                                               EditorViewportSceneSnapshot &snapshot);
 }  // namespace Horo::Editor

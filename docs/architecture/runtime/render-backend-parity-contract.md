@@ -90,6 +90,25 @@ Shared implementation belongs in a backend-neutral target only when its
 semantics are genuinely API-independent. OpenGL code is not moved into a shared
 target merely so Metal can call it.
 
+The selected editor viewport adapter reports its projection clip-depth range
+through the backend-neutral renderer contract. OpenGL reports `[-1, 1]`; Metal
+and Vulkan report `[0, 1]`. Viewport presentation, gizmo projection, pointer-ray
+construction, and CPU picking consume that value directly. Editor feature code
+must not branch on `RenderBackendId` to recover this convention.
+
+Editor viewport adapters also consume the same backend-neutral world-grid line
+geometry and render it inside the offscreen viewport target. Grid visibility,
+adaptive spacing, depth-test behavior, and mesh occlusion are parity obligations;
+an adapter must not replace the world grid with a backend-specific screen-space
+effect.
+
+Selected Light influence visualizers follow the same rule. Directional arrows,
+Point range geometry, and Spot cone geometry are built once from the typed
+world-space Light snapshot and rendered as depth-tested, non-depth-writing lines
+by every interactive editor backend. Constant-size Light location markers and
+marker hit testing remain in the shared GUI presentation layer because they are
+screen-space editor affordances rather than scene geometry.
+
 ## Pre-Window Backend Description
 
 The host must know presentation requirements before it creates a window. Every

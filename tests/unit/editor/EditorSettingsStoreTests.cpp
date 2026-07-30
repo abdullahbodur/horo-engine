@@ -1,5 +1,3 @@
-#include <catch2/catch_test_macros.hpp>
-
 #include "Horo/Editor/EditorConfiguration.h"
 #include "Horo/Editor/EditorDataBus.h"
 #include "Horo/Editor/EditorSettingsEvents.h"
@@ -9,14 +7,13 @@
 #include "Horo/Foundation/DataBus.h"
 
 #include <algorithm>
+#include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <fstream>
 #include <string>
 
-namespace
-{
-    void SetHomeForTest(const std::filesystem::path& home)
-    {
+namespace {
+    void SetHomeForTest(const std::filesystem::path &home) {
 #if defined(_WIN32)
         _putenv_s("USERPROFILE", home.string().c_str());
 #else
@@ -24,12 +21,10 @@ namespace
 #endif
     }
 
-    TEST_CASE("Save And Load Round Trip", "[unit][editor]")
-    {
+    TEST_CASE("Save And Load Round Trip", "[unit][editor]") {
         using namespace Horo::Editor;
 
-        const std::filesystem::path home = std::filesystem::temp_directory_path() /
-            "horo_editor_settings_store_roundtrip";
+        const std::filesystem::path home = std::filesystem::temp_directory_path() / "horo_editor_settings_store_roundtrip";
         std::filesystem::remove_all(home);
         SetHomeForTest(home);
 
@@ -63,12 +58,10 @@ namespace
         REQUIRE((loaded.settings.consoleLogLevel == EditorConsoleLogLevel::Debug));
     }
 
-    TEST_CASE("Invalid Values Are Rejected On Save", "[unit][editor]")
-    {
+    TEST_CASE("Invalid Values Are Rejected On Save", "[unit][editor]") {
         using namespace Horo::Editor;
 
-        const std::filesystem::path home = std::filesystem::temp_directory_path() /
-            "horo_editor_settings_store_invalid";
+        const std::filesystem::path home = std::filesystem::temp_directory_path() / "horo_editor_settings_store_invalid";
         std::filesystem::remove_all(home);
         SetHomeForTest(home);
 
@@ -82,12 +75,10 @@ namespace
         REQUIRE((doc.settings.accentColorHex == "#04A5FC"));
     }
 
-    TEST_CASE("Malformed File Falls Back To Defaults", "[unit][editor]")
-    {
+    TEST_CASE("Malformed File Falls Back To Defaults", "[unit][editor]") {
         using namespace Horo::Editor;
 
-        const std::filesystem::path home = std::filesystem::temp_directory_path() /
-            "horo_editor_settings_store_malformed";
+        const std::filesystem::path home = std::filesystem::temp_directory_path() / "horo_editor_settings_store_malformed";
         std::filesystem::remove_all(home);
         SetHomeForTest(home);
         std::filesystem::create_directories(home / ".horo");
@@ -102,8 +93,7 @@ namespace
         REQUIRE((loaded.settings == DefaultEditorSettings()));
     }
 
-    TEST_CASE("Persisted Appearance Apply Commits One Atomic Configuration Revision", "[unit][editor]")
-    {
+    TEST_CASE("Persisted Appearance Apply Commits One Atomic Configuration Revision", "[unit][editor]") {
         using namespace Horo;
         using namespace Horo::Editor;
 
@@ -125,11 +115,14 @@ namespace
         ConfigurationService configuration = CreateEditorConfigurationService(DefaultEditorSettings(), &events);
         const ConfigurationSnapshot before = configuration.Snapshot();
         ConfigurationChangedEvent observed{};
-        const Subscription subscription = events.Subscribe<ConfigurationChangedEvent>(
-            [&observed](const ConfigurationChangedEvent& event) { observed = event; });
+        const Subscription subscription = events.Subscribe<ConfigurationChangedEvent>([&observed](const ConfigurationChangedEvent &event) {
+            observed = event;
+        });
 
         const ConfigurationDraft draft = MakeEditorAppearanceConfigurationDraft(before, applied.settings);
-        REQUIRE((configuration.Commit(draft).HasValue()));
+        const Result<void> committed = configuration.Commit(draft);
+        INFO((committed.HasError() ? committed.ErrorValue().message : std::string{}));
+        REQUIRE((committed.HasValue()));
 
         const ConfigurationSnapshot after = configuration.Snapshot();
         REQUIRE((before.Revision() == 0));
@@ -144,23 +137,25 @@ namespace
         REQUIRE((std::get<std::int64_t>(after.Get(SettingKey{"editor.appearance.code_font_size_px"})) == 16));
         REQUIRE((observed.revision == after.Revision()));
         REQUIRE((observed.changedKeys.size() == 4));
-        REQUIRE((std::any_of(observed.changedKeys.begin(), observed.changedKeys.end(),
-            [](const SettingKey &key) { return key.Value() == "editor.theme.active"; })));
-        REQUIRE((std::any_of(observed.changedKeys.begin(), observed.changedKeys.end(),
-            [](const SettingKey &key) { return key.Value() == "editor.appearance.accent_color"; })));
-        REQUIRE((std::any_of(observed.changedKeys.begin(), observed.changedKeys.end(),
-            [](const SettingKey &key) { return key.Value() == "editor.appearance.ui_scale_percent"; })));
-        REQUIRE((std::any_of(observed.changedKeys.begin(), observed.changedKeys.end(),
-            [](const SettingKey &key) { return key.Value() == "editor.appearance.code_font_size_px"; })));
+        REQUIRE((std::any_of(observed.changedKeys.begin(), observed.changedKeys.end(), [](const SettingKey &key) {
+            return key.Value() == "editor.theme.active";
+        })));
+        REQUIRE((std::any_of(observed.changedKeys.begin(), observed.changedKeys.end(), [](const SettingKey &key) {
+            return key.Value() == "editor.appearance.accent_color";
+        })));
+        REQUIRE((std::any_of(observed.changedKeys.begin(), observed.changedKeys.end(), [](const SettingKey &key) {
+            return key.Value() == "editor.appearance.ui_scale_percent";
+        })));
+        REQUIRE((std::any_of(observed.changedKeys.begin(), observed.changedKeys.end(), [](const SettingKey &key) {
+            return key.Value() == "editor.appearance.code_font_size_px";
+        })));
     }
 
-    TEST_CASE("Failed Or Stale Authority Commit Retains Committed Snapshot And Does Not Publish", "[unit][editor]")
-    {
+    TEST_CASE("Failed Or Stale Authority Commit Retains Committed Snapshot And Does Not Publish", "[unit][editor]") {
         using namespace Horo;
         using namespace Horo::Editor;
 
-        const std::filesystem::path home =
-            std::filesystem::temp_directory_path() / "horo_editor_settings_authority_failure";
+        const std::filesystem::path home = std::filesystem::temp_directory_path() / "horo_editor_settings_authority_failure";
         std::filesystem::remove_all(home);
         SetHomeForTest(home);
 
@@ -171,13 +166,11 @@ namespace
         EditorSettingsService settings{initial, configuration, events, localization};
         int committedEventCount = 0;
         const Subscription subscription =
-            events.Subscribe<EditorSettingsChangedEvent>([&committedEventCount](const EditorSettingsChangedEvent& event)
-            {
-                if (event.phase == SettingsChangePhase::Committed)
-                {
-                    ++committedEventCount;
-                }
-            });
+            events.Subscribe<EditorSettingsChangedEvent>([&committedEventCount](const EditorSettingsChangedEvent &event) {
+            if (event.phase == SettingsChangePhase::Committed) {
+                ++committedEventCount;
+            }
+        });
 
         EditorSettings invalid = initial;
         invalid.accentColorHex = "invalid";
@@ -202,13 +195,11 @@ namespace
         REQUIRE((committedEventCount == 1));
     }
 
-    TEST_CASE("Successful Authority Commit Persists Activates And Publishes One Committed Event", "[unit][editor]")
-    {
+    TEST_CASE("Successful Authority Commit Persists Activates And Publishes One Committed Event", "[unit][editor]") {
         using namespace Horo;
         using namespace Horo::Editor;
 
-        const std::filesystem::path home =
-            std::filesystem::temp_directory_path() / "horo_editor_settings_authority_success";
+        const std::filesystem::path home = std::filesystem::temp_directory_path() / "horo_editor_settings_authority_success";
         std::filesystem::remove_all(home);
         SetHomeForTest(home);
 
@@ -219,23 +210,21 @@ namespace
         EditorSettingsService settings{initial, configuration, events, localization};
         int eventCount = 0;
         EditorSettingsChangedEvent observed{};
-        const Subscription subscription =
-            events.Subscribe<EditorSettingsChangedEvent>([&](const EditorSettingsChangedEvent& event)
-            {
-                ++eventCount;
-                observed = event;
-            });
+        const Subscription subscription = events.Subscribe<EditorSettingsChangedEvent>([&](const EditorSettingsChangedEvent &event) {
+            ++eventCount;
+            observed = event;
+        });
 
         EditorSettings draftSettings = initial;
         draftSettings.themePreset = EditorThemePreset::Light;
         draftSettings.accentColorHex = "#112233";
-        const auto result =
-            settings.Commit(
-                EditorSettingsDraft{.baseRevision = settings.Snapshot().revision, .settings = draftSettings});
+        draftSettings.gridOverlay = false;
+        const auto result = settings.Commit(EditorSettingsDraft{.baseRevision = settings.Snapshot().revision, .settings = draftSettings});
 
         REQUIRE((result.HasValue()));
         REQUIRE((result.Value().revision == 1));
         REQUIRE((settings.Snapshot() == result.Value()));
+        REQUIRE_FALSE((settings.Snapshot().settings.gridOverlay));
         REQUIRE((configuration.Snapshot().Revision() == 1));
         REQUIRE((std::get<std::string>(configuration.Snapshot().Get(SettingKey{"editor.theme.active"})) == "light"));
         REQUIRE((LoadEditorSettingsDocument().settings == draftSettings));
@@ -244,4 +233,4 @@ namespace
         REQUIRE((observed.phase == SettingsChangePhase::Committed));
         REQUIRE((observed.changedDomains == SettingsDomain::All));
     }
-} // namespace
+}  // namespace

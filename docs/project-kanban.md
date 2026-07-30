@@ -3,7 +3,7 @@
 
 Bu dosya Horo Engine'in mimari hedefleri ile gerçek repository durumunu aynı
 yerde izlemek için kullanılan yaşayan kanbandır. Normatif davranışın kaynağı
-[`docs/architecture/`](./architecture/README.md) belgeleridir; bu dosya o
+mth-001)`docs/architecture/`](./architecture/README.md) belgeleridir; bu dosya o
 sözleşmelerin uygulanma ve doğrulanma durumunu özetler.
 
 <a id="kanban"></a>
@@ -12,7 +12,7 @@ sözleşmelerin uygulanma ve doğrulanma durumunu özetler.
 
 | Yapılıyor                                                                                          | İncelenecek                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Hazır                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Bağımlı                                                                                                                                                                                                                                                                       | Sonra                                                                                                                                                                                                                                                                                                                                 | Tamamlandı                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 |----------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| [EDT-004 · Console, output ve operations panelleri](#edt-004)<br>[EXT-001 · Extension ve gameplay module host](#ext-001)<br>[EDT-002 · Inspector authoring](#edt-002) | [EDT-003 · Content Browser asset işlemleri](#edt-003)<br>[FND-001A · TaskGroup structured concurrency](#fnd-001a)<br>[PRJ-001A · Shared project mutation](#prj-001a)<br>[PRJ-001 · Project save/open/recovery](#prj-001)<br>[FND-001 · Foundation kontrat denetimi](#fnd-001)<br>[INP-001 · Input entegrasyon denetimi](#inp-001)<br>[MTH-001 · Scene math ve viewport denetimi](#mth-001)<br>[RND-002 · OpenGL/Metal parity denetimi](#rnd-002)<br>[TST-001 · Test matrisi ve CI denetimi](#tst-001)<br>[TST-002 · Dear ImGui UI automation](#tst-002) | [MAT-001 · Material ve shader temeli](#mat-001)<br>[CLI-001 · Headless CLI host](#cli-001)<br>[MCP-001 · MCP host ve tool registry](#mcp-001)<br>[OBS-001 · Observability temeli](#obs-001)<br>[SEC-001 · Runtime güvenlik politikaları](#sec-001) | [MIG-001F · Subsystem/provider adoption](#mig-001f)<br>[GME-001 · Play mode ve gameplay runtime](#gme-001)<br>[PHY-001 · Physics runtime](#phy-001)<br>[AUD-001 · Audio runtime](#aud-001)<br>[PKG-001 · Package sistemi](#pkg-001)<br>[REL-001 · Release pipeline](#rel-001) | [NET-001 · Networking](#net-001)<br>[GUI-001 · Runtime Game UI/HUD](#gui-001)<br>[PLT-001 · Platform services](#plt-001)<br>[PFB-001 · Prefab sistemi](#pfb-001)<br>[ADV-001 · Advanced renderer özellikleri](#adv-001)<br>[ADV-002 · Gelişmiş dünya sistemleri](#adv-002) | [MIG-001 · Project migration architecture](#mig-001)<br>[MIG-001A · Version ve compatibility foundation](#mig-001a)<br>[MIG-001B · Migration registry ve planner](#mig-001b)<br>[MIG-001C · Transaction ve recovery](#mig-001c)<br>[MIG-001D · Project-open entegrasyonu](#mig-001d)<br>[MIG-001E · Welcome compatibility görünümü](#mig-001e)<br>[MIG-001F-01 · Project settings migration adoption](#mig-001f-01)<br>[RUN-001 · Runtime lifecycle ve frame scheduler](#run-001)<br>[ARC-001 · Desired tree ve target uyumu](#arc-001)<br>[EDT-001 · Editor vertical slice sağlamlaştırma](#edt-001)<br>[RND-001 · Generic renderer resource geçişi](#rnd-001)<br>[SCN-001 · Scene runtime ve ECS temeli](#scn-001)<br>[AST-001 · Asset pipeline temeli](#ast-001)<br>[AST-001A · Asset registry ve provider baseline](#ast-001a)<br>[AST-001B · Runtime scene asset resolution](#ast-001b)<br>[AST-001C · headless-null cooking ve cache](#ast-001c)<br>[AST-001D · Modular import ve GUI modal](#ast-001d)<br>[BAS-001 · Foundation primitives](#bas-001)<br>[BAS-002 · Scene math baseline](#bas-002)<br>[BAS-003 · Runtime input baseline](#bas-003)<br>[BAS-004 · Editor host ve workspace baseline](#bas-004)<br>[BAS-005 · Hierarchy create ve typed primitives](#bas-005)<br>[BAS-006 · Procedural mesh ve viewport baseline](#bas-006)<br>[BAS-007 · macOS app identity](#bas-007)<br>[DOC-001 · Scene document kalıcılık denetimi](#doc-001) |
+| [EDT-004 · Console, output ve operations panelleri](#edt-004)<br>[EXT-001 · Extension ve gameplay module host](#ext-001)<br>[EDT-002 · Inspector authoring](#edt-002) | [EDT-003 · Content Browser asset işlemleri](#edt-003)<br>[FND-001A · TaskGroup structured concurrency](#fnd-001a)<br>[PRJ-001A · Shared project mutation](#prj-001a)<br>[PRJ-001 · Project save/open/recovery](#prj-001)<br>[FND-001 · Foundation kontrat denetimi](#fnd-001)<br>[INP-001 · Input entegrasyon denetimi](#inp-001)<br>[RND-002 · OpenGL/Metal parity denetimi](#rnd-002)<br>[TST-001 · Test matrisi ve CI denetimi](#tst-001)<br>[TST-002 · Dear ImGui UI automation](#tst-002) | [RND-003 · Editor viewport anti-aliasing](#rnd-003)<br>[MAT-001 · Material ve shader temeli](#mat-001)<br>[CLI-001 · Headless CLI host](#cli-001)<br>[MCP-001 · MCP host ve tool registry](#mcp-001)<br>[OBS-001 · Observability temeli](#obs-001)<br>[SEC-001 · Runtime güvenlik politikaları](#sec-001) | [MIG-001F · Subsystem/provider adoption](#mig-001f)<br>[GME-001 · Play mode ve gameplay runtime](#gme-001)<br>[PHY-001 · Physics runtime](#phy-001)<br>[AUD-001 · Audio runtime](#aud-001)<br>[PKG-001 · Package sistemi](#pkg-001)<br>[REL-001 · Release pipeline](#rel-001) | [NET-001 · Networking](#net-001)<br>[GUI-001 · Runtime Game UI/HUD](#gui-001)<br>[PLT-001 · Platform services](#plt-001)<br>[PFB-001 · Prefab sistemi](#pfb-001)<br>[ADV-001 · Advanced renderer özellikleri](#adv-001)<br>[ADV-002 · Gelişmiş dünya sistemleri](#adv-002) | [MIG-001 · Project migration architecture](#mig-001)<br>[MIG-001A · Version ve compatibility foundation](#mig-001a)<br>[MIG-001B · Migration registry ve planner](#mig-001b)<br>[MIG-001C · Transaction ve recovery](#mig-001c)<br>[MIG-001D · Project-open entegrasyonu](#mig-001d)<br>[MIG-001E · Welcome compatibility görünümü](#mig-001e)<br>[MIG-001F-01 · Project settings migration adoption](#mig-001f-01)<br>[RUN-001 · Runtime lifecycle ve frame scheduler](#run-001)<br>[ARC-001 · Desired tree ve target uyumu](#arc-001)<br>[EDT-001 · Editor vertical slice sağlamlaştırma](#edt-001)<br>[RND-001 · Generic renderer resource geçişi](#rnd-001)<br>[SCN-001 · Scene runtime ve ECS temeli](#scn-001)<br>[AST-001 · Asset pipeline temeli](#ast-001)<br>[AST-001A · Asset registry ve provider baseline](#ast-001a)<br>[AST-001B · Runtime scene asset resolution](#ast-001b)<br>[AST-001C · headless-null cooking ve cache](#ast-001c)<br>[AST-001D · Modular import ve GUI modal](#ast-001d)<br>[BAS-001 · Foundation primitives](#bas-001)<br>[BAS-002 · Scene math baseline](#bas-002)<br>[BAS-003 · Runtime input baseline](#bas-003)<br>[BAS-004 · Editor host ve workspace baseline](#bas-004)<br>[BAS-005 · Hierarchy create ve typed primitives](#bas-005)<br>[BAS-006 · Procedural mesh ve viewport baseline](#bas-006)<br>[BAS-007 · macOS app identity](#bas-007)<br>[DOC-001 · Scene document kalıcılık denetimi](#doc-001)<br>[MTH-001 · Scene math ve viewport denetimi](#mth-001) |
 
 ## Durum Sözleşmesi
 
@@ -145,7 +145,7 @@ ticket kapsamındadır.
 
 ### FND-001A — TaskGroup structured concurrency
 
-- **Durum:** İncelenecek
+- **Durum:** Tamamlandı
 - **Öncelik:** P0
 - **Özet:** Result döndüren job submission ve operation-owned, non-movable
   `TaskGroup` ile accepted-child join/cancellation sınırını kur.
@@ -376,14 +376,39 @@ ticket kapsamındadır.
 
 ### MTH-001 — Scene math ve viewport tüketici denetimi
 
-- **Durum:** İncelenecek
+- **Durum:** Tamamlandı
 - **Öncelik:** P0
 - **Özet:** Kamera, picking, focus selected ve Move/Rotate/Scale gizmo kodunda
   tekrar eden ya da sessiz fallback yapan yerel matematik kalmadığını doğrula.
 - **Kabul:** Perspective/orthographic, iki clip-depth convention, parented
   negative/non-uniform scale ve singular failure yolları ortak API'den geçer.
+- **Tamamlanan dilim:** Monolithic `ViewportPanel` render-target/overlay
+  composition seviyesine indirildi. Pointer capture lifecycle,
+  navigation/focus/picking mapping, transform-gizmo session ve gizmo
+  projection/drawing/hit-test sorumlulukları ayrı viewport bileşenlerine
+  taşındı. Bileşenler yalnız typed workspace command üretir; scene, selection,
+  viewport ve history authority'leri controller/model sınırında kaldı.
+  `TransformGizmoMath` ImGui'den bağımsız bir hesaplama sınırı olarak eklendi;
+  singular parent, non-finite input ve decomposition hataları typed sonuçla
+  preview cancellation'a taşındı. Local/world rotate-scale, negatif scale ve
+  rotated non-uniform parent senaryoları regresyon testleriyle kapatıldı.
+  Viewport renderer kontratı clip-depth range'i typed değer olarak sunuyor;
+  projection, gizmo, pointer ray ve CPU picking bu değeri backend adı
+  çıkarsamadan tüketiyor. OpenGL `NegativeOneToOne`, Metal/Vulkan
+  `ZeroToOne` parity'si perspective ve orthographic testlerle doğrulandı.
+  Viewport grid'i ImGui screen-space çiziminden çıkarılarak gerçek XZ world-space
+  render geometrisine dönüştürüldü. Allocation-free ortak üretici, perspective
+  target distance/FOV ve orthographic height üzerinden `1/2/5 × 10ⁿ` adaptive
+  spacing seçiyor; OpenGL ve Metal aynı geometriyi meshlerden önce depth-test
+  açık, depth-write kapalı çiziyor. Settings içindeki `gridOverlay` tercihi
+  editor-private renderer kontratına bağlandı.
+- **Kalan:** Yok. Donanım/display gerektiren backend GPU smoke kapsamı
+  [RND-002](#rnd-002) altında izlenir.
 - **Mimari:** [Scene Math](./architecture/foundation/scene-math.md).
 - **Bağımlılık:** [BAS-002](#bas-002), [EDT-001](#edt-001).
+- **Son doğrulama:** 2026-07-29 — önceki targeted matris 72/72 geçti; adaptive
+  grid eklenmesinden sonra viewport/gizmo regresyon matrisi ayrıca 33/33 geçti.
+  `HoroEditor`, OpenGL viewport adapter ve Metal viewport adapter build edildi.
 
 [↑ Kanbana dön](#kanban)
 
@@ -424,9 +449,50 @@ ticket kapsamındadır.
   selection ve primitive draw sonuçlarının eşit kontratta kaldığını doğrula.
 - **Kabul:** OpenGL-only, Metal-only ve combined konfigürasyonları geçer; silent
   fallback yoktur; shutdown frames-in-flight kaynaklarını güvenli bırakır.
+- **Tamamlanan dilim:** Typed clip-depth parity'sine ek olarak adaptive
+  world-space viewport grid geometrisi ve depth davranışı iki adapter'da aynı
+  kontratla build edildi. Donanım/display GPU smoke doğrulaması açık kalır.
 - **Mimari:** [Backend Parity](./architecture/runtime/render-backend-parity-contract.md),
   [Renderer Availability](./architecture/runtime/renderer-distribution-and-availability.md).
 - **Bağımlılık:** [BAS-006](#bas-006), [RND-001](#rnd-001).
+
+[↑ Kanbana dön](#kanban)
+
+<a id="rnd-003"></a>
+
+### RND-003 — Editor viewport anti-aliasing ve kalite ayarları
+
+- **Durum:** Hazır
+- **Öncelik:** P1
+- **Özet:** Editor viewport mesh ve grid kenarlarındaki single-sample
+  rasterization aliasing'ini backend-neutral bir kalite politikasıyla gider.
+- **Editor Settings:** Rendering sayfası kalıcı ve typed
+  `Viewport Anti-Aliasing` seçimi sunar: `Off`, `2× MSAA`, `4× MSAA` ve
+  `8× MSAA`. Varsayılan `4× MSAA` olur. UI yalnız aktif backend/device
+  capability snapshot'ının desteklediği seviyeleri seçilebilir gösterir;
+  unsupported bir istek sessizce daha düşük örnek sayısına düşürülmez.
+- **Renderer kontratı:** OpenGL multisample color/depth target'a çizer ve
+  ImGui'nin tükettiği single-sample texture'a explicit resolve yapar. Metal
+  pipeline, color/depth target ve resolve attachment aynı sample count'u
+  kullanır. Resize veya ayar değişimi target'ları güvenli frame sınırında
+  yeniden oluşturur; normal frame'de allocation veya GPU wait eklenmez.
+- **Grid kalitesi:** Uzak ve sub-pixel grid çizgileri yalnız native line
+  primitive/MSAA sonucuna bırakılmaz. Backend-parity shader tabanlı
+  derivative/coverage ve mesafe fade politikası uygulanır; bu davranış seçilen
+  viewport anti-aliasing kalitesinin otomatik parçasıdır ve backend-specific
+  ikinci bir kullanıcı ayarı oluşturmaz.
+- **Observability:** Requested/effective sample count, target recreation ve
+  capability rejection structured renderer loglarına yazılır.
+- **Kabul:** Off/2×/4×/8× persistence round-trip ve Settings apply çalışır;
+  OpenGL/Metal render-target resolve semantiği eşittir; unsupported sample
+  count typed ve kullanıcıya gösterilebilir hata üretir; HiDPI resize,
+  projection switch, grid visibility ve renderer shutdown regresyonları
+  geçer. Opt-in GPU smoke, diagonal mesh silhouette ve uzak-grid görsel
+  fixture'larını iki backend için kapsar.
+- **Mimari:** [Backend Parity](./architecture/runtime/render-backend-parity-contract.md),
+  [Editor Panel Host](./architecture/editor/editor-panel-host.md).
+- **Bağımlılık:** [RND-001](#rnd-001); backend/display doğrulama matrisi
+  [RND-002](#rnd-002) ve [TST-001](#tst-001) altında izlenir.
 
 [↑ Kanbana dön](#kanban)
 
@@ -713,6 +779,18 @@ ticket kapsamındadır.
 - **Mimari:** [Editor Panel Host](./architecture/editor/editor-panel-host.md),
   [Editor Document Model](./architecture/editor/editor-document-model.md).
 - **Bağımlılık:** [DOC-001](#doc-001).
+- **Geçici lighting odağı:** Typed Light authoring tamamlandıktan sonra EDT-002,
+  Trigger/Audio editörlerine geçmeden önce gerçek viewport lighting vertical
+  slice'ı büyük ölçüde kapatılacaktır. Referans kalite hedefi; nötr bir zemin ve
+  küp sahnesinde yüz yönlerini açıkça okutan Directional/Point/Spot aydınlatma,
+  doğru world-space normal dönüşümü, yumuşak fakat kararlı temas gölgesi ve
+  OpenGL/Metal görsel parity'sidir. Sabit shader ışığı kabul edilmez; Inspector
+  değişiklikleri aynı frame-owned backend-neutral light snapshot'ına ulaşmalıdır.
+  İlk kapanış kapsamında bounded forward lighting, directional shadow map,
+  shadow bias/PCF, ışık kapatıldığında deterministik ambient görünüm ve görsel
+  regression sahnesi bulunur. Cascaded directional shadows, punctual shadow
+  atlas/cubemap, PBR material ve HDR post-processing bu vertical slice'ın
+  devamında [ADV-001](#adv-001) ve [MAT-001](#mat-001) altında büyütülecektir.
 - **Tamamlanan dilimler:** Single-selection Inspector gerçek typed object kind
   projection'ını gösterir. Shared editable title üzerinden object name,
   document'in canonical 1–128 byte validation kontratıyla tek semantic rename
@@ -726,13 +804,54 @@ ticket kapsamındadır.
   view, orthographic height ve near/far clipping plane değerlerini shared
   Inspector controls ile düzenler; document sınırındaki canonical validation,
   no-op koruması ve undo/redo tek typed component command üzerinde birleşir.
-  Mock Mesh Renderer ve Static Flags satırları kaldırıldı.
-- **Kalan:** Typed Light/Trigger/Audio component editörleri,
-  multi-selection mixed values ve batch transaction; narrow/localized layout
-  matrisi.
-- **Son doğrulama:** 2026-07-29 — Inspector render interaction ve workspace
-  controller, shared UI, document ve localization targeted matrisi 66/66 geçti;
-  `HoroEditor` build edildi.
+  Typed Light editorü Directional/Point/Spot türüne göre renk, yoğunluk, menzil
+  ve koni alanlarını adaptif gösterir; shared color/float controls, canonical
+  finite/range validation, no-op koruması ve tek undoable component command
+  üzerinden çalışır. Bu kontroller drag sırasında document revision/history
+  üretmeyen typed viewport preview uygular; mouse release tek component command
+  commit eder. Escape, selection/revision değişimi, geçersiz ara değer ve no-op
+  bırakma authored ışığı deterministik olarak geri yükler. Authored ışıklar artık
+  frame-owned, world-space ve en fazla
+  16 elemanlı backend-neutral render snapshot'ına çıkarılır; hierarchy/world
+  transform ve transient transform preview ışık konum/yönünü aynı karede
+  günceller. OpenGL ve Metal aynı Directional/Point/Spot forward aydınlatma,
+  inverse-transpose normal, deterministic ambient, range/cone attenuation ve
+  display mapping semantiğini uygular. İlk aktif Directional ışık için scene
+  bounds'a fit edilen ve texel-snapped 2048² shadow view, iki backendde native
+  depth target, front-face caster pass, slope-aware bias ve 3×3 PCF ile
+  çalışır. Bu baseline sabit shader ışığı içermez. Her Light viewport'ta
+  sabit-piksel, türüne özel ve tıklanarak seçilebilen bir marker ile görünür.
+  Seçili Directional Light paralel yön oklarıyla, Point Light menzil küresi ve
+  radyal oklarla, Spot Light ise inner/outer cone halkaları ve ışınlarla
+  gösterilir. Bu influence geometry tek backend-neutral fixed-capacity builder
+  tarafından üretilir; OpenGL ve Metal aynı çizgileri scene depth ile test edip
+  depth yazmadan çizer. Inspector light preview değişiklikleri marker ve
+  visualizer snapshot'ına authored document/history üretmeden aynı anda yansır.
+  Mock Mesh Renderer ve Static Flags satırları kaldırıldı. Hierarchy
+  replace/toggle/range ve viewport modifier-click ile çoklu seçim üretir.
+  Inspector farklı Position/Rotation/Scale eksenlerini mixed-value olarak
+  gösterir; mixed eksendeki drag delta değerini her objenin authored değerine
+  relative uygular ve objeler arası offset'i korur. Uniform eksenler absolute
+  edit davranışını sürdürür. Drag preview bütün seçim için transient kalır;
+  commit atomik tek batch transaction ve tek undo kaydıdır. Escape,
+  selection/revision değişimi, parent-child preview, no-op ve rollback
+  davranışları regression kapsamındadır.
+- **Lighting devam sınırı:** Shadow aç/kapat ve kalite/bias değerlerinin authored
+  veya editor-only policy olarak ürün kararı, punctual light shadow atlas/cubemap,
+  cascaded directional shadow, material/PBR ve HDR [ADV-001](#adv-001) /
+  [MAT-001](#mat-001) kapsamındadır. EDT-002'ye dönmeden önce manuel referans
+  sahnesinde küp/zemin temas gölgesi, Point/Spot falloff ve OpenGL/Metal görsel
+  parity kontrolü yapılmalıdır.
+- **Kalan:** Typed Trigger/Audio component editörleri ve narrow/localized
+  layout matrisi.
+- **Son doğrulama:** 2026-07-30 — Inspector edit-session, viewport-model,
+  scene-extraction, controller ve panel matrisi light live-preview regressions
+  dahil önceki 78/78 geçti. Seçili Light visualizer geometry, panel request ve
+  live marker projection kapsamındaki ilave targeted matris 54/54 geçti. Önceki
+  Light extraction/shadow-view/runtime-scene matrisi 39/39; OpenGL
+  directional-light GPU smoke 41 assertion ile geçti. OpenGL ve Metal
+  `HoroEditor` build edildi;
+  Metal runtime shader first-frame smoke tamamlandı.
 
 [↑ Kanbana dön](#kanban)
 
@@ -1207,7 +1326,7 @@ ticket kapsamındadır.
   unproject, rays, bounds ve fallible math sözleşmesinin çalışan temeli vardır.
 - **Kanıt:** `include/Horo/Math/SceneMath.h`, `HoroSceneMathTests`.
 - **Son doğrulama:** 2026-07-17 — skeleton suite içinde geçti.
-- **Devam:** Tüketici denetimi [MTH-001](#mth-001).
+- **Devam:** Tüketici denetimi [MTH-001](#mth-001) ile tamamlandı.
 
 [↑ Kanbana dön](#kanban)
 

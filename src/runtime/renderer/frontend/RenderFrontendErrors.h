@@ -20,4 +20,4 @@ namespace Horo::Render::FrontendErrors {
     extern const ErrorCodeDescriptor StaticMeshExecutorAlreadyAttached;
     extern const ErrorCodeDescriptor StaticMeshExecutorMissing;
     extern const ErrorCodeDescriptor TargetReleaseDuringFrame;
-} // namespace Horo::Render::FrontendErrors
+}  // namespace Horo::Render::FrontendErrors

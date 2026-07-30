@@ -4,19 +4,45 @@
 
 #include <array>
 #include <optional>
+#include <span>
 #include <string>
+#include <vector>
 
 namespace Horo::Editor {
+    /** @brief Per-axis mixed-value state projected from the selected object set. */
+    struct InspectorTransformMixedValues {
+        std::array<bool, 3> position{};
+        std::array<bool, 3> rotation{};
+        std::array<bool, 3> scale{};
+    };
+
+    /** @brief Per-axis fields changed by one transform widget interaction. */
+    struct InspectorTransformAxisMask {
+        std::array<bool, 3> position{};
+        std::array<bool, 3> rotation{};
+        std::array<bool, 3> scale{};
+
+        /** @brief Reports whether at least one transform axis is included. */
+        [[nodiscard]] bool Any() const noexcept;
+    };
+
     /** @brief UI-independent draft values owned by one Inspector edit session. */
     struct InspectorObjectDraft {
         std::optional<SceneObjectId> object;
+        std::size_t selectedObjectCount{0};
         DocumentRevision revision;
         std::string name;
         std::array<float, 3> position{};
         std::array<float, 3> rotationDegrees{};
         std::array<float, 3> scale{1.0F, 1.0F, 1.0F};
+        InspectorTransformMixedValues mixed;
         std::optional<Runtime::CameraComponent> camera;
         float cameraFieldOfViewDegrees{60.0F};
+        std::optional<Runtime::LightComponent> light;
+        float lightInnerConeDegrees{20.0F};
+        float lightOuterConeDegrees{45.0F};
+        std::optional<Runtime::TriggerVolumeComponent> triggerVolume;
+        std::optional<Runtime::AudioSourceComponent> audioSource;
     };
 
     /** @brief Semantic name-widget events consumed without an ImGui dependency. */
@@ -30,11 +56,33 @@ namespace Horo::Editor {
         bool changed{false};
         bool committed{false};
         bool cancelRequested{false};
+        InspectorTransformAxisMask changedAxes;
     };
 
     /** @brief Semantic Camera-widget events consumed without an ImGui dependency. */
     struct InspectorCameraEdit {
         bool committed{false};
+        bool removeRequested{false};
+    };
+
+    /** @brief Semantic Light-widget events consumed without an ImGui dependency. */
+    struct InspectorLightEdit {
+        bool changed{false};
+        bool committed{false};
+        bool cancelRequested{false};
+        bool removeRequested{false};
+    };
+
+    /** @brief Semantic TriggerVolume-widget events consumed without an ImGui dependency. */
+    struct InspectorTriggerVolumeEdit {
+        bool committed{false};
+        bool removeRequested{false};
+    };
+
+    /** @brief Semantic AudioSource-widget events consumed without an ImGui dependency. */
+    struct InspectorAudioSourceEdit {
+        bool committed{false};
+        bool removeRequested{false};
     };
 
     /**
@@ -58,6 +106,18 @@ namespace Horo::Editor {
         [[nodiscard]] EditorWorkspaceViewCommandData BeginObject(const SceneObject &object, DocumentRevision revision);
 
         /**
+         * @brief Reconciles a complete ordered selection projection.
+         * @param objects All current scene-object projections.
+         * @param selectedObjects Ordered selected object identities.
+         * @param primary Primary selected identity, when one exists.
+         * @param revision Current document revision.
+         * @return A preview-cancellation command when the previous edit session owned one.
+         */
+        [[nodiscard]] EditorWorkspaceViewCommandData BeginSelection(std::span<const SceneObject> objects,
+                                                                    std::span<const SceneObjectId> selectedObjects,
+                                                                    std::optional<SceneObjectId> primary, DocumentRevision revision);
+
+        /**
          * @brief Clears the current edit session.
          * @return A preview-cancellation command when a transient preview was active.
          */
@@ -68,12 +128,23 @@ namespace Horo::Editor {
                                                                    bool allowCommands);
 
         /** @brief Reduces one transform edit into preview, commit, or cancel. */
-        [[nodiscard]] EditorWorkspaceViewCommandData ApplyTransformEdit(const InspectorTransformEdit &edit, const SceneObject &object,
-                                                                        bool allowCommands);
+        [[nodiscard]] EditorWorkspaceViewCommandData ApplyTransformEdit(const InspectorTransformEdit &edit, bool allowCommands);
 
         /** @brief Reduces one Camera edit into a typed component command. */
         [[nodiscard]] EditorWorkspaceViewCommandData ApplyCameraEdit(const InspectorCameraEdit &edit, const SceneObject &object,
                                                                      bool allowCommands) const;
+
+        /** @brief Reduces one Light edit into a typed component command. */
+        [[nodiscard]] EditorWorkspaceViewCommandData ApplyLightEdit(const InspectorLightEdit &edit, const SceneObject &object,
+                                                                    bool allowCommands);
+
+        /** @brief Reduces one TriggerVolume edit into a typed component command. */
+        [[nodiscard]] EditorWorkspaceViewCommandData ApplyTriggerVolumeEdit(const InspectorTriggerVolumeEdit &edit,
+                                                                            const SceneObject &object, bool allowCommands) const;
+
+        /** @brief Reduces one AudioSource edit into a typed component command. */
+        [[nodiscard]] EditorWorkspaceViewCommandData ApplyAudioSourceEdit(const InspectorAudioSourceEdit &edit, const SceneObject &object,
+                                                                          bool allowCommands) const;
 
         /** @brief Reports whether the current transform draft is valid. */
         [[nodiscard]] bool IsTransformValid() const noexcept;
@@ -81,14 +152,41 @@ namespace Horo::Editor {
         /** @brief Reports whether the session owns a transient transform preview. */
         [[nodiscard]] bool HasTransformPreview() const noexcept;
 
+        /** @brief Reports whether the session owns a transient Light-component preview. */
+        [[nodiscard]] bool HasLightPreview() const noexcept;
+
         /** @brief Reports whether the current Camera draft is valid. */
         [[nodiscard]] bool IsCameraValid() const noexcept;
 
+        /** @brief Reports whether the current Light draft is valid. */
+        [[nodiscard]] bool IsLightValid() const noexcept;
+
+        /** @brief Reports whether the current TriggerVolume draft is valid (always true when present). */
+        [[nodiscard]] bool IsTriggerVolumeValid() const noexcept;
+
+        /** @brief Reports whether the current AudioSource draft is valid. */
+        [[nodiscard]] bool IsAudioSourceValid() const noexcept;
+
     private:
-        void SynchronizeDraft(const SceneObject &object, DocumentRevision revision);
-        void ResetTransformDraft(const SceneObject &object);
+        struct ObjectTransformBaseline {
+            SceneObjectId object;
+            Math::Transform localTransform;
+        };
+
+        void SynchronizeDraft(std::span<const SceneObject> objects, std::span<const SceneObjectId> selectedObjects,
+                              std::optional<SceneObjectId> primary, DocumentRevision revision);
+        void ResetTransformDraft();
+        void ResetLightDraft(const SceneObject &object);
+        [[nodiscard]] std::vector<SceneObjectTransformUpdate> BuildTransformUpdates() const;
 
         InspectorObjectDraft m_draft;
-        std::optional<SceneObjectId> m_previewObject;
+        std::vector<ObjectTransformBaseline> m_baselines;
+        InspectorTransformAxisMask m_editedAxes;
+        InspectorTransformAxisMask m_relativeAxes;
+        std::array<float, 3> m_referencePosition{};
+        std::array<float, 3> m_referenceRotationDegrees{};
+        std::array<float, 3> m_referenceScale{1.0F, 1.0F, 1.0F};
+        bool m_hasTransformPreview{false};
+        bool m_hasLightPreview{false};
     };
 }  // namespace Horo::Editor

@@ -180,7 +180,8 @@ namespace Horo::Tests
                     .scene = Render::RenderSceneView{
                         .camera = Editor::ToRenderCamera(scene.camera),
                         .meshResources = scene.meshResources,
-                        .instances = scene.instances
+                        .instances = scene.instances,
+                        .lights = scene.lights,
                     }
                 }
             };
