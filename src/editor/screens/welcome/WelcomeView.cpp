@@ -124,8 +124,12 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] bool DrawWelcomeActionButton(const char *label, const Ui::ButtonVariant variant, const EditorGuiContext &ctx) {
-            return Ui::Button(
-                Ui::ButtonProps{label, ImVec2{-1.0F, 42.0F}, variant, true, 14.0F, ctx.theme.fonts.sans, Theme::FontPx::Sans});
+            return Ui::Button(Ui::ButtonProps{.label = label,
+                                              .size = {0.0F, 42.0F},
+                                              .variant = variant,
+                                              .font = ctx.theme.fonts.sans,
+                                              .componentSize = Ui::ComponentSize::Large,
+                                              .style = {.width = Ui::StyleWidth::FillAvailable}});
         }
     }  // namespace
 

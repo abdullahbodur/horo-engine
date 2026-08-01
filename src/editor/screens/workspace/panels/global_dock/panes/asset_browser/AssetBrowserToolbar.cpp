@@ -17,11 +17,26 @@
 
 namespace Horo::Editor {
     namespace {
-        constexpr float HeaderHeight = 28.0F;
-        constexpr float ToolbarHeight = 28.0F;
-        constexpr float NavigationButtonSize = 22.0F;
-        constexpr float NavigationWidth = NavigationButtonSize * 3.0F + 2.0F;
-        constexpr float BreadcrumbGap = 12.0F;
+        [[nodiscard]] float HeaderHeight() noexcept {
+            return Ui::ScaledLayoutValue(28.0F);
+        }
+
+        [[nodiscard]] float ToolbarHeight() noexcept {
+            return Ui::ScaledLayoutValue(28.0F);
+        }
+
+        [[nodiscard]] float NavigationButtonSize() noexcept {
+            return Ui::ScaledLayoutValue(22.0F);
+        }
+
+        [[nodiscard]] float NavigationWidth() noexcept {
+            return NavigationButtonSize() * 3.0F + Ui::ScaledLayoutValue(2.0F);
+        }
+
+        [[nodiscard]] float BreadcrumbGap() noexcept {
+            return Ui::ScaledLayoutValue(12.0F);
+        }
+
         constexpr float HeaderFontSize = kGlobalDockMinimumFontSize;
 
         struct ToolbarLayout {
@@ -35,8 +50,10 @@ namespace Horo::Editor {
             }
         };
 
-        [[nodiscard]] constexpr ToolbarLayout ResolveLayout(const bool compact) noexcept {
-            return compact ? ToolbarLayout{3.0F, 52.0F, 52.0F, 38.0F} : ToolbarLayout{6.0F, 132.0F, 108.0F, 48.0F};
+        [[nodiscard]] ToolbarLayout ResolveLayout(const bool compact) noexcept {
+            const float scale = Theme::GetActiveTokens().sizes.uiScale;
+            return compact ? ToolbarLayout{3.0F * scale, 52.0F * scale, 52.0F * scale, 38.0F * scale}
+                           : ToolbarLayout{6.0F * scale, 132.0F * scale, 108.0F * scale, 48.0F * scale};
         }
 
         [[nodiscard]] ImFont *ResolveFont(ImFont *preferred) {
@@ -80,9 +97,9 @@ namespace Horo::Editor {
 
             ImGui::SetCursorScreenPos(position);
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0.0F, 0.0F});
-            ImGui::BeginChild("##ContentBrowserBreadcrumb", {std::min(naturalWidth, maximumWidth), HeaderHeight}, false,
+            ImGui::BeginChild("##ContentBrowserBreadcrumb", {std::min(naturalWidth, maximumWidth), HeaderHeight()}, false,
                               ImGuiWindowFlags_AlwaysUseWindowPadding | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-            ImGui::SetCursorPosY((HeaderHeight - ImGui::GetTextLineHeight()) * 0.5F);
+            ImGui::SetCursorPosY((HeaderHeight() - ImGui::GetTextLineHeight()) * 0.5F);
             if (clipped && firstVisible > 0) {
                 ImGui::TextColored(Theme::Dim(), "...");
                 ImGui::SameLine(0.0F, 5.0F);
@@ -111,14 +128,14 @@ namespace Horo::Editor {
         [[nodiscard]] float DrawNavigationAndBreadcrumbs(const ImVec2 position, const EditorWorkspaceViewModel &viewModel,
                                                          EditorWorkspaceViewCommandData &command, ImFont *font,
                                                          const float maximumBreadcrumbWidth) {
-            constexpr ImVec2 buttonSize{NavigationButtonSize, NavigationButtonSize};
+            const ImVec2 buttonSize{NavigationButtonSize(), NavigationButtonSize()};
             const auto drawNavigationButton = [&command, buttonSize](const char *id, const Ui::NavigationIcon icon, const bool enabled,
                                                                      const EditorWorkspaceViewCommand target) {
                 if (Ui::NavigationIconButton(id, icon, buttonSize, enabled))
                     command = AssetBrowserInteractionSession::Navigate(target);
             };
 
-            ImGui::SetCursorScreenPos({position.x, position.y + (HeaderHeight - buttonSize.y) * 0.5F});
+            ImGui::SetCursorScreenPos({position.x, position.y + (HeaderHeight() - buttonSize.y) * 0.5F});
             drawNavigationButton("ContentBrowserBack", Ui::NavigationIcon::Back, viewModel.contentBrowserCanNavigateBack,
                                  EditorWorkspaceViewCommand::NavigateContentBrowserBack);
             ImGui::SameLine(0.0F, 1.0F);
@@ -129,15 +146,21 @@ namespace Horo::Editor {
                                  viewModel.contentBrowser.absoluteCurrentPath != viewModel.contentBrowser.absoluteRootPath,
                                  EditorWorkspaceViewCommand::NavigateContentBrowserUp);
 
-            const float breadcrumbWidth = DrawBreadcrumb({position.x + NavigationWidth + BreadcrumbGap, position.y},
+            const float breadcrumbWidth = DrawBreadcrumb({position.x + NavigationWidth() + BreadcrumbGap(), position.y},
                                                          viewModel.contentBrowser, command, font, maximumBreadcrumbWidth);
-            return NavigationWidth + (breadcrumbWidth > 0.0F ? BreadcrumbGap + breadcrumbWidth : 0.0F);
+            return NavigationWidth() + (breadcrumbWidth > 0.0F ? BreadcrumbGap() + breadcrumbWidth : 0.0F);
         }
 
-        void DrawQueryControls(const ImVec2 position, const float availableWidth, const ToolbarLayout &layout,
+        void DrawQueryControls(const ImVec2 position, const float availableWidth, const float rightEdgeX, const ToolbarLayout &layout,
                                const ContentBrowserDirectory &directory, AssetBrowserInteractionState &state,
                                const EditorGuiContext &context) {
-            const float searchWidth = std::max(1.0F, availableWidth - layout.FixedWidth());
+            // Right-aligned layout: search on left, type/sort/A-Z pinned to right edge
+            const float fixedWidth = layout.FixedWidth();
+            constexpr float outerPadX = 12.0F;
+            const float fixedStartX = rightEdgeX - outerPadX - fixedWidth;
+            const float searchWidth = std::max(60.0F, fixedStartX - position.x - layout.gap);
+
+            // Search
             ImGui::SetCursorScreenPos(position);
             static_cast<void>(Ui::InputTextControl("##ContentBrowserSearch", state.search.data(), state.search.size(), context.theme.fonts,
                                                    false, searchWidth));
@@ -152,6 +175,9 @@ namespace Horo::Editor {
                                                      searchMin.y + (searchMax.y - searchMin.y - HeaderFontSize) * 0.5F},
                                                     Theme::U32(Theme::Dim()), placeholder.c_str());
             }
+
+            // Type / Sort / Direction pinned to right edge
+            ImGui::SetCursorScreenPos({fixedStartX, position.y});
 
             std::vector<std::string> typeLabels{
                 context.localization.Get("editor", "workspace.content_browser.filter.all_types"),
@@ -176,10 +202,9 @@ namespace Horo::Editor {
             for (const std::string &label : typeLabels)
                 typeItems.push_back(label.c_str());
 
-            ImGui::SameLine(0.0F, layout.gap);
             ImGui::SetNextItemWidth(layout.typeWidth);
             if (Ui::ComboControl("ContentBrowserTypeFilter", &typeIndex, typeItems.data(), static_cast<int>(typeItems.size()),
-                                 context.theme.fonts, false, ToolbarHeight)) {
+                                 context.theme.fonts, false, ToolbarHeight())) {
                 state.assetTypeFilter = typeIndex == 0 ? std::string{} : typeLabels[static_cast<std::size_t>(typeIndex)];
             }
 
@@ -192,7 +217,7 @@ namespace Horo::Editor {
             ImGui::SameLine(0.0F, layout.gap);
             ImGui::SetNextItemWidth(layout.sortWidth);
             if (Ui::ComboControl("ContentBrowserSort", &sortIndex, sortItems.data(), static_cast<int>(sortItems.size()),
-                                 context.theme.fonts, false, ToolbarHeight)) {
+                                 context.theme.fonts, false, ToolbarHeight())) {
                 state.sortField = sortIndex == 0 ? ContentBrowserSortField::Name : ContentBrowserSortField::Type;
             }
 
@@ -200,12 +225,11 @@ namespace Horo::Editor {
             const bool ascending = state.sortDirection == ContentBrowserSortDirection::Ascending;
             if (Ui::Button({
                     .label = ascending ? "A-Z" : "Z-A",
-                    .size = {layout.directionWidth, ToolbarHeight},
+                    .size = {layout.directionWidth, ToolbarHeight()},
                     .variant = Ui::ButtonVariant::Secondary,
-                    .fontSize = 12.0F,
                     .font = context.theme.fonts.sansCompact,
                     .baseFontSize = Theme::FontPx::SansCompact,
-                    .componentSize = Ui::ButtonSize::Small,
+                    .componentSize = Ui::ComponentSize::XS,
                 })) {
                 state.sortDirection = ascending ? ContentBrowserSortDirection::Descending : ContentBrowserSortDirection::Ascending;
             }
@@ -222,10 +246,12 @@ namespace Horo::Editor {
         const float groupGap = compact ? 4.0F : 8.0F;
         const float minimumSearchWidth = compact ? 1.0F : 120.0F;
         const float maximumBreadcrumbWidth =
-            std::max(0.0F, safeWidth - NavigationWidth - groupGap - minimumSearchWidth - layout.FixedWidth());
+            std::max(0.0F, safeWidth - NavigationWidth() - groupGap - minimumSearchWidth - layout.FixedWidth());
         ImFont *font = ResolveFont(context.theme.fonts.sansCompact);
         const float navigationWidth = DrawNavigationAndBreadcrumbs(position, viewModel, command, font, maximumBreadcrumbWidth);
-        DrawQueryControls({position.x + navigationWidth + groupGap, position.y}, std::max(1.0F, safeWidth - navigationWidth - groupGap),
-                          layout, viewModel.contentBrowser, state, context);
+        const float queryAvailable = std::max(1.0F, safeWidth - navigationWidth - groupGap);
+        const float rightEdge = position.x + safeWidth;
+        DrawQueryControls({position.x + navigationWidth + groupGap, position.y}, queryAvailable, rightEdge, layout,
+                          viewModel.contentBrowser, state, context);
     }
 }  // namespace Horo::Editor

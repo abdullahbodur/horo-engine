@@ -4,10 +4,12 @@
 #include "Horo/Editor/IWorkspacePanel.h"
 #include "editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserPane.h"
 #include "editor/screens/workspace/panels/global_dock/panes/audio/GlobalDockAudioPane.h"
+#include "editor/screens/workspace/panels/global_dock/panes/build_output/GlobalDockBuildOutputPane.h"
 #include "editor/screens/workspace/panels/global_dock/panes/console/GlobalDockConsolePane.h"
 #include "editor/screens/workspace/panels/global_dock/panes/localization/GlobalDockLocalizationPane.h"
 #include "editor/screens/workspace/panels/global_dock/panes/mcp/GlobalDockMcpPane.h"
 #include "editor/screens/workspace/panels/global_dock/panes/network/GlobalDockNetworkPane.h"
+#include "editor/screens/workspace/panels/global_dock/panes/operations/GlobalDockOperationsPane.h"
 #include "editor/screens/workspace/panels/global_dock/panes/performance/GlobalDockPerformancePane.h"
 #include "editor/screens/workspace/panels/global_dock/panes/physics/GlobalDockPhysicsPane.h"
 
@@ -21,6 +23,8 @@ namespace Horo::Editor {
     enum class GlobalDockTab : std::uint8_t {
         Assets,
         Console,
+        BuildOutput,
+        Operations,
         Mcp,
         Performance,
         Physics,
@@ -30,12 +34,13 @@ namespace Horo::Editor {
     };
 
     inline constexpr std::array kDefaultGlobalDockTabs{
-        GlobalDockTab::Assets,  GlobalDockTab::Console, GlobalDockTab::Mcp,     GlobalDockTab::Performance,
-        GlobalDockTab::Physics, GlobalDockTab::Audio,   GlobalDockTab::Network, GlobalDockTab::Localization,
+        GlobalDockTab::Assets,  GlobalDockTab::Console,      GlobalDockTab::BuildOutput, GlobalDockTab::Operations,
+        GlobalDockTab::Mcp,     GlobalDockTab::Performance,  GlobalDockTab::Physics,     GlobalDockTab::Audio,
+        GlobalDockTab::Network, GlobalDockTab::Localization,
     };
 
     /** @brief Returns the stable default global-dock tab order. */
-    [[nodiscard]] constexpr const std::array<GlobalDockTab, 8> &DefaultGlobalDockTabs() noexcept {
+    [[nodiscard]] constexpr const std::array<GlobalDockTab, 10> &DefaultGlobalDockTabs() noexcept {
         return kDefaultGlobalDockTabs;
     }
 
@@ -78,6 +83,8 @@ namespace Horo::Editor {
         GlobalDockTab activeTab_{GlobalDockTab::Assets};
         AssetBrowserPane assetsPane_;
         GlobalDockConsolePane consolePane_;
+        GlobalDockBuildOutputPane buildOutputPane_;
+        GlobalDockOperationsPane operationsPane_;
         GlobalDockMcpPane mcpPane_;
         GlobalDockPerformancePane performancePane_;
         GlobalDockPhysicsPane physicsPane_;

@@ -101,9 +101,9 @@ namespace Horo::Editor {
             if (Ui::Button({.label = primaryLabel.c_str(),
                             .size = {kButtonSize.x, kButtonSize.y},
                             .variant = Ui::ButtonVariant::Secondary,
-                            .fontSize = 13.0F,
                             .font = ctx.theme.fonts.sansCompact,
-                            .baseFontSize = Theme::FontPx::SansCompact})) {
+                            .baseFontSize = Theme::FontPx::SansCompact,
+                            .componentSize = Ui::ComponentSize::Small})) {
                 if (state.hasFailed && state.canRetry)
                     cmd = ProjectLoadingViewCommand::Retry;
                 else if (state.hasFailed)
@@ -120,9 +120,9 @@ namespace Horo::Editor {
                 if (Ui::Button({.label = backLabel.c_str(),
                                 .size = {kButtonSize.x, kButtonSize.y},
                                 .variant = Ui::ButtonVariant::Secondary,
-                                .fontSize = 13.0F,
                                 .font = ctx.theme.fonts.sansCompact,
-                                .baseFontSize = Theme::FontPx::SansCompact}))
+                                .baseFontSize = Theme::FontPx::SansCompact,
+                                .componentSize = Ui::ComponentSize::Small}))
                     cmd = ProjectLoadingViewCommand::Back;
             }
         }

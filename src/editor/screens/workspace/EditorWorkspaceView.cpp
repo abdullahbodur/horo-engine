@@ -871,7 +871,7 @@ namespace Horo::Editor {
                 .label = restore.c_str(),
                 .size = ImVec2(buttonWidth, buttonHeight),
                 .variant = Ui::ButtonVariant::Primary,
-                .componentSize = Ui::ButtonSize::Small,
+                .componentSize = Ui::ComponentSize::Small,
             })) {
             outCommand.command = EditorWorkspaceViewCommand::RestoreSceneRecovery;
         }
@@ -880,7 +880,7 @@ namespace Horo::Editor {
                 .label = discard.c_str(),
                 .size = ImVec2(buttonWidth, buttonHeight),
                 .variant = Ui::ButtonVariant::Secondary,
-                .componentSize = Ui::ButtonSize::Small,
+                .componentSize = Ui::ComponentSize::Small,
             })) {
             outCommand.command = EditorWorkspaceViewCommand::DiscardSceneRecovery;
         }
@@ -928,7 +928,7 @@ namespace Horo::Editor {
                 .label = compare.c_str(),
                 .size = ImVec2(compareButtonWidth, buttonHeight),
                 .variant = Ui::ButtonVariant::Secondary,
-                .componentSize = Ui::ButtonSize::Small,
+                .componentSize = Ui::ComponentSize::Small,
             })) {
             outCommand.command = EditorWorkspaceViewCommand::CompareExternalScene;
         }
@@ -937,7 +937,7 @@ namespace Horo::Editor {
                 .label = reload.c_str(),
                 .size = ImVec2(actionButtonWidth, buttonHeight),
                 .variant = Ui::ButtonVariant::Secondary,
-                .componentSize = Ui::ButtonSize::Small,
+                .componentSize = Ui::ComponentSize::Small,
             })) {
             outCommand.command = EditorWorkspaceViewCommand::ReloadExternalScene;
         }
@@ -946,7 +946,7 @@ namespace Horo::Editor {
                 .label = overwrite.c_str(),
                 .size = ImVec2(actionButtonWidth, buttonHeight),
                 .variant = Ui::ButtonVariant::Primary,
-                .componentSize = Ui::ButtonSize::Small,
+                .componentSize = Ui::ComponentSize::Small,
             })) {
             outCommand.command = EditorWorkspaceViewCommand::OverwriteExternalScene;
         }

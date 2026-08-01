@@ -920,6 +920,12 @@
     "workspace.content_browser.project_asset_dock": {"text": "Proje varlık paneli"},
     "workspace.global_dock.tab.assets": {"text": "Varlıklar"},
     "workspace.global_dock.tab.console": {"text": "Konsol"},
+    "workspace.global_dock.tab.build_output": {
+      "text": "Build"
+    },
+    "workspace.global_dock.tab.operations": {
+      "text": "Ops"
+    },
     "workspace.global_dock.tab.mcp": {"text": "MCP"},
     "workspace.global_dock.tab.performance": {"text": "Perf"},
     "workspace.global_dock.tab.physics": {"text": "Fizik"},
@@ -937,8 +943,58 @@
     "workspace.global_dock.console.filter.info": {"text": "Bilgi"},
     "workspace.global_dock.console.filter.debug": {"text": "Debug"},
     "workspace.global_dock.console.filter.trace": {"text": "Trace"},
-    "workspace.global_dock.console.search": {"text": "Ara"},
+    "workspace.global_dock.console.search": {
+      "text": "Filtrele..."
+    },
+    "workspace.global_dock.console.clear": {
+      "text": "Temizle"
+    },
     "workspace.global_dock.console.empty": {"text": "Etkin filtrelerle eşleşen log yok."},
+    "workspace.global_dock.build_output.search": {
+      "text": "Filtrele..."
+    },
+    "workspace.global_dock.build_output.clear": {
+      "text": "Temizle"
+    },
+    "workspace.global_dock.build_output.columns": {
+      "text": "Sütunlar"
+    },
+    "workspace.global_dock.build_output.status.all": {
+      "text": "Tüm Durumlar"
+    },
+    "workspace.global_dock.build_output.status.ok": {
+      "text": "Tamam"
+    },
+    "workspace.global_dock.build_output.status.failed": {
+      "text": "Başarısız"
+    },
+    "workspace.global_dock.build_output.status.cached": {
+      "text": "Önbellekte"
+    },
+    "workspace.global_dock.build_output.column.time": {
+      "text": "Zaman"
+    },
+    "workspace.global_dock.build_output.column.status": {
+      "text": "Durum"
+    },
+    "workspace.global_dock.build_output.column.message": {
+      "text": "Mesaj"
+    },
+    "workspace.global_dock.build_output.column.source": {
+      "text": "Kaynak"
+    },
+    "workspace.global_dock.build_output.empty": {
+      "text": "Henüz build çıktısı yok. Sonuçları görmek için bir cook işlemi başlatın."
+    },
+    "workspace.global_dock.operations.search": {
+      "text": "Filtrele..."
+    },
+    "workspace.global_dock.operations.clear": {
+      "text": "Temizle"
+    },
+    "workspace.global_dock.operations.empty": {
+      "text": "Henüz işlem yok. Sonuçları görmek için bir cook veya import başlatın."
+    },
     "workspace.global_dock.mcp.bridge": {"text": "horo.mcp.bridge@0.4.0 — etkin"},
     "workspace.global_dock.mcp.tools": {"text": "scene.query, scene.select, scene.move, asset.list, build.trigger"},
     "workspace.global_dock.mcp.awaiting": {"text": "Araç çağrısı bekleniyor…"},

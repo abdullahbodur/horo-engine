@@ -32,6 +32,8 @@ namespace Horo::Editor {
         const std::array tabNames{
             context.localization.Get("editor", "workspace.global_dock.tab.assets").c_str(),
             context.localization.Get("editor", "workspace.global_dock.tab.console").c_str(),
+            context.localization.Get("editor", "workspace.global_dock.tab.build_output").c_str(),
+            context.localization.Get("editor", "workspace.global_dock.tab.operations").c_str(),
             context.localization.Get("editor", "workspace.global_dock.tab.mcp").c_str(),
             context.localization.Get("editor", "workspace.global_dock.tab.performance").c_str(),
             context.localization.Get("editor", "workspace.global_dock.tab.physics").c_str(),
@@ -58,6 +60,12 @@ namespace Horo::Editor {
                 break;
             case GlobalDockTab::Console:
                 consolePane_.Draw(contentOrigin, contentWidth, context);
+                break;
+            case GlobalDockTab::BuildOutput:
+                buildOutputPane_.Draw(contentOrigin, contentWidth, context);
+                break;
+            case GlobalDockTab::Operations:
+                operationsPane_.Draw(contentOrigin, contentWidth, context);
                 break;
             case GlobalDockTab::Mcp:
                 mcpPane_.Draw(contentOrigin, contentWidth, context);
@@ -87,11 +95,15 @@ namespace Horo::Editor {
     void GlobalDockPanel::OnAttach(PanelContext &context) {
         assetsPane_.Attach(context.guiRenderer);
         consolePane_.Attach(context.logQuery);
+        buildOutputPane_.Attach(context.logQuery);
+        operationsPane_.Attach(context.logQuery);
     }
 
     /** @copydoc GlobalDockPanel::OnDetach */
     void GlobalDockPanel::OnDetach() {
         assetsPane_.Detach();
         consolePane_.Detach();
+        buildOutputPane_.Detach();
+        operationsPane_.Detach();
     }
 }  // namespace Horo::Editor

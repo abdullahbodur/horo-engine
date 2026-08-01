@@ -22,6 +22,8 @@ namespace Horo::Editor {
     namespace {
         constexpr float OuterPaddingX = 10.0F;
         constexpr float OuterPaddingY = 8.0F;
+        constexpr float ToolbarPadX = 12.0F;
+        constexpr float ToolbarPadY = 5.0F;
         constexpr float HeaderHeight = 28.0F;
         constexpr float HeaderToGridGap = 8.0F;
         constexpr float CardGap = 6.0F;
@@ -70,7 +72,17 @@ namespace Horo::Editor {
         std::string &selectedAssetPath = state.selectedAbsolutePath;
         const ILocalizationService &localization = context.localization;
         const ContentBrowserDirectory &directory = viewModel.contentBrowser;
-        const ImVec2 headerPos{contentOrigin.x + OuterPaddingX, contentOrigin.y + OuterPaddingY};
+
+        // ── App bar background ──────────────────────────────────
+        const float barFullWidth = contentWidth + OuterPaddingX * 2.0F;
+        const float barHeight = ToolbarPadY * 2.0F + HeaderHeight;
+        const ImVec2 barMin{contentOrigin.x, contentOrigin.y};
+        const ImVec2 barMax{barMin.x + barFullWidth, barMin.y + barHeight};
+
+        drawList->AddRectFilled(barMin, barMax, Theme::U32(Theme::Bg2()));
+        drawList->AddLine({barMin.x, barMax.y}, {barMax.x, barMax.y}, Theme::U32(Theme::Border()), 1.0F);
+
+        const ImVec2 headerPos{barMin.x + ToolbarPadX, barMin.y + ToolbarPadY};
         DrawAssetBrowserToolbar(headerPos, std::max(1.0F, contentWidth - OuterPaddingX * 2.0F), viewModel, command, state, context);
         const std::vector<std::size_t> visibleEntries = interactionSession.ProjectEntries(directory);
         if (!selectedAssetPath.empty() &&
@@ -83,7 +95,7 @@ namespace Horo::Editor {
         DrawAssetBrowserBackgroundActions(viewModel, interactionSession, command, context);
         cardRenderer.RetainVisible(directory, visibleEntries);
 
-        float gridY = contentOrigin.y + OuterPaddingY + HeaderHeight + HeaderToGridGap;
+        float gridY = barMax.y + 4.0F;
         if (!viewModel.contentBrowserOperationError.empty()) {
             const std::string &errorText = localization.Get("editor", viewModel.contentBrowserOperationError);
             drawList->AddText(font, HeaderFontSize, {headerPos.x, gridY}, Theme::U32(Theme::Err()), errorText.c_str());

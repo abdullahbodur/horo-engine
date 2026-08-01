@@ -180,9 +180,11 @@ outputs, and optional local state.
 
 ```cpp
 enum class ComponentSize {
+    XS,
     Small,
     Medium,
     Large,
+    XL,
 };
 
 enum class ButtonVariant {
@@ -208,7 +210,7 @@ struct ButtonProps {
     ComponentSize size = ComponentSize::Medium;
     bool enabled = true;
     bool loading = false;
-    bool fillAvailableWidth = false;
+    StyleProperties style = {};
 };
 
 struct ButtonResult {
@@ -256,6 +258,41 @@ badges, menu items, and other controls:
 - enabled, disabled, loading, error, and focus state
 - optional leading or trailing icon
 - accessible label and tooltip metadata
+
+`StyleProperties` carries opt-in call-site presentation such as filling the
+available horizontal space and token-backed padding overrides. Component size
+remains the primary geometry contract: `XS`, `Small`, `Medium`, `Large`, and
+`XL` resolve font size, padding, minimum height, and icon size together.
+
+The base values are theme data rather than component implementation literals.
+Custom themes discovered under `~/.horo/themes/` may override them with:
+
+```json
+{
+  "tokens": {
+    "componentSizes": {
+      "xs": {
+        "fontSize": 12,
+        "paddingX": 8,
+        "paddingY": 3,
+        "minimumHeight": 24,
+        "iconSize": 12
+      }
+    },
+    "styleSpacing": {
+      "xs": 4,
+      "s": 8,
+      "m": 12,
+      "l": 16,
+      "xl": 24
+    }
+  }
+}
+```
+
+Global display scaling is temporarily disabled. The persisted setting remains
+in the settings document for compatibility, but the editor renders at 100%
+until font, layout, native DPI, and viewport scaling share one coherent policy.
 
 Not every primitive exposes every option. A control only exposes properties
 that have a defined behavior and token mapping. Feature code composes or wraps a

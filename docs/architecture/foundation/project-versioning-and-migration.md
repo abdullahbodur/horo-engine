@@ -1469,7 +1469,7 @@ conflicting project-owned schema timelines:
 - `release/distribution-and-update.md`
 - `delivery/quality-and-ci.md`
 - `desired-project-tree.md`
-- `project-kanban.md`
+- [GitHub Project 8 — Horo Engine Kanban](https://github.com/users/abdullahbodur/projects/8/views/1)
 
 ## Related Documents
 

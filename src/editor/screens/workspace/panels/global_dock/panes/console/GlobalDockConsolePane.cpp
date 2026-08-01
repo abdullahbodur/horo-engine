@@ -15,6 +15,24 @@ namespace Horo::Editor {
     namespace {
         constexpr float OuterPaddingX = 10.0F;
 
+        [[nodiscard]] float ToolbarPadX() noexcept {
+            return Ui::ScaledLayoutValue(12.0F);
+        }
+
+        [[nodiscard]] float ToolbarPadY() noexcept {
+            return Ui::ScaledLayoutValue(5.0F);
+        }
+
+        [[nodiscard]] float ToolbarHeight() noexcept {
+            return Ui::ScaledLayoutValue(28.0F);
+        }
+
+        constexpr float SearchWidth = 180.0F;
+
+        [[nodiscard]] float ControlGap() noexcept {
+            return Ui::ScaledLayoutValue(4.0F);
+        }
+
         enum class ConsoleLevelGroup : std::size_t {
             Error,
             Warn,
@@ -103,20 +121,27 @@ namespace Horo::Editor {
     /** @copydoc GlobalDockConsolePane::Draw */
     void GlobalDockConsolePane::Draw(const ImVec2 &contentOrigin, const float contentWidth, const EditorGuiContext &context) {
         const bool snapshotChanged = RefreshSnapshot();
-        constexpr float toolbarPadX = 10.0F;
-        constexpr float toolbarPadY = 6.0F;
-        constexpr float buttonHeight = 26.0F;
-        constexpr float buttonGap = 4.0F;
-        constexpr float searchWidth = 220.0F;
-        const bool stackedToolbar = contentWidth < 620.0F;
-        const float toolbarHeight = stackedToolbar ? 66.0F : 38.0F;
         const auto &fonts = context.theme.fonts;
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        ImFont *font = fonts.sansCompact ? fonts.sansCompact : ImGui::GetFont();
 
-        ImGui::SetCursorScreenPos({contentOrigin.x + toolbarPadX, contentOrigin.y + toolbarPadY});
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0.0F, 0.0F});
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {buttonGap, 0.0F});
-        ImGui::BeginChild("##ConsoleToolbar", {contentWidth, toolbarHeight}, false,
-                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings);
+        // ── Toolbar bar ──────────────────────────────────────────
+        const float barFullWidth = contentWidth + OuterPaddingX * 2.0F;
+        const float barTotalHeight = ToolbarPadY() * 2.0F + ToolbarHeight();
+        const ImVec2 barMin{contentOrigin.x, contentOrigin.y};
+        const ImVec2 barMax{barMin.x + barFullWidth, barMin.y + barTotalHeight};
+
+        drawList->AddRectFilled(barMin, barMax, Theme::U32(Theme::Bg2()));
+        drawList->AddLine({barMin.x, barMax.y}, {barMax.x, barMax.y}, Theme::U32(Theme::Border()), 1.0F);
+
+        if (fonts.sansCompact != nullptr)
+            ImGui::PushFont(fonts.sansCompact);
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0f, 4.0f});
+
+        // ── Left: level filter pills ────────────────────────────
+        ImGui::SetCursorScreenPos({barMin.x + ToolbarPadX(), barMin.y + ToolbarPadY()});
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {ControlGap(), 0.0F});
 
         const std::array filterKeys{
             "workspace.global_dock.console.filter.error", "workspace.global_dock.console.filter.warn",
@@ -125,50 +150,60 @@ namespace Horo::Editor {
         };
         for (std::size_t index = 0; index < filterKeys.size(); ++index) {
             const std::string &label = context.localization.Get("editor", filterKeys[index]);
-            const float width = std::max(44.0F, ImGui::CalcTextSize(label.c_str()).x + 16.0F);
             const Ui::ButtonProps button{
                 .label = label.c_str(),
-                .size = {width, buttonHeight},
                 .variant = m_levelEnabled[index] ? Ui::ButtonVariant::Primary : Ui::ButtonVariant::Secondary,
                 .font = fonts.sansCompact,
+                .componentSize = Ui::ComponentSize::Small,
             };
             if (Ui::Button(button)) {
                 m_levelEnabled[index] = !m_levelEnabled[index];
                 m_filterDirty = true;
             }
-            if (index + 1 < filterKeys.size())
-                ImGui::SameLine(0.0F, buttonGap);
+            ImGui::SameLine(0.0F, ControlGap());
         }
+        ImGui::PopStyleVar();  // ItemSpacing
 
-        const std::string &searchLabel = context.localization.Get("editor", "workspace.global_dock.console.search");
-        const float searchLabelWidth = ImGui::CalcTextSize(searchLabel.c_str()).x;
-        const float resolvedSearchWidth = std::min(searchWidth, std::max(80.0F, contentWidth - searchLabelWidth - 12.0F));
-        if (stackedToolbar) {
-            ImGui::SetCursorPos({0.0F, 34.0F});
-        } else {
-            ImGui::SameLine(
-                std::max(ImGui::GetCursorPosX() + buttonGap, ImGui::GetWindowWidth() - searchLabelWidth - 8.0F - resolvedSearchWidth));
-        }
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(Theme::Dim(), "%s", searchLabel.c_str());
-        ImGui::SameLine(0.0F, 8.0F);
-        if (Ui::InputTextControl("##ConsoleSearch", m_search.data(), m_search.size(), fonts, false, resolvedSearchWidth)) {
+        // ── Right: search + clear ───────────────────────────────
+        const std::string &clearLabel = context.localization.Get("editor", "workspace.global_dock.console.clear");
+        const float clearWidth = ImGui::CalcTextSize(clearLabel.c_str()).x + 16.0F;
+        const std::string &hint = context.localization.Get("editor", "workspace.global_dock.console.search");
+        const float resolvedSearchWidth =
+            std::min(SearchWidth, std::max(80.0F, barFullWidth - ToolbarPadX() * 2.0F - clearWidth - ControlGap() - 120.0F));
+        const float controlsWidth = resolvedSearchWidth + ControlGap() + clearWidth;
+        const float controlsX = barMax.x - ToolbarPadX() - controlsWidth;
+
+        ImGui::SetCursorScreenPos({controlsX, barMin.y + ToolbarPadY()});
+        if (Ui::InputTextControl("##ConsoleSearch", m_search.data(), m_search.size(), context.theme.fonts, false, resolvedSearchWidth,
+                                 hint.c_str())) {
             m_filterDirty = true;
         }
 
-        ImGui::EndChild();
-        ImGui::PopStyleVar(2);
+        ImGui::SameLine(0.0F, ControlGap());
+        if (Ui::Button(Ui::ButtonProps{.label = clearLabel.c_str(),
+                                       .variant = Ui::ButtonVariant::Secondary,
+                                       .font = fonts.sansCompact,
+                                       .componentSize = Ui::ComponentSize::Small})) {
+            m_search[0] = '\0';
+            m_filterDirty = true;
+        }
 
+        ImGui::PopStyleVar();  // FramePadding
+
+        if (fonts.sansCompact != nullptr)
+            ImGui::PopFont();
+
+        // ── Rebuild filter ──────────────────────────────────────
         const bool rebuildSelectableText = m_filterDirty && !m_textSelectionActive;
         if (rebuildSelectableText)
             RebuildFilter();
 
-        const float listY = contentOrigin.y + toolbarPadY + toolbarHeight + 4.0F;
-        const float listHeight = std::max(1.0F, ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - listY);
-        ImGui::SetCursorScreenPos({contentOrigin.x, listY});
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {10.0F, 6.0F});
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {4.0F, 2.0F});
-        ImGui::BeginChild("##ConsoleLogScroll", {contentWidth + OuterPaddingX * 2.0F, listHeight}, false,
+        // ── Content ─────────────────────────────────────────────
+        const float contentY = barMax.y + 4.0F;
+        const float contentHeight = std::max(1.0F, ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - contentY);
+        ImGui::SetCursorScreenPos({contentOrigin.x, contentY});
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {0.0F, 0.0F});
+        ImGui::BeginChild("##ConsoleLogScroll", {barFullWidth, contentHeight}, false,
                           ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_NoSavedSettings);
         const bool wasAtBottom = ImGui::GetScrollY() >= std::max(0.0F, ImGui::GetScrollMaxY() - 2.0F);
 
@@ -227,7 +262,7 @@ namespace Horo::Editor {
         }
         m_initialFollowTail = false;
         ImGui::EndChild();
-        ImGui::PopStyleVar(2);
+        ImGui::PopStyleVar();
     }
 
     bool GlobalDockConsolePane::RefreshSnapshot() {

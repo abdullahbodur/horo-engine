@@ -1122,36 +1122,32 @@ namespace Horo::Editor {
             const std::string backLabel = ctx.localization.Get("editor", "project_creation.back") + "###project_creation_back";
             const std::string nextLabel = ctx.localization.Get("editor", "project_creation.next") + "###project_creation_next";
             const std::string createLabel = ctx.localization.Get("editor", "project_creation.create") + "###project_creation_create";
-            if (Ui::Button({backLabel.c_str(),
-                            {backW, btnH},
-                            Ui::ButtonVariant::Secondary,
-                            st.step > 1,
-                            13.0F,
-                            ctx.theme.fonts.sansCompact,
-                            Theme::FontPx::SansCompact})) {
+            if (Ui::Button({.label = backLabel.c_str(),
+                            .size = {backW, btnH},
+                            .variant = Ui::ButtonVariant::Secondary,
+                            .enabled = st.step > 1,
+                            .font = ctx.theme.fonts.sansCompact,
+                            .baseFontSize = Theme::FontPx::SansCompact,
+                            .componentSize = Ui::ComponentSize::Small})) {
                 st.step--;
             }
 
             ImGui::SameLine(0.0F, gap);
 
             if (!isReview) {
-                if (Ui::Button({nextLabel.c_str(),
-                                {nextW, btnH},
-                                Ui::ButtonVariant::Primary,
-                                true,
-                                13.0F,
-                                ctx.theme.fonts.sansCompact,
-                                Theme::FontPx::SansCompact})) {
+                if (Ui::Button({.label = nextLabel.c_str(),
+                                .size = {nextW, btnH},
+                                .font = ctx.theme.fonts.sansCompact,
+                                .baseFontSize = Theme::FontPx::SansCompact,
+                                .componentSize = Ui::ComponentSize::Small})) {
                     st.step++;
                 }
             } else {
-                if (Ui::Button({createLabel.c_str(),
-                                {createW, btnH},
-                                Ui::ButtonVariant::Primary,
-                                true,
-                                13.0F,
-                                ctx.theme.fonts.sansCompact,
-                                Theme::FontPx::SansCompact})) {
+                if (Ui::Button({.label = createLabel.c_str(),
+                                .size = {createW, btnH},
+                                .font = ctx.theme.fonts.sansCompact,
+                                .baseFontSize = Theme::FontPx::SansCompact,
+                                .componentSize = Ui::ComponentSize::Small})) {
                     if (isValid) {
                         (void)controller.BuildCreationRequest();
                         outCommand = ProjectCreationViewCommand::CreateProject;
@@ -1220,23 +1216,20 @@ namespace Horo::Editor {
             }
             ImGui::Dummy({0.0F, 6.0F});
 
-            if (Ui::Button({"Keep Editing",
-                            {110.0F, 28.0F},
-                            Ui::ButtonVariant::Secondary,
-                            true,
-                            13.0F,
-                            ctx.theme.fonts.sansCompact,
-                            Theme::FontPx::SansCompact})) {
+            if (Ui::Button({.label = "Keep Editing",
+                            .size = {110.0F, 28.0F},
+                            .variant = Ui::ButtonVariant::Secondary,
+                            .font = ctx.theme.fonts.sansCompact,
+                            .baseFontSize = Theme::FontPx::SansCompact,
+                            .componentSize = Ui::ComponentSize::Small})) {
                 state.confirmingDiscard = false;
             }
             ImGui::SameLine(0.0F, 8.0F);
-            if (Ui::Button({"Discard & Return",
-                            {140.0F, 28.0F},
-                            Ui::ButtonVariant::Primary,
-                            true,
-                            13.0F,
-                            ctx.theme.fonts.sansCompact,
-                            Theme::FontPx::SansCompact})) {
+            if (Ui::Button({.label = "Discard & Return",
+                            .size = {140.0F, 28.0F},
+                            .font = ctx.theme.fonts.sansCompact,
+                            .baseFontSize = Theme::FontPx::SansCompact,
+                            .componentSize = Ui::ComponentSize::Small})) {
                 controller.DiscardDraft();
                 command = ProjectCreationViewCommand::ReturnToWelcome;
                 state.confirmingDiscard = false;

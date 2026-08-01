@@ -219,8 +219,6 @@ namespace Horo::Editor {
             const std::string customThemeDescription = ctx.localization.Get("editor", "settings.appearance.custom_theme.description");
             const std::string accentLabel = ctx.localization.Get("editor", "settings.appearance.accent_color");
             const std::string accentDescription = ctx.localization.Get("editor", "settings.appearance.accent_color.description");
-            const std::string scaleLabel = ctx.localization.Get("editor", "settings.appearance.ui_scale");
-            const std::string scaleDescription = ctx.localization.Get("editor", "settings.appearance.ui_scale.description");
             const std::string fontSizeLabel = ctx.localization.Get("editor", "settings.appearance.code_font_size");
             const std::string fontSizeDescription = ctx.localization.Get("editor", "settings.appearance.code_font_size.description");
             SettingRow(colorThemeLabel.c_str(), colorThemeDescription.c_str(), ctx.theme.fonts, [&st, &ctx]() {
@@ -250,9 +248,6 @@ namespace Horo::Editor {
             });
             const std::string typoGroup = ctx.localization.Get("editor", "settings.appearance.typography_group");
             SettingGroup(typoGroup.c_str(), ctx.theme.fonts);
-            SettingRow(scaleLabel.c_str(), scaleDescription.c_str(), ctx.theme.fonts, [&st, &ctx]() {
-                SliderIntControl("##ui-scale", &st.appearance.uiScale, 75, 200, SliderValueFormat::Percent, ctx.theme.fonts, 25);
-            });
             SettingRow(fontSizeLabel.c_str(), fontSizeDescription.c_str(), ctx.theme.fonts, [&st, &ctx]() {
                 (void)InputTextControl("##font-size", st.appearance.editorFontSize, 8, ctx.theme.fonts);
             });
@@ -1805,9 +1800,9 @@ namespace Horo::Editor {
                 Button({.label = restoreDefaults.c_str(),
                         .size = {restoreW, actionH},
                         .variant = ButtonVariant::Secondary,
-                        .fontSize = 13.0F,
                         .font = ctx.theme.fonts.sansCompact,
-                        .baseFontSize = FontPx::SansCompact})) {
+                        .baseFontSize = FontPx::SansCompact,
+                        .componentSize = ComponentSize::Small})) {
                 LOG_INFO("editor.settings", "Restore Defaults clicked — draft reset to factory defaults.");
                 ApplySettingsToDraft(st, DefaultEditorSettings());
                 st.statusMessage = "Defaults loaded into draft. Apply to persist.";
@@ -1818,9 +1813,9 @@ namespace Horo::Editor {
             if (Button({.label = cancelLabel.c_str(),
                         .size = {cancelW, actionH},
                         .variant = ButtonVariant::Secondary,
-                        .fontSize = 13.0F,
                         .font = ctx.theme.fonts.sansCompact,
-                        .baseFontSize = FontPx::SansCompact})) {
+                        .baseFontSize = FontPx::SansCompact,
+                        .componentSize = ComponentSize::Small})) {
                 LOG_INFO("editor.settings", "Settings cancelled by user (dirty=%s).", st.dirty ? "yes" : "no");
                 requestClose = true;
             }
@@ -1829,9 +1824,9 @@ namespace Horo::Editor {
             if (Button({.label = applyLabel.c_str(),
                         .size = {applyW, actionH},
                         .variant = ButtonVariant::Primary,
-                        .fontSize = 13.0F,
                         .font = ctx.theme.fonts.sansCompact,
-                        .baseFontSize = FontPx::SansCompact})) {
+                        .baseFontSize = FontPx::SansCompact,
+                        .componentSize = ComponentSize::Small})) {
                 (void)ApplySettings(st, settings);
             }
 

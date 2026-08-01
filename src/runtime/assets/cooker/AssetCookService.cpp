@@ -13,6 +13,7 @@
 #include "Horo/Foundation/Sha256.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -72,6 +73,26 @@ namespace Horo::Assets {
 
         // Pin the registry snapshot's records in deterministic order
         auto records = request.registry.Records();
+
+        // Emit cook-started record
+        if (request.buildOutputStore != nullptr) {
+            const auto now = std::chrono::system_clock::now();
+            request.buildOutputStore->Append(Log::StructuredLogRecord{
+                .timestampUtc = now,
+                .level = Log::Level::Info,
+                .category = "Build.Cook.Start",
+                .message = std::to_string(records.size()),
+                .context = "BEGIN",
+            });
+            request.buildOutputStore->Append(Log::StructuredLogRecord{
+                .timestampUtc = now,
+                .level = Log::Level::Info,
+                .category = "Op.Cook",
+                .message = std::to_string(records.size()) + " assets",
+                .context = "RUNNING",
+            });
+        }
+
         if (records.empty()) {
             // Empty snapshot: write an empty current.json directly (no manifest/generation dir needed).
             // Build an empty current.json
@@ -192,6 +213,21 @@ namespace Horo::Assets {
                 ++cacheHits;
         }
 
+        // Emit per-asset cache-hit records
+        if (request.buildOutputStore != nullptr) {
+            for (const auto &slot : slots) {
+                if (slot.cacheHit) {
+                    request.buildOutputStore->Append(Log::StructuredLogRecord{
+                        .timestampUtc = std::chrono::system_clock::now(),
+                        .level = Log::Level::Info,
+                        .category = "Build.Cook",
+                        .message = slot.record.sourcePath.String(),
+                        .context = "CACHED",
+                    });
+                }
+            }
+        }
+
         // Submit misses through TaskGroup
         {
             TaskGroup group(jobs_, TaskGroupFailurePolicy::FailFast, cancellation);
@@ -245,6 +281,21 @@ namespace Horo::Assets {
                 return Result<AssetCookReport>::Failure(joinResult.ErrorValue());
         }
 
+        // Emit per-asset cooked records (all non-cached slots cooked successfully)
+        if (request.buildOutputStore != nullptr) {
+            for (const auto &slot : slots) {
+                if (!slot.cacheHit) {
+                    request.buildOutputStore->Append(Log::StructuredLogRecord{
+                        .timestampUtc = std::chrono::system_clock::now(),
+                        .level = Log::Level::Info,
+                        .category = "Build.Cook",
+                        .message = slot.record.sourcePath.String(),
+                        .context = "OK",
+                    });
+                }
+            }
+        }
+
         // Store cache entries and build manifest
         std::vector<AssetCookManifestEntry> manifestEntries;
         std::vector<std::vector<std::uint8_t>> manifestPayloads;
@@ -277,6 +328,24 @@ namespace Horo::Assets {
             return Result<AssetCookReport>::Failure(pubResult.ErrorValue());
 
         std::size_t cookedCount = slots.size() - cacheHits;
+
+        // Emit cook-complete record
+        if (request.buildOutputStore != nullptr) {
+            request.buildOutputStore->Append(Log::StructuredLogRecord{
+                .timestampUtc = std::chrono::system_clock::now(),
+                .level = Log::Level::Info,
+                .category = "Build.Cook.End",
+                .message = std::to_string(cookedCount) + " cooked, " + std::to_string(cacheHits) + " cached, 0 failed",
+                .context = "END",
+            });
+            request.buildOutputStore->Append(Log::StructuredLogRecord{
+                .timestampUtc = std::chrono::system_clock::now(),
+                .level = Log::Level::Info,
+                .category = "Op.Cook",
+                .message = std::to_string(cookedCount) + " cooked, " + std::to_string(cacheHits) + " cached",
+                .context = "OK",
+            });
+        }
 
         return Result<AssetCookReport>::Success(AssetCookReport{
             .generation = pubResult.Value(),

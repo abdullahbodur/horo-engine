@@ -1,3 +1,7 @@
+/**
+ * @file EditorUiComponents.h
+ * @brief Typed primitive and composite contracts for the editor design system.
+ */
 #pragma once
 
 #include "Horo/Editor/EditorTheme.h"
@@ -6,9 +10,11 @@
 #include <cstdint>
 #include <functional>
 #include <imgui.h>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace Horo::Editor::Ui {
 
@@ -20,30 +26,81 @@ namespace Horo::Editor::Ui {
         Secondary,
     };
 
-    /** @brief Predefined size presets for shared buttons. */
-    enum class ButtonSize {
-        Small,
-        Medium,
-        Large,
+    using ComponentSize = DesignSystem::ComponentSize;
+    using SpacingSize = DesignSystem::SpacingSize;
+
+    /** @brief Horizontal sizing behavior shared by primitive style properties. */
+    enum class StyleWidth {
+        FitContent,
+        FillAvailable,
     };
+
+    /** @brief Optional call-site presentation shared by editor primitives. */
+    struct StyleProperties {
+        StyleWidth width{StyleWidth::FitContent}; /**< Horizontal sizing behavior. */
+        std::optional<SpacingSize> paddingX{};    /**< Horizontal token override; empty inherits the size preset. */
+        std::optional<SpacingSize> paddingY{};    /**< Vertical token override; empty inherits the size preset. */
+    };
+
+    /**
+     * @brief Resolves one logical layout dimension through the active global UI scale.
+     * @param value Unscaled logical UI value.
+     * @return Display-scaled value.
+     */
+    [[nodiscard]] float ScaledLayoutValue(float value) noexcept;
 
     // ── Button props & primitive ─────────────────────────────────────────
 
     /** @brief Input contract for the shared editor button primitive. */
     struct ButtonProps {
-        const char *label = "";
-        ImVec2 size = {0.0F, 0.0F};
-        ButtonVariant variant = ButtonVariant::Primary;
-        bool enabled = true;
-        float fontSize = 14.0F;
-        ImFont *font = nullptr;
-        float baseFontSize = Theme::FontPx::Sans;
-        ButtonSize componentSize = ButtonSize::Medium;
-        bool fillAvailableWidth = false;
+        const char *label = "";                              /**< Visible label plus stable ImGui identity suffix. */
+        ImVec2 size = {0.0F, 0.0F};                          /**< Optional logical size; zero dimensions use theme metrics. */
+        ButtonVariant variant = ButtonVariant::Primary;      /**< Semantic color treatment. */
+        bool enabled = true;                                 /**< Whether the action can be activated. */
+        ImFont *font = nullptr;                              /**< Optional font atlas entry. */
+        float baseFontSize = Theme::FontPx::Sans;            /**< Atlas size used to calculate the font scale. */
+        ComponentSize componentSize = ComponentSize::Medium; /**< Shared theme-backed geometry preset. */
+        StyleProperties style{};                             /**< Optional call-site presentation overrides. */
     };
 
-    /** @brief Draws a shared editor button primitive. */
+    /**
+     * @brief Draws a shared editor button primitive.
+     * @param props Stable identity, state, semantic variant, sizing, and optional style overrides.
+     * @return True when the enabled button was activated this frame.
+     */
     [[nodiscard]] bool Button(const ButtonProps &props);
+
+    // ── Configurable data table primitive ────────────────────────────────
+
+    /** @brief One visible/configurable column in a shared data table. */
+    struct TableColumn {
+        std::string id;
+        std::string label;
+        float width{0.0F};
+        bool visible{true};
+    };
+
+    /** @brief One selectable cell in a shared data table row. */
+    struct TableCell {
+        std::string text;
+        ImVec4 color{Theme::Text()};
+    };
+
+    /** @brief Row data consumed by the shared data table primitive. */
+    struct TableRow {
+        std::vector<TableCell> cells;
+    };
+
+    /** @brief Rendering options for a shared data table. */
+    struct TableProps {
+        const char *id{"##Table"};
+        ComponentSize componentSize{ComponentSize::Small};
+        bool selectableCells{true};
+    };
+
+    /** @brief Draws a themed table with runtime column visibility and selectable cells. */
+    void DrawTable(const TableProps &props, std::span<const TableColumn> columns, std::span<const TableRow> rows,
+                   const Theme::Fonts &fonts);
 
     // ── Card / surface primitives ────────────────────────────────────────
 
@@ -90,9 +147,10 @@ namespace Horo::Editor::Ui {
     struct IconButtonProps {
         const char *id = "";
         IconButtonGlyph glyph = IconButtonGlyph::Plus;
-        ImVec2 size = {32.0F, 32.0F};
+        ImVec2 size = {0.0F, 0.0F};
         const char *tooltip = "";
         bool enabled = true;
+        ComponentSize componentSize = ComponentSize::Medium;
     };
 
     /**
@@ -256,7 +314,7 @@ namespace Horo::Editor::Ui {
 
     /** @brief Renders a styled dropdown with optional error styling. Returns true if the selection changed. */
     [[nodiscard]] bool ComboControl(const char *id, int *value, const char *const items[], int itemCount, const Theme::Fonts &fonts,
-                                    bool error = false, float height = 0.0F);
+                                    bool error = false, float height = 0.0F, ComponentSize componentSize = ComponentSize::Small);
 
     /**
      * @brief Renders the shared dropdown design for entries projected from a typed model.
@@ -267,10 +325,25 @@ namespace Horo::Editor::Ui {
      * @param fonts Editor typography handles.
      * @param error Whether to render the field in its error state.
      * @param height Explicit field height, or zero to use the shared default.
+     * @param componentSize Shared theme-backed size preset.
      * @return True when an enabled entry changed the selection.
      */
     [[nodiscard]] bool ComboControl(const char *id, int *value, int itemCount, const ComboItemSource &source, const Theme::Fonts &fonts,
-                                    bool error = false, float height = 0.0F);
+                                    bool error = false, float height = 0.0F, ComponentSize componentSize = ComponentSize::Small);
+
+    /**
+     * @brief Renders a themed multi-select field with a checkbox popup.
+     * @param id Stable UI identity.
+     * @param label Visible summary label.
+     * @param items Visible option labels.
+     * @param values Mutable selection values paired with @p items.
+     * @param fonts Editor typography handles.
+     * @param width Logical field width; zero uses the label's natural width.
+     * @param componentSize Shared theme-backed size preset.
+     * @return True when any selection value changed.
+     */
+    [[nodiscard]] bool MultiSelectField(const char *id, const char *label, std::span<const char *const> items, std::span<bool> values,
+                                        const Theme::Fonts &fonts, float width = 0.0F, ComponentSize componentSize = ComponentSize::Small);
 
     /**
      * @brief Renders an input text field with shared frame styling and optional error state.
@@ -280,10 +353,13 @@ namespace Horo::Editor::Ui {
      * @param fonts Editor typography handles.
      * @param error Whether to render the field in its error state.
      * @param width Requested control width; negative values fill the remaining content width.
+     * @param hint Optional placeholder text shown when the field is empty; nullptr for none.
+     * @param prefixIconWidth Extra left padding reserved for a caller-drawn prefix icon; 0 for none.
      * @return True when the text changed.
      */
     [[nodiscard]] bool InputTextControl(const char *id, char *buffer, size_t bufferSize, const Theme::Fonts &fonts, bool error = false,
-                                        float width = -1.0F);
+                                        float width = -1.0F, const char *hint = nullptr, float prefixIconWidth = 0.0F,
+                                        ComponentSize componentSize = ComponentSize::Small);
 
     /**
      * @brief Renders the string-backed overload of the shared input text field.
@@ -293,10 +369,12 @@ namespace Horo::Editor::Ui {
      * @param fonts Editor typography handles.
      * @param error Whether to render the field in its error state.
      * @param width Requested control width; negative values fill the remaining content width.
+     * @param hint Optional placeholder text shown when the field is empty; nullptr for none.
      * @return True when the text changed.
      */
     [[nodiscard]] bool InputTextControl(const char *id, std::string &value, size_t maxSize, const Theme::Fonts &fonts, bool error = false,
-                                        float width = -1.0F);
+                                        float width = -1.0F, const char *hint = nullptr, float prefixIconWidth = 0.0F,
+                                        ComponentSize componentSize = ComponentSize::Small);
 
     /**
      * @brief Presentation metadata for one line in a selectable text block.
@@ -419,6 +497,7 @@ namespace Horo::Editor::Ui {
         bool showBrandMark = false;
         bool showClose = true;
         float titleFontSize = 14.0F;
+        ComponentSize componentSize = ComponentSize::Medium;
     };
 
     /**

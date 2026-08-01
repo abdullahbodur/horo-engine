@@ -368,6 +368,7 @@ namespace Horo::Editor {
         for (const auto &item : m_snapshot.items)
             m_defaultPresetValues.push_back(CapturePresetValues(item, *m_catalog, "Default"));
         LOG_INFO("editor.asset_import", "Import started: %zu files.", m_snapshot.items.size());
+        LOG_INFO("Op.AssetImport.RUNNING", "Import started: %zu files.", m_snapshot.items.size());
 
         return Result<void>::Success();
     }
@@ -432,6 +433,7 @@ namespace Horo::Editor {
         m_snapshot.revision = opSnapshot.revision;
 
         LOG_INFO("editor.asset_import", "Imported item %zu: %s", index, m_snapshot.items[index].displayName.c_str());
+        LOG_INFO("Op.AssetImport.OK", "Imported item %zu: %s", index, m_snapshot.items[index].displayName.c_str());
 
         // Check for conflicts before committing
         auto commitItem = m_snapshot.items[index];  // mutable copy for name/folder transforms
@@ -469,6 +471,7 @@ namespace Horo::Editor {
             conflict.snapshotIndex = index;
             m_conflictQueue.push_back(std::move(conflict));
             LOG_INFO("editor.asset_import", "Conflict detected for %s — queued for resolution", commitItem.displayName.c_str());
+            LOG_INFO("Op.AssetImport.FAILED", "Conflict detected for %s — queued for resolution", commitItem.displayName.c_str());
         } else {
             // Commit to project storage
             if (m_committer) {

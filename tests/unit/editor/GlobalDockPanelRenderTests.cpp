@@ -72,9 +72,10 @@ namespace {
     TEST_CASE("Global dock exposes the default tabs", "[unit][editor][gui]") {
         using namespace Horo::Editor;
 
-        constexpr std::array expected{
-            GlobalDockTab::Assets,  GlobalDockTab::Console, GlobalDockTab::Mcp,     GlobalDockTab::Performance,
-            GlobalDockTab::Physics, GlobalDockTab::Audio,   GlobalDockTab::Network, GlobalDockTab::Localization,
+        const std::array expected{
+            GlobalDockTab::Assets,  GlobalDockTab::Console,      GlobalDockTab::BuildOutput, GlobalDockTab::Operations,
+            GlobalDockTab::Mcp,     GlobalDockTab::Performance,  GlobalDockTab::Physics,     GlobalDockTab::Audio,
+            GlobalDockTab::Network, GlobalDockTab::Localization,
         };
         REQUIRE((DefaultGlobalDockTabs() == expected));
 

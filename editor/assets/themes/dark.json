@@ -1,5 +1,51 @@
 {
   "name": "Horo Dark",
+  "tokens": {
+    "componentSizes": {
+      "xs": {
+        "fontSize": 12,
+        "paddingX": 8,
+        "paddingY": 3,
+        "minimumHeight": 24,
+        "iconSize": 12
+      },
+      "s": {
+        "fontSize": 13,
+        "paddingX": 10,
+        "paddingY": 5,
+        "minimumHeight": 28,
+        "iconSize": 14
+      },
+      "m": {
+        "fontSize": 14,
+        "paddingX": 14,
+        "paddingY": 7,
+        "minimumHeight": 32,
+        "iconSize": 16
+      },
+      "l": {
+        "fontSize": 16,
+        "paddingX": 18,
+        "paddingY": 10,
+        "minimumHeight": 40,
+        "iconSize": 20
+      },
+      "xl": {
+        "fontSize": 18,
+        "paddingX": 22,
+        "paddingY": 13,
+        "minimumHeight": 48,
+        "iconSize": 24
+      }
+    },
+    "styleSpacing": {
+      "xs": 4,
+      "s": 8,
+      "m": 12,
+      "l": 16,
+      "xl": 24
+    }
+  },
   "colors": {
     "Text": [
       0.867,

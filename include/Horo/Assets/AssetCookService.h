@@ -12,6 +12,7 @@
 #include "Horo/Assets/CookCatalog.h"
 #include "Horo/Foundation/CancellationToken.h"
 #include "Horo/Foundation/JobSystem.h"
+#include "Horo/Foundation/Logging/StructuredLogStore.h"
 #include "Horo/Foundation/Result.h"
 
 #include <filesystem>
@@ -34,6 +35,7 @@ struct AssetCookRequest
     AssetRegistrySnapshot registry;          /**< Pinned immutable registry snapshot. */
     AssetCookTargetId target;                /**< Cook target to produce artifacts for. */
     AssetCookLimits limits;                  /**< Bounded size and concurrency limits. */
+    Log::StructuredLogStore *buildOutputStore{nullptr}; /**< Optional store for per-asset cook progress records. */
 };
 
 /**
