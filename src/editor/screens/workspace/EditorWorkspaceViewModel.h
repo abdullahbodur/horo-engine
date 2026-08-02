@@ -3,12 +3,14 @@
 #include "Horo/Editor/ActivityBarLayout.h"
 #include "Horo/Editor/EditorMenuModel.h"
 #include "Horo/Editor/EditorWorkspaceEvents.h"
+#include "Horo/Foundation/Result.h"
 #include "Horo/Editor/WorkspacePanelHost.h"
 #include "Horo/Runtime/Render/RenderScene.h"
 #include "editor/document/SceneDocument.h"
 #include "editor/project_model/EditorTransformTool.h"
 #include "editor/project_model/EditorViewportModel.h"
 #include "editor/screens/workspace/ContentBrowserModel.h"
+#include "editor/screens/workspace/GameplayBehaviorRequest.h"
 
 #include <optional>
 #include <string>
@@ -180,6 +182,7 @@ namespace Horo::Editor {
         std::uint32_t column{};
     };
 
+
     struct EditorWorkspaceViewCommandData {
         EditorWorkspaceViewCommand command = EditorWorkspaceViewCommand::None;
         std::optional<EditorMenuInvocation> menuInvocation = std::nullopt;
@@ -212,6 +215,7 @@ namespace Horo::Editor {
         std::optional<WorkspacePanelDropTarget> workspaceDropTarget = std::nullopt;
         std::optional<ContentBrowserAssetTransferRequest> contentBrowserTransfer = std::nullopt;
         std::optional<DiagnosticSourceRequest> diagnosticSource = std::nullopt;
+        std::optional<CreateGameplayBehaviorRequest> gameplayBehaviorRequest = std::nullopt;
     };
 
     /** @brief Pending project-local Content Browser clipboard operation. */

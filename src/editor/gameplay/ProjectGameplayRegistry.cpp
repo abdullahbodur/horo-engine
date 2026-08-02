@@ -58,7 +58,10 @@ namespace Horo::Editor {
                      iterator != end && !error; iterator.increment(error)) {
                     if (iterator->is_regular_file(error) &&
                         (iterator->path().extension() == ".cpp" || iterator->path().extension() == ".cc" ||
-                         iterator->path().extension() == ".cxx"))
+                         iterator->path().extension() == ".cxx") &&
+                        // GameModule.cpp is the generated bootstrap created by the editor;
+                        // it is not evidence that the project contains a native behavior.
+                        iterator->path().filename() != "GameModule.cpp")
                         return true;
                 }
             }

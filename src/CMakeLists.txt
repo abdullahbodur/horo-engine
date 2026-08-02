@@ -403,6 +403,8 @@ add_library(HoroEditorServices STATIC
         editor/gameplay/ProjectGameplayRegistry.cpp
         editor/gameplay/EditorPlaySessionController.cpp
         editor/screens/workspace/ContentBrowserModel.cpp
+        editor/screens/workspace/GameplayBehaviorRequestValidation.cpp
+        editor/modals/gameplay_behavior/GameplayBehaviorFilenameModalState.cpp
         editor/project_model/ProjectCreationService.cpp
         editor/project_model/ProjectMutation.cpp
         editor/project_model/ProjectMigrationTransaction.cpp
@@ -507,6 +509,7 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/modals/asset_import/AssetImportModal.cpp
             editor/modals/asset_import/AssetImportModalPresentation.cpp
             editor/modals/scene_compare/SceneConflictCompareModal.cpp
+            editor/modals/gameplay_behavior/GameplayBehaviorFilenameModal.cpp
             editor/screens/welcome/WelcomeView.cpp
             editor/screens/welcome/WelcomeScreen.cpp
             editor/screens/project_creation/ProjectCreationView.cpp

@@ -924,6 +924,11 @@ namespace Horo::Editor {
     }
 
     void EditorWorkspaceController::ProcessCommand(const EditorWorkspaceViewCommandData &cmd) {
+        // Keep a complete audit trail for workspace interactions, including commands that
+        // are rejected by validation or fail during the underlying filesystem operation.
+        LOG_INFO("editor.asset_actions", "Workspace action received: command=%d path='%s' secondary='%s'",
+                 static_cast<int>(cmd.command), cmd.stringPayload.value_or("").c_str(),
+                 cmd.secondaryStringPayload.value_or("").c_str());
         // A transient overlay must not survive the interaction or workspace action that owns it.
         if (!m_viewport.Current().transformPreviews.empty() && cmd.command != EditorWorkspaceViewCommand::None &&
             cmd.command != EditorWorkspaceViewCommand::PreviewObjectTransform &&
@@ -2169,6 +2174,7 @@ namespace Horo::Editor {
     }
 
     void EditorWorkspaceController::CreateContentBrowserFolder(const std::string &absoluteDirectory, const std::string &name) {
+        LOG_INFO("editor.asset_actions", "Create folder requested: directory='%s' name='%s'", absoluteDirectory.c_str(), name.c_str());
         m_viewModel.contentBrowserOperationError.clear();
         if (m_mutations == nullptr || m_durableFiles == nullptr) {
             m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.unavailable";
@@ -2197,15 +2203,20 @@ namespace Horo::Editor {
         }
         std::error_code error;
         if (!std::filesystem::create_directory(directory / requestedName, error) || error) {
+            LOG_ERROR("editor.asset_actions", "Create folder failed: path='%s' error='%s'",
+                      (directory / requestedName).string().c_str(), error.message().c_str());
             m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.create_folder_failed";
             return;
         }
         static_cast<void>(m_durableFiles->SyncDirectory(directory));
+        LOG_INFO("editor.asset_actions", "Create folder completed: path='%s'", (directory / requestedName).string().c_str());
         RefreshContentBrowserAfterMutation();
     }
 
     void EditorWorkspaceController::CreateGameplayBehavior(const bool nativeBehavior,
                                                            const std::string &absoluteDirectory) {
+        LOG_INFO("editor.asset_actions", "Create %s behavior requested: directory='%s'",
+                 nativeBehavior ? "native" : "lua", absoluteDirectory.c_str());
         m_viewModel.contentBrowserOperationError.clear();
         if (m_mutations == nullptr || m_durableFiles == nullptr) {
             m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.unavailable";
@@ -2288,6 +2299,8 @@ namespace Horo::Editor {
               "}\n";
         const Result<void> written = m_durableFiles->WriteDurable(source, std::as_bytes(std::span{contents}));
         if (written.HasError()) {
+            LOG_ERROR("editor.asset_actions", "Create %s behavior failed writing '%s': %s",
+                      nativeBehavior ? "native" : "lua", source.string().c_str(), written.ErrorValue().message.c_str());
             m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.create_behavior_failed";
             return;
         }
@@ -2314,6 +2327,8 @@ namespace Horo::Editor {
                 const Result<void> moduleWritten =
                     m_durableFiles->WriteDurable(moduleSource, std::as_bytes(std::span{moduleContents}));
                 if (moduleWritten.HasError()) {
+                    LOG_ERROR("editor.asset_actions", "Create native behavior failed writing module '%s': %s",
+                              moduleSource.string().c_str(), moduleWritten.ErrorValue().message.c_str());
                     static_cast<void>(m_durableFiles->RemoveDurable(source));
                     m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.create_behavior_failed";
                     return;
@@ -2326,6 +2341,8 @@ namespace Horo::Editor {
             const Result<void> sidecar =
                 m_durableFiles->WriteDurable(source.string() + ".meta", std::as_bytes(std::span{metadata}));
             if (sidecar.HasError()) {
+                LOG_ERROR("editor.asset_actions", "Create lua behavior failed writing metadata for '%s': %s",
+                          source.string().c_str(), sidecar.ErrorValue().message.c_str());
                 static_cast<void>(m_durableFiles->RemoveDurable(source));
                 m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.create_behavior_failed";
                 return;
@@ -2337,6 +2354,8 @@ namespace Horo::Editor {
             m_nativeBuildDebounceSeconds = 0.25F;
         else
             RefreshGameplayRegistry();
+        LOG_INFO("editor.asset_actions", "Create %s behavior completed: source='%s'",
+                 nativeBehavior ? "native" : "lua", source.string().c_str());
     }
 
     void EditorWorkspaceController::RefreshGameplayRegistry() {

@@ -206,6 +206,15 @@
     "workspace.scene_compare.field.primitive": { "text": "Primitive" },
     "workspace.scene_compare.field.components": { "text": "Components" },
     "workspace.scene_compare.empty": { "text": "No semantic object differences remain. The file may only differ in formatting." },
+    "workspace.gameplay_behavior.create.title": { "text": "Create Gameplay Behavior" },
+    "workspace.gameplay_behavior.create.type": { "text": "TYPE" },
+    "workspace.gameplay_behavior.create.lua": { "text": "Lua" },
+    "workspace.gameplay_behavior.create.native": { "text": "Native C++" },
+    "workspace.gameplay_behavior.create.destination": { "text": "DESTINATION" },
+    "workspace.gameplay_behavior.create.filename": { "text": "FILENAME" },
+    "workspace.gameplay_behavior.create.invalid_filename": { "text": "Enter a valid filename without an extension or path separators." },
+    "workspace.gameplay_behavior.create.confirm": { "text": "Create" },
+    "workspace.gameplay_behavior.create.cancel": { "text": "Cancel" },
     "project_loading.status.cancelling": {
       "text": "Cancelling..."
     },

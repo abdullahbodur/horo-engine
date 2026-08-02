@@ -119,6 +119,37 @@ namespace {
         EditorWorkspaceController controller_;
     };
 
+    TEST_CASE("Gameplay behavior creation requests validate Lua and native kinds", "[unit][editor][behavior]") {
+        const std::string destination = std::filesystem::absolute("project/assets/scripts").string();
+        for (const GameplayBehaviorKind kind : {GameplayBehaviorKind::Lua, GameplayBehaviorKind::Native}) {
+            const CreateGameplayBehaviorRequest request{.destination = destination, .baseName = "PlayerBehavior", .kind = kind};
+            REQUIRE((ValidateCreateGameplayBehaviorRequest(request).HasValue()));
+        }
+    }
+
+    TEST_CASE("Gameplay behavior creation requests reject invalid destinations and names", "[unit][editor][behavior]") {
+        for (const std::string destination : {"", "project/assets/scripts", "./project/assets/scripts"}) {
+            const CreateGameplayBehaviorRequest request{
+                .destination = destination, .baseName = "PlayerBehavior", .kind = GameplayBehaviorKind::Lua};
+            const Result<void> result = ValidateCreateGameplayBehaviorRequest(request);
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().code.Value() == "workspace.gameplay_behavior.invalid_request");
+        }
+        for (const std::string name : {"", "dir/name", "dir\\\\name", "behavior.lua", ".", "..", "CON", "COM1", "LPT1", "com1.txt",
+                                       "lpt1.lua", "name ", "name.", "bad<name"}) {
+            const CreateGameplayBehaviorRequest request{
+                .destination = "/project/assets/scripts", .baseName = name, .kind = GameplayBehaviorKind::Lua};
+            const Result<void> result = ValidateCreateGameplayBehaviorRequest(request);
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().code.Value() == "workspace.gameplay_behavior.invalid_request");
+        }
+        const CreateGameplayBehaviorRequest controlCharacterRequest{
+            .destination = "/project/assets/scripts", .baseName = std::string{"bad\x01name"}, .kind = GameplayBehaviorKind::Lua};
+        const Result<void> controlCharacterResult = ValidateCreateGameplayBehaviorRequest(controlCharacterRequest);
+        REQUIRE(controlCharacterResult.HasError());
+        REQUIRE(controlCharacterResult.ErrorValue().code.Value() == "workspace.gameplay_behavior.invalid_request");
+    }
+
     TEST_CASE("Workspace Save Persists And Reopens The Default Scene", "[unit][editor][persistence]") {
         const std::filesystem::path projectRoot =
             std::filesystem::temp_directory_path() /

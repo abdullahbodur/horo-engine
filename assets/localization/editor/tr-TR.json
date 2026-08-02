@@ -206,6 +206,15 @@
     "workspace.scene_compare.field.primitive": { "text": "Primitive" },
     "workspace.scene_compare.field.components": { "text": "Componentler" },
     "workspace.scene_compare.empty": { "text": "Anlamsal nesne farkı kalmadı. Dosya yalnızca biçimlendirme açısından farklı olabilir." },
+    "workspace.gameplay_behavior.create.title": { "text": "Gameplay Behavior Oluştur" },
+    "workspace.gameplay_behavior.create.type": { "text": "TÜR" },
+    "workspace.gameplay_behavior.create.lua": { "text": "Lua" },
+    "workspace.gameplay_behavior.create.native": { "text": "Native C++" },
+    "workspace.gameplay_behavior.create.destination": { "text": "HEDEF" },
+    "workspace.gameplay_behavior.create.filename": { "text": "DOSYA ADI" },
+    "workspace.gameplay_behavior.create.invalid_filename": { "text": "Uzantı veya yol ayırıcıları içermeyen geçerli bir dosya adı girin." },
+    "workspace.gameplay_behavior.create.confirm": { "text": "Oluştur" },
+    "workspace.gameplay_behavior.create.cancel": { "text": "İptal" },
     "project_loading.status.cancelling": {
       "text": "İptal ediliyor..."
     },

@@ -352,6 +352,13 @@ if (HORO_BUILD_EDITOR_GUI)
     target_link_libraries(HoroEditorWorkspaceControllerTests PRIVATE HoroEngine::Gui)
 endif ()
 
+add_executable(HoroGameplayBehaviorFilenameModalStateTests
+        unit/editor/GameplayBehaviorFilenameModalStateTests.cpp
+)
+target_compile_features(HoroGameplayBehaviorFilenameModalStateTests PRIVATE cxx_std_20)
+target_include_directories(HoroGameplayBehaviorFilenameModalStateTests PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(HoroGameplayBehaviorFilenameModalStateTests PRIVATE HoroEngine::EditorServices)
+
 add_executable(HoroEditorMenuModelTests
         unit/editor/EditorMenuModelTests.cpp
 )
@@ -888,6 +895,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroActivityBarLayoutTests
         HoroWorkspaceSplitterInteractionTests
         HoroEditorWorkspaceControllerTests
+        HoroGameplayBehaviorFilenameModalStateTests
         HoroEditorMenuModelTests
         HoroEditorStatusBarModelTests
         HoroHierarchyModelTests
