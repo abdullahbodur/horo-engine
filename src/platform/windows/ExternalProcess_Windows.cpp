@@ -206,6 +206,8 @@ namespace Horo {
         Result<std::vector<wchar_t>> environment = BuildEnvironment(request.environment);
         if (environment.HasError())
             return Result<ExternalProcessResult>::Failure(environment.ErrorValue());
+
+        std::vector<wchar_t> environmentBlock = std::move(environment).Value();
         const std::wstring workingDirectory = request.workingDirectory.native();
 
         STARTUPINFOW startup{};
@@ -216,7 +218,7 @@ namespace Horo {
         startup.hStdError = stderrWrite.value;
         PROCESS_INFORMATION process{};
         const DWORD flags = CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_PROCESS_GROUP | CREATE_SUSPENDED | CREATE_NO_WINDOW;
-        if (!CreateProcessW(nullptr, commandLine.data(), nullptr, nullptr, TRUE, flags, environment.Value().data(),
+        if (!CreateProcessW(nullptr, commandLine.data(), nullptr, nullptr, TRUE, flags, environmentBlock.data(),
                             workingDirectory.empty() ? nullptr : workingDirectory.c_str(), &startup, &process))
             return Result<ExternalProcessResult>::Failure(MakeError(PlatformErrors::ProcessLaunchFailed));
         Handle processHandle{process.hProcess};
