@@ -50,7 +50,7 @@ reverse dependency order. No subsystem starts a hidden process-global runtime.
 Created
   -> Initializing
   -> Ready
-  -> Running
+  -> Running <-> Suspended
   -> Stopping
   -> Stopped
 
@@ -88,10 +88,10 @@ The canonical interactive frame is:
 2. PollPlatformEvents
 3. BuildInputSnapshot
 4. ApplyQueuedOwnerThreadCommands
-5. AdvanceFixedSimulation zero or more times
-6. UpdateVariableRateServices
-7. BuildRenderSnapshot
-8. RenderWorld
+5. FixedUpdate zero or more times
+6. VariableUpdate
+7. RenderExtraction
+8. RenderExecution
 9. RenderGui
 10. Present
 11. CommitDeferredLifecycleChanges
@@ -100,6 +100,14 @@ The canonical interactive frame is:
 
 Frame phases are profiler scopes. A subsystem cannot mutate another owner's
 state merely because both execute in the same frame.
+
+`RuntimePhase` exposes this complete ordering to both graphical and headless
+hosts. Headless compositions register successful no-op participants for omitted
+capabilities rather than defining a second phase contract. Presentation is
+admitted only after `RenderExtraction`, `RenderExecution`, and `RenderGui` have
+all completed successfully in the same frame. Failure or cancellation skips all
+later normal phases, including `EndFrame`; owned frame scopes perform cleanup by
+abort/RAII instead.
 
 Main-thread job continuations are pumped with phase-specific budgets. State
 required by fixed simulation is committed before fixed steps begin. Destructive
@@ -133,6 +141,37 @@ Render(alpha);
 Long stalls do not create an unbounded simulation spiral. When
 `maxCatchUpSteps` is reached, the host records dropped simulation time according
 to the configured policy.
+
+The baseline Phase 1 policy uses a 16,666,667 ns fixed step, at most five
+catch-up ticks, and a 250 ms maximum real delta. Negative samples normalize to
+zero. After catch-up saturation, whole fixed intervals are discarded while the
+fractional remainder is preserved, keeping interpolation alpha in `[0, 1)`.
+The first frame and first frame after resume establish a zero-delta baseline.
+
+`FixedStepContext::simulationTick` is the one-based tick currently being
+attempted. It becomes committed only after every fixed-step participant
+succeeds. `FrameContext::completedSimulationTick` is the count of committed
+ticks and is therefore zero before the first successful tick. Variable update
+and render extraction observe that committed count together with interpolation
+alpha.
+
+The scheduler retains allocation-free cumulative counters for committed ticks,
+dropped time and steps, catch-up saturation, negative samples, and maximum-delta
+clamps. Hosts query snapshots without locks or logging in the hot path;
+observability adapters may publish them at their own bounded cadence.
+
+## Error And Allocation Contract
+
+Expected participant failures use `Result<void>` and stable error codes.
+Exceptions are forbidden as participant control flow, but the host contains an
+unexpected exception at the participant boundary, aborts owned frame state, and
+translates it to a typed fatal runtime error.
+
+The allocation-free guarantee applies to the successful steady-state scheduler
+path: clock math, context construction, participant traversal, and phase
+dispatch. Error construction, diagnostic formatting, exception containment,
+and shutdown failure handling may allocate. GUI and concrete renderer internals
+retain their own separately measured allocation contracts.
 
 Variable-rate update is not used for deterministic physics integration.
 
@@ -245,6 +284,13 @@ policy decides whether to:
 Minimized or occluded windows avoid unnecessary presentation work while still
 servicing required jobs, transports, and shutdown requests.
 
+Explicit host suspension is distinct from gameplay pause. While suspended, the
+host runs only `BeginFrame`, `PollPlatformEvents`,
+`ApplyQueuedOwnerThreadCommands`, and `EndFrame`. Fixed/variable simulation,
+render extraction, execution, GUI rendering, and presentation are skipped.
+Resume resets the clock baseline so suspended wall time never becomes catch-up
+work.
+
 ## Fatal Failure
 
 A fatal runtime failure:
@@ -291,7 +337,13 @@ Required tests cover:
 
 - startup success and partial-initialization failure unwind
 - fixed-step accumulator and catch-up bounds
-- deterministic simulation under different presentation frame rates
+- fixed-state determinism under 30, 60, and 144 Hz variable frame cadences
+- interpolation alpha at equivalent accumulator positions
+- presentation gating after extraction, execution, and GUI failures
+- dropped-time and clamp counter observability
+- allocation-free successful steady-state scheduler dispatch
+- mid-frame cancellation and exception containment
+- explicit suspend pump phases and resume baseline reset
 - pause and one-tick step
 - editor play isolation and stop restoration
 - stale asynchronous scene transition rejection

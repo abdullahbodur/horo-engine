@@ -18,6 +18,13 @@ The project uses **Catch2 v3** for C++ tests. Catch2 provides:
 - tag-based test selection
 - BDD-style macros when useful
 
+Catch2 is a test-only dependency pinned to an immutable revision in
+`cmake/Dependencies.cmake`. Native test targets link
+`Catch2::Catch2WithMain`; production targets must not expose or transitively
+link the framework. `tests/CMakeLists.txt` registers native executables through
+`horo_register_catch_test()`, which uses `catch_discover_tests()` so every
+`TEST_CASE` is independently visible to CTest, IDEs, and CI.
+
 ```cpp
 #include <catch2/catch_test_macros.hpp>
 
@@ -27,7 +34,106 @@ TEST_CASE("ProjectPath resolves relative to project root", "[core][path]") {
 }
 ```
 
-Python-based tooling tests use `pytest` for scripts and automation harnesses.
+Python tooling tests use the pinned pytest 8.4.2 dependency and remain a process-level CTest suite; C++
+and Python test frameworks are not mixed inside one executable. The canonical
+Python conventions are:
+
+- files: `tests/python/test_<concern>.py`
+- test functions: `test_<behavior>()`
+- shared pytest fixtures only: `tests/python/conftest.py`
+- private helpers: a leading underscore and no `test_` prefix
+
+Class-based tests are reserved for cases that genuinely share behavior or
+fixture scope; they are not used merely for naming. Every scenario remains
+independently discoverable by pytest.
+
+## Running Tests Locally
+
+Configure and build the canonical test matrix from the repository root:
+
+```bash
+python3 -m pip install -r scripts/requirements.txt
+cmake -S . -B build/skeleton -DBUILD_TESTING=ON
+cmake --build build/skeleton --parallel
+```
+
+The default local verification excludes tests that require a display or GPU:
+
+```bash
+ctest --test-dir build/skeleton -LE gpu --output-on-failure
+```
+
+Run all tests present in the configured build, or select them by CTest regex:
+
+```bash
+ctest --test-dir build/skeleton --output-on-failure
+ctest --test-dir build/skeleton -R HoroProjectMigrationTests --output-on-failure
+ctest --test-dir build/skeleton -N
+```
+
+Every discovered Catch2 case is a separate CTest test. A Catch2 executable may
+also be invoked directly by exact case name or tag expression:
+
+```bash
+./build/skeleton/tests/HoroProjectMigrationTests \
+  "Pipeline Requires Terminal Validation"
+./build/skeleton/tests/HoroProjectMigrationTests "[unit][application]"
+./build/skeleton/tests/HoroProjectMigrationTests --list-tests
+```
+
+The backend migration integration target runs the frozen `0.0.1` fixture through
+the production catalog, planner, durable transaction, and `ProjectOpenService`
+without ImGui, SDL, or a GPU:
+
+```bash
+cmake --build build/skeleton --target HoroProjectMigrationIntegrationTests --parallel
+./build/skeleton/tests/HoroProjectMigrationIntegrationTests \
+  "Legacy 0.0.1 project migrates to 0.1.0 through backend project open" \
+  --reporter console --success
+```
+
+The target verifies the `0.1.0` root, compression defaults, unknown JSON
+preservation, migration receipt/history binding, second-open idempotence,
+failure-without-publication, and the required structured log categories. It uses
+an isolated temporary copy of the frozen fixture and never mutates repository
+fixtures.
+
+CTest invokes the Python suite through the same interpreter selected by CMake.
+For direct pytest selection and failure output:
+
+```bash
+python3 -m pytest tests/python
+python3 -m pytest tests/python/test_project_migration_generator.py -k factory -vv
+```
+
+`BUILD_TESTING=ON` fails during configure with the required installation
+command when pytest is unavailable. CMake never installs Python packages or
+mutates the developer environment implicitly.
+
+GPU smoke and editor first-frame checks are opt-in. They require a compatible
+display and graphics device and must not be reported as run merely because the
+targets compiled:
+
+```bash
+cmake -S . -B build/skeleton \
+  -DBUILD_TESTING=ON \
+  -DHORO_ENABLE_GPU_SMOKE_TESTS=ON
+cmake --build build/skeleton --parallel
+ctest --test-dir build/skeleton -L gpu --output-on-failure
+```
+
+For a GUI-off/headless matrix:
+
+```bash
+cmake -S . -B build/headless \
+  -DBUILD_TESTING=ON \
+  -DHORO_BUILD_EDITOR_GUI=OFF \
+  -DHORO_BUILD_RENDER_OPENGL=OFF \
+  -DHORO_BUILD_RENDER_METAL=OFF \
+  -DHORO_ENABLE_GPU_SMOKE_TESTS=OFF
+cmake --build build/headless --parallel
+ctest --test-dir build/headless --output-on-failure
+```
 
 ## Test Layers
 
@@ -42,11 +148,15 @@ packaged-player smoke validation as defined by
 Unit tests validate isolated module behavior. They link against production
 targets and must not compile production sources directly.
 
-Location: `tests/test_<module>/` or `tests/test_<feature>.cpp`
+Location: `tests/unit/<owner>/<concern>Tests.cpp`
 
 Rules:
 
 - one logical concern per `TEST_CASE`
+- place the scenario body directly in `TEST_CASE`; do not keep a second
+  test-named function that is called only by that case
+- retain helpers only for genuinely shared fixtures, setup/teardown, test data,
+  or reusable domain actions
 - mock or stub external dependencies
 - avoid disk I/O when possible; use in-memory fixtures
 - run in milliseconds
@@ -117,8 +227,16 @@ asserts on responses and side effects.
 
 ### GUI Tests
 
-GUI tests use the `HoroEditorUiTest` harness. They drive ImGui state
-programmatically and assert on widget state, selection, and persistence.
+GUI tests use `EditorUiTestHarness`, with Catch2 owning discovery and final
+reporting and Dear ImGui Test Engine owning widget lookup, input automation,
+and popup/focus progression. Presentation is injected behind
+`IEditorUiTestSurface`. The default headless surface runs an instrumented ImGui
+context without initializing SDL or owning a window, display connection, or GPU
+resource. Opt-in OpenGL and Metal surfaces present the same scenario in a real
+SDL window and run the production render frontend, viewport adapter, GUI
+bridge, and presentation lifecycle. Supported interactive backends execute the
+same test and interaction path; renderer selection changes only the injected
+host composition.
 
 Types:
 
@@ -154,7 +272,8 @@ one machine-specific absolute number.
 
 ```text
 tests/
-    test_<module>/           unit tests per module
+    CMakeLists.txt           native discovery and process-test registration
+    unit/                    unit/component tests grouped by owning target
     integration/             cross-module integration tests
     contract/                GUI/CLI/MCP contract tests (typed-outcome equivalence)
     cli/                     CLI-specific tests
@@ -165,36 +284,13 @@ tests/
     helpers/                 shared test utilities
 ```
 
-Each test executable corresponds to one test target in CMake.
+Each native test executable corresponds to one owning CMake test target. A
+target may contain multiple source files from the same dependency boundary;
+unrelated owners, platform guards, and renderer compositions must not be folded
+into a monolithic executable. Each behavior is a separately named and tagged
+Catch2 `TEST_CASE`.
 
-## Running Tests
-
-### Local Fast Suite
-
-```bash
-python3 scripts/dev.py test
-```
-
-Runs unit, integration, and fast contract tests that complete quickly and have no
-GUI dependency. 
-
-*Note: This local convenience command runs a broader set of tests than the CI "PR Fast Lane", which strictly defers cross-module integration tests to later gates to preserve cycle time.*
-
-### Specific Tests
-
-```bash
-python3 scripts/dev.py test -- test_core test_scene_project_model
-```
-
-### Complete Matrix
-
-```bash
-python3 scripts/dev.py test --all
-```
-
-Runs every test including GUI, renderer, and platform-specific tests. This corresponds to the full suite executed during CI's Scheduled Validation, and is a superset of the bounded acceptance shard run in Protected Matrix jobs.
-
-### Game Project Tests
+## Downstream Game Project Tests
 
 Downstream games run their own tests through the `horo-engine test` command, not
 through engine-private test binaries:
@@ -214,13 +310,6 @@ engine coverage.
 in-repository developer wrapper. It builds or locates the local `horo-engine`
 executable and delegates to the same public `horo-engine test` command. External
 project documentation and CI examples should use `horo-engine test` directly.
-
-### Direct CTest
-
-```bash
-cd build/debug
-ctest --output-on-failure -R "test_core|test_scene"
-```
 
 ## Writing Tests
 
@@ -247,9 +336,22 @@ TEST_CASE("Asset archive can round-trip a mesh", "[asset][archive]") {
 
 Every `TEST_CASE` must have tags. Use the convention:
 
-- module tag: `[core]`, `[scene]`, `[asset]`, `[editor]`
+- layer tag: `[unit]` or `[integration]`
+- module tag: `[foundation]`, `[application]`, `[runtime]`, `[scene]`, `[assets]`, `[editor]`
 - concern tag: `[path]`, `[serialization]`, `[lifecycle]`
-- speed tag: `[slow]`, `[gui]`, `[integration]`
+- capability tag when relevant: `[renderer]`, `[gpu]`, `[gui]`, `[slow]`
+
+Test names are behavioral sentences and do not contain ticket IDs. Use
+`REQUIRE` for prerequisites that make later assertions unsafe and `CHECK` when
+independent observations should all be reported. Assertions must run on the
+Catch2 test thread; worker tasks publish typed results or thread-safe probes
+that the test thread inspects after join.
+
+Public-header self-containment checks are compile targets, not Catch2 cases.
+Python generator checks, editor first-frame processes, and other subprocess
+contracts remain direct CTest entries. GPU smoke executables use Catch2 but are
+registered only when `HORO_ENABLE_GPU_SMOKE_TESTS=ON` and retain `gpu`/display
+labels.
 
 ### Avoid Shared Mutable State
 
@@ -312,37 +414,162 @@ without real OS resources.
 
 ## GUI Test Harness
 
-GUI tests are implemented using the **Dear ImGui Test Engine** (`imgui_test_engine`). This official framework allows tests to interact with the UI exactly as a user would, verifying focus, popup stacks, drag-and-drop operations, and actual widget rendering.
+The dependency is fetched only in an explicit test-enabled GUI composition:
 
-Tests are registered within the ImGui Test Engine's coroutine system but are invoked and reported through Catch2. The engine runs with a null renderer to ensure tests execute in milliseconds without requiring a visible window.
+```bash
+cmake -S . -B build/ui-automation \
+  -DBUILD_TESTING=ON \
+  -DHORO_BUILD_EDITOR_GUI=ON \
+  -DHORO_ENABLE_IMGUI_UI_TESTS=ON
+cmake --build build/ui-automation \
+  --target HoroEditorUiAutomationTests --parallel
+```
+
+That composition instruments the existing `HoroThirdPartyImGui` target with
+`IMGUI_ENABLE_TEST_ENGINE`; it never links a second ImGui implementation into
+the same process. With the option disabled, or with GUI disabled, Test Engine
+is absent from the target graph.
+
+Each workflow is a Catch2 `TEST_CASE` tagged `[ui][imgui][editor]`. It registers
+one parent Test Engine coroutine. `UiScenarioPipe` registers each named
+operation as a native Test Engine child test and executes it with
+`RunChildTest()`. The harness pumps deterministic frames through the injected
+surface, stops and joins the coroutine, and only then translates parent status,
+child-step results, logs, or captured exceptions into Catch2 assertions. Catch2
+assertions must never run on the Test Engine coroutine thread.
 
 ```cpp
-TEST_CASE("Selecting an object updates the properties panel", "[editor][gui]") {
-    // Setup ImGui test engine environment
-    ImGuiTestEngine* engine = HoroTestEnvironment::GetImGuiTestEngine();
-    
-    ImGuiTest* t = IM_REGISTER_TEST(engine, "Editor", "select_object_updates_properties");
-    t->TestFunc = [](ImGuiTestContext* ctx) {
-        ctx->SetRef("Editor");
-        
-        // Open project via headless bridge
-        LoadTestProject("tests/fixtures/projects/minimal_project");
-        
-        // Drive actual ImGui interaction using ImGui IDs
-        ctx->ItemClick("hierarchy/wall_north");
-        
-        // Verify UI reaction
-        ctx->SetRef("properties");
-        IM_CHECK_STR_EQ(GetInspectedObjectId().c_str(), "wall_north");
-    };
-    
-    // Pump frames until test completes
-    HoroTestEnvironment::RunImGuiTest(t);
+TEST_CASE("Full editor project journey creates content and configures the viewport",
+          "[ui][imgui][editor][e2e]") {
+    EditorUiTestHarness harness;
+    FullEditorUiTestHost editor;
+    const auto result = harness.RunScenario(
+        "full_editor", "project_journey",
+        [&](ImGuiTestContext* context) { editor.DrawFrame(context); },
+        [&](UiScenarioPipe& scenario) {
+            FullEditorSetups::CreateProjectAndOpenWorkspace(
+                scenario, editor, {.name = "PipelineProject", .templateId = "empty"});
+            FullEditorActions::CreateRootBox(scenario);
+            FullEditorActions::SelectOrthographicProjection(scenario, editor);
+        }, EditorUiScenarioBudget::Extended(1800), &editor.Input());
+
+    INFO(result.testEngineLog);
+    for (const UiScenarioStepResult& step : result.steps) {
+        INFO(step.name);
+        CHECK(step.status == UiScenarioStepStatus::Passed);
+    }
+    REQUIRE(result.Succeeded());
 }
 ```
 
-GUI tests run against the null renderer by default. Renderer-specific visual
-tests use screenshot baselines per platform.
+Child tests share the parent test context and application state. `Setup()` and
+`Step()` both use native child tests, but setup children run at the fast Test
+Engine speed and are reported separately from the behavior under test. A step is one
+atomic user operation, not necessarily one low-level click. Transient ImGui
+state such as an open popup or menu must be opened and consumed in the same
+step; a later step may verify the resulting persistent editor command or model
+state. Failure marks the current step failed and records later steps as
+skipped. Every step records its name and frame interval for Catch2 diagnostics.
+
+A basic harness-only contract scenario covers Button, Checkbox, Slider,
+InputText, nested items, menu actions, and application-side state verification.
+It validates the adapter and is not an editor workflow. Product UI scenarios
+use `FullEditorUiTestHost`, which composes the real screen registry, modal host,
+workspace panel registry, input router, project creation/open services, runtime
+scene preview, and isolated editor configuration. They never replace the editor
+with a hand-built component window.
+
+Reusable setup pipelines live in `FullEditorUiTestSetups`. For example,
+`CreateProjectAndOpenWorkspace()` composes four named setup children: open the
+creation route, choose a template, enter and submit identity, and wait through
+the real asynchronous `ProjectLoading` route. The following behavior steps
+continue against the same live editor session. A scenario may compose the
+smaller `OpenProjectCreation()`, `SubmitProjectCreation()`, and
+`AwaitWorkspace()` setup functions when it needs an intermediate route.
+Reusable behavior blocks live in `FullEditorUiTestActions`. A connected user
+journey prepares the editor once, then composes several action blocks against
+that same project/session instead of recreating the project for every feature.
+Setup children assert only the route/barrier invariants required to make the
+following behavior meaningful; feature assertions belong to `Step()` children.
+
+Interactive controls use localization-independent ImGui identities such as
+`Visible label###stable_id`. Test code addresses stable IDs or ID paths, never
+translated text. Full-editor workflows currently cover project creation/open,
+hierarchy creation with cross-panel observation, and viewport projection in
+both `en-US` and `tr-TR`. Settings modal, splitter, and Welcome routing retain
+their lower-level model/render coverage until equivalent full-editor workflows
+are added; isolated component windows are not accepted as replacements in this
+automation suite.
+
+The Test Engine override is the single input source in this harness. After
+`ImGui::NewFrame`, `TestInputBridge` converts the current ImGui IO state into a
+`RawInputCollector` snapshot and starts the same `InputRouter` frame consumed by
+editor code. The harness does not inject an independent second event stream.
+
+The default deterministic budget is 600 simulated frames. A scenario may opt
+into 601–1800 frames through an explicit extended budget. Each discovered CTest
+case also has a 120-second process timeout. Cases are process-isolated by
+`catch_discover_tests()` and may run under `ctest -j`; a process-local admission
+guard rejects a second live harness/ImGui context.
+Interactive input animation expands the effective frame ceiling by 10x at
+normal speed and 30x at cinematic speed; the 120-second process timeout remains
+the terminal bound. Fast/headless execution retains the declared frame budget.
+
+Run the suite by label, target regex, or Catch2 tags:
+
+```bash
+ctest --test-dir build/ui-automation -L gui --output-on-failure -j 8
+ctest --test-dir build/ui-automation \
+  -R '^HoroEditorUiAutomationTests' --output-on-failure -j 8
+./build/ui-automation/tests/HoroEditorUiAutomationTests \
+  '[ui][imgui][editor]'
+```
+
+GUI tests run against the null renderer by default. To exercise one scenario
+through a real renderer, configure the desired backend and run the Catch2 case
+directly:
+
+```bash
+cmake -S . -B build/ui-automation \
+  -DBUILD_TESTING=ON \
+  -DHORO_BUILD_EDITOR_GUI=ON \
+  -DHORO_BUILD_RENDER_OPENGL=ON \
+  -DHORO_ENABLE_IMGUI_UI_TESTS=ON
+cmake --build build/ui-automation \
+  --target HoroEditorUiAutomationTests --parallel
+HORO_UI_TEST_RENDERER=opengl \
+  ./build/ui-automation/tests/HoroEditorUiAutomationTests \
+  "Full editor project journey creates content and configures the viewport" \
+  --reporter console --success
+```
+
+`HORO_UI_TEST_RENDERER` accepts `null`, `opengl`, or `metal`. The null renderer
+is the default deterministic CI composition. OpenGL and Metal use their
+production SDL presentation port, render frontend, editor viewport adapter,
+GUI bridge, offscreen target, and frame/present ordering. A requested backend
+that is absent from the build is rejected with a clear error. Metal requires
+`HORO_BUILD_RENDER_METAL=ON` on Apple platforms.
+
+Interactive compositions use normal Test Engine speed by default so pointer,
+widget, and rendered viewport actions can be followed; set
+`HORO_UI_TEST_SPEED=cinematic` for slower observation. Closing the window
+cancels the case cleanly. Run one directly selected case at a time because a
+parallel CTest run would open one renderer window per process. These E2E runs
+verify renderer integration and readiness, but are not screenshot-golden
+coverage. Pixel baselines and backend-specific visual assertions remain in the
+renderer GPU test layer.
+
+Select a product scenario when inspecting Horo's UI. The
+`Basic Dear ImGui widgets execute as named child test steps` case intentionally
+renders a minimal Button/Checkbox/Slider fixture and validates only the harness.
+Harness-contract cases explicitly force the headless surface even when
+`HORO_UI_TEST_RENDERER=opengl` is set, so running the complete executable
+never opens this fixture as a visible product window.
+Every editor behavior scenario, whether headless or visible, pumps the complete
+`FullEditorUiTestHost` composition. This is required because an interaction in
+one panel may alter another panel, modal, route, input context, or project
+service. Lower-level panel render tests remain useful outside this automation
+suite, but do not substitute for a full-editor workflow scenario.
 
 Selection tests update `EditorSelectionModel` through the same interaction path
 as production UI. They also verify that a tab attached after the selection can
@@ -448,7 +675,10 @@ ctest --preset sanitizer --output-on-failure
 
 ### GUI test failure
 
-GUI test failures produce screenshots in `build/debug/test_output/`:
+The current headless interaction suite reports Test Engine logs through
+Catch2. Screenshot golden comparison is a later TST-002 slice; when enabled,
+visual tests write their artifacts under the configured build tree rather than
+the source tree:
 
 ```text
 build/debug/test_output/

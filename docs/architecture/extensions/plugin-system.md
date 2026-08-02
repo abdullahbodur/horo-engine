@@ -159,6 +159,7 @@ and marketplace metadata:
   "modules": [
     {
       "id": "com.vendor.fbx-importer.native",
+      "version": "2.0.0",
       "kind": "native",
       "entry": "bin/${platform}-${arch}/horo_fbx_importer"
     }
@@ -189,6 +190,12 @@ and marketplace metadata:
 }
 ```
 
+Every module has its own canonical semantic version. When `version` is omitted
+from a module entry, the package version is inherited and becomes the module's
+effective version. Contribution registries snapshot both contribution version
+and effective module version; durable asset provenance records both so a module
+upgrade is distinguishable from an importer-contract upgrade.
+
 Validation rules:
 
 - Package IDs, module IDs, and contribution IDs are globally canonical and
@@ -210,6 +217,7 @@ Initial editor and tool extension points:
 | Extension point | Purpose | Typical host authority |
 |---|---|---|
 | `asset.importer` | Convert source files into typed asset import results. | Host owns asset database writes and generated output placement. |
+| `asset.preview` | Produce a bounded rendering-neutral RGBA8 editor preview for an imported asset type. | Host owns scheduling, validation, texture upload/cache lifetime, card chrome, and type-specific fallbacks; modules never receive ImGui or renderer handles. |
 | `asset.cooker` | Convert imported assets into runtime-ready platform variants. | Host owns cook graph, cache keys, and output commits. |
 | `project.validator` | Validate project configuration, assets, or package requirements. | Host owns diagnostics and project mutation policy. |
 | `application.capability` | Add a headless use-case capability that GUI, CLI, MCP, or other approved contributions can call. | Application layer owns operation IDs, scheduling, cancellation, permission checks, and result storage. |
@@ -233,6 +241,14 @@ Initial editor and tool extension points:
 | `command` | Add typed commands and menu contributions. | Host owns command routing, undo policy, and shortcuts. |
 | `project.browser_action` | Add project-browser actions. | Host owns selected project context and confirmation UI. |
 | `mcp.tool` | Add MCP tools subject to permission policy. | MCP host owns transport, schema, and authorization. |
+
+`editor.status_item` contributions are declarative bounded snapshots; they do
+not receive ImGui callbacks. The shell owns validation, active-panel visibility,
+width admission, overflow, localization, modal input exclusion, and typed
+invocation routing. The current host renders any unresolved non-empty icon
+resource ID as a semantic dot; a host icon registry may replace known IDs while
+preserving that fallback. See
+[Editor Status Bar](../editor/editor-status-bar.md).
 
 Runtime-facing extension points are stricter and must also satisfy gameplay and
 runtime lifecycle contracts:
@@ -272,6 +288,24 @@ fail validation. File-extension conflicts require explicit priority, user
 selection, or project policy; registration order is never used as the tie
 breaker. Project gameplay modules cannot override trusted package importers or
 cookers implicitly by loading later.
+
+Asset importer settings UI is host-owned and declarative. An importer
+contribution supplies stable field IDs, kinds, defaults, validation bounds,
+localized labels, choices, and an `includeInPresets` policy for each field. The
+host renders the same form in editor, CLI, MCP, and automation adapters where
+applicable; native modules do not receive ImGui callbacks. `includeInPresets`
+means that a user-created import preset may retain and later reapply that field.
+It defaults to false so per-source identifiers, credentials, paths, and other
+instance-specific values are never retained accidentally. The host may also
+retain its own non-unique destination options, but asset names and other
+host-declared unique fields are excluded from presets.
+
+External binary importers expose this descriptor and their import operation
+through the versioned asset-importer C function table supplied by the host.
+`AssetImporterContribution`, STL containers, C++ virtual interfaces, exceptions,
+and allocator ownership do not cross the binary ABI. The C ABI adapter validates
+and copies module-owned descriptor data into the host-owned typed registry before
+the module can participate in import operations.
 
 ## Backend, Frontend, And Hybrid Packages
 
@@ -381,16 +415,19 @@ are not a memory-safety sandbox.
 Tool/editor native modules use a stable C ABI entry point:
 
 ```c
-typedef struct HoroExtensionHostApiV1 HoroExtensionHostApiV1;
-typedef struct HoroExtensionModuleApiV1 HoroExtensionModuleApiV1;
+typedef struct HoroExtensionHostApi HoroExtensionHostApi;
+typedef struct HoroExtensionModuleApi HoroExtensionModuleApi;
 
 HORO_EXTENSION_EXPORT HoroExtensionStatus
-horo_extension_load_v1(const HoroExtensionHostApiV1* host,
-                       HoroExtensionModuleApiV1* module);
+horo_extension_load(const HoroExtensionHostApi* host,
+                       HoroExtensionModuleApi* module);
 ```
 
-ABI structures include `size`, `version`, and reserved fields for append-only
-extension. Function tables use C-compatible types and explicit ownership
+ABI structures include `size`, version identity, and reserved fields for
+append-only extension. A loaded module may return `moduleId` and
+`moduleVersion`; when present the host validates both against the manifest.
+The manifest remains the durable authority for legacy binaries that omit these
+appended fields. Function tables use C-compatible types and explicit ownership
 callbacks. The host rejects:
 
 - unsupported API versions
@@ -404,6 +441,16 @@ No STL containers, exceptions, RTTI-dependent ownership, allocator ownership, or
 C++ object deletion crosses this ABI. Module-allocated memory is released by the
 module through module-provided callbacks. Host-allocated memory is released by
 the host.
+
+The implemented `asset.importer` v1 port is declared in
+`include/Horo/Extensions/ExtensionAbi.h`. During `horo_extension_load`, the host
+provides `registerAssetImporter`. The module submits a bounded descriptor,
+declarative setting schema, import callback, optional RGBA8 preview callback,
+and a module-owned context/destroy callback. Descriptor text is copied
+immediately; import and preview output is written only through host-owned byte
+sinks. A successful registration transfers the importer context to the host
+adapter even if a later contribution causes the package transaction to fail.
+The host then invokes the module destroy callback exactly once.
 
 Project gameplay modules may use the SDK-generation C++ boundary documented in
 [Gameplay Module Boundary](./gameplay-module-boundary.md). That boundary is
@@ -437,6 +484,15 @@ sequenceDiagram
 
 Failure discards the complete candidate. Other packages and engine subsystems
 never observe partial registration.
+
+The implemented importer catalog supports atomic `RegisterBatch`: every
+external descriptor is copied and validated in a load-local candidate first,
+then the complete batch is admitted or rejected without mutating the catalog.
+Contribution IDs must also be declared as `asset.importer` entries in the
+manifest and bind to the module being loaded. Catalog snapshots retain a shared
+module lease through their C ABI adapters. `UnloadExtension` therefore releases
+the manager lease but cannot unload executable code while an importer or preview
+snapshot can still call it.
 
 ## Asset Importer Example
 
@@ -869,8 +925,10 @@ Discovered -> Resolved -> Validated -> Trusted -> Loaded -> Registered -> Active
 
 Disable, update, and removal operations are staged and applied on restart by
 default. Shutdown reverses active registrations before host registries disappear,
-then invokes module shutdown. Dynamic libraries remain loaded until process exit
-unless a future API explicitly proves safe unload.
+then invokes module shutdown. Dynamic libraries remain loaded until no live
+manager, catalog, importer, or preview lease remains. The current asset importer
+adapter implements this conservative lease rule; it does not force-unload a
+library that still has callable function pointers.
 
 Safe runtime unload requires all of the following to be proven for a specific
 module API:
@@ -912,6 +970,39 @@ separate helper process and communicate through a bounded protocol.
 - Do not treat marketplace availability as required for local development,
   offline projects, or private enterprise registries.
 
+## Current Editor Integration
+
+Editor Settings presents the user-facing concept as **Extensions**. An extension
+package contains one or more versioned **Modules**, and those modules publish
+typed **Contributions**. The editor no longer invents separate plugin records for
+features that do not exist in the running composition.
+
+The current implementation provides:
+
+- a deterministic inventory containing compiled built-in asset importers and
+  packages installed directly below the absolute user extension root
+  `~/.horo/extensions`;
+- local directory installation through a bounded staging copy that rejects
+  symlinks, path escape, duplicate package IDs, oversized trees, and relative
+  source paths;
+- durable user activation and local-trust state in the managed extension root;
+- version, origin, module, contribution, absolute manifest path, activation
+  error, runtime-active, and restart-required projections in Editor Settings;
+- startup-only native activation into the candidate asset-importer catalog.
+- an optional Marketplace tab backed by the public GitHub-hosted static
+  registry URL, with asynchronous search, platform filtering, bounded HTTPS
+  downloads, canonical SHA-256 verification, bounded ZIP extraction, and
+  transactional publication through the installed-extension inventory.
+
+Newly installed native packages are disabled. Enabling a user package is the
+explicit local trust decision, and enable/disable changes take effect on editor
+restart. Marketplace installation does not grant trust or activate native code;
+the user enables the installed package explicitly from the Installed tab.
+
+Artifact signatures, updates, dependency resolution, per-project requirements,
+removal, private-registry credentials, and live-safe contribution types remain
+future work.
+
 ## Testing
 
 Required tests cover:
@@ -942,6 +1033,12 @@ Required tests cover:
 - shutdown ordering and no host callbacks after module teardown
 - no STL, exceptions, or cross-allocator ownership in ABI fixtures
 - marketplace registry schema, SHA-256, signature, and release URL validation
+
+The repository's executable reference fixture lives under
+`examples/extensions/asset-importer-basic`. Its automated contract test loads
+the real platform library, binds manifest/module/contribution versions,
+imports, generates a preview, releases the manager lease, invokes the
+snapshot-pinned importer again, and performs an identity-preserving reimport.
 
 ## Related Documents
 

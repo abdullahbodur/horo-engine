@@ -40,8 +40,7 @@ All project-owned Python entry points, including `scripts/dev.py`,
 `scripts/requirements.txt` as their single third-party dependency declaration:
 
 ```text
-pytest>=8.0
-pyyaml>=6.0
+pytest==8.4.2
 ```
 
 Hashing, JSON parsing, argument parsing, and filesystem access in

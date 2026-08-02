@@ -1,0 +1,14 @@
+return horo.behavior {
+    type_id = "{{BEHAVIOR_TYPE_ID}}",
+    display_name = "Semantic Input Movement",
+    category = "Tests",
+    schema_version = 1,
+    fields = {},
+    on_fixed_update = function(ctx, dt)
+        local x, y, z = ctx.transform.position()
+        local move_x, move_y, down = ctx.input.action("gameplay.move")
+        if down then
+            ctx.transform.set_position(x + move_x, y, z)
+        end
+    end
+}

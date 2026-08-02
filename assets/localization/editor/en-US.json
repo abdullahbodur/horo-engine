@@ -1,0 +1,1331 @@
+{
+  "schemaVersion": 1,
+  "messageFormat": "plain-text-1",
+  "locale": "en-US",
+  "namespace": "editor",
+  "messages": {
+    "editor_workspace.action.return_to_welcome": {
+      "text": "← Return to Welcome"
+    },
+    "editor_workspace.title": {
+      "text": "Editor Workspace"
+    },
+    "project_creation.back": {
+      "text": "← Back"
+    },
+    "project_creation.create": {
+      "text": "Create Project"
+    },
+    "project_creation.identity.directory": {
+      "text": "PROJECT DIRECTORY"
+    },
+    "project_creation.identity.location": {
+      "text": "PROJECT LOCATION"
+    },
+    "project_creation.identity.location.hint": {
+      "text": "Choose an empty folder or a missing location with a writable parent."
+    },
+    "project_creation.identity.location.select": {
+      "text": "Select Project Location"
+    },
+    "project_creation.identity.name": {
+      "text": "PROJECT NAME"
+    },
+    "project_creation.identity.name.hint": {
+      "text": "Stored as project.json name; projectId is generated once."
+    },
+    "project_creation.identity.scene": {
+      "text": "DEFAULT SCENE"
+    },
+    "project_creation.identity.version": {
+      "text": "PROJECT VERSION"
+    },
+    "project_creation.identity.version.hint": {
+      "text": "Game/product version. Does not select project-format migrations."
+    },
+    "project_creation.next": {
+      "text": "Next →"
+    },
+    "project_creation.review.settings": {
+      "text": "PROJECT SETTINGS"
+    },
+    "project_creation.review.compatibility": {
+      "text": "Project compatibility"
+    },
+    "project_creation.review.project_id_generated": {
+      "text": "projectId generated"
+    },
+    "project_creation.review.what_will_be_created": {
+      "text": "WHAT WILL BE CREATED"
+    },
+    "project_creation.settings.custom": {
+      "text": "CUSTOM SUBSYSTEM SELECTION"
+    },
+    "project_creation.settings.first_person": {
+      "text": "FIRST PERSON CONTROLLER SETTINGS"
+    },
+    "project_creation.settings.optional": {
+      "text": "OPTIONAL"
+    },
+    "project_creation.settings.package": {
+      "text": "PACKAGE SOURCE CONFIGURATION"
+    },
+    "project_creation.settings.runtime": {
+      "text": "RUNTIME DEFAULTS"
+    },
+    "project_creation.settings.tech_demo": {
+      "text": "TECH DEMO CONFIGURATION"
+    },
+    "project_creation.settings.toolchain": {
+      "text": "REQUIRED TOOLCHAIN"
+    },
+    "project_creation.step.identity.desc": {
+      "text": "Name & location"
+    },
+    "project_creation.step.identity.title": {
+      "text": "Identity"
+    },
+    "project_creation.step.review.desc": {
+      "text": "Validate & create"
+    },
+    "project_creation.step.review.title": {
+      "text": "Review"
+    },
+    "project_creation.step.settings.desc": {
+      "text": "Runtime defaults"
+    },
+    "project_creation.step.settings.title": {
+      "text": "Settings"
+    },
+    "project_creation.step.template.choose": {
+      "text": "CHOOSE A TEMPLATE"
+    },
+    "project_creation.step.template.desc": {
+      "text": "Choose starter"
+    },
+    "project_creation.step.template.title": {
+      "text": "Template"
+    },
+    "project_creation.subtitle": {
+      "text": "Create portable .horo metadata and starter content"
+    },
+    "project_creation.template.3d_starter": {
+      "text": "3D Starter"
+    },
+    "project_creation.template.3d_starter.desc": {
+      "text": "Scene, camera, directional light, floor, material defaults."
+    },
+    "project_creation.template.custom": {
+      "text": "Custom"
+    },
+    "project_creation.template.custom.desc": {
+      "text": "Pick systems manually before project generation."
+    },
+    "project_creation.template.empty": {
+      "text": "Empty"
+    },
+    "project_creation.template.empty.desc": {
+      "text": "No starter scene. Minimal asset tree and project.json."
+    },
+    "project_creation.template.first_person": {
+      "text": "First Person"
+    },
+    "project_creation.template.first_person.desc": {
+      "text": "Character controller, input map, capsule, and test level."
+    },
+    "project_creation.template.package_based": {
+      "text": "Package Based"
+    },
+    "project_creation.template.package_based.desc": {
+      "text": "Create from a verified template package and lockfile."
+    },
+    "project_creation.template.tech_demo": {
+      "text": "Tech Demo"
+    },
+    "project_creation.template.tech_demo.desc": {
+      "text": "Rendering samples, observability overlays, benchmark scene."
+    },
+    "project_creation.title": {
+      "text": "NEW PROJECT"
+    },
+    "project_loading.action.cancel": {
+      "text": "Cancel"
+    },
+    "project_loading.action.retry": {
+      "text": "Retry"
+    },
+    "project_loading.action.back": {
+      "text": "Back to Projects"
+    },
+    "project_loading.status.creating": { "text": "Creating project files..." },
+    "project_loading.status.inspecting": { "text": "Inspecting project..." },
+    "project_loading.status.cleaning": { "text": "Cleaning completed recovery data..." },
+    "project_loading.status.recovering": { "text": "Recovering interrupted project changes..." },
+    "project_loading.status.validating": { "text": "Validating project compatibility..." },
+    "project_loading.status.planning": { "text": "Planning project migration..." },
+    "project_loading.status.migrating": { "text": "Migrating project data..." },
+    "project_loading.status.updating": { "text": "Updating project version metadata..." },
+    "project_loading.status.rebuilding": { "text": "Rebuilding derived project state..." },
+    "project_loading.status.renderer": { "text": "Checking renderer availability..." },
+    "project_loading.status.workspace": { "text": "Preparing workspace session..." },
+    "project_loading.status.ready": { "text": "Project ready." },
+    "project_loading.status.renderer_restart": { "text": "Restarting with the project renderer..." },
+    "project_loading.status.failed": { "text": "Project could not be opened." },
+    "project_loading.status.processing": { "text": "Processing project..." },
+    "project_loading.error.busy": { "text": "The project is being modified by another operation. Retry when it finishes." },
+    "project_loading.error.recovery": { "text": "The interrupted project operation could not be recovered safely." },
+    "project_loading.error.renderer": { "text": "The project's renderer is unavailable or requires repair." },
+    "project_loading.error.migration": { "text": "Project migration failed before a workspace could be prepared." },
+    "project_loading.error.derived": { "text": "Derived project state could not be rebuilt safely." },
+    "project_loading.error.scene": { "text": "The project's default scene is missing, unreadable, or invalid." },
+    "project_loading.error.session": { "text": "The prepared workspace session became stale. Retry project loading." },
+    "workspace.recovery.available": { "text": "Unsaved scene recovery data is available." },
+    "workspace.recovery.restore": { "text": "Restore" },
+    "workspace.recovery.discard": { "text": "Discard" },
+    "workspace.scene_conflict.available": { "text": "The scene changed outside this editor session." },
+    "workspace.scene_conflict.compare": { "text": "Compare" },
+    "workspace.scene_conflict.reload": { "text": "Reload from Disk" },
+    "workspace.scene_conflict.overwrite": { "text": "Overwrite File" },
+    "workspace.scene_compare.title": { "text": "Scene Changes" },
+    "workspace.scene_save_as.title": { "text": "Save Scene As" },
+    "workspace.scene_save_copy_as.title": { "text": "Save Scene Copy As" },
+    "workspace.scene_save.file_type": { "text": "Horo Scene" },
+    "workspace.scene_compare.description": { "text": "Compare the active document with the latest validated scene on disk." },
+    "workspace.scene_compare.loading": { "text": "Loading the latest scene from disk..." },
+    "workspace.scene_compare.failed": { "text": "The scene could not be compared." },
+    "workspace.scene_compare.added": { "text": "Added on disk" },
+    "workspace.scene_compare.removed": { "text": "Removed from disk" },
+    "workspace.scene_compare.modified": { "text": "Modified" },
+    "workspace.scene_compare.summary.added": { "text": "added" },
+    "workspace.scene_compare.summary.removed": { "text": "removed" },
+    "workspace.scene_compare.summary.modified": { "text": "modified" },
+    "workspace.scene_compare.field.name": { "text": "Name" },
+    "workspace.scene_compare.field.id": { "text": "ID" },
+    "workspace.scene_compare.field.parent": { "text": "Parent" },
+    "workspace.scene_compare.field.transform": { "text": "Transform" },
+    "workspace.scene_compare.field.primitive": { "text": "Primitive" },
+    "workspace.scene_compare.field.components": { "text": "Components" },
+    "workspace.scene_compare.empty": { "text": "No semantic object differences remain. The file may only differ in formatting." },
+    "project_loading.status.cancelling": {
+      "text": "Cancelling..."
+    },
+    "project_loading.status.finalizing": {
+      "text": "Finalizing workspace..."
+    },
+    "project_loading.status.init_db": {
+      "text": "Initializing asset database..."
+    },
+    "project_loading.status.loading_scene": {
+      "text": "Loading default scene..."
+    },
+    "project_loading.status.parsing": {
+      "text": "Parsing project manifests..."
+    },
+    "project_loading.title.opening": {
+      "text": "Opening"
+    },
+    "settings.appearance.accent_color": {
+      "text": "Accent Color"
+    },
+    "settings.appearance.accent_color.description": {
+      "text": "Used for focus rings, active states, and primary actions."
+    },
+    "settings.appearance.code_font_size": {
+      "text": "Code Font Size"
+    },
+    "settings.appearance.code_font_size.description": {
+      "text": "Point size for the script editor and console output."
+    },
+    "settings.appearance.color_theme": {
+      "text": "Color Theme"
+    },
+    "settings.appearance.color_theme.description": {
+      "text": "Built-in themes or custom JSON theme file."
+    },
+    "settings.appearance.custom_theme": {
+      "text": "Custom Theme"
+    },
+    "settings.appearance.custom_theme.description": {
+      "text": "Path to a JSON theme file. Leave empty to use built-in."
+    },
+    "settings.appearance.theme_group": {
+      "text": "THEME"
+    },
+    "settings.appearance.typography_group": {
+      "text": "TYPOGRAPHY & SCALE"
+    },
+    "settings.appearance.ui_scale": {
+      "text": "UI Scale"
+    },
+    "settings.appearance.ui_scale.description": {
+      "text": "Scales all editor chrome uniformly."
+    },
+    "settings.apply": {
+      "text": "Apply"
+    },
+    "settings.audio.enable_in_editor": {
+      "text": "Enable Audio In Editor"
+    },
+    "settings.audio.enable_in_editor.description": {
+      "text": "Play in-editor sounds and preview audio assets."
+    },
+    "settings.audio.headphones": {
+      "text": "Headphones"
+    },
+    "settings.audio.master_volume": {
+      "text": "Master Volume"
+    },
+    "settings.audio.master_volume.description": {
+      "text": "Global audio output level for the editor (0–100)."
+    },
+    "settings.audio.output_device": {
+      "text": "Audio Output Device"
+    },
+    "settings.audio.output_device.description": {
+      "text": "Preferred playback device for editor audio."
+    },
+    "settings.audio.output_group": {
+      "text": "OUTPUT"
+    },
+    "settings.audio.speakers": {
+      "text": "Speakers"
+    },
+    "settings.audio.system_default": {
+      "text": "System Default"
+    },
+    "settings.cancel": {
+      "text": "Cancel"
+    },
+    "settings.diagnostics.auto_capture": {
+      "text": "Auto-capture On Stutter"
+    },
+    "settings.diagnostics.auto_capture.description": {
+      "text": "Automatically start a profiler capture when a frame spike is detected."
+    },
+    "settings.diagnostics.debug": {
+      "text": "Debug"
+    },
+    "settings.diagnostics.error": {
+      "text": "Error"
+    },
+    "settings.diagnostics.info": {
+      "text": "Info"
+    },
+    "settings.diagnostics.log_level": {
+      "text": "Console Log Level"
+    },
+    "settings.diagnostics.log_level.description": {
+      "text": "Minimum severity shown in the editor console output."
+    },
+    "settings.diagnostics.logging_group": {
+      "text": "LOGGING"
+    },
+    "settings.diagnostics.profiler_group": {
+      "text": "PROFILER"
+    },
+    "settings.diagnostics.stutter_threshold": {
+      "text": "Stutter Threshold (ms)"
+    },
+    "settings.diagnostics.stutter_threshold.description": {
+      "text": "Frame time above this value triggers an auto-capture."
+    },
+    "settings.diagnostics.warning": {
+      "text": "Warning"
+    },
+    "settings.diagnostics.write_log": {
+      "text": "Write Log To File"
+    },
+    "settings.diagnostics.write_log.description": {
+      "text": "Persist the console log to a timestamped file on disk."
+    },
+    "settings.general.autosave_interval": {
+      "text": "Auto-save Interval"
+    },
+    "settings.general.autosave_interval.description": {
+      "text": "Minutes between automatic scene saves. Zero disables auto-save."
+    },
+    "settings.general.confirm_exit": {
+      "text": "Confirm Exit With Unsaved Changes"
+    },
+    "settings.general.confirm_exit.description": {
+      "text": "Prompt before closing when unsaved changes exist."
+    },
+    "settings.general.default_scene": {
+      "text": "Default Scene On Project Open"
+    },
+    "settings.general.default_scene.description": {
+      "text": "Scene file loaded automatically when opening a project."
+    },
+    "settings.general.restore_workspace": {
+      "text": "Restore Workspace Layout"
+    },
+    "settings.general.restore_workspace.description": {
+      "text": "Reopen tabs and panel layout from last session."
+    },
+    "settings.general.session_group": {
+      "text": "EDITOR SESSION"
+    },
+    "settings.general.startup_behavior": {
+      "text": "Startup Behavior"
+    },
+    "settings.general.startup_behavior.description": {
+      "text": "What to show when the editor launches."
+    },
+    "settings.general.startup_browser": {
+      "text": "Project browser"
+    },
+    "settings.general.startup_group": {
+      "text": "STARTUP & PROJECT"
+    },
+    "settings.general.startup_last": {
+      "text": "Last project"
+    },
+    "settings.general.startup_welcome": {
+      "text": "Welcome screen"
+    },
+    "settings.input.invert_orbit_y": {
+      "text": "Invert Orbit Y"
+    },
+    "settings.input.invert_orbit_y.description": {
+      "text": "Reverse the vertical orbit direction (push up to look down)."
+    },
+    "settings.input.navigation_group": {
+      "text": "NAVIGATION"
+    },
+    "settings.input.orbit_sensitivity": {
+      "text": "Orbit Sensitivity"
+    },
+    "settings.input.orbit_sensitivity.description": {
+      "text": "Mouse drag multiplier for orbiting the viewport camera."
+    },
+    "settings.input.pan_sensitivity": {
+      "text": "Pan Sensitivity"
+    },
+    "settings.input.pan_sensitivity.description": {
+      "text": "Mouse drag multiplier for panning the viewport camera."
+    },
+    "settings.input.mappings_description": {
+      "text": "Open Input Mapping from the right activity bar to edit shortcuts, gamepad bindings, profiles, and player assignments."
+    },
+    "settings.input.mappings_group": {
+      "text": "INPUT MAPPINGS"
+    },
+    "settings.input.mappings_label": {
+      "text": "Central Input Mapping"
+    },
+    "settings.input.shortcut.click_to_record": {
+      "text": "Click to record"
+    },
+    "settings.input.shortcut.press_keys": {
+      "text": "Press keys..."
+    },
+    "settings.language": {
+      "text": "Language"
+    },
+    "settings.language.description": {
+      "text": "Language used by the editor interface."
+    },
+    "settings.language.english": {
+      "text": "English"
+    },
+    "settings.language.turkish": {
+      "text": "Turkish"
+    },
+    "settings.nav.appearance": {
+      "text": "Appearance"
+    },
+    "settings.nav.audio": {
+      "text": "Audio"
+    },
+    "settings.nav.diagnostics": {
+      "text": "Diagnostics"
+    },
+    "settings.nav.editor": {
+      "text": "Editor"
+    },
+    "settings.nav.engine": {
+      "text": "Engine"
+    },
+    "settings.nav.general": {
+      "text": "General"
+    },
+    "settings.nav.input": {
+      "text": "Input"
+    },
+    "settings.nav.network": {
+      "text": "Network"
+    },
+    "settings.nav.plugins": {
+      "text": "Extensions"
+    },
+    "settings.nav.rendering": {
+      "text": "Rendering"
+    },
+    "settings.nav.tools": {
+      "text": "Tools"
+    },
+    "settings.network.download_threads": {
+      "text": "Package Download Threads"
+    },
+    "settings.network.download_threads.description": {
+      "text": "Parallel download workers for template and asset packages."
+    },
+    "settings.network.max_preview_clients": {
+      "text": "Max Preview Clients"
+    },
+    "settings.network.max_preview_clients.description": {
+      "text": "Maximum concurrent PIE (Play In Editor) client connections."
+    },
+    "settings.network.multiplayer_group": {
+      "text": "MULTIPLAYER PREVIEW"
+    },
+    "settings.network.simulate_latency": {
+      "text": "Simulate Latency"
+    },
+    "settings.network.simulate_latency.description": {
+      "text": "Artificial one-way delay injected on loopback (ms)."
+    },
+    "settings.plugins.action.disable": {
+      "text": "Disable"
+    },
+    "settings.plugins.action.enable": {
+      "text": "Enable"
+    },
+    "settings.plugins.action.install": {
+      "text": "Install..."
+    },
+    "settings.plugins.action.open_docs": {
+      "text": "Open Docs"
+    },
+    "settings.plugins.action.open_logs": {
+      "text": "Open Logs"
+    },
+    "settings.plugins.action.reload": {
+      "text": "Reload"
+    },
+    "settings.plugins.action.validate": {
+      "text": "Validate"
+    },
+    "settings.plugins.category.audio": {
+      "text": "Audio"
+    },
+    "settings.plugins.category.editor": {
+      "text": "Editor Tool"
+    },
+    "settings.plugins.category.platform": {
+      "text": "Platform"
+    },
+    "settings.plugins.description": {
+      "text": "Extensions are versioned packages. Each package can contribute native modules such as asset importers and preview providers."
+    },
+    "settings.plugins.feedback.install_not_implemented": {
+      "text": "Plugin installation dialog not yet implemented."
+    },
+    "settings.plugins.feedback.reloaded": {
+      "text": "Plugins reloaded successfully."
+    },
+    "settings.plugins.fmod.desc": {
+      "text": "FMOD Studio authoring, live update, bank import, and runtime binding."
+    },
+    "settings.plugins.fmod.detail_desc": {
+      "text": "Connects Horo audio assets with FMOD Studio banks, event references, live update, and build validation."
+    },
+    "settings.plugins.installed": {
+      "text": "Installed"
+    },
+    "settings.plugins.mcp.desc": {
+      "text": "Local automation bridge for scene, asset, and editor operations."
+    },
+    "settings.plugins.mcp.detail_desc": {
+      "text": "Exposes a local MCP endpoint so external tools can inspect project state, create assets, run editor commands, and query diagnostics."
+    },
+    "settings.plugins.restart.needs_sdk": {
+      "text": "Needs SDK path"
+    },
+    "settings.plugins.restart.not_required": {
+      "text": "Restart not required"
+    },
+    "settings.plugins.restart.on_enable": {
+      "text": "Restart on enable"
+    },
+    "settings.plugins.runtime": {
+      "text": "Runtime"
+    },
+    "settings.plugins.scope.editor": {
+      "text": "Editor-wide"
+    },
+    "settings.plugins.scope.platform": {
+      "text": "Platform"
+    },
+    "settings.plugins.scope.project": {
+      "text": "Project-scoped"
+    },
+    "settings.plugins.signed.disabled": {
+      "text": "Disabled"
+    },
+    "settings.plugins.signed.signed": {
+      "text": "Signed"
+    },
+    "settings.plugins.signed.vendor": {
+      "text": "Verified Vendor"
+    },
+    "settings.plugins.status.disabled": {
+      "text": "Disabled"
+    },
+    "settings.plugins.status.enabled": {
+      "text": "Enabled"
+    },
+    "settings.plugins.status.trusted": {
+      "text": "Trusted"
+    },
+    "settings.plugins.status.vendor": {
+      "text": "Verified Vendor"
+    },
+    "settings.extensions.active_count": {
+      "text": "Runtime active"
+    },
+    "settings.extensions.author": {
+      "text": "Author"
+    },
+    "settings.extensions.builtin_manifest": {
+      "text": "This extension is compiled into the editor and does not have an external manifest path."
+    },
+    "settings.extensions.contributions": {
+      "text": "Contributions"
+    },
+    "settings.extensions.details": {
+      "text": "EXTENSION DETAILS"
+    },
+    "settings.extensions.empty": {
+      "text": "No extension matches this filter."
+    },
+    "settings.extensions.feedback.installed": {
+      "text": "Extension installed in a disabled state. Enable it and restart the editor to load native modules."
+    },
+    "settings.extensions.feedback.restart": {
+      "text": "Activation preference saved. Restart the editor to apply the runtime change."
+    },
+    "settings.extensions.filter": {
+      "text": "Filter extensions..."
+    },
+    "settings.extensions.install_root": {
+      "text": "Absolute installation root"
+    },
+    "settings.extensions.installed_count": {
+      "text": "Installed packages"
+    },
+    "settings.extensions.installed_heading": {
+      "text": "INSTALLED EXTENSIONS"
+    },
+    "settings.extensions.lifecycle": {
+      "text": "ACTIVATION LIFECYCLE"
+    },
+    "settings.extensions.marketplace": {
+      "text": "Marketplace"
+    },
+    "settings.extensions.marketplace.empty": {
+      "text": "No compatible extensions match this search."
+    },
+    "settings.extensions.marketplace.installing": {
+      "text": "Installing..."
+    },
+    "settings.extensions.marketplace.installed": {
+      "text": "Installed"
+    },
+    "settings.extensions.marketplace.search": {
+      "text": "Search marketplace..."
+    },
+    "settings.extensions.marketplace.search.action": {
+      "text": "Search"
+    },
+    "settings.extensions.marketplace.searching": {
+      "text": "Searching the extension registry..."
+    },
+    "settings.extensions.marketplace.unavailable": {
+      "text": "The extension marketplace is unavailable in this editor composition."
+    },
+    "settings.extensions.manifest": {
+      "text": "Absolute manifest"
+    },
+    "settings.extensions.modules": {
+      "text": "Modules"
+    },
+    "settings.extensions.none": {
+      "text": "None declared"
+    },
+    "settings.extensions.origin": {
+      "text": "Origin"
+    },
+    "settings.extensions.origin.builtin": {
+      "text": "Built-in"
+    },
+    "settings.extensions.origin.user": {
+      "text": "User installed"
+    },
+    "settings.extensions.package_id": {
+      "text": "Package ID"
+    },
+    "settings.extensions.pending_count": {
+      "text": "Pending restart"
+    },
+    "settings.extensions.restart_required": {
+      "text": "Restart required"
+    },
+    "settings.extensions.select_folder": {
+      "text": "Select an extension package folder"
+    },
+    "settings.extensions.select_prompt": {
+      "text": "Select an extension from the list to inspect its package, modules, contributions, and manifest."
+    },
+    "settings.extensions.status.active": {
+      "text": "Active"
+    },
+    "settings.extensions.status.inactive": {
+      "text": "Inactive"
+    },
+    "settings.extensions.tab.manifest": {
+      "text": "Manifest"
+    },
+    "settings.extensions.tab.overview": {
+      "text": "Overview"
+    },
+    "settings.extensions.total": {
+      "text": "total"
+    },
+    "settings.extensions.unavailable": {
+      "text": "The extension inventory service is unavailable in this editor composition."
+    },
+    "settings.plugins.steam.desc": {
+      "text": "Steam achievements, overlay, networking sockets, and build metadata."
+    },
+    "settings.plugins.steam.detail_desc": {
+      "text": "Adds Steam platform services such as overlay, achievements, networking sockets, and App ID metadata."
+    },
+    "settings.rendering.dx11": {
+      "text": "DX11"
+    },
+    "settings.rendering.dx12_vulkan": {
+      "text": "DX12 / Vulkan"
+    },
+    "settings.rendering.es3": {
+      "text": "ES3"
+    },
+    "settings.rendering.grid_overlay": {
+      "text": "Grid Overlay"
+    },
+    "settings.rendering.grid_overlay.description": {
+      "text": "Show the reference grid in the editor viewport."
+    },
+    "settings.rendering.high_end": {
+      "text": "High End"
+    },
+    "settings.rendering.lit": {
+      "text": "Lit"
+    },
+    "settings.rendering.quality_group": {
+      "text": "QUALITY"
+    },
+    "settings.rendering.shaded": {
+      "text": "Shaded"
+    },
+    "settings.rendering.texture_budget": {
+      "text": "Texture Streaming Budget"
+    },
+    "settings.rendering.texture_budget.description": {
+      "text": "Maximum texture memory pool used by the streaming system."
+    },
+    "settings.rendering.tier": {
+      "text": "Editor Rendering Tier"
+    },
+    "settings.rendering.tier.description": {
+      "text": "Maximum feature tier used in the editor viewport."
+    },
+    "settings.rendering.unlit": {
+      "text": "Unlit"
+    },
+    "settings.rendering.viewport_group": {
+      "text": "VIEWPORT"
+    },
+    "settings.rendering.viewport_mode": {
+      "text": "Default Viewport Mode"
+    },
+    "settings.rendering.viewport_mode.description": {
+      "text": "Shading mode used for new viewport panels."
+    },
+    "settings.rendering.wireframe": {
+      "text": "Wireframe"
+    },
+    "settings.restore_defaults": {
+      "text": "Restore Defaults"
+    },
+    "settings.title": {
+      "text": "Editor Settings"
+    },
+    "welcome.browse_all": {
+      "text": "BROWSE ALL"
+    },
+    "welcome.new_project": {
+      "text": "+  New Project"
+    },
+    "welcome.open_project": {
+      "text": "   Open Project"
+    },
+    "welcome.open_settings": {
+      "text": "   Open Settings"
+    },
+    "welcome.recent_projects": {
+      "text": "RECENT PROJECTS"
+    },
+    "status.navigation.label": {"text": "Nav"},
+    "status.navigation.idle": {"text": "idle"},
+    "status.navigation.busy": {"text": "busy"},
+    "status.backend.opengl": {"text": "OpenGL"},
+    "status.cpu.label": {"text": "CPU"},
+    "status.document.saved": {"text": "Saved"},
+    "status.document.unsaved": {"text": "Unsaved"},
+    "status.selection.label": {"text": "Sel"},
+    "status.selection.none": {"text": "0 obj"},
+    "status.selection.one": {"text": "1 obj"},
+    "status.overflow.hidden": {"text": "status items hidden"},
+    "workspace.panel.hierarchy": {"text": "Hierarchy"},
+    "workspace.panel.inspector": {"text": "Inspector"},
+    "workspace.panel.viewport": {"text": "Viewport"},
+    "workspace.panel.game": {"text": "Game"},
+    "workspace.game.idle": {"text": "Press Play to start the game."},
+    "workspace.play.pause": {"text": "Pause"},
+    "workspace.play.resume": {"text": "Resume"},
+    "workspace.play.step": {"text": "Step"},
+    "workspace.play.stop": {"text": "Stop"},
+    "workspace.inspector.behavior_enabled": {"text": "Enabled"},
+    "workspace.inspector.behavior_missing": {"text": "Missing Behavior"},
+    "workspace.content_browser.action.create_lua_behavior": {"text": "Create Lua Behavior"},
+    "workspace.content_browser.action.create_native_behavior": {"text": "Create Native C++ Behavior"},
+    "workspace.content_browser.operation.create_behavior_failed": {"text": "Behavior source could not be created."},
+    "workspace.panel.content_browser": {"text": "Content Browser"},
+    "workspace.input_mapping.title": {"text": "Input Mapping"},
+    "workspace.input_mapping.binding": {"text": "Binding"},
+    "workspace.input_mapping.binding_updated": {"text": "Binding updated."},
+    "workspace.input_mapping.deadzone": {"text": "Deadzone"},
+    "workspace.input_mapping.generation": {"text": "generation"},
+    "workspace.input_mapping.player": {"text": "Player"},
+    "workspace.input_mapping.slot": {"text": "slot"},
+    "workspace.input_mapping.unassigned": {"text": "Unassigned"},
+    "workspace.input_mapping.type.digital": {"text": "Digital"},
+    "workspace.input_mapping.type.axis_1d": {"text": "1D Axis"},
+    "workspace.input_mapping.type.axis_2d": {"text": "2D Axis"},
+    "workspace.input_mapping.type.unknown": {"text": "Unknown"},
+    "workspace.input_mapping.actions": {"text": "Action Maps"},
+    "workspace.input_mapping.devices": {"text": "Devices"},
+    "workspace.input_mapping.profiles": {"text": "Profiles"},
+    "workspace.input_mapping.no_actions": {"text": "No input actions are registered."},
+    "workspace.input_mapping.action": {"text": "Action"},
+    "workspace.input_mapping.type": {"text": "Type"},
+    "workspace.input_mapping.bindings": {"text": "Bindings"},
+    "workspace.input_mapping.status": {"text": "Status"},
+    "workspace.input_mapping.required": {"text": "Required"},
+    "workspace.input_mapping.optional": {"text": "Optional"},
+    "workspace.input_mapping.rebind": {"text": "Rebind"},
+    "workspace.input_mapping.press_key": {"text": "Press a key; Escape cancels."},
+    "workspace.input_mapping.no_devices": {"text": "No gamepads are connected."},
+    "workspace.input_mapping.assign_player_one": {"text": "Assign Player 1"},
+    "workspace.input_mapping.unassign": {"text": "Unassign"},
+    "workspace.input_mapping.active_profile": {"text": "Active profile"},
+    "workspace.input_mapping.save_profile": {"text": "Save Profile"},
+    "workspace.input_mapping.save_project_profile": {"text": "Save Project Override"},
+    "workspace.input_mapping.project_profile_saved": {"text": "Project input override saved."},
+    "workspace.input_mapping.reload_profile": {"text": "Reload Profile"},
+    "workspace.input_mapping.profile_saved": {"text": "Input profile saved."},
+    "workspace.input_mapping.profile_loaded": {"text": "Input profile loaded."},
+    "workspace.hierarchy.add_object": {"text": "+ Add Object"},
+    "workspace.create": {"text": "Create"},
+    "workspace.create.group.objects_3d": {"text": "3D Objects"},
+    "workspace.create.group.cameras": {"text": "Cameras"},
+    "workspace.create.group.lights": {"text": "Lights"},
+    "workspace.create.group.volumes": {"text": "Volumes"},
+    "workspace.create.group.audio": {"text": "Audio"},
+    "primitive.mesh.box": {"text": "Box"},
+    "primitive.mesh.sphere": {"text": "Sphere"},
+    "primitive.mesh.capsule": {"text": "Capsule"},
+    "primitive.mesh.cylinder": {"text": "Cylinder"},
+    "primitive.mesh.cone": {"text": "Cone"},
+    "primitive.mesh.plane": {"text": "Plane"},
+    "primitive.mesh.quad": {"text": "Quad"},
+    "primitive.object.empty": {"text": "GameObject"},
+    "primitive.object.camera": {"text": "Camera"},
+    "primitive.object.light_directional": {"text": "Directional Light"},
+    "primitive.object.light_point": {"text": "Point Light"},
+    "primitive.object.light_spot": {"text": "Spot Light"},
+    "primitive.object.trigger_volume": {"text": "Trigger Volume"},
+    "primitive.object.audio_source": {"text": "Audio Source"},
+    "workspace.hierarchy.type.mesh": {"text": "Mesh"},
+    "workspace.hierarchy.type.empty": {"text": "GameObject"},
+    "workspace.hierarchy.type.light": {"text": "Light"},
+    "workspace.hierarchy.type.camera": {"text": "Camera"},
+    "workspace.hierarchy.type.volume": {"text": "Volume"},
+    "workspace.hierarchy.type.audio": {"text": "Audio"},
+    "workspace.hierarchy.empty": {"text": "Scene is empty"},
+    "workspace.hierarchy.search": {"text": "Search objects..."},
+    "workspace.hierarchy.no_matches": {"text": "No matching objects"},
+    "workspace.hierarchy.rename": {"text": "Rename"},
+    "workspace.hierarchy.duplicate": {"text": "Duplicate"},
+    "workspace.hierarchy.delete": {"text": "Delete"},
+    "workspace.hierarchy.move_to_root": {"text": "Move to Root"},
+    "workspace.inspector.kind.mesh": {"text": "Mesh"},
+    "workspace.inspector.kind.empty": {"text": "GameObject"},
+    "workspace.inspector.kind.camera": {"text": "Camera"},
+    "workspace.inspector.kind.light": {"text": "Light"},
+    "workspace.inspector.kind.trigger_volume": {"text": "Trigger Volume"},
+    "workspace.inspector.add_component": {"text": "Add Component"},
+    "workspace.inspector.remove_component": {"text": "Remove Component"},
+    "workspace.inspector.kind.audio_source": {"text": "Audio Source"},
+    "workspace.inspector.transform": {"text": "Transform"},
+    "workspace.inspector.position": {"text": "Position"},
+    "workspace.inspector.rotation": {"text": "Rotation"},
+    "workspace.inspector.scale": {"text": "Scale"},
+    "workspace.inspector.camera": {"text": "Camera"},
+    "workspace.inspector.camera_projection": {"text": "Projection"},
+    "workspace.inspector.camera_projection_perspective": {"text": "Perspective"},
+    "workspace.inspector.camera_projection_orthographic": {"text": "Orthographic"},
+    "workspace.inspector.camera_field_of_view": {"text": "Field of View"},
+    "workspace.inspector.camera_orthographic_height": {"text": "Orthographic Height"},
+    "workspace.inspector.camera_near_plane": {"text": "Near Plane"},
+    "workspace.inspector.camera_far_plane": {"text": "Far Plane"},
+    "workspace.inspector.camera_invalid": {"text": "Camera projection and clipping values must form a valid finite range."},
+    "workspace.inspector.light": {"text": "Light"},
+    "workspace.inspector.light_kind": {"text": "Type"},
+    "workspace.inspector.light_kind_directional": {"text": "Directional"},
+    "workspace.inspector.light_kind_point": {"text": "Point"},
+    "workspace.inspector.light_kind_spot": {"text": "Spot"},
+    "workspace.inspector.light_color": {"text": "Color"},
+    "workspace.inspector.light_intensity": {"text": "Intensity"},
+    "workspace.inspector.light_range": {"text": "Range"},
+    "workspace.inspector.light_inner_cone": {"text": "Inner cone"},
+    "workspace.inspector.light_outer_cone": {"text": "Outer cone"},
+    "workspace.inspector.light_invalid": {"text": "Light color, intensity, range, and cone values must form a valid finite configuration."},
+    "workspace.inspector.trigger_volume": {"text": "Trigger Volume"},
+    "workspace.inspector.trigger_volume_shape": {"text": "Shape"},
+    "workspace.inspector.trigger_volume_shape_box": {"text": "Box"},
+    "workspace.inspector.trigger_volume_shape_sphere": {"text": "Sphere"},
+    "workspace.inspector.trigger_volume_shape_capsule": {"text": "Capsule"},
+    "workspace.inspector.trigger_volume_shape_plane": {"text": "Static Plane"},
+    "workspace.inspector.audio_source": {"text": "Audio Source"},
+    "workspace.inspector.audio_source_kind": {"text": "Source type"},
+    "workspace.inspector.audio_source_kind_native_clip": {"text": "Native Clip"},
+    "workspace.inspector.audio_source_kind_middleware_event": {"text": "Middleware Event"},
+    "workspace.inspector.audio_source_gain": {"text": "Gain"},
+    "workspace.inspector.audio_source_spatial": {"text": "Spatial"},
+    "workspace.inspector.audio_source_invalid": {"text": "Audio source gain must be a finite non-negative value."},
+    "workspace.inspector.name_invalid": {"text": "Object name must contain 1 to 128 bytes."},
+    "workspace.inspector.transform_invalid": {"text": "Transform values must be finite numbers."},
+    "workspace.inspector.objects_selected": {"text": "objects selected"},
+    "workspace.inspector.empty": {"text": "Select an object in the Hierarchy to inspect its properties."},
+    "workspace.value.on": {"text": "On"},
+    "workspace.value.off": {"text": "Off"},
+    "workspace.value.static": {"text": "✓ Static"},
+    "workspace.viewport.object_count": {"text": "{} object(s)"},
+    "workspace.viewport.perspective_shaded": {"text": "Perspective · Shaded"},
+    "workspace.viewport.orthographic_shaded": {"text": "Orthographic · Shaded"},
+    "workspace.viewport.renderer_missing": {"text": "Renderer not attached"},
+    "workspace.content_browser.embedded": {"text": "EMBEDDED"},
+    "workspace.content_browser.project_asset_dock": {"text": "Project asset dock"},
+    "workspace.global_dock.tab.assets": {"text": "Assets"},
+    "workspace.global_dock.tab.console": {"text": "Console"},
+    "workspace.global_dock.tab.build_output": {
+      "text": "Build"
+    },
+    "workspace.global_dock.tab.operations": {
+      "text": "Ops"
+    },
+    "workspace.global_dock.tab.mcp": {"text": "MCP"},
+    "workspace.global_dock.tab.performance": {"text": "Perf"},
+    "workspace.global_dock.tab.physics": {"text": "Physics"},
+    "workspace.global_dock.tab.audio": {"text": "Audio"},
+    "workspace.global_dock.tab.network": {"text": "Net"},
+    "workspace.global_dock.tab.localization": {"text": "L10n"},
+    "workspace.global_dock.preview.mcp": {"text": "MCP preview"},
+    "workspace.global_dock.preview.performance": {"text": "Performance preview"},
+    "workspace.global_dock.preview.physics": {"text": "Physics debug preview"},
+    "workspace.global_dock.preview.audio": {"text": "Audio mixer preview"},
+    "workspace.global_dock.preview.network": {"text": "Network debug preview"},
+    "workspace.global_dock.preview.localization": {"text": "Localization preview"},
+    "workspace.global_dock.console.filter.error": {"text": "Error"},
+    "workspace.global_dock.console.filter.warn": {"text": "Warn"},
+    "workspace.global_dock.console.filter.info": {"text": "Info"},
+    "workspace.global_dock.console.filter.debug": {"text": "Debug"},
+    "workspace.global_dock.console.filter.trace": {"text": "Trace"},
+    "workspace.global_dock.console.search": {
+      "text": "Filter..."
+    },
+    "workspace.global_dock.console.clear": {
+      "text": "Clear"
+    },
+    "workspace.global_dock.console.levels": {"text": "Levels"},
+    "workspace.global_dock.console.empty": {"text": "No logs match the active filters."},
+    "workspace.global_dock.build_output.search": {
+      "text": "Filter..."
+    },
+    "workspace.global_dock.build_output.clear": {
+      "text": "Clear"
+    },
+    "workspace.global_dock.build_output.columns": {
+      "text": "Columns"
+    },
+    "workspace.global_dock.build_output.status.all": {
+      "text": "All Status"
+    },
+    "workspace.global_dock.build_output.status.ok": {
+      "text": "OK"
+    },
+    "workspace.global_dock.build_output.status.failed": {
+      "text": "Failed"
+    },
+    "workspace.global_dock.build_output.status.cached": {
+      "text": "Cached"
+    },
+    "workspace.global_dock.build_output.row_status.info": {"text": "Info"},
+    "workspace.global_dock.build_output.row_status.succeeded": {"text": "OK"},
+    "workspace.global_dock.build_output.row_status.failed": {"text": "Failed"},
+    "workspace.global_dock.build_output.row_status.cached": {"text": "Cached"},
+    "workspace.global_dock.build_output.row_status.cancelled": {"text": "Cancelled"},
+    "workspace.global_dock.build_output.column.time": {
+      "text": "Time"
+    },
+    "workspace.global_dock.build_output.column.status": {
+      "text": "Status"
+    },
+    "workspace.global_dock.build_output.column.message": {
+      "text": "Message"
+    },
+    "workspace.global_dock.build_output.column.source": {
+      "text": "Source"
+    },
+    "workspace.global_dock.build_output.empty": {
+      "text": "No build output yet. Run a cook operation to see results."
+    },
+    "workspace.global_dock.build_output.dropped": {"text": "Older build output entries discarded:"},
+    "workspace.global_dock.build_output.source.invalid": {"text": "The diagnostic source is unavailable or outside the project."},
+    "workspace.global_dock.build_output.source.unavailable": {"text": "Source navigation is unavailable on this platform."},
+    "workspace.global_dock.operations.search": {
+      "text": "Filter..."
+    },
+    "workspace.global_dock.operations.clear": {
+      "text": "Clear"
+    },
+    "workspace.global_dock.operations.columns": {"text": "Columns"},
+    "workspace.global_dock.operations.column.status": {"text": "Status"},
+    "workspace.global_dock.operations.column.operation": {"text": "Operation"},
+    "workspace.global_dock.operations.column.phase": {"text": "Phase"},
+    "workspace.global_dock.operations.column.progress": {"text": "Progress"},
+    "workspace.global_dock.operations.column.message": {"text": "Message"},
+    "workspace.global_dock.operations.column.action": {"text": "Action"},
+    "workspace.global_dock.operations.cancel": {"text": "Cancel"},
+    "workspace.global_dock.operations.state.queued": {"text": "Queued"},
+    "workspace.global_dock.operations.state.running": {"text": "Running"},
+    "workspace.global_dock.operations.state.waiting": {"text": "Waiting"},
+    "workspace.global_dock.operations.state.cancelling": {"text": "Cancelling"},
+    "workspace.global_dock.operations.state.succeeded": {"text": "Succeeded"},
+    "workspace.global_dock.operations.state.failed": {"text": "Failed"},
+    "workspace.global_dock.operations.state.cancelled": {"text": "Cancelled"},
+    "workspace.global_dock.operations.kind.build": {"text": "Build"},
+    "workspace.global_dock.operations.kind.cook": {"text": "Cook assets"},
+    "workspace.global_dock.operations.kind.import": {"text": "Import assets"},
+    "workspace.global_dock.operations.kind.index": {"text": "Index assets"},
+    "workspace.global_dock.operations.kind.validation": {"text": "Validate project"},
+    "workspace.global_dock.operations.empty": {
+      "text": "No operations yet. Run a cook or import to see results."
+    },
+    "workspace.global_dock.operations.dropped": {"text": "Older completed operations discarded:"},
+    "workspace.global_dock.mcp.bridge": {"text": "horo.mcp.bridge@0.4.0 — active"},
+    "workspace.global_dock.mcp.tools": {"text": "scene.query, scene.select, scene.move, asset.list, build.trigger"},
+    "workspace.global_dock.mcp.awaiting": {"text": "Awaiting tool call…"},
+    "workspace.global_dock.performance.gpu": {"text": "16.7 ms · Draw calls: 84 · Tris: 124k"},
+    "workspace.global_dock.performance.cpu": {"text": "4.1 ms · Batches: 22 · Shadow casters: 8"},
+    "workspace.global_dock.performance.memory": {"text": "VRAM 214 MB / 4096 MB"},
+    "workspace.global_dock.physics.solver": {"text": "Steps: 3 · Bodies: 28 · Contacts: 14"},
+    "workspace.global_dock.physics.layers": {"text": "Default, Player, Enemy, Projectile, Terrain"},
+    "workspace.global_dock.physics.memory": {"text": "Collision meshes: 6.8 MB · Broadphase: BVH"},
+    "workspace.global_dock.audio.master": {"text": "−3.2 dB · Voices: 12 / 64"},
+    "workspace.global_dock.audio.busses": {"text": "Master, Music, SFX, Ambient, Voice"},
+    "workspace.global_dock.audio.device": {"text": "Stereo 48 kHz · Latency: 10.7 ms"},
+    "workspace.global_dock.network.ping": {"text": "42 ms · Bandwidth: 12.3 kb/s ↓ · 3.1 kb/s ↑"},
+    "workspace.global_dock.network.replication": {"text": "176 objects replicating · RPC queue: 0"},
+    "workspace.global_dock.network.connection": {"text": "1 peer · Server-authoritative · tick 64 Hz"},
+    "workspace.global_dock.localization.locale": {"text": "tr-TR · Fallback: en-US · 3 loaded"},
+    "workspace.global_dock.localization.strings": {"text": "1,247 translated · 0 missing · 18 fuzzy"},
+    "workspace.global_dock.localization.fonts": {"text": "Noto Sans · RTL: ✓ · CJK: ✓"},
+    "workspace.content_browser.assets_root": {"text": "assets/"},
+    "workspace.content_browser.empty": {"text": "This folder is empty."},
+    "workspace.content_browser.loading": {"text": "Loading assets..."},
+    "workspace.content_browser.unavailable": {"text": "This asset folder could not be read."},
+    "workspace.content_browser.no_results": {"text": "No assets match the current filters."},
+    "workspace.content_browser.search": {"text": "Search current folder..."},
+    "workspace.content_browser.filter.all_types": {"text": "All types"},
+    "workspace.content_browser.sort.name": {"text": "Name"},
+    "workspace.content_browser.sort.type": {"text": "Type"},
+    "workspace.content_browser.action.rename": {"text": "Rename"},
+    "workspace.content_browser.action.delete": {"text": "Delete"},
+    "workspace.content_browser.action.asset_info": {"text": "Asset Info"},
+    "workspace.content_browser.action.duplicate": {"text": "Duplicate"},
+    "workspace.content_browser.action.copy": {"text": "Copy"},
+    "workspace.content_browser.action.cut": {"text": "Cut / Move"},
+    "workspace.content_browser.action.paste_here": {"text": "Paste Here"},
+    "workspace.content_browser.action.move_here": {"text": "Move Here"},
+    "workspace.content_browser.action.create_folder": {"text": "Create Folder"},
+    "workspace.content_browser.action.import_here": {"text": "Import Here"},
+    "workspace.content_browser.action.refresh": {"text": "Refresh"},
+    "workspace.content_browser.action.reimport": {"text": "Reimport"},
+    "workspace.content_browser.action.reveal": {"text": "Reveal in File Manager"},
+    "workspace.content_browser.action.open_external_ide": {"text": "Open in External IDE"},
+    "workspace.content_browser.action.copy_path": {"text": "Copy Absolute Path"},
+    "workspace.content_browser.action.cancel": {"text": "Cancel"},
+    "workspace.content_browser.action.close": {"text": "Close"},
+    "workspace.content_browser.create_folder.title": {"text": "Create Folder"},
+    "workspace.content_browser.create_folder.name": {"text": "Folder name"},
+    "workspace.content_browser.info.title": {"text": "Asset Info"},
+    "workspace.content_browser.info.directory": {"text": "Directory"},
+    "workspace.content_browser.info.asset": {"text": "Asset"},
+    "workspace.content_browser.info.path": {"text": "Absolute path"},
+    "workspace.content_browser.info.type": {"text": "Asset type"},
+    "workspace.content_browser.info.asset_id": {"text": "Asset ID"},
+    "workspace.content_browser.info.registration": {"text": "Registry"},
+    "workspace.content_browser.info.registered": {"text": "Registered"},
+    "workspace.content_browser.info.unregistered": {"text": "Unregistered"},
+    "workspace.content_browser.info.size": {"text": "Payload size"},
+    "workspace.content_browser.info.importer": {"text": "Importer"},
+    "workspace.content_browser.info.module": {"text": "Module"},
+    "workspace.content_browser.info.source": {"text": "Import source"},
+    "workspace.content_browser.info.reimport_status": {"text": "Reimport"},
+    "workspace.content_browser.info.reimport_manual": {"text": "Available (manual)"},
+    "workspace.content_browser.info.reimport_source_changed": {"text": "Source changed"},
+    "workspace.content_browser.info.reimport_source_stale": {"text": "Source may have changed"},
+    "workspace.content_browser.info.reimport_importer_changed": {"text": "Importer changed"},
+    "workspace.content_browser.info.reimport_module_changed": {"text": "Module changed"},
+    "workspace.content_browser.info.last_import_reason": {"text": "Last import reason"},
+    "workspace.content_browser.info.import_reason_initial": {"text": "Initial import"},
+    "workspace.content_browser.info.import_reason_manual": {"text": "Manual reimport"},
+    "workspace.content_browser.info.metadata": {"text": "Metadata"},
+    "workspace.content_browser.info.none": {"text": "Not available"},
+    "workspace.content_browser.rename.title": {"text": "Rename Asset Entry"},
+    "workspace.content_browser.rename.name": {"text": "NAME"},
+    "workspace.content_browser.delete.title": {"text": "Delete Asset Entry"},
+    "workspace.content_browser.delete.message": {"text": "This entry will be removed from the Assets directory and moved to the project's recoverable local trash."},
+    "workspace.content_browser.delete.dependencies": {"text": "Direct dependencies"},
+    "workspace.content_browser.delete.dependency_warning": {"text": "This asset records dependencies. Deleting it does not delete those referenced assets."},
+    "workspace.content_browser.operation.unavailable": {"text": "Asset operations are unavailable in this editor composition."},
+    "workspace.content_browser.operation.invalid_name": {"text": "Choose a valid file or folder name."},
+    "workspace.content_browser.operation.invalid_target": {"text": "The selected asset entry is no longer available."},
+    "workspace.content_browser.operation.name_exists": {"text": "An entry with that name already exists."},
+    "workspace.content_browser.operation.busy": {"text": "Another project write is active. Try again shortly."},
+    "workspace.content_browser.operation.rename_failed": {"text": "The asset entry could not be renamed."},
+    "workspace.content_browser.operation.delete_failed": {"text": "The asset entry could not be moved to project trash."},
+    "workspace.content_browser.operation.registry_failed": {"text": "The asset changed, but the Asset Registry could not be refreshed."},
+    "workspace.content_browser.operation.clipboard_empty": {"text": "There is no asset to paste."},
+    "workspace.content_browser.operation.asset_required": {"text": "This operation requires a registered asset."},
+    "workspace.content_browser.operation.copy_failed": {"text": "The asset could not be copied."},
+    "workspace.content_browser.operation.move_failed": {"text": "The asset could not be moved."},
+    "workspace.content_browser.operation.create_folder_failed": {"text": "The folder could not be created."},
+    "workspace.content_browser.operation.same_folder": {"text": "The asset is already in this folder."},
+    "workspace.content_browser.operation.companion_invalid": {"text": "The asset metadata or companion-file set is missing or unsafe."},
+    "workspace.content_browser.operation.rollback_failed": {"text": "The operation failed and could not be fully rolled back. Inspect the project files before continuing."},
+    "workspace.content_browser.operation.reimport_unavailable": {"text": "This asset does not record a reimport source."},
+    "workspace.content_browser.operation.reimport_importer_missing": {"text": "The importer module recorded by this asset is not available."},
+    "workspace.content_browser.operation.reimport_failed": {"text": "The asset could not be reimported; the previous payload was preserved."},
+    "workspace.content_browser.operation.reveal_unavailable": {"text": "File Manager integration is unavailable on this platform."},
+    "workspace.content_browser.scenes": {"text": "scenes"},
+    "workspace.content_browser.models": {"text": "models"},
+    "workspace.content_browser.textures": {"text": "textures"},
+    "workspace.content_browser.materials": {"text": "materials"},
+    "workspace.content_browser.shaders": {"text": "shaders"},
+    "workspace.content_browser.audio": {"text": "audio"},
+    "web_workspace.activity.find_in_scene": {"text": "Find in Scene"},
+    "web_workspace.activity.scene_settings": {"text": "Scene Settings"},
+    "web_workspace.activity.project_settings": {"text": "Project Settings"},
+    "web_workspace.activity.build_output": {"text": "Build Output"},
+    "web_workspace.activity.render_settings": {"text": "Render Settings"},
+    "web_workspace.activity.ai_chat": {"text": "AI Chat"},
+    "web_workspace.ai_chat.history": {"text": "Chat history"},
+    "web_workspace.ai_chat.new_chat": {"text": "New chat"},
+    "web_workspace.ai_chat.close_chat": {"text": "Close chat"},
+    "web_workspace.ai_chat.ready": {"text": "Ready. Ask me about the engine, scene editing, or any workflow."},
+    "web_workspace.ai_chat.add_context": {"text": "+ Add context"},
+    "web_workspace.ai_chat.placeholder": {"text": "Ask Horo…"},
+    "web_workspace.ai_chat.send": {"text": "Send"},
+    "web_workspace.ai_chat.previous_chats": {"text": "Previous chats"},
+    "web_workspace.language": {"text": "Language"},
+    "web_workspace.ai_chat.title": {"text": "HORO AI CHAT"},
+    "web_workspace.ai_chat.mode.ask": {"text": "ask"},
+    "web_workspace.ai_chat.mode.agent": {"text": "agent"},
+    "web_workspace.ai_chat.mode.edit": {"text": "edit"},
+    "web_workspace.value.on": {"text": "On"},
+    "web_workspace.value.static": {"text": "✓ Static"},
+    "web_workspace.accessibility.opens_modal": {"text": "opens modal"},
+    "web_workspace.accessibility.opens_screen": {"text": "opens screen"},
+    "web_workspace.menu.assets": {"text": "Assets"},
+    "web_workspace.inspector.scale": {"text": "Scale"},
+    "web_workspace.inspector.mesh": {"text": "Mesh"},
+    "web_workspace.menu.file": {"text": "File"},
+    "web_workspace.menu.edit": {"text": "Edit"},
+    "web_workspace.dock.assets": {"text": "Assets"},
+    "web_workspace.menu.game_object": {"text": "GameObject"},
+    "web_workspace.menu.component": {"text": "Component"},
+    "web_workspace.menu.window": {"text": "Window"},
+    "web_workspace.menu.build": {"text": "Build"},
+    "web_workspace.menu.help": {"text": "Help"},
+    "web_workspace.menu.workspace": {"text": "Workspace"},
+    "web_workspace.menu.asset_editors": {"text": "Asset Editors"},
+    "web_workspace.menu.tools": {"text": "Tools"},
+    "web_workspace.menu.diagnostics": {"text": "Diagnostics"},
+    "web_workspace.menu.runtime": {"text": "Runtime"},
+    "web_workspace.menu.localization_editor": {"text": "Localization Editor"},
+    "web_workspace.menu.new_project": {"text": "New Project"},
+    "web_workspace.menu.open_project": {"text": "Open Project"},
+    "web_workspace.menu.open_recent": {"text": "Open Recent"},
+    "web_workspace.menu.save": {"text": "Save"},
+    "web_workspace.menu.save_as": {"text": "Save As…"},
+    "web_workspace.menu.save_copy_as": {"text": "Save Copy As…"},
+    "web_workspace.menu.exit": {"text": "Exit"},
+    "web_workspace.menu.undo": {"text": "Undo"},
+    "web_workspace.menu.redo": {"text": "Redo"},
+    "web_workspace.menu.cut": {"text": "Cut"},
+    "web_workspace.menu.copy": {"text": "Copy"},
+    "web_workspace.menu.paste": {"text": "Paste"},
+    "web_workspace.menu.preferences": {"text": "Preferences…"},
+    "web_workspace.menu.import_asset": {"text": "Import New Asset…"},
+    "web_workspace.menu.reimport_all": {"text": "Reimport All"},
+    "web_workspace.menu.refresh_asset_index": {"text": "Refresh Asset Index"},
+    "web_workspace.menu.create_empty": {"text": "Create Empty"},
+    "web_workspace.menu.create_primitive": {"text": "Create Primitive →"},
+    "web_workspace.menu.create_light": {"text": "Create Light →"},
+    "web_workspace.menu.add_component": {"text": "Add Component…"},
+    "web_workspace.menu.documentation": {"text": "Documentation"},
+    "web_workspace.menu.editor_settings": {"text": "Editor Settings"},
+    "web_workspace.menu.character_setup": {"text": "Character Setup…"},
+    "web_workspace.menu.editor_workspace": {"text": "Editor Workspace"},
+    "web_workspace.menu.ui_canvas_editor": {"text": "UI Canvas Editor"},
+    "web_workspace.menu.cinematic_sequencer": {"text": "Cinematic Sequencer"},
+    "web_workspace.menu.animation_editor": {"text": "Animation Editor"},
+    "web_workspace.menu.material_editor": {"text": "Material Editor"},
+    "web_workspace.menu.particle_editor": {"text": "Particle Editor"},
+    "web_workspace.menu.prefab_editor": {"text": "Prefab Editor"},
+    "web_workspace.menu.shader_graph": {"text": "Shader Graph"},
+    "web_workspace.menu.asset_browser": {"text": "Asset Browser"},
+    "web_workspace.menu.plugin_manager": {"text": "Plugin Manager"},
+    "web_workspace.menu.package_manager": {"text": "Package Manager"},
+    "web_workspace.menu.primitives_panel": {"text": "Primitives Panel"},
+    "web_workspace.menu.decal_placement": {"text": "Decal Placement"},
+    "web_workspace.menu.destruction_setup": {"text": "Destruction Setup"},
+    "web_workspace.menu.save_load_manager": {"text": "Save/Load Manager"},
+    "web_workspace.menu.post_processing_stack": {"text": "Post Processing Stack"},
+    "web_workspace.menu.xr_setup": {"text": "XR Setup"},
+    "web_workspace.menu.physics_debugger": {"text": "Physics Debugger"},
+    "web_workspace.menu.network_debugger": {"text": "Network Debugger"},
+    "web_workspace.menu.navigation_bake": {"text": "Navigation Bake"},
+    "web_workspace.menu.lod_debugger": {"text": "LOD Debugger"},
+    "web_workspace.menu.virtual_texturing_debug": {"text": "Virtual Texturing Debug"},
+    "web_workspace.menu.observability_dashboard": {"text": "Observability Dashboard"},
+    "web_workspace.menu.mcp_panel": {"text": "MCP Panel"},
+    "web_workspace.menu.console_panel": {"text": "Console Panel"},
+    "web_workspace.menu.audio_mixer": {"text": "Audio Mixer"},
+    "web_workspace.menu.input_mapping_editor": {"text": "Input Mapping Editor"},
+    "web_workspace.menu.pcg_graph_editor": {"text": "PCG Graph Editor"},
+    "web_workspace.menu.gameplay_behavior_editor": {"text": "Gameplay Behavior Editor"},
+    "web_workspace.menu.build_release": {"text": "Build & Release…"},
+    "web_workspace.menu.build_output": {"text": "Build Output"},
+    "web_workspace.menu.project_settings": {"text": "Project Settings"},
+    "web_workspace.menu.render_settings": {"text": "Render Settings"},
+    "web_workspace.menu.platform_services": {"text": "Platform Services"},
+    "web_workspace.menu.gameplay_integration": {"text": "Gameplay Integration"},
+    "web_workspace.menu.clean_build": {"text": "Clean Build"},
+    "web_workspace.menu.validate_project": {"text": "Validate Project"},
+    "web_workspace.panel.hierarchy": {"text": "Hierarchy"},
+    "web_workspace.panel.inspector": {"text": "Inspector"},
+    "web_workspace.panel.scene": {"text": "Scene"},
+    "web_workspace.panel.content_browser": {"text": "Content Browser"},
+    "web_workspace.inspector.transform": {"text": "Transform"},
+    "web_workspace.inspector.position": {"text": "Position"},
+    "web_workspace.inspector.rotation": {"text": "Rotation"},
+    "web_workspace.toolbar.scale": {"text": "Scale"},
+    "web_workspace.inspector.mesh_renderer": {"text": "Mesh Renderer"},
+    "web_workspace.type.mesh": {"text": "Mesh"},
+    "web_workspace.inspector.material": {"text": "Material"},
+    "web_workspace.inspector.shadows": {"text": "Shadows"},
+    "web_workspace.inspector.static_flags": {"text": "Static Flags"},
+    "web_workspace.inspector.batching": {"text": "Batching"},
+    "web_workspace.inspector.lightmap": {"text": "Lightmap"},
+    "web_workspace.inspector.static": {"text": "Static"},
+    "web_workspace.toolbar.select": {"text": "Select"},
+    "web_workspace.toolbar.move": {"text": "Move"},
+    "web_workspace.toolbar.rotate": {"text": "Rotate"},
+    "web_workspace.toolbar.play": {"text": "Play"},
+    "web_workspace.toolbar.game": {"text": "Game"},
+    "web_workspace.toolbar.local_space": {"text": "Local space"},
+    "web_workspace.toolbar.world_space": {"text": "World space"},
+    "web_workspace.viewport.perspective_shaded": {"text": "Perspective · Shaded"},
+    "web_workspace.viewport.wire": {"text": "Wire"},
+    "web_workspace.dock.console": {"text": "Console"},
+    "web_workspace.dock.mcp": {"text": "MCP"},
+    "web_workspace.dock.performance": {"text": "Perf"},
+    "web_workspace.dock.physics": {"text": "Physics"},
+    "web_workspace.dock.audio": {"text": "Audio"},
+    "web_workspace.dock.network": {"text": "Net"},
+    "web_workspace.dock.localization": {"text": "L10n"},
+    "web_workspace.label.embedded": {"text": "EMBEDDED"},
+    "web_workspace.label.bridge": {"text": "BRIDGE"},
+    "web_workspace.label.tools": {"text": "TOOLS"},
+    "web_workspace.label.gpu": {"text": "GPU"},
+    "web_workspace.label.cpu": {"text": "CPU"},
+    "web_workspace.label.memory": {"text": "MEM"},
+    "web_workspace.label.solver": {"text": "SOLVER"},
+    "web_workspace.label.layers": {"text": "LAYERS"},
+    "web_workspace.label.master": {"text": "MASTER"},
+    "web_workspace.label.busses": {"text": "BUSSES"},
+    "web_workspace.label.device": {"text": "DEVICE"},
+    "web_workspace.label.ping": {"text": "PING"},
+    "web_workspace.label.replication": {"text": "REP"},
+    "web_workspace.label.connection": {"text": "CONN"},
+    "web_workspace.label.locale": {"text": "LOCALE"},
+    "web_workspace.label.strings": {"text": "STRINGS"},
+    "web_workspace.label.fonts": {"text": "FONTS"},
+    "web_workspace.dock.project_assets": {"text": "Project asset dock"},
+    "web_workspace.dock.console_preview": {"text": "Console preview"},
+    "web_workspace.dock.mcp_preview": {"text": "MCP preview"},
+    "web_workspace.dock.performance_preview": {"text": "Performance preview"},
+    "web_workspace.dock.physics_preview": {"text": "Physics debug preview"},
+    "web_workspace.dock.audio_preview": {"text": "Audio mixer preview"},
+    "web_workspace.dock.network_preview": {"text": "Network debug preview"},
+    "web_workspace.dock.localization_preview": {"text": "Localization preview"},
+    "web_workspace.action.open_asset_browser": {"text": "Open Asset Browser →"},
+    "web_workspace.action.open_console": {"text": "Open Console Panel →"},
+    "web_workspace.action.open_mcp": {"text": "Open MCP Panel →"},
+    "web_workspace.action.open_observability": {"text": "Open Observability Dashboard →"},
+    "web_workspace.action.open_physics": {"text": "Open Physics Debugger →"},
+    "web_workspace.action.open_audio": {"text": "Open Audio Mixer →"},
+    "web_workspace.action.open_network": {"text": "Open Network Debugger →"},
+    "web_workspace.action.open_localization": {"text": "Open Localization Editor →"},
+    "web_workspace.status.unsaved": {"text": "Unsaved"},
+    "web_workspace.status.selection": {"text": "Sel"},
+    "web_workspace.status.revision": {"text": "Rev"},
+    "web_workspace.status.navigation": {"text": "Nav"},
+    "web_workspace.status.idle": {"text": "idle"},
+    "web_workspace.search_objects": {"text": "Search objects…"},
+    "web_workspace.modal.panel": {"text": "Panel"},
+    "web_workspace.action.close": {"text": "Close"},
+    "web_workspace.action.toggle_bottom_dock": {"text": "Toggle bottom dock"},
+    "web_workspace.type.camera": {"text": "Camera"},
+    "web_workspace.type.light": {"text": "Light"},
+    "welcome.project.compatibility.current": {"text": "Current"},
+    "welcome.project.compatibility.compatible": {"text": "Compatible"},
+    "welcome.project.compatibility.will_upgrade": {"text": "Will upgrade"},
+    "welcome.project.compatibility.recovery_required": {"text": "Recovery required"},
+    "welcome.project.compatibility.newer_horo_required": {"text": "Newer Horo required"},
+    "welcome.project.compatibility.cannot_upgrade": {"text": "Cannot upgrade"},
+    "welcome.project.compatibility.version_unavailable": {"text": "Version unavailable"},
+    "welcome.project.compatibility.refreshing": {"text": "Checking compatibility…"},
+    "welcome.subtitle": {
+      "text": "Game Engine"
+    },
+    "welcome.whats_new": {
+      "text": "WHAT'S NEW"
+    }
+  }
+}

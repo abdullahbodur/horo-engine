@@ -69,13 +69,17 @@ EditorLayer
     |                       +-- PerformanceTab
     |
     +-- EditorModalHost          exclusive modal workflows above the workspace
-    |
-    +-- EditorStatusBar          bottom status line
 ```
 
 `EditorLayer` is the GUI composition root. It creates the workspace controller,
-panel host, modal host, menu bar, toolbar, status bar, and viewport render
+panel host, modal host, menu bar, toolbar, and viewport render
 integration, then forwards frame lifecycle calls.
+
+The persistent status bar is shell chrome owned by `GuiScreenHost`, not by
+`EditorLayer` or `EditorPanelHost`. Panels may publish bounded status
+contributions through the host registry, including an
+`OnlyWhenPanelActive` visibility policy. See
+[Editor Status Bar](./editor-status-bar.md).
 
 `EditorLayer` is also the GUI coordinator for top-level presentation actions. It
 consumes typed results from the menu bar and toolbar, opens GUI-only surfaces
@@ -109,6 +113,11 @@ every possible GUI or domain action.
 `EditorPanelHost` owns layout and tab lifetime. Individual tabs own only their
 presentation state and drawing.
 
+The bottom Console tab is a presentation consumer of the foundation
+`IStructuredLogQuery` capability. It does not parse terminal text or own a second
+logger. Terminal, persistent JSONL, and Console delivery fan out from the same
+accepted structured record.
+
 `EditorModalHost` is a separate overlay owner. Settings, Build & Release, import,
 and confirmation workflows are not tabs or layout nodes. While a modal is open,
 the panel host remains mounted and rendered but receives no user interaction.
@@ -118,6 +127,20 @@ workspace while its interaction is blocked.
 See [Editor Modal Host](./editor-modal-host.md).
 
 ## Panel Host
+
+The implemented workspace uses `WorkspacePanelHost` and a validated
+`WorkspaceLayout` tree containing `SplitNode`, `TabStackNode`, and `PanelNode`
+values. `WorkspacePanelRegistry` owns `IWorkspacePanel` instances and injects a
+scoped `PanelContext`; it is not a callback-only registry. `EditorWorkspaceView`
+is the ImGui presentation adapter for that model and emits typed workspace
+commands for tab activation, panel docking, activity-bar reordering, and seam
+resizing. `WorkspaceDockArea` remains placement metadata and a command boundary;
+it is not the authoritative layout representation.
+
+Layout persistence validates the node tree before activation and falls back to
+the versioned default layout on structural failure. Splitter and panel drag
+gestures acquire central input-router capture, so modal opening, focus loss, or
+owner destruction cancels them before any dock mutation is committed.
 
 `EditorPanelHost` is a thin layout and tab-lifecycle manager. It knows:
 
@@ -280,6 +303,14 @@ surface state. References to temporarily unavailable optional surfaces are
 reported in `LayoutLoadReport` and skipped without making the remaining layout
 invalid.
 
+Runtime splitter input uses screen-space seam rectangles and explicit pointer
+capture rather than transparent ImGui overlay windows. This keeps hit testing
+independent of platform window z-order and preserves an active resize while the
+pointer moves outside the narrow seam. Activity-panel drag/drop and modal popup
+ownership suppress new splitter capture. Conversely, an active splitter owns the
+primary pointer before dock rendering and suppresses competing panel-header and
+activity-item drag sources; overlapping hit regions must never start both operations.
+
 Registration makes a surface available and attaches its lifecycle; placement is
 a separate layout operation. `TabRegistration` and `PanelRegistration` provide
 fallback placement metadata for new workspaces, schema migration, and newly
@@ -289,6 +320,24 @@ tab, `MoveTab()` changes its stack and index, and `CloseTab()` removes it from
 the visible layout without unregistering or destroying it. `UnregisterTab()` and
 `UnregisterPanel()` detach and destroy the registered surface after removing all
 layout references.
+
+### Panel and Tab Service Provisioning (Registry Architecture)
+
+To support modular addition of workspace panels (such as `HierarchyPanel`,
+`InspectorPanel`, `ConsoleTab`, or third-party package dashboards) without
+passing a monolithic context object or modifying `EditorWorkspaceController`
+for each new surface, panel construction uses composition-time service
+provisioning (`EditorServiceRegistry`).
+
+```cpp
+using TabFactory = std::function<std::unique_ptr<EditorTab>(
+    const EditorServiceRegistry& services)>;
+using PanelFactory = std::function<std::unique_ptr<EditorPanel>(
+    const EditorServiceRegistry& services)>;
+```
+
+- **Scoped Dependency Injection:** When `EditorLayer` activates the workspace, `EditorWorkspaceController` populates the session `EditorServiceRegistry` with narrow capabilities (`EditorDataBus&`, `SceneDocument&`, `EditorSelectionModel&`).
+- **Dynamic Surface Instantiation:** Each panel or tab descriptor registers its factory function with `PanelRegistry`. `EditorPanelHost` constructs registered surfaces by supplying only the required services, avoiding tight coupling between panels and preventing header bloat at the workspace composition root.
 
 ## Surface Contracts
 
@@ -468,7 +517,7 @@ sections:
   etc.) and the search filter.
   - Owner: `HierarchyTab`
   - Writes selection through: `EditorSelectionModel`
-  - Subscribes to: `SceneDocumentChangedEvent`
+  - Subscribes to: selection and document notifications
 
 - **Project tab**: shows the project file tree (`assets`, `shaders`, `src`,
   `CMakeLists.txt`).
@@ -618,6 +667,78 @@ backend resources and render-target lifetime belong to the editor render
 integration and renderer services. The panel receives a typed render-target
 handle or view and never stores backend-specific renderer objects directly.
 
+The current navigation mapping is:
+
+- right mouse drag: fly-camera look;
+- right mouse capture plus `W/A/S/D` and `Q/E`: forward/side/vertical movement;
+- `Shift` during fly capture: accelerated movement;
+- middle mouse drag: camera-relative pan;
+- `Alt` plus left mouse drag: orbit around the current target;
+- mouse wheel: camera-relative dolly.
+
+The top-left projection control switches between `Perspective · Shaded` and
+`Orthographic · Shaded` through an `EditorViewportModel` command. Switching
+projection preserves approximate apparent scale at the orbit target and remains
+editor-session state; it does not dirty the authored scene or mutate a Camera
+component. Perspective pan derives world units per pixel from target distance,
+vertical field of view, and viewport height. Orthographic pan derives it from
+orthographic height and viewport height. Wheel input scales target distance or
+orthographic height exponentially.
+
+The routed `editor.viewport.focus_selected` action (`F` by default) is eligible
+only while the viewport is hovered or focused. It frames bounds from the selected
+instance in the current render snapshot. Missing selection or renderable bounds
+is a no-op. Projection changes and focus update viewport revision only and never
+create document history.
+
+Move-gizmo drags update only an explicit viewport preview snapshot while the
+pointer is captured. Releasing the pointer submits one transform command through
+`EditorHistory`; cancelling restores the committed document snapshot. Preview
+frames increment viewport revision but do not increment document revision,
+publish document-change events, dirty the scene, or create undo entries.
+
+The active viewport renderer reports its typed clip-depth convention through
+`IEditorViewportRenderer`. `ViewportPanel` forwards that value to gizmo
+projection, pointer-ray construction, and picking commands. These consumers do
+not inspect or branch on a concrete renderer identifier.
+
+The viewport grid is world-space editor presentation, not a screen-space ImGui
+decoration and not authored scene content. `ViewportPanel` forwards the committed
+grid-visibility setting through the editor-private viewport renderer contract.
+Shared allocation-free geometry generation places the grid on the world XZ plane,
+snaps it to world cells around the camera target, and selects a minor spacing from
+the `1/2/5 × 10ⁿ` sequence. Perspective spacing derives from target distance and
+vertical field of view; orthographic spacing derives from orthographic height.
+Concrete adapters draw the same geometry before scene meshes with depth testing
+enabled and depth writes disabled, allowing scene geometry to cover the grid
+without making the grid a document object or picking target.
+
+Viewport implementation responsibilities are split by lifetime and authority:
+
+- `ViewportPanel` composes the render-target surface and presentation overlays;
+- `EditorViewportGridGeometry` owns bounded adaptive world-grid generation
+  without per-frame heap allocation or backend-native types;
+- `ViewportInteractionController` arbitrates mutually exclusive gizmo and
+  navigation sessions and emits typed workspace commands;
+- `ViewportInteractionCapture` owns routed pointer-capture tokens and guarantees
+  deterministic cancellation before panel detachment;
+- `ViewportNavigationController` maps input snapshots to camera, focus, and
+  picking commands without mutating viewport state;
+- `TransformGizmoGeometry` owns screen projection, handle drawing, and hit
+  testing;
+- `TransformGizmoController` owns only pointer-derived transient drag state and
+  emits preview, commit, or cancellation commands;
+- `TransformGizmoMath` validates drag inputs and evaluates local/world
+  Move/Rotate/Scale results without ImGui, document mutation, or silent
+  decomposition fallback.
+
+These components remain editor-presentation adapters. `EditorViewportModel`,
+`EditorSelectionModel`, `SceneDocument`, and `EditorHistory` remain the
+authorities. Geometry drawing and input mapping must not commit scene state
+directly. Singular parents, non-finite input, and unrepresentable transform
+updates terminate the transient preview through a typed error; they must not
+substitute identity axes or commit a partial result.
+
 ### Right Dock
 
 Visible as the Properties panel.
@@ -629,9 +750,22 @@ Visible as the Properties panel.
   - Subscribes to: selection and document notifications
   - Executes: undoable editor commands when values are edited
 
+The Inspector projects the complete ordered object selection and a separate
+primary object identity. A transform axis is presented as mixed when selected
+objects disagree on that axis. Dragging a mixed axis applies the primary draft's
+delta relative to each selected object's authored axis value, preserving their
+spacing and per-object offsets. Editing a uniform axis keeps absolute assignment
+semantics. Every untouched translation, rotation, and scale axis retains each
+object's authored value. The presentation reducer emits one typed batch preview
+during drag and one atomic document command on commit. The document executor
+validates the complete update set before mutation, drops unchanged entries, and
+records at most one undo transaction. Escape, selection or revision changes,
+and competing workspace commands clear the whole transient preview set without
+mutating the document.
+
 ### Bottom Dock
 
-Visible as the Workspace panel with four tabs:
+Visible as the Workspace panel with the following tabs:
 
 - **Assets tab**: thumbnail browser for project assets.
   - Owner: `AssetsTab`
@@ -650,6 +784,26 @@ Visible as the Workspace panel with four tabs:
     on `EditorDataBus`. The tab queries the store for the required range.
   - Clearing or filtering the tab changes presentation state; it does not delete
     persistent log files or change logger configuration implicitly.
+
+- **Build Output tab**: bounded typed build and cook diagnostics.
+  - Owner: `GlobalDockBuildOutputPane`
+  - Queries: `IBuildOutputQuery`; it never parses log categories for status.
+  - Optional absolute source locations carry line and column metadata. The
+    workspace validates that a target is a regular non-symlink beneath the
+    active project before dispatching platform navigation. The validated request
+    preserves line and column through the platform capability; a host without a
+    configured source-editor adapter may fall back to revealing the file.
+  - Empty projections and bounded-retention drops are presented explicitly; a
+    user must not mistake a filtered or truncated snapshot for producer silence.
+
+- **Operations tab**: user-facing import, cook, build, and validation progress.
+  - Owner: `GlobalDockOperationsPane`
+  - Queries: `IOperationQuery`
+  - Executes: cooperative cancellation through `IOperationControl`
+  - The panel owns only search, column visibility, and presentation filters;
+    `OperationStore` owns bounded lifecycle snapshots and terminal retention.
+  - Empty projections and dropped terminal-history counts are visible presentation
+    states, not inferred from log text.
 
 - **MCP tab**: MCP command history and activity.
   - Owner: `McpTab`
@@ -700,11 +854,12 @@ command dispatch.
 
 ### Status Bar
 
-Bottom line with `Sel: 0`, `Dirty: no`, `Nav: idle`, `Reload: idle`, `Render: OpenGL`.
+Persistent shell-owned bottom line rendered by `GuiScreenHost`.
 
-- Owner: `EditorStatusBar`
-- Subscribes to: `SelectionChangedEvent`, `SceneDocumentChangedEvent`,
-  `EditorOperationEvent`
+- Owner: `GuiScreenHost`
+- Workspace bridge: `EditorWorkspaceScreen`
+- Inputs: bounded `EditorStatusItemContent` snapshots in the host registry
+- Does not call panel/plugin providers or query document models during draw
 
 ## Data Flow Example: Selecting an Object
 
@@ -714,7 +869,8 @@ Bottom line with `Sel: 0`, `Dirty: no`, `Nav: idle`, `Reload: idle`, `Render: Op
 4. The selection model publishes `SelectionChangedEvent` on `EditorDataBus`.
 5. `PropertiesTab` queries the selection model and refreshes inspected fields.
 6. `ViewportPanel` queries the selection model and syncs the gizmo.
-7. `StatusBar` queries the selection model and updates `Sel: 1`.
+7. `EditorWorkspaceScreen` publishes the committed selection snapshot to the
+   host status registry; the next status draw presents `Sel: 1`.
 
 No tab knows the others exist. The event producer does not know which panel
 will consume the event, and tabs attaching later can query the current selection
@@ -729,7 +885,8 @@ without replaying old events.
 4. After the transaction commits, `SceneDocument` increments its revision and
    publishes one `SceneDocumentChangedEvent` through the editor bus.
 5. `HierarchyTab` receives it and refreshes dirty indicators.
-6. `StatusBar` receives it and shows `Dirty: yes`.
+6. `EditorWorkspaceScreen` publishes the committed dirty-state snapshot and the
+   shell status bar presents `Unsaved`.
 7. The viewport renders the updated object on the next frame through the
    existing runtime binding.
 
@@ -861,6 +1018,9 @@ src/editor/document/
     EditorWorkspaceController.h/cpp
 src/editor/data_bus/
     EditorDataBus.h/cpp
+src/editor/status_bar/
+    EditorStatusBar.h/cpp
+    EditorStatusBarModel.cpp
 src/editor/panels/
     EditorPanelHost.h/cpp
     EditorTab.h
@@ -869,7 +1029,6 @@ src/editor/panels/
     EditorViewportModel.h/cpp
     EditorMenuBar.h/cpp
     EditorToolbar.h/cpp
-    EditorStatusBar.h/cpp
     tabs/
         HierarchyTab.h/cpp
         ProjectTab.h/cpp

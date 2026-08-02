@@ -20,6 +20,8 @@ game owns its product-specific update policy.
 - Update checks respect explicit channels and user policy.
 - Project formats are not upgraded merely because an update was downloaded.
 - Plugins and toolchains have independent compatibility checks.
+- Renderer backends are independently installable signed product components;
+  editor-core installation does not imply installation of every renderer.
 
 ## Distribution Products
 
@@ -29,10 +31,16 @@ Supported products include:
 - `horo-engine` CLI package
 - `horopak` package tool
 - public SDK/development package
+- first-party renderer component packages
 - symbols and diagnostic artifacts kept outside ordinary installation
 
 Each artifact has stable product, version, platform, architecture, build
 identity, and checksum metadata.
+
+Renderer component install, availability, probe, and no-renderer recovery follow
+[Renderer Distribution And Availability](../runtime/renderer-distribution-and-availability.md).
+Their signed metadata and private module ABI follow
+[Renderer Module Package Manifest](../runtime/renderer-module-package-manifest.md).
 
 ## Platform Package Formats
 

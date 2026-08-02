@@ -42,13 +42,13 @@ GUI actions, CLI commands, and MCP tools must use the same application-level
 operations. A capability must not be implemented independently in an ImGui
 callback, CLI handler, or MCP handler.
 
-Inside the graphical host, `EditorLayer` is the GUI composition root and
+Inside the graphical host, the application-owned `GuiScreenHost` is the GUI composition root and
 `EditorWorkspaceController` owns the active editor session. The controller
 coordinates the scene document, selection, viewport state, undo/redo commands,
 workspace persistence, and editor-local notifications. GUI panels and tabs do
 not become application-layer state authorities.
 
-`EditorModalHost`, also owned by `EditorLayer`, composes transient screen-like
+`EditorModalHost`, owned by application composition and borrowed by `GuiScreenHost`, composes transient screen-like
 workflows above the editor workspace. It owns modal focus and interaction
 exclusivity but not editor, project, build, or release state.
 
@@ -280,9 +280,10 @@ src/
 ```text
 HoroEngine::Foundation
 HoroEngine::Platform
+HoroEngine::Runtime
 HoroEngine::Assets
 HoroEngine::SceneModel
-HoroEngine::SceneRuntime
+HoroEngine::RuntimeScene
 HoroEngine::Physics
 HoroEngine::AudioApi
 HoroEngine::AudioRuntime
@@ -293,6 +294,8 @@ HoroEngine::NetworkRuntime
 HoroEngine::NetworkSockets
 HoroEngine::RenderApi
 HoroEngine::RenderFrontend
+HoroEngine::RenderModuleAbi
+HoroEngine::RenderModuleHost
 HoroEngine::RenderOpenGL
 HoroEngine::RenderNull
 HoroEngine::RenderVulkan
@@ -300,6 +303,7 @@ HoroEngine::RenderMetal
 HoroEngine::RenderD3D12
 HoroEngine::Pipeline
 HoroEngine::Application
+HoroEngine::ProjectMigrations
 HoroEngine::EditorModel
 HoroEngine::EditorServices
 HoroEngine::Gui
@@ -308,6 +312,19 @@ HoroEngine::GameplayApi
 HoroEngine::ExtensionApi
 HoroEngine::ExtensionHost
 ```
+
+`HoroEngine::Application` owns project version/compatibility plus the
+backend-neutral migration registry, planner, typed pipeline, deterministic
+inventory and verified dry-run executor. `HoroEngine::ProjectMigrations` depends
+on Application and owns only build-generated core definition composition;
+Application never depends back on that concrete catalog target. The PRJ-001A
+platform baseline owns native durability and lock handles; EditorServices owns
+the shared project-mutation coordinator and MIG-001C journaled transaction
+service. EditorServices also owns the GUI-neutral MIG-001D `ProjectOpenService`;
+the service schedules one operation-owned job, installs prepared derived state on
+the owner thread, and publishes a generation-safe project-session candidate. The
+GUI screen only projects progress and performs candidate-backed final
+route/restart actions. `Gui` cannot construct a workspace from a raw project path.
 
 Executable composition targets are:
 
@@ -335,6 +352,15 @@ Each target owns an explicit source list and the smallest practical public
 include surface. Production targets are linked into tests; production sources
 are not recompiled as part of test-only libraries.
 
+`HoroEngine::Assets` is implemented as a backend-neutral Foundation-only target.
+Its current AST-001A surface owns stable asset/type identities, immutable
+registry snapshots, sidecar/index persistence, cooked-byte providers, and the
+bounded job-system load coordinator. Importer, cooker, archive, cache, hot
+reload, and Content Browser remain later consumers or targets; they must not be
+folded into Foundation or a renderer backend. `HoroEngine::RuntimeScene` consumes
+Assets one-way for AST-001B snapshot-pinned scene preparation; Assets never
+depends on RuntimeScene.
+
 ## Dependency Direction
 
 Arrows point from the dependent target to the target that defines the contract:
@@ -342,11 +368,15 @@ Arrows point from the dependent target to the target that defines the contract:
 ```text
 platform -----------------------------------------------> foundation
 
+runtime -----------------------------------------------> foundation
+
 assets / scene-model / render-api / audio-api /
 network-api / gameplay-api / extension-api -------------> foundation
 
 physics / audio-runtime / network-runtime /
-scene-runtime / render-frontend / pipeline -------------> neutral APIs and models
+render-frontend / pipeline ------------------------------> neutral APIs and models
+
+runtime-scene -------------------------------------------> runtime + assets + foundation
 
 audio-platform / audio-null / network-sockets /
 render-opengl / render-null / render-vulkan ------------> platform + owning API
@@ -357,7 +387,7 @@ application / editor-model / editor-services -----------> neutral APIs,
 gui / mcp / extension-host -----------------------------> application, editor,
                                                           and extension APIs
 
-apps ---------------------------------------------------> adapters + platform
+apps ---------------------------------------------------> runtime + adapters + platform
                                                           + selected backends
 ```
 
@@ -502,22 +532,32 @@ The arrows below mean compile-time `depends on`; they do not represent runtime
 callback direction:
 
 ```text
-scene-runtime -----------+
+runtime-scene -----------+
                          |
 render-frontend ---------+---> render-api
+                         |
+render-module-host ------+
                          |
 render-opengl -----------+
 render-null -------------+
 render-vulkan -----------+
 
-apps ---> render-frontend + one selected renderer backend
+apps ---> render-frontend + render-module-host
 ```
 
 Backend selection occurs during host startup. Backend-specific handles,
 resources, headers, and system libraries remain private to the owning backend.
 Renderer backends implement `RenderApi` contracts and do not depend on
-`RenderFrontend`. The application composition root constructs the selected
-backend and supplies its API capability to the frontend.
+`RenderFrontend`. Installed product composition resolves one independently
+installed, verified, ABI-compatible, successfully probed renderer component;
+`RenderModuleHost` loads its exact path and adapts it into the in-process render
+registry. Development and test hosts may link a backend directly without making
+that static path the installed-product architecture.
+
+Renderer component lifecycle follows
+[Renderer Distribution And Availability](../runtime/renderer-distribution-and-availability.md).
+Equal backend behavior follows
+[Render Backend Parity Contract](../runtime/render-backend-parity-contract.md).
 
 The null renderer is a supported implementation for headless execution and
 tests.
@@ -532,7 +572,7 @@ credential storage, and graphics-context bootstrapping are platform-owned
 responsibilities.
 
 Foundation, assets, pipeline, and headless application use cases remain usable
-without SDL2, OpenGL, or ImGui unless their explicit operation contract requires
+without SDL3, OpenGL, or ImGui unless their explicit operation contract requires
 one of those capabilities.
 
 Filesystem, process, window, event, clock, dialog, credential, and crash-service

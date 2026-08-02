@@ -70,48 +70,48 @@ ImGui wrapper must define its typed props/result contract, token usage,
 accessibility behavior, and component-gallery coverage before feature code
 depends on it.
 
-## Initial Backend And Renderer
+## Editor Platform And Renderer Boundary
 
-The first graphical editor bootstrap uses SDL2 for platform windowing and
-multimedia integration, and Dear ImGui's OpenGL backend for GUI rendering. Both
-are implementation details hidden behind Horo-owned editor adapters.
+The graphical editor uses SDL3 for platform windowing and multimedia
+integration. Dear ImGui renderer integration is selected with the active Horo
+renderer backend. SDL3 and concrete ImGui renderer backends are implementation
+details hidden behind Horo-owned editor adapters.
 
 Reasons:
 
-- SDL2 gives Horo one stable platform surface for windowing, input,
-  controllers, clipboard, timers, and future multimedia-oriented host work.
-- Dear ImGui has a maintained SDL2 backend.
-- OpenGL is sufficient to validate editor chrome, input, DPI, modal policy, and
-  screen routing before the production render frontend is ready.
-- The adapter boundary lets the editor replace the bootstrap renderer with a
-  Vulkan, Metal, or DirectX-backed implementation later without changing screen,
-  modal, project-model, CLI, MCP, or runtime code.
+- SDL3 gives Horo one stable platform surface for windowing, input, gamepads,
+  clipboard, timers, and future multimedia-oriented host work.
+- Dear ImGui has a maintained SDL3 backend.
+- OpenGL and Metal are equal first-class renderer implementations behind the
+  same Horo-owned editor rendering contract.
+- Renderer selection does not change screen, modal, project-model, CLI, MCP, or
+  runtime feature code.
 
 Constraints:
 
 - No public Horo header, screen, panel, modal, project-model, CLI, MCP, or
-  runtime subsystem includes SDL2, OpenGL, or raw Dear ImGui backend headers.
+  runtime subsystem includes SDL3, OpenGL, or raw Dear ImGui backend headers.
 - Screens and panels depend on design-system interfaces, not backend objects.
-- The OpenGL GUI backend is not the engine renderer and must not become an RHI
-  shortcut.
+- No concrete GUI backend may become an RHI shortcut or a compatibility layer
+  used by another renderer backend.
 - A null GUI backend exists for deterministic non-window tests.
 
-Rejected for the first bootstrap: GLFW, SDL3, native platform APIs first,
-Vulkan first, Metal first, software rendering first, and web/Electron shells.
-GLFW is too narrow for Horo's multimedia targets. SDL3 is not selected yet
-because SDL2 has the more mature integration surface for the initial engine and
-editor bootstrap. These may be revisited only with an architecture update.
+GLFW and web/Electron shells remain rejected for the native editor host. SDL3 is
+isolated behind the editor platform adapter so renderer or host changes do not
+affect editor-facing contracts. Backend implementation order is not an
+architectural priority; every interactive backend must satisfy the shared
+[Render Backend Parity Contract](../runtime/render-backend-parity-contract.md).
 
 ## DPI, Docking, And Viewports
 
 Initial DPI policy:
 
-- Use per-monitor content scale from the SDL2-backed window adapter where
+- Use per-monitor content scale from the SDL3-backed window adapter where
   available.
 - Store current scale in editor GUI state.
 - Rebuild font resources when the scale bucket changes.
 - Express component sizes in design tokens, not raw pixels.
-- Screens consume scaled design tokens; they do not query SDL2 or native monitor
+- Screens consume scaled design tokens; they do not query SDL3 or native monitor
   state directly.
 
 Docking policy:
@@ -180,9 +180,11 @@ outputs, and optional local state.
 
 ```cpp
 enum class ComponentSize {
+    XS,
     Small,
     Medium,
     Large,
+    XL,
 };
 
 enum class ButtonVariant {
@@ -208,7 +210,7 @@ struct ButtonProps {
     ComponentSize size = ComponentSize::Medium;
     bool enabled = true;
     bool loading = false;
-    bool fillAvailableWidth = false;
+    StyleProperties style = {};
 };
 
 struct ButtonResult {
@@ -256,6 +258,41 @@ badges, menu items, and other controls:
 - enabled, disabled, loading, error, and focus state
 - optional leading or trailing icon
 - accessible label and tooltip metadata
+
+`StyleProperties` carries opt-in call-site presentation such as filling the
+available horizontal space and token-backed padding overrides. Component size
+remains the primary geometry contract: `XS`, `Small`, `Medium`, `Large`, and
+`XL` resolve font size, padding, minimum height, and icon size together.
+
+The base values are theme data rather than component implementation literals.
+Custom themes discovered under `~/.horo/themes/` may override them with:
+
+```json
+{
+  "tokens": {
+    "componentSizes": {
+      "xs": {
+        "fontSize": 12,
+        "paddingX": 8,
+        "paddingY": 3,
+        "minimumHeight": 24,
+        "iconSize": 12
+      }
+    },
+    "styleSpacing": {
+      "xs": 4,
+      "s": 8,
+      "m": 12,
+      "l": 16,
+      "xl": 24
+    }
+  }
+}
+```
+
+Global display scaling is temporarily disabled. The persisted setting remains
+in the settings document for compatibility, but the editor renders at 100%
+until font, layout, native DPI, and viewport scaling share one coherent policy.
 
 Not every primitive exposes every option. A control only exposes properties
 that have a defined behavior and token mapping. Feature code composes or wraps a
@@ -328,6 +365,14 @@ tokens as other GUI surfaces.
 The modal-surface primitive provides visual structure only. Exclusive focus,
 input blocking, modal stack ownership, close policy, and focus restoration belong
 to `EditorModalHost`.
+
+The current GUI implementation exposes this structure through
+`Ui::ScopedModalShell`. It owns responsive centering, shared title-bar chrome,
+the close affordance, body/footer geometry, and the fixed footer surface.
+`Ui::ModalSplitPane` composes an optional leading navigation/sidebar with a
+scrollable primary pane. Modal workflows supply content and actions; they do not
+redraw this chrome. Compact status metadata uses the semantic `Ui::Badge`
+primitive rather than feature-local tag or pill drawing.
 
 Rules:
 
@@ -481,23 +526,41 @@ Theme presets use a versioned data format:
 Theme sources are:
 
 - packaged presets in the application's read-only `themes/` resources
-- custom presets in
-  `Platform::UserConfigDirectory()/horo/themes/*.theme.json`
+- custom presets in `~/.horo/themes/*.json` (current implementation; target:
+  `Platform::UserConfigDirectory()/horo/themes/*.theme.json`)
 - an optional project override at `<project>/.horo/theme.json`
 - an explicit external preset selected through `HORO_THEME_FILE`
 
-Packaged presets and the packaged base theme are data resources, not styling
-literals embedded in GUI source. A desktop build discovers custom preset files
-at runtime, so users can add, import, export, or edit a preset without rebuilding
-the application.
+Current theme file format (flat, for rapid iteration):
 
-Preset IDs are stable and unique. Custom presets use a namespaced ID such as
-`user.midnight`; they cannot silently replace a packaged preset with the same
-ID. The registry rejects duplicate IDs, inheritance cycles, invalid token types,
-and presets whose required values cannot be resolved through inheritance.
-Unknown tokens produce diagnostics so misspellings do not appear to succeed.
+```json
+{
+    "name": "Monokai",
+    "WindowBg": "#272822",
+    "ChildBg": "#1e1f1c",
+    "Text": "#f8f8f2",
+    "Border": "#49483e"
+}
+```
 
-The registry scans packaged and user theme locations during GUI startup and on
+Target format (versioned, with inheritance):
+
+```json
+{
+    "schemaVersion": 1,
+    "id": "user.midnight",
+    "displayName": "Midnight",
+    "extends": "horo.base-dark",
+    "tokens": {
+        "colors": {
+            "surfacePanel": "#101722"
+        }
+    }
+}
+```
+
+Migration from flat to versioned format is planned. Custom presets discovered
+at runtime are added to the theme selector alongside built-in presets.
 an explicit rescan requested by Settings. Development builds may watch the
 active external or custom preset file. Reload follows this contract:
 
@@ -541,7 +604,8 @@ integration may be added per platform without changing component props.
 The design system supports:
 
 - global UI scaling
-- minimum readable font and control sizes
+- minimum readable font and control sizes; the workspace global dock uses the
+  compact typography token from its tab labels as its text-size floor
 - contrast validation for semantic color pairs
 - keyboard navigation
 - modal focus trapping and deterministic focus restoration

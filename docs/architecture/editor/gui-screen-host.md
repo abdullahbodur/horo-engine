@@ -13,6 +13,9 @@ popups.
 
 - `HoroEditor` is one process and one GUI application.
 - A screen owns the application content area for one route.
+- Persistent shell chrome such as the status bar is owned by `GuiScreenHost`,
+  not by the active screen. The screen receives the remaining bounded content
+  region.
 - Screen navigation is direct typed host coordination, not a data-bus command.
 - Only the active screen receives interactive input.
 - Screens receive narrow application capabilities and do not own business
@@ -22,6 +25,10 @@ popups.
 - The startup project-selection experience is the `WelcomeScreen` route inside
   `GuiScreenHost`; it is not a separate launcher executable, module, lifecycle,
   or component set.
+- Welcome and renderer-component repair remain reachable through a minimal
+  product bootstrap presentation path that does not require a RenderApi backend.
+  The editor workspace still requires one verified and available interactive
+  renderer.
 
 ## Surface Taxonomy
 
@@ -40,9 +47,12 @@ the application route.
 ```text
 HoroEditorApp
   +-- GuiScreenHost
+  |     +-- EditorStatusBar
+  |     +-- EditorStatusItemRegistry
   |     +-- WelcomeScreen
   |     +-- ProjectBrowserScreen
   |     +-- ProjectCreationScreen
+  |     +-- ProjectLoadingScreen
   |     +-- EditorWorkspaceScreen
   |
   +-- Application Services
@@ -51,6 +61,35 @@ HoroEditorApp
 
 `GuiScreenHost` owns the active screen object and navigation state.
 `EditorWorkspaceScreen` composes `EditorLayer`, which owns panel and modal hosts.
+The host-owned status bar persists across route replacement; see
+[Editor Status Bar](./editor-status-bar.md).
+
+## Screen Registration and Service Provisioning (Registry Architecture)
+
+To avoid compiling every concrete screen header inside a single application
+file or passing a monolithic context object with dozens of service references
+through every constructor, `GuiScreenHost` utilizes explicit composition-time
+service provisioning (`EditorServiceRegistry`) and factory registration
+(`ScreenRegistry`).
+
+```text
+Composition Root (EditorLayer / App)
+  |-- Populates -> EditorServiceRegistry (type-indexed typed service lookup)
+  |-- Registers -> ScreenRegistry (map<GuiRouteKind, ScreenFactory>)
+  +-- Passes to -> GuiScreenHost
+```
+
+```cpp
+using ScreenFactory = std::function<std::unique_ptr<IGuiScreen>(
+    const EditorServiceRegistry& services,
+    const RouteParameters& parameters)>;
+```
+
+### Core Provisioning Rules
+
+- **No Global Statics or Ambient Lookups:** Following [System Design](../foundation/system-design.md), screens and panels must not query process-global service locators (`ServiceLoader::Get()`) or mutate global registries during static initialization. All registrations happen explicitly at composition time.
+- **Narrow Dependency Injection:** Each screen factory pulls from `EditorServiceRegistry` only the exact subset of services it requires. For example, `WelcomeScreen` pulls `LocalizationService&` and `WelcomeScreenController&`, while `ProjectCreationScreen` pulls `ProjectCreationService&` and `JobSystem&`.
+- **Decoupled Route Construction:** `GuiScreenHost::Navigate()` does not contain hard-coded `switch/case` constructor blocks for every route. It queries `ScreenRegistry::CreateScreen(route.kind, m_services, route.parameters)`. If an extension package or future workspace workflow registers a new `GuiRouteKind` or custom panel, `GuiScreenHost` instantiates it transparently without modifying core navigation code or including external headers.
 
 ## Startup Flow
 
@@ -59,18 +98,60 @@ special-cased outside the route system.
 
 Startup order:
 
-1. `HoroEditor` creates the SDL2-backed editor platform/media adapter.
-2. The platform adapter creates one main window.
-3. The GUI backend creates the Dear ImGui context and renderer resources.
-4. `GuiScreenHost` starts on `GuiRouteKind::Welcome`.
-5. `WelcomeScreen` requests recent projects from project-model services.
-6. Create/open actions return typed navigation requests.
-7. `GuiScreenHost` validates route payloads and leave guards before changing
-   screens.
+1. `HoroEditor` creates the platform adapter and minimal bootstrap presentation
+   required for Welcome/component repair.
+2. The renderer component service discovers and validates machine-local
+   component records without loading a project renderer.
+3. Composition constructs `GuiScreenHost`, registers every borrowed screen
+   service, and then starts the host on `GuiRouteKind::Welcome`.
+4. `WelcomeScreen` requests recent projects and renderer preflight snapshots from
+   application/project-model services.
+5. Create/open actions resolve renderer requirements before requesting project
+   loading.
+6. After one selected interactive renderer is `Available`, the composition root
+   creates its presentation-capable window attachment, RenderApi backend, and
+   editor GUI resources.
+7. `GuiScreenHost` validates route payloads and leave guards before entering
+   `ProjectLoading` or `EditorWorkspace`.
 
 The welcome screen reads recent projects through project-model services. It does
 not parse `<user-state>/horo/recent_projects.json` directly and does not persist
 arbitrary thumbnail paths.
+
+The bootstrap presentation path is not an engine renderer, cannot enter the
+workspace or draw a project viewport, and must not register as OpenGL, Metal,
+Vulkan, or Null. It exists only to keep the single HoroEditor application capable
+of renderer install/repair when no interactive component is available.
+
+## Recent Project Renderer Resolution
+
+Recent-project cards include the requested renderer's local preflight state. A
+card click does not navigate to `ProjectLoading` while its renderer requirement
+is unresolved.
+
+For a project requesting missing OpenGL while compatible Metal is available, the
+Welcome screen owns a blocking resolution dialog with exactly these project-level
+choices:
+
+```text
+[Install OpenGL]
+[Use Metal for This Project]
+[Cancel]
+```
+
+The product GUI does not offer a duplicate session-only `Open Once with Metal`
+choice. `Use Metal for This Project` is an explicit persistent project-setting
+change, capability-validated and committed transactionally through an
+application use case. The Welcome screen does not edit project files directly.
+
+If no compatible alternative is available, replacement is omitted and the
+dialog offers install, repair, diagnostics, offline-package, and cancel actions
+as applicable. Cancelling keeps the Welcome route active and leaves project state
+unchanged.
+
+Detailed component states, mutation ordering, cache invalidation, and required
+tests are defined by
+[Renderer Distribution And Availability](../runtime/renderer-distribution-and-availability.md#recent-project-renderer-preflight).
 
 ## Route Model
 
@@ -79,6 +160,7 @@ enum class GuiRouteKind {
     Welcome,
     ProjectBrowser,
     ProjectCreation,
+    ProjectLoading,
     EditorWorkspace
 };
 ```
@@ -94,8 +176,13 @@ struct ProjectCreationRouteParameters {
     std::optional<TemplateId> initialTemplate;
 };
 
+struct ProjectLoadingRouteParameters {
+    std::string projectRoot;
+    std::string projectName;
+};
+
 struct EditorWorkspaceRouteParameters {
-    ProjectId projectId;
+    ProjectSessionCandidateId session;
     std::optional<ProjectPath> initialScene;
 };
 
@@ -103,6 +190,7 @@ using RouteParameters =
     std::variant<WelcomeRouteParameters,
                  ProjectBrowserRouteParameters,
                  ProjectCreationRouteParameters,
+                 ProjectLoadingRouteParameters,
                  EditorWorkspaceRouteParameters>;
 
 struct GuiRoute {
@@ -113,10 +201,11 @@ struct GuiRoute {
 
 The host validates that the parameter alternative matches `GuiRouteKind` and
 that IDs and paths are structurally valid before constructing a destination
-screen. The destination then performs semantic validation through application
-services during `OnEnter()`, such as checking project existence, trust, access,
-or format compatibility. Invalid parameters return a typed navigation error and
-leave the active route unchanged.
+screen. A workspace route requires a non-zero session candidate ID; raw project
+paths are accepted only by `ProjectLoading`. The workspace reserves the candidate
+during `OnEnter()`, commits its single consumption after controller/panel setup,
+and releases the reservation if entry fails. Invalid parameters return a typed
+navigation error and leave the active route unchanged.
 
 ## Screen Contract
 
@@ -184,9 +273,11 @@ public:
     virtual ScreenId Id() const = 0;
     virtual Result<void> OnEnter(const GuiRoute&) = 0;
     virtual void OnUpdate(float dt) = 0;
-    virtual void Draw() = 0;
+    virtual void Draw(const GuiContentRegion& contentRegion) = 0;
+    virtual void CollectActivePanelIds(
+        std::vector<std::string_view>& output) const;
     virtual LeaveDecision CanLeave(const LeaveTarget& target) const = 0;
-    virtual Result<LeaveDecision, LeaveError>
+    virtual Result<LeaveDecision>
     ResolveLeave(const LeaveTarget& target,
                  const LeaveResolution& resolution) = 0;
     virtual void OnLeave() = 0;
@@ -201,19 +292,21 @@ screen. The requirement contains stable identities, not owning pointers or
 presentation callbacks.
 
 `OnEnter()` succeeds before the route becomes active. Destination construction
-and entry are staged while the current screen remains active. A candidate
-screen owns all partially initialized resources through RAII and must not
-invalidate the current screen during entry. Application operations that require
-exclusive state return prepared handles whose commit occurs only at route
-commit.
+is staged while the current screen remains active. Before destination entry,
+the old screen receives `OnLeave()` so process-wide panel/status registrations
+cannot be torn down after the candidate has claimed them. If destination entry
+fails, the host re-enters the old route; rollback failure is fatal to the GUI
+session. Candidate-owned partial resources remain protected by RAII.
 
-If construction or `OnEnter()` fails, the candidate is destroyed, prepared work
-is rolled back or abandoned through its owning service, `OnLeave()` is not
-called on the current screen, and the active route remains unchanged. A failure
-that invalidates process-wide window or renderer operation uses the fatal host
-path rather than ordinary navigation recovery.
+If construction fails, the current screen remains untouched. If `OnEnter()`
+fails after old-screen teardown, the candidate is destroyed and the old screen
+is re-entered with the unchanged active route. A rollback failure invalidates
+the GUI session and requests shutdown rather than continuing with ambiguous
+shared ownership.
 
 `OnLeave()` executes once after leave permission and before destruction.
+Navigation requested from `Draw()` is queued and committed only after that
+screen callback returns; an active screen is never destroyed on its own stack.
 
 ## Navigation
 
@@ -244,14 +337,12 @@ struct NavigationError {
 `LeaveSubjectId` is a validated opaque identity that correlates the requirement
 with the document, draft, job, recovery flow, or native dialog that produced it.
 It is stable only while that blocker exists within one screen instance; it is
-not a process-global or persistent identity. The host binds each requirement to
-the current `ScreenInstanceId`, `NavigationAttemptId`, and
-`LeaveRequirementRevision`, then passes the subject and revision back to the
-owning screen without interpreting them.
+not a process-global or persistent identity. The host verifies that the displayed
+subject, revision, and action still match its current pending requirement before
+calling the owning screen, which performs its own domain-state validation.
 
-`ScreenInstanceId` is unique for one constructed screen lifetime.
-`NavigationAttemptId` is unique for one accepted navigation or application-close
-request and expires when that request commits, fails, or is cancelled.
+The current host keeps one pending requirement/target pair and rejects a second
+navigation request as busy until it commits or is cancelled.
 `LeaveRequirementRevision` increases when the state or allowed actions of the
 same blocker change.
 
@@ -260,8 +351,8 @@ same blocker change.
 host calls `ResolveLeave()`. The screen verifies the subject and action, commits
 the corresponding save, discard, cancellation, detach, or recovery operation
 through its owning service, and returns `Allow`, `Deny`, or a new requirement.
-Failed resolution returns a typed `LeaveError` and keeps the current route
-active.
+Failed resolution returns the foundation `Error` carried by `Result` and keeps
+the current route active.
 
 A resolution chain is allowed because one blocker may reveal another, such as
 saving a dirty document before resolving a running operation. Each successful
@@ -290,20 +381,19 @@ A successful route commit is ordered:
 
 1. validate that the pending request and active route are still current
 2. obtain final leave permission
-3. construct the candidate and complete staged `OnEnter()`
+3. construct the candidate without claiming shared panel/status registrations
 4. call `OnLeave()` on the previous screen
-5. commit prepared exclusive application state
-6. replace the active route and establish destination focus
-7. destroy the previous screen
-8. publish `GuiRouteChangedEvent`
+5. call candidate `OnEnter()` and claim shared registrations
+6. if entry fails, destroy the candidate and re-enter the previous route
+7. replace the active route and establish destination focus
+8. destroy the previous screen
+9. publish `GuiRouteChangedEvent`
 
-No observer sees the destination route before its entry and required application
-state commit succeed.
-
-All fallible preparation and validation completes before step 4. A prepared
-exclusive-state commit is no-fail by contract. If a destination cannot provide
-that guarantee, preparation fails and the transition is rejected before
-`OnLeave()` runs.
+No observer sees the destination route before its entry succeeds. Candidate
+entry remains fallible after old-screen teardown because current workspace
+registrations are process-wide. The host therefore treats re-entering the
+previous route as the rollback operation. Rollback failure invalidates the GUI
+session and requests shutdown.
 
 Navigation is not published as a command on `EngineDataBus` or
 `EditorDataBus`. After commit, the host publishes one bounded route-changed
@@ -384,6 +474,22 @@ Leaving:
 4. destroy GUI surfaces and subscriptions
 5. close the editor session
 6. close or retain the project according to destination requirements
+
+Process startup uses an explicit lifecycle boundary. Constructing
+`GuiScreenHost` creates its registries but does not invoke a screen factory.
+Composition registers every borrowed screen dependency and then calls
+`Start(initialRoute)` exactly once. No screen may observe a partially populated
+service registry.
+
+Process shutdown uses the same explicit lifecycle boundary. `GuiScreenHost::Shutdown()`
+is idempotent: it calls the active screen's `OnLeave()` at most once, destroys
+the screen, and clears borrowed service registrations while their owners still
+exist. The input router and all route-specific services are registered before
+`Start()` constructs the initial screen, so screens can use their complete
+dependency set during their entire lifecycle. The application first cancels input capture and resolves or force-detaches the
+modal stack, then calls `Shutdown()` before composition-owned viewport, ImGui, renderer,
+window, input, and project services begin destruction; the host destructor delegates
+to `Shutdown()` only as a safety net.
 
 The screen does not duplicate project-open or scene-save business logic.
 Job ownership, cancellation, detach behavior, and shutdown joins follow

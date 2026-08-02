@@ -195,6 +195,13 @@ headless tools may omit it. `StructuredLogEventAdapter` belongs above
 foundation because it translates store revisions into process notifications.
 The Console tab depends on a query capability, not on sink internals.
 
+The editor host composes a 4096-record `StructuredLogStore` alongside the
+terminal and JSONL sinks. Its overwrite-oldest retention is process-wide and
+thread-safe. The Console tab queries immutable revision snapshots, applies
+presentation-only severity and text filters, and stops following the tail while
+the user is inspecting older rows. These filters never change producer or
+persistent-sink level policy.
+
 Engine and project code do not write diagnostic output directly through
 `printf`, `std::cout`, `std::cerr`, ad hoc files, or independent
 `logging.basicConfig()` calls. Bootstrap, emergency signal handling, and a

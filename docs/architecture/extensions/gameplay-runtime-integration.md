@@ -196,6 +196,22 @@ reclaims process resources. Host-level emergency shutdown still invalidates
 module callbacks and releases owned host resources where the platform permits,
 but behavior authors must not rely on `OnDestroy()` for durable persistence.
 
+The editor play-session controller uses the following explicit state machine:
+
+```text
+Idle -> Starting -> Playing <-> Paused -> Stopping -> Idle
+                       |
+                     Failed
+```
+
+Play focuses a persistent Game document tab and renders the first valid active
+runtime camera. Pause stops fixed simulation while presentation remains active.
+Step consumes exactly one fixed tick while paused. Stop completes behavior
+disable/destroy and runtime-scene destruction before restoring the previous
+authoring document tab. A missing camera, stale prepared preview, unavailable
+behavior descriptor, or gameplay source diagnostic prevents activation and is
+presented in the Game tab.
+
 ## Game-Owned Components
 
 Each serializable game component has:

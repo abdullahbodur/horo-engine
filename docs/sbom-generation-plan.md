@@ -23,16 +23,16 @@ documentation.
 
 The engine currently carries **15 distinct third-party components** across three
 categories. This inventory was extracted from `CMakeLists.txt`,
-`vendor/CMakeLists.txt`, and `vendor/README.md` on 2026-05-25.
+`cmake/Dependencies.cmake`, `vendor/CMakeLists.txt`, and `vendor/README.md` on
+2026-07-26.
 
-### 2.1 Committed vendor sources (5)
+### 2.1 Committed vendor sources (4)
 
 | Component | Version | License | Origin | Notes |
 |-----------|---------|---------|--------|-------|
-| glad | (generated) | MIT / Khronos | `vendor/glad/` | OpenGL 4.1 Core loader, pre-generated. No upstream tag; pin generation date. |
+| glad | v2.0.8 (`73db193`) | MIT / Khronos | `vendor/glad/` | OpenGL 4.1 Core loader, generated without extensions; provenance and regeneration command are recorded in `vendor/glad/README.md`. |
 | glm | (header snapshot) | MIT / Happy Bunny | `vendor/glm/glm.hpp` | Header-only math. No version macro; pin commit hash via `git subtree` or manual record. |
 | stb_image | (header snapshot) | MIT / Public Domain | `vendor/stb/` | Header-only image decode (`stb_image.h`, `stb_dxt.h`). No version macro; track commit hash. |
-| ufbx | v0.21.3 | MIT / Public Domain | `vendor/ufbx/` | FBX parser amalgamation. Version recorded in `vendor/README.md` and inline comment. |
 | bc7enc | (committed snapshot) | MIT / Public Domain | `vendor/bc7enc/` | BC7 texture encoder. No version macro; pin commit hash. |
 
 **Challenge:** glad, glm, stb, and bc7enc have no embedded version identifier.
@@ -45,13 +45,14 @@ The SBOM generator must either:
 truth, with a pre-commit hook or CI check that validates it against the actual
 snapshot contents.
 
-### 2.2 FetchContent dependencies (8 active + 2 optional)
+### 2.2 FetchContent dependencies (9 active + 2 optional)
 
 | Component | Version | License | Origin | Gated By |
 |-----------|---------|---------|--------|----------|
 | glfw | 3.4 | zlib/libpng | `https://github.com/glfw/glfw.git` | Always |
 | imgui | v1.91.6 | MIT | `https://github.com/ocornut/imgui.git` | Always |
 | nlohmann_json | v3.11.3 | MIT | `https://github.com/nlohmann/json.git` | Always |
+| ufbx | v0.21.3 (`83bc7cf`) | MIT / Public Domain | `https://github.com/ufbx/ufbx.git` | Always |
 | tinygltf | v2.9.3 | MIT | `https://github.com/syoyo/tinygltf.git` | Always |
 | xxhash | v0.8.3 | BSD-2-Clause | `https://github.com/Cyan4973/xxHash.git` | Always |
 | lz4 | v1.10.0 | BSD-2-Clause | `https://github.com/lz4/lz4.git` | Always |
@@ -199,13 +200,6 @@ Single source of truth for committed vendor snapshots:
       "license": "MIT",
       "origin": "https://github.com/nothings/stb",
       "notes": "Header-only image libraries. stb_image.h v2.29, stb_dxt.h v1.0 (approx)."
-    },
-    {
-      "name": "ufbx",
-      "version": "0.21.3",
-      "license": "MIT",
-      "origin": "https://github.com/ufbx/ufbx",
-      "pinned_commit": "83bc7cf"
     },
     {
       "name": "bc7enc",

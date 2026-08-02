@@ -1,0 +1,1332 @@
+{
+  "schemaVersion": 1,
+  "messageFormat": "plain-text-1",
+  "locale": "tr-TR",
+  "namespace": "editor",
+  "messages": {
+    "editor_workspace.action.return_to_welcome": {
+      "text": "← Karşılama Ekranına Dön"
+    },
+    "editor_workspace.title": {
+      "text": "Editör Çalışma Alanı"
+    },
+    "project_creation.back": {
+      "text": "← Geri"
+    },
+    "project_creation.create": {
+      "text": "Proje Oluştur"
+    },
+    "project_creation.identity.directory": {
+      "text": "PROJE DİZİNİ"
+    },
+    "project_creation.identity.location": {
+      "text": "PROJE KONUMU"
+    },
+    "project_creation.identity.location.hint": {
+      "text": "Boş bir klasör veya yazılabilir bir üst dizine sahip eksik bir konum seçin."
+    },
+    "project_creation.identity.location.select": {
+      "text": "Proje Konumunu Seçin"
+    },
+    "project_creation.identity.name": {
+      "text": "PROJE İSMİ"
+    },
+    "project_creation.identity.name.hint": {
+      "text": "project.json ismi olarak saklanır; projectId bir kez oluşturulur."
+    },
+    "project_creation.identity.scene": {
+      "text": "VARSAYILAN SAHNE"
+    },
+    "project_creation.identity.version": {
+      "text": "PROJE SÜRÜMÜ"
+    },
+    "project_creation.identity.version.hint": {
+      "text": "Oyun/ürün sürümü. Proje format geçişlerini seçmez."
+    },
+    "project_creation.next": {
+      "text": "İleri →"
+    },
+    "project_creation.review.settings": {
+      "text": "PROJE AYARLARI"
+    },
+    "project_creation.review.compatibility": {
+      "text": "Proje uyumluluğu"
+    },
+    "project_creation.review.project_id_generated": {
+      "text": "projectId oluşturulacak"
+    },
+    "project_creation.review.what_will_be_created": {
+      "text": "NELER OLUŞTURULACAK"
+    },
+    "project_creation.settings.custom": {
+      "text": "ÖZEL ALTSİSTEM SEÇİMİ"
+    },
+    "project_creation.settings.first_person": {
+      "text": "BİRİNCİ ŞAHIS KONTROLCÜ AYARLARI"
+    },
+    "project_creation.settings.optional": {
+      "text": "İSTEĞE BAĞLI"
+    },
+    "project_creation.settings.package": {
+      "text": "PAKET KAYNAK YAPILANDIRMASI"
+    },
+    "project_creation.settings.runtime": {
+      "text": "ÇALIŞMA ZAMANI VARSAYILANLARI"
+    },
+    "project_creation.settings.tech_demo": {
+      "text": "TEKNOLOJİ DEMOSU YAPILANDIRMASI"
+    },
+    "project_creation.settings.toolchain": {
+      "text": "GEREKLİ ARAÇ ZİNCİRİ"
+    },
+    "project_creation.step.identity.desc": {
+      "text": "İsim & konum"
+    },
+    "project_creation.step.identity.title": {
+      "text": "Kimlik"
+    },
+    "project_creation.step.review.desc": {
+      "text": "Doğrula & oluştur"
+    },
+    "project_creation.step.review.title": {
+      "text": "Gözden Geçir"
+    },
+    "project_creation.step.settings.desc": {
+      "text": "Varsayılan ayarlar"
+    },
+    "project_creation.step.settings.title": {
+      "text": "Ayarlar"
+    },
+    "project_creation.step.template.choose": {
+      "text": "BİR ŞABLON SEÇİN"
+    },
+    "project_creation.step.template.desc": {
+      "text": "Başlangıç seç"
+    },
+    "project_creation.step.template.title": {
+      "text": "Şablon"
+    },
+    "project_creation.subtitle": {
+      "text": "Taşınabilir .horo metadata ve başlangıç içeriği oluştur"
+    },
+    "project_creation.template.3d_starter": {
+      "text": "3B Başlangıç"
+    },
+    "project_creation.template.3d_starter.desc": {
+      "text": "Sahne, kamera, yönlü ışık, zemin, materyal varsayılanları."
+    },
+    "project_creation.template.custom": {
+      "text": "Özel"
+    },
+    "project_creation.template.custom.desc": {
+      "text": "Proje oluşturulmadan önce sistemleri manuel olarak seçin."
+    },
+    "project_creation.template.empty": {
+      "text": "Boş"
+    },
+    "project_creation.template.empty.desc": {
+      "text": "Başlangıç sahnesi yok. Minimal varlık ağacı ve project.json."
+    },
+    "project_creation.template.first_person": {
+      "text": "Birinci Şahıs"
+    },
+    "project_creation.template.first_person.desc": {
+      "text": "Karakter kontrolcüsü, girdi haritası, kapsül ve test seviyesi."
+    },
+    "project_creation.template.package_based": {
+      "text": "Paket Tabanlı"
+    },
+    "project_creation.template.package_based.desc": {
+      "text": "Doğrulanmış bir şablon paketinden ve kilit dosyasından oluşturun."
+    },
+    "project_creation.template.tech_demo": {
+      "text": "Teknoloji Demosu"
+    },
+    "project_creation.template.tech_demo.desc": {
+      "text": "Görüntüleme örnekleri, gözlemlenebilirlik arayüzleri, test sahnesi."
+    },
+    "project_creation.title": {
+      "text": "YENİ PROJE"
+    },
+    "project_loading.action.cancel": {
+      "text": "İptal"
+    },
+    "project_loading.action.retry": {
+      "text": "Tekrar Dene"
+    },
+    "project_loading.action.back": {
+      "text": "Projelere Dön"
+    },
+    "project_loading.status.creating": { "text": "Proje dosyaları oluşturuluyor..." },
+    "project_loading.status.inspecting": { "text": "Proje inceleniyor..." },
+    "project_loading.status.cleaning": { "text": "Tamamlanmış kurtarma verileri temizleniyor..." },
+    "project_loading.status.recovering": { "text": "Yarım kalan proje değişiklikleri kurtarılıyor..." },
+    "project_loading.status.validating": { "text": "Proje uyumluluğu doğrulanıyor..." },
+    "project_loading.status.planning": { "text": "Proje migration planı hazırlanıyor..." },
+    "project_loading.status.migrating": { "text": "Proje verileri migrate ediliyor..." },
+    "project_loading.status.updating": { "text": "Proje sürüm bilgisi güncelleniyor..." },
+    "project_loading.status.rebuilding": { "text": "Türetilmiş proje durumu yeniden oluşturuluyor..." },
+    "project_loading.status.renderer": { "text": "Renderer kullanılabilirliği kontrol ediliyor..." },
+    "project_loading.status.workspace": { "text": "Workspace oturumu hazırlanıyor..." },
+    "project_loading.status.ready": { "text": "Proje hazır." },
+    "project_loading.status.renderer_restart": { "text": "Proje renderer'ı ile yeniden başlatılıyor..." },
+    "project_loading.status.failed": { "text": "Proje açılamadı." },
+    "project_loading.status.processing": { "text": "Proje işleniyor..." },
+    "project_loading.error.busy": { "text": "Proje başka bir işlem tarafından değiştiriliyor. İşlem bitince tekrar deneyin." },
+    "project_loading.error.recovery": { "text": "Yarım kalan proje işlemi güvenli biçimde kurtarılamadı." },
+    "project_loading.error.renderer": { "text": "Projenin renderer'ı kullanılamıyor veya onarım gerektiriyor." },
+    "project_loading.error.migration": { "text": "Workspace hazırlanmadan önce proje migration işlemi başarısız oldu." },
+    "project_loading.error.derived": { "text": "Türetilmiş proje durumu güvenli biçimde yeniden oluşturulamadı." },
+    "project_loading.error.scene": { "text": "Projenin varsayılan sahnesi eksik, okunamıyor veya geçersiz." },
+    "project_loading.error.session": { "text": "Hazırlanan workspace oturumu geçersizleşti. Projeyi yeniden yükleyin." },
+    "workspace.recovery.available": { "text": "Kaydedilmemiş sahne kurtarma verisi bulundu." },
+    "workspace.recovery.restore": { "text": "Kurtar" },
+    "workspace.recovery.discard": { "text": "Sil" },
+    "workspace.scene_conflict.available": { "text": "Sahne bu editör oturumunun dışında değiştirildi." },
+    "workspace.scene_conflict.compare": { "text": "Karşılaştır" },
+    "workspace.scene_conflict.reload": { "text": "Diskten Yükle" },
+    "workspace.scene_conflict.overwrite": { "text": "Dosyanın Üzerine Yaz" },
+    "workspace.scene_compare.title": { "text": "Sahne Değişiklikleri" },
+    "workspace.scene_save_as.title": { "text": "Sahneyi Farklı Kaydet" },
+    "workspace.scene_save_copy_as.title": { "text": "Sahne Kopyasını Farklı Kaydet" },
+    "workspace.scene_save.file_type": { "text": "Horo Sahnesi" },
+    "workspace.scene_compare.description": { "text": "Aktif belgeyi diskteki en son doğrulanmış sahne ile karşılaştırın." },
+    "workspace.scene_compare.loading": { "text": "Diskteki en son sahne yükleniyor..." },
+    "workspace.scene_compare.failed": { "text": "Sahne karşılaştırılamadı." },
+    "workspace.scene_compare.added": { "text": "Diskte eklendi" },
+    "workspace.scene_compare.removed": { "text": "Diskten silindi" },
+    "workspace.scene_compare.modified": { "text": "Değiştirildi" },
+    "workspace.scene_compare.summary.added": { "text": "eklendi" },
+    "workspace.scene_compare.summary.removed": { "text": "silindi" },
+    "workspace.scene_compare.summary.modified": { "text": "değiştirildi" },
+    "workspace.scene_compare.field.name": { "text": "İsim" },
+    "workspace.scene_compare.field.id": { "text": "ID" },
+    "workspace.scene_compare.field.parent": { "text": "Parent" },
+    "workspace.scene_compare.field.transform": { "text": "Transform" },
+    "workspace.scene_compare.field.primitive": { "text": "Primitive" },
+    "workspace.scene_compare.field.components": { "text": "Componentler" },
+    "workspace.scene_compare.empty": { "text": "Anlamsal nesne farkı kalmadı. Dosya yalnızca biçimlendirme açısından farklı olabilir." },
+    "project_loading.status.cancelling": {
+      "text": "İptal ediliyor..."
+    },
+    "project_loading.status.finalizing": {
+      "text": "Çalışma alanı tamamlanıyor..."
+    },
+    "project_loading.status.init_db": {
+      "text": "Varlık veritabanı başlatılıyor..."
+    },
+    "project_loading.status.loading_scene": {
+      "text": "Varsayılan sahne yükleniyor..."
+    },
+    "project_loading.status.parsing": {
+      "text": "Proje manifestleri ayrıştırılıyor..."
+    },
+    "project_loading.title.opening": {
+      "text": "Açılıyor:"
+    },
+    "settings.appearance.accent_color": {
+      "text": "Vurgu Rengi"
+    },
+    "settings.appearance.accent_color.description": {
+      "text": "Odak halkaları, aktif durumlar ve birincil eylemler için kullanılır."
+    },
+    "settings.appearance.code_font_size": {
+      "text": "Kod Yazı Boyutu"
+    },
+    "settings.appearance.code_font_size.description": {
+      "text": "Script editörü ve konsol çıktısı için punto boyutu."
+    },
+    "settings.appearance.color_theme": {
+      "text": "Renk Teması"
+    },
+    "settings.appearance.color_theme.description": {
+      "text": "Yerleşik temalar veya özel JSON tema dosyası."
+    },
+    "settings.appearance.custom_theme": {
+      "text": "Özel Tema"
+    },
+    "settings.appearance.custom_theme.description": {
+      "text": "JSON tema dosyasının yolu. Yerleşik tema için boş bırakın."
+    },
+    "settings.appearance.theme_group": {
+      "text": "TEMA"
+    },
+    "settings.appearance.typography_group": {
+      "text": "TİPOGRAFİ & ÖLÇEK"
+    },
+    "settings.appearance.ui_scale": {
+      "text": "Arayüz Ölçeği"
+    },
+    "settings.appearance.ui_scale.description": {
+      "text": "Editör arayüzünün tamamını aynı oranda ölçekler."
+    },
+    "settings.apply": {
+      "text": "Uygula"
+    },
+    "settings.audio.enable_in_editor": {
+      "text": "Editörde Sesi Etkinleştir"
+    },
+    "settings.audio.enable_in_editor.description": {
+      "text": "Editör içi sesleri ve ses varlığı önizlemelerini oynat."
+    },
+    "settings.audio.headphones": {
+      "text": "Kulaklıklar"
+    },
+    "settings.audio.master_volume": {
+      "text": "Ana Ses"
+    },
+    "settings.audio.master_volume.description": {
+      "text": "Editörün genel ses çıkış seviyesi (0–100)."
+    },
+    "settings.audio.output_device": {
+      "text": "Ses Çıkış Aygıtı"
+    },
+    "settings.audio.output_device.description": {
+      "text": "Editör sesi için tercih edilen oynatma aygıtı."
+    },
+    "settings.audio.output_group": {
+      "text": "ÇIKIŞ"
+    },
+    "settings.audio.speakers": {
+      "text": "Hoparlörler"
+    },
+    "settings.audio.system_default": {
+      "text": "Sistem Varsayılanı"
+    },
+    "settings.cancel": {
+      "text": "İptal"
+    },
+    "settings.diagnostics.auto_capture": {
+      "text": "Takılmada Otomatik Yakala"
+    },
+    "settings.diagnostics.auto_capture.description": {
+      "text": "Kare sıçraması algılandığında profiler yakalamasını başlat."
+    },
+    "settings.diagnostics.debug": {
+      "text": "Hata Ayıklama"
+    },
+    "settings.diagnostics.error": {
+      "text": "Hata"
+    },
+    "settings.diagnostics.info": {
+      "text": "Bilgi"
+    },
+    "settings.diagnostics.log_level": {
+      "text": "Konsol Günlük Seviyesi"
+    },
+    "settings.diagnostics.log_level.description": {
+      "text": "Editör konsol çıktısında gösterilecek minimum önem seviyesi."
+    },
+    "settings.diagnostics.logging_group": {
+      "text": "LOGLAMA"
+    },
+    "settings.diagnostics.profiler_group": {
+      "text": "PROFİLEYİCİ"
+    },
+    "settings.diagnostics.stutter_threshold": {
+      "text": "Takılma Eşiği (ms)"
+    },
+    "settings.diagnostics.stutter_threshold.description": {
+      "text": "Bu değerin üzerindeki kare süresi otomatik yakalamayı tetikler."
+    },
+    "settings.diagnostics.warning": {
+      "text": "Uyarı"
+    },
+    "settings.diagnostics.write_log": {
+      "text": "Günlüğü Dosyaya Yaz"
+    },
+    "settings.diagnostics.write_log.description": {
+      "text": "Konsol günlüğünü zaman damgalı bir dosyaya kaydet."
+    },
+    "settings.general.autosave_interval": {
+      "text": "Otomatik Kayıt Aralığı"
+    },
+    "settings.general.autosave_interval.description": {
+      "text": "Otomatik sahne kayıtları arasındaki dakika. Sıfır otomatik kaydı kapatır."
+    },
+    "settings.general.confirm_exit": {
+      "text": "Kaydedilmemiş Değişikliklerde Çıkışı Onayla"
+    },
+    "settings.general.confirm_exit.description": {
+      "text": "Kaydedilmemiş değişiklikler varken kapatmadan önce sor."
+    },
+    "settings.general.default_scene": {
+      "text": "Proje Açılışında Varsayılan Sahne"
+    },
+    "settings.general.default_scene.description": {
+      "text": "Proje açılırken otomatik yüklenen sahne dosyası."
+    },
+    "settings.general.restore_workspace": {
+      "text": "Çalışma Alanı Düzenini Geri Yükle"
+    },
+    "settings.general.restore_workspace.description": {
+      "text": "Son oturumdaki sekmeleri ve panel düzenini yeniden aç."
+    },
+    "settings.general.session_group": {
+      "text": "EDİTÖR OTURUMU"
+    },
+    "settings.general.startup_behavior": {
+      "text": "Başlangıç Davranışı"
+    },
+    "settings.general.startup_behavior.description": {
+      "text": "Editör açıldığında gösterilecek görünüm."
+    },
+    "settings.general.startup_browser": {
+      "text": "Proje tarayıcı"
+    },
+    "settings.general.startup_group": {
+      "text": "BAŞLANGIÇ & PROJE"
+    },
+    "settings.general.startup_last": {
+      "text": "Son proje"
+    },
+    "settings.general.startup_welcome": {
+      "text": "Karşılama Ekranı"
+    },
+    "settings.input.invert_orbit_y": {
+      "text": "Yörünge Y Ekseni Ters"
+    },
+    "settings.input.invert_orbit_y.description": {
+      "text": "Dikey yörünge yönünü tersine çevirir."
+    },
+    "settings.input.navigation_group": {
+      "text": "NAVİGASYON"
+    },
+    "settings.input.orbit_sensitivity": {
+      "text": "Yörünge Hassasiyeti"
+    },
+    "settings.input.orbit_sensitivity.description": {
+      "text": "Viewport kamerasını döndürmek için fare sürükleme çarpanı."
+    },
+    "settings.input.pan_sensitivity": {
+      "text": "Kaydırma Hassasiyeti"
+    },
+    "settings.input.pan_sensitivity.description": {
+      "text": "Viewport kamerasını kaydırmak için fare sürükleme çarpanı."
+    },
+    "settings.input.mappings_description": {
+      "text": "Kısayolları, gamepad bağlarını, profilleri ve oyuncu atamalarını düzenlemek için sağ etkinlik çubuğundan Giriş Eşleme panelini açın."
+    },
+    "settings.input.mappings_group": {
+      "text": "GİRİŞ EŞLEMELERİ"
+    },
+    "settings.input.mappings_label": {
+      "text": "Merkezi Giriş Eşleme"
+    },
+    "settings.input.shortcut.click_to_record": {
+      "text": "Kaydetmek için tıkla"
+    },
+    "settings.input.shortcut.press_keys": {
+      "text": "Tuşlara basın..."
+    },
+    "settings.language": {
+      "text": "Dil"
+    },
+    "settings.language.description": {
+      "text": "Editör arayüzünde kullanılan dil."
+    },
+    "settings.language.english": {
+      "text": "İngilizce"
+    },
+    "settings.language.turkish": {
+      "text": "Türkçe"
+    },
+    "settings.nav.appearance": {
+      "text": "Görünüm"
+    },
+    "settings.nav.audio": {
+      "text": "Ses"
+    },
+    "settings.nav.diagnostics": {
+      "text": "Tanılama"
+    },
+    "settings.nav.editor": {
+      "text": "Editör"
+    },
+    "settings.nav.engine": {
+      "text": "Motor"
+    },
+    "settings.nav.general": {
+      "text": "Genel"
+    },
+    "settings.nav.input": {
+      "text": "Girdi"
+    },
+    "settings.nav.network": {
+      "text": "Ağ"
+    },
+    "settings.nav.plugins": {
+      "text": "Uzantılar"
+    },
+    "settings.nav.rendering": {
+      "text": "Render"
+    },
+    "settings.nav.tools": {
+      "text": "Araçlar"
+    },
+    "settings.network.download_threads": {
+      "text": "Paket İndirme İş Parçacıkları"
+    },
+    "settings.network.download_threads.description": {
+      "text": "Şablon ve varlık paketleri için paralel indirme işçileri."
+    },
+    "settings.network.max_preview_clients": {
+      "text": "Maksimum Önizleme İstemcisi"
+    },
+    "settings.network.max_preview_clients.description": {
+      "text": "Maksimum eşzamanlı PIE (Editörde Oynat) istemci bağlantısı."
+    },
+    "settings.network.multiplayer_group": {
+      "text": "ÇOK OYUNCULU ÖNİZLEME"
+    },
+    "settings.network.simulate_latency": {
+      "text": "Gecikmeyi Simüle Et"
+    },
+    "settings.network.simulate_latency.description": {
+      "text": "Loopback üzerine eklenen yapay tek yönlü gecikme (ms)."
+    },
+    "settings.plugins.action.disable": {
+      "text": "Devre Dışı Bırak"
+    },
+    "settings.plugins.action.enable": {
+      "text": "Etkinleştir"
+    },
+    "settings.plugins.action.install": {
+      "text": "Yükle..."
+    },
+    "settings.plugins.action.open_docs": {
+      "text": "Dökümanları Aç"
+    },
+    "settings.plugins.action.open_logs": {
+      "text": "Logları Aç"
+    },
+    "settings.plugins.action.reload": {
+      "text": "Yenile"
+    },
+    "settings.plugins.action.validate": {
+      "text": "Doğrula"
+    },
+    "settings.plugins.category.audio": {
+      "text": "Ses"
+    },
+    "settings.plugins.category.editor": {
+      "text": "Editör Aracı"
+    },
+    "settings.plugins.category.platform": {
+      "text": "Platform"
+    },
+    "settings.plugins.description": {
+      "text": "Uzantılar sürümlenmiş paketlerdir. Her paket asset importer ve önizleme sağlayıcısı gibi native modüller sunabilir."
+    },
+    "settings.plugins.feedback.install_not_implemented": {
+      "text": "Eklenti yükleme penceresi henüz uygulanmadı."
+    },
+    "settings.plugins.feedback.reloaded": {
+      "text": "Eklentiler başarıyla yenilendi."
+    },
+    "settings.plugins.fmod.desc": {
+      "text": "FMOD Studio yazarlığı, canlı güncelleme, banka içe aktarımı ve çalışma zamanı bağlama."
+    },
+    "settings.plugins.fmod.detail_desc": {
+      "text": "Horo ses varlıklarını FMOD Studio bankaları, olay referansları, canlı güncelleme ve derleme doğrulaması ile bağlar."
+    },
+    "settings.plugins.installed": {
+      "text": "Yüklü"
+    },
+    "settings.plugins.mcp.desc": {
+      "text": "Sahne, varlık ve editör operasyonları için yerel otomasyon köprüsü."
+    },
+    "settings.plugins.mcp.detail_desc": {
+      "text": "Harici araçların proje durumunu inceleyebilmesi, varlıklar oluşturabilmesi, editör komutlarını çalıştırabilmesi ve teşhis sorgulayabilmesi için yerel bir MCP uç noktası sunar."
+    },
+    "settings.plugins.restart.needs_sdk": {
+      "text": "SDK yolu gerekiyor"
+    },
+    "settings.plugins.restart.not_required": {
+      "text": "Yeniden başlatma gerekmez"
+    },
+    "settings.plugins.restart.on_enable": {
+      "text": "Etkinleştirmede yeniden başlat"
+    },
+    "settings.plugins.runtime": {
+      "text": "Çalışma Zamanı"
+    },
+    "settings.plugins.scope.editor": {
+      "text": "Editör geneli"
+    },
+    "settings.plugins.scope.platform": {
+      "text": "Platform"
+    },
+    "settings.plugins.scope.project": {
+      "text": "Proje kapsamlı"
+    },
+    "settings.plugins.signed.disabled": {
+      "text": "Devre Dışı"
+    },
+    "settings.plugins.signed.signed": {
+      "text": "İmzalı"
+    },
+    "settings.plugins.signed.vendor": {
+      "text": "Doğrulanmış Sağlayıcı"
+    },
+    "settings.plugins.status.disabled": {
+      "text": "Devre Dışı"
+    },
+    "settings.plugins.status.enabled": {
+      "text": "Etkinleştirildi"
+    },
+    "settings.plugins.status.trusted": {
+      "text": "Güvenilir"
+    },
+    "settings.plugins.status.vendor": {
+      "text": "Doğrulanmış Sağlayıcı"
+    },
+    "settings.extensions.active_count": {
+      "text": "Çalışma zamanında aktif"
+    },
+    "settings.extensions.author": {
+      "text": "Geliştirici"
+    },
+    "settings.extensions.builtin_manifest": {
+      "text": "Bu uzantı editöre derlenmiştir ve harici bir manifest yolu yoktur."
+    },
+    "settings.extensions.contributions": {
+      "text": "Katkılar"
+    },
+    "settings.extensions.details": {
+      "text": "UZANTI DETAYLARI"
+    },
+    "settings.extensions.empty": {
+      "text": "Bu filtreyle eşleşen uzantı yok."
+    },
+    "settings.extensions.feedback.installed": {
+      "text": "Uzantı devre dışı durumda kuruldu. Native modülleri yüklemek için etkinleştirip editörü yeniden başlatın."
+    },
+    "settings.extensions.feedback.restart": {
+      "text": "Etkinleştirme tercihi kaydedildi. Çalışma zamanı değişikliğini uygulamak için editörü yeniden başlatın."
+    },
+    "settings.extensions.filter": {
+      "text": "Uzantıları filtrele..."
+    },
+    "settings.extensions.install_root": {
+      "text": "Absolute kurulum kökü"
+    },
+    "settings.extensions.installed_count": {
+      "text": "Kurulu paketler"
+    },
+    "settings.extensions.installed_heading": {
+      "text": "KURULU UZANTILAR"
+    },
+    "settings.extensions.lifecycle": {
+      "text": "ETKİNLEŞTİRME YAŞAM DÖNGÜSÜ"
+    },
+    "settings.extensions.marketplace": {
+      "text": "Marketplace"
+    },
+    "settings.extensions.marketplace.empty": {
+      "text": "Bu aramayla eşleşen uyumlu uzantı bulunamadı."
+    },
+    "settings.extensions.marketplace.installing": {
+      "text": "Kuruluyor..."
+    },
+    "settings.extensions.marketplace.installed": {
+      "text": "Kurulu"
+    },
+    "settings.extensions.marketplace.search": {
+      "text": "Marketplace'te ara..."
+    },
+    "settings.extensions.marketplace.search.action": {
+      "text": "Ara"
+    },
+    "settings.extensions.marketplace.searching": {
+      "text": "Uzantı registry'sinde aranıyor..."
+    },
+    "settings.extensions.marketplace.unavailable": {
+      "text": "Uzantı marketplace servisi bu editör kompozisyonunda mevcut değil."
+    },
+    "settings.extensions.manifest": {
+      "text": "Absolute manifest"
+    },
+    "settings.extensions.modules": {
+      "text": "Modüller"
+    },
+    "settings.extensions.none": {
+      "text": "Tanımlanmamış"
+    },
+    "settings.extensions.origin": {
+      "text": "Kaynak"
+    },
+    "settings.extensions.origin.builtin": {
+      "text": "Yerleşik"
+    },
+    "settings.extensions.origin.user": {
+      "text": "Kullanıcı kurulumu"
+    },
+    "settings.extensions.package_id": {
+      "text": "Paket ID"
+    },
+    "settings.extensions.pending_count": {
+      "text": "Yeniden başlatma bekliyor"
+    },
+    "settings.extensions.restart_required": {
+      "text": "Yeniden başlatma gerekli"
+    },
+    "settings.extensions.select_folder": {
+      "text": "Bir uzantı paket klasörü seçin"
+    },
+    "settings.extensions.select_prompt": {
+      "text": "Paket, modül, katkı ve manifest bilgilerini incelemek için listeden bir uzantı seçin."
+    },
+    "settings.extensions.status.active": {
+      "text": "Aktif"
+    },
+    "settings.extensions.status.inactive": {
+      "text": "Pasif"
+    },
+    "settings.extensions.tab.manifest": {
+      "text": "Manifest"
+    },
+    "settings.extensions.tab.overview": {
+      "text": "Genel Bakış"
+    },
+    "settings.extensions.total": {
+      "text": "toplam"
+    },
+    "settings.extensions.unavailable": {
+      "text": "Uzantı envanteri servisi bu editör kompozisyonunda mevcut değil."
+    },
+    "settings.plugins.steam.desc": {
+      "text": "Steam başarımları, arayüzü, ağ soketleri ve derleme meta verileri."
+    },
+    "settings.plugins.steam.detail_desc": {
+      "text": "Arayüz, başarımlar, ağ soketleri ve App ID meta verileri gibi Steam platform hizmetlerini ekler."
+    },
+    "settings.rendering.dx11": {
+      "text": "DX11"
+    },
+    "settings.rendering.dx12_vulkan": {
+      "text": "DX12 / Vulkan"
+    },
+    "settings.rendering.es3": {
+      "text": "ES3"
+    },
+    "settings.rendering.grid_overlay": {
+      "text": "Izgara Katmanı"
+    },
+    "settings.rendering.grid_overlay.description": {
+      "text": "Editör viewport’unda referans ızgarasını göster."
+    },
+    "settings.rendering.high_end": {
+      "text": "Yüksek Seviye"
+    },
+    "settings.rendering.lit": {
+      "text": "Aydınlatılmış"
+    },
+    "settings.rendering.quality_group": {
+      "text": "KALİTE"
+    },
+    "settings.rendering.shaded": {
+      "text": "Gölgelendirilmiş"
+    },
+    "settings.rendering.texture_budget": {
+      "text": "Texture Streaming Bütçesi"
+    },
+    "settings.rendering.texture_budget.description": {
+      "text": "Streaming sistemi tarafından kullanılan maksimum texture bellek havuzu."
+    },
+    "settings.rendering.tier": {
+      "text": "Editör Render Seviyesi"
+    },
+    "settings.rendering.tier.description": {
+      "text": "Editör viewport’unda kullanılan en yüksek özellik seviyesi."
+    },
+    "settings.rendering.unlit": {
+      "text": "Aydınlatmasız"
+    },
+    "settings.rendering.viewport_group": {
+      "text": "GÖRÜNÜM ALANI"
+    },
+    "settings.rendering.viewport_mode": {
+      "text": "Varsayılan Viewport Modu"
+    },
+    "settings.rendering.viewport_mode.description": {
+      "text": "Yeni viewport panellerinde kullanılan gölgelendirme modu."
+    },
+    "settings.rendering.wireframe": {
+      "text": "Tel Kafes"
+    },
+    "settings.restore_defaults": {
+      "text": "Varsayılanları Geri Yükle"
+    },
+    "settings.title": {
+      "text": "Editör Ayarları"
+    },
+    "welcome.browse_all": {
+      "text": "TÜMÜNE GÖZ AT"
+    },
+    "welcome.new_project": {
+      "text": "+  Yeni Proje"
+    },
+    "welcome.open_project": {
+      "text": "   Proje Aç"
+    },
+    "welcome.open_settings": {
+      "text": "   Ayarları Aç"
+    },
+    "welcome.recent_projects": {
+      "text": "SON PROJELER"
+    },
+    "status.navigation.label": {"text": "Gez"},
+    "status.navigation.idle": {"text": "boşta"},
+    "status.navigation.busy": {"text": "meşgul"},
+    "status.backend.opengl": {"text": "OpenGL"},
+    "status.cpu.label": {"text": "CPU"},
+    "status.document.saved": {"text": "Kaydedildi"},
+    "status.document.unsaved": {"text": "Kaydedilmedi"},
+    "status.selection.label": {"text": "Seç"},
+    "status.selection.none": {"text": "0 nesne"},
+    "status.selection.one": {"text": "1 nesne"},
+    "status.overflow.hidden": {"text": "durum öğesi gizlendi"},
+    "workspace.panel.hierarchy": {"text": "Hiyerarşi"},
+    "workspace.panel.inspector": {"text": "Denetçi"},
+    "workspace.panel.viewport": {"text": "Görünüm"},
+    "workspace.panel.game": {"text": "Oyun"},
+    "workspace.game.idle": {"text": "Oyunu başlatmak için Oynat'a basın."},
+    "workspace.play.pause": {"text": "Duraklat"},
+    "workspace.play.resume": {"text": "Sürdür"},
+    "workspace.play.step": {"text": "Adım"},
+    "workspace.play.stop": {"text": "Durdur"},
+    "workspace.inspector.behavior_enabled": {"text": "Etkin"},
+    "workspace.inspector.behavior_missing": {"text": "Eksik Behavior"},
+    "workspace.content_browser.action.create_lua_behavior": {"text": "Lua Behavior Oluştur"},
+    "workspace.content_browser.action.create_native_behavior": {"text": "Native C++ Behavior Oluştur"},
+    "workspace.content_browser.operation.create_behavior_failed": {"text": "Behavior kaynağı oluşturulamadı."},
+    "workspace.panel.content_browser": {"text": "İçerik Tarayıcısı"},
+    "workspace.input_mapping.title": {"text": "Girdi Eşleme"},
+    "workspace.input_mapping.binding": {"text": "Bağ"},
+    "workspace.input_mapping.binding_updated": {"text": "Bağ güncellendi."},
+    "workspace.input_mapping.deadzone": {"text": "Ölü bölge"},
+    "workspace.input_mapping.generation": {"text": "nesil"},
+    "workspace.input_mapping.player": {"text": "Oyuncu"},
+    "workspace.input_mapping.slot": {"text": "yuva"},
+    "workspace.input_mapping.unassigned": {"text": "Atanmamış"},
+    "workspace.input_mapping.type.digital": {"text": "Dijital"},
+    "workspace.input_mapping.type.axis_1d": {"text": "1B Eksen"},
+    "workspace.input_mapping.type.axis_2d": {"text": "2B Eksen"},
+    "workspace.input_mapping.type.unknown": {"text": "Bilinmiyor"},
+    "workspace.input_mapping.actions": {"text": "Aksiyon Haritaları"},
+    "workspace.input_mapping.devices": {"text": "Cihazlar"},
+    "workspace.input_mapping.profiles": {"text": "Profiller"},
+    "workspace.input_mapping.no_actions": {"text": "Kayıtlı bir girdi aksiyonu yok."},
+    "workspace.input_mapping.action": {"text": "Aksiyon"},
+    "workspace.input_mapping.type": {"text": "Tür"},
+    "workspace.input_mapping.bindings": {"text": "Atamalar"},
+    "workspace.input_mapping.status": {"text": "Durum"},
+    "workspace.input_mapping.required": {"text": "Zorunlu"},
+    "workspace.input_mapping.optional": {"text": "İsteğe bağlı"},
+    "workspace.input_mapping.rebind": {"text": "Yeniden Ata"},
+    "workspace.input_mapping.press_key": {"text": "Bir tuşa basın; Escape iptal eder."},
+    "workspace.input_mapping.no_devices": {"text": "Bağlı bir gamepad yok."},
+    "workspace.input_mapping.assign_player_one": {"text": "Oyuncu 1'e Ata"},
+    "workspace.input_mapping.unassign": {"text": "Atamayı Kaldır"},
+    "workspace.input_mapping.active_profile": {"text": "Aktif profil"},
+    "workspace.input_mapping.save_profile": {"text": "Profili Kaydet"},
+    "workspace.input_mapping.save_project_profile": {"text": "Proje Geçersiz Kılmasını Kaydet"},
+    "workspace.input_mapping.project_profile_saved": {"text": "Proje girdi geçersiz kılması kaydedildi."},
+    "workspace.input_mapping.reload_profile": {"text": "Profili Yeniden Yükle"},
+    "workspace.input_mapping.profile_saved": {"text": "Girdi profili kaydedildi."},
+    "workspace.input_mapping.profile_loaded": {"text": "Girdi profili yüklendi."},
+    "workspace.hierarchy.add_object": {"text": "+ Nesne Ekle"},
+    "workspace.create": {"text": "Oluştur"},
+    "workspace.create.group.objects_3d": {"text": "3B Nesneler"},
+    "workspace.create.group.cameras": {"text": "Kameralar"},
+    "workspace.create.group.lights": {"text": "Işıklar"},
+    "workspace.create.group.volumes": {"text": "Hacimler"},
+    "workspace.create.group.audio": {"text": "Ses"},
+    "primitive.mesh.box": {"text": "Kutu"},
+    "primitive.mesh.sphere": {"text": "Küre"},
+    "primitive.mesh.capsule": {"text": "Kapsül"},
+    "primitive.mesh.cylinder": {"text": "Silindir"},
+    "primitive.mesh.cone": {"text": "Koni"},
+    "primitive.mesh.plane": {"text": "Düzlem"},
+    "primitive.mesh.quad": {"text": "Dörtgen"},
+    "primitive.object.empty": {"text": "GameObject"},
+    "primitive.object.camera": {"text": "Kamera"},
+    "primitive.object.light_directional": {"text": "Yönlü Işık"},
+    "primitive.object.light_point": {"text": "Noktasal Işık"},
+    "primitive.object.light_spot": {"text": "Spot Işık"},
+    "primitive.object.trigger_volume": {"text": "Tetikleyici Hacim"},
+    "primitive.object.audio_source": {"text": "Ses Kaynağı"},
+    "workspace.hierarchy.type.mesh": {"text": "Mesh"},
+    "workspace.hierarchy.type.empty": {"text": "GameObject"},
+    "workspace.hierarchy.type.light": {"text": "Işık"},
+    "workspace.hierarchy.type.camera": {"text": "Kamera"},
+    "workspace.hierarchy.type.volume": {"text": "Hacim"},
+    "workspace.hierarchy.type.audio": {"text": "Ses"},
+    "workspace.hierarchy.empty": {"text": "Sahne boş"},
+    "workspace.hierarchy.search": {"text": "Nesnelerde ara..."},
+    "workspace.hierarchy.no_matches": {"text": "Eşleşen nesne yok"},
+    "workspace.hierarchy.rename": {"text": "Yeniden Adlandır"},
+    "workspace.hierarchy.duplicate": {"text": "Çoğalt"},
+    "workspace.hierarchy.delete": {"text": "Sil"},
+    "workspace.hierarchy.move_to_root": {"text": "Kök Seviyesine Taşı"},
+    "workspace.inspector.kind.mesh": {"text": "Mesh"},
+    "workspace.inspector.kind.empty": {"text": "GameObject"},
+    "workspace.inspector.kind.camera": {"text": "Kamera"},
+    "workspace.inspector.kind.light": {"text": "Işık"},
+    "workspace.inspector.add_component": {"text": "Bileşen Ekle"},
+    "workspace.inspector.remove_component": {"text": "Bileşeni Kaldır"},
+    "workspace.inspector.trigger_volume": {"text": "Tetikleyici Hacim"},
+    "workspace.inspector.kind.trigger_volume": {"text": "Tetikleme Hacmi"},
+    "workspace.inspector.kind.audio_source": {"text": "Ses Kaynağı"},
+    "workspace.inspector.transform": {"text": "Dönüşüm"},
+    "workspace.inspector.position": {"text": "Konum"},
+    "workspace.inspector.rotation": {"text": "Döndürme"},
+    "workspace.inspector.scale": {"text": "Ölçek"},
+    "workspace.inspector.camera": {"text": "Kamera"},
+    "workspace.inspector.camera_projection": {"text": "İzdüşüm"},
+    "workspace.inspector.camera_projection_perspective": {"text": "Perspektif"},
+    "workspace.inspector.camera_projection_orthographic": {"text": "Ortografik"},
+    "workspace.inspector.camera_field_of_view": {"text": "Görüş Açısı"},
+    "workspace.inspector.camera_orthographic_height": {"text": "Ortografik Yükseklik"},
+    "workspace.inspector.camera_near_plane": {"text": "Yakın Düzlem"},
+    "workspace.inspector.camera_far_plane": {"text": "Uzak Düzlem"},
+    "workspace.inspector.camera_invalid": {"text": "Kamera izdüşümü ve kırpma değerleri geçerli, sonlu bir aralık oluşturmalıdır."},
+    "workspace.inspector.light": {"text": "Işık"},
+    "workspace.inspector.light_kind": {"text": "Tür"},
+    "workspace.inspector.light_kind_directional": {"text": "Yönlü"},
+    "workspace.inspector.light_kind_point": {"text": "Noktasal"},
+    "workspace.inspector.light_kind_spot": {"text": "Spot"},
+    "workspace.inspector.light_color": {"text": "Renk"},
+    "workspace.inspector.light_intensity": {"text": "Yoğunluk"},
+    "workspace.inspector.light_range": {"text": "Menzil"},
+    "workspace.inspector.light_inner_cone": {"text": "İç koni"},
+    "workspace.inspector.light_outer_cone": {"text": "Dış koni"},
+    "workspace.inspector.light_invalid": {"text": "Işık rengi, yoğunluğu, menzili ve koni değerleri geçerli ve sonlu olmalıdır."},
+    "workspace.inspector.trigger_volume": {"text": "Tetikleyici Hacim"},
+    "workspace.inspector.trigger_volume_shape": {"text": "Şekil"},
+    "workspace.inspector.trigger_volume_shape_box": {"text": "Kutu"},
+    "workspace.inspector.trigger_volume_shape_sphere": {"text": "Küre"},
+    "workspace.inspector.trigger_volume_shape_capsule": {"text": "Kapsül"},
+    "workspace.inspector.trigger_volume_shape_plane": {"text": "Statik Düzlem"},
+    "workspace.inspector.audio_source": {"text": "Ses Kaynağı"},
+    "workspace.inspector.audio_source_kind": {"text": "Kaynak türü"},
+    "workspace.inspector.audio_source_kind_native_clip": {"text": "Yerel Klip"},
+    "workspace.inspector.audio_source_kind_middleware_event": {"text": "Ara Katman Olayı"},
+    "workspace.inspector.audio_source_gain": {"text": "Kazanç"},
+    "workspace.inspector.audio_source_spatial": {"text": "Uzamsal"},
+    "workspace.inspector.audio_source_invalid": {"text": "Ses kaynağı kazancı sonlu ve negatif olmayan bir değer olmalıdır."},
+    "workspace.inspector.name_invalid": {"text": "Nesne adı 1 ile 128 bayt arasında olmalıdır."},
+    "workspace.inspector.transform_invalid": {"text": "Dönüşüm değerleri sonlu sayılar olmalıdır."},
+    "workspace.inspector.objects_selected": {"text": "nesne seçildi"},
+    "workspace.inspector.empty": {"text": "Özelliklerini incelemek için Hiyerarşi panelinden bir nesne seçin."},
+    "workspace.value.on": {"text": "Açık"},
+    "workspace.value.off": {"text": "Kapalı"},
+    "workspace.value.static": {"text": "✓ Statik"},
+    "workspace.viewport.object_count": {"text": "{} nesne"},
+    "workspace.viewport.perspective_shaded": {"text": "Perspektif · Gölgeli"},
+    "workspace.viewport.orthographic_shaded": {"text": "Ortografik · Gölgeli"},
+    "workspace.viewport.renderer_missing": {"text": "Görüntüleyici bağlı değil"},
+    "workspace.content_browser.embedded": {"text": "YERLEŞİK"},
+    "workspace.content_browser.project_asset_dock": {"text": "Proje varlık paneli"},
+    "workspace.global_dock.tab.assets": {"text": "Varlıklar"},
+    "workspace.global_dock.tab.console": {"text": "Konsol"},
+    "workspace.global_dock.tab.build_output": {
+      "text": "Build"
+    },
+    "workspace.global_dock.tab.operations": {
+      "text": "Ops"
+    },
+    "workspace.global_dock.tab.mcp": {"text": "MCP"},
+    "workspace.global_dock.tab.performance": {"text": "Perf"},
+    "workspace.global_dock.tab.physics": {"text": "Fizik"},
+    "workspace.global_dock.tab.audio": {"text": "Ses"},
+    "workspace.global_dock.tab.network": {"text": "Net"},
+    "workspace.global_dock.tab.localization": {"text": "L10n"},
+    "workspace.global_dock.preview.mcp": {"text": "MCP önizlemesi"},
+    "workspace.global_dock.preview.performance": {"text": "Performans önizlemesi"},
+    "workspace.global_dock.preview.physics": {"text": "Fizik hata ayıklama önizlemesi"},
+    "workspace.global_dock.preview.audio": {"text": "Ses mikseri önizlemesi"},
+    "workspace.global_dock.preview.network": {"text": "Ağ hata ayıklama önizlemesi"},
+    "workspace.global_dock.preview.localization": {"text": "Yerelleştirme önizlemesi"},
+    "workspace.global_dock.console.filter.error": {"text": "Hata"},
+    "workspace.global_dock.console.filter.warn": {"text": "Uyarı"},
+    "workspace.global_dock.console.filter.info": {"text": "Bilgi"},
+    "workspace.global_dock.console.filter.debug": {"text": "Debug"},
+    "workspace.global_dock.console.filter.trace": {"text": "Trace"},
+    "workspace.global_dock.console.search": {
+      "text": "Filtrele..."
+    },
+    "workspace.global_dock.console.clear": {
+      "text": "Temizle"
+    },
+    "workspace.global_dock.console.levels": {"text": "Seviyeler"},
+    "workspace.global_dock.console.empty": {"text": "Etkin filtrelerle eşleşen log yok."},
+    "workspace.global_dock.build_output.search": {
+      "text": "Filtrele..."
+    },
+    "workspace.global_dock.build_output.clear": {
+      "text": "Temizle"
+    },
+    "workspace.global_dock.build_output.columns": {
+      "text": "Sütunlar"
+    },
+    "workspace.global_dock.build_output.status.all": {
+      "text": "Tüm Durumlar"
+    },
+    "workspace.global_dock.build_output.status.ok": {
+      "text": "Tamam"
+    },
+    "workspace.global_dock.build_output.status.failed": {
+      "text": "Başarısız"
+    },
+    "workspace.global_dock.build_output.status.cached": {
+      "text": "Önbellekte"
+    },
+    "workspace.global_dock.build_output.row_status.info": {"text": "Bilgi"},
+    "workspace.global_dock.build_output.row_status.succeeded": {"text": "Tamam"},
+    "workspace.global_dock.build_output.row_status.failed": {"text": "Başarısız"},
+    "workspace.global_dock.build_output.row_status.cached": {"text": "Önbellekte"},
+    "workspace.global_dock.build_output.row_status.cancelled": {"text": "İptal edildi"},
+    "workspace.global_dock.build_output.column.time": {
+      "text": "Zaman"
+    },
+    "workspace.global_dock.build_output.column.status": {
+      "text": "Durum"
+    },
+    "workspace.global_dock.build_output.column.message": {
+      "text": "Mesaj"
+    },
+    "workspace.global_dock.build_output.column.source": {
+      "text": "Kaynak"
+    },
+    "workspace.global_dock.build_output.empty": {
+      "text": "Henüz build çıktısı yok. Sonuçları görmek için bir cook işlemi başlatın."
+    },
+    "workspace.global_dock.build_output.dropped": {"text": "Eski build çıktıları kaldırıldı:"},
+    "workspace.global_dock.build_output.source.invalid": {"text": "Tanı kaynağı kullanılamıyor veya proje dışında."},
+    "workspace.global_dock.build_output.source.unavailable": {"text": "Kaynak gezintisi bu platformda kullanılamıyor."},
+    "workspace.global_dock.operations.search": {
+      "text": "Filtrele..."
+    },
+    "workspace.global_dock.operations.clear": {
+      "text": "Temizle"
+    },
+    "workspace.global_dock.operations.columns": {"text": "Sütunlar"},
+    "workspace.global_dock.operations.column.status": {"text": "Durum"},
+    "workspace.global_dock.operations.column.operation": {"text": "İşlem"},
+    "workspace.global_dock.operations.column.phase": {"text": "Aşama"},
+    "workspace.global_dock.operations.column.progress": {"text": "İlerleme"},
+    "workspace.global_dock.operations.column.message": {"text": "Mesaj"},
+    "workspace.global_dock.operations.column.action": {"text": "Eylem"},
+    "workspace.global_dock.operations.cancel": {"text": "İptal"},
+    "workspace.global_dock.operations.state.queued": {"text": "Sırada"},
+    "workspace.global_dock.operations.state.running": {"text": "Çalışıyor"},
+    "workspace.global_dock.operations.state.waiting": {"text": "Bekliyor"},
+    "workspace.global_dock.operations.state.cancelling": {"text": "İptal ediliyor"},
+    "workspace.global_dock.operations.state.succeeded": {"text": "Tamamlandı"},
+    "workspace.global_dock.operations.state.failed": {"text": "Başarısız"},
+    "workspace.global_dock.operations.state.cancelled": {"text": "İptal edildi"},
+    "workspace.global_dock.operations.kind.build": {"text": "Build"},
+    "workspace.global_dock.operations.kind.cook": {"text": "Assetleri cook et"},
+    "workspace.global_dock.operations.kind.import": {"text": "Asset içe aktar"},
+    "workspace.global_dock.operations.kind.index": {"text": "Assetleri indeksle"},
+    "workspace.global_dock.operations.kind.validation": {"text": "Projeyi doğrula"},
+    "workspace.global_dock.operations.empty": {
+      "text": "Henüz işlem yok. Sonuçları görmek için bir cook veya import başlatın."
+    },
+    "workspace.global_dock.operations.dropped": {"text": "Eski tamamlanmış işlemler kaldırıldı:"},
+    "workspace.global_dock.mcp.bridge": {"text": "horo.mcp.bridge@0.4.0 — etkin"},
+    "workspace.global_dock.mcp.tools": {"text": "scene.query, scene.select, scene.move, asset.list, build.trigger"},
+    "workspace.global_dock.mcp.awaiting": {"text": "Araç çağrısı bekleniyor…"},
+    "workspace.global_dock.performance.gpu": {"text": "16.7 ms · Çizim çağrıları: 84 · Üçgen: 124k"},
+    "workspace.global_dock.performance.cpu": {"text": "4.1 ms · Gruplar: 22 · Gölge oluşturanlar: 8"},
+    "workspace.global_dock.performance.memory": {"text": "VRAM 214 MB / 4096 MB"},
+    "workspace.global_dock.physics.solver": {"text": "Adımlar: 3 · Gövdeler: 28 · Temaslar: 14"},
+    "workspace.global_dock.physics.layers": {"text": "Varsayılan, Oyuncu, Düşman, Mermi, Arazi"},
+    "workspace.global_dock.physics.memory": {"text": "Çarpışma meshleri: 6.8 MB · Geniş faz: BVH"},
+    "workspace.global_dock.audio.master": {"text": "−3.2 dB · Sesler: 12 / 64"},
+    "workspace.global_dock.audio.busses": {"text": "Ana, Müzik, SFX, Ortam, Ses"},
+    "workspace.global_dock.audio.device": {"text": "Stereo 48 kHz · Gecikme: 10.7 ms"},
+    "workspace.global_dock.network.ping": {"text": "42 ms · Bant genişliği: 12.3 kb/s ↓ · 3.1 kb/s ↑"},
+    "workspace.global_dock.network.replication": {"text": "176 nesne çoğaltılıyor · RPC kuyruğu: 0"},
+    "workspace.global_dock.network.connection": {"text": "1 eş · Sunucu yetkili · tik 64 Hz"},
+    "workspace.global_dock.localization.locale": {"text": "tr-TR · Geri dönüş: en-US · 3 yüklü"},
+    "workspace.global_dock.localization.strings": {"text": "1.247 çevrildi · 0 eksik · 18 belirsiz"},
+    "workspace.global_dock.localization.fonts": {"text": "Noto Sans · RTL: ✓ · CJK: ✓"},
+    "workspace.content_browser.assets_root": {"text": "varlıklar/"},
+    "workspace.content_browser.empty": {"text": "Bu klasör boş."},
+    "workspace.content_browser.loading": {"text": "Varlıklar yükleniyor..."},
+    "workspace.content_browser.unavailable": {"text": "Bu varlık klasörü okunamadı."},
+    "workspace.content_browser.no_results": {"text": "Geçerli filtrelerle eşleşen varlık yok."},
+    "workspace.content_browser.search": {"text": "Geçerli klasörde ara..."},
+    "workspace.content_browser.filter.all_types": {"text": "Tüm türler"},
+    "workspace.content_browser.sort.name": {"text": "Ad"},
+    "workspace.content_browser.sort.type": {"text": "Tür"},
+    "workspace.content_browser.action.rename": {"text": "Yeniden Adlandır"},
+    "workspace.content_browser.action.delete": {"text": "Sil"},
+    "workspace.content_browser.action.asset_info": {"text": "Varlık Bilgisi"},
+    "workspace.content_browser.action.duplicate": {"text": "Çoğalt"},
+    "workspace.content_browser.action.copy": {"text": "Kopyala"},
+    "workspace.content_browser.action.cut": {"text": "Kes / Taşı"},
+    "workspace.content_browser.action.paste_here": {"text": "Buraya Yapıştır"},
+    "workspace.content_browser.action.move_here": {"text": "Buraya Taşı"},
+    "workspace.content_browser.action.create_folder": {"text": "Klasör Oluştur"},
+    "workspace.content_browser.action.import_here": {"text": "Buraya İçe Aktar"},
+    "workspace.content_browser.action.refresh": {"text": "Yenile"},
+    "workspace.content_browser.action.reimport": {"text": "Yeniden İçe Aktar"},
+    "workspace.content_browser.action.reveal": {"text": "Dosya Yöneticisinde Göster"},
+    "workspace.content_browser.action.open_external_ide": {"text": "Harici IDE'de Aç"},
+    "workspace.content_browser.action.copy_path": {"text": "Mutlak Yolu Kopyala"},
+    "workspace.content_browser.action.cancel": {"text": "İptal"},
+    "workspace.content_browser.action.close": {"text": "Kapat"},
+    "workspace.content_browser.create_folder.title": {"text": "Klasör Oluştur"},
+    "workspace.content_browser.create_folder.name": {"text": "Klasör adı"},
+    "workspace.content_browser.info.title": {"text": "Varlık Bilgisi"},
+    "workspace.content_browser.info.directory": {"text": "Klasör"},
+    "workspace.content_browser.info.asset": {"text": "Varlık"},
+    "workspace.content_browser.info.path": {"text": "Mutlak yol"},
+    "workspace.content_browser.info.type": {"text": "Varlık türü"},
+    "workspace.content_browser.info.asset_id": {"text": "Varlık kimliği"},
+    "workspace.content_browser.info.registration": {"text": "Kayıt"},
+    "workspace.content_browser.info.registered": {"text": "Kayıtlı"},
+    "workspace.content_browser.info.unregistered": {"text": "Kayıtsız"},
+    "workspace.content_browser.info.size": {"text": "Payload boyutu"},
+    "workspace.content_browser.info.importer": {"text": "İçe aktarıcı"},
+    "workspace.content_browser.info.module": {"text": "Modül"},
+    "workspace.content_browser.info.source": {"text": "İçe aktarma kaynağı"},
+    "workspace.content_browser.info.reimport_status": {"text": "Yeniden içe aktarma"},
+    "workspace.content_browser.info.reimport_manual": {"text": "Kullanılabilir (manuel)"},
+    "workspace.content_browser.info.reimport_source_changed": {"text": "Kaynak değişti"},
+    "workspace.content_browser.info.reimport_source_stale": {"text": "Kaynak değişmiş olabilir"},
+    "workspace.content_browser.info.reimport_importer_changed": {"text": "İçe aktarıcı değişti"},
+    "workspace.content_browser.info.reimport_module_changed": {"text": "Modül değişti"},
+    "workspace.content_browser.info.last_import_reason": {"text": "Son içe aktarma nedeni"},
+    "workspace.content_browser.info.import_reason_initial": {"text": "İlk içe aktarma"},
+    "workspace.content_browser.info.import_reason_manual": {"text": "Manuel yeniden içe aktarma"},
+    "workspace.content_browser.info.metadata": {"text": "Metadata"},
+    "workspace.content_browser.info.none": {"text": "Mevcut değil"},
+    "workspace.content_browser.rename.title": {"text": "Varlık Girdisini Yeniden Adlandır"},
+    "workspace.content_browser.rename.name": {"text": "AD"},
+    "workspace.content_browser.delete.title": {"text": "Varlık Girdisini Sil"},
+    "workspace.content_browser.delete.message": {"text": "Bu girdi Assets klasöründen kaldırılacak ve projenin geri alınabilir yerel çöp klasörüne taşınacak."},
+    "workspace.content_browser.delete.dependencies": {"text": "Doğrudan bağımlılıklar"},
+    "workspace.content_browser.delete.dependency_warning": {"text": "Bu varlığın kayıtlı bağımlılıkları var. Silme işlemi referans verilen varlıkları silmez."},
+    "workspace.content_browser.operation.unavailable": {"text": "Bu editör bileşiminde varlık işlemleri kullanılamıyor."},
+    "workspace.content_browser.operation.invalid_name": {"text": "Geçerli bir dosya veya klasör adı seçin."},
+    "workspace.content_browser.operation.invalid_target": {"text": "Seçilen varlık girdisi artık mevcut değil."},
+    "workspace.content_browser.operation.name_exists": {"text": "Bu ada sahip bir girdi zaten var."},
+    "workspace.content_browser.operation.busy": {"text": "Başka bir proje yazma işlemi etkin. Kısa süre sonra tekrar deneyin."},
+    "workspace.content_browser.operation.rename_failed": {"text": "Varlık girdisi yeniden adlandırılamadı."},
+    "workspace.content_browser.operation.delete_failed": {"text": "Varlık girdisi proje çöpüne taşınamadı."},
+    "workspace.content_browser.operation.registry_failed": {"text": "Varlık değişti ancak Varlık Kaydı yenilenemedi."},
+    "workspace.content_browser.operation.clipboard_empty": {"text": "Yapıştırılacak bir varlık yok."},
+    "workspace.content_browser.operation.asset_required": {"text": "Bu işlem kayıtlı bir varlık gerektirir."},
+    "workspace.content_browser.operation.copy_failed": {"text": "Varlık kopyalanamadı."},
+    "workspace.content_browser.operation.move_failed": {"text": "Varlık taşınamadı."},
+    "workspace.content_browser.operation.create_folder_failed": {"text": "Klasör oluşturulamadı."},
+    "workspace.content_browser.operation.same_folder": {"text": "Varlık zaten bu klasörde."},
+    "workspace.content_browser.operation.companion_invalid": {"text": "Varlık metadata veya companion dosya seti eksik ya da güvenli değil."},
+    "workspace.content_browser.operation.rollback_failed": {"text": "İşlem başarısız oldu ve tamamen geri alınamadı. Devam etmeden önce proje dosyalarını inceleyin."},
+    "workspace.content_browser.operation.reimport_unavailable": {"text": "Bu varlık yeniden içe aktarma kaynağını kaydetmiyor."},
+    "workspace.content_browser.operation.reimport_importer_missing": {"text": "Bu varlıkta kayıtlı içe aktarıcı modülü kullanılamıyor."},
+    "workspace.content_browser.operation.reimport_failed": {"text": "Varlık yeniden içe aktarılamadı; önceki payload korundu."},
+    "workspace.content_browser.operation.reveal_unavailable": {"text": "Dosya Yöneticisi entegrasyonu bu platformda kullanılamıyor."},
+    "workspace.content_browser.scenes": {"text": "sahneler"},
+    "workspace.content_browser.models": {"text": "modeller"},
+    "workspace.content_browser.textures": {"text": "dokular"},
+    "workspace.content_browser.materials": {"text": "materyaller"},
+    "workspace.content_browser.shaders": {"text": "gölgelendiriciler"},
+    "workspace.content_browser.audio": {"text": "ses"},
+    "web_workspace.activity.find_in_scene": {"text": "Sahnede Bul"},
+    "web_workspace.activity.scene_settings": {"text": "Sahne Ayarları"},
+    "web_workspace.activity.project_settings": {"text": "Proje Ayarları"},
+    "web_workspace.activity.build_output": {"text": "Derleme Çıktısı"},
+    "web_workspace.activity.render_settings": {"text": "Görüntüleme Ayarları"},
+    "web_workspace.activity.ai_chat": {"text": "Yapay Zekâ Sohbeti"},
+    "web_workspace.ai_chat.history": {"text": "Sohbet geçmişi"},
+    "web_workspace.ai_chat.new_chat": {"text": "Yeni sohbet"},
+    "web_workspace.ai_chat.close_chat": {"text": "Sohbeti kapat"},
+    "web_workspace.ai_chat.ready": {"text": "Hazır. Motor, sahne düzenleme veya herhangi bir iş akışı hakkında soru sor."},
+    "web_workspace.ai_chat.add_context": {"text": "+ Bağlam ekle"},
+    "web_workspace.ai_chat.placeholder": {"text": "Horo'ya sor…"},
+    "web_workspace.ai_chat.send": {"text": "Gönder"},
+    "web_workspace.ai_chat.previous_chats": {"text": "Önceki sohbetler"},
+    "web_workspace.language": {"text": "Dil"},
+    "web_workspace.ai_chat.title": {"text": "HORO YAPAY ZEKÂ SOHBETİ"},
+    "web_workspace.ai_chat.mode.ask": {"text": "sor"},
+    "web_workspace.ai_chat.mode.agent": {"text": "ajan"},
+    "web_workspace.ai_chat.mode.edit": {"text": "düzenle"},
+    "web_workspace.value.on": {"text": "Açık"},
+    "web_workspace.value.static": {"text": "✓ Statik"},
+    "web_workspace.accessibility.opens_modal": {"text": "modalı açar"},
+    "web_workspace.accessibility.opens_screen": {"text": "ekranı açar"},
+    "web_workspace.menu.assets": {"text": "Varlıklar"},
+    "web_workspace.inspector.scale": {"text": "Ölçek"},
+    "web_workspace.inspector.mesh": {"text": "Mesh"},
+    "web_workspace.menu.file": {"text": "Dosya"},
+    "web_workspace.menu.edit": {"text": "Düzenle"},
+    "web_workspace.dock.assets": {"text": "Varlıklar"},
+    "web_workspace.menu.game_object": {"text": "Oyun Nesnesi"},
+    "web_workspace.menu.component": {"text": "Bileşen"},
+    "web_workspace.menu.window": {"text": "Pencere"},
+    "web_workspace.menu.build": {"text": "Derle"},
+    "web_workspace.menu.help": {"text": "Yardım"},
+    "web_workspace.menu.workspace": {"text": "Çalışma Alanı"},
+    "web_workspace.menu.asset_editors": {"text": "Varlık Editörleri"},
+    "web_workspace.menu.tools": {"text": "Araçlar"},
+    "web_workspace.menu.diagnostics": {"text": "Tanı"},
+    "web_workspace.menu.runtime": {"text": "Çalışma Zamanı"},
+    "web_workspace.menu.localization_editor": {"text": "Yerelleştirme Editörü"},
+    "web_workspace.menu.new_project": {"text": "Yeni Proje"},
+    "web_workspace.menu.open_project": {"text": "Proje Aç"},
+    "web_workspace.menu.open_recent": {"text": "Son Kullanılanı Aç"},
+    "web_workspace.menu.save": {"text": "Kaydet"},
+    "web_workspace.menu.save_as": {"text": "Farklı Kaydet…"},
+    "web_workspace.menu.save_copy_as": {"text": "Kopyayı Farklı Kaydet…"},
+    "web_workspace.menu.exit": {"text": "Çıkış"},
+    "web_workspace.menu.undo": {"text": "Geri Al"},
+    "web_workspace.menu.redo": {"text": "Yinele"},
+    "web_workspace.menu.cut": {"text": "Kes"},
+    "web_workspace.menu.copy": {"text": "Kopyala"},
+    "web_workspace.menu.paste": {"text": "Yapıştır"},
+    "web_workspace.menu.preferences": {"text": "Tercihler…"},
+    "web_workspace.menu.import_asset": {"text": "Yeni Varlık İçe Aktar…"},
+    "web_workspace.menu.reimport_all": {"text": "Tümünü Yeniden İçe Aktar"},
+    "web_workspace.menu.refresh_asset_index": {"text": "Varlık Dizinini Yenile"},
+    "web_workspace.menu.create_empty": {"text": "Boş Oluştur"},
+    "web_workspace.menu.create_primitive": {"text": "İlkel Oluştur →"},
+    "web_workspace.menu.create_light": {"text": "Işık Oluştur →"},
+    "web_workspace.menu.add_component": {"text": "Bileşen Ekle…"},
+    "web_workspace.menu.documentation": {"text": "Belgeler"},
+    "web_workspace.menu.editor_settings": {"text": "Editör Ayarları"},
+    "web_workspace.menu.character_setup": {"text": "Karakter Kurulumu…"},
+    "web_workspace.menu.editor_workspace": {"text": "Editör Çalışma Alanı"},
+    "web_workspace.menu.ui_canvas_editor": {"text": "UI Canvas Editörü"},
+    "web_workspace.menu.cinematic_sequencer": {"text": "Sinematik Sıralayıcı"},
+    "web_workspace.menu.animation_editor": {"text": "Animasyon Editörü"},
+    "web_workspace.menu.material_editor": {"text": "Materyal Editörü"},
+    "web_workspace.menu.particle_editor": {"text": "Parçacık Editörü"},
+    "web_workspace.menu.prefab_editor": {"text": "Prefab Editörü"},
+    "web_workspace.menu.shader_graph": {"text": "Shader Grafiği"},
+    "web_workspace.menu.asset_browser": {"text": "Varlık Tarayıcısı"},
+    "web_workspace.menu.plugin_manager": {"text": "Eklenti Yöneticisi"},
+    "web_workspace.menu.package_manager": {"text": "Paket Yöneticisi"},
+    "web_workspace.menu.primitives_panel": {"text": "Primitifler Paneli"},
+    "web_workspace.menu.decal_placement": {"text": "Dekal Yerleşimi"},
+    "web_workspace.menu.destruction_setup": {"text": "Yıkım Kurulumu"},
+    "web_workspace.menu.save_load_manager": {"text": "Kaydet/Yükle Yöneticisi"},
+    "web_workspace.menu.post_processing_stack": {"text": "Son İşleme Yığını"},
+    "web_workspace.menu.xr_setup": {"text": "XR Kurulumu"},
+    "web_workspace.menu.physics_debugger": {"text": "Fizik Hata Ayıklayıcı"},
+    "web_workspace.menu.network_debugger": {"text": "Ağ Hata Ayıklayıcı"},
+    "web_workspace.menu.navigation_bake": {"text": "Navigasyon Pişirme"},
+    "web_workspace.menu.lod_debugger": {"text": "LOD Hata Ayıklayıcı"},
+    "web_workspace.menu.virtual_texturing_debug": {"text": "Sanal Dokulama Hata Ayıklama"},
+    "web_workspace.menu.observability_dashboard": {"text": "Gözlemlenebilirlik Panosu"},
+    "web_workspace.menu.mcp_panel": {"text": "MCP Paneli"},
+    "web_workspace.menu.console_panel": {"text": "Konsol Paneli"},
+    "web_workspace.menu.audio_mixer": {"text": "Ses Mikseri"},
+    "web_workspace.menu.input_mapping_editor": {"text": "Girdi Eşleme Editörü"},
+    "web_workspace.menu.pcg_graph_editor": {"text": "PCG Graf Editörü"},
+    "web_workspace.menu.gameplay_behavior_editor": {"text": "Oynanış Davranış Editörü"},
+    "web_workspace.menu.build_release": {"text": "Derle ve Yayınla…"},
+    "web_workspace.menu.build_output": {"text": "Derleme Çıktısı"},
+    "web_workspace.menu.project_settings": {"text": "Proje Ayarları"},
+    "web_workspace.menu.render_settings": {"text": "Render Ayarları"},
+    "web_workspace.menu.platform_services": {"text": "Platform Servisleri"},
+    "web_workspace.menu.gameplay_integration": {"text": "Oynanış Entegrasyonu"},
+    "web_workspace.menu.clean_build": {"text": "Temiz Derleme"},
+    "web_workspace.menu.validate_project": {"text": "Projeyi Doğrula"},
+    "web_workspace.panel.hierarchy": {"text": "Hiyerarşi"},
+    "web_workspace.panel.inspector": {"text": "Denetçi"},
+    "web_workspace.panel.scene": {"text": "Sahne"},
+    "web_workspace.panel.content_browser": {"text": "İçerik Tarayıcısı"},
+    "web_workspace.inspector.transform": {"text": "Dönüşüm"},
+    "web_workspace.inspector.position": {"text": "Konum"},
+    "web_workspace.inspector.rotation": {"text": "Döndürme"},
+    "web_workspace.toolbar.scale": {"text": "Ölçek"},
+    "web_workspace.inspector.mesh_renderer": {"text": "Mesh Görüntüleyici"},
+    "web_workspace.type.mesh": {"text": "Mesh"},
+    "web_workspace.inspector.material": {"text": "Materyal"},
+    "web_workspace.inspector.shadows": {"text": "Gölgeler"},
+    "web_workspace.inspector.static_flags": {"text": "Statik Bayraklar"},
+    "web_workspace.inspector.batching": {"text": "Gruplama"},
+    "web_workspace.inspector.lightmap": {"text": "Işık Haritası"},
+    "web_workspace.inspector.static": {"text": "Statik"},
+    "web_workspace.toolbar.select": {"text": "Seç"},
+    "web_workspace.toolbar.move": {"text": "Taşı"},
+    "web_workspace.toolbar.rotate": {"text": "Döndür"},
+    "web_workspace.toolbar.play": {"text": "Oynat"},
+    "web_workspace.toolbar.game": {"text": "Oyun"},
+    "web_workspace.toolbar.local_space": {"text": "Yerel uzay"},
+    "web_workspace.toolbar.world_space": {"text": "Dünya uzayı"},
+    "web_workspace.viewport.perspective_shaded": {"text": "Perspektif · Gölgeli"},
+    "web_workspace.viewport.wire": {"text": "Tel Kafes"},
+    "web_workspace.dock.console": {"text": "Konsol"},
+    "web_workspace.dock.mcp": {"text": "MCP"},
+    "web_workspace.dock.performance": {"text": "Performans"},
+    "web_workspace.dock.physics": {"text": "Fizik"},
+    "web_workspace.dock.audio": {"text": "Ses"},
+    "web_workspace.dock.network": {"text": "Ağ"},
+    "web_workspace.dock.localization": {"text": "Yerelleştirme"},
+    "web_workspace.label.embedded": {"text": "GÖMÜLÜ"},
+    "web_workspace.label.bridge": {"text": "KÖPRÜ"},
+    "web_workspace.label.tools": {"text": "ARAÇLAR"},
+    "web_workspace.label.gpu": {"text": "GPU"},
+    "web_workspace.label.cpu": {"text": "CPU"},
+    "web_workspace.label.memory": {"text": "BELLEK"},
+    "web_workspace.label.solver": {"text": "ÇÖZÜCÜ"},
+    "web_workspace.label.layers": {"text": "KATMANLAR"},
+    "web_workspace.label.master": {"text": "ANA"},
+    "web_workspace.label.busses": {"text": "VERİ YOLLARI"},
+    "web_workspace.label.device": {"text": "AYGIT"},
+    "web_workspace.label.ping": {"text": "PING"},
+    "web_workspace.label.replication": {"text": "ÇOĞALTMA"},
+    "web_workspace.label.connection": {"text": "BAĞLANTI"},
+    "web_workspace.label.locale": {"text": "DİL"},
+    "web_workspace.label.strings": {"text": "DİZELER"},
+    "web_workspace.label.fonts": {"text": "YAZI TİPLERİ"},
+    "web_workspace.dock.project_assets": {"text": "Proje varlık paneli"},
+    "web_workspace.dock.console_preview": {"text": "Konsol önizlemesi"},
+    "web_workspace.dock.mcp_preview": {"text": "MCP önizlemesi"},
+    "web_workspace.dock.performance_preview": {"text": "Performans önizlemesi"},
+    "web_workspace.dock.physics_preview": {"text": "Fizik hata ayıklama önizlemesi"},
+    "web_workspace.dock.audio_preview": {"text": "Ses mikseri önizlemesi"},
+    "web_workspace.dock.network_preview": {"text": "Ağ hata ayıklama önizlemesi"},
+    "web_workspace.dock.localization_preview": {"text": "Yerelleştirme önizlemesi"},
+    "web_workspace.action.open_asset_browser": {"text": "Varlık Tarayıcısını Aç →"},
+    "web_workspace.action.open_console": {"text": "Konsol Panelini Aç →"},
+    "web_workspace.action.open_mcp": {"text": "MCP Panelini Aç →"},
+    "web_workspace.action.open_observability": {"text": "Gözlemlenebilirlik Panelini Aç →"},
+    "web_workspace.action.open_physics": {"text": "Fizik Hata Ayıklayıcıyı Aç →"},
+    "web_workspace.action.open_audio": {"text": "Ses Mikserini Aç →"},
+    "web_workspace.action.open_network": {"text": "Ağ Hata Ayıklayıcıyı Aç →"},
+    "web_workspace.action.open_localization": {"text": "Yerelleştirme Editörünü Aç →"},
+    "web_workspace.status.unsaved": {"text": "Kaydedilmemiş"},
+    "web_workspace.status.selection": {"text": "Seçim"},
+    "web_workspace.status.revision": {"text": "Revizyon"},
+    "web_workspace.status.navigation": {"text": "Gezişim"},
+    "web_workspace.status.idle": {"text": "boşta"},
+    "web_workspace.search_objects": {"text": "Nesnelerde ara…"},
+    "web_workspace.modal.panel": {"text": "Panel"},
+    "web_workspace.action.close": {"text": "Kapat"},
+    "web_workspace.action.toggle_bottom_dock": {"text": "Alt paneli aç/kapat"},
+    "web_workspace.type.camera": {"text": "Kamera"},
+    "web_workspace.type.light": {"text": "Işık"},
+    "welcome.project.compatibility.current": {"text": "Güncel"},
+    "welcome.project.compatibility.compatible": {"text": "Uyumlu"},
+    "welcome.project.compatibility.will_upgrade": {"text": "Yükseltilecek"},
+    "welcome.project.compatibility.recovery_required": {"text": "Kurtarma gerekiyor"},
+    "welcome.project.compatibility.newer_horo_required": {"text": "Daha yeni Horo gerekiyor"},
+    "welcome.project.compatibility.cannot_upgrade": {"text": "Yükseltilemiyor"},
+    "welcome.project.compatibility.version_unavailable": {"text": "Sürüm kullanılamıyor"},
+    "welcome.project.compatibility.refreshing": {"text": "Uyumluluk kontrol ediliyor…"},
+    "welcome.subtitle": {
+      "text": "Oyun Motoru"
+    },
+    "welcome.whats_new": {
+      "text": "YENİLİKLER"
+    }
+  }
+}

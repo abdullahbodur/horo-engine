@@ -195,7 +195,8 @@ produce a complete test descriptor snapshot before execution:
 
 ```json
 {
-  "formatVersion": 1,
+  "horoVersion": "0.0.1",
+  "persistentContract": "sha256:5ef87e96e24c0a3a5e44f4dee182dbd3bfb5402e08e07aaf3d64d4a3ff24ae6d",
   "profiles": {
     "fast": {
       "includeTags": ["game", "unit", "integration"],

@@ -82,6 +82,60 @@ Presentation layers may show inline squiggles, a Problems panel, status bar
 state, or toast notifications. Scripts and automation consume the typed
 diagnostic stream rather than scraping compiler text.
 
+### Development Build Session Contract
+
+The application-owned `GameplayBuildService` is the only Horo-owned writer of
+`.horo/local/build/gameplay-debug`. Editor, CLI, MCP, and Horo CI project-build
+commands must use this service and its advisory lock. Manual CMake invocations
+are outside that cooperative guarantee and must use a different build directory.
+
+One project/configuration reuses one incremental CMake tree. Native development
+builds configure and build without a shell:
+
+```text
+cmake -S <project> -B <project>/.horo/local/build/gameplay-debug
+      -DHoroEngineGameplay_DIR=<sdk-package>
+      -DCMAKE_BUILD_TYPE=Debug
+cmake --build <build-tree> --target HoroGameGameplay --config Debug --parallel
+```
+
+The generic process runner receives executable, arguments, working directory,
+and environment as separate typed values. Gameplay builds inherit the developer
+environment after removing ambient `CC`, `CXX`, CMake generator/toolset/platform,
+and toolchain-file selectors. Those selectors may only be supplied through the
+typed build environment. POSIX process groups and Windows Job Objects own the
+complete child tree. Configure has a five-minute timeout, build has a
+fifteen-minute timeout, and cancellation escalates from a two-second graceful
+window to forced tree termination while stdout and stderr remain continuously
+drained.
+
+Freshness is a SHA-256 identity over project CMake files, native sources and
+headers, declared extra inputs, SDK fingerprint, selected configuration,
+generator/toolset/platform, and compiler identity. Compiler binary SHA-256 is
+cached by canonical path, native file identity, size, and last-write time, so a
+Play preflight does not reread an unchanged compiler. The resolved CMake input
+manifest is part of the successful identity.
+
+The project lock is attempted without blocking. A contender enters
+`WaitingForExternalBuild`, exposes lock-owner metadata, remains cancellable, and
+waits at most twenty minutes. When the lock is released it rereads successful
+state: an identical external result is reused; otherwise it acquires the lock
+and builds the latest desired hash. Same-hash requests join the active session.
+Different hashes coalesce into one latest-wins successor and never write the
+incremental tree concurrently.
+
+`.horo/local/gameplay_build_state.json` and the published module manifest change
+only after configure, compile, post-build fingerprint recheck, artifact/manifest
+validation, and shadow-copy load validation all succeed. Publication is
+transactional with rollback of the prior manifest. Failure, cancellation,
+timeout, or supersession preserves the previous state, artifact, manifest, and
+loaded gameplay module. Diagnostics remain associated with one `OperationId`.
+
+Process lines are limited to 16 KiB. A build session publishes at most 8 MiB and
+8192 records while reserving diagnostic capacity; excess pipe data is still
+drained and represented by one suppression summary. The global Build Output
+store applies its independent bounded retention policy.
+
 ## Object-Attached Behaviors
 
 Horo supports object-attached gameplay behavior through explicit behavior
@@ -105,7 +159,9 @@ Behavior attachment is data-driven:
 
 ```cpp
 struct BehaviorComponent {
+    BehaviorInstanceId instanceId;
     BehaviorTypeId typeId;
+    uint32_t schemaVersion;
     bool enabled = true;
     SerializedObject fields;
 };
@@ -129,10 +185,19 @@ struct BehaviorDescriptor {
 };
 ```
 
-`BehaviorComponent` is the persistent scene data. It stores the stable behavior
-type ID, enabled state, and serialized authoring fields. It does not store a C++
+`BehaviorComponent` is the persistent scene data. It stores stable behavior type
+and attachment instance IDs, schema version, enabled state, and serialized
+authoring fields. `BehaviorInstanceId` remains stable across field edits,
+undo/redo, prefab overrides, and hot reload. Object duplication creates new
+attachment instance IDs. It does not store a C++
 class name, function pointer, vtable pointer, script file path as identity, or
 runtime address.
+
+An object may own multiple behavior attachments. Repeating the same behavior
+type is accepted only when its descriptor declares `allowMultiple`. Missing or
+incompatible descriptors do not erase the persistent payload: the Inspector
+shows a Missing Behavior section that may be removed explicitly or become active
+again when a compatible descriptor returns.
 
 Behavior descriptors reach the registry only through generated native annotation
 output, script asset discovery, or visual graph discovery. Project code does not
@@ -284,6 +349,8 @@ public:
     virtual void OnStart(BehaviorContext&) {}
     virtual void OnEnable(BehaviorContext&) {}
     virtual void OnDisable(BehaviorContext&) {}
+    virtual void OnInputAction(BehaviorContext&, const GameplayInputAction&) {}
+    virtual void OnEvent(BehaviorContext&, const GameplayEvent&) {}
     virtual void OnFixedUpdate(BehaviorContext&, FixedDeltaTime) {}
     virtual void OnPresentationUpdate(BehaviorContext&, FrameDeltaTime) {}
     virtual void OnDestroy(BehaviorContext&) {}
@@ -299,6 +366,10 @@ public:
   enabled and before its first eligible fixed gameplay update. If a behavior is
   created disabled, `OnStart` is delayed until the first enable.
 - `OnFixedUpdate` runs in deterministic fixed-step gameplay phases.
+- `OnInputAction` receives tick-assigned action transitions before the eligible
+  fixed update. Held values remain available through `BehaviorContext::input`.
+- `OnEvent` receives schema-validated scene events during the next tick's event
+  phase; publishing an event never invokes another behavior re-entrantly.
 - `OnPresentationUpdate` runs for interpolation, camera-facing presentation, or
   visual-only state and must not mutate simulation-authoritative state.
 - `OnDisable` and `OnDestroy` run before the runtime removes the behavior
@@ -313,6 +384,7 @@ descriptor validated
   -> OnCreate
   -> OnEnable if enabled
   -> OnStart before the first eligible fixed gameplay tick after first enable
+  -> OnInputAction transitions and queued OnEvent deliveries
   -> zero or more OnFixedUpdate / OnPresentationUpdate callbacks
   -> OnDisable when disabled or removed while active
   -> OnDestroy before instance storage is released
@@ -321,6 +393,13 @@ descriptor validated
 `OnStart` is not re-run after later disable/enable cycles. `OnDisable` runs only
 for an instance that is currently enabled. `OnDestroy` always runs once for every
 constructed instance, including instances that were never enabled.
+
+Each runtime scene owns a bounded `GameplayEventQueue`; gameplay tick traffic is
+not routed through the process-wide `EngineDataBus`. Events carry a stable
+`GameplayEventTypeId`, schema version, bounded typed fields, and an optional
+entity target. An event published during tick N is delivered during tick N+1 in
+stable behavior-type, entity, and attachment-instance order. Subscriptions and
+queued callbacks cannot outlive their scene, behavior instance, or native module.
 
 `OnCreate` is for local initialization that only requires descriptors,
 serialized fields, and resolved dependencies. `OnStart` is for initialization

@@ -1,0 +1,24 @@
+{
+  "documents": {
+    ".horo/project.json": {
+      "optional": [
+        "compatibilityProof"
+      ],
+      "required": [
+        "horoVersion",
+        "persistentContract",
+        "projectId",
+        "name",
+        "projectVersion",
+        "createdAt",
+        "settings"
+      ],
+      "settingsRequired": [
+        "assetCompression",
+        "renderBackend",
+        "textureCompression"
+      ]
+    }
+  },
+  "horoVersion": "0.1.0"
+}

@@ -1,8 +1,0 @@
-#pragma once
-#include <cstdint>
-#include <limits>
-
-namespace Horo {
-    using Entity = uint32_t;
-    constexpr Entity INVALID_ENTITY = std::numeric_limits<uint32_t>::max();
-} // namespace Horo

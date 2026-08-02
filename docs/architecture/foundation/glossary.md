@@ -231,6 +231,13 @@ project ID.
 An owned object with an explicit lifetime, such as a file mapping, asset lease,
 physics body, GPU texture, window, process, or subscription.
 
+### Renderer Component
+
+An independently installable, signed first-party product component implementing
+one stable renderer backend identity. Installation does not imply host support,
+probe success, availability, selection, or activation. Renderer components are
+product state rather than project `.horopkg` dependencies.
+
 ### Result
 
 A typed success or failure returned by a fallible operation. Callers branch on

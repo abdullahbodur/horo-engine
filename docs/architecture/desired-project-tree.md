@@ -22,6 +22,7 @@ terminal and avoid renderer-specific centering/layout behavior.
 
 ```text
 horo-engine/
+├── pyproject.toml
 ├── CMakeLists.txt
 ├── CMakePresets.json
 ├── README.md
@@ -32,7 +33,16 @@ horo-engine/
 │   ├── HoroDependencies.cmake
 │   ├── HoroPackaging.cmake
 │   ├── HoroSDK.cmake
+│   ├── GenerateProjectCompatibility.cmake
+│   ├── GenerateProjectMigrations.cmake
 │   └── modules/
+├── releases/
+│   ├── 0.0.1/
+│   ├── 0.1.0/
+│   └── <horo-semver>/
+│       ├── release.json
+│       ├── project-contract.json
+│       └── migration-recovery-contract.json
 ├── docs/
 │   ├── architecture/
 │   │   ├── README.md
@@ -45,6 +55,8 @@ horo-engine/
 │   │   │   ├── system-design.md
 │   │   │   ├── glossary.md
 │   │   │   ├── error-and-diagnostics.md
+│   │   │   ├── scene-math.md
+│   │   │   ├── project-versioning-and-migration.md
 │   │   │   ├── configuration-system.md
 │   │   │   ├── concurrency-and-jobs.md
 │   │   │   ├── engine-data-bus.md
@@ -54,6 +66,9 @@ horo-engine/
 │   │   │   ├── runtime-lifecycle.md
 │   │   │   ├── scene-runtime.md
 │   │   │   ├── rendering-architecture.md
+│   │   │   ├── render-backend-parity-contract.md
+│   │   │   ├── renderer-distribution-and-availability.md
+│   │   │   ├── renderer-module-package-manifest.md
 │   │   │   ├── material-and-shader-model.md
 │   │   │   ├── shader-graph-editor.html
 │   │   │   ├── advanced-rendering-architecture.md
@@ -110,6 +125,9 @@ horo-engine/
 │   │   │   ├── xr-setup.html
 │   │   │   └── material-editor.html
 │   │   ├── editor/
+│   │   │   ├── ProjectMigrationTransactionTests.cpp
+│   │   │   ├── ProjectOpenServiceTests.cpp
+│   │   │   └── RecentProjectInspectionServiceTests.cpp
 │   │   │   ├── gui-screen-host.md
 │   │   │   ├── ui-design-system.md
 │   │   │   ├── localization.md
@@ -176,6 +194,20 @@ horo-engine/
 │       │   ├── Paths.h
 │       │   ├── Time.h
 │       │   └── Handles.h
+│       ├── Math/
+│       │   └── SceneMath.h
+│       ├── Application/
+│       │   ├── ProjectVersion.h
+│       │   ├── ProjectCompatibility.h
+│       │   ├── ProjectMigration.h
+│       │   └── ProjectMigrationCatalog.h
+│       ├── Editor/
+│       │   ├── ProjectMutation.h
+│       │   ├── ProjectMigrationTransaction.h
+│       │   ├── ProjectOpenService.h
+│       │   ├── ProjectSession.h
+│       │   ├── RecentProject.h
+│       │   └── RecentProjectInspectionService.h
 │       ├── Runtime/
 │       │   ├── Runtime.h
 │       │   ├── RuntimeLifecycle.h
@@ -185,11 +217,23 @@ horo-engine/
 │       │   ├── Entity.h
 │       │   ├── Component.h
 │       │   ├── System.h
+│       │   ├── Scene/
+│       │   │   ├── RuntimeSceneDefinition.h
+│       │   │   ├── RuntimeScene.h
+│       │   │   ├── PrimitiveCatalog.h
+│       │   │   ├── PrimitiveMesh.h
+│       │   │   └── SceneComponents.h
 │       │   ├── AssetHandle.h
-│       │   ├── AssetProvider.h
 │       │   ├── Input.h
 │       │   ├── Physics.h
 │       │   ├── Renderer.h
+│       │   ├── Render/
+│       │   │   ├── Mesh.h
+│       │   │   ├── RenderScene.h
+│       │   │   ├── RenderBackend.h
+│       │   │   ├── RenderBackendRegistry.h
+│       │   │   ├── RenderFrontend.h
+│       │   │   └── NullBackendModule.h
 │       │   ├── Networking.h
 │       │   ├── GameUI.h
 │       │   ├── DebugConsole.h
@@ -213,10 +257,11 @@ horo-engine/
 │       │   ├── ScriptModuleDescriptor.h
 │       │   └── ImportedLibraryModule.h
 │       ├── Assets/
+│       │   ├── AssetId.h
+│       │   ├── AssetRegistry.h
+│       │   ├── AssetProvider.h
 │       │   ├── AssetImporter.h
 │       │   ├── AssetCooker.h
-│       │   ├── AssetRegistry.h
-│       │   ├── AssetId.h
 │       │   ├── PackageAssetReference.h
 │       │   └── RuntimeArchive.h
 │       ├── Packages/
@@ -252,12 +297,28 @@ horo-engine/
 │           ├── Signing.h
 │           └── DistributionManifest.h
 ├── src/
+│   ├── application/
+│   │   ├── project/
+│   │   │   ├── ProjectVersion.cpp
+│   │   │   ├── ProjectCompatibility.cpp
+│   │   │   ├── ProjectErrors.h
+│   │   │   └── ProjectErrors.cpp
+│   │   ├── project_migration/
+│   │   │   ├── ProjectMigrationRegistry.cpp
+│   │   │   └── ProjectMigrationExecution.cpp
+│   │   └── project_migrations/
+│   │       ├── definitions/
+│   │       │   ├── 0.1.0/
+│   │       │   └── <target-semver>/
+│   │       └── checkpoints/
+│   │           └── <target-semver>/<source-semver>/
 │   ├── foundation/
 │   │   ├── error/
 │   │   ├── diagnostics/
 │   │   ├── config/
 │   │   ├── jobs/
 │   │   ├── data_bus/
+│   │   ├── math/
 │   │   ├── memory/
 │   │   ├── platform/
 │   │   │   ├── common/
@@ -271,26 +332,45 @@ horo-engine/
 │   │   │   ├── frame_scheduler/
 │   │   │   └── timer_queue/
 │   │   ├── scene/
+│   │   │   ├── RuntimeSceneDefinition.cpp
+│   │   │   ├── RuntimeScene.cpp
+│   │   │   ├── RuntimeSceneErrors.h
+│   │   │   ├── RuntimeSceneErrors.cpp
 │   │   │   ├── entity/
 │   │   │   ├── component/
+│   │   │   ├── primitive/
+│   │   │   │   ├── PrimitiveCatalog.cpp
+│   │   │   │   └── PrimitiveMesh.cpp
 │   │   │   ├── system/
 │   │   │   ├── serialization/
 │   │   │   └── transitions/
 │   │   ├── assets/
+│   │   │   ├── AssetErrors.h
+│   │   │   ├── AssetErrors.cpp
 │   │   │   ├── importer/
 │   │   │   ├── cooker/
 │   │   │   ├── registry/
+│   │   │   │   ├── AssetId.cpp
+│   │   │   │   └── AssetRegistry.cpp
 │   │   │   ├── cache/
 │   │   │   ├── runtime_provider/
+│   │   │   │   ├── AssetProviderRead.h
+│   │   │   │   └── AssetProvider.cpp
 │   │   │   ├── hot_reload/
 │   │   │   └── archive/
 │   │   ├── renderer/
 │   │   │   ├── frontend/
 │   │   │   ├── render_graph/
 │   │   │   ├── rhi/
-│   │   │   ├── null/
-│   │   │   ├── opengl/
-│   │   │   ├── vulkan/
+│   │   │   ├── backend_registry/
+│   │   │   ├── module_abi/
+│   │   │   ├── module_host/
+│   │   │   ├── modules/
+│   │   │   │   ├── null/
+│   │   │   │   ├── opengl/
+│   │   │   │   ├── vulkan/
+│   │   │   │   ├── metal/
+│   │   │   │   └── d3d12/
 │   │   │   └── shaders/
 │   │   ├── physics/
 │   │   │   ├── broadphase/
@@ -311,6 +391,10 @@ horo-engine/
 │   │   │   └── null_backend/
 │   │   ├── game_ui/
 │   │   ├── input/
+│   │   │   ├── Input.cpp
+│   │   │   └── sdl/
+│   │   │       ├── SdlInputBackend.h
+│   │   │       └── SdlInputBackend.cpp
 │   │   ├── networking/
 │   │   ├── debug/
 │   │   └── platform_services/
@@ -412,6 +496,10 @@ horo-engine/
 │   │   ├── source_editor/
 │   │   ├── graph_editor/
 │   │   ├── project_model/
+│   │   │   ├── ProjectMutation.cpp
+│   │   │   ├── ProjectMigrationTransaction.cpp
+│   │   │   ├── ProjectOpenService.cpp
+│   │   │   └── RecentProjectInspectionService.cpp
 │   │   └── mcp_bridge/
 │   ├── interfaces/
 │   │   ├── cli/
@@ -489,8 +577,12 @@ horo-engine/
 │       ├── asset-importer-basic/
 │       └── mcp-tool-basic/
 ├── tests/
+│   ├── CMakeLists.txt
 │   ├── unit/
 │   │   ├── foundation/
+│   │   ├── application/
+│   │   │   ├── ProjectCompatibilityTests.cpp
+│   │   │   └── ProjectMigrationTests.cpp
 │   │   ├── runtime/
 │   │   │   ├── frame/
 │   │   │   ├── scene/
@@ -534,26 +626,49 @@ horo-engine/
 │   │   └── mcp/
 │   ├── fixtures/
 │   │   ├── projects/
+│   │   │   └── horo_0_0_1_compression/
 │   │   ├── packages/
 │   │   ├── release/
 │   │   └── observability/
+│   ├── gui/
+│   │   ├── EditorUiAutomationHarnessTests.cpp
+│   │   └── FullEditorUiAutomationScenarios.cpp
+│   ├── helpers/
+│   │   └── editor_ui/
+│   │       ├── EditorUiTestHarness.h
+│   │       ├── EditorUiTestHarness.cpp
+│   │       ├── EditorUiTestSurface.h
+│   │       ├── EditorUiTestSurface.cpp
+│   │       ├── FullEditorUiTestActions.h
+│   │       ├── FullEditorUiTestActions.cpp
+│   │       ├── FullEditorUiTestHost.h
+│   │       ├── FullEditorUiTestHost.cpp
+│   │       ├── FullEditorUiTestSetups.h
+│   │       ├── FullEditorUiTestSetups.cpp
+│   │       └── InteractiveOpenGlEditorUiTestSurface.cpp
 │   ├── mocks/
-│   ├── ui_scenarios/
 │   └── python/
+│       ├── conftest.py
+│       ├── test_project_compatibility_generator.py
+│       └── test_project_migration_generator.py
 ├── scripts/
+│   ├── requirements.txt
 │   ├── dev.py
 │   ├── ci.py
 │   ├── package.py
 │   ├── release.py
 │   ├── dependency-state.py
 │   ├── validate-docs.py
-│   └── generate-schemas.py
+│   ├── generate-schemas.py
+│   ├── generate_project_compatibility.py
+│   └── generate_project_migration_catalog.py
 ├── tools/
 │   ├── package-index-server/
 │   ├── schema-validator/
 │   ├── asset-cooker/
 │   ├── release-verifier/
 │   ├── observability-viewer/
+│   ├── project-migration-catalog/
 │   └── mcp-devtools/
 ├── vendor/
 └── deprecated/

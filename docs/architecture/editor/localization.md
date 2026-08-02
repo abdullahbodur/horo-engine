@@ -26,6 +26,58 @@ project-authored UI use project-owned namespaces.
 - Layout and components must tolerate expansion, right-to-left text, and font
   fallback.
 
+## Editor Adoption And Dynamic Text Extraction
+
+The editor migration replaces user-facing hardcoded sentences with semantic
+message keys. Branding and proper names such as `Horo`, plugin IDs, asset names,
+file paths, command names, and other technical identifiers remain explicit data;
+they are not translated merely because they are string literals.
+
+Localization is configuration-driven at runtime, but source extraction is a
+build/editor-tool concern. The extractor must not perform blind text replacement
+or infer translation keys from English prose at render time. It produces a
+deterministic report containing:
+
+- source location and owning UI component;
+- candidate literal and its classification;
+- proposed namespace/key based on the component contract;
+- whether the literal is user-facing, technical, branding, or intentionally
+  excluded;
+- catalog coverage and argument metadata status.
+
+The first extractor implementation may use a conservative source scanner for
+known UI call sites, but the production path should use compiler-backed source
+locations (for example, a Clang AST tool) once the call-site inventory is stable.
+Every automatic candidate requires an explicit classification or allowlist entry.
+The extractor is therefore a migration aid and coverage gate, not a runtime
+dependency and not an excuse to translate arbitrary identifiers.
+
+The editor runtime owns one `LocalizationService` and one immutable active
+snapshot. GUI components request `LocalizedText` by key and resolve it during
+presentation. The selected editor locale is an editor setting stored as a
+normalized BCP 47 tag (for example, `en-US` or `tr-TR`). A locale change is a
+settings transaction: the service validates and prepares the candidate snapshot,
+the settings authority commits the user preference, and the GUI activates the
+new snapshot at a frame boundary. A failed catalog load must leave both the
+previous active locale and the committed settings unchanged.
+
+The initial editor language control is intentionally a finite list of packaged
+locale tags. Arbitrary locale entry, remote catalog download, project-owned
+locale policy, and translation editing are follow-up capabilities. The language
+setting belongs to the General settings surface, while catalog diagnostics and
+missing-key reports belong to Diagnostics. The selected language label itself is
+resolved through the source fallback catalog so the control remains usable when
+switching languages.
+
+### Initial migration boundary
+
+The first migration covers editor-owned visible labels, buttons, tabs, tooltips,
+placeholders, modal status text, and user-facing validation/error text. It does
+not rewrite logs, stable error codes, JSON keys, protocol fields, asset paths,
+plugin IDs, shader names, or persisted identifiers. Each migrated component must
+use one catalog namespace and must not concatenate translated sentence
+fragments.
+
 ## Message Identity
 
 Message identity is the pair `(namespace, localKey)`. Its canonical serialized

@@ -1,30 +1,91 @@
 cmake_minimum_required(VERSION 3.25)
 
-set(HORO_ENGINE_VERSION "0.0.1")
+set(HORO_ENGINE_VERSION "0.1.0")
 
 project(HoroEngine VERSION ${HORO_ENGINE_VERSION} LANGUAGES CXX C)
+
+set(HORO_GAMEPLAY_SDK_FINGERPRINT
+    "horo-${HORO_ENGINE_VERSION}-gameplay-sdk1-${CMAKE_CXX_COMPILER_ID}-${CMAKE_CXX_COMPILER_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
+)
 
 # New project layout is being introduced incrementally. Legacy source is parked
 # under deprecated/ as migration reference and is intentionally not part of target
 # discovery.
 
 include(GNUInstallDirs)
+include(CTest)
+include(CMakePackageConfigHelpers)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 option(HORO_BUILD_EDITOR_GUI "Build the graphical HoroEditor bootstrap" ON)
+option(HORO_BUILD_RENDER_OPENGL "Build the OpenGL renderer backend" ${HORO_BUILD_EDITOR_GUI})
+set(_HORO_BUILD_RENDER_METAL_DEFAULT OFF)
+if(APPLE AND HORO_BUILD_EDITOR_GUI)
+    set(_HORO_BUILD_RENDER_METAL_DEFAULT ON)
+endif()
+option(HORO_BUILD_RENDER_METAL "Build the Metal renderer backend" ${_HORO_BUILD_RENDER_METAL_DEFAULT})
+option(HORO_ENABLE_GPU_SMOKE_TESTS "Register tests that require a display server and hardware graphics context" OFF)
+option(HORO_ENABLE_IMGUI_UI_TESTS "Build headless Dear ImGui UI automation tests" OFF)
+option(HORO_BUILD_EXAMPLES "Build SDK and extension examples" ${BUILD_TESTING})
+
+if(HORO_ENABLE_IMGUI_UI_TESTS AND NOT BUILD_TESTING)
+    message(FATAL_ERROR "HORO_ENABLE_IMGUI_UI_TESTS requires BUILD_TESTING=ON")
+endif()
+
+if(HORO_ENABLE_IMGUI_UI_TESTS AND NOT HORO_BUILD_EDITOR_GUI)
+    message(FATAL_ERROR "HORO_ENABLE_IMGUI_UI_TESTS requires HORO_BUILD_EDITOR_GUI=ON")
+endif()
+
+if(HORO_BUILD_RENDER_METAL AND NOT APPLE)
+    message(FATAL_ERROR "HORO_BUILD_RENDER_METAL is supported only on Apple platforms")
+endif()
+
+if(HORO_BUILD_EDITOR_GUI AND NOT HORO_BUILD_RENDER_OPENGL AND NOT HORO_BUILD_RENDER_METAL)
+    message(FATAL_ERROR "The editor GUI composition requires at least one interactive renderer")
+endif()
 
 include(Dependencies)
+include(GenerateBuildInfo)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+include(HoroGameplayModule)
+include(GenerateProjectMigrations)
+include(GenerateProjectCompatibility)
+
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/CMakeLists.txt")
     add_subdirectory(src)
 endif()
 
+set(HORO_GAMEPLAY_SDK_PACKAGE_DIR "${CMAKE_BINARY_DIR}/sdk/gameplay" CACHE INTERNAL
+    "Build-tree CMake package used by project gameplay modules")
+file(MAKE_DIRECTORY "${HORO_GAMEPLAY_SDK_PACKAGE_DIR}")
+set_target_properties(HoroFoundation PROPERTIES EXPORT_NAME Foundation POSITION_INDEPENDENT_CODE ON)
+set_target_properties(HoroGameplayApi PROPERTIES EXPORT_NAME GameplayApi POSITION_INDEPENDENT_CODE ON)
+export(TARGETS HoroFoundation HoroGameplayApi
+       NAMESPACE HoroEngine::
+       FILE "${HORO_GAMEPLAY_SDK_PACKAGE_DIR}/HoroEngineGameplayTargets.cmake")
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/HoroEngineGameplayConfig.cmake.in"
+    "${HORO_GAMEPLAY_SDK_PACKAGE_DIR}/HoroEngineGameplayConfig.cmake"
+    INSTALL_DESTINATION "."
+    NO_SET_AND_CHECK_MACRO
+    NO_CHECK_REQUIRED_COMPONENTS_MACRO)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/HoroGameplayModule.cmake"
+               "${HORO_GAMEPLAY_SDK_PACKAGE_DIR}/HoroGameplayModule.cmake" COPYONLY)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/WriteGameplayModuleManifest.cmake"
+               "${HORO_GAMEPLAY_SDK_PACKAGE_DIR}/WriteGameplayModuleManifest.cmake" COPYONLY)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_gameplay_behavior_bundle.py"
+               "${HORO_GAMEPLAY_SDK_PACKAGE_DIR}/generate_gameplay_behavior_bundle.py" COPYONLY)
+
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/apps/CMakeLists.txt")
     add_subdirectory(apps)
 endif()
 
+if(HORO_BUILD_EXAMPLES AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/CMakeLists.txt")
+    add_subdirectory(examples)
+endif()
+
 if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
-    enable_testing()
     add_subdirectory(tests)
 endif()

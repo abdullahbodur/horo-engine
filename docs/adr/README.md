@@ -10,9 +10,13 @@ to the replacement.
 
 ## Index
 
-| ID | Title | Status | Date |
-|---|---|---|---|
-| [001](001-native-ci-builds.md) | Host-Agnostic Local Release Pipeline | accepted | 2026-05-30 |
+| ID                                    | Title                                | Status   | Date       |
+|---------------------------------------|--------------------------------------|----------|------------|
+| [001](001-native-ci-builds.md)        | Host-Agnostic Local Release Pipeline | accepted | 2026-05-30 |
+| [002](002-credential-handling.md)     | Credential Handling                  | accepted | 2026-05-25 |
+| [003](003-artifact-identity.md)       | Artifact Identity                    | accepted | 2026-05-25 |
+| [004](004-cli-core-gui-boundary.md)   | CLI, Core, and GUI Boundary          | accepted | 2026-05-25 |
+| [005](005-submodule-compatibility.md) | Submodule Compatibility Constraints  | accepted | 2026-05-25 |
 
 ## Conventions
 
