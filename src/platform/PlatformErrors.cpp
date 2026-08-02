@@ -23,4 +23,24 @@ namespace Horo::PlatformErrors
         .retryable = false,
         .userActionable = true,
     };
+
+    const ErrorCodeDescriptor ProcessLaunchFailed{
+        .domain = Domain,
+        .code = ErrorCode{"process_launch_failed"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The external process could not be started.",
+        .remediationHint = "Verify that the executable and toolchain are installed and accessible.",
+        .retryable = true,
+        .userActionable = true,
+    };
+
+    const ErrorCodeDescriptor ProcessIoFailed{
+        .domain = Domain,
+        .code = ErrorCode{"process_io_failed"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "External process output could not be consumed.",
+        .remediationHint = "Retry the operation and inspect the host platform diagnostics.",
+        .retryable = true,
+        .userActionable = false,
+    };
 } // namespace Horo::PlatformErrors

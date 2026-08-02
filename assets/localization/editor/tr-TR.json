@@ -790,6 +790,17 @@
     "workspace.panel.hierarchy": {"text": "Hiyerarşi"},
     "workspace.panel.inspector": {"text": "Denetçi"},
     "workspace.panel.viewport": {"text": "Görünüm"},
+    "workspace.panel.game": {"text": "Oyun"},
+    "workspace.game.idle": {"text": "Oyunu başlatmak için Oynat'a basın."},
+    "workspace.play.pause": {"text": "Duraklat"},
+    "workspace.play.resume": {"text": "Sürdür"},
+    "workspace.play.step": {"text": "Adım"},
+    "workspace.play.stop": {"text": "Durdur"},
+    "workspace.inspector.behavior_enabled": {"text": "Etkin"},
+    "workspace.inspector.behavior_missing": {"text": "Eksik Behavior"},
+    "workspace.content_browser.action.create_lua_behavior": {"text": "Lua Behavior Oluştur"},
+    "workspace.content_browser.action.create_native_behavior": {"text": "Native C++ Behavior Oluştur"},
+    "workspace.content_browser.operation.create_behavior_failed": {"text": "Behavior kaynağı oluşturulamadı."},
     "workspace.panel.content_browser": {"text": "İçerik Tarayıcısı"},
     "workspace.input_mapping.title": {"text": "Girdi Eşleme"},
     "workspace.input_mapping.binding": {"text": "Bağ"},
@@ -949,6 +960,7 @@
     "workspace.global_dock.console.clear": {
       "text": "Temizle"
     },
+    "workspace.global_dock.console.levels": {"text": "Seviyeler"},
     "workspace.global_dock.console.empty": {"text": "Etkin filtrelerle eşleşen log yok."},
     "workspace.global_dock.build_output.search": {
       "text": "Filtrele..."
@@ -971,6 +983,11 @@
     "workspace.global_dock.build_output.status.cached": {
       "text": "Önbellekte"
     },
+    "workspace.global_dock.build_output.row_status.info": {"text": "Bilgi"},
+    "workspace.global_dock.build_output.row_status.succeeded": {"text": "Tamam"},
+    "workspace.global_dock.build_output.row_status.failed": {"text": "Başarısız"},
+    "workspace.global_dock.build_output.row_status.cached": {"text": "Önbellekte"},
+    "workspace.global_dock.build_output.row_status.cancelled": {"text": "İptal edildi"},
     "workspace.global_dock.build_output.column.time": {
       "text": "Zaman"
     },
@@ -986,15 +1003,39 @@
     "workspace.global_dock.build_output.empty": {
       "text": "Henüz build çıktısı yok. Sonuçları görmek için bir cook işlemi başlatın."
     },
+    "workspace.global_dock.build_output.dropped": {"text": "Eski build çıktıları kaldırıldı:"},
+    "workspace.global_dock.build_output.source.invalid": {"text": "Tanı kaynağı kullanılamıyor veya proje dışında."},
+    "workspace.global_dock.build_output.source.unavailable": {"text": "Kaynak gezintisi bu platformda kullanılamıyor."},
     "workspace.global_dock.operations.search": {
       "text": "Filtrele..."
     },
     "workspace.global_dock.operations.clear": {
       "text": "Temizle"
     },
+    "workspace.global_dock.operations.columns": {"text": "Sütunlar"},
+    "workspace.global_dock.operations.column.status": {"text": "Durum"},
+    "workspace.global_dock.operations.column.operation": {"text": "İşlem"},
+    "workspace.global_dock.operations.column.phase": {"text": "Aşama"},
+    "workspace.global_dock.operations.column.progress": {"text": "İlerleme"},
+    "workspace.global_dock.operations.column.message": {"text": "Mesaj"},
+    "workspace.global_dock.operations.column.action": {"text": "Eylem"},
+    "workspace.global_dock.operations.cancel": {"text": "İptal"},
+    "workspace.global_dock.operations.state.queued": {"text": "Sırada"},
+    "workspace.global_dock.operations.state.running": {"text": "Çalışıyor"},
+    "workspace.global_dock.operations.state.waiting": {"text": "Bekliyor"},
+    "workspace.global_dock.operations.state.cancelling": {"text": "İptal ediliyor"},
+    "workspace.global_dock.operations.state.succeeded": {"text": "Tamamlandı"},
+    "workspace.global_dock.operations.state.failed": {"text": "Başarısız"},
+    "workspace.global_dock.operations.state.cancelled": {"text": "İptal edildi"},
+    "workspace.global_dock.operations.kind.build": {"text": "Build"},
+    "workspace.global_dock.operations.kind.cook": {"text": "Assetleri cook et"},
+    "workspace.global_dock.operations.kind.import": {"text": "Asset içe aktar"},
+    "workspace.global_dock.operations.kind.index": {"text": "Assetleri indeksle"},
+    "workspace.global_dock.operations.kind.validation": {"text": "Projeyi doğrula"},
     "workspace.global_dock.operations.empty": {
       "text": "Henüz işlem yok. Sonuçları görmek için bir cook veya import başlatın."
     },
+    "workspace.global_dock.operations.dropped": {"text": "Eski tamamlanmış işlemler kaldırıldı:"},
     "workspace.global_dock.mcp.bridge": {"text": "horo.mcp.bridge@0.4.0 — etkin"},
     "workspace.global_dock.mcp.tools": {"text": "scene.query, scene.select, scene.move, asset.list, build.trigger"},
     "workspace.global_dock.mcp.awaiting": {"text": "Araç çağrısı bekleniyor…"},
@@ -1035,6 +1076,7 @@
     "workspace.content_browser.action.refresh": {"text": "Yenile"},
     "workspace.content_browser.action.reimport": {"text": "Yeniden İçe Aktar"},
     "workspace.content_browser.action.reveal": {"text": "Dosya Yöneticisinde Göster"},
+    "workspace.content_browser.action.open_external_ide": {"text": "Harici IDE'de Aç"},
     "workspace.content_browser.action.copy_path": {"text": "Mutlak Yolu Kopyala"},
     "workspace.content_browser.action.cancel": {"text": "İptal"},
     "workspace.content_browser.action.close": {"text": "Kapat"},

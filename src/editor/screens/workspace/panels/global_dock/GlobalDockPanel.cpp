@@ -62,7 +62,7 @@ namespace Horo::Editor {
                 consolePane_.Draw(contentOrigin, contentWidth, context);
                 break;
             case GlobalDockTab::BuildOutput:
-                buildOutputPane_.Draw(contentOrigin, contentWidth, context);
+                buildOutputPane_.Draw(contentOrigin, contentWidth, command, context);
                 break;
             case GlobalDockTab::Operations:
                 operationsPane_.Draw(contentOrigin, contentWidth, context);
@@ -95,8 +95,8 @@ namespace Horo::Editor {
     void GlobalDockPanel::OnAttach(PanelContext &context) {
         assetsPane_.Attach(context.guiRenderer);
         consolePane_.Attach(context.logQuery);
-        buildOutputPane_.Attach(context.logQuery);
-        operationsPane_.Attach(context.logQuery);
+        buildOutputPane_.Attach(context.buildOutputQuery);
+        operationsPane_.Attach(context.operationQuery, context.operationControl);
     }
 
     /** @copydoc GlobalDockPanel::OnDetach */

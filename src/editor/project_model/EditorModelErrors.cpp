@@ -26,6 +26,15 @@ namespace Horo::Editor {
             .retryable = false,
             .userActionable = true,
         };
+        const ErrorCodeDescriptor InvalidBehavior{
+            .domain = SceneDocumentDomain,
+            .code = ErrorCode{"scene_document.invalid_behavior"},
+            .defaultSeverity = ErrorSeverity::Error,
+            .summary = "Scene behavior attachment is invalid.",
+            .remediationHint = "Use stable behavior identities and bounded schema-versioned fields.",
+            .retryable = false,
+            .userActionable = true,
+        };
         const ErrorCodeDescriptor InvalidCamera{
             .domain = SceneDocumentDomain,
             .code = ErrorCode{"scene_document.invalid_camera"},

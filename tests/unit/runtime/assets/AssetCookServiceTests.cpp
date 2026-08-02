@@ -125,6 +125,8 @@ TEST_CASE("AssetCookService empty registry publishes empty generation", "[native
     REQUIRE((catSnapshot.HasValue()));
 
     AssetCookService service(jobs, catSnapshot.Value());
+    BuildOutputStore buildOutput{8};
+    OperationStore operations{4, 4};
 
     AssetCookRequest request{
         .sourceRoot = project.dir.path,
@@ -132,6 +134,8 @@ TEST_CASE("AssetCookService empty registry publishes empty generation", "[native
         .cookedRoot = cookedDir.path,
         .registry = emptySnapshot,
         .target = Target("headless-null"),
+        .buildOutputStore = &buildOutput,
+        .operationStore = &operations,
     };
 
     CancellationToken cancellation;
@@ -142,6 +146,13 @@ TEST_CASE("AssetCookService empty registry publishes empty generation", "[native
     REQUIRE((report.totalAssets == 0));
     REQUIRE((report.cookedAssets == 0));
     REQUIRE((report.cacheHits == 0));
+    const auto buildSnapshot = buildOutput.SnapshotIfChanged(0);
+    REQUIRE(buildSnapshot.has_value());
+    REQUIRE((buildSnapshot->records.back().status == BuildOutputStatus::Succeeded));
+    const auto operationSnapshot = operations.SnapshotIfChanged(0);
+    REQUIRE(operationSnapshot.has_value());
+    REQUIRE((operationSnapshot->operations.size() == 1));
+    REQUIRE((operationSnapshot->operations.front().state == OperationState::Succeeded));
 }
 
 TEST_CASE("AssetCookService honours cancellation before work", "[native]")

@@ -6,6 +6,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <span>
 #include <string>
@@ -70,7 +71,9 @@ namespace {
 
     class TestWorkspaceController final {
     public:
-        explicit TestWorkspaceController(std::string projectRoot = "test-project") : controller_(std::move(projectRoot), runtimeScene_) {
+        explicit TestWorkspaceController(std::string projectRoot = "test-project", DiagnosticSourceNavigator diagnosticNavigator = {})
+            : controller_(std::move(projectRoot), runtimeScene_, {}, nullptr, nullptr, nullptr, nullptr, nullptr,
+                          std::move(diagnosticNavigator)) {
             REQUIRE((runtimeScene_.Startup(cancellation_.Token()).HasValue()));
             PumpLifecycleCommit();
         }
@@ -989,6 +992,61 @@ namespace {
         std::filesystem::remove_all(outsideDirectory, cleanupError);
     }
 
+    TEST_CASE("Diagnostic source navigation rejects files outside the project", "[unit][editor][diagnostics]") {
+        const std::filesystem::path base =
+            std::filesystem::temp_directory_path() /
+            ("horo-diagnostic-source-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        const std::filesystem::path projectRoot = base / "project";
+        const std::filesystem::path outsideSource = base / "outside.cpp";
+        std::filesystem::create_directories(projectRoot);
+        {
+            std::ofstream source(outsideSource);
+            source << "int main() {}\n";
+        }
+
+        TestWorkspaceController controller{projectRoot.string()};
+        EditorWorkspaceViewCommandData command;
+        command.command = EditorWorkspaceViewCommand::OpenDiagnosticSource;
+        command.diagnosticSource = DiagnosticSourceRequest{.absolutePath = outsideSource.string(), .line = 1};
+        controller.ProcessCommand(command);
+        REQUIRE((controller.ViewModel().contentBrowserOperationError == "workspace.global_dock.build_output.source.invalid"));
+
+        std::error_code cleanupError;
+        std::filesystem::remove_all(base, cleanupError);
+    }
+
+    TEST_CASE("Diagnostic source navigation preserves a validated line and column", "[unit][editor][diagnostics]") {
+        const std::filesystem::path projectRoot =
+            std::filesystem::temp_directory_path() /
+            ("horo-diagnostic-location-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        const std::filesystem::path sourcePath = projectRoot / "assets/shaders/material.glsl";
+        std::filesystem::create_directories(sourcePath.parent_path());
+        {
+            std::ofstream source(sourcePath);
+            source << "void main() {}\n";
+        }
+
+        std::optional<DiagnosticSourceRequest> navigated;
+        TestWorkspaceController controller{projectRoot.string(), [&navigated](const DiagnosticSourceRequest &source) {
+            navigated = source;
+            return true;
+        }};
+        EditorWorkspaceViewCommandData command;
+        command.command = EditorWorkspaceViewCommand::OpenDiagnosticSource;
+        command.diagnosticSource = DiagnosticSourceRequest{.absolutePath = sourcePath.string(), .line = 27, .column = 9};
+        controller.ProcessCommand(command);
+
+        REQUIRE(navigated.has_value());
+        REQUIRE((std::filesystem::weakly_canonical(std::filesystem::path{navigated->absolutePath}) ==
+                 std::filesystem::weakly_canonical(sourcePath)));
+        REQUIRE((navigated->line == 27));
+        REQUIRE((navigated->column == 9));
+        REQUIRE(controller.ViewModel().contentBrowserOperationError.empty());
+
+        std::error_code cleanupError;
+        std::filesystem::remove_all(projectRoot, cleanupError);
+    }
+
     TEST_CASE("Content Browser Rename And Delete Roll Back Degraded Registry Publication", "[unit][editor]") {
         const std::filesystem::path projectRoot =
             std::filesystem::temp_directory_path() /
@@ -1433,7 +1491,7 @@ namespace {
         createRoot.primitivePayload = Runtime::PrimitiveId{"primitive.object.empty"};
         controller.ProcessCommand(createRoot);
         const SceneObject root = controller.ViewModel().objects.back();
-        REQUIRE((root.kind == SceneObjectKind::Empty));
+        REQUIRE((root.kind == SceneObjectKind::GameObject));
         REQUIRE((!root.parent.has_value()));
         REQUIRE((controller.ViewModel().primarySelection == root.id));
 
@@ -1743,6 +1801,55 @@ namespace {
         REQUIRE((restored->components.light == original));
     }
 
+    TEST_CASE("Inspector Optional Components Add Update And Remove Through Typed History", "[unit][editor]") {
+        TestWorkspaceController controller;
+        const SceneObjectId object = controller.ViewModel().objects.front().id;
+        const DocumentRevision initialRevision = controller.ViewModel().documentRevision;
+
+        EditorWorkspaceViewCommandData addTrigger;
+        addTrigger.command = EditorWorkspaceViewCommand::AddComponentToObject;
+        addTrigger.objectPayload = object;
+        addTrigger.componentTypePayload = ComponentType::TriggerVolume;
+        controller.ProcessCommand(addTrigger);
+        REQUIRE((controller.ViewModel().objects.front().components.triggerVolume.has_value()));
+
+        Runtime::TriggerVolumeComponent trigger = *controller.ViewModel().objects.front().components.triggerVolume;
+        trigger.shape = Runtime::ColliderShapeType::Sphere;
+        EditorWorkspaceViewCommandData updateTrigger;
+        updateTrigger.command = EditorWorkspaceViewCommand::UpdateTriggerVolumeComponent;
+        updateTrigger.objectPayload = object;
+        updateTrigger.triggerVolumePayload = trigger;
+        controller.ProcessCommand(updateTrigger);
+        REQUIRE((controller.ViewModel().objects.front().components.triggerVolume == trigger));
+
+        EditorWorkspaceViewCommandData addAudio;
+        addAudio.command = EditorWorkspaceViewCommand::AddComponentToObject;
+        addAudio.objectPayload = object;
+        addAudio.componentTypePayload = ComponentType::AudioSource;
+        controller.ProcessCommand(addAudio);
+        Runtime::AudioSourceComponent audio = *controller.ViewModel().objects.front().components.audioSource;
+        audio.gain = 1.5F;
+        EditorWorkspaceViewCommandData updateAudio;
+        updateAudio.command = EditorWorkspaceViewCommand::UpdateAudioSourceComponent;
+        updateAudio.objectPayload = object;
+        updateAudio.audioSourcePayload = audio;
+        controller.ProcessCommand(updateAudio);
+        REQUIRE((controller.ViewModel().objects.front().components.audioSource == audio));
+
+        EditorWorkspaceViewCommandData removeTrigger;
+        removeTrigger.command = EditorWorkspaceViewCommand::RemoveComponentFromObject;
+        removeTrigger.objectPayload = object;
+        removeTrigger.componentTypePayload = ComponentType::TriggerVolume;
+        controller.ProcessCommand(removeTrigger);
+        REQUIRE((!controller.ViewModel().objects.front().components.triggerVolume.has_value()));
+        REQUIRE((controller.ViewModel().documentRevision.value == initialRevision.value + 5));
+
+        EditorWorkspaceViewCommandData undo;
+        undo.command = EditorWorkspaceViewCommand::UndoScene;
+        controller.ProcessCommand(undo);
+        REQUIRE((controller.ViewModel().objects.front().components.triggerVolume == trigger));
+    }
+
     TEST_CASE("Inspector Light Preview Updates Viewport Without Mutating Document", "[unit][editor]") {
         TestWorkspaceController controller;
 
@@ -1827,6 +1934,48 @@ namespace {
         REQUIRE((viewportEvents.size() == 2));
         static_cast<void>(documentSubscription);
         static_cast<void>(viewportSubscription);
+    }
+
+    TEST_CASE("Idle Frames Preserve Inspector Transform And Light Previews", "[unit][editor]") {
+        TestWorkspaceController controller;
+        const SceneObject mesh = controller.ViewModel().objects.front();
+        EditorWorkspaceViewCommandData selectMesh;
+        selectMesh.command = EditorWorkspaceViewCommand::SelectObject;
+        selectMesh.objectPayload = mesh.id;
+        controller.ProcessCommand(selectMesh);
+        Math::Transform previewTransform = mesh.localTransform;
+        previewTransform.translation = {3.0F, 2.0F, 1.0F};
+
+        EditorWorkspaceViewCommandData transformPreview;
+        transformPreview.command = EditorWorkspaceViewCommand::PreviewObjectTransform;
+        transformPreview.transformUpdates = std::vector{SceneObjectTransformUpdate{mesh.id, previewTransform}};
+        controller.ProcessCommand(transformPreview);
+        controller.ProcessCommand({});
+
+        const auto meshInstance = std::ranges::find(controller.ViewportScene().instanceObjects, mesh.id);
+        REQUIRE((meshInstance != controller.ViewportScene().instanceObjects.end()));
+        const std::size_t meshIndex =
+            static_cast<std::size_t>(std::distance(controller.ViewportScene().instanceObjects.begin(), meshInstance));
+        REQUIRE((Math::TransformPoint(controller.ViewportScene().instances[meshIndex].localToWorld, {}) == previewTransform.translation));
+        REQUIRE((controller.ViewModel().primarySelectionPreviewWorldTransform.has_value()));
+
+        EditorWorkspaceViewCommandData createLight;
+        createLight.command = EditorWorkspaceViewCommand::CreatePrimitive;
+        createLight.primitivePayload = Runtime::PrimitiveId{"primitive.object.light_point"};
+        controller.ProcessCommand(createLight);
+        const SceneObject light = controller.ViewModel().objects.back();
+        Runtime::LightComponent previewLight = *light.components.light;
+        previewLight.intensity = 9.0F;
+
+        EditorWorkspaceViewCommandData lightPreview;
+        lightPreview.command = EditorWorkspaceViewCommand::PreviewLightComponent;
+        lightPreview.objectPayload = light.id;
+        lightPreview.lightPayload = previewLight;
+        controller.ProcessCommand(lightPreview);
+        controller.ProcessCommand({});
+
+        REQUIRE((controller.ViewportScene().lights.back().intensity == 9.0F));
+        REQUIRE((controller.ViewModel().viewportLights.back().light.intensity == 9.0F));
     }
 
     TEST_CASE("Selection Change Cancels A Transient Inspector Transform Preview", "[unit][editor]") {

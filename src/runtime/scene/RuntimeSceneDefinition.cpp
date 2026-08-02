@@ -64,8 +64,17 @@ namespace
             light.outerConeRadians > Math::Pi)
             return false;
     }
-    return !components.audioSource ||
-           (std::isfinite(components.audioSource->gain) && components.audioSource->gain >= 0);
+    if (components.audioSource && (!std::isfinite(components.audioSource->gain) || components.audioSource->gain < 0))
+        return false;
+    std::vector<Gameplay::BehaviorInstanceId> behaviorIds;
+    behaviorIds.reserve(components.behaviors.size());
+    for (const Gameplay::BehaviorComponent &behavior : components.behaviors) {
+        if (Gameplay::ValidateBehaviorComponent(behavior).HasError() ||
+            std::ranges::find(behaviorIds, behavior.instanceId) != behaviorIds.end())
+            return false;
+        behaviorIds.push_back(behavior.instanceId);
+    }
+    return true;
 }
 } // namespace
 

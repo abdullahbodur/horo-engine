@@ -765,7 +765,7 @@ mutating the document.
 
 ### Bottom Dock
 
-Visible as the Workspace panel with four tabs:
+Visible as the Workspace panel with the following tabs:
 
 - **Assets tab**: thumbnail browser for project assets.
   - Owner: `AssetsTab`
@@ -784,6 +784,26 @@ Visible as the Workspace panel with four tabs:
     on `EditorDataBus`. The tab queries the store for the required range.
   - Clearing or filtering the tab changes presentation state; it does not delete
     persistent log files or change logger configuration implicitly.
+
+- **Build Output tab**: bounded typed build and cook diagnostics.
+  - Owner: `GlobalDockBuildOutputPane`
+  - Queries: `IBuildOutputQuery`; it never parses log categories for status.
+  - Optional absolute source locations carry line and column metadata. The
+    workspace validates that a target is a regular non-symlink beneath the
+    active project before dispatching platform navigation. The validated request
+    preserves line and column through the platform capability; a host without a
+    configured source-editor adapter may fall back to revealing the file.
+  - Empty projections and bounded-retention drops are presented explicitly; a
+    user must not mistake a filtered or truncated snapshot for producer silence.
+
+- **Operations tab**: user-facing import, cook, build, and validation progress.
+  - Owner: `GlobalDockOperationsPane`
+  - Queries: `IOperationQuery`
+  - Executes: cooperative cancellation through `IOperationControl`
+  - The panel owns only search, column visibility, and presentation filters;
+    `OperationStore` owns bounded lifecycle snapshots and terminal retention.
+  - Empty projections and dropped terminal-history counts are visible presentation
+    states, not inferred from log text.
 
 - **MCP tab**: MCP command history and activity.
   - Owner: `McpTab`

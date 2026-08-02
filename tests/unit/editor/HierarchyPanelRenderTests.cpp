@@ -1,26 +1,20 @@
-#include <catch2/catch_test_macros.hpp>
-
-#include "editor/screens/workspace/panels/hierarchy/HierarchyPanel.h"
-
 #include "Horo/Editor/EditorDataBus.h"
 #include "Horo/Editor/EditorSettingsService.h"
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/Localization/ILocalizationService.h"
 #include "Horo/Foundation/DataBus.h"
+#include "editor/screens/workspace/panels/hierarchy/HierarchyPanel.h"
 
+#include <catch2/catch_test_macros.hpp>
 #include <imgui.h>
-
 #include <string>
 #include <string_view>
 #include <unordered_map>
 
-namespace
-{
-    class TestLocalization final : public Horo::Editor::ILocalizationService
-    {
+namespace {
+    class TestLocalization final : public Horo::Editor::ILocalizationService {
     public:
-        [[nodiscard]] const std::string& Get(const std::string_view, const std::string_view localKey) const override
-        {
+        [[nodiscard]] const std::string &Get(const std::string_view, const std::string_view localKey) const override {
             const auto [entry, inserted] = values_.try_emplace(std::string(localKey), localKey);
             static_cast<void>(inserted);
             return entry->second;
@@ -29,16 +23,15 @@ namespace
     private:
         mutable std::unordered_map<std::string, std::string> values_;
     };
-} // namespace
+}  // namespace
 
-TEST_CASE("Hierarchy Panel Render Tests", "[unit][editor]")
-{
+TEST_CASE("Hierarchy Panel Render Tests", "[unit][editor]") {
     using namespace Horo;
     using namespace Horo::Editor;
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO();
+    ImGuiIO &io = ImGui::GetIO();
     io.DisplaySize = ImVec2(640.0F, 480.0F);
     io.DeltaTime = 1.0F / 60.0F;
     io.Fonts->AddFontDefault();
@@ -47,17 +40,15 @@ TEST_CASE("Hierarchy Panel Render Tests", "[unit][editor]")
     EngineDataBus engineEvents;
     EditorDataBus editorEvents;
     TestLocalization localization;
-    ImFont* defaultFont = io.Fonts->Fonts.front();
+    ImFont *defaultFont = io.Fonts->Fonts.front();
     const Theme::Fonts fonts{.sans = defaultFont, .sansCompact = defaultFont, .sansEmphasis = defaultFont};
     const ThemeContext theme{.fonts = fonts};
     const EditorSettingsSnapshot settings{};
-    const EditorGuiContext context{
-        .engineEvents = engineEvents,
-        .editorEvents = editorEvents,
-        .localization = localization,
-        .theme = theme,
-        .settings = settings
-    };
+    const EditorGuiContext context{.engineEvents = engineEvents,
+                                   .editorEvents = editorEvents,
+                                   .localization = localization,
+                                   .theme = theme,
+                                   .settings = settings};
     EditorWorkspaceViewModel viewModel;
     viewModel.documentRevision = DocumentRevision{1};
     viewModel.objects = {

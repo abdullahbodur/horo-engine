@@ -645,6 +645,20 @@ TEST_CASE("Lifecycle And Steady State", "[unit][runtime][scene]")
     const SceneRuntimeId preparedId = service.ActiveScene()->RuntimeId();
     const EntityRef oldEntity = *service.ActiveScene()->Find(SceneObjectId{1});
 
+    auto cloned = service.CloneActive(SceneRuntimeId{999});
+    Check(cloned.HasValue());
+    std::unique_ptr<RuntimeScene> playScene = std::move(cloned).Value();
+    Check(playScene->View().RuntimeId() == SceneRuntimeId{999});
+    const EntityRef clonedEntity = *playScene->View().Find(SceneObjectId{1});
+    Math::Transform moved = *playScene->View().Get(clonedEntity).Value().localTransform;
+    moved.translation.x = 42.0F;
+    SceneCommandBuffer moveClone;
+    moveClone.SetLocalTransform(clonedEntity, moved);
+    Check(playScene->Commit(std::move(moveClone)).HasValue());
+    Check(playScene->View().Get(clonedEntity).Value().localTransform->translation.x == 42.0F);
+    Check(service.ActiveScene()->Get(oldEntity).Value().localTransform->translation.x == 0.0F);
+    Check(service.CloneActive(preparedId).HasError());
+
     Check(service.QueuePreparation(Definition(2)).HasValue());
     SceneCommandBuffer rejectedDuringTransition;
     [[maybe_unused]] const DeferredEntity rejected = rejectedDuringTransition.Create(RuntimeEntityCreateInfo{});

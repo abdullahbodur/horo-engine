@@ -10,6 +10,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 
 namespace {
     class TestLocalization final : public Horo::Editor::ILocalizationService {
@@ -18,6 +19,10 @@ namespace {
             const auto [entry, inserted] = values_.try_emplace(std::string(localKey), localKey);
             static_cast<void>(inserted);
             return entry->second;
+        }
+
+        void Set(const std::string_view key, std::string value) {
+            values_.insert_or_assign(std::string(key), std::move(value));
         }
 
     private:
@@ -66,14 +71,16 @@ TEST_CASE("Inspector Panel Render Tests", "[unit][editor]") {
     viewModel.selectedObjects = {SceneObjectId{7}};
     EditorWorkspaceViewCommandData command;
     InspectorPanel panel;
+    ImVec2 windowSize{280.0F, 440.0F};
+    ImVec2 panelSize{260.0F, 400.0F};
 
     const auto drawFrame = [&] {
         ImGui::NewFrame();
         ImGui::SetNextWindowPos(ImVec2(0.0F, 0.0F));
-        ImGui::SetNextWindowSize(ImVec2(280.0F, 440.0F));
+        ImGui::SetNextWindowSize(windowSize);
         ImGui::Begin("InspectorRenderTest", nullptr,
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove);
-        panel.DrawPanel(ImGui::GetCursorScreenPos(), ImVec2(260.0F, 400.0F), viewModel, command, context);
+        panel.DrawPanel(ImGui::GetCursorScreenPos(), panelSize, viewModel, command, context);
         ImGui::End();
         ImGui::Render();
     };
@@ -141,6 +148,34 @@ TEST_CASE("Inspector Panel Render Tests", "[unit][editor]") {
     command = {};
     drawFrame();
     REQUIRE((command.command == EditorWorkspaceViewCommand::None));
+
+    localization.Set("workspace.panel.inspector", "Nesne Özellikleri ve Yapılandırma");
+    localization.Set("workspace.inspector.camera_projection", "Son Derece Uzun Kamera İzdüşüm Yöntemi");
+    localization.Set("workspace.inspector.camera_orthographic_height", "Ortografik Görüntüleme Yüksekliği");
+    SceneObject camera{
+        .id = SceneObjectId{9},
+        .name = "Çok Uzun Yerelleştirilmiş Kamera Nesnesi",
+        .kind = SceneObjectKind::Camera,
+    };
+    camera.components.camera = Runtime::CameraComponent{.projection = Runtime::CameraProjection::Orthographic};
+    viewModel.objects = {camera};
+    viewModel.primarySelection = camera.id;
+    viewModel.selectedObjects = {camera.id};
+    ++viewModel.documentRevision.value;
+    windowSize = {180.0F, 440.0F};
+    panelSize = {160.0F, 400.0F};
+    io.DisplaySize = {180.0F, 480.0F};
+    command = {};
+    drawFrame();
+    REQUIRE((command.command == EditorWorkspaceViewCommand::None));
+    const ImDrawData *drawData = ImGui::GetDrawData();
+    REQUIRE((drawData != nullptr));
+    for (int listIndex = 0; listIndex < drawData->CmdListsCount; ++listIndex) {
+        for (const ImDrawCmd &drawCommand : drawData->CmdLists[listIndex]->CmdBuffer) {
+            REQUIRE((drawCommand.ClipRect.x >= 0.0F));
+            REQUIRE((drawCommand.ClipRect.z <= io.DisplaySize.x));
+        }
+    }
 
     ImGui::DestroyContext();
 }

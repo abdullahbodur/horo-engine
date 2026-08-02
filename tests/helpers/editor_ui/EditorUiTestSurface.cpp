@@ -13,6 +13,7 @@ namespace Horo::Tests {
             }
 
             void RequestGrid(const Editor::EditorViewportGridOptions) noexcept override {}
+
             void RequestLightVisualizer(Editor::EditorViewportLightVisualizerOptions) noexcept override {}
 
             [[nodiscard]] Editor::EditorViewportExtent RequestedExtent() const noexcept override {

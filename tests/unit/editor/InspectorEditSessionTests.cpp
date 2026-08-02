@@ -230,3 +230,77 @@ TEST_CASE("Inspector multi-selection preview cancels on selection change", "[uni
     REQUIRE((session.Draft().object == second.id));
     REQUIRE((!session.HasTransformPreview()));
 }
+
+TEST_CASE("Inspector multi-selection refreshes when only the primary object changes", "[unit][editor]") {
+    using namespace Horo::Editor;
+    InspectorEditSession session;
+    SceneObject first = MakeCameraObject(SceneObjectId{61});
+    first.localTransform.translation.x = 1.0F;
+    SceneObject second = MakeCameraObject(SceneObjectId{62});
+    second.localTransform.translation.x = 4.0F;
+    const std::array objects{first, second};
+    const std::array selected{first.id, second.id};
+
+    static_cast<void>(session.BeginSelection(objects, selected, first.id, DocumentRevision{1}));
+    REQUIRE((session.Draft().object == first.id));
+    REQUIRE((session.Draft().position[0] == 1.0F));
+
+    session.Draft().position[0] = 3.0F;
+    static_cast<void>(session.ApplyTransformEdit(
+        InspectorTransformEdit{
+            .changed = true,
+            .changedAxes = {.position = {true, false, false}},
+        },
+        true));
+    const EditorWorkspaceViewCommandData primaryChanged = session.BeginSelection(objects, selected, second.id, DocumentRevision{1});
+
+    REQUIRE((primaryChanged.command == EditorWorkspaceViewCommand::CancelObjectTransformPreview));
+    REQUIRE((session.Draft().object == second.id));
+    REQUIRE((session.Draft().position[0] == 4.0F));
+    REQUIRE((!session.HasTransformPreview()));
+}
+
+TEST_CASE("Inspector no-op transform commit does not leak edited axes into the next interaction", "[unit][editor]") {
+    using namespace Horo::Editor;
+    InspectorEditSession session;
+    const SceneObject object = MakeCameraObject(SceneObjectId{71});
+    static_cast<void>(session.BeginObject(object, DocumentRevision{1}));
+
+    session.Draft().position[0] = 2.0F;
+    static_cast<void>(session.ApplyTransformEdit(
+        InspectorTransformEdit{
+            .changed = true,
+            .changedAxes = {.position = {true, false, false}},
+        },
+        true));
+    session.Draft().position[0] = object.localTransform.translation.x;
+    const EditorWorkspaceViewCommandData noOpCommit = session.ApplyTransformEdit(InspectorTransformEdit{.committed = true}, true);
+    REQUIRE((noOpCommit.command == EditorWorkspaceViewCommand::CommitObjectTransform));
+
+    REQUIRE((session.ApplyTransformEdit(InspectorTransformEdit{.committed = true}, true).command == EditorWorkspaceViewCommand::None));
+}
+
+TEST_CASE("Inspector edit session validates typed TriggerVolume and AudioSource edits", "[unit][editor]") {
+    using namespace Horo::Editor;
+    SceneObject object = MakeCameraObject(SceneObjectId{81});
+    object.components.triggerVolume = Horo::Runtime::TriggerVolumeComponent{};
+    object.components.audioSource = Horo::Runtime::AudioSourceComponent{};
+    InspectorEditSession session;
+    static_cast<void>(session.BeginObject(object, DocumentRevision{1}));
+
+    session.Draft().triggerVolume->shape = Horo::Runtime::ColliderShapeType::Sphere;
+    const EditorWorkspaceViewCommandData trigger =
+        session.ApplyTriggerVolumeEdit(InspectorTriggerVolumeEdit{.committed = true}, object, true);
+    REQUIRE((trigger.command == EditorWorkspaceViewCommand::UpdateTriggerVolumeComponent));
+    REQUIRE((trigger.triggerVolumePayload->shape == Horo::Runtime::ColliderShapeType::Sphere));
+
+    session.Draft().audioSource->gain = 2.0F;
+    const EditorWorkspaceViewCommandData audio = session.ApplyAudioSourceEdit(InspectorAudioSourceEdit{.committed = true}, object, true);
+    REQUIRE((audio.command == EditorWorkspaceViewCommand::UpdateAudioSourceComponent));
+    REQUIRE((audio.audioSourcePayload->gain == 2.0F));
+
+    session.Draft().audioSource->gain = -1.0F;
+    REQUIRE((!session.IsAudioSourceValid()));
+    REQUIRE((session.ApplyAudioSourceEdit(InspectorAudioSourceEdit{.committed = true}, object, true).command ==
+             EditorWorkspaceViewCommand::None));
+}

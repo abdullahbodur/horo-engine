@@ -30,4 +30,11 @@ namespace Horo::Editor {
      * @return True when the platform accepted the reveal request.
      */
     [[nodiscard]] bool RevealInNativeFileManager(const std::filesystem::path &absolutePath) noexcept;
+
+    /**
+     * @brief Opens one absolute source file in the operating system's configured external editor.
+     * @param absolutePath Existing absolute source path.
+     * @return True when the platform accepted the open request.
+     */
+    [[nodiscard]] bool OpenInExternalEditor(const std::filesystem::path &absolutePath) noexcept;
 }  // namespace Horo::Editor

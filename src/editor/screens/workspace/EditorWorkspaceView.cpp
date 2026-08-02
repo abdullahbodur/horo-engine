@@ -747,7 +747,9 @@ namespace Horo::Editor {
 
         // The remaining strip is the document activity/file-tab rail. Play is the
         // left-most member of the right-aligned controls.
-        constexpr float playW = 70.0f;
+        const bool playIdle = viewModel.playState == EditorPlayState::Idle || viewModel.playState == EditorPlayState::Failed;
+        const bool playPaused = viewModel.playState == EditorPlayState::Paused;
+        const float playW = playIdle ? 70.0F : (playPaused ? 202.0F : 136.0F);
         constexpr float utilW = 28.0f * 2;
         const float utilX = pos.x + size.x - utilW - 10.0F;
         const float playX = utilX - playW - 8.0F;
@@ -800,25 +802,38 @@ namespace Horo::Editor {
             ImGui::PopClipRect();
         }
 
-        // Play Button
+        // Play-mode controls use one shared primitive size so their geometry remains consistent.
         curX = playX;
-
         const float py = centerY - 13.0f;
-        ImGui::SetCursorScreenPos(ImVec2(curX, py));
-        if (ImGui::InvisibleButton("##Play", ImVec2(playW, 26.0f))) {
-            // TODO: Handle play clicked
+        const auto drawPlayButton = [&](const std::string &visibleLabel, const char *stableId, const bool enabled) {
+            const std::string label = visibleLabel + "###" + stableId;
+            ImGui::SetCursorScreenPos(ImVec2(curX, py));
+            const bool clicked = Ui::Button({.label = label.c_str(),
+                                             .size = {64.0F, 26.0F},
+                                             .variant = Ui::ButtonVariant::Secondary,
+                                             .enabled = enabled,
+                                             .font = m_context.theme.fonts.sans,
+                                             .componentSize = Ui::ComponentSize::Small});
+            curX += 66.0F;
+            return clicked;
+        };
+        const bool transition = viewModel.playState == EditorPlayState::Starting || viewModel.playState == EditorPlayState::Stopping;
+        if (playIdle) {
+            if (drawPlayButton(m_context.localization.Get("editor", "web_workspace.toolbar.play"), "workspace_play_play", !transition))
+                outCommand.command = EditorWorkspaceViewCommand::StartPlay;
+        } else if (playPaused) {
+            if (drawPlayButton(m_context.localization.Get("editor", "workspace.play.resume"), "workspace_play_resume", true))
+                outCommand.command = EditorWorkspaceViewCommand::ResumePlay;
+            if (drawPlayButton(m_context.localization.Get("editor", "workspace.play.step"), "workspace_play_step", true))
+                outCommand.command = EditorWorkspaceViewCommand::StepPlay;
+            if (drawPlayButton(m_context.localization.Get("editor", "workspace.play.stop"), "workspace_play_stop", true))
+                outCommand.command = EditorWorkspaceViewCommand::StopPlay;
+        } else {
+            if (drawPlayButton(m_context.localization.Get("editor", "workspace.play.pause"), "workspace_play_pause", !transition))
+                outCommand.command = EditorWorkspaceViewCommand::PausePlay;
+            if (drawPlayButton(m_context.localization.Get("editor", "workspace.play.stop"), "workspace_play_stop", !transition))
+                outCommand.command = EditorWorkspaceViewCommand::StopPlay;
         }
-        const bool playHovered = ImGui::IsItemHovered();
-        dl->AddRectFilled(ImVec2(curX, py), ImVec2(curX + playW, py + 26.0f), Theme::U32(Theme::Bg0()), 4.0f);
-        dl->AddRect(ImVec2(curX, py), ImVec2(curX + playW, py + 26.0f), Theme::U32(Theme::Border()), 4.0f);
-        if (playHovered)
-            dl->AddRectFilled(ImVec2(curX + 2, py + 2), ImVec2(curX + playW - 2, py + 24.0f), Theme::U32(Theme::Hover()), 3.0f);
-
-        const ImU32 playCol = Theme::U32(Theme::Ok());
-        const float tox = curX + 10.0f;
-        const float toy = py + 8.0f;
-        dl->AddTriangleFilled(ImVec2(tox, toy), ImVec2(tox + 8.5f, toy + 4.5f), ImVec2(tox, toy + 9.0f), playCol);
-        dl->AddText(m_context.theme.fonts.sans, m_context.theme.fonts.sans->FontSize, ImVec2(curX + 24.0f, py + 5.0f), playCol, "Play");
 
         // Utility group (Right aligned)
         curX = utilX;

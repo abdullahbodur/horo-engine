@@ -191,6 +191,9 @@ class GuiScreen
     /** @brief Updates screen-local simulation and time-dependent logic. */
     virtual void OnUpdate(float dt) = 0;
 
+    /** @brief Advances one fixed simulation tick for screens that own an isolated play session. */
+    virtual void OnFixedUpdate(double fixedDeltaSeconds) { static_cast<void>(fixedDeltaSeconds); }
+
     /** @brief Renders the screen UI inside the shell-provided application content area. */
     virtual void Draw(const GuiContentRegion &contentRegion) = 0;
 
@@ -317,6 +320,9 @@ class GuiScreenHost
 
     /** @brief Updates the active screen and checks pending leave dialogs. */
     void OnUpdate(float dt);
+
+    /** @brief Routes one host fixed tick to the active screen. */
+    void OnFixedUpdate(double fixedDeltaSeconds);
 
     /** @brief Renders the active screen and any active leave-resolution modals. */
     void Draw();

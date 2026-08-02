@@ -121,6 +121,7 @@ namespace Horo::Runtime
     {
         std::vector<DeferredEntityResolution> created;
         std::size_t destroyed{};
+        std::size_t transformsUpdated{};
     };
 
     /** @brief Owner-thread command buffer for structural changes at the lifecycle safe point. */
@@ -133,6 +134,8 @@ namespace Horo::Runtime
         /** @brief Queues destruction of an existing generation-checked entity. @param entity Reference validated when the
          * batch commits. */
         void Destroy(EntityRef entity);
+        /** @brief Queues a local-transform replacement validated when the batch commits. */
+        void SetLocalTransform(EntityRef entity, Math::Transform localTransform);
         /** @brief Reports whether no structural commands are queued. @return True when the buffer has no commands. */
         [[nodiscard]] bool Empty() const noexcept;
 
@@ -150,7 +153,13 @@ namespace Horo::Runtime
             EntityRef entity;
         };
 
-        using Command = std::variant<CreateCommand, DestroyCommand>;
+        struct SetLocalTransformCommand
+        {
+            EntityRef entity;
+            Math::Transform localTransform;
+        };
+
+        using Command = std::variant<CreateCommand, DestroyCommand, SetLocalTransformCommand>;
         std::vector<Command> commands_;
         std::uint64_t nextDeferred_{1};
     };
@@ -301,6 +310,12 @@ namespace Horo::Runtime
         [[nodiscard]] Result<void> QueueStructuralCommands(SceneCommandBuffer commands);
         /** @brief Returns the current immutable active scene view. */
         [[nodiscard]] std::optional<RuntimeSceneView> ActiveScene() const noexcept;
+        /**
+         * @brief Clones the active prepared scene into a separate runtime domain.
+         * @param runtimeId Unique identity for the clone; must not match the active domain.
+         * @return Independent topology/component state sharing only immutable cooked asset payloads.
+         */
+        [[nodiscard]] Result<std::unique_ptr<RuntimeScene>> CloneActive(SceneRuntimeId runtimeId) const;
         /** @brief Returns and clears the newest structural commit result. */
         [[nodiscard]] std::optional<StructuralCommitResult> TakeStructuralCommitResult();
         /** @brief Returns and clears the newest recoverable operation error. */

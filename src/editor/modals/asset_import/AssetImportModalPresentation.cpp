@@ -318,7 +318,8 @@ namespace Horo::Editor {
             },
             fonts);
         if (modalShell.CloseRequested())
-            frameResult = ModalFrameResult::RequestClose(ModalCloseReason::Cancelled);
+            frameResult =
+                ModalFrameResult::RequestClose(modal.IsImportComplete() ? ModalCloseReason::Completed : ModalCloseReason::Cancelled);
 
         ImDrawList *dl = ImGui::GetWindowDrawList();
         std::size_t doneCount = 0, errorCount = 0, warningCount = 0;
@@ -1039,10 +1040,11 @@ namespace Horo::Editor {
             }
 
             ImGui::SameLine(0.0f, presetActionsGap);
+            const bool importComplete = modal.IsImportComplete();
             ButtonProps cancelProps{
-                .label = "Cancel",
+                .label = importComplete ? "Done" : "Cancel",
                 .size = {cancelW, actionH},
-                .variant = ButtonVariant::Secondary,
+                .variant = importComplete ? ButtonVariant::Primary : ButtonVariant::Secondary,
                 .enabled = true,
             };
             const bool canImport =
@@ -1055,7 +1057,7 @@ namespace Horo::Editor {
             };
 
             if (Button(cancelProps))
-                frameResult = ModalFrameResult::RequestClose(ModalCloseReason::Cancelled);
+                frameResult = ModalFrameResult::RequestClose(importComplete ? ModalCloseReason::Completed : ModalCloseReason::Cancelled);
             ImGui::SameLine(0.0f, gap);
             if (Button(importProps)) {
                 CancellationToken cancellation;

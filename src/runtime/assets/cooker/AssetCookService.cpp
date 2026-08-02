@@ -28,6 +28,62 @@
 namespace Horo::Assets {
     namespace {
 
+        class CookOperationScope {
+        public:
+            CookOperationScope(OperationStore *store, BuildOutputStore *output, const CancellationToken &cancellation,
+                               const std::optional<OperationId> id)
+                : store_(store), output_(output), cancellation_(&cancellation), id_(id) {}
+
+            ~CookOperationScope() {
+                if (completed_)
+                    return;
+                const bool cancelled = cancellation_->IsCancellationRequested();
+                if (store_ != nullptr && id_.has_value())
+                    static_cast<void>(
+                        store_->Update(*id_, OperationUpdate{.state = cancelled ? OperationState::Cancelled : OperationState::Failed,
+                                                             .phase = "cook",
+                                                             .message = cancelled ? "Cook cancelled" : "Cook failed"}));
+                if (output_ != nullptr)
+                    output_->Append(BuildOutputRecord{.timestampUtc = std::chrono::system_clock::now(),
+                                                      .status = cancelled ? BuildOutputStatus::Cancelled : BuildOutputStatus::Failed,
+                                                      .phase = "cook",
+                                                      .message = cancelled ? "Cook cancelled" : "Cook failed"});
+            }
+
+            CookOperationScope(const CookOperationScope &) = delete;
+            CookOperationScope &operator=(const CookOperationScope &) = delete;
+
+            void Update(std::string phase, std::string message, const float progress) {
+                if (store_ != nullptr && id_.has_value())
+                    static_cast<void>(store_->Update(*id_, OperationUpdate{.state = OperationState::Running,
+                                                                           .phase = std::move(phase),
+                                                                           .message = std::move(message),
+                                                                           .progress = progress}));
+            }
+
+            void Succeed(std::string message) {
+                const std::string outputMessage = message;
+                if (store_ != nullptr && id_.has_value())
+                    static_cast<void>(store_->Update(*id_, OperationUpdate{.state = OperationState::Succeeded,
+                                                                           .phase = "complete",
+                                                                           .message = std::move(message),
+                                                                           .progress = 1.0F}));
+                if (output_ != nullptr)
+                    output_->Append(BuildOutputRecord{.timestampUtc = std::chrono::system_clock::now(),
+                                                      .status = BuildOutputStatus::Succeeded,
+                                                      .phase = "complete",
+                                                      .message = outputMessage});
+                completed_ = true;
+            }
+
+        private:
+            OperationStore *store_{};
+            BuildOutputStore *output_{};
+            const CancellationToken *cancellation_{};
+            std::optional<OperationId> id_;
+            bool completed_{false};
+        };
+
         /**
          * @brief Reads source bytes from a project-relative path under sourceRoot.
          */
@@ -74,22 +130,26 @@ namespace Horo::Assets {
         // Pin the registry snapshot's records in deterministic order
         auto records = request.registry.Records();
 
+        std::optional<OperationId> operationId;
+        if (request.operationStore != nullptr) {
+            operationId = request.operationStore->Begin(OperationDescriptor{.kind = OperationKind::Cook,
+                                                                            .title = "Cook assets",
+                                                                            .phase = "prepare",
+                                                                            .message = std::to_string(records.size()) + " assets",
+                                                                            .progress = 0.0F,
+                                                                            .cancellable = static_cast<bool>(request.requestCancel),
+                                                                            .requestCancel = request.requestCancel});
+        }
+        CookOperationScope operation{request.operationStore, request.buildOutputStore, cancellation, operationId};
+
         // Emit cook-started record
         if (request.buildOutputStore != nullptr) {
             const auto now = std::chrono::system_clock::now();
-            request.buildOutputStore->Append(Log::StructuredLogRecord{
+            request.buildOutputStore->Append(BuildOutputRecord{
                 .timestampUtc = now,
-                .level = Log::Level::Info,
-                .category = "Build.Cook.Start",
-                .message = std::to_string(records.size()),
-                .context = "BEGIN",
-            });
-            request.buildOutputStore->Append(Log::StructuredLogRecord{
-                .timestampUtc = now,
-                .level = Log::Level::Info,
-                .category = "Op.Cook",
-                .message = std::to_string(records.size()) + " assets",
-                .context = "RUNNING",
+                .status = BuildOutputStatus::Info,
+                .phase = "prepare",
+                .message = "Cooking " + std::to_string(records.size()) + " assets",
             });
         }
 
@@ -119,6 +179,7 @@ namespace Horo::Assets {
                 std::filesystem::rename(tempPath, currentPath);
             }
 
+            operation.Succeed("Cooked 0 assets");
             return Result<AssetCookReport>::Success(AssetCookReport{
                 .generation =
                     AssetCookGeneration{
@@ -156,6 +217,7 @@ namespace Horo::Assets {
 
         std::vector<CookSlot> slots;
         slots.reserve(records.size());
+        operation.Update("prepare", "Reading asset sources", 0.1F);
 
         for (const auto &record : records) {
             // Find cooker strategy
@@ -217,18 +279,21 @@ namespace Horo::Assets {
         if (request.buildOutputStore != nullptr) {
             for (const auto &slot : slots) {
                 if (slot.cacheHit) {
-                    request.buildOutputStore->Append(Log::StructuredLogRecord{
+                    request.buildOutputStore->Append(BuildOutputRecord{
                         .timestampUtc = std::chrono::system_clock::now(),
-                        .level = Log::Level::Info,
-                        .category = "Build.Cook",
+                        .status = BuildOutputStatus::Cached,
+                        .phase = "cook",
                         .message = slot.record.sourcePath.String(),
-                        .context = "CACHED",
+                        .source =
+                            DiagnosticSourceLocation{
+                                .absolutePath = (request.sourceRoot / slot.record.sourcePath.String()).lexically_normal().string()},
                     });
                 }
             }
         }
 
         // Submit misses through TaskGroup
+        operation.Update("cook", "Cooking asset payloads", 0.35F);
         {
             TaskGroup group(jobs_, TaskGroupFailurePolicy::FailFast, cancellation);
 
@@ -285,18 +350,21 @@ namespace Horo::Assets {
         if (request.buildOutputStore != nullptr) {
             for (const auto &slot : slots) {
                 if (!slot.cacheHit) {
-                    request.buildOutputStore->Append(Log::StructuredLogRecord{
+                    request.buildOutputStore->Append(BuildOutputRecord{
                         .timestampUtc = std::chrono::system_clock::now(),
-                        .level = Log::Level::Info,
-                        .category = "Build.Cook",
+                        .status = BuildOutputStatus::Succeeded,
+                        .phase = "cook",
                         .message = slot.record.sourcePath.String(),
-                        .context = "OK",
+                        .source =
+                            DiagnosticSourceLocation{
+                                .absolutePath = (request.sourceRoot / slot.record.sourcePath.String()).lexically_normal().string()},
                     });
                 }
             }
         }
 
         // Store cache entries and build manifest
+        operation.Update("publish", "Publishing cooked generation", 0.8F);
         std::vector<AssetCookManifestEntry> manifestEntries;
         std::vector<std::vector<std::uint8_t>> manifestPayloads;
 
@@ -329,23 +397,7 @@ namespace Horo::Assets {
 
         std::size_t cookedCount = slots.size() - cacheHits;
 
-        // Emit cook-complete record
-        if (request.buildOutputStore != nullptr) {
-            request.buildOutputStore->Append(Log::StructuredLogRecord{
-                .timestampUtc = std::chrono::system_clock::now(),
-                .level = Log::Level::Info,
-                .category = "Build.Cook.End",
-                .message = std::to_string(cookedCount) + " cooked, " + std::to_string(cacheHits) + " cached, 0 failed",
-                .context = "END",
-            });
-            request.buildOutputStore->Append(Log::StructuredLogRecord{
-                .timestampUtc = std::chrono::system_clock::now(),
-                .level = Log::Level::Info,
-                .category = "Op.Cook",
-                .message = std::to_string(cookedCount) + " cooked, " + std::to_string(cacheHits) + " cached",
-                .context = "OK",
-            });
-        }
+        operation.Succeed(std::to_string(cookedCount) + " cooked, " + std::to_string(cacheHits) + " cached");
 
         return Result<AssetCookReport>::Success(AssetCookReport{
             .generation = pubResult.Value(),

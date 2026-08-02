@@ -5,6 +5,7 @@
 #include <vector>
 
 namespace Horo::Editor {
+    inline constexpr const char *kGameplayMoveAction = "gameplay.move";
     inline constexpr auto kEditorWorkspaceInputContext = "editor.workspace";
     inline constexpr auto kActionSave = "editor.save";
     inline constexpr auto kActionUndo = "editor.undo";

@@ -19,5 +19,10 @@ namespace Horo::Editor {
     bool RevealInNativeFileManager(const std::filesystem::path &) noexcept {
         return false;
     }
+
+    /** @copydoc OpenInExternalEditor */
+    bool OpenInExternalEditor(const std::filesystem::path &) noexcept {
+        return false;
+    }
 }  // namespace Horo::Editor
 #endif

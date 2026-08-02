@@ -45,6 +45,12 @@ void SceneCommandBuffer::Destroy(EntityRef entity)
 {
     commands_.push_back(DestroyCommand{entity});
 }
+
+/** @copydoc SceneCommandBuffer::SetLocalTransform */
+void SceneCommandBuffer::SetLocalTransform(const EntityRef entity, Math::Transform localTransform) {
+    commands_.push_back(SetLocalTransformCommand{entity, std::move(localTransform)});
+}
+
 /** @copydoc SceneCommandBuffer::Empty */
 bool SceneCommandBuffer::Empty() const noexcept
 {
@@ -203,6 +209,17 @@ Result<std::unique_ptr<RuntimeScene>> RuntimeScene::CreateResolved(const Runtime
     return Result<std::unique_ptr<RuntimeScene>>::Success(std::move(scene));
 }
 
+/** @copydoc RuntimeSceneService::CloneActive */
+Result<std::unique_ptr<RuntimeScene>> RuntimeSceneService::CloneActive(const SceneRuntimeId runtimeId) const {
+    if (!active_ || !runtimeId.IsValid() || runtimeId == active_->runtimeId_)
+        return Failure<std::unique_ptr<RuntimeScene>>(SceneErrors::InvalidCandidate,
+                                                      "An active scene and a distinct runtime identity are required.");
+    auto clone = std::unique_ptr<RuntimeScene>(new RuntimeScene(runtimeId, active_->definitionId_, active_->definitionRevision_,
+                                                                active_->config_, active_->assetRegistryRevision_, active_->assets_));
+    clone->storage_ = active_->storage_;
+    return Result<std::unique_ptr<RuntimeScene>>::Success(std::move(clone));
+}
+
 /** @copydoc RuntimeScene::View */
 RuntimeSceneView RuntimeScene::View() const noexcept
 {
@@ -303,14 +320,19 @@ Result<StructuralCommitResult> RuntimeScene::Commit(SceneCommandBuffer commands)
             if (created.HasError())
                 return Result<StructuralCommitResult>::Failure(created.ErrorValue());
             result.created.push_back({create->deferred, created.Value()});
-        }
-        else
-        {
-            const Result<void> destroyed =
-                DestroyEntity(candidate, std::get<SceneCommandBuffer::DestroyCommand>(command).entity);
-            if (destroyed.HasError())
-                return Result<StructuralCommitResult>::Failure(destroyed.ErrorValue());
+        } else if (const auto *destroy = std::get_if<SceneCommandBuffer::DestroyCommand>(&command)) {
+            const Result<void> destroyedResult = DestroyEntity(candidate, destroy->entity);
+            if (destroyedResult.HasError())
+                return Result<StructuralCommitResult>::Failure(destroyedResult.ErrorValue());
             ++result.destroyed;
+        } else
+        {
+            const auto &transform = std::get<SceneCommandBuffer::SetLocalTransformCommand>(command);
+            if (!IsValid(candidate, transform.entity) || transform.localTransform.TryToMatrix().HasError())
+                return Result<StructuralCommitResult>::Failure(
+                    MakeError(SceneErrors::InvalidEntity, "Deferred transform target or value is invalid."));
+            candidate.slots[transform.entity.entity.index].localTransform = transform.localTransform;
+            ++result.transformsUpdated;
         }
     }
     storage_ = std::move(candidate);

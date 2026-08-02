@@ -1,5 +1,3 @@
-#include <catch2/catch_test_macros.hpp>
-
 #include "Horo/Editor/EditorConfiguration.h"
 #include "Horo/Editor/EditorDataBus.h"
 #include "Horo/Editor/EditorGuiContext.h"
@@ -14,83 +12,61 @@
 #include "Horo/Foundation/JobSystem.h"
 #include "editor/project_model/RendererAvailability.h"
 
+#include <catch2/catch_test_macros.hpp>
 #include <memory>
 
-namespace Horo::Editor::Theme
-{
+namespace Horo::Editor::Theme {
     struct Fonts;
 }
 
-namespace
-{
+namespace {
     using namespace Horo;
     using namespace Horo::Editor;
 
-    struct ScreenStats
-    {
+    struct ScreenStats {
         int enters = 0;
         int leaves = 0;
         int destructions = 0;
     };
 
-    class RecordingScreen final : public GuiScreen
-    {
+    class RecordingScreen final : public GuiScreen {
     public:
-        explicit RecordingScreen(ScreenStats& stats) : stats_(stats)
-        {
-        }
+        explicit RecordingScreen(ScreenStats &stats) : stats_(stats) {}
 
-        ~RecordingScreen() override
-        {
+        ~RecordingScreen() override {
             ++stats_.destructions;
         }
 
-        [[nodiscard]] ScreenId Id() const override
-        {
+        [[nodiscard]] ScreenId Id() const override {
             return 1;
         }
 
-        [[nodiscard]] Result<void> OnEnter(const GuiRoute&) override
-        {
+        [[nodiscard]] Result<void> OnEnter(const GuiRoute &) override {
             ++stats_.enters;
             return Result<void>::Success();
         }
 
-        void OnUpdate(float) override
-        {
-        }
+        void OnUpdate(float) override {}
 
-        void Draw(const GuiContentRegion&) override
-        {
-        }
+        void Draw(const GuiContentRegion &) override {}
 
-        [[nodiscard]] LeaveDecision CanLeave(const LeaveTarget&) const override
-        {
+        [[nodiscard]] LeaveDecision CanLeave(const LeaveTarget &) const override {
             return {.disposition = LeaveDisposition::Allow, .requirement = std::nullopt};
         }
 
-        [[nodiscard]] Result<LeaveDecision> ResolveLeave(const LeaveTarget&, const LeaveResolution&) override
-        {
-            return Result<LeaveDecision>::Success({
-                .disposition = LeaveDisposition::Allow, .requirement = std::nullopt
-            });
+        [[nodiscard]] Result<LeaveDecision> ResolveLeave(const LeaveTarget &, const LeaveResolution &) override {
+            return Result<LeaveDecision>::Success({.disposition = LeaveDisposition::Allow, .requirement = std::nullopt});
         }
 
-        void OnLeave() override
-        {
+        void OnLeave() override {
             ++stats_.leaves;
         }
 
     private:
-        ScreenStats& stats_;
+        ScreenStats &stats_;
     };
 
-    TEST_CASE (
-    "Shutdown Leaves Once Destroys Screen And Revokes Services"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Shutdown Leaves Once Destroys Screen And Revokes Services", "[unit][editor]") {
         EngineDataBus engineEvents;
         EditorDataBus editorEvents;
         Input::InputRouter input;
@@ -100,25 +76,21 @@ namespace
         ConfigurationService configuration = CreateEditorConfigurationService(DefaultEditorSettings());
         EditorSettingsService settings{DefaultEditorSettings(), configuration, editorEvents, localization};
         EditorModalHost modals{editorEvents, input};
-        const Theme::Fonts& fonts = *reinterpret_cast<const Theme::Fonts*>(static_cast<std::uintptr_t>(1));
+        const Theme::Fonts &fonts = *reinterpret_cast<const Theme::Fonts *>(static_cast<std::uintptr_t>(1));
         ThemeContext theme{fonts};
         EditorSettingsSnapshot settingsSnapshot = settings.Snapshot();
         EditorGuiContext gui{engineEvents, editorEvents, localization, theme, settingsSnapshot};
-        RendererAvailabilitySnapshot renderers{
-            {RendererBackendAvailability{"opengl", "OpenGL", RendererAvailabilityState::Active, {}}}, "opengl"
-        };
+        RendererAvailabilitySnapshot renderers{{RendererBackendAvailability{"opengl", "OpenGL", RendererAvailabilityState::Active, {}}},
+                                               "opengl"};
         ScreenStats stats;
         ScreenRegistry screens;
-        screens.Register(GuiRouteKind::Welcome, [](const EditorServiceRegistry& services, const GuiRoute&)
-        {
+        screens.Register(GuiRouteKind::Welcome, [](const EditorServiceRegistry &services, const GuiRoute &) {
             return std::make_unique<RecordingScreen>(services.Get<ScreenStats>());
         });
         WorkspacePanelRegistry panels;
 
-        GuiScreenHost host{
-            gui, modals, settings, localization, engineEvents,
-            creation, jobs, input, renderers, std::move(screens), std::move(panels)
-        };
+        GuiScreenHost host{gui,  modals, settings,  localization,       engineEvents,     creation,
+                           jobs, input,  renderers, std::move(screens), std::move(panels)};
         REQUIRE((&host.Services().Get<JobSystem>() == &jobs));
         REQUIRE((stats.enters == 0));
         REQUIRE((host.Navigate(GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}}).HasError()));
@@ -127,9 +99,7 @@ namespace
         REQUIRE((stats.enters == 1));
         REQUIRE((!host.Services().Empty()));
 
-        const Result<void> invalidRoute = host.Navigate(GuiRoute{
-            GuiRouteKind::Welcome, ProjectCreationRouteParameters{}
-        });
+        const Result<void> invalidRoute = host.Navigate(GuiRoute{GuiRouteKind::Welcome, ProjectCreationRouteParameters{}});
         REQUIRE((invalidRoute.HasError()));
         REQUIRE((invalidRoute.ErrorValue().domain.Value() == "horo.editor.screens"));
         REQUIRE((invalidRoute.ErrorValue().code.Value() == "navigation.invalid_route_parameters"));
@@ -149,4 +119,4 @@ namespace
         REQUIRE((navigation.ErrorValue().code.Value() == "navigation.host_shutdown"));
         jobs.Shutdown(ShutdownPolicy::Cancel);
     }
-} // namespace
+}  // namespace

@@ -11,7 +11,7 @@ TEST_CASE("Hierarchy edit session projects scene objects without ImGui", "[unit]
         SceneObject{
             .id = SceneObjectId{1},
             .name = "Root",
-            .kind = SceneObjectKind::Empty,
+            .kind = SceneObjectKind::GameObject,
         },
         SceneObject{
             .id = SceneObjectId{2},

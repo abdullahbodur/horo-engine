@@ -6,6 +6,7 @@
  */
 
 #include "Horo/Foundation/Result.h"
+#include "Horo/Gameplay/BehaviorTypes.h"
 #include "Horo/Math/SceneMath.h"
 #include "Horo/Runtime/Scene/PrimitiveMeshDescriptor.h"
 
@@ -86,8 +87,9 @@ namespace Horo::Editor {
         std::optional<Runtime::LightComponent> light;
         std::optional<Runtime::TriggerVolumeComponent> triggerVolume;
         std::optional<Runtime::AudioSourceComponent> audioSource;
+        std::vector<Gameplay::BehaviorComponent> behaviors;
 
-        [[nodiscard]] constexpr auto operator<=>(const SceneObjectComponentSet &) const noexcept = default;
+        [[nodiscard]] bool operator==(const SceneObjectComponentSet &) const noexcept = default;
     };
 
     /** @brief Immutable value snapshot of one authored scene object. */
@@ -225,6 +227,27 @@ namespace Horo::Editor {
         ComponentType type;
     };
 
+    /** @brief Undoable request to attach one descriptor-derived behavior to an object. */
+    struct AttachSceneObjectBehaviorCommand {
+        SceneObjectId object;
+        Gameplay::BehaviorTypeId typeId;
+        std::uint32_t schemaVersion{1};
+        bool enabled{true};
+        bool allowMultiple{false};
+        std::vector<Gameplay::BehaviorField> fields;
+    };
+
+    /** @brief Undoable request to replace enabled state or fields of one behavior attachment. */
+    struct SetSceneObjectBehaviorCommand {
+        SceneObjectId object;
+        Gameplay::BehaviorComponent behavior;
+    };
+
+    /** @brief Undoable request to remove one attachment by stable identity. */
+    struct RemoveSceneObjectBehaviorCommand {
+        SceneObjectId object;
+        Gameplay::BehaviorInstanceId behavior;
+    };
 
     /** @brief Typed request to duplicate one object without duplicating its children. */
     struct DuplicateSceneObjectCommand {
@@ -345,6 +368,7 @@ namespace Horo::Editor {
         DocumentStateId m_savedState{1};
         std::uint64_t m_nextStateId{2};
         std::uint64_t m_nextObjectId{1};
+        std::uint64_t m_nextBehaviorInstanceId{1};
     };
 
     /** @brief Sole mutation boundary for the minimum typed scene command set. */
@@ -378,6 +402,12 @@ namespace Horo::Editor {
         [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneObjectAudioSourceCommand &command);
         [[nodiscard]] Result<SceneCommandResult> Execute(const AddSceneObjectComponentCommand &command);
         [[nodiscard]] Result<SceneCommandResult> Execute(const RemoveSceneObjectComponentCommand &command);
+        /** @brief Validates and atomically attaches one behavior with a generated stable instance ID. */
+        [[nodiscard]] Result<SceneCommandResult> Execute(const AttachSceneObjectBehaviorCommand &command);
+        /** @brief Validates and atomically replaces one existing behavior attachment. */
+        [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneObjectBehaviorCommand &command);
+        /** @brief Validates and atomically removes one behavior attachment. */
+        [[nodiscard]] Result<SceneCommandResult> Execute(const RemoveSceneObjectBehaviorCommand &command);
 
         /** @brief Validates and atomically commits a shallow duplicate-object command. */
         [[nodiscard]] Result<SceneCommandResult> Execute(const DuplicateSceneObjectCommand &command);

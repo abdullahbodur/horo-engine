@@ -131,8 +131,8 @@ namespace Horo::Editor {
 
     AssetImportModal::AssetImportModal(const Theme::Fonts &fonts, JobSystem &jobs,
                                        std::shared_ptr<const Assets::AssetImporterCatalogSnapshot> catalog,
-                                       Assets::AssetRegistry *assetRegistry) noexcept
-        : m_fonts(fonts), m_jobs(jobs), m_catalog(std::move(catalog)), m_assetRegistry(assetRegistry) {}
+                                       Assets::AssetRegistry *assetRegistry, OperationStore *operationStore) noexcept
+        : m_fonts(fonts), m_jobs(jobs), m_catalog(std::move(catalog)), m_assetRegistry(assetRegistry), m_operationStore(operationStore) {}
 
     ModalId AssetImportModal::Id() const {
         return ModalId{kModalId};
@@ -159,6 +159,9 @@ namespace Horo::Editor {
         m_presetsByImporterAndExtension.clear();
         m_defaultPresetValues.clear();
         m_snapshot = Assets::AssetImportSnapshot{};
+        m_itemCompleted.clear();
+        m_visibleOperationId.reset();
+        m_operationCancellation.reset();
 
         m_logCtx = std::make_unique<Log::LogContext>("modal", "asset_import", "modal_id", std::to_string(kModalId));
         LOG_INFO("editor.asset_import", "AssetImportModal opened.");
@@ -179,19 +182,37 @@ namespace Horo::Editor {
     }
 
     void AssetImportModal::OnClose(const ModalCloseReason reason) {
-        const char *reasonStr = (reason == ModalCloseReason::Completed)   ? "completed"
-                                : (reason == ModalCloseReason::Cancelled) ? "cancelled"
-                                                                          : "app_shutdown";
+        const bool completed = reason == ModalCloseReason::Completed || IsImportComplete();
+        const char *reasonStr = completed ? "completed" : (reason == ModalCloseReason::Cancelled) ? "cancelled" : "app_shutdown";
         LOG_INFO("editor.asset_import", "AssetImportModal closed (reason=%s).", reasonStr);
 
-        if (m_operation)
-            m_operation->Cancel();
+        if (!completed) {
+            if (m_operation)
+                m_operation->Cancel();
+            if (m_operationCancellation)
+                m_operationCancellation->RequestCancellation();
+        }
+        if (m_operationStore != nullptr && m_visibleOperationId.has_value()) {
+            static_cast<void>(
+                m_operationStore->Update(*m_visibleOperationId,
+                                         OperationUpdate{.state = completed ? OperationState::Succeeded : OperationState::Cancelled,
+                                                         .phase = completed ? "complete" : "cancelled",
+                                                         .message = completed ? "Asset import completed" : "Asset import cancelled",
+                                                         .progress = completed ? std::optional<float>{1.0F} : std::nullopt}));
+        }
+        m_visibleOperationId.reset();
 
         m_logCtx.reset();
     }
 
     const Assets::AssetImportSnapshot &AssetImportModal::Snapshot() const noexcept {
         return m_snapshot;
+    }
+
+    bool AssetImportModal::IsImportComplete() const noexcept {
+        return !m_itemCompleted.empty() && !HasPendingConflicts() && std::ranges::all_of(m_itemCompleted, [](const bool completed) {
+            return completed;
+        });
     }
 
     const Assets::AssetImporterCatalogSnapshot &AssetImportModal::Catalog() const noexcept {
@@ -334,6 +355,7 @@ namespace Horo::Editor {
             if (result.HasError())
                 return Result<void>::Failure(result.ErrorValue());
             m_snapshot = result.Value();
+            m_itemCompleted.resize(m_snapshot.items.size(), false);
             if (!m_defaultDestinationFolder.empty()) {
                 for (std::size_t index = previousItemCount; index < m_snapshot.items.size(); ++index)
                     m_snapshot.items[index].destinationFolder = m_defaultDestinationFolder;
@@ -353,11 +375,13 @@ namespace Horo::Editor {
             .sourceFiles = sourceFiles,
         };
 
-        auto result = m_operation->Start(request, cancellation);
+        m_operationCancellation = std::make_shared<CancellationSource>(cancellation);
+        auto result = m_operation->Start(request, m_operationCancellation->Token());
         if (result.HasError())
             return Result<void>::Failure(result.ErrorValue());
 
         m_snapshot = result.Value();
+        m_itemCompleted.assign(m_snapshot.items.size(), false);
         if (!m_defaultDestinationFolder.empty()) {
             for (auto &item : m_snapshot.items)
                 item.destinationFolder = m_defaultDestinationFolder;
@@ -368,7 +392,27 @@ namespace Horo::Editor {
         for (const auto &item : m_snapshot.items)
             m_defaultPresetValues.push_back(CapturePresetValues(item, *m_catalog, "Default"));
         LOG_INFO("editor.asset_import", "Import started: %zu files.", m_snapshot.items.size());
-        LOG_INFO("Op.AssetImport.RUNNING", "Import started: %zu files.", m_snapshot.items.size());
+        if (m_operationStore != nullptr) {
+            const std::weak_ptr<CancellationSource> weakCancellation = m_operationCancellation;
+            m_visibleOperationId = m_operationStore->Begin(OperationDescriptor{
+                .kind = OperationKind::Import,
+                .title = "Import assets",
+                .phase = "prepare",
+                .message = std::to_string(m_snapshot.items.size()) + " files",
+                .progress = 0.0F,
+                .cancellable = true,
+                .requestCancel =
+                    [weakCancellation] {
+                if (const auto cancellation = weakCancellation.lock())
+                    cancellation->RequestCancellation();
+            },
+            });
+            if (m_visibleOperationId.has_value())
+                static_cast<void>(m_operationStore->Update(*m_visibleOperationId, OperationUpdate{.state = OperationState::Running,
+                                                                                                  .phase = "import",
+                                                                                                  .message = "Importing assets",
+                                                                                                  .progress = 0.0F}));
+        }
 
         return Result<void>::Success();
     }
@@ -415,9 +459,19 @@ namespace Horo::Editor {
         if (settingsResult.HasError())
             return Result<void>::Failure(settingsResult.ErrorValue());
 
-        auto result = m_operation->ImportSingleItem(index, cancellation);
-        if (result.HasError())
+        const CancellationToken operationCancellation = m_operationCancellation ? m_operationCancellation->Token() : cancellation;
+        auto result = m_operation->ImportSingleItem(index, operationCancellation);
+        if (result.HasError()) {
+            if (m_operationStore != nullptr && m_visibleOperationId.has_value())
+                static_cast<void>(
+                    m_operationStore->Update(*m_visibleOperationId, OperationUpdate{.state = operationCancellation.IsCancellationRequested()
+                                                                                                 ? OperationState::Cancelled
+                                                                                                 : OperationState::Failed,
+                                                                                    .phase = "import",
+                                                                                    .message = result.ErrorValue().message,
+                                                                                    .error = result.ErrorValue()}));
             return Result<void>::Failure(result.ErrorValue());
+        }
 
         // Merge only the imported item's fields from the operation result,
         // preserving user-modified UI state (e.g. destinationFolder) on other items.
@@ -433,7 +487,6 @@ namespace Horo::Editor {
         m_snapshot.revision = opSnapshot.revision;
 
         LOG_INFO("editor.asset_import", "Imported item %zu: %s", index, m_snapshot.items[index].displayName.c_str());
-        LOG_INFO("Op.AssetImport.OK", "Imported item %zu: %s", index, m_snapshot.items[index].displayName.c_str());
 
         // Check for conflicts before committing
         auto commitItem = m_snapshot.items[index];  // mutable copy for name/folder transforms
@@ -441,6 +494,7 @@ namespace Horo::Editor {
         // Skip items that failed to import (no result payload)
         if (!commitItem.result.has_value()) {
             LOG_INFO("editor.asset_import", "Skipping commit for %s — import produced no result.", commitItem.displayName.c_str());
+            MarkItemCompleted(index);
             return Result<void>::Success();
         }
 
@@ -471,7 +525,11 @@ namespace Horo::Editor {
             conflict.snapshotIndex = index;
             m_conflictQueue.push_back(std::move(conflict));
             LOG_INFO("editor.asset_import", "Conflict detected for %s — queued for resolution", commitItem.displayName.c_str());
-            LOG_INFO("Op.AssetImport.FAILED", "Conflict detected for %s — queued for resolution", commitItem.displayName.c_str());
+            if (m_operationStore != nullptr && m_visibleOperationId.has_value())
+                static_cast<void>(
+                    m_operationStore->Update(*m_visibleOperationId, OperationUpdate{.state = OperationState::Waiting,
+                                                                                    .phase = "resolve conflicts",
+                                                                                    .message = "Waiting for conflict resolution"}));
         } else {
             // Commit to project storage
             if (m_committer) {
@@ -487,14 +545,57 @@ namespace Horo::Editor {
                 auto commitResult = m_committer->Commit(batch, idGen, noCancel);
                 if (commitResult.HasError()) {
                     LOG_ERROR("editor.asset_import", "Commit failed for item %zu: %s", index, commitResult.ErrorValue().message.c_str());
+                    FailVisibleOperation(commitResult.ErrorValue(), "commit");
                     return Result<void>::Failure(commitResult.ErrorValue());
                 } else {
                     LOG_INFO("editor.asset_import", "Committed item %zu to project storage.", index);
                 }
             }
+            MarkItemCompleted(index);
         }
 
         return Result<void>::Success();
+    }
+
+    void AssetImportModal::MarkItemCompleted(const std::size_t index) {
+        if (index >= m_itemCompleted.size())
+            return;
+        m_itemCompleted[index] = true;
+
+        if (m_operationStore == nullptr || !m_visibleOperationId.has_value())
+            return;
+
+        const std::size_t completedItems = static_cast<std::size_t>(std::ranges::count(m_itemCompleted, true));
+        const float progress =
+            m_itemCompleted.empty() ? 1.0F : static_cast<float>(completedItems) / static_cast<float>(m_itemCompleted.size());
+        if (IsImportComplete()) {
+            static_cast<void>(m_operationStore->Update(*m_visibleOperationId, OperationUpdate{.state = OperationState::Succeeded,
+                                                                                              .phase = "complete",
+                                                                                              .message = "Asset import completed",
+                                                                                              .progress = 1.0F}));
+            m_visibleOperationId.reset();
+            return;
+        }
+
+        const bool waitingForConflict = HasPendingConflicts();
+        static_cast<void>(
+            m_operationStore->Update(*m_visibleOperationId,
+                                     OperationUpdate{.state = waitingForConflict ? OperationState::Waiting : OperationState::Running,
+                                                     .phase = waitingForConflict ? "resolve conflicts" : "import",
+                                                     .message = waitingForConflict ? "Waiting for conflict resolution"
+                                                                                   : std::to_string(completedItems) + " of " +
+                                                                                         std::to_string(m_itemCompleted.size()),
+                                                     .progress = progress}));
+    }
+
+    void AssetImportModal::FailVisibleOperation(const Error &error, const std::string_view phase) {
+        if (m_operationStore == nullptr || !m_visibleOperationId.has_value())
+            return;
+        static_cast<void>(m_operationStore->Update(*m_visibleOperationId, OperationUpdate{.state = OperationState::Failed,
+                                                                                          .phase = std::string{phase},
+                                                                                          .message = error.message,
+                                                                                          .error = error}));
+        m_visibleOperationId.reset();
     }
 
     // -------------------------------------------------------------------------
@@ -511,10 +612,10 @@ namespace Horo::Editor {
         return std::filesystem::exists(targetPath, ec);
     }
 
-    void AssetImportModal::CommitCurrentItem(const Assets::AssetImportItem &item, ConflictChoice choice, bool applyAll) {
+    bool AssetImportModal::CommitCurrentItem(const Assets::AssetImportItem &item, ConflictChoice choice, bool applyAll) {
         if (choice == ConflictChoice::Skip) {
             LOG_INFO("editor.asset_import", "Skipped import for %s (user chose Skip)", item.displayName.c_str());
-            return;
+            return true;
         }
 
         auto commitItem = item;  // mutable copy
@@ -559,11 +660,14 @@ namespace Horo::Editor {
 
         CancellationToken noCancel;
         auto commitResult = m_committer->Commit(batch, idGen, noCancel);
-        if (commitResult.HasError())
+        if (commitResult.HasError()) {
             LOG_ERROR("editor.asset_import", "Commit failed for %s: %s", assetName.c_str(), commitResult.ErrorValue().message.c_str());
-        else {
+            FailVisibleOperation(commitResult.ErrorValue(), "commit");
+            return false;
+        } else {
             LOG_INFO("editor.asset_import", "Committed %s (choice=%d)", assetName.c_str(), static_cast<int>(choice));
         }
+        return true;
     }
 
     void AssetImportModal::ResolveCurrentConflict(ConflictChoice choice, bool applyAll) {
@@ -575,12 +679,15 @@ namespace Horo::Editor {
 
         const auto &conflict = m_conflictQueue[m_conflictCursor];
         const auto &item = m_snapshot.items[conflict.snapshotIndex];
-        CommitCurrentItem(item, choice, applyAll);
+        const std::size_t completedIndex = conflict.snapshotIndex;
+        const bool resolved = CommitCurrentItem(item, choice, applyAll);
 
         ++m_conflictCursor;
         if (m_conflictCursor >= m_conflictQueue.size()) {
             m_conflictQueue.clear();
             m_conflictCursor = 0;
         }
+        if (resolved)
+            MarkItemCompleted(completedIndex);
     }
 }  // namespace Horo::Editor

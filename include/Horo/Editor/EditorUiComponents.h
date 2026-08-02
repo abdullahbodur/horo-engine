@@ -98,9 +98,15 @@ namespace Horo::Editor::Ui {
         bool selectableCells{true};
     };
 
+    /** @brief Optional activation produced by one selectable table cell. */
+    struct TableInteraction {
+        std::optional<std::size_t> activatedRow;
+        std::optional<std::size_t> activatedColumn;
+    };
+
     /** @brief Draws a themed table with runtime column visibility and selectable cells. */
-    void DrawTable(const TableProps &props, std::span<const TableColumn> columns, std::span<const TableRow> rows,
-                   const Theme::Fonts &fonts);
+    [[nodiscard]] TableInteraction DrawTable(const TableProps &props, std::span<const TableColumn> columns, std::span<const TableRow> rows,
+                                             const Theme::Fonts &fonts);
 
     // ── Card / surface primitives ────────────────────────────────────────
 

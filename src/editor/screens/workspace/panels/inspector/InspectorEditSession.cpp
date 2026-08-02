@@ -93,8 +93,13 @@ namespace Horo::Editor {
         const bool sameSelection =
             m_baselines.size() == selectedObjects.size() &&
             std::ranges::equal(m_baselines, selectedObjects, std::ranges::equal_to{}, &ObjectTransformBaseline::object, std::identity{});
+        const SceneObjectId resolvedPrimary =
+            primary.has_value() && std::ranges::find(m_baselines, *primary, &ObjectTransformBaseline::object) != m_baselines.end()
+                ? *primary
+                : (m_baselines.empty() ? SceneObjectId{} : m_baselines.front().object);
+        const bool samePrimary = sameSelection && m_draft.object == resolvedPrimary;
         EditorWorkspaceViewCommandData command;
-        if (!sameSelection || m_draft.revision != revision) {
+        if (!sameSelection || !samePrimary || m_draft.revision != revision) {
             if (m_hasTransformPreview)
                 command.command = EditorWorkspaceViewCommand::CancelObjectTransformPreview;
             else if (m_hasLightPreview)
@@ -181,6 +186,8 @@ namespace Horo::Editor {
             command.command = EditorWorkspaceViewCommand::CommitObjectTransform;
             command.transformUpdates = BuildTransformUpdates();
             m_hasTransformPreview = false;
+            m_editedAxes = {};
+            m_relativeAxes = {};
             return command;
         }
         if (!edit.changed || !m_editedAxes.Any())
@@ -290,8 +297,7 @@ namespace Horo::Editor {
 
     /** @copydoc InspectorEditSession::ApplyTriggerVolumeEdit */
     EditorWorkspaceViewCommandData InspectorEditSession::ApplyTriggerVolumeEdit(const InspectorTriggerVolumeEdit &edit,
-                                                                                const SceneObject &object,
-                                                                                const bool allowCommands) const {
+                                                                                const SceneObject &object, const bool allowCommands) const {
         if (!allowCommands || m_baselines.size() != 1 || !edit.committed || !object.components.triggerVolume.has_value() ||
             !m_draft.triggerVolume.has_value() || *m_draft.triggerVolume == *object.components.triggerVolume) {
             return {};
@@ -304,8 +310,7 @@ namespace Horo::Editor {
 
     /** @copydoc InspectorEditSession::ApplyAudioSourceEdit */
     EditorWorkspaceViewCommandData InspectorEditSession::ApplyAudioSourceEdit(const InspectorAudioSourceEdit &edit,
-                                                                              const SceneObject &object,
-                                                                              const bool allowCommands) const {
+                                                                              const SceneObject &object, const bool allowCommands) const {
         if (!allowCommands || m_baselines.size() != 1 || !edit.committed || !object.components.audioSource.has_value() ||
             !m_draft.audioSource.has_value() || !IsValidAudioSourceComponent(*m_draft.audioSource) ||
             *m_draft.audioSource == *object.components.audioSource) {
@@ -331,7 +336,11 @@ namespace Horo::Editor {
         const bool sameSelection =
             m_baselines.size() == selectedObjects.size() &&
             std::ranges::equal(m_baselines, selectedObjects, std::ranges::equal_to{}, &ObjectTransformBaseline::object, std::identity{});
-        if (sameSelection && m_draft.revision == revision)
+        const SceneObjectId resolvedPrimary =
+            primary.has_value() && std::ranges::find(m_baselines, *primary, &ObjectTransformBaseline::object) != m_baselines.end()
+                ? *primary
+                : (m_baselines.empty() ? SceneObjectId{} : m_baselines.front().object);
+        if (sameSelection && m_draft.object == resolvedPrimary && m_draft.revision == revision)
             return;
 
         m_baselines.clear();

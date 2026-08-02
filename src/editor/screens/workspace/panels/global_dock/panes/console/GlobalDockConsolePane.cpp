@@ -109,12 +109,24 @@ namespace Horo::Editor {
     /** @copydoc GlobalDockConsolePane::Attach */
     void GlobalDockConsolePane::Attach(const Log::IStructuredLogQuery *logQuery) noexcept {
         m_logQuery = logQuery;
+        m_snapshot = {};
+        m_revision = 0;
+        m_filteredIndices.clear();
+        m_selectableText.clear();
+        m_lineLayouts.clear();
         m_filterDirty = true;
+        m_initialFollowTail = true;
+        m_textSelectionActive = false;
     }
 
     /** @copydoc GlobalDockConsolePane::Detach */
     void GlobalDockConsolePane::Detach() noexcept {
         m_logQuery = nullptr;
+        m_snapshot = {};
+        m_revision = 0;
+        m_filteredIndices.clear();
+        m_selectableText.clear();
+        m_lineLayouts.clear();
         m_textSelectionActive = false;
     }
 
@@ -127,7 +139,9 @@ namespace Horo::Editor {
 
         // ── Toolbar bar ──────────────────────────────────────────
         const float barFullWidth = contentWidth + OuterPaddingX * 2.0F;
-        const float barTotalHeight = ToolbarPadY() * 2.0F + ToolbarHeight();
+        const bool stackedToolbar = contentWidth < 720.0F;
+        const float barTotalHeight =
+            ToolbarPadY() * 2.0F + ToolbarHeight() * (stackedToolbar ? 2.0F : 1.0F) + (stackedToolbar ? ControlGap() : 0.0F);
         const ImVec2 barMin{contentOrigin.x, contentOrigin.y};
         const ImVec2 barMax{barMin.x + barFullWidth, barMin.y + barTotalHeight};
 
@@ -148,19 +162,33 @@ namespace Horo::Editor {
             "workspace.global_dock.console.filter.info",  "workspace.global_dock.console.filter.debug",
             "workspace.global_dock.console.filter.trace",
         };
-        for (std::size_t index = 0; index < filterKeys.size(); ++index) {
-            const std::string &label = context.localization.Get("editor", filterKeys[index]);
-            const Ui::ButtonProps button{
-                .label = label.c_str(),
-                .variant = m_levelEnabled[index] ? Ui::ButtonVariant::Primary : Ui::ButtonVariant::Secondary,
-                .font = fonts.sansCompact,
-                .componentSize = Ui::ComponentSize::Small,
+        if (stackedToolbar) {
+            const std::array<std::string, 5> filterText{
+                context.localization.Get("editor", filterKeys[0]), context.localization.Get("editor", filterKeys[1]),
+                context.localization.Get("editor", filterKeys[2]), context.localization.Get("editor", filterKeys[3]),
+                context.localization.Get("editor", filterKeys[4]),
             };
-            if (Ui::Button(button)) {
-                m_levelEnabled[index] = !m_levelEnabled[index];
+            const std::array<const char *, 5> filterLabels{filterText[0].c_str(), filterText[1].c_str(), filterText[2].c_str(),
+                                                           filterText[3].c_str(), filterText[4].c_str()};
+            const std::string &levelsLabel = context.localization.Get("editor", "workspace.global_dock.console.levels");
+            if (Ui::MultiSelectField("##ConsoleLevels", levelsLabel.c_str(), filterLabels, m_levelEnabled, fonts, 104.0F,
+                                     Ui::ComponentSize::Small))
                 m_filterDirty = true;
+        } else {
+            for (std::size_t index = 0; index < filterKeys.size(); ++index) {
+                const std::string &label = context.localization.Get("editor", filterKeys[index]);
+                const Ui::ButtonProps button{
+                    .label = label.c_str(),
+                    .variant = m_levelEnabled[index] ? Ui::ButtonVariant::Primary : Ui::ButtonVariant::Secondary,
+                    .font = fonts.sansCompact,
+                    .componentSize = Ui::ComponentSize::Small,
+                };
+                if (Ui::Button(button)) {
+                    m_levelEnabled[index] = !m_levelEnabled[index];
+                    m_filterDirty = true;
+                }
+                ImGui::SameLine(0.0F, ControlGap());
             }
-            ImGui::SameLine(0.0F, ControlGap());
         }
         ImGui::PopStyleVar();  // ItemSpacing
 
@@ -171,9 +199,9 @@ namespace Horo::Editor {
         const float resolvedSearchWidth =
             std::min(SearchWidth, std::max(80.0F, barFullWidth - ToolbarPadX() * 2.0F - clearWidth - ControlGap() - 120.0F));
         const float controlsWidth = resolvedSearchWidth + ControlGap() + clearWidth;
-        const float controlsX = barMax.x - ToolbarPadX() - controlsWidth;
+        const float controlsX = stackedToolbar ? barMin.x + ToolbarPadX() : barMax.x - ToolbarPadX() - controlsWidth;
 
-        ImGui::SetCursorScreenPos({controlsX, barMin.y + ToolbarPadY()});
+        ImGui::SetCursorScreenPos({controlsX, barMin.y + ToolbarPadY() + (stackedToolbar ? ToolbarHeight() + ControlGap() : 0.0F)});
         if (Ui::InputTextControl("##ConsoleSearch", m_search.data(), m_search.size(), context.theme.fonts, false, resolvedSearchWidth,
                                  hint.c_str())) {
             m_filterDirty = true;

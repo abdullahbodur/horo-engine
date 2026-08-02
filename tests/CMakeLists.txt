@@ -68,6 +68,8 @@ if (HORO_ENABLE_IMGUI_UI_TESTS)
     )
     target_compile_definitions(HoroEditorUiAutomationTests PRIVATE
             HORO_PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+            HORO_GAMEPLAY_SDK_PACKAGE_DIR="${HORO_GAMEPLAY_SDK_PACKAGE_DIR}"
+            HORO_GAMEPLAY_CXX_COMPILER="${CMAKE_CXX_COMPILER}"
     )
     target_link_libraries(HoroEditorUiAutomationTests PRIVATE
             HoroEngine::Gui
@@ -109,6 +111,40 @@ add_executable(HoroInputTests
 )
 target_compile_features(HoroInputTests PRIVATE cxx_std_20)
 target_link_libraries(HoroInputTests PRIVATE HoroEngine::Input)
+add_executable(HoroGameplayRuntimeTests
+        unit/gameplay/BehaviorRuntimeTests.cpp
+)
+target_compile_features(HoroGameplayRuntimeTests PRIVATE cxx_std_20)
+target_link_libraries(HoroGameplayRuntimeTests PRIVATE HoroEngine::GameplayRuntime)
+horo_add_gameplay_module(HoroTestGameModule
+        MODULE_ID game.tests
+        NO_MANIFEST
+        SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/gameplay_module/TestGameModule.cpp
+)
+add_executable(HoroGameModuleHostTests
+        unit/gameplay/GameModuleHostTests.cpp
+)
+target_compile_features(HoroGameModuleHostTests PRIVATE cxx_std_20)
+target_compile_definitions(HoroGameModuleHostTests PRIVATE HORO_TEST_GAME_MODULE_PATH="$<TARGET_FILE:HoroTestGameModule>")
+target_link_libraries(HoroGameModuleHostTests PRIVATE HoroEngine::GameplayModuleHost)
+add_dependencies(HoroGameModuleHostTests HoroTestGameModule)
+add_executable(HoroLuaBehaviorTests
+        unit/gameplay/LuaBehaviorTests.cpp
+)
+target_compile_features(HoroLuaBehaviorTests PRIVATE cxx_std_20)
+target_link_libraries(HoroLuaBehaviorTests PRIVATE HoroEngine::GameplayLua)
+add_executable(HoroEditorPlaySessionControllerTests
+        unit/editor/EditorPlaySessionControllerTests.cpp
+)
+target_compile_features(HoroEditorPlaySessionControllerTests PRIVATE cxx_std_20)
+target_link_libraries(HoroEditorPlaySessionControllerTests PRIVATE HoroEngine::EditorServices)
+add_executable(HoroProjectGameplayRegistryTests
+        unit/editor/ProjectGameplayRegistryTests.cpp
+)
+target_compile_features(HoroProjectGameplayRegistryTests PRIVATE cxx_std_20)
+target_compile_definitions(HoroProjectGameplayRegistryTests PRIVATE HORO_TEST_GAME_MODULE_PATH="$<TARGET_FILE:HoroTestGameModule>")
+target_link_libraries(HoroProjectGameplayRegistryTests PRIVATE HoroEngine::EditorServices)
+add_dependencies(HoroProjectGameplayRegistryTests HoroTestGameModule)
 add_executable(HoroSceneMathTests
         unit/foundation/SceneMathTests.cpp
 )
@@ -129,6 +165,11 @@ add_executable(HoroStructuredLogStoreTests
 )
 target_compile_features(HoroStructuredLogStoreTests PRIVATE cxx_std_20)
 target_link_libraries(HoroStructuredLogStoreTests PRIVATE HoroEngine::Foundation Threads::Threads)
+add_executable(HoroActivityStoreTests
+        unit/foundation/ActivityStoreTests.cpp
+)
+target_compile_features(HoroActivityStoreTests PRIVATE cxx_std_20)
+target_link_libraries(HoroActivityStoreTests PRIVATE HoroEngine::Foundation Threads::Threads)
 
 set(HORO_FOUNDATION_PUBLIC_HEADER_COMPILE_SOURCE
         ${CMAKE_CURRENT_BINARY_DIR}/HoroFoundationPublicHeaderCompile.cpp)
@@ -500,6 +541,14 @@ add_executable(HoroPlatformTests
 
 target_compile_features(HoroPlatformTests PRIVATE cxx_std_20)
 target_link_libraries(HoroPlatformTests PRIVATE HoroEngine::Platform)
+add_executable(HoroGameplayBuildServiceTests
+        unit/application/GameplayBuildServiceTests.cpp
+)
+target_compile_features(HoroGameplayBuildServiceTests PRIVATE cxx_std_20)
+target_compile_definitions(HoroGameplayBuildServiceTests PRIVATE
+        HORO_GAMEPLAY_SDK_PACKAGE_DIR="${HORO_GAMEPLAY_SDK_PACKAGE_DIR}"
+)
+target_link_libraries(HoroGameplayBuildServiceTests PRIVATE HoroEngine::GameplayBuild)
 add_executable(HoroEditorViewportSceneTests
         unit/editor/EditorViewportSceneTests.cpp
 )
@@ -806,10 +855,16 @@ endif ()
 
 set(HORO_CATCH_TEST_TARGETS
         HoroInputTests
+        HoroGameplayRuntimeTests
+        HoroGameModuleHostTests
+        HoroLuaBehaviorTests
+        HoroEditorPlaySessionControllerTests
+        HoroProjectGameplayRegistryTests
         HoroSceneMathTests
         HoroFoundationStringTests
         HoroFoundationSha256Tests
         HoroStructuredLogStoreTests
+        HoroActivityStoreTests
         HoroPrimitiveMeshTests
         HoroEditorWelcomeControllerTests
         HoroEditorModalHostTests
@@ -854,6 +909,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroFoundationDiagnosticsTests
         HoroFoundationJobSystemTests
         HoroPlatformTests
+        HoroGameplayBuildServiceTests
         HoroEditorViewportSceneTests
         HoroSceneDocumentTests
         HoroSceneDocumentPersistenceTests

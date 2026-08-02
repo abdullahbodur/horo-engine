@@ -36,6 +36,8 @@ namespace Horo::Editor {
     private:
         void DrawSelection(const EditorWorkspaceViewModel &viewModel, std::span<const SceneObjectId> selectedObjects,
                            EditorWorkspaceViewCommandData &command, const EditorGuiContext &context);
+        void DrawAddComponent(const SceneObject &object, const EditorWorkspaceViewModel &viewModel,
+                              EditorWorkspaceViewCommandData &command, const EditorGuiContext &context);
         void DrawMultiSelectionTitle(std::size_t selectedObjectCount, const EditorGuiContext &context);
         [[nodiscard]] InspectorNameEdit DrawObjectTitleWidgets(const SceneObject &object, const EditorGuiContext &context);
         [[nodiscard]] InspectorTransformEdit DrawTransformWidgets(const EditorGuiContext &context);
@@ -43,6 +45,8 @@ namespace Horo::Editor {
         [[nodiscard]] InspectorLightEdit DrawLightWidgets(const EditorGuiContext &context);
         [[nodiscard]] InspectorTriggerVolumeEdit DrawTriggerVolumeWidgets(const EditorGuiContext &context);
         [[nodiscard]] InspectorAudioSourceEdit DrawAudioSourceWidgets(const EditorGuiContext &context);
+        void DrawBehaviors(const SceneObject &object, const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &command,
+                           const EditorGuiContext &context);
         void ApplyNameEdit(const InspectorNameEdit &edit, const SceneObject &object, EditorWorkspaceViewCommandData &command);
         void ApplyTransformEdit(const InspectorTransformEdit &edit, EditorWorkspaceViewCommandData &command);
         void ApplyCameraEdit(const InspectorCameraEdit &edit, const SceneObject &object, EditorWorkspaceViewCommandData &command);

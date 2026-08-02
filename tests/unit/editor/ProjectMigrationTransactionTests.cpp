@@ -1,49 +1,38 @@
-#include <catch2/catch_test_macros.hpp>
-
 #include "Horo/Editor/ProjectMigrationTransaction.h"
 
 #include <algorithm>
 #include <atomic>
+#include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <fstream>
 #include <functional>
 #include <limits>
 #include <optional>
 
-namespace
-{
+namespace {
     using namespace Horo;
     using namespace Horo::Application;
     using namespace Horo::Editor;
 
-    const ErrorCodeDescriptor InjectedFailure{
-        .domain = ErrorDomainId{"test.migration"},
-        .code = ErrorCode{"injected"},
-        .defaultSeverity = ErrorSeverity::Error,
-        .summary = "Injected failure."
-    };
+    const ErrorCodeDescriptor InjectedFailure{.domain = ErrorDomainId{"test.migration"},
+                                              .code = ErrorCode{"injected"},
+                                              .defaultSeverity = ErrorSeverity::Error,
+                                              .summary = "Injected failure."};
 
-    class FailingFilesystem final : public DurableFileSystem
-    {
+    class FailingFilesystem final : public DurableFileSystem {
     public:
-        explicit FailingFilesystem(std::filesystem::path root) : root_(std::move(root))
-        {
-        }
+        explicit FailingFilesystem(std::filesystem::path root) : root_(std::move(root)) {}
 
-        Result<ExclusiveFileLock>
-        TryAcquireExclusive(const std::filesystem::path& path, std::string_view owner) override
-        {
+        Result<ExclusiveFileLock> TryAcquireExclusive(const std::filesystem::path &path, std::string_view owner) override {
             auto acquired = native_.TryAcquireExclusive(path, owner);
-            if (acquired.HasValue() && onExclusiveAcquired)
-            {
+            if (acquired.HasValue() && onExclusiveAcquired) {
                 auto callback = std::move(onExclusiveAcquired);
                 callback();
             }
             return acquired;
         }
 
-        Result<std::uint64_t> AvailableBytes(const std::filesystem::path& path) const override
-        {
+        Result<std::uint64_t> AvailableBytes(const std::filesystem::path &path) const override {
             if (onAvailableBytes)
                 onAvailableBytes();
             if (availableBytes.has_value())
@@ -51,32 +40,26 @@ namespace
             return native_.AvailableBytes(path);
         }
 
-        Result<void> WriteDurable(const std::filesystem::path& path, std::span<const std::byte> bytes) override
-        {
+        Result<void> WriteDurable(const std::filesystem::path &path, std::span<const std::byte> bytes) override {
             return native_.WriteDurable(path, bytes);
         }
 
-        Result<void> CopyDurable(const std::filesystem::path& a, const std::filesystem::path& b) override
-        {
+        Result<void> CopyDurable(const std::filesystem::path &a, const std::filesystem::path &b) override {
             return native_.CopyDurable(a, b);
         }
 
-        Result<void> AtomicReplace(const std::filesystem::path& a, const std::filesystem::path& b) override
-        {
+        Result<void> AtomicReplace(const std::filesystem::path &a, const std::filesystem::path &b) override {
             if (failRoot && b == root_ / ".horo/project.json")
                 return Result<void>::Failure(MakeError(InjectedFailure));
             return native_.AtomicReplace(a, b);
         }
 
-        Result<void> RemoveDurable(const std::filesystem::path& path) override
-        {
+        Result<void> RemoveDurable(const std::filesystem::path &path) override {
             return native_.RemoveDurable(path);
         }
 
-        Result<void> SyncDirectory(const std::filesystem::path& path) override
-        {
-            if (onSyncDirectory)
-            {
+        Result<void> SyncDirectory(const std::filesystem::path &path) override {
+            if (onSyncDirectory) {
                 auto callback = std::move(onSyncDirectory);
                 callback();
             }
@@ -94,104 +77,87 @@ namespace
         NativeDurableFileSystem native_;
     };
 
-    std::vector<std::byte> Bytes(const std::string& text)
-    {
+    std::vector<std::byte> Bytes(const std::string &text) {
         std::vector<std::byte> result(text.size());
-        std::transform(text.begin(), text.end(), result.begin(),
-                       [](char value) { return static_cast<std::byte>(value); });
+        std::transform(text.begin(), text.end(), result.begin(), [](char value) {
+            return static_cast<std::byte>(value);
+        });
         return result;
     }
 
-    ContractBaselineVersion Version(const char* text)
-    {
+    ContractBaselineVersion Version(const char *text) {
         auto parsed = ParseHoroVersion(text);
         REQUIRE((parsed.HasValue()));
         return {parsed.Value()};
     }
 
-    PersistentContractHash Contract(std::uint8_t marker)
-    {
+    PersistentContractHash Contract(std::uint8_t marker) {
         PersistentContractHash hash;
         hash.bytes.fill(marker);
         return hash;
     }
 
-    class Append final : public IProjectMigrationDocumentStage
-    {
+    class Append final : public IProjectMigrationDocumentStage {
     public:
-        MigrationStageDescriptor Describe() const override
-        {
+        MigrationStageDescriptor Describe() const override {
             return {.id = {"test.append"}, .writeFamilies = {"other"}};
         }
 
-        Result<MigrationDocumentChange> Execute(const ProjectDocumentView& source, const MigrationStageContext&,
-                                                const CancellationToken&) const override
-        {
+        Result<MigrationDocumentChange> Execute(const ProjectDocumentView &source, const MigrationStageContext &,
+                                                const CancellationToken &) const override {
             auto output = std::vector<std::byte>(source.bytes.begin(), source.bytes.end());
             output.push_back(std::byte{'!'});
             return Result<MigrationDocumentChange>::Success({source.handle, std::move(output)});
         }
     };
 
-    class Valid final : public IProjectMigrationValidator
-    {
+    class Valid final : public IProjectMigrationValidator {
     public:
-        MigrationStageDescriptor Describe() const override
-        {
+        MigrationStageDescriptor Describe() const override {
             return {.id = {"test.valid"}};
         }
 
-        Result<void> Validate(const ProjectMigrationContext&, const CancellationToken&) const override
-        {
+        Result<void> Validate(const ProjectMigrationContext &, const CancellationToken &) const override {
             return Result<void>::Success();
         }
     };
 
-    class FinalCandidateValid final : public IProjectMigrationValidator
-    {
+    class FinalCandidateValid final : public IProjectMigrationValidator {
     public:
-        MigrationStageDescriptor Describe() const override
-        {
+        MigrationStageDescriptor Describe() const override {
             return {.id = {"test.final_candidate"}};
         }
 
-        Result<void> Validate(const ProjectMigrationContext& context, const CancellationToken&) const override
-        {
+        Result<void> Validate(const ProjectMigrationContext &context, const CancellationToken &) const override {
             bool sawTargetRoot = false;
             bool sawHistory = false;
-            for (const auto& entry : context.ListDocuments({}))
-            {
+            for (const auto &entry : context.ListDocuments({})) {
                 const auto document = context.ReadDocument(entry.handle);
                 if (document.HasError())
                     return Result<void>::Failure(document.ErrorValue());
-                const auto text = std::string_view(reinterpret_cast<const char*>(document.Value().bytes.data()),
-                                                   document.Value().bytes.size());
+                const auto text =
+                    std::string_view(reinterpret_cast<const char *>(document.Value().bytes.data()), document.Value().bytes.size());
                 if (entry.path == ".horo/project.json")
                     sawTargetRoot = text.find("\"horoVersion\": \"0.1.0\"") != std::string_view::npos &&
-                        text.find("migrationHistoryHead") != std::string_view::npos;
+                                    text.find("migrationHistoryHead") != std::string_view::npos;
                 if (entry.path == ".horo/migration_history.json")
                     sawHistory = text.find("test.migration") != std::string_view::npos;
             }
             return sawTargetRoot && sawHistory
                        ? Result<void>::Success()
-                       : Result<void>::Failure(
-                           MakeError(InjectedFailure, "Final validator did not see transaction documents."));
+                       : Result<void>::Failure(MakeError(InjectedFailure, "Final validator did not see transaction documents."));
         }
     };
 
-    [[nodiscard]] std::filesystem::path UniqueTransactionRoot()
-    {
+    [[nodiscard]] std::filesystem::path UniqueTransactionRoot() {
         static std::atomic<std::uint64_t> sequence{};
         const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
         return std::filesystem::temp_directory_path() /
-        ("horo-transaction-test-" + std::to_string(stamp) + "-" +
-            std::to_string(sequence.fetch_add(1, std::memory_order_relaxed)));
+               ("horo-transaction-test-" + std::to_string(stamp) + "-" + std::to_string(sequence.fetch_add(1, std::memory_order_relaxed)));
     }
 
-    struct Project
-    {
-        Project()
-        {
+    struct Project {
+        Project() {
             root = UniqueTransactionRoot();
             std::error_code ignored;
             std::filesystem::remove_all(root, ignored);
@@ -203,20 +169,17 @@ namespace
             Write("assets/data.txt", "value");
         }
 
-        ~Project()
-        {
+        ~Project() {
             std::error_code ignored;
             std::filesystem::remove_all(root, ignored);
         }
 
-        void Write(const std::filesystem::path& path, const std::string& text)
-        {
+        void Write(const std::filesystem::path &path, const std::string &text) {
             std::filesystem::create_directories((root / path).parent_path());
             std::ofstream(root / path, std::ios::binary) << text;
         }
 
-        std::string Read(const std::filesystem::path& path) const
-        {
+        std::string Read(const std::filesystem::path &path) const {
             std::ifstream stream(root / path, std::ios::binary);
             return {std::istreambuf_iterator<char>(stream), {}};
         }
@@ -224,87 +187,62 @@ namespace
         std::filesystem::path root;
     };
 
-    ProjectMigrationPlan Plan()
-    {
+    ProjectMigrationPlan Plan() {
         auto builder = ProjectMigrationPipelineBuilder::Begin({"test.migration"});
-        static_cast<void>(
-            builder.AddForEach(MigrationDocumentQuery::Kind(MigrationDocumentKind::Other), std::make_shared<Append>()));
+        static_cast<void>(builder.AddForEach(MigrationDocumentQuery::Kind(MigrationDocumentKind::Other), std::make_shared<Append>()));
         static_cast<void>(builder.AddValidator(std::make_shared<Valid>()));
         auto pipeline = std::move(builder).Build();
         REQUIRE((pipeline.HasValue()));
-        ProjectMigrationDefinition definition{
-            .id = {"test.migration"},
-            .from = Version("0.0.1"),
-            .to = Version("0.1.0"),
-            .sourceContract = Contract(1),
-            .targetContract = Contract(2),
-            .pipeline = pipeline.Value()
-        };
+        ProjectMigrationDefinition definition{.id = {"test.migration"},
+                                              .from = Version("0.0.1"),
+                                              .to = Version("0.1.0"),
+                                              .sourceContract = Contract(1),
+                                              .targetContract = Contract(2),
+                                              .pipeline = pipeline.Value()};
         definition.storageEstimate = {.maximumOutputRatioPermille = 1000, .maximumAddedBytesPerDocument = 1};
-        return {
-            .source = Version("0.0.1"),
-            .target = Version("0.1.0"),
-            .definitions = {definition},
-            .targetValidator = std::make_shared<FinalCandidateValid>()
-        };
+        return {.source = Version("0.0.1"),
+                .target = Version("0.1.0"),
+                .definitions = {definition},
+                .targetValidator = std::make_shared<FinalCandidateValid>()};
     }
 
-    [[nodiscard]] ProjectMetadata SourceMetadata()
-    {
-        return {
-            .horoVersion = {ParseHoroVersion("0.0.1").Value()},
-            .persistentContract = Contract(1),
-            .projectId = "p1",
-            .name = "Test",
-            .projectVersion = "0.1.0",
-            .createdAt = "2026-07-18T00:00:00Z",
-            .renderBackend = "opengl"
-        };
+    [[nodiscard]] ProjectMetadata SourceMetadata() {
+        return {.horoVersion = {ParseHoroVersion("0.0.1").Value()},
+                .persistentContract = Contract(1),
+                .projectId = "p1",
+                .name = "Test",
+                .projectVersion = "0.1.0",
+                .createdAt = "2026-07-18T00:00:00Z",
+                .renderBackend = "opengl"};
     }
 
-    [[nodiscard]] ReleaseCompatibilityDecision TargetDecision()
-    {
-        return {
-            .release = {ParseHoroVersion("0.1.0").Value()},
-            .contractBaseline = Version("0.1.0"),
-            .persistentContract = Contract(2)
-        };
+    [[nodiscard]] ReleaseCompatibilityDecision TargetDecision() {
+        return {.release = {ParseHoroVersion("0.1.0").Value()}, .contractBaseline = Version("0.1.0"), .persistentContract = Contract(2)};
     }
 
-    TEST_CASE (
-    "Transaction Publishes History And Preserves Unknown Metadata"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Transaction Publishes History And Preserves Unknown Metadata", "[unit][editor]") {
         Project project;
         NativeDurableFileSystem files;
         SystemWallClock clock;
         ProjectMutationCoordinator coordinator(files);
         JobSystem jobs({.workerCount = 2, .maxQueuedJobs = 8});
         ProjectMigrationTransactionService service(files, clock, coordinator, jobs);
-        ProjectMetadata metadata{
-            .horoVersion = {ParseHoroVersion("0.0.1").Value()},
-            .persistentContract = Contract(1),
-            .projectId = "p1",
-            .name = "Test",
-            .projectVersion = "0.1.0",
-            .createdAt = "2026-07-18T00:00:00Z",
-            .renderBackend = "opengl"
-        };
-        ReleaseCompatibilityDecision target{
-            .release = {ParseHoroVersion("0.1.0").Value()},
-            .contractBaseline = Version("0.1.0"),
-            .persistentContract = Contract(2)
-        };
-        auto result = service.Execute({
-            .projectRoot = project.root,
-            .sourceMetadata = metadata,
-            .sourceBaseline = Version("0.0.1"),
-            .targetDecision = target,
-            .plan = Plan(),
-            .engineBuildIdentity = "test-build"
-        });
+        ProjectMetadata metadata{.horoVersion = {ParseHoroVersion("0.0.1").Value()},
+                                 .persistentContract = Contract(1),
+                                 .projectId = "p1",
+                                 .name = "Test",
+                                 .projectVersion = "0.1.0",
+                                 .createdAt = "2026-07-18T00:00:00Z",
+                                 .renderBackend = "opengl"};
+        ReleaseCompatibilityDecision target{.release = {ParseHoroVersion("0.1.0").Value()},
+                                            .contractBaseline = Version("0.1.0"),
+                                            .persistentContract = Contract(2)};
+        auto result = service.Execute({.projectRoot = project.root,
+                                       .sourceMetadata = metadata,
+                                       .sourceBaseline = Version("0.0.1"),
+                                       .targetDecision = target,
+                                       .plan = Plan(),
+                                       .engineBuildIdentity = "test-build"});
         REQUIRE((result.HasValue()));
         REQUIRE((project.Read("assets/data.txt") == "value!"));
         const auto root = project.Read(".horo/project.json");
@@ -317,40 +255,29 @@ namespace
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE (
-    "Recovery Resumes After History Before Root Failure"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Recovery Resumes After History Before Root Failure", "[unit][editor]") {
         Project project;
         FailingFilesystem files(project.root);
         SystemWallClock clock;
         ProjectMutationCoordinator coordinator(files);
         JobSystem jobs({.workerCount = 2, .maxQueuedJobs = 8});
         ProjectMigrationTransactionService service(files, clock, coordinator, jobs);
-        ProjectMetadata metadata{
-            .horoVersion = {ParseHoroVersion("0.0.1").Value()},
-            .persistentContract = Contract(1),
-            .projectId = "p1",
-            .name = "Test",
-            .projectVersion = "0.1.0",
-            .createdAt = "2026-07-18T00:00:00Z",
-            .renderBackend = "opengl"
-        };
-        ReleaseCompatibilityDecision target{
-            .release = {ParseHoroVersion("0.1.0").Value()},
-            .contractBaseline = Version("0.1.0"),
-            .persistentContract = Contract(2)
-        };
-        auto failed = service.Execute({
-            .projectRoot = project.root,
-            .sourceMetadata = metadata,
-            .sourceBaseline = Version("0.0.1"),
-            .targetDecision = target,
-            .plan = Plan(),
-            .engineBuildIdentity = "test-build"
-        });
+        ProjectMetadata metadata{.horoVersion = {ParseHoroVersion("0.0.1").Value()},
+                                 .persistentContract = Contract(1),
+                                 .projectId = "p1",
+                                 .name = "Test",
+                                 .projectVersion = "0.1.0",
+                                 .createdAt = "2026-07-18T00:00:00Z",
+                                 .renderBackend = "opengl"};
+        ReleaseCompatibilityDecision target{.release = {ParseHoroVersion("0.1.0").Value()},
+                                            .contractBaseline = Version("0.1.0"),
+                                            .persistentContract = Contract(2)};
+        auto failed = service.Execute({.projectRoot = project.root,
+                                       .sourceMetadata = metadata,
+                                       .sourceBaseline = Version("0.0.1"),
+                                       .targetDecision = target,
+                                       .plan = Plan(),
+                                       .engineBuildIdentity = "test-build"});
         REQUIRE((failed.HasError()));
         REQUIRE((project.Read(".horo/project.json").find("\"horoVersion\":\"0.0.1\"") != std::string::npos));
         REQUIRE((project.Read(".horo/migration_history.json").find("test.migration") != std::string::npos));
@@ -363,40 +290,29 @@ namespace
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE (
-    "Recovery Restores Verified Originals When Forward Evidence Is Lost"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Recovery Restores Verified Originals When Forward Evidence Is Lost", "[unit][editor]") {
         Project project;
         FailingFilesystem files(project.root);
         SystemWallClock clock;
         ProjectMutationCoordinator coordinator(files);
         JobSystem jobs({.workerCount = 2, .maxQueuedJobs = 8});
         ProjectMigrationTransactionService service(files, clock, coordinator, jobs);
-        ProjectMetadata metadata{
-            .horoVersion = {ParseHoroVersion("0.0.1").Value()},
-            .persistentContract = Contract(1),
-            .projectId = "p1",
-            .name = "Test",
-            .projectVersion = "0.1.0",
-            .createdAt = "2026-07-18T00:00:00Z",
-            .renderBackend = "opengl"
-        };
-        ReleaseCompatibilityDecision target{
-            .release = {ParseHoroVersion("0.1.0").Value()},
-            .contractBaseline = Version("0.1.0"),
-            .persistentContract = Contract(2)
-        };
-        auto failed = service.Execute({
-            .projectRoot = project.root,
-            .sourceMetadata = metadata,
-            .sourceBaseline = Version("0.0.1"),
-            .targetDecision = target,
-            .plan = Plan(),
-            .engineBuildIdentity = "test-build"
-        });
+        ProjectMetadata metadata{.horoVersion = {ParseHoroVersion("0.0.1").Value()},
+                                 .persistentContract = Contract(1),
+                                 .projectId = "p1",
+                                 .name = "Test",
+                                 .projectVersion = "0.1.0",
+                                 .createdAt = "2026-07-18T00:00:00Z",
+                                 .renderBackend = "opengl"};
+        ReleaseCompatibilityDecision target{.release = {ParseHoroVersion("0.1.0").Value()},
+                                            .contractBaseline = Version("0.1.0"),
+                                            .persistentContract = Contract(2)};
+        auto failed = service.Execute({.projectRoot = project.root,
+                                       .sourceMetadata = metadata,
+                                       .sourceBaseline = Version("0.0.1"),
+                                       .targetDecision = target,
+                                       .plan = Plan(),
+                                       .engineBuildIdentity = "test-build"});
         REQUIRE((failed.HasError()));
         const auto recovery = service.InspectPendingRecovery(project.root);
         REQUIRE((recovery.operationId.has_value()));
@@ -413,12 +329,7 @@ namespace
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE (
-    "Execute Revalidates Pending Recovery After Lease Acquisition"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Execute Revalidates Pending Recovery After Lease Acquisition", "[unit][editor]") {
         Project project;
         FailingFilesystem files(project.root);
         files.failRoot = false;
@@ -428,58 +339,46 @@ namespace
         ProjectMigrationTransactionService service(files, clock, coordinator, jobs);
         const std::string operationId(32, 'd');
         const std::string contract = FormatMigrationRecoveryContractId(CurrentMigrationRecoveryContractId());
-        files.onExclusiveAcquired = [&]
-        {
-            project.Write(
-                ".horo/local/migration/" + operationId + "/journal.json",
-                "{\"writerHoroVersion\":\"" + FormatHoroVersion(CurrentEngineReleaseVersion().value) +
-                "\",\"recoveryContract\":\"" + contract + "\",\"operationId\":\"" + operationId +
-                "\",\"state\":\"Committed\",\"sourceVersion\":\"0.0.1\","
-                "\"targetVersion\":\"0.1.0\",\"projectId\":\"p1\","
-                "\"engineBuildIdentity\":\"test-build\",\"records\":[]}");
+        files.onExclusiveAcquired = [&] {
+            project.Write(".horo/local/migration/" + operationId + "/journal.json",
+                          "{\"writerHoroVersion\":\"" + FormatHoroVersion(CurrentEngineReleaseVersion().value) +
+                              "\",\"recoveryContract\":\"" + contract + "\",\"operationId\":\"" + operationId +
+                              "\",\"state\":\"Committed\",\"sourceVersion\":\"0.0.1\","
+                              "\"targetVersion\":\"0.1.0\",\"projectId\":\"p1\","
+                              "\"engineBuildIdentity\":\"test-build\",\"records\":[]}");
         };
 
-        const auto result = service.Execute({
-            .projectRoot = project.root,
-            .sourceMetadata = SourceMetadata(),
-            .sourceBaseline = Version("0.0.1"),
-            .targetDecision = TargetDecision(),
-            .plan = Plan(),
-            .engineBuildIdentity = "test-build"
-        });
+        const auto result = service.Execute({.projectRoot = project.root,
+                                             .sourceMetadata = SourceMetadata(),
+                                             .sourceBaseline = Version("0.0.1"),
+                                             .targetDecision = TargetDecision(),
+                                             .plan = Plan(),
+                                             .engineBuildIdentity = "test-build"});
 
         REQUIRE((result.HasError()));
         REQUIRE((result.ErrorValue().code.Value() == "project.migration.recovery_failed"));
-        REQUIRE((service.InspectPendingRecovery(project.root).action ==
-                 MigrationRecoveryAction::FinalizeCommittedMigration));
+        REQUIRE((service.InspectPendingRecovery(project.root).action == MigrationRecoveryAction::FinalizeCommittedMigration));
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE (
-    "Recover Revalidates Cleared Evidence After Lease Acquisition"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Recover Revalidates Cleared Evidence After Lease Acquisition", "[unit][editor]") {
         Project project;
         const std::string operationId(32, 'e');
         const std::string contract = FormatMigrationRecoveryContractId(CurrentMigrationRecoveryContractId());
         const auto operationRoot = project.root / ".horo/local/migration" / operationId;
-        project.Write(
-            ".horo/local/migration/" + operationId + "/journal.json",
-            "{\"writerHoroVersion\":\"" + FormatHoroVersion(CurrentEngineReleaseVersion().value) +
-            "\",\"recoveryContract\":\"" + contract + "\",\"operationId\":\"" + operationId +
-            "\",\"state\":\"Committed\",\"sourceVersion\":\"0.0.1\","
-            "\"targetVersion\":\"0.1.0\",\"projectId\":\"p1\","
-            "\"engineBuildIdentity\":\"test-build\",\"records\":[]}");
+        project.Write(".horo/local/migration/" + operationId + "/journal.json",
+                      "{\"writerHoroVersion\":\"" + FormatHoroVersion(CurrentEngineReleaseVersion().value) + "\",\"recoveryContract\":\"" +
+                          contract + "\",\"operationId\":\"" + operationId +
+                          "\",\"state\":\"Committed\",\"sourceVersion\":\"0.0.1\","
+                          "\"targetVersion\":\"0.1.0\",\"projectId\":\"p1\","
+                          "\"engineBuildIdentity\":\"test-build\",\"records\":[]}");
         FailingFilesystem files(project.root);
         files.failRoot = false;
         SystemWallClock clock;
         ProjectMutationCoordinator coordinator(files);
         JobSystem jobs({.workerCount = 1, .maxQueuedJobs = 1});
         ProjectMigrationTransactionService service(files, clock, coordinator, jobs);
-        files.onExclusiveAcquired = [&]
-        {
+        files.onExclusiveAcquired = [&] {
             std::error_code ignored;
             std::filesystem::remove_all(operationRoot, ignored);
             REQUIRE_FALSE((ignored));
@@ -490,12 +389,7 @@ namespace
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE (
-    "Transaction Holds Mutation Lease Through Storage Admission"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Transaction Holds Mutation Lease Through Storage Admission", "[unit][editor]") {
         Project project;
         FailingFilesystem files(project.root);
         files.failRoot = false;
@@ -504,41 +398,29 @@ namespace
         JobSystem jobs({.workerCount = 2, .maxQueuedJobs = 8});
         ProjectMigrationTransactionService service(files, clock, coordinator, jobs);
         bool competingWriterRejected = false;
-        files.onAvailableBytes = [&]
-        {
-            const auto competing = coordinator.TryAcquire({
-                project.root, ProjectMutationOwner::Save, "competing-save"
-            });
+        files.onAvailableBytes = [&] {
+            const auto competing = coordinator.TryAcquire({project.root, ProjectMutationOwner::Save, "competing-save"});
             competingWriterRejected = competing.HasError();
             REQUIRE((competing.HasError()));
             REQUIRE((competing.ErrorValue().code.Value() == "project.migration.locked"));
         };
 
-        const auto result = service.Execute({
-            .projectRoot = project.root,
-            .sourceMetadata = SourceMetadata(),
-            .sourceBaseline = Version("0.0.1"),
-            .targetDecision = TargetDecision(),
-            .plan = Plan(),
-            .engineBuildIdentity = "test-build"
-        });
+        const auto result = service.Execute({.projectRoot = project.root,
+                                             .sourceMetadata = SourceMetadata(),
+                                             .sourceBaseline = Version("0.0.1"),
+                                             .targetDecision = TargetDecision(),
+                                             .plan = Plan(),
+                                             .engineBuildIdentity = "test-build"});
 
         REQUIRE((result.HasValue()));
         REQUIRE((competingWriterRejected));
         files.onAvailableBytes = {};
-        const auto afterTransaction = coordinator.TryAcquire({
-            project.root, ProjectMutationOwner::Save, "save-after-migration"
-        });
+        const auto afterTransaction = coordinator.TryAcquire({project.root, ProjectMutationOwner::Save, "save-after-migration"});
         REQUIRE((afterTransaction.HasValue()));
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE (
-    "Storage Admission Rejects Insufficient Capacity Before Staging"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Storage Admission Rejects Insufficient Capacity Before Staging", "[unit][editor]") {
         Project project;
         const std::string rootBefore = project.Read(".horo/project.json");
         const std::string dataBefore = project.Read("assets/data.txt");
@@ -550,14 +432,12 @@ namespace
         JobSystem jobs({.workerCount = 2, .maxQueuedJobs = 8});
         ProjectMigrationTransactionService service(files, clock, coordinator, jobs);
 
-        const auto result = service.Execute({
-            .projectRoot = project.root,
-            .sourceMetadata = SourceMetadata(),
-            .sourceBaseline = Version("0.0.1"),
-            .targetDecision = TargetDecision(),
-            .plan = Plan(),
-            .engineBuildIdentity = "test-build"
-        });
+        const auto result = service.Execute({.projectRoot = project.root,
+                                             .sourceMetadata = SourceMetadata(),
+                                             .sourceBaseline = Version("0.0.1"),
+                                             .targetDecision = TargetDecision(),
+                                             .plan = Plan(),
+                                             .engineBuildIdentity = "test-build"});
 
         REQUIRE((result.HasError()));
         REQUIRE((result.ErrorValue().code.Value() == "project.migration.capacity_insufficient"));
@@ -568,30 +448,20 @@ namespace
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE (
-    "Storage Admission Handles Zero Margin And Saturates Declared Bounds"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Storage Admission Handles Zero Margin And Saturates Declared Bounds", "[unit][editor]") {
         Project project;
         NativeDurableFileSystem files;
         SystemWallClock clock;
         ProjectMutationCoordinator coordinator(files);
         JobSystem jobs({.workerCount = 1, .maxQueuedJobs = 4});
-        const ProjectMigrationStoragePolicy policy{
-            .minimumSafetyMarginBytes = 0,
-            .safetyMarginPermille = 0
-        };
+        const ProjectMigrationStoragePolicy policy{.minimumSafetyMarginBytes = 0, .safetyMarginPermille = 0};
         ProjectMigrationTransactionService service(files, clock, coordinator, jobs, policy);
-        ProjectMigrationTransactionRequest request{
-            .projectRoot = project.root,
-            .sourceMetadata = SourceMetadata(),
-            .sourceBaseline = Version("0.0.1"),
-            .targetDecision = TargetDecision(),
-            .plan = Plan(),
-            .engineBuildIdentity = "test-build"
-        };
+        ProjectMigrationTransactionRequest request{.projectRoot = project.root,
+                                                   .sourceMetadata = SourceMetadata(),
+                                                   .sourceBaseline = Version("0.0.1"),
+                                                   .targetDecision = TargetDecision(),
+                                                   .plan = Plan(),
+                                                   .engineBuildIdentity = "test-build"};
 
         const auto zeroMargin = service.InspectStorageAdmission(request);
         REQUIRE((zeroMargin.HasValue()));
@@ -613,12 +483,7 @@ namespace
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE (
-    "Cancellation Before Publish Preserves Project And History"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Cancellation Before Publish Preserves Project And History", "[unit][editor]") {
         Project project;
         const std::string rootBefore = project.Read(".horo/project.json");
         const std::string dataBefore = project.Read("assets/data.txt");
@@ -630,15 +495,13 @@ namespace
         CancellationSource cancellation;
         cancellation.RequestCancellation();
 
-        const auto result = service.Execute({
-            .projectRoot = project.root,
-            .sourceMetadata = SourceMetadata(),
-            .sourceBaseline = Version("0.0.1"),
-            .targetDecision = TargetDecision(),
-            .plan = Plan(),
-            .engineBuildIdentity = "test-build",
-            .cancellation = cancellation.Token()
-        });
+        const auto result = service.Execute({.projectRoot = project.root,
+                                             .sourceMetadata = SourceMetadata(),
+                                             .sourceBaseline = Version("0.0.1"),
+                                             .targetDecision = TargetDecision(),
+                                             .plan = Plan(),
+                                             .engineBuildIdentity = "test-build",
+                                             .cancellation = cancellation.Token()});
 
         REQUIRE((result.HasError()));
         REQUIRE((result.ErrorValue().code.Value() == "project.migration.cancelled"));
@@ -649,23 +512,17 @@ namespace
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE (
-    "Committed Journal Finalizes Cleanup Without Rewriting Project"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Committed Journal Finalizes Cleanup Without Rewriting Project", "[unit][editor]") {
         Project project;
         const std::string operationId(32, 'c');
         const std::string rootBefore = project.Read(".horo/project.json");
         const std::string contract = FormatMigrationRecoveryContractId(CurrentMigrationRecoveryContractId());
-        project.Write(
-            ".horo/local/migration/" + operationId + "/journal.json",
-            "{\"writerHoroVersion\":\"" + FormatHoroVersion(CurrentEngineReleaseVersion().value) +
-            "\",\"recoveryContract\":\"" + contract + "\",\"operationId\":\"" + operationId +
-            "\",\"state\":\"Committed\",\"sourceVersion\":\"0.0.1\","
-            "\"targetVersion\":\"0.1.0\",\"projectId\":\"p1\","
-            "\"engineBuildIdentity\":\"test-build\",\"records\":[]}");
+        project.Write(".horo/local/migration/" + operationId + "/journal.json",
+                      "{\"writerHoroVersion\":\"" + FormatHoroVersion(CurrentEngineReleaseVersion().value) + "\",\"recoveryContract\":\"" +
+                          contract + "\",\"operationId\":\"" + operationId +
+                          "\",\"state\":\"Committed\",\"sourceVersion\":\"0.0.1\","
+                          "\"targetVersion\":\"0.1.0\",\"projectId\":\"p1\","
+                          "\"engineBuildIdentity\":\"test-build\",\"records\":[]}");
         FailingFilesystem files(project.root);
         files.failRoot = false;
         SystemWallClock clock;
@@ -673,15 +530,12 @@ namespace
         JobSystem jobs({.workerCount = 1, .maxQueuedJobs = 1});
         ProjectMigrationTransactionService service(files, clock, coordinator, jobs);
         bool recoveryLeaseObserved{};
-        files.onSyncDirectory = [&]
-        {
-            auto contender = coordinator.TryAcquire(
-                {project.root, ProjectMutationOwner::Save, "recovery-lease-probe"});
+        files.onSyncDirectory = [&] {
+            auto contender = coordinator.TryAcquire({project.root, ProjectMutationOwner::Save, "recovery-lease-probe"});
             recoveryLeaseObserved = contender.HasError();
         };
 
-        REQUIRE((service.InspectPendingRecovery(project.root).action ==
-                 MigrationRecoveryAction::FinalizeCommittedMigration));
+        REQUIRE((service.InspectPendingRecovery(project.root).action == MigrationRecoveryAction::FinalizeCommittedMigration));
         REQUIRE((service.Recover(project.root).HasValue()));
         REQUIRE((recoveryLeaseObserved));
         REQUIRE((project.Read(".horo/project.json") == rootBefore));
@@ -692,20 +546,14 @@ namespace
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE (
-    "Recovery Journal Rejects Duplicate Keys"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Recovery Journal Rejects Duplicate Keys", "[unit][editor]") {
         Project project;
         const std::string operationId(32, 'a');
         const std::string writer = FormatHoroVersion(CurrentEngineReleaseVersion().value);
-        project.Write(
-            ".horo/local/migration/" + operationId + "/journal.json",
-            "{\"writerHoroVersion\":\"" + writer + "\",\"operationId\":\"" + operationId +
-            "\",\"state\":\"Preparing\",\"state\":\"Committed\",\"sourceVersion\":\"0.0.1\"," +
-            "\"targetVersion\":\"0.1.0\",\"projectId\":\"p1\",\"engineBuildIdentity\":\"test\",\"records\":[]}");
+        project.Write(".horo/local/migration/" + operationId + "/journal.json",
+                      "{\"writerHoroVersion\":\"" + writer + "\",\"operationId\":\"" + operationId +
+                          "\",\"state\":\"Preparing\",\"state\":\"Committed\",\"sourceVersion\":\"0.0.1\"," +
+                          "\"targetVersion\":\"0.1.0\",\"projectId\":\"p1\",\"engineBuildIdentity\":\"test\",\"records\":[]}");
         NativeDurableFileSystem files;
         SystemWallClock clock;
         ProjectMutationCoordinator coordinator(files);
@@ -719,29 +567,22 @@ namespace
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
 
-    TEST_CASE (
-    "Supported Old Writer And Committed Cleanup Are Handled Separately"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Supported Old Writer And Committed Cleanup Are Handled Separately", "[unit][editor]") {
         Project project;
         const std::string operationId(32, 'b');
         const std::string contract = FormatMigrationRecoveryContractId(CurrentMigrationRecoveryContractId());
-        const std::string journal = "{\"writerHoroVersion\":\"0.0.0\",\"recoveryContract\":\"" + contract +
-            "\",\"operationId\":\"" + operationId +
-            "\",\"state\":\"Preparing\",\"sourceVersion\":\"0.0.0\","
-            "\"targetVersion\":\"0.0.1\",\"projectId\":\"p1\","
-            "\"engineBuildIdentity\":\"old-test\",\"records\":[]}";
+        const std::string journal = "{\"writerHoroVersion\":\"0.0.0\",\"recoveryContract\":\"" + contract + "\",\"operationId\":\"" +
+                                    operationId +
+                                    "\",\"state\":\"Preparing\",\"sourceVersion\":\"0.0.0\","
+                                    "\"targetVersion\":\"0.0.1\",\"projectId\":\"p1\","
+                                    "\"engineBuildIdentity\":\"old-test\",\"records\":[]}";
         project.Write(".horo/local/migration/" + operationId + "/journal.json", journal);
         NativeDurableFileSystem files;
         SystemWallClock clock;
         ProjectMutationCoordinator coordinator(files);
         JobSystem jobs({.workerCount = 1, .maxQueuedJobs = 1});
         ProjectMigrationTransactionService service(files, clock, coordinator, jobs);
-        REQUIRE(
-            (service.InspectPendingRecovery(project.root).action == MigrationRecoveryAction::DiscardUnpublishedStaging))
-        ;
+        REQUIRE((service.InspectPendingRecovery(project.root).action == MigrationRecoveryAction::DiscardUnpublishedStaging));
         REQUIRE((service.Recover(project.root).HasValue()));
 
         std::string committed = journal;
@@ -753,4 +594,4 @@ namespace
         REQUIRE((!std::filesystem::exists(project.root / ".horo/local/migration-cleanup" / operationId)));
         jobs.Shutdown(ShutdownPolicy::Drain);
     }
-} // namespace
+}  // namespace

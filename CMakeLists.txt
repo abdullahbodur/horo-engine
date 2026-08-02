@@ -4,12 +4,17 @@ set(HORO_ENGINE_VERSION "0.1.0")
 
 project(HoroEngine VERSION ${HORO_ENGINE_VERSION} LANGUAGES CXX C)
 
+set(HORO_GAMEPLAY_SDK_FINGERPRINT
+    "horo-${HORO_ENGINE_VERSION}-gameplay-sdk1-${CMAKE_CXX_COMPILER_ID}-${CMAKE_CXX_COMPILER_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
+)
+
 # New project layout is being introduced incrementally. Legacy source is parked
 # under deprecated/ as migration reference and is intentionally not part of target
 # discovery.
 
 include(GNUInstallDirs)
 include(CTest)
+include(CMakePackageConfigHelpers)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -43,6 +48,7 @@ endif()
 include(Dependencies)
 include(GenerateBuildInfo)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+include(HoroGameplayModule)
 include(GenerateProjectMigrations)
 include(GenerateProjectCompatibility)
 
@@ -50,6 +56,27 @@ include(GenerateProjectCompatibility)
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/CMakeLists.txt")
     add_subdirectory(src)
 endif()
+
+set(HORO_GAMEPLAY_SDK_PACKAGE_DIR "${CMAKE_BINARY_DIR}/sdk/gameplay" CACHE INTERNAL
+    "Build-tree CMake package used by project gameplay modules")
+file(MAKE_DIRECTORY "${HORO_GAMEPLAY_SDK_PACKAGE_DIR}")
+set_target_properties(HoroFoundation PROPERTIES EXPORT_NAME Foundation POSITION_INDEPENDENT_CODE ON)
+set_target_properties(HoroGameplayApi PROPERTIES EXPORT_NAME GameplayApi POSITION_INDEPENDENT_CODE ON)
+export(TARGETS HoroFoundation HoroGameplayApi
+       NAMESPACE HoroEngine::
+       FILE "${HORO_GAMEPLAY_SDK_PACKAGE_DIR}/HoroEngineGameplayTargets.cmake")
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/HoroEngineGameplayConfig.cmake.in"
+    "${HORO_GAMEPLAY_SDK_PACKAGE_DIR}/HoroEngineGameplayConfig.cmake"
+    INSTALL_DESTINATION "."
+    NO_SET_AND_CHECK_MACRO
+    NO_CHECK_REQUIRED_COMPONENTS_MACRO)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/HoroGameplayModule.cmake"
+               "${HORO_GAMEPLAY_SDK_PACKAGE_DIR}/HoroGameplayModule.cmake" COPYONLY)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/cmake/WriteGameplayModuleManifest.cmake"
+               "${HORO_GAMEPLAY_SDK_PACKAGE_DIR}/WriteGameplayModuleManifest.cmake" COPYONLY)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_gameplay_behavior_bundle.py"
+               "${HORO_GAMEPLAY_SDK_PACKAGE_DIR}/generate_gameplay_behavior_bundle.py" COPYONLY)
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/apps/CMakeLists.txt")
     add_subdirectory(apps)

@@ -7,7 +7,8 @@ namespace Horo::Editor {
         Runtime::SceneDefinitionBuilder builder{sceneId, Runtime::SceneDefinitionRevision{document.state.value}};
         for (const SceneObjectSnapshot &object : document.objects) {
             const Runtime::RuntimeComponentSet components{object.components.camera, object.components.light,
-                                                          object.components.triggerVolume, object.components.audioSource};
+                                                          object.components.triggerVolume, object.components.audioSource,
+                                                          object.components.behaviors};
             builder.Add(
                 Runtime::RuntimeEntityDefinition{Runtime::SceneObjectId{object.id.value},
                                                  object.parent ? std::optional{Runtime::SceneObjectId{object.parent->value}} : std::nullopt,

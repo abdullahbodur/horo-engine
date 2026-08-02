@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "runtime": "lua",
+  "behaviorTypeId": "{{BEHAVIOR_TYPE_ID}}"
+}

@@ -12,6 +12,7 @@
 #include "Horo/Extensions/ExtensionMarketplace.h"
 #include "Horo/Foundation/DataBus.h"
 #include "Horo/Foundation/Logging/Logger.h"
+#include "Horo/Foundation/OperationStore.h"
 #include "Horo/Runtime/Input.h"
 #include "NavigationErrors.h"
 #include "editor/project_model/RendererAvailability.h"
@@ -408,6 +409,16 @@ namespace Horo::Editor {
         FlushPendingNavigation();
     }
 
+    /** @copydoc GuiScreenHost::OnFixedUpdate */
+    void GuiScreenHost::OnFixedUpdate(const double fixedDeltaSeconds) {
+        if (activeScreen_) {
+            isScreenCallbackActive_ = true;
+            activeScreen_->OnFixedUpdate(fixedDeltaSeconds);
+            isScreenCallbackActive_ = false;
+        }
+        FlushPendingNavigation();
+    }
+
     void GuiScreenHost::FlushPendingNavigation() {
         if (!pendingNavigation_.has_value()) {
             return;
@@ -464,7 +475,7 @@ namespace Horo::Editor {
             case EditorMenuAction::ImportAssets:
                 if (context_ && modalHost_ && !modalHost_->HasOpenModal()) {
                     auto modal = std::make_unique<AssetImportModal>(context_->theme.fonts, m_importJobs, importerCatalog_,
-                                                                    services_.TryGet<Assets::AssetRegistry>());
+                                                           services_.TryGet<Assets::AssetRegistry>(), services_.TryGet<OperationStore>());
                     modal->SetProjectRoot(CurrentProjectRoot());
                     if (invocation.assetDestination.has_value())
                         modal->SetDefaultDestination(*invocation.assetDestination);

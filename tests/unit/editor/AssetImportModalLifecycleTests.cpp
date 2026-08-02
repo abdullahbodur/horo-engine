@@ -1,68 +1,60 @@
-#include <catch2/catch_test_macros.hpp>
-
-#include "Horo/Editor/AssetImportModal.h"
 #include "Horo/Assets/AssetImporter.h"
+#include "Horo/Editor/AssetImportModal.h"
 #include "Horo/Editor/EditorDataBus.h"
 #include "Horo/Editor/EditorModalHost.h"
 #include "Horo/Foundation/JobSystem.h"
 #include "Horo/Runtime/Input.h"
 
-#include <functional>
+#include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <vector>
 
-namespace
-{
-using namespace Horo;
-using namespace Horo::Editor;
-using namespace Horo::Assets;
+namespace {
+    using namespace Horo;
+    using namespace Horo::Editor;
+    using namespace Horo::Assets;
 
-class TestImporter final : public IAssetImporter
-{
-  public:
-    [[nodiscard]] Result<PreparedAssetImport> Import(
-        const AssetImportInput &input,
-        const CancellationToken &cancellation) const override
-    {
-        PreparedAssetImport result;
-        result.type = AssetTypeId::Parse("core.mesh").Value();
-        result.editorPayload.assign(input.sourceBytes.begin(), input.sourceBytes.end());
-        return Result<PreparedAssetImport>::Success(std::move(result));
-    }
-};
-
-/** @brief Test double that overrides Draw for headless testing. */
-class TestAssetImportModal : public AssetImportModal
-{
-  public:
-    using AssetImportModal::AssetImportModal;
-
-    ModalFrameResult Draw() override
-    {
-        if (!m_preparedCalled && m_prepareFn)
-        {
-            m_prepareFn();
-            m_preparedCalled = true;
+    class TestImporter final : public IAssetImporter {
+    public:
+        [[nodiscard]] Result<PreparedAssetImport> Import(const AssetImportInput &input,
+                                                         const CancellationToken &cancellation) const override {
+            PreparedAssetImport result;
+            result.type = AssetTypeId::Parse("core.mesh").Value();
+            result.editorPayload.assign(input.sourceBytes.begin(), input.sourceBytes.end());
+            return Result<PreparedAssetImport>::Success(std::move(result));
         }
-        return ModalFrameResult::None();
-    }
+    };
 
-    std::function<void()> m_prepareFn;
-    bool m_preparedCalled{false};
-};
+    /** @brief Test double that overrides Draw for headless testing. */
+    class TestAssetImportModal : public AssetImportModal {
+    public:
+        using AssetImportModal::AssetImportModal;
 
-} // namespace
+        ModalFrameResult Draw() override {
+            if (!m_preparedCalled && m_prepareFn) {
+                m_prepareFn();
+                m_preparedCalled = true;
+            }
+            return ModalFrameResult::None();
+        }
 
-TEST_CASE("AssetImportModal lifecycle: open, begin, prepare, close", "[native]")
-{
+        std::function<void()> m_prepareFn;
+        bool m_preparedCalled{false};
+    };
+
+}  // namespace
+
+TEST_CASE("AssetImportModal lifecycle completes the visible operation before the modal closes", "[native]") {
     EditorDataBus events;
     Input::InputRouter inputRouter;
     EditorModalHost modalHost{events, inputRouter};
     const auto &fonts = *reinterpret_cast<const Theme::Fonts *>(static_cast<std::uintptr_t>(1));
     JobSystem jobs;
+    OperationStore operations{4, 4};
 
     // Build importer catalog
     AssetImporterCatalog catalog;
@@ -81,7 +73,7 @@ TEST_CASE("AssetImportModal lifecycle: open, begin, prepare, close", "[native]")
     auto catSnapshot = catalog.Publish();
     REQUIRE((catSnapshot.HasValue()));
 
-    auto modal = std::make_unique<TestAssetImportModal>(fonts, jobs, catSnapshot.Value());
+    auto modal = std::make_unique<TestAssetImportModal>(fonts, jobs, catSnapshot.Value(), nullptr, &operations);
     auto *modalPtr = modal.get();
 
     bool prepared = false;
@@ -100,28 +92,35 @@ TEST_CASE("AssetImportModal lifecycle: open, begin, prepare, close", "[native]")
 
     // Begin import
     CancellationToken cancellation;
-    auto beginResult = modalPtr->BeginImport(
-        {std::filesystem::path("/tmp/test/cube.obj")},
-        std::filesystem::path("/tmp/test"),
-        cancellation);
+    auto beginResult =
+        modalPtr->BeginImport({std::filesystem::path("/tmp/test/cube.obj")}, std::filesystem::path("/tmp/test"), cancellation);
     REQUIRE((beginResult.HasValue()));
 
     auto &snap = modalPtr->Snapshot();
     REQUIRE((snap.items.size() == 1));
+    auto runningOperations = operations.SnapshotIfChanged(0);
+    REQUIRE(runningOperations.has_value());
+    REQUIRE((runningOperations->operations.size() == 1));
+    REQUIRE((runningOperations->operations.front().state == OperationState::Running));
 
     // Draw triggers prepare
     modalHost.Draw();
 
     REQUIRE((prepared));
+    REQUIRE(modalPtr->IsImportComplete());
+    const auto completedOperations = operations.SnapshotIfChanged(runningOperations->revision);
+    REQUIRE(completedOperations.has_value());
+    REQUIRE((completedOperations->operations.front().state == OperationState::Succeeded));
+    REQUIRE((completedOperations->operations.front().progress == 1.0F));
 
-    // Close
-    auto closeResult = modalHost.RequestClose(modalPtr->Id(), ModalCloseReason::Completed);
+    // A stale cancel-style close request cannot relabel already committed work.
+    auto closeResult = modalHost.RequestClose(modalPtr->Id(), ModalCloseReason::Cancelled);
     REQUIRE((closeResult.HasValue()));
     modalHost.OnUpdate(0.016f);
+    REQUIRE_FALSE(operations.SnapshotIfChanged(completedOperations->revision).has_value());
 }
 
-TEST_CASE("AssetImportModal presets are scoped by importer contribution and extension", "[native]")
-{
+TEST_CASE("AssetImportModal presets are scoped by importer contribution and extension", "[native]") {
     const auto &fonts = *reinterpret_cast<const Theme::Fonts *>(static_cast<std::uintptr_t>(1));
     JobSystem jobs;
     AssetImporterCatalog catalog;
@@ -134,24 +133,25 @@ TEST_CASE("AssetImportModal presets are scoped by importer contribution and exte
                      .version = "1.0.0",
                      .fileExtensions = {"obj", "fbx"},
                      .assetTypes = {AssetTypeId::Parse("core.mesh").Value()},
-                     .settings = {
-                         ImportSettingDescriptor{
-                             .id = "optimize",
-                             .labelKey = "Optimize",
-                             .descriptionKey = "",
-                             .kind = ImportSettingKind::Boolean,
-                             .defaultValue = false,
-                             .includeInPresets = true,
+                     .settings =
+                         {
+                             ImportSettingDescriptor{
+                                 .id = "optimize",
+                                 .labelKey = "Optimize",
+                                 .descriptionKey = "",
+                                 .kind = ImportSettingKind::Boolean,
+                                 .defaultValue = false,
+                                 .includeInPresets = true,
+                             },
+                             ImportSettingDescriptor{
+                                 .id = "sourceTag",
+                                 .labelKey = "Source Tag",
+                                 .descriptionKey = "",
+                                 .kind = ImportSettingKind::Text,
+                                 .defaultValue = std::string{},
+                                 .includeInPresets = false,
+                             },
                          },
-                         ImportSettingDescriptor{
-                             .id = "sourceTag",
-                             .labelKey = "Source Tag",
-                             .descriptionKey = "",
-                             .kind = ImportSettingKind::Text,
-                             .defaultValue = std::string{},
-                             .includeInPresets = false,
-                         },
-                     },
                      .strategy = std::make_shared<const TestImporter>(),
                  })
                  .HasValue()));
@@ -160,10 +160,9 @@ TEST_CASE("AssetImportModal presets are scoped by importer contribution and exte
 
     TestAssetImportModal modal{fonts, jobs, catalogSnapshot.Value()};
     CancellationToken cancellation;
-    REQUIRE((modal.BeginImport(
-        {"/tmp/test/cube.obj", "/tmp/test/character.fbx"}, "/tmp/test", cancellation).HasValue()));
+    REQUIRE((modal.BeginImport({"/tmp/test/cube.obj", "/tmp/test/character.fbx"}, "/tmp/test", cancellation).HasValue()));
 
-    auto& objItem = const_cast<AssetImportItem&>(modal.Snapshot().items[0]);
+    auto &objItem = const_cast<AssetImportItem &>(modal.Snapshot().items[0]);
     objItem.displayName = "PresetIndependentName";
     objItem.destinationFolder = "assets/Characters";
     objItem.subfolderByType = 2;
@@ -201,10 +200,8 @@ TEST_CASE("AssetImportModal presets are scoped by importer contribution and exte
     REQUIRE((objItem.settings["settings.sourceTag"] == "second-source"));
 }
 
-TEST_CASE("AssetImportModal applies an absolute Content Browser destination", "[native]")
-{
-    const auto& fonts =
-        *reinterpret_cast<const Theme::Fonts*>(static_cast<std::uintptr_t>(1));
+TEST_CASE("AssetImportModal applies an absolute Content Browser destination", "[native]") {
+    const auto &fonts = *reinterpret_cast<const Theme::Fonts *>(static_cast<std::uintptr_t>(1));
     JobSystem jobs;
     AssetImporterCatalog catalog;
     REQUIRE((catalog
@@ -224,8 +221,7 @@ TEST_CASE("AssetImportModal applies an absolute Content Browser destination", "[
 
     const std::filesystem::path projectRoot =
         std::filesystem::temp_directory_path() /
-        ("horo-import-destination-" + std::to_string(
-            std::chrono::steady_clock::now().time_since_epoch().count()));
+        ("horo-import-destination-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     const std::filesystem::path destination = projectRoot / "assets/Meshes";
     std::filesystem::create_directories(destination);
 
@@ -233,8 +229,7 @@ TEST_CASE("AssetImportModal applies an absolute Content Browser destination", "[
     modal.SetProjectRoot(projectRoot);
     modal.SetDefaultDestination(destination);
     CancellationToken cancellation;
-    REQUIRE((modal.BeginImport(
-        {projectRoot / "source/cube.obj"}, projectRoot, cancellation).HasValue()));
+    REQUIRE((modal.BeginImport({projectRoot / "source/cube.obj"}, projectRoot, cancellation).HasValue()));
     REQUIRE((modal.Snapshot().items.size() == 1));
     REQUIRE((modal.Snapshot().items[0].destinationFolder == "assets/Meshes"));
 
@@ -242,29 +237,29 @@ TEST_CASE("AssetImportModal applies an absolute Content Browser destination", "[
     std::filesystem::remove_all(projectRoot, cleanupError);
 }
 
-TEST_CASE("AssetImportModal does not duplicate an already selected type folder", "[native]")
-{
-    const auto& fonts = *reinterpret_cast<const Theme::Fonts*>(static_cast<std::uintptr_t>(1));
+TEST_CASE("AssetImportModal does not duplicate an already selected type folder", "[native]") {
+    const auto &fonts = *reinterpret_cast<const Theme::Fonts *>(static_cast<std::uintptr_t>(1));
     JobSystem jobs;
     AssetImporterCatalog catalog;
-    REQUIRE((catalog.Register(AssetImporterContribution{
-        .contributionId = "test.mesh",
-        .packageId = "test",
-        .moduleId = "mesh",
-        .moduleVersion = "1.0.0",
-        .version = "1.0.0",
-        .fileExtensions = {"fbx"},
-        .assetTypes = {AssetTypeId::Parse("core.mesh").Value()},
-        .subfolderCategory = "Meshes",
-        .strategy = std::make_shared<const TestImporter>(),
-    }).HasValue()));
+    REQUIRE((catalog
+                 .Register(AssetImporterContribution{
+                     .contributionId = "test.mesh",
+                     .packageId = "test",
+                     .moduleId = "mesh",
+                     .moduleVersion = "1.0.0",
+                     .version = "1.0.0",
+                     .fileExtensions = {"fbx"},
+                     .assetTypes = {AssetTypeId::Parse("core.mesh").Value()},
+                     .subfolderCategory = "Meshes",
+                     .strategy = std::make_shared<const TestImporter>(),
+                 })
+                 .HasValue()));
     auto catalogSnapshot = catalog.Publish();
     REQUIRE(catalogSnapshot.HasValue());
 
     const std::filesystem::path projectRoot =
         std::filesystem::temp_directory_path() /
-        ("horo-import-destination-" + std::to_string(
-            std::chrono::steady_clock::now().time_since_epoch().count()));
+        ("horo-import-destination-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     const std::filesystem::path sourcePath = projectRoot / "source.fbx";
     std::filesystem::create_directories(projectRoot / "assets/Meshes");
     {
@@ -275,7 +270,7 @@ TEST_CASE("AssetImportModal does not duplicate an already selected type folder",
     TestAssetImportModal modal{fonts, jobs, catalogSnapshot.Value()};
     CancellationToken cancellation;
     REQUIRE((modal.BeginImport({sourcePath}, projectRoot, cancellation).HasValue()));
-    auto& item = const_cast<AssetImportItem&>(modal.Snapshot().items[0]);
+    auto &item = const_cast<AssetImportItem &>(modal.Snapshot().items[0]);
     item.destinationFolder = "assets/Meshes";
     item.subfolderByType = 0;
     REQUIRE((modal.ImportSingleItem(0, cancellation).HasValue()));

@@ -1,27 +1,19 @@
-#include <catch2/catch_message.hpp>
-#include <catch2/catch_test_macros.hpp>
-
 #include "Horo/Editor/HierarchyModel.h"
 
+#include <catch2/catch_message.hpp>
+#include <catch2/catch_test_macros.hpp>
 #include <iostream>
 #include <optional>
 #include <string_view>
 #include <vector>
 
-namespace
-{
-    void Expect(const bool condition, const std::string_view message)
-    {
+namespace {
+    void Expect(const bool condition, const std::string_view message) {
         INFO(message);
         REQUIRE((condition));
     }
 
-    TEST_CASE (
-    "Mock Hierarchy Matches Editor Reference"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Mock Hierarchy Matches Editor Reference", "[unit][editor]") {
         using namespace Horo::Editor;
         HierarchyModel model = CreateMockHierarchyModel();
 
@@ -34,12 +26,7 @@ namespace
         Expect(model.Roots()[2]->children[0]->type == HierarchyNodeType::Camera, "Cameras should contain a camera");
     }
 
-    TEST_CASE (
-    "Visible Rows Respect Expansion And Search Ancestors"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Visible Rows Respect Expansion And Search Ancestors", "[unit][editor]") {
         using namespace Horo::Editor;
         HierarchyModel model = CreateMockHierarchyModel();
         std::vector<HierarchyVisibleRow> rows;
@@ -55,34 +42,21 @@ namespace
 
         model.BuildVisibleRows("floor", rows);
         Expect(rows.size() == 2, "search should retain a matching node and its ancestor path");
-        Expect(rows[0].node->name == "Room" && rows[1].node->name == "floor 000",
-               "search should preserve hierarchy context");
+        Expect(rows[0].node->name == "Room" && rows[1].node->name == "floor 000", "search should preserve hierarchy context");
     }
 
-    TEST_CASE (
-    "Rename Validates And Updates Node"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Rename Validates And Updates Node", "[unit][editor]") {
         using namespace Horo::Editor;
         HierarchyModel model = CreateMockHierarchyModel();
         const auto floorId = model.Roots()[0]->children[0]->id;
 
-        Expect(model.Rename(floorId, "Player Floor") == HierarchyMutationResult::Success,
-               "valid rename should succeed");
+        Expect(model.Rename(floorId, "Player Floor") == HierarchyMutationResult::Success, "valid rename should succeed");
         Expect(model.Find(floorId)->name == "Player Floor", "rename should update the stable node");
-        Expect(model.Rename(floorId, "   ") == HierarchyMutationResult::InvalidName,
-               "blank rename should be rejected without mutation");
+        Expect(model.Rename(floorId, "   ") == HierarchyMutationResult::InvalidName, "blank rename should be rejected without mutation");
         Expect(model.Find(floorId)->name == "Player Floor", "failed rename should preserve the prior name");
     }
 
-    TEST_CASE (
-    "Delete Removes Whole Subtree And Selection"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Delete Removes Whole Subtree And Selection", "[unit][editor]") {
         using namespace Horo::Editor;
         HierarchyModel model;
         const auto parent = model.AddNode(std::nullopt, "Parent", HierarchyNodeType::Empty);
@@ -96,12 +70,7 @@ namespace
         Expect(!model.SelectedId().has_value(), "deleting the selected subtree should clear selection");
     }
 
-    TEST_CASE (
-    "Reparent Preserves Subtree And Rejects Cycles"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Reparent Preserves Subtree And Rejects Cycles", "[unit][editor]") {
         using namespace Horo::Editor;
         HierarchyModel model;
         const auto parentA = model.AddNode(std::nullopt, "Parent A", HierarchyNodeType::Empty);
@@ -109,26 +78,18 @@ namespace
         const auto grandchild = model.AddNode(child, "Grandchild", HierarchyNodeType::Light);
         const auto parentB = model.AddNode(std::nullopt, "Parent B", HierarchyNodeType::Empty);
 
-        Expect(model.Reparent(child, parentB) == HierarchyMutationResult::Success,
-               "node should become a child of another node");
+        Expect(model.Reparent(child, parentB) == HierarchyMutationResult::Success, "node should become a child of another node");
         Expect(model.ParentId(child) == parentB, "reparent should update the direct parent");
         Expect(model.ParentId(grandchild) == child, "reparent should preserve descendant hierarchy");
-        Expect(model.Reparent(parentB, grandchild) == HierarchyMutationResult::Cycle,
-               "a node must not move below its own descendant");
+        Expect(model.Reparent(parentB, grandchild) == HierarchyMutationResult::Cycle, "a node must not move below its own descendant");
         Expect(model.ParentId(parentB) == std::nullopt, "rejected cycle must not mutate the tree");
 
-        Expect(model.Reparent(child, std::nullopt) == HierarchyMutationResult::Success,
-               "node should move back to root level");
+        Expect(model.Reparent(child, std::nullopt) == HierarchyMutationResult::Success, "node should move back to root level");
         Expect(model.ParentId(child) == std::nullopt, "root move should clear the parent");
         Expect(model.ParentId(grandchild) == child, "root move should still preserve descendants");
     }
 
-    TEST_CASE (
-    "Replace Projects Stable Hierarchy And Preserves Presentation State"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Replace Projects Stable Hierarchy And Preserves Presentation State", "[unit][editor]") {
         using namespace Horo::Editor;
         HierarchyModel model;
         const std::vector initial{
@@ -143,9 +104,7 @@ namespace
         Expect(model.Select(20) == HierarchyMutationResult::Success, "projected child should be selectable");
 
         const std::vector updated{
-            HierarchyNodeInput{
-                .id = 10, .parent = std::nullopt, .name = "Renamed Root", .type = HierarchyNodeType::Empty
-            },
+            HierarchyNodeInput{.id = 10, .parent = std::nullopt, .name = "Renamed Root", .type = HierarchyNodeType::Empty},
             HierarchyNodeInput{.id = 30, .parent = 10, .name = "Replacement", .type = HierarchyNodeType::Mesh},
         };
         model.Replace(updated);
@@ -156,4 +115,4 @@ namespace
         Expect(model.Find(20) == nullptr, "replacement should remove stale document objects");
         Expect(!model.SelectedId().has_value(), "replacement should clear stale presentation selection");
     }
-} // namespace
+}  // namespace

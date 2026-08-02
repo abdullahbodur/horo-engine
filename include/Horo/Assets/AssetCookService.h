@@ -10,12 +10,14 @@
 #include "Horo/Assets/AssetCookOutput.h"
 #include "Horo/Assets/AssetRegistry.h"
 #include "Horo/Assets/CookCatalog.h"
+#include "Horo/Foundation/BuildOutputStore.h"
 #include "Horo/Foundation/CancellationToken.h"
 #include "Horo/Foundation/JobSystem.h"
-#include "Horo/Foundation/Logging/StructuredLogStore.h"
+#include "Horo/Foundation/OperationStore.h"
 #include "Horo/Foundation/Result.h"
 
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <span>
 #include <string>
@@ -30,12 +32,14 @@ namespace Horo::Assets
 struct AssetCookRequest
 {
     std::filesystem::path sourceRoot;       /**< Project source root for resolving relative source paths. */
-    std::filesystem::path cacheRoot;         /**< Cache root directory for immutable artifact cache. */
-    std::filesystem::path cookedRoot;        /**< Target root for generation publication. */
-    AssetRegistrySnapshot registry;          /**< Pinned immutable registry snapshot. */
-    AssetCookTargetId target;                /**< Cook target to produce artifacts for. */
-    AssetCookLimits limits;                  /**< Bounded size and concurrency limits. */
-    Log::StructuredLogStore *buildOutputStore{nullptr}; /**< Optional store for per-asset cook progress records. */
+    std::filesystem::path cacheRoot;        /**< Cache root directory for immutable artifact cache. */
+    std::filesystem::path cookedRoot;       /**< Target root for generation publication. */
+    AssetRegistrySnapshot registry;         /**< Pinned immutable registry snapshot. */
+    AssetCookTargetId target;               /**< Cook target to produce artifacts for. */
+    AssetCookLimits limits;                 /**< Bounded size and concurrency limits. */
+    BuildOutputStore *buildOutputStore{nullptr}; /**< Optional typed per-asset cook output authority. */
+    OperationStore *operationStore{nullptr};     /**< Optional user-facing operation authority. */
+    std::function<void()> requestCancel;         /**< Cooperative cancellation request paired with the supplied token. */
 };
 
 /**

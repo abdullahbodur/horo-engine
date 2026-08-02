@@ -114,6 +114,12 @@ namespace Horo::Editor {
             std::optional<Runtime::AudioSourceComponent> audioSource;
         };
 
+        struct BehaviorsChangedDelta {
+            SceneObjectId object;
+            std::vector<Gameplay::BehaviorComponent> before;
+            std::vector<Gameplay::BehaviorComponent> after;
+        };
+
         struct IndexedSceneObject {
             SceneObjectSnapshot object;
             std::size_t index{0};
@@ -126,7 +132,7 @@ namespace Horo::Editor {
 
         using SceneCommandDelta = std::variant<CreatedObjectDelta, RenamedObjectDelta, TransformedObjectDelta, TransformedObjectsDelta,
                                                CameraChangedDelta, LightChangedDelta, TriggerVolumeChangedDelta, AudioSourceChangedDelta,
-                                               ComponentAddedDelta, ComponentRemovedDelta, DeletedObjectsDelta>;
+                                               ComponentAddedDelta, ComponentRemovedDelta, BehaviorsChangedDelta, DeletedObjectsDelta>;
 
         struct HistoryRecord {
             DocumentStateId beforeState;
@@ -187,6 +193,16 @@ namespace Horo::Editor {
                 return Result<void>::Failure(
                     MakeDocumentError(SceneDocumentErrors::InvalidAudioSource, "Audio source gain must be finite."));
             }
+            std::vector<Gameplay::BehaviorInstanceId> behaviorIds;
+            behaviorIds.reserve(components.behaviors.size());
+            for (const Gameplay::BehaviorComponent &behavior : components.behaviors) {
+                if (Gameplay::ValidateBehaviorComponent(behavior).HasError() ||
+                    std::ranges::find(behaviorIds, behavior.instanceId) != behaviorIds.end()) {
+                    return Result<void>::Failure(
+                        MakeDocumentError(SceneDocumentErrors::InvalidBehavior, "Behavior attachment payload is invalid."));
+                }
+                behaviorIds.push_back(behavior.instanceId);
+            }
             return Result<void>::Success();
         }
 
@@ -205,6 +221,20 @@ namespace Horo::Editor {
                     return bytes;
                 } else if constexpr (std::is_same_v<Delta, TransformedObjectsDelta>) {
                     return sizeof(Delta) + typedDelta.objects.size() * sizeof(TransformedObjectDelta);
+                } else if constexpr (std::is_same_v<Delta, BehaviorsChangedDelta>) {
+                    auto bytes = [](const std::vector<Gameplay::BehaviorComponent> &behaviors) {
+                        std::size_t total = behaviors.size() * sizeof(Gameplay::BehaviorComponent);
+                        for (const auto &behavior : behaviors) {
+                            total += behavior.typeId.Value().size();
+                            for (const auto &field : behavior.fields) {
+                                total += field.name.size();
+                                if (const auto *text = std::get_if<std::string>(&field.value))
+                                    total += text->size();
+                            }
+                        }
+                        return total;
+                    };
+                    return sizeof(Delta) + bytes(typedDelta.before) + bytes(typedDelta.after);
                 } else {
                     return sizeof(Delta);
                 }
@@ -250,6 +280,8 @@ namespace Horo::Editor {
                     if (const auto object = FindObject(objects, typedDelta.object); object != objects.end()) {
                         object->components.audioSource = typedDelta.after;
                     }
+                } else if constexpr (std::is_same_v<Delta, BehaviorsChangedDelta>) {
+                    FindObject(objects, typedDelta.object)->components.behaviors = typedDelta.after;
                 } else if constexpr (std::is_same_v<Delta, ComponentAddedDelta>) {
                     if (const auto object = FindObject(objects, typedDelta.object); object != objects.end()) {
                         switch (typedDelta.type) {
@@ -303,6 +335,8 @@ namespace Horo::Editor {
                     if (const auto object = FindObject(objects, typedDelta.object); object != objects.end()) {
                         object->components.audioSource = typedDelta.before;
                     }
+                } else if constexpr (std::is_same_v<Delta, BehaviorsChangedDelta>) {
+                    FindObject(objects, typedDelta.object)->components.behaviors = typedDelta.before;
                 } else if constexpr (std::is_same_v<Delta, ComponentAddedDelta>) {
                     if (const auto object = FindObject(objects, typedDelta.object); object != objects.end()) {
                         switch (typedDelta.type) {
@@ -446,8 +480,10 @@ namespace Horo::Editor {
     /** @copydoc SceneDocument::LoadSaved */
     Result<void> SceneDocument::LoadSaved(std::vector<SceneObjectSnapshot> objects) {
         std::unordered_set<std::uint64_t> objectIds;
+        std::unordered_set<std::uint64_t> behaviorIds;
         objectIds.reserve(objects.size());
         std::uint64_t maximumObjectId = 0;
+        std::uint64_t maximumBehaviorId = 0;
         for (const SceneObjectSnapshot &object : objects) {
             if (!object.id.IsValid() || !objectIds.insert(object.id.value).second) {
                 return Result<void>::Failure(
@@ -465,9 +501,17 @@ namespace Horo::Editor {
                 return primitive;
             if (const Result<void> components = ValidateComponents(object.components); components.HasError())
                 return components;
+            for (const Gameplay::BehaviorComponent &behavior : object.components.behaviors) {
+                if (!behaviorIds.insert(behavior.instanceId.value).second) {
+                    return Result<void>::Failure(MakeDocumentError(SceneDocumentErrors::InvalidBehavior,
+                                                                   "Loaded behavior instance IDs must be unique across the scene."));
+                }
+                maximumBehaviorId = std::max(maximumBehaviorId, behavior.instanceId.value);
+            }
             maximumObjectId = std::max(maximumObjectId, object.id.value);
         }
-        if (maximumObjectId == std::numeric_limits<std::uint64_t>::max()) {
+        if (maximumObjectId == std::numeric_limits<std::uint64_t>::max() ||
+            maximumBehaviorId == std::numeric_limits<std::uint64_t>::max()) {
             return Result<void>::Failure(MakeDocumentError(SceneDocumentErrors::ObjectNotFound,
                                                            "Loaded scene object IDs must leave space for future authored objects."));
         }
@@ -502,6 +546,7 @@ namespace Horo::Editor {
         m_savedState = m_state;
         m_nextStateId = 2;
         m_nextObjectId = maximumObjectId + 1;
+        m_nextBehaviorInstanceId = maximumBehaviorId + 1;
         return Result<void>::Success();
     }
 
@@ -864,6 +909,99 @@ namespace Horo::Editor {
                                                                       DocumentChangeKind::ComponentChanged, std::move(affected), true});
     }
 
+    /** @copydoc SceneDocumentCommandExecutor::Execute(const AttachSceneObjectBehaviorCommand&) */
+    Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const AttachSceneObjectBehaviorCommand &command) {
+        const auto object = FindObject(m_document.m_objects, command.object);
+        if (object == m_document.m_objects.end())
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
+        if (!command.typeId.IsValid() || command.schemaVersion == 0 ||
+            (!command.allowMultiple && std::ranges::any_of(object->components.behaviors, [&](const auto &behavior) {
+            return behavior.typeId == command.typeId;
+        }))) {
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::InvalidBehavior, "Behavior type cannot be attached more than once to this object."));
+        }
+        Gameplay::BehaviorComponent behavior{Gameplay::BehaviorInstanceId{m_document.m_nextBehaviorInstanceId}, command.typeId,
+                                             command.schemaVersion, command.enabled, command.fields};
+        if (Gameplay::ValidateBehaviorComponent(behavior).HasError())
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::InvalidBehavior, "Behavior attachment payload is invalid."));
+        auto after = object->components.behaviors;
+        after.push_back(std::move(behavior));
+        SceneCommandDelta delta = BehaviorsChangedDelta{object->id, object->components.behaviors, std::move(after)};
+        if (const Result<void> valid = ValidateHistoryDelta(delta, 1); valid.HasError())
+            return Result<SceneCommandResult>::Failure(valid.ErrorValue());
+        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
+        const DocumentStateId beforeState = m_document.m_state;
+        ApplyDelta(m_document.m_objects, delta);
+        ++m_document.m_nextBehaviorInstanceId;
+        ++m_document.m_revision.value;
+        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
+        std::vector affected{object->id};
+        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
+        return Result<SceneCommandResult>::Success(
+            {command.object, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, std::move(affected), true});
+    }
+
+    /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneObjectBehaviorCommand&) */
+    Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const SetSceneObjectBehaviorCommand &command) {
+        if (Gameplay::ValidateBehaviorComponent(command.behavior).HasError())
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::InvalidBehavior, "Behavior replacement payload is invalid."));
+        const auto object = FindObject(m_document.m_objects, command.object);
+        if (object == m_document.m_objects.end())
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
+        const auto behavior =
+            std::ranges::find(object->components.behaviors, command.behavior.instanceId, &Gameplay::BehaviorComponent::instanceId);
+        if (behavior == object->components.behaviors.end() || behavior->typeId != command.behavior.typeId)
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::InvalidBehavior, "Behavior attachment does not exist or changed type."));
+        if (*behavior == command.behavior)
+            return Result<SceneCommandResult>::Success(
+                {command.object, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
+        auto after = object->components.behaviors;
+        *std::ranges::find(after, command.behavior.instanceId, &Gameplay::BehaviorComponent::instanceId) = command.behavior;
+        SceneCommandDelta delta = BehaviorsChangedDelta{object->id, object->components.behaviors, std::move(after)};
+        if (const Result<void> valid = ValidateHistoryDelta(delta, 1); valid.HasError())
+            return Result<SceneCommandResult>::Failure(valid.ErrorValue());
+        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
+        const DocumentStateId beforeState = m_document.m_state;
+        ApplyDelta(m_document.m_objects, delta);
+        ++m_document.m_revision.value;
+        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
+        std::vector affected{object->id};
+        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
+        return Result<SceneCommandResult>::Success(
+            {command.object, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, std::move(affected), true});
+    }
+
+    /** @copydoc SceneDocumentCommandExecutor::Execute(const RemoveSceneObjectBehaviorCommand&) */
+    Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const RemoveSceneObjectBehaviorCommand &command) {
+        const auto object = FindObject(m_document.m_objects, command.object);
+        if (object == m_document.m_objects.end())
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
+        auto after = object->components.behaviors;
+        const auto removed = std::erase_if(after, [&](const Gameplay::BehaviorComponent &behavior) {
+            return behavior.instanceId == command.behavior;
+        });
+        if (removed == 0)
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::InvalidBehavior, "Behavior attachment does not exist."));
+        SceneCommandDelta delta = BehaviorsChangedDelta{object->id, object->components.behaviors, std::move(after)};
+        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
+        const DocumentStateId beforeState = m_document.m_state;
+        ApplyDelta(m_document.m_objects, delta);
+        ++m_document.m_revision.value;
+        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
+        std::vector affected{object->id};
+        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
+        return Result<SceneCommandResult>::Success(
+            {command.object, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, std::move(affected), true});
+    }
+
     /** @copydoc SceneDocumentCommandExecutor::Execute(const DuplicateSceneObjectCommand&) */
     Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const DuplicateSceneObjectCommand &command) {
         if (!IsValidSceneObjectName(command.name)) {
@@ -877,13 +1015,16 @@ namespace Horo::Editor {
         }
 
         const SceneObjectId id{m_document.m_nextObjectId};
+        SceneObjectComponentSet duplicatedComponents = source->components;
+        for (Gameplay::BehaviorComponent &behavior : duplicatedComponents.behaviors)
+            behavior.instanceId = Gameplay::BehaviorInstanceId{m_document.m_nextBehaviorInstanceId++};
         SceneCommandDelta delta = CreatedObjectDelta{
             .object = SceneObjectSnapshot{.id = id,
                                           .parent = source->parent,
                                           .name = command.name,
                                           .localTransform = source->localTransform,
                                           .primitiveMesh = source->primitiveMesh,
-                                          .components = source->components},
+                                          .components = std::move(duplicatedComponents)},
             .index = m_document.m_objects.size(),
             .kind = DocumentChangeKind::Duplicated,
         };

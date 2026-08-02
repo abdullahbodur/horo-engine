@@ -13,6 +13,13 @@ namespace Horo::Editor {
             return Input::ActionDescriptor{Input::ActionId{id}, Input::ActionValueType::Digital,
                                            Input::InputContextId{kEditorWorkspaceInputContext}, required, std::move(bindings)};
         }
+
+        Input::InputBinding AxisKey(const Input::Key key, const std::uint8_t component, const float scale) {
+            Input::InputBinding binding = KeyBinding(key);
+            binding.component = component;
+            binding.scale = scale;
+            return binding;
+        }
     }  // namespace
 
     std::vector<Input::ActionDescriptor> BuildEditorInputActions() {
@@ -27,6 +34,12 @@ namespace Horo::Editor {
             Digital(kActionToolRotate, true, {KeyBinding(Input::Key::E)}),
             Digital(kActionToolScale, true, {KeyBinding(Input::Key::R)}),
             Digital(kActionViewportFocusSelected, false, {KeyBinding(Input::Key::F)}),
+            Input::ActionDescriptor{Input::ActionId{kGameplayMoveAction},
+                                    Input::ActionValueType::Axis2D,
+                                    Input::InputContextId{kEditorWorkspaceInputContext},
+                                    false,
+                                    {AxisKey(Input::Key::Left, 0, -1.0F), AxisKey(Input::Key::Right, 0, 1.0F),
+                                     AxisKey(Input::Key::Down, 1, -1.0F), AxisKey(Input::Key::Up, 1, 1.0F)}},
         };
     }
 }  // namespace Horo::Editor

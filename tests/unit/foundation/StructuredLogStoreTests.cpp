@@ -1,8 +1,7 @@
-#include <catch2/catch_test_macros.hpp>
-
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Foundation/Logging/StructuredLogStore.h"
 
+#include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdint>
 #include <memory>
@@ -10,21 +9,19 @@
 #include <vector>
 
 namespace {
-[[nodiscard]] Horo::Log::StructuredLogRecord MakeRecord(
-    const std::uint64_t sequence, const Horo::Log::Level level = Horo::Log::Level::Info) {
-    return Horo::Log::StructuredLogRecord{
-        .sequence = sequence,
-        .timestampUtc =
-            std::chrono::system_clock::time_point{} + std::chrono::milliseconds(sequence),
-        .level = level,
-        .category = "test.category",
-        .message = "message-" + std::to_string(sequence),
-    };
-}
-} // namespace
+    [[nodiscard]] Horo::Log::StructuredLogRecord MakeRecord(const std::uint64_t sequence,
+                                                            const Horo::Log::Level level = Horo::Log::Level::Info) {
+        return Horo::Log::StructuredLogRecord{
+            .sequence = sequence,
+            .timestampUtc = std::chrono::system_clock::time_point{} + std::chrono::milliseconds(sequence),
+            .level = level,
+            .category = "test.category",
+            .message = "message-" + std::to_string(sequence),
+        };
+    }
+}  // namespace
 
-TEST_CASE("Structured log store overwrites the oldest record at its fixed capacity",
-          "[foundation][logging]") {
+TEST_CASE("Structured log store overwrites the oldest record at its fixed capacity", "[foundation][logging]") {
     Horo::Log::StructuredLogStore store{3};
     store.Append(MakeRecord(1));
     store.Append(MakeRecord(2));
@@ -42,8 +39,7 @@ TEST_CASE("Structured log store overwrites the oldest record at its fixed capaci
     REQUIRE((!store.SnapshotIfChanged(snapshot->revision).has_value()));
 }
 
-TEST_CASE("Structured log store remains bounded under concurrent producers",
-          "[foundation][logging]") {
+TEST_CASE("Structured log store remains bounded under concurrent producers", "[foundation][logging]") {
     Horo::Log::StructuredLogStore store{64};
     std::vector<std::thread> producers;
     for (std::uint64_t producer = 0; producer < 4; ++producer) {

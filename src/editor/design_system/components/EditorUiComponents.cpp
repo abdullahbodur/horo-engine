@@ -182,13 +182,14 @@ namespace Horo::Editor::Ui {
         return props.enabled && clicked;
     }
 
-    void DrawTable(const TableProps &props, const std::span<const TableColumn> columns, const std::span<const TableRow> rows,
-                   const Theme::Fonts &fonts) {
+    TableInteraction DrawTable(const TableProps &props, const std::span<const TableColumn> columns, const std::span<const TableRow> rows,
+                               const Theme::Fonts &fonts) {
+        TableInteraction interaction;
         std::size_t visibleColumnCount = 0;
         for (const TableColumn &column : columns)
             visibleColumnCount += column.visible ? 1U : 0U;
         if (visibleColumnCount == 0U)
-            return;
+            return interaction;
 
         const auto &metrics = DesignSystem::MetricsFor(Theme::GetActiveTokens(), props.componentSize);
         const float rowHeight = metrics.minimumHeight;
@@ -232,7 +233,10 @@ namespace Horo::Editor::Ui {
                     if (props.selectableCells) {
                         ImGui::PushID(static_cast<int>(rowIndex * 1000U + columnIndex));
                         ImGui::PushStyleColor(ImGuiCol_Text, color);
-                        ImGui::Selectable(text.c_str(), false, ImGuiSelectableFlags_AllowOverlap);
+                        if (ImGui::Selectable(text.c_str(), false, ImGuiSelectableFlags_AllowOverlap)) {
+                            interaction.activatedRow = rowIndex;
+                            interaction.activatedColumn = columnIndex;
+                        }
                         ImGui::PopStyleColor();
                         ImGui::PopID();
                     } else {
@@ -245,6 +249,7 @@ namespace Horo::Editor::Ui {
         ImGui::PopStyleColor(7);
         ImGui::PopStyleVar();
         static_cast<void>(fonts);
+        return interaction;
     }
 
     // ── ScopedCard ───────────────────────────────────────────────────────

@@ -2,8 +2,7 @@
 
 #include "Horo/Foundation/ErrorCode.h"
 
-namespace Horo::Application::ProjectErrors
-{
+namespace Horo::Application::ProjectErrors {
     extern const ErrorCodeDescriptor VersionInvalid;
     extern const ErrorCodeDescriptor HashInvalid;
     extern const ErrorCodeDescriptor RegistryInvalid;
@@ -40,4 +39,4 @@ namespace Horo::Application::ProjectErrors
     extern const ErrorCodeDescriptor MigrationCapacityInsufficient;
     extern const ErrorCodeDescriptor MigrationPublishFailed;
     extern const ErrorCodeDescriptor MigrationRecoveryFailed;
-} // namespace Horo::Application::ProjectErrors
+}  // namespace Horo::Application::ProjectErrors

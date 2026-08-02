@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <format>
@@ -428,10 +429,21 @@ namespace Horo::Editor {
                                                          const Assets::AssetRegistrySnapshot &assetRegistry,
                                                          Assets::AssetRegistry *mutableAssetRegistry, ProjectMutationCoordinator *mutations,
                                                          DurableFileSystem *durableFiles,
-                                                         const Assets::AssetImporterCatalogSnapshot *importerCatalog, JobSystem *jobs)
+                                                         const Assets::AssetImporterCatalogSnapshot *importerCatalog, JobSystem *jobs,
+                                                         DiagnosticSourceNavigator diagnosticSourceNavigator,
+                                                         Application::GameplayBuildService *gameplayBuilds,
+                                                         Application::GameplayBuildEnvironment gameplayBuildEnvironment)
         : m_runtimeScene(runtimeScene), m_assetRegistry(assetRegistry), m_mutableAssetRegistry(mutableAssetRegistry),
           m_mutations(mutations), m_durableFiles(durableFiles), m_importerCatalog(importerCatalog),
+          m_diagnosticSourceNavigator(std::move(diagnosticSourceNavigator)),
+          m_gameplayBuilds(gameplayBuilds), m_gameplayBuildEnvironment(std::move(gameplayBuildEnvironment)),
           m_sceneFileWatch(jobs != nullptr ? std::make_unique<SceneFileWatchService>(*jobs) : nullptr) {
+        if (!m_diagnosticSourceNavigator) {
+            m_diagnosticSourceNavigator = [](const DiagnosticSourceRequest &source) {
+                const std::filesystem::path path{source.absolutePath};
+                return OpenInExternalEditor(path) || RevealInNativeFileManager(path);
+            };
+        }
         std::error_code pathError;
         std::filesystem::path absoluteProjectRoot =
             std::filesystem::absolute(std::filesystem::path{projectRoot}, pathError).lexically_normal();
@@ -448,13 +460,21 @@ namespace Horo::Editor {
         m_viewModel.projectRoot = absoluteProjectRoot.string();
         m_viewModel.assetRegistryRevision = assetRegistry.Revision();
         m_viewModel.contentBrowser = BuildContentBrowserDirectory(m_viewModel.projectRoot, {}, assetRegistry, m_importerCatalog);
+        m_gameplayRegistry = ProjectGameplayRegistry::Discover(absoluteProjectRoot);
+        for (const ProjectGameplayDiagnostic &diagnostic : m_gameplayRegistry->Diagnostics())
+            LOG_ERROR("editor.gameplay", "Gameplay source '%s' is invalid: %s", diagnostic.source.string().c_str(),
+                      diagnostic.error.message.c_str());
+        for (const Gameplay::BehaviorRegistration &registration : m_gameplayRegistry->Registry().Registrations())
+            m_viewModel.availableBehaviors.push_back(registration.descriptor);
         m_viewModel.panelDockAreas = {{"horo.hierarchy", WorkspaceDockArea::Left},
                                       {"horo.viewport", WorkspaceDockArea::Document},
+                                      {"horo.game", WorkspaceDockArea::Document},
                                       {"horo.global_dock", WorkspaceDockArea::Bottom},
                                       {"horo.inspector", WorkspaceDockArea::Right},
                                       {"horo.input_mapping", WorkspaceDockArea::Right}};
         static_cast<void>(m_viewModel.activityBarLayout.Insert("horo.hierarchy", ActivityBarSlot{ActivityBarRail::Left, 0, 0}));
         static_cast<void>(m_viewModel.activityBarLayout.Insert("horo.viewport", ActivityBarSlot{ActivityBarRail::DocumentTop, 0, 0}));
+        static_cast<void>(m_viewModel.activityBarLayout.Insert("horo.game", ActivityBarSlot{ActivityBarRail::DocumentTop, 0, 1}));
         static_cast<void>(m_viewModel.activityBarLayout.Insert("horo.global_dock", ActivityBarSlot{ActivityBarRail::Left, 2, 0}));
         static_cast<void>(m_viewModel.activityBarLayout.Insert("horo.inspector", ActivityBarSlot{ActivityBarRail::Right, 0, 0}));
         static_cast<void>(m_viewModel.activityBarLayout.Insert("horo.input_mapping", ActivityBarSlot{ActivityBarRail::Right, 1, 0}));
@@ -561,6 +581,34 @@ namespace Horo::Editor {
 
     void EditorWorkspaceController::UpdateFps(const float fps) {
         m_viewModel.fps = fps;
+    }
+
+    void EditorWorkspaceController::UpdateGameplaySources(const float elapsedSeconds) {
+        UpdateGameplayBuild(elapsedSeconds);
+        if (m_gameplayRegistry == nullptr || !std::isfinite(elapsedSeconds) || elapsedSeconds <= 0.0F)
+            return;
+        m_gameplaySourceWatchElapsedSeconds += elapsedSeconds;
+        if (m_gameplaySourceWatchElapsedSeconds < 0.5F)
+            return;
+        m_gameplaySourceWatchElapsedSeconds = 0.0F;
+        for (const ProjectGameplayDiagnostic &diagnostic : m_gameplayRegistry->ReloadChangedLuaSources())
+            LOG_ERROR("editor.gameplay", "Lua reload kept the last working revision for '%s': %s",
+                      diagnostic.source.string().c_str(), diagnostic.error.message.c_str());
+        if (!m_gameplayRegistry->ConsumeNativeArtifactChange())
+            return;
+        std::unique_ptr<ProjectGameplayRegistry> candidate = ProjectGameplayRegistry::Discover(m_viewModel.projectRoot);
+        if (candidate->HasBlockingDiagnostics()) {
+            for (const ProjectGameplayDiagnostic &diagnostic : candidate->Diagnostics())
+                LOG_ERROR("editor.gameplay", "Native reload kept the last working module for '%s': %s",
+                          diagnostic.source.string().c_str(), diagnostic.error.message.c_str());
+            return;
+        }
+        if (m_playSession.IsActive())
+            m_pendingGameplayRegistry = std::move(candidate);
+        else {
+            m_gameplayRegistry = std::move(candidate);
+            RefreshAvailableBehaviorProjection();
+        }
     }
 
     /** @copydoc EditorWorkspaceController::UpdateAutosave */
@@ -877,12 +925,14 @@ namespace Horo::Editor {
 
     void EditorWorkspaceController::ProcessCommand(const EditorWorkspaceViewCommandData &cmd) {
         // A transient overlay must not survive the interaction or workspace action that owns it.
-        if (!m_viewport.Current().transformPreviews.empty() && cmd.command != EditorWorkspaceViewCommand::PreviewObjectTransform &&
+        if (!m_viewport.Current().transformPreviews.empty() && cmd.command != EditorWorkspaceViewCommand::None &&
+            cmd.command != EditorWorkspaceViewCommand::PreviewObjectTransform &&
             cmd.command != EditorWorkspaceViewCommand::CommitObjectTransform &&
             cmd.command != EditorWorkspaceViewCommand::CancelObjectTransformPreview) {
             CancelObjectTransformPreview();
         }
-        if (m_viewport.Current().lightPreview.has_value() && cmd.command != EditorWorkspaceViewCommand::PreviewLightComponent &&
+        if (m_viewport.Current().lightPreview.has_value() && cmd.command != EditorWorkspaceViewCommand::None &&
+            cmd.command != EditorWorkspaceViewCommand::PreviewLightComponent &&
             cmd.command != EditorWorkspaceViewCommand::UpdateLightComponent &&
             cmd.command != EditorWorkspaceViewCommand::CancelLightComponentPreview) {
             CancelLightComponentPreview();
@@ -920,6 +970,33 @@ namespace Horo::Editor {
                 break;
             case EditorWorkspaceViewCommand::RedoScene:
                 HandleDocumentCommandResult(m_documentCommands.Redo(), "Redo");
+                break;
+            case EditorWorkspaceViewCommand::StartPlay:
+                StartPlaySession();
+                break;
+            case EditorWorkspaceViewCommand::PausePlay: {
+                const Result<void> paused = m_playSession.Pause();
+                if (paused.HasError())
+                    LOG_WARN("editor.play_mode", "%s", paused.ErrorValue().message.c_str());
+                RefreshPlayStateProjection();
+                break;
+            }
+            case EditorWorkspaceViewCommand::ResumePlay: {
+                const Result<void> resumed = m_playSession.Resume();
+                if (resumed.HasError())
+                    LOG_WARN("editor.play_mode", "%s", resumed.ErrorValue().message.c_str());
+                RefreshPlayStateProjection();
+                break;
+            }
+            case EditorWorkspaceViewCommand::StepPlay: {
+                const Result<void> stepped = m_playSession.Step();
+                if (stepped.HasError())
+                    LOG_WARN("editor.play_mode", "%s", stepped.ErrorValue().message.c_str());
+                RefreshPlayStateProjection();
+                break;
+            }
+            case EditorWorkspaceViewCommand::StopPlay:
+                StopPlaySession();
                 break;
             case EditorWorkspaceViewCommand::CreatePrimitive:
                 if (cmd.primitivePayload.has_value()) {
@@ -1113,6 +1190,39 @@ namespace Horo::Editor {
                                                 "Remove component");
                 }
                 break;
+            case EditorWorkspaceViewCommand::AttachBehaviorToObject:
+                if (cmd.objectPayload.has_value() && cmd.behaviorTypePayload.has_value()) {
+                    const Gameplay::BehaviorRegistration *registration = m_gameplayRegistry != nullptr
+                        ? m_gameplayRegistry->Registry().Find(*cmd.behaviorTypePayload)
+                        : nullptr;
+                    if (registration == nullptr) {
+                        LOG_ERROR("editor.gameplay", "Attach behavior rejected because the descriptor is unavailable.");
+                        break;
+                    }
+                    std::vector<Gameplay::BehaviorField> fields;
+                    fields.reserve(registration->descriptor.fields.size());
+                    for (const Gameplay::BehaviorFieldDescriptor &field : registration->descriptor.fields)
+                        fields.push_back({field.name, field.defaultValue});
+                    HandleDocumentCommandResult(
+                        m_documentCommands.Execute(AttachSceneObjectBehaviorCommand{
+                            *cmd.objectPayload, registration->descriptor.typeId, registration->descriptor.schemaVersion,
+                            true, registration->descriptor.allowMultiple, std::move(fields)}),
+                        "Attach behavior");
+                }
+                break;
+            case EditorWorkspaceViewCommand::UpdateBehaviorOnObject:
+                if (cmd.objectPayload.has_value() && cmd.behaviorPayload.has_value())
+                    HandleDocumentCommandResult(
+                        m_documentCommands.Execute(SetSceneObjectBehaviorCommand{*cmd.objectPayload, *cmd.behaviorPayload}),
+                        "Update behavior");
+                break;
+            case EditorWorkspaceViewCommand::RemoveBehaviorFromObject:
+                if (cmd.objectPayload.has_value() && cmd.behaviorInstancePayload.has_value())
+                    HandleDocumentCommandResult(
+                        m_documentCommands.Execute(RemoveSceneObjectBehaviorCommand{*cmd.objectPayload,
+                                                                                    *cmd.behaviorInstancePayload}),
+                        "Remove behavior");
+                break;
             case EditorWorkspaceViewCommand::NavigateContentBrowser:
                 if (cmd.stringPayload.has_value())
                     NavigateContentBrowser(*cmd.stringPayload, true);
@@ -1163,6 +1273,12 @@ namespace Horo::Editor {
                 if (cmd.stringPayload.has_value() && cmd.secondaryStringPayload.has_value())
                     CreateContentBrowserFolder(*cmd.stringPayload, *cmd.secondaryStringPayload);
                 break;
+            case EditorWorkspaceViewCommand::CreateLuaBehavior:
+                CreateGameplayBehavior(false, cmd.stringPayload.value_or(m_viewModel.contentBrowser.absoluteCurrentPath));
+                break;
+            case EditorWorkspaceViewCommand::CreateNativeBehavior:
+                CreateGameplayBehavior(true, cmd.stringPayload.value_or(m_viewModel.contentBrowser.absoluteCurrentPath));
+                break;
             case EditorWorkspaceViewCommand::ReimportContentBrowserAsset:
                 if (cmd.stringPayload.has_value())
                     ReimportContentBrowserAsset(*cmd.stringPayload);
@@ -1170,6 +1286,10 @@ namespace Horo::Editor {
             case EditorWorkspaceViewCommand::RevealContentBrowserEntry:
                 if (cmd.stringPayload.has_value())
                     RevealContentBrowserEntry(*cmd.stringPayload);
+                break;
+            case EditorWorkspaceViewCommand::OpenDiagnosticSource:
+                if (cmd.diagnosticSource.has_value())
+                    OpenDiagnosticSource(*cmd.diagnosticSource);
                 break;
             case EditorWorkspaceViewCommand::ChangeActivePanel:
                 if (cmd.targetIndex.has_value() && cmd.stringPayload.has_value()) {
@@ -1624,6 +1744,10 @@ namespace Horo::Editor {
     }
 
     void EditorWorkspaceController::SynchronizeRuntimeScenePreview() {
+        if (m_playSession.IsActive()) {
+            ExtractPlayViewportScene();
+            return;
+        }
         if (std::optional<Error> operationError = m_runtimeScene.TakeOperationError())
             LOG_ERROR("editor.runtime_scene", "Runtime scene operation failed: %s", operationError->message.c_str());
 
@@ -1638,6 +1762,7 @@ namespace Horo::Editor {
             return;
         }
         m_viewportScene = std::move(extracted).Value();
+        ++m_viewportSceneRevision;
         if (!m_viewport.Current().transformPreviews.empty()) {
             const Result<void> reapplied =
                 ApplyEditorViewportTransformPreview(*active, m_viewport.Current().transformPreviews, m_viewportScene);
@@ -1661,6 +1786,218 @@ namespace Horo::Editor {
             m_deferredRuntimeSnapshot.reset();
             QueueRuntimeScene(std::move(deferred));
         }
+    }
+
+    Application::GameplayBuildRequest EditorWorkspaceController::MakeGameplayBuildRequest() const {
+        return Application::GameplayBuildRequest{
+            .projectRoot = m_viewModel.projectRoot,
+            .environment = m_gameplayBuildEnvironment,
+        };
+    }
+
+    bool EditorWorkspaceController::HasNativeGameplaySources() const {
+        const std::filesystem::path sourceRoot = std::filesystem::path{m_viewModel.projectRoot} / "source" / "gameplay";
+        std::error_code error;
+        if (!std::filesystem::is_directory(sourceRoot, error))
+            return false;
+        for (std::filesystem::recursive_directory_iterator iterator{sourceRoot, error}, end; iterator != end && !error;
+             iterator.increment(error)) {
+            if (!iterator->is_regular_file(error))
+                continue;
+            const std::string extension = iterator->path().extension().string();
+            if (extension == ".c" || extension == ".cc" || extension == ".cpp" || extension == ".cxx" ||
+                extension == ".ixx" || extension == ".cppm")
+                return true;
+        }
+        return false;
+    }
+
+    void EditorWorkspaceController::StartGameplayBuild(const bool playWhenReady) {
+        if (m_gameplayBuilds == nullptr || m_gameplayBuildEnvironment.gameplaySdkPackage.empty()) {
+            if (playWhenReady) {
+                m_viewModel.playState = EditorPlayState::Failed;
+                m_viewModel.playError = "Native gameplay build service is unavailable.";
+            }
+            return;
+        }
+        const Result<Application::GameplayBuildSessionId> started = m_gameplayBuilds->Start(MakeGameplayBuildRequest());
+        if (started.HasError()) {
+            if (playWhenReady) {
+                m_viewModel.playState = EditorPlayState::Failed;
+                m_viewModel.playError = started.ErrorValue().message;
+            }
+            return;
+        }
+        m_gameplayBuildSession = started.Value();
+        m_playAfterGameplayBuild = m_playAfterGameplayBuild || playWhenReady;
+        if (playWhenReady) {
+            m_prePlayDocumentPanelId = m_viewModel.activeDocumentPanelId;
+            m_viewModel.activeDocumentPanelId = "horo.game";
+            m_viewModel.playState = EditorPlayState::Starting;
+            m_viewModel.playError.clear();
+        }
+    }
+
+    void EditorWorkspaceController::UpdateGameplayBuild(const float elapsedSeconds) {
+        if (m_nativeBuildDebounceSeconds >= 0.0F && std::isfinite(elapsedSeconds) && elapsedSeconds > 0.0F) {
+            m_nativeBuildDebounceSeconds -= elapsedSeconds;
+            if (m_nativeBuildDebounceSeconds <= 0.0F) {
+                m_nativeBuildDebounceSeconds = -1.0F;
+                StartGameplayBuild(false);
+            }
+        }
+        if (!m_gameplayBuildSession.has_value() || m_gameplayBuilds == nullptr)
+            return;
+        const std::optional<Application::GameplayBuildSnapshot> snapshot = m_gameplayBuilds->Query(*m_gameplayBuildSession);
+        if (!snapshot.has_value())
+            return;
+        switch (snapshot->state) {
+            case Application::GameplayBuildState::Succeeded: {
+                const bool startPlay = m_playAfterGameplayBuild;
+                m_gameplayBuildSession.reset();
+                m_playAfterGameplayBuild = false;
+                RefreshGameplayRegistry();
+                if (startPlay)
+                    BeginPlaySession();
+                break;
+            }
+            case Application::GameplayBuildState::Failed:
+            case Application::GameplayBuildState::Cancelled:
+            case Application::GameplayBuildState::TimedOut:
+                m_gameplayBuildSession.reset();
+                if (m_playAfterGameplayBuild) {
+                    m_playAfterGameplayBuild = false;
+                    m_viewModel.playState = EditorPlayState::Failed;
+                    m_viewModel.playError = snapshot->error.has_value() ? snapshot->error->message : "Gameplay build failed.";
+                }
+                break;
+            default: break;
+        }
+    }
+
+    void EditorWorkspaceController::StartPlaySession() {
+        if (HasNativeGameplaySources() &&
+            (m_gameplayBuilds == nullptr || !m_gameplayBuilds->IsUpToDate(MakeGameplayBuildRequest()))) {
+            StartGameplayBuild(true);
+            return;
+        }
+        RefreshGameplayRegistry();
+        BeginPlaySession();
+    }
+
+    void EditorWorkspaceController::BeginPlaySession() {
+        if (m_gameplayRegistry == nullptr)
+            m_gameplayRegistry = ProjectGameplayRegistry::Discover(m_viewModel.projectRoot);
+        if (m_gameplayRegistry->HasBlockingDiagnostics()) {
+            m_viewModel.playState = EditorPlayState::Failed;
+            m_viewModel.playError = m_gameplayRegistry->Diagnostics().front().error.message;
+            m_prePlayDocumentPanelId = m_viewModel.activeDocumentPanelId;
+            m_viewModel.activeDocumentPanelId = "horo.game";
+            return;
+        }
+
+        m_prePlayDocumentPanelId = m_viewModel.activeDocumentPanelId;
+        std::unique_ptr<Runtime::RuntimeScene> preparedScene;
+        auto cloned = m_runtimeScene.CloneActive(Runtime::SceneRuntimeId{0x8000000000000001ULL});
+        if (cloned.HasValue())
+            preparedScene = std::move(cloned).Value();
+        const Result<void> started =
+            m_playSession.Start(m_document.Snapshot(), m_gameplayRegistry->Registry(), std::move(preparedScene));
+        m_viewModel.activeDocumentPanelId = "horo.game";
+        if (started.HasError())
+            LOG_ERROR("editor.play_mode", "Play Mode failed to start: %s", started.ErrorValue().message.c_str());
+        RefreshPlayStateProjection();
+        ExtractPlayViewportScene();
+    }
+
+    void EditorWorkspaceController::StopPlaySession() {
+        m_playSession.Stop();
+        if (m_pendingGameplayRegistry && !m_pendingGameplayRegistry->HasBlockingDiagnostics()) {
+            m_gameplayRegistry = std::move(m_pendingGameplayRegistry);
+            RefreshAvailableBehaviorProjection();
+        } else {
+            m_pendingGameplayRegistry.reset();
+        }
+        m_viewModel.playError.clear();
+        m_viewModel.playState = EditorPlayState::Idle;
+        m_viewModel.activeDocumentPanelId = m_prePlayDocumentPanelId.empty() ? "horo.viewport" : m_prePlayDocumentPanelId;
+        m_activeRuntimeRevision = {};
+    }
+
+    void EditorWorkspaceController::RefreshPlayStateProjection() {
+        switch (m_playSession.State()) {
+            case EditorPlaySessionState::Idle: m_viewModel.playState = EditorPlayState::Idle; break;
+            case EditorPlaySessionState::Starting: m_viewModel.playState = EditorPlayState::Starting; break;
+            case EditorPlaySessionState::Playing: m_viewModel.playState = EditorPlayState::Playing; break;
+            case EditorPlaySessionState::Paused: m_viewModel.playState = EditorPlayState::Paused; break;
+            case EditorPlaySessionState::Stopping: m_viewModel.playState = EditorPlayState::Stopping; break;
+            case EditorPlaySessionState::Failed: m_viewModel.playState = EditorPlayState::Failed; break;
+        }
+        m_viewModel.playError = m_playSession.LastError().has_value() ? m_playSession.LastError()->message : std::string{};
+    }
+
+    void EditorWorkspaceController::UpdatePlayPresentation(const float elapsedSeconds) {
+        if (!std::isfinite(elapsedSeconds) || elapsedSeconds < 0.0F)
+            return;
+        m_playSession.PresentationUpdate(Gameplay::FrameDeltaTime{static_cast<double>(elapsedSeconds)});
+        ExtractPlayViewportScene();
+    }
+
+    void EditorWorkspaceController::UpdatePlayFixed(const std::span<const Gameplay::GameplayInputAction> input,
+                                                    const double fixedDeltaSeconds) {
+        if (!std::isfinite(fixedDeltaSeconds) || fixedDeltaSeconds <= 0.0)
+            return;
+        ApplyPendingGameplayRegistry();
+        const Result<void> updated = m_playSession.FixedUpdate(input, Gameplay::FixedDeltaTime{fixedDeltaSeconds});
+        if (updated.HasError())
+            LOG_ERROR("editor.play_mode", "Play Mode fixed update failed: %s", updated.ErrorValue().message.c_str());
+        RefreshPlayStateProjection();
+        ExtractPlayViewportScene();
+    }
+
+    void EditorWorkspaceController::ExtractPlayViewportScene() {
+        Runtime::RuntimeScene *scene = m_playSession.Scene();
+        if (scene == nullptr)
+            return;
+        const Runtime::RuntimeSceneView runtimeView = scene->View();
+        EditorViewportCamera camera = m_viewport.Current().camera;
+        for (std::size_t slot = 0; slot < runtimeView.SlotCount(); ++slot) {
+            const std::optional<Runtime::RuntimeEntityView> entity = runtimeView.EntityAt(slot);
+            if (!entity || !entity->components->camera.has_value())
+                continue;
+            const Runtime::CameraComponent &authoredCamera = *entity->components->camera;
+            Math::Transform worldTransform = *entity->localTransform;
+            if (entity->authoredObject.has_value()) {
+                const Result<SceneObjectWorldTransforms> world = ResolveSceneObjectWorldTransforms(
+                    runtimeView, SceneObjectId{entity->authoredObject->value});
+                if (world.HasValue()) {
+                    const Result<Math::Transform> decomposed = Math::TryDecomposeAffineTRS(world.Value().localToWorld);
+                    if (decomposed.HasValue())
+                        worldTransform = decomposed.Value();
+                }
+            }
+            camera = EditorViewportCamera{
+                .projection = authoredCamera.projection,
+                .position = worldTransform.translation,
+                .target = worldTransform.translation + worldTransform.rotation.Rotate({0.0F, 0.0F, -1.0F}),
+                .up = worldTransform.rotation.Rotate({0.0F, 1.0F, 0.0F}),
+                .verticalFovRadians = authoredCamera.verticalFieldOfViewRadians,
+                .orthographicHeight = authoredCamera.orthographicHeight,
+                .nearPlane = authoredCamera.nearPlane,
+                .farPlane = authoredCamera.farPlane,
+            };
+            break;
+        }
+        Result<EditorViewportSceneSnapshot> extracted = ExtractEditorViewportScene(
+            runtimeView, m_playSession.AuthoringRevision(), camera, m_primitiveMeshCache);
+        if (extracted.HasError()) {
+            LOG_ERROR("editor.play_mode", "Game viewport extraction failed: %s", extracted.ErrorValue().message.c_str());
+            return;
+        }
+        m_viewportScene = std::move(extracted).Value();
+        ++m_viewportSceneRevision;
+        m_viewModel.viewportCamera = camera;
+        RefreshViewportLightProjection();
     }
 
     void EditorWorkspaceController::RefreshContentBrowserAfterMutation() {
@@ -1865,6 +2202,184 @@ namespace Horo::Editor {
         }
         static_cast<void>(m_durableFiles->SyncDirectory(directory));
         RefreshContentBrowserAfterMutation();
+    }
+
+    void EditorWorkspaceController::CreateGameplayBehavior(const bool nativeBehavior,
+                                                           const std::string &absoluteDirectory) {
+        m_viewModel.contentBrowserOperationError.clear();
+        if (m_mutations == nullptr || m_durableFiles == nullptr) {
+            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.unavailable";
+            return;
+        }
+        const std::filesystem::path projectRoot = NormalizeAbsolute(m_viewModel.projectRoot);
+        const std::filesystem::path assetsRoot = projectRoot / "assets";
+        const std::filesystem::path scriptsRoot = assetsRoot / "scripts";
+        const std::filesystem::path requestedDirectory = NormalizeAbsolute(absoluteDirectory);
+        std::filesystem::path directory = nativeBehavior
+            ? projectRoot / "source" / "gameplay"
+            : (HasPathPrefix(scriptsRoot, requestedDirectory) ? requestedDirectory : scriptsRoot);
+        if ((!nativeBehavior && !HasPathPrefix(assetsRoot, directory)) ||
+            (nativeBehavior && !HasPathPrefix(projectRoot, directory))) {
+            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.invalid_target";
+            return;
+        }
+        auto lease = m_mutations->TryAcquire(ProjectMutationRequest{
+            .projectRoot = projectRoot,
+            .owner = ProjectMutationOwner::Asset,
+            .operationId = nativeBehavior ? "create-native-behavior" : "create-lua-behavior",
+        });
+        if (lease.HasError()) {
+            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.busy";
+            return;
+        }
+        std::error_code filesystemError;
+        std::filesystem::create_directories(directory, filesystemError);
+        if (filesystemError) {
+            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.create_behavior_failed";
+            return;
+        }
+
+        std::size_t suffix = 0;
+        std::filesystem::path source;
+        do {
+            const std::string stem = suffix == 0 ? "NewBehavior" : "NewBehavior" + std::to_string(suffix + 1);
+            source = directory / (stem + (nativeBehavior ? ".cpp" : ".horo_script"));
+            ++suffix;
+        } while (std::filesystem::exists(source, filesystemError) && suffix < 1000);
+        if (filesystemError || suffix >= 1000) {
+            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.name_exists";
+            return;
+        }
+
+        std::string projectNamespace = projectRoot.filename().string();
+        std::ranges::transform(projectNamespace, projectNamespace.begin(), [](const unsigned char value) {
+            return std::isalnum(value) ? static_cast<char>(std::tolower(value)) : '_';
+        });
+        if (projectNamespace.empty())
+            projectNamespace = "project";
+        std::string behaviorName = source.stem().string();
+        std::string behaviorSlug = behaviorName;
+        std::ranges::transform(behaviorSlug, behaviorSlug.begin(), [](const unsigned char value) {
+            return static_cast<char>(std::tolower(value));
+        });
+        const std::string typeId = "game." + projectNamespace + "." + behaviorSlug;
+        const std::string contents = nativeBehavior
+            ? "#include <Horo/Gameplay/NativeBehavior.h>\n\n"
+              "class " + behaviorName + " final : public Horo::Gameplay::IBehaviorInstance {\n"
+              "public:\n"
+              "    static Horo::Gameplay::BehaviorDescriptor DescribeBehavior() {\n"
+              "        Horo::Gameplay::BehaviorDescriptor descriptor;\n"
+              "        descriptor.displayName = \"" + behaviorName + "\";\n"
+              "        return descriptor;\n"
+              "    }\n\n"
+              "    void OnFixedUpdate(Horo::Gameplay::BehaviorContext& ctx, Horo::Gameplay::FixedDeltaTime dt) override {\n"
+              "        (void)ctx;\n"
+              "        (void)dt;\n"
+              "    }\n"
+              "};\n\nHORO_BEHAVIOR(" + behaviorName + ", \"" + typeId + "\")\n"
+            : "return horo.behavior {\n"
+              "    type_id = \"" + typeId + "\",\n"
+              "    display_name = \"" + behaviorName + "\",\n"
+              "    category = \"Gameplay\",\n"
+              "    schema_version = 1,\n"
+              "    fields = {},\n"
+              "    on_fixed_update = function(ctx, dt)\n"
+              "    end\n"
+              "}\n";
+        const Result<void> written = m_durableFiles->WriteDurable(source, std::as_bytes(std::span{contents}));
+        if (written.HasError()) {
+            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.create_behavior_failed";
+            return;
+        }
+        if (nativeBehavior) {
+            const std::filesystem::path moduleSource = directory / "GameModule.cpp";
+            if (!std::filesystem::exists(moduleSource, filesystemError)) {
+                const std::string moduleContents =
+                    "#include <Horo/Gameplay/GameModule.h>\n\n"
+                    "namespace {\n"
+                    "class ProjectGameModule final : public Horo::Gameplay::IGameModule {\n"
+                    "public:\n"
+                    "    Horo::Result<void> Start(Horo::Gameplay::GameRuntimeContext&) override {\n"
+                    "        return Horo::Result<void>::Success();\n"
+                    "    }\n"
+                    "    void Stop(Horo::Gameplay::GameRuntimeContext&) noexcept override {}\n"
+                    "};\n"
+                    "}\n\n"
+                    "extern \"C\" HORO_GAME_EXPORT Horo::Gameplay::IGameModule* CreateGameModule() noexcept {\n"
+                    "    return new ProjectGameModule{};\n"
+                    "}\n\n"
+                    "extern \"C\" HORO_GAME_EXPORT void DestroyGameModule(Horo::Gameplay::IGameModule* module) noexcept {\n"
+                    "    delete module;\n"
+                    "}\n";
+                const Result<void> moduleWritten =
+                    m_durableFiles->WriteDurable(moduleSource, std::as_bytes(std::span{moduleContents}));
+                if (moduleWritten.HasError()) {
+                    static_cast<void>(m_durableFiles->RemoveDurable(source));
+                    m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.create_behavior_failed";
+                    return;
+                }
+            }
+        }
+        if (!nativeBehavior) {
+            const std::string metadata = "{\n  \"schemaVersion\": 1,\n  \"runtime\": \"lua\",\n  \"behaviorTypeId\": \"" +
+                                         typeId + "\"\n}\n";
+            const Result<void> sidecar =
+                m_durableFiles->WriteDurable(source.string() + ".meta", std::as_bytes(std::span{metadata}));
+            if (sidecar.HasError()) {
+                static_cast<void>(m_durableFiles->RemoveDurable(source));
+                m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.create_behavior_failed";
+                return;
+            }
+        }
+        static_cast<void>(m_durableFiles->SyncDirectory(directory));
+        RefreshContentBrowserAfterMutation();
+        if (nativeBehavior)
+            m_nativeBuildDebounceSeconds = 0.25F;
+        else
+            RefreshGameplayRegistry();
+    }
+
+    void EditorWorkspaceController::RefreshGameplayRegistry() {
+        std::unique_ptr<ProjectGameplayRegistry> candidate = ProjectGameplayRegistry::Discover(m_viewModel.projectRoot);
+        if (m_playSession.IsActive()) {
+            m_pendingGameplayRegistry = std::move(candidate);
+            return;
+        }
+        m_gameplayRegistry = std::move(candidate);
+        RefreshAvailableBehaviorProjection();
+    }
+
+    void EditorWorkspaceController::RefreshAvailableBehaviorProjection() {
+        m_viewModel.availableBehaviors.clear();
+        for (const Gameplay::BehaviorRegistration &registration : m_gameplayRegistry->Registry().Registrations())
+            m_viewModel.availableBehaviors.push_back(registration.descriptor);
+        for (const ProjectGameplayDiagnostic &diagnostic : m_gameplayRegistry->Diagnostics())
+            LOG_ERROR("editor.gameplay", "Gameplay source '%s' is invalid: %s", diagnostic.source.string().c_str(),
+                      diagnostic.error.message.c_str());
+    }
+
+    void EditorWorkspaceController::ApplyPendingGameplayRegistry() {
+        if (!m_pendingGameplayRegistry)
+            return;
+        if (m_pendingGameplayRegistry->HasBlockingDiagnostics()) {
+            for (const ProjectGameplayDiagnostic &diagnostic : m_pendingGameplayRegistry->Diagnostics())
+                LOG_ERROR("editor.gameplay", "Gameplay registry candidate was rejected for '%s': %s",
+                          diagnostic.source.string().c_str(), diagnostic.error.message.c_str());
+            m_pendingGameplayRegistry.reset();
+            return;
+        }
+        const Result<void> reloaded =
+            m_playSession.ReloadBehaviors(m_pendingGameplayRegistry->Registry(), m_gameplayRegistry->Registry());
+        if (reloaded.HasError()) {
+            LOG_ERROR("editor.gameplay", "Gameplay reload rolled back to the previous module: %s",
+                      reloaded.ErrorValue().message.c_str());
+            m_pendingGameplayRegistry.reset();
+            RefreshPlayStateProjection();
+            return;
+        }
+        m_gameplayRegistry = std::move(m_pendingGameplayRegistry);
+        RefreshAvailableBehaviorProjection();
+        LOG_INFO("editor.gameplay", "Gameplay module reloaded at a fixed-tick safe point.");
     }
 
     bool EditorWorkspaceController::CopyContentBrowserAssetTo(const std::filesystem::path &absoluteSource,
@@ -2140,6 +2655,28 @@ namespace Horo::Editor {
         if (!RevealInNativeFileManager(target)) {
             m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.reveal_unavailable";
         }
+    }
+
+    void EditorWorkspaceController::OpenDiagnosticSource(const DiagnosticSourceRequest &source) {
+        m_viewModel.contentBrowserOperationError.clear();
+        if (!std::filesystem::path{source.absolutePath}.is_absolute()) {
+            m_viewModel.contentBrowserOperationError = "workspace.global_dock.build_output.source.invalid";
+            return;
+        }
+
+        const std::filesystem::path target = NormalizeAbsolute(source.absolutePath);
+        const std::filesystem::path projectRoot = NormalizeAbsolute(m_viewModel.projectRoot);
+        std::error_code error;
+        const auto status = std::filesystem::symlink_status(target, error);
+        if (error || std::filesystem::is_symlink(status) || !std::filesystem::is_regular_file(status) ||
+            !HasPathPrefix(projectRoot, target)) {
+            m_viewModel.contentBrowserOperationError = "workspace.global_dock.build_output.source.invalid";
+            return;
+        }
+        DiagnosticSourceRequest validatedSource = source;
+        validatedSource.absolutePath = target.string();
+        if (!m_diagnosticSourceNavigator(validatedSource))
+            m_viewModel.contentBrowserOperationError = "workspace.global_dock.build_output.source.unavailable";
     }
 
     void EditorWorkspaceController::RenameContentBrowserEntry(const std::string &absolutePath, const std::string &newName) {

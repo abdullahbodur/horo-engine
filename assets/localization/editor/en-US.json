@@ -790,6 +790,17 @@
     "workspace.panel.hierarchy": {"text": "Hierarchy"},
     "workspace.panel.inspector": {"text": "Inspector"},
     "workspace.panel.viewport": {"text": "Viewport"},
+    "workspace.panel.game": {"text": "Game"},
+    "workspace.game.idle": {"text": "Press Play to start the game."},
+    "workspace.play.pause": {"text": "Pause"},
+    "workspace.play.resume": {"text": "Resume"},
+    "workspace.play.step": {"text": "Step"},
+    "workspace.play.stop": {"text": "Stop"},
+    "workspace.inspector.behavior_enabled": {"text": "Enabled"},
+    "workspace.inspector.behavior_missing": {"text": "Missing Behavior"},
+    "workspace.content_browser.action.create_lua_behavior": {"text": "Create Lua Behavior"},
+    "workspace.content_browser.action.create_native_behavior": {"text": "Create Native C++ Behavior"},
+    "workspace.content_browser.operation.create_behavior_failed": {"text": "Behavior source could not be created."},
     "workspace.panel.content_browser": {"text": "Content Browser"},
     "workspace.input_mapping.title": {"text": "Input Mapping"},
     "workspace.input_mapping.binding": {"text": "Binding"},
@@ -948,6 +959,7 @@
     "workspace.global_dock.console.clear": {
       "text": "Clear"
     },
+    "workspace.global_dock.console.levels": {"text": "Levels"},
     "workspace.global_dock.console.empty": {"text": "No logs match the active filters."},
     "workspace.global_dock.build_output.search": {
       "text": "Filter..."
@@ -970,6 +982,11 @@
     "workspace.global_dock.build_output.status.cached": {
       "text": "Cached"
     },
+    "workspace.global_dock.build_output.row_status.info": {"text": "Info"},
+    "workspace.global_dock.build_output.row_status.succeeded": {"text": "OK"},
+    "workspace.global_dock.build_output.row_status.failed": {"text": "Failed"},
+    "workspace.global_dock.build_output.row_status.cached": {"text": "Cached"},
+    "workspace.global_dock.build_output.row_status.cancelled": {"text": "Cancelled"},
     "workspace.global_dock.build_output.column.time": {
       "text": "Time"
     },
@@ -985,15 +1002,39 @@
     "workspace.global_dock.build_output.empty": {
       "text": "No build output yet. Run a cook operation to see results."
     },
+    "workspace.global_dock.build_output.dropped": {"text": "Older build output entries discarded:"},
+    "workspace.global_dock.build_output.source.invalid": {"text": "The diagnostic source is unavailable or outside the project."},
+    "workspace.global_dock.build_output.source.unavailable": {"text": "Source navigation is unavailable on this platform."},
     "workspace.global_dock.operations.search": {
       "text": "Filter..."
     },
     "workspace.global_dock.operations.clear": {
       "text": "Clear"
     },
+    "workspace.global_dock.operations.columns": {"text": "Columns"},
+    "workspace.global_dock.operations.column.status": {"text": "Status"},
+    "workspace.global_dock.operations.column.operation": {"text": "Operation"},
+    "workspace.global_dock.operations.column.phase": {"text": "Phase"},
+    "workspace.global_dock.operations.column.progress": {"text": "Progress"},
+    "workspace.global_dock.operations.column.message": {"text": "Message"},
+    "workspace.global_dock.operations.column.action": {"text": "Action"},
+    "workspace.global_dock.operations.cancel": {"text": "Cancel"},
+    "workspace.global_dock.operations.state.queued": {"text": "Queued"},
+    "workspace.global_dock.operations.state.running": {"text": "Running"},
+    "workspace.global_dock.operations.state.waiting": {"text": "Waiting"},
+    "workspace.global_dock.operations.state.cancelling": {"text": "Cancelling"},
+    "workspace.global_dock.operations.state.succeeded": {"text": "Succeeded"},
+    "workspace.global_dock.operations.state.failed": {"text": "Failed"},
+    "workspace.global_dock.operations.state.cancelled": {"text": "Cancelled"},
+    "workspace.global_dock.operations.kind.build": {"text": "Build"},
+    "workspace.global_dock.operations.kind.cook": {"text": "Cook assets"},
+    "workspace.global_dock.operations.kind.import": {"text": "Import assets"},
+    "workspace.global_dock.operations.kind.index": {"text": "Index assets"},
+    "workspace.global_dock.operations.kind.validation": {"text": "Validate project"},
     "workspace.global_dock.operations.empty": {
       "text": "No operations yet. Run a cook or import to see results."
     },
+    "workspace.global_dock.operations.dropped": {"text": "Older completed operations discarded:"},
     "workspace.global_dock.mcp.bridge": {"text": "horo.mcp.bridge@0.4.0 — active"},
     "workspace.global_dock.mcp.tools": {"text": "scene.query, scene.select, scene.move, asset.list, build.trigger"},
     "workspace.global_dock.mcp.awaiting": {"text": "Awaiting tool call…"},
@@ -1034,6 +1075,7 @@
     "workspace.content_browser.action.refresh": {"text": "Refresh"},
     "workspace.content_browser.action.reimport": {"text": "Reimport"},
     "workspace.content_browser.action.reveal": {"text": "Reveal in File Manager"},
+    "workspace.content_browser.action.open_external_ide": {"text": "Open in External IDE"},
     "workspace.content_browser.action.copy_path": {"text": "Copy Absolute Path"},
     "workspace.content_browser.action.cancel": {"text": "Cancel"},
     "workspace.content_browser.action.close": {"text": "Close"},

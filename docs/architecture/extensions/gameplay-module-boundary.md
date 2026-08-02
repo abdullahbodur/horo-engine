@@ -8,15 +8,33 @@ This document defines the native gameplay module boundary: project-owned C++ mod
 
 ```text
 MyGame/
-  src/
+  source/gameplay/
     GameModule.cpp
-    systems/
-    components/
   CMakeLists.txt
 ```
 
-The project links public engine targets through `add_subdirectory()` or an
-installed SDK package as defined by the build architecture.
+The project consumes the exported gameplay SDK package. Project scaffolding must
+not compile the engine with `add_subdirectory()`:
+
+```cmake
+find_package(HoroEngineGameplay CONFIG REQUIRED)
+horo_add_gameplay_module(HoroGameGameplay
+    MODULE_ID game.my_game
+    SOURCES ${HORO_GAMEPLAY_SOURCES}
+    INPUTS ${PROJECT_OWNED_TRANSITIVE_INPUTS}
+)
+```
+
+`HoroEngineGameplay` exports `HoroEngine::GameplayApi`, the annotation code
+generator, module helper, and exact SDK/toolchain metadata. Consumer configure
+rejects a mismatched compiler family/version, target OS/architecture, generator
+platform/toolset, C++ standard, or ABI-affecting runtime contract. Module load
+then validates the exact SDK fingerprint before any project factory executes.
+
+`INPUTS` is the explicit dependency boundary for project-owned inputs outside
+`source/`, `include/`, and `cmake/`. Every path is canonicalized inside the
+project root; traversal and symlink escape are rejected. The helper writes the
+resolved input manifest consumed by freshness checks.
 
 ## Binary Boundary
 
@@ -292,6 +310,25 @@ Native gameplay code reload, when enabled in development:
 - invalidates all module-owned callbacks and function pointers
 - reloads through a versioned module boundary
 - recreates systems and restores compatible state
+
+The project module build publishes `.horo/local/gameplay_module.json` only after
+the complete dynamic library and generated descriptor bundle succeed. The
+manifest contains the absolute local artifact path, module ID, exact host SDK
+fingerprint, and descriptor revision. It is machine-local build evidence and is
+never scene or source identity.
+
+The editor loads each candidate from a unique shadow copy. It validates the
+manifest, SDK fingerprint, exported module descriptor, and complete descriptor
+revision before changing the active registry. Native and script descriptors are
+then committed into one frozen registry transaction. A duplicate ID across the
+two sources rejects the candidate rather than selecting by load order.
+
+During Play, an accepted candidate waits for the next fixed-tick boundary. The
+old behavior runtime is shut down while its module remains loaded, replacement
+instances are created against the unchanged runtime scene, and only then is the
+old module released. Candidate activation failure reconstructs the previous
+runtime against the same scene; if rollback also fails, the play session enters
+the explicit failed state.
 
 If any unload precondition cannot be proven, the editor requests a play-session
 or process restart instead of unloading unsafe C++ code.

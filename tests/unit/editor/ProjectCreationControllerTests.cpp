@@ -1,42 +1,34 @@
-#include <catch2/catch_test_macros.hpp>
-
 #include "Horo/Editor/ProjectCreationController.h"
 #include "editor/project_model/RendererAvailability.h"
 
+#include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <string>
 
-namespace
-{
-    const Horo::Editor::RendererAvailabilitySnapshot& DefaultAvailability()
-    {
+namespace {
+    const Horo::Editor::RendererAvailabilitySnapshot &DefaultAvailability() {
         using namespace Horo::Editor;
-        static const RendererAvailabilitySnapshot availability{
-            {RendererBackendAvailability{"opengl", "OpenGL", RendererAvailabilityState::Active, {}}}, "opengl"
-        };
+        static const RendererAvailabilitySnapshot
+            availability{{RendererBackendAvailability{"opengl", "OpenGL", RendererAvailabilityState::Active, {}}}, "opengl"};
         return availability;
     }
 
-    class TemporaryDirectory
-    {
+    class TemporaryDirectory {
     public:
-        TemporaryDirectory()
-        {
+        TemporaryDirectory() {
             const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
             path_ = std::filesystem::temp_directory_path() / ("horo-project-creation-" + std::to_string(stamp));
             std::filesystem::create_directories(path_);
         }
 
-        ~TemporaryDirectory()
-        {
+        ~TemporaryDirectory() {
             std::error_code error;
             std::filesystem::remove_all(path_, error);
         }
 
-        [[nodiscard]] const std::filesystem::path& Path() const
-        {
+        [[nodiscard]] const std::filesystem::path &Path() const {
             return path_;
         }
 
@@ -44,25 +36,16 @@ namespace
         std::filesystem::path path_;
     };
 
-    void HasDiagnostic(const Horo::Editor::ProjectCreationValidation& validation,
-                       const Horo::Editor::ProjectCreationDiagnosticCode code)
-    {
-        for (const auto& diagnostic : validation.diagnostics)
-        {
-            if (diagnostic.code == code)
-            {
+    void HasDiagnostic(const Horo::Editor::ProjectCreationValidation &validation, const Horo::Editor::ProjectCreationDiagnosticCode code) {
+        for (const auto &diagnostic : validation.diagnostics) {
+            if (diagnostic.code == code) {
                 return;
             }
         }
         REQUIRE((false && "expected validation diagnostic"));
     }
 
-    TEST_CASE (
-    "Provides Document Defaults"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Provides Document Defaults", "[unit][editor]") {
         using namespace Horo::Editor;
 
         const ProjectCreationDraft draft = ProjectCreationController{DefaultAvailability()}.Draft();
@@ -81,12 +64,7 @@ namespace
         REQUIRE((!ProjectCreationController{DefaultAvailability()}.IsDirty()));
     }
 
-    TEST_CASE (
-    "Rejects Blank And Path Like Names"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Rejects Blank And Path Like Names", "[unit][editor]") {
         using namespace Horo::Editor;
 
         TemporaryDirectory temporaryDirectory;
@@ -100,12 +78,7 @@ namespace
         HasDiagnostic(controller.Validate(), ProjectCreationDiagnosticCode::ProjectNameContainsPathSeparator);
     }
 
-    TEST_CASE (
-    "Distinguishes Occupied Empty And Missing Destinations"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Distinguishes Occupied Empty And Missing Destinations", "[unit][editor]") {
         using namespace Horo::Editor;
 
         TemporaryDirectory temporaryDirectory;
@@ -135,12 +108,7 @@ namespace
         REQUIRE((!std::filesystem::exists(missing)));
     }
 
-    TEST_CASE (
-    "Tracks Draft Leave Intent"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Tracks Draft Leave Intent", "[unit][editor]") {
         using namespace Horo::Editor;
 
         ProjectCreationController controller{DefaultAvailability()};
@@ -155,24 +123,16 @@ namespace
         REQUIRE((controller.LeaveIntent() == ProjectCreationLeaveIntent::Allow));
     }
 
-    TEST_CASE (
-    "Defaults To Active Backend And Rejects Unavailable Selection"
-    ,
-    "[unit][editor]"
-    )
-    {
+    TEST_CASE("Defaults To Active Backend And Rejects Unavailable Selection", "[unit][editor]") {
         using namespace Horo::Editor;
-        const RendererAvailabilitySnapshot availability{
-            {
-                RendererBackendAvailability{"opengl", "OpenGL", RendererAvailabilityState::Available, {}},
-                RendererBackendAvailability{"metal", "Metal", RendererAvailabilityState::Active, {}},
-                RendererBackendAvailability{
-                    "vulkan", "Vulkan", RendererAvailabilityState::NotInstalled,
-                    "Renderer component is not installed."
-                },
-            },
-            "metal"
-        };
+        const RendererAvailabilitySnapshot
+            availability{{
+                             RendererBackendAvailability{"opengl", "OpenGL", RendererAvailabilityState::Available, {}},
+                             RendererBackendAvailability{"metal", "Metal", RendererAvailabilityState::Active, {}},
+                             RendererBackendAvailability{"vulkan", "Vulkan", RendererAvailabilityState::NotInstalled,
+                                                         "Renderer component is not installed."},
+                         },
+                         "metal"};
         ProjectCreationController controller{availability};
         REQUIRE((controller.Draft().renderBackend == "metal"));
 
@@ -183,4 +143,4 @@ namespace
         HasDiagnostic(controller.Validate(), ProjectCreationDiagnosticCode::RendererBackendUnavailable);
         REQUIRE((!controller.BuildCreationRequest().has_value()));
     }
-} // namespace
+}  // namespace

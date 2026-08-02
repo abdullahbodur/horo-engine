@@ -7,20 +7,17 @@
 #include <memory>
 #include <optional>
 
-namespace Horo::Tests
-{
+namespace Horo::Tests {
     /** @brief Runs the production renderer frame contract for one interactive UI-test surface. */
-    class InteractiveEditorUiTestRenderer final
-    {
+    class InteractiveEditorUiTestRenderer final {
     public:
         [[nodiscard]] static std::unique_ptr<InteractiveEditorUiTestRenderer> Create(
-            std::unique_ptr<Render::RenderFrontend> frontend,
-            std::unique_ptr<Editor::IEditorGuiRenderer> guiRenderer,
+            std::unique_ptr<Render::RenderFrontend> frontend, std::unique_ptr<Editor::IEditorGuiRenderer> guiRenderer,
             std::unique_ptr<Editor::IEditorViewportRenderer> viewportRenderer);
 
         ~InteractiveEditorUiTestRenderer();
-        InteractiveEditorUiTestRenderer(const InteractiveEditorUiTestRenderer&) = delete;
-        InteractiveEditorUiTestRenderer& operator=(const InteractiveEditorUiTestRenderer&) = delete;
+        InteractiveEditorUiTestRenderer(const InteractiveEditorUiTestRenderer &) = delete;
+        InteractiveEditorUiTestRenderer &operator=(const InteractiveEditorUiTestRenderer &) = delete;
 
         /** @brief Begins one production renderer and GUI frame for the drawable extent. */
         void BeginFrame(Render::FramebufferExtent outputExtent);
@@ -35,7 +32,7 @@ namespace Horo::Tests
         void Shutdown() noexcept;
 
         /** @brief Returns the backend-specific viewport adapter owned by this composition. */
-        [[nodiscard]] Editor::IEditorViewportRenderer& ViewportRenderer() noexcept;
+        [[nodiscard]] Editor::IEditorViewportRenderer &ViewportRenderer() noexcept;
 
     private:
         InteractiveEditorUiTestRenderer(std::unique_ptr<Render::RenderFrontend> frontend,
@@ -56,4 +53,4 @@ namespace Horo::Tests
         bool executorAttached_{false};
         bool frameExecuted_{false};
     };
-} // namespace Horo::Tests
+}  // namespace Horo::Tests

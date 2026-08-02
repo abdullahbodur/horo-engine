@@ -16,6 +16,16 @@
 #include <vector>
 
 namespace Horo::Editor {
+    /** @brief Presentation projection of the editor play-session lifecycle. */
+    enum class EditorPlayState : std::uint8_t {
+        Idle,
+        Starting,
+        Playing,
+        Paused,
+        Stopping,
+        Failed,
+    };
+
     /** @brief Typed presentation kind projected from authored scene components. */
     enum class SceneObjectKind : std::uint8_t {
         Mesh,
@@ -55,6 +65,11 @@ namespace Horo::Editor {
         DiscardSceneRecovery,
         UndoScene,
         RedoScene,
+        StartPlay,
+        PausePlay,
+        ResumePlay,
+        StepPlay,
+        StopPlay,
         CreatePrimitive,
         DuplicateObject,
         DeleteObject,
@@ -77,6 +92,9 @@ namespace Horo::Editor {
         UpdateAudioSourceComponent,
         AddComponentToObject,
         RemoveComponentFromObject,
+        AttachBehaviorToObject,
+        UpdateBehaviorOnObject,
+        RemoveBehaviorFromObject,
         NavigateContentBrowser,
         NavigateContentBrowserBack,
         NavigateContentBrowserForward,
@@ -91,8 +109,11 @@ namespace Horo::Editor {
         TransferContentBrowserAsset,
         CancelContentBrowserClipboard,
         CreateContentBrowserFolder,
+        CreateLuaBehavior,
+        CreateNativeBehavior,
         ReimportContentBrowserAsset,
         RevealContentBrowserEntry,
+        OpenDiagnosticSource,
         ChangeActivePanel,
         ReorderActivityBarItem,
         DockWorkspacePanel,
@@ -152,6 +173,13 @@ namespace Horo::Editor {
         ContentBrowserTransferMode mode{ContentBrowserTransferMode::Move};
     };
 
+    /** @brief Absolute, optionally line-addressed diagnostic source requested by an output panel. */
+    struct DiagnosticSourceRequest {
+        std::string absolutePath;
+        std::uint32_t line{};
+        std::uint32_t column{};
+    };
+
     struct EditorWorkspaceViewCommandData {
         EditorWorkspaceViewCommand command = EditorWorkspaceViewCommand::None;
         std::optional<EditorMenuInvocation> menuInvocation = std::nullopt;
@@ -169,6 +197,9 @@ namespace Horo::Editor {
         std::optional<Runtime::TriggerVolumeComponent> triggerVolumePayload = std::nullopt;
         std::optional<Runtime::AudioSourceComponent> audioSourcePayload = std::nullopt;
         std::optional<ComponentType> componentTypePayload = std::nullopt;
+        std::optional<Gameplay::BehaviorTypeId> behaviorTypePayload = std::nullopt;
+        std::optional<Gameplay::BehaviorComponent> behaviorPayload = std::nullopt;
+        std::optional<Gameplay::BehaviorInstanceId> behaviorInstancePayload = std::nullopt;
         std::optional<EditorTransformTool> transformToolPayload = std::nullopt;
         std::optional<EditorTransformSpace> transformSpacePayload = std::nullopt;
         std::optional<std::string> stringPayload = std::nullopt;
@@ -180,6 +211,7 @@ namespace Horo::Editor {
         std::optional<SideDockSlot> sideDockSlot = std::nullopt;
         std::optional<WorkspacePanelDropTarget> workspaceDropTarget = std::nullopt;
         std::optional<ContentBrowserAssetTransferRequest> contentBrowserTransfer = std::nullopt;
+        std::optional<DiagnosticSourceRequest> diagnosticSource = std::nullopt;
     };
 
     /** @brief Pending project-local Content Browser clipboard operation. */
@@ -205,6 +237,7 @@ namespace Horo::Editor {
         bool contentBrowserCanNavigateForward{false};
         DocumentRevision documentRevision;
         std::vector<SceneObject> objects;
+        std::vector<Gameplay::BehaviorDescriptor> availableBehaviors;
         std::optional<SceneObjectId> hierarchyRevealObject;
         DocumentRevision hierarchyRevealRevision{};
         std::optional<SceneObjectId> primarySelection;
@@ -222,6 +255,8 @@ namespace Horo::Editor {
         bool recoveryAvailable = false;
         bool canUndo = false;
         bool canRedo = false;
+        EditorPlayState playState{EditorPlayState::Idle};
+        std::string playError;
         float fps = 0.0F;
 
         std::string activeLeftPanelId = "horo.hierarchy";

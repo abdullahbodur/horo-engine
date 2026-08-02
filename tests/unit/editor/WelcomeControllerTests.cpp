@@ -1,7 +1,6 @@
-#include <catch2/catch_test_macros.hpp>
-
 #include "Horo/Editor/WelcomeController.h"
 
+#include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <filesystem>
 #include <optional>
@@ -10,21 +9,18 @@
 #include <variant>
 #include <vector>
 
-namespace
-{
-    class ScopedTestHome
-    {
+namespace {
+    class ScopedTestHome {
     public:
         explicit ScopedTestHome(std::string_view name)
             : path_(std::filesystem::temp_directory_path() /
-                (std::string{name} + "-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())))
-        {
+                    (std::string{name} + "-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()))) {
 #if defined(_WIN32)
-            constexpr const char* key = "USERPROFILE";
+            constexpr const char *key = "USERPROFILE";
 #else
-            constexpr const char* key = "HOME";
+            constexpr const char *key = "HOME";
 #endif
-            if (const char* current = std::getenv(key))
+            if (const char *current = std::getenv(key))
                 previous_ = current;
             std::filesystem::create_directories(path_);
 #if defined(_WIN32)
@@ -34,13 +30,12 @@ namespace
 #endif
         }
 
-        ~ScopedTestHome()
-        {
+        ~ScopedTestHome() {
 #if defined(_WIN32)
-            constexpr const char* key = "USERPROFILE";
+            constexpr const char *key = "USERPROFILE";
             _putenv_s(key, previous_.value_or("").c_str());
 #else
-            constexpr const char* key = "HOME";
+            constexpr const char *key = "HOME";
             if (previous_)
                 setenv(key, previous_->c_str(), 1);
             else
@@ -55,46 +50,31 @@ namespace
         std::optional<std::string> previous_;
     };
 
-    TEST_CASE (
-    "Route payload validation rejects mismatched parameters"
-    ,
-    "[unit][editor][welcome]"
-    )
-    {
+    TEST_CASE("Route payload validation rejects mismatched parameters", "[unit][editor][welcome]") {
         using namespace Horo::Editor;
 
         REQUIRE((IsRoutePayloadValid(GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}})));
         REQUIRE((IsRoutePayloadValid(GuiRoute{GuiRouteKind::ProjectBrowser, ProjectBrowserRouteParameters{}})));
         REQUIRE((IsRoutePayloadValid(GuiRoute{GuiRouteKind::ProjectCreation, ProjectCreationRouteParameters{}})));
-        REQUIRE((IsRoutePayloadValid(GuiRoute{
-                GuiRouteKind::EditorWorkspace, EditorWorkspaceRouteParameters{ProjectSessionCandidateId{1}, std::nullopt
-                }})
-        ));
-        REQUIRE((!IsRoutePayloadValid(GuiRoute{
-            GuiRouteKind::EditorWorkspace, EditorWorkspaceRouteParameters{ProjectSessionCandidateId{}, std::nullopt}})))
-        ;
+        REQUIRE((IsRoutePayloadValid(
+            GuiRoute{GuiRouteKind::EditorWorkspace, EditorWorkspaceRouteParameters{ProjectSessionCandidateId{1}, std::nullopt}})));
+        REQUIRE((!IsRoutePayloadValid(
+            GuiRoute{GuiRouteKind::EditorWorkspace, EditorWorkspaceRouteParameters{ProjectSessionCandidateId{}, std::nullopt}})));
 
         REQUIRE((!IsRoutePayloadValid(GuiRoute{GuiRouteKind::Welcome, ProjectBrowserRouteParameters{}})));
     }
 
-    TEST_CASE (
-    "Welcome filters invalid recent projects"
-    ,
-    "[unit][editor][welcome]"
-    )
-    {
+    TEST_CASE("Welcome filters invalid recent projects", "[unit][editor][welcome]") {
         using namespace Horo::Editor;
 
         const std::string validRoot = (std::filesystem::temp_directory_path() / "horo-valid-project").string();
 
-        WelcomeScreenController controller{
-            {
-                RecentProjectEntry{"Valid", validRoot, "today", "valid"},
-                RecentProjectEntry{"Missing Path", "", "today", "missing"},
-                RecentProjectEntry{"", "/tmp/missing-name", "today", "missing-name"},
-                RecentProjectEntry{"Relative Path", "~/projects/example", "today", "relative"},
-            }
-        };
+        WelcomeScreenController controller{{
+            RecentProjectEntry{"Valid", validRoot, "today", "valid"},
+            RecentProjectEntry{"Missing Path", "", "today", "missing"},
+            RecentProjectEntry{"", "/tmp/missing-name", "today", "missing-name"},
+            RecentProjectEntry{"Relative Path", "~/projects/example", "today", "relative"},
+        }};
 
         const WelcomeViewModel model = controller.BuildViewModel();
         REQUIRE((model.productName == "Horo Editor"));
@@ -106,19 +86,14 @@ namespace
         REQUIRE((openRecent->kind == WelcomeActionKind::OpenRecentProject));
         REQUIRE((openRecent->route.kind == GuiRouteKind::ProjectLoading));
 
-        const auto* parameters = std::get_if<ProjectLoadingRouteParameters>(&openRecent->route.parameters);
+        const auto *parameters = std::get_if<ProjectLoadingRouteParameters>(&openRecent->route.parameters);
         REQUIRE((parameters != nullptr));
         REQUIRE((parameters->projectRoot == validRoot));
 
         REQUIRE((!controller.RequestOpenRecentProject(1).has_value()));
     }
 
-    TEST_CASE (
-    "Welcome preview text is deterministic"
-    ,
-    "[unit][editor][welcome]"
-    )
-    {
+    TEST_CASE("Welcome preview text is deterministic", "[unit][editor][welcome]") {
         using namespace Horo::Editor;
 
         const std::string projectRoot = (std::filesystem::temp_directory_path() / "horo-preview-project").string();
@@ -132,12 +107,7 @@ namespace
         REQUIRE((text.find(projectRoot) != std::string::npos));
     }
 
-    TEST_CASE (
-    "Cached compatibility projection round trips"
-    ,
-    "[unit][editor][welcome]"
-    )
-    {
+    TEST_CASE("Cached compatibility projection round trips", "[unit][editor][welcome]") {
         const ScopedTestHome home{"horo-welcome-controller"};
         using namespace Horo::Application;
         using namespace Horo::Editor;
@@ -145,12 +115,10 @@ namespace
         const auto current = CurrentEngineReleaseVersion();
         const std::string root = (std::filesystem::temp_directory_path() / "horo-cached-project").string();
         RecentProjectEntry entry{"Cached", root, "today", "custom"};
-        entry.compatibility = RecentProjectCompatibilityProjection{
-            .projectVersion = current,
-            .status = ProjectCompatibilityStatus::Current,
-            .targetVersion = current,
-            .inspectionState = RecentProjectInspectionState::Fresh
-        };
+        entry.compatibility = RecentProjectCompatibilityProjection{.projectVersion = current,
+                                                                   .status = ProjectCompatibilityStatus::Current,
+                                                                   .targetVersion = current,
+                                                                   .inspectionState = RecentProjectInspectionState::Fresh};
         REQUIRE((SaveRecentProjectsToDisk({entry})));
         const auto loaded = LoadRecentProjectsFromDisk();
         REQUIRE((loaded.size() == 1));
@@ -159,4 +127,4 @@ namespace
         REQUIRE((loaded.front().compatibility->projectVersion == current));
         REQUIRE((loaded.front().compatibility->inspectionState == RecentProjectInspectionState::Cached));
     }
-} // namespace
+}  // namespace

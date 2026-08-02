@@ -36,6 +36,10 @@ namespace Horo::Editor {
         void Replace(EditorViewportSceneSnapshot snapshot);
         void Clear() noexcept;
         [[nodiscard]] EditorViewportSceneView View() const noexcept;
+        /** @brief Returns the document revision represented by the current handoff snapshot. */
+        [[nodiscard]] DocumentRevision Revision() const noexcept { return m_snapshot.documentRevision; }
+        /** @brief Returns the runtime-scene identity represented by the current handoff snapshot. */
+        [[nodiscard]] Runtime::SceneRuntimeId RuntimeSceneId() const noexcept { return m_snapshot.runtimeSceneId; }
 
     private:
         EditorViewportSceneSnapshot m_snapshot{};

@@ -16,6 +16,13 @@ namespace Horo::Log
 class IStructuredLogQuery;
 } // namespace Horo::Log
 
+namespace Horo
+{
+class IBuildOutputQuery;
+class IOperationControl;
+class IOperationQuery;
+} // namespace Horo
+
 namespace Horo::Editor
 {
 class EditorDataBus;
@@ -33,6 +40,9 @@ struct PanelContext
     Input::InputRouter *inputRouter{nullptr};
     Input::InputContextToken *workspaceInputContext{nullptr};
     const Log::IStructuredLogQuery *logQuery{nullptr};
+    const IBuildOutputQuery *buildOutputQuery{nullptr};
+    const IOperationQuery *operationQuery{nullptr};
+    IOperationControl *operationControl{nullptr};
 };
 
 /** @brief Base interface for a modular Workspace Panel (e.g. Hierarchy, Inspector) */

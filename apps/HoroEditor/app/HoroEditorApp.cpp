@@ -1,6 +1,7 @@
 #include "HoroEditorApp.h"
 
 #include "Horo/Application/ProjectCompatibility.h"
+#include "Horo/Application/GameplayBuildService.h"
 #include "Horo/Assets/AssetRegistry.h"
 #include "Horo/Editor/DefaultScreenFactories.h"
 #include "Horo/Editor/DefaultWorkspacePanels.h"
@@ -22,12 +23,15 @@
 #include "Horo/Editor/WorkspacePanelRegistry.h"
 #include "Horo/Extensions/ExtensionInventory.h"
 #include "Horo/Extensions/ExtensionMarketplace.h"
+#include "Horo/Foundation/BuildOutputStore.h"
 #include "Horo/Foundation/DataBus.h"
 #include "Horo/Foundation/JobSystem.h"
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Foundation/Logging/StructuredLogStore.h"
+#include "Horo/Foundation/OperationStore.h"
 #include "Horo/Foundation/Paths.h"
 #include "Horo/Foundation/Platform.h"
+#include "Horo/Platform/ExternalProcess.h"
 #include "Horo/Runtime/Input.h"
 #include "Horo/Runtime/Render/RenderFrontend.h"
 #include "Horo/Runtime/RuntimeHost.h"
@@ -592,6 +596,8 @@ namespace Horo::Editor {
             IEditorViewportRenderer &viewportRenderer;
             Render::RenderTargetHandle viewportTarget;
             const Log::IStructuredLogQuery &logQuery;
+            BuildOutputStore &buildOutputStore;
+            OperationStore &operationStore;
         };
 
         class EditorRuntimeParticipant final : public Runtime::RuntimeLifecycleParticipant {
@@ -647,7 +653,8 @@ namespace Horo::Editor {
                 return Result<void>::Success();
             }
 
-            Result<void> OnFixedUpdate(const Runtime::FixedStepContext &) override {
+            Result<void> OnFixedUpdate(const Runtime::FixedStepContext &context) override {
+                screenHost_->OnFixedUpdate(static_cast<double>(context.fixedDelta.ToNanoseconds()) / 1'000'000'000.0);
                 return Result<void>::Success();
             }
 
@@ -828,6 +835,13 @@ namespace Horo::Editor {
             // Borrowed screen services must outlive the host that invokes screen OnLeave().
             EditorViewportSceneState viewportSceneState;
             NativeDurableFileSystem durableFiles;
+            NativeExternalProcessRunner externalProcesses;
+            Application::GameplayBuildService gameplayBuildService{externalProcesses, p.jobSystem, durableFiles,
+                                                                    &p.buildOutputStore, &p.operationStore};
+            Application::GameplayBuildEnvironment gameplayBuildEnvironment{
+                .gameplaySdkPackage = HORO_GAMEPLAY_SDK_PACKAGE_DIR,
+                .cxxCompiler = std::filesystem::path{HORO_GAMEPLAY_CXX_COMPILER},
+            };
             SystemWallClock wallClock;
             ProjectMutationCoordinator mutationCoordinator{durableFiles};
             ProjectMigrationTransactionService migrationTransactions{durableFiles, wallClock, mutationCoordinator, p.jobSystem};
@@ -881,9 +895,15 @@ namespace Horo::Editor {
             screenHost.Services().Register<Assets::AssetRegistry>(assetRegistry);
             screenHost.Services().Register<ProjectMutationCoordinator>(mutationCoordinator);
             screenHost.Services().Register<DurableFileSystem>(durableFiles);
+            screenHost.Services().Register<Application::GameplayBuildService>(gameplayBuildService);
+            screenHost.Services().Register<Application::GameplayBuildEnvironment>(gameplayBuildEnvironment);
             screenHost.Services().Register<ProjectOpenService>(projectOpenService);
             screenHost.Services().Register<RecentProjectInspectionService>(recentProjectInspection);
             screenHost.Services().RegisterConst<Log::IStructuredLogQuery>(p.logQuery);
+            screenHost.Services().RegisterConst<IBuildOutputQuery>(p.buildOutputStore);
+            screenHost.Services().Register<OperationStore>(p.operationStore);
+            screenHost.Services().RegisterConst<IOperationQuery>(p.operationStore);
+            screenHost.Services().Register<IOperationControl>(p.operationStore);
             if (const Result<void> started = screenHost.Start(std::move(p.initialRoute)); started.HasError()) {
                 LOG_ERROR("editor.screens", "Initial screen startup failed: %s", started.ErrorValue().message.c_str());
                 screenHost.RequestFatalShutdown();
@@ -941,6 +961,8 @@ namespace Horo::Editor {
         Log::Logger::Init("~/.horo/logs", "horo-editor");
         auto structuredLogStore = std::make_shared<Log::StructuredLogStore>(4096U);
         Log::Logger::SetStructuredLogStore(structuredLogStore);
+        BuildOutputStore buildOutputStore{2048U};
+        OperationStore operationStore{64U, 200U};
 
         // Setup base MDC for the whole application run
         Log::LogContext appCtx("app", "horo-editor", "run_id", "1");
@@ -1077,7 +1099,9 @@ namespace Horo::Editor {
                                            *composition.guiRenderer,
                                            *composition.viewportRenderer,
                                            composition.viewportTarget,
-                                           *structuredLogStore};
+                                           *structuredLogStore,
+                                           buildOutputStore,
+                                           operationStore};
         const std::optional<EditorRendererRestartRequest> rendererRestart = RunEditorMainLoop(loopParams);
 
         DestroyEditorTextures(textures, *composition.guiRenderer);

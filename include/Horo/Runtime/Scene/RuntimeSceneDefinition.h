@@ -7,6 +7,7 @@
 
 #include "Horo/Assets/AssetId.h"
 #include "Horo/Foundation/Result.h"
+#include "Horo/Gameplay/BehaviorTypes.h"
 #include "Horo/Math/SceneMath.h"
 #include "Horo/Runtime/Scene/PrimitiveMeshDescriptor.h"
 #include "Horo/Runtime/Scene/SceneComponents.h"
@@ -54,7 +55,8 @@ struct RuntimeComponentSet
     std::optional<LightComponent> light;
     std::optional<TriggerVolumeComponent> triggerVolume;
     std::optional<AudioSourceComponent> audioSource;
-    [[nodiscard]] constexpr auto operator<=>(const RuntimeComponentSet &) const noexcept = default;
+    std::vector<Gameplay::BehaviorComponent> behaviors;
+    [[nodiscard]] bool operator==(const RuntimeComponentSet &) const noexcept = default;
 };
 
 /** @brief Complete immutable definition of one authored runtime entity. */

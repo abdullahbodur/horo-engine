@@ -47,12 +47,14 @@ that affinity and synchronization are explicit.
 
 ## Job System Interface
 
-Implementation status on 18 July 2026: the FND-001A baseline implements the
+Implementation status on 1 August 2026: the FND-001A baseline implements the
 bounded worker queue, result-returning submissions, parent cancellation and the
-non-movable operation-owned `TaskGroup` below. Priority, affinity, configuration
-snapshot capture, main-thread pumping and the richer operation store remain
-later Foundation work; examples later in this document describe that target and
-must not be read as already implemented.
+non-movable operation-owned `TaskGroup` below. A bounded `OperationStore`
+baseline also provides typed state, phase, monotonic per-phase progress,
+terminal retention, and cooperative cancellation. Priority, affinity,
+configuration snapshot capture, main-thread pumping, job aggregation, wait
+reasons, and revision notifications remain later Foundation work; examples of
+those capabilities below describe the target rather than implemented behavior.
 
 ```cpp
 class JobSystem {

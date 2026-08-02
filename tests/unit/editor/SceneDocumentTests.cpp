@@ -628,4 +628,48 @@ namespace {
         snapshot = document.Snapshot();
         REQUIRE((snapshot.objects.size() == 2 && snapshot.objects[1].primitiveMesh == sphere));
     }
+
+    TEST_CASE("Behavior Attach Edit Remove Duplicate And History Preserve Stable Attachment Identity", "[unit][editor][gameplay]") {
+        using namespace Horo;
+        using namespace Horo::Editor;
+        SceneDocument document;
+        EditorHistory history;
+        SceneDocumentCommandExecutor commands{document, history};
+        const auto created = commands.Execute(CreateSceneObjectCommand{.name = "Player"});
+        REQUIRE(created.HasValue());
+        const auto type = Gameplay::BehaviorTypeId::Parse("game.tests.player_controller");
+        REQUIRE(type.HasValue());
+        REQUIRE(commands
+                    .Execute(AttachSceneObjectBehaviorCommand{
+                        created.Value().object,
+                        type.Value(),
+                        1,
+                        true,
+                        false,
+                        {Gameplay::BehaviorField{"speed", 2.0}},
+                    })
+                    .HasValue());
+        REQUIRE(document.Objects().front().components.behaviors.size() == 1);
+        const Gameplay::BehaviorInstanceId firstId = document.Objects().front().components.behaviors.front().instanceId;
+        REQUIRE(firstId.IsValid());
+        REQUIRE(commands.Execute(AttachSceneObjectBehaviorCommand{created.Value().object, type.Value()}).HasError());
+
+        Gameplay::BehaviorComponent edited = document.Objects().front().components.behaviors.front();
+        edited.enabled = false;
+        edited.fields.front().value = 4.0;
+        REQUIRE(commands.Execute(SetSceneObjectBehaviorCommand{created.Value().object, edited}).HasValue());
+        REQUIRE(!document.Objects().front().components.behaviors.front().enabled);
+        REQUIRE(commands.Undo().HasValue());
+        REQUIRE(document.Objects().front().components.behaviors.front().enabled);
+        REQUIRE(commands.Redo().HasValue());
+        REQUIRE(!document.Objects().front().components.behaviors.front().enabled);
+
+        const auto duplicate = commands.Execute(DuplicateSceneObjectCommand{created.Value().object, "Player Copy"});
+        REQUIRE(duplicate.HasValue());
+        REQUIRE(document.Objects().back().components.behaviors.front().instanceId != firstId);
+        REQUIRE(commands.Execute(RemoveSceneObjectBehaviorCommand{created.Value().object, firstId}).HasValue());
+        REQUIRE(document.Objects().front().components.behaviors.empty());
+        REQUIRE(commands.Undo().HasValue());
+        REQUIRE(document.Objects().front().components.behaviors.front().instanceId == firstId);
+    }
 }  // namespace

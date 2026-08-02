@@ -84,7 +84,7 @@ namespace Horo::Editor
         bool initializeGit = true;
         bool restorePackages = true;
         bool includeStarterContent = true;
-        bool generateCMakeProject = false;
+        bool generateCMakeProject = true;
 
         [[nodiscard]] bool operator==(const ProjectCreationDraft&) const = default;
     };

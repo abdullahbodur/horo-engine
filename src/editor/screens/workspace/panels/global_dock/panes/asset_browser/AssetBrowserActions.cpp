@@ -7,6 +7,7 @@
 #include "editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserInteractionSession.h"
 
 #include <algorithm>
+#include <filesystem>
 #include <ranges>
 
 namespace Horo::Editor {
@@ -33,6 +34,18 @@ namespace Horo::Editor {
         if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.create_folder").c_str(), nullptr,
                                 context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.create")) {
             interactionSession.OpenCreateFolder();
+        }
+        if (Ui::ContextMenuItem((localization.Get("editor", "workspace.content_browser.action.create_lua_behavior") +
+                                 "###content_browser_create_lua_behavior").c_str(), nullptr,
+                                context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.create_lua_behavior")) {
+            command.command = EditorWorkspaceViewCommand::CreateLuaBehavior;
+            command.stringPayload = directory.absoluteCurrentPath;
+        }
+        if (Ui::ContextMenuItem((localization.Get("editor", "workspace.content_browser.action.create_native_behavior") +
+                                 "###content_browser_create_native_behavior").c_str(), nullptr,
+                                context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.create_native_behavior")) {
+            command.command = EditorWorkspaceViewCommand::CreateNativeBehavior;
+            command.stringPayload = directory.absoluteCurrentPath;
         }
         if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.import_here").c_str(), nullptr,
                                 context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.import")) {
@@ -94,6 +107,12 @@ namespace Horo::Editor {
             interactionSession.OpenInfo(entry);
         }
         if (entry.kind == ContentBrowserEntryKind::Asset) {
+            if (std::filesystem::path{entry.absolutePath}.extension() == ".horo_script" &&
+                Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.open_external_ide").c_str(), nullptr,
+                                    context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.open")) {
+                command.command = EditorWorkspaceViewCommand::OpenDiagnosticSource;
+                command.diagnosticSource = DiagnosticSourceRequest{entry.absolutePath, 0, 0};
+            }
             ImGui::BeginDisabled(!entry.canReimport);
             if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.reimport").c_str(), nullptr,
                                     context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.refresh")) {

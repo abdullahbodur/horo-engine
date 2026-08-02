@@ -7,6 +7,8 @@ add_library(HoroFoundation STATIC
         foundation/logging/Logger.cpp
         foundation/logging/LogContext.cpp
         foundation/logging/StructuredLogStore.cpp
+        foundation/diagnostics/BuildOutputStore.cpp
+        foundation/diagnostics/OperationStore.cpp
         foundation/data_bus/DataBus.cpp
         foundation/jobs/JobSystem.cpp
         foundation/config/Configuration.cpp
@@ -28,9 +30,13 @@ add_library(HoroPlatform STATIC
 )
 
 if (WIN32)
-    target_sources(HoroPlatform PRIVATE platform/windows/DynamicLibrary_Windows.cpp)
+    target_sources(HoroPlatform PRIVATE
+            platform/windows/DynamicLibrary_Windows.cpp
+            platform/windows/ExternalProcess_Windows.cpp)
 else ()
-    target_sources(HoroPlatform PRIVATE platform/posix/DynamicLibrary_Posix.cpp)
+    target_sources(HoroPlatform PRIVATE
+            platform/posix/DynamicLibrary_Posix.cpp
+            platform/posix/ExternalProcess_Posix.cpp)
     target_link_libraries(HoroPlatform PRIVATE dl)
 endif ()
 
@@ -86,6 +92,19 @@ target_compile_features(HoroRuntime PUBLIC cxx_std_20)
 target_include_directories(HoroRuntime PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(HoroRuntime PUBLIC HoroEngine::Foundation)
 
+add_library(HoroGameplayApi STATIC
+        gameplay/api/BehaviorTypes.cpp
+        gameplay/api/GameModule.cpp
+        gameplay/api/GameplayErrors.cpp
+)
+add_library(HoroEngine::GameplayApi ALIAS HoroGameplayApi)
+target_compile_features(HoroGameplayApi PUBLIC cxx_std_20)
+target_include_directories(HoroGameplayApi PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(HoroGameplayApi PUBLIC HoroEngine::Foundation)
+target_compile_definitions(HoroGameplayApi PRIVATE
+        HORO_GAMEPLAY_SDK_FINGERPRINT="${HORO_GAMEPLAY_SDK_FINGERPRINT}"
+)
+
 add_library(HoroRuntimeScene STATIC
         runtime/scene/RuntimeSceneDefinition.cpp
         runtime/scene/RuntimeScene.cpp
@@ -94,7 +113,45 @@ add_library(HoroRuntimeScene STATIC
 add_library(HoroEngine::RuntimeScene ALIAS HoroRuntimeScene)
 target_compile_features(HoroRuntimeScene PUBLIC cxx_std_20)
 target_include_directories(HoroRuntimeScene PUBLIC ${PROJECT_SOURCE_DIR}/include)
-target_link_libraries(HoroRuntimeScene PUBLIC HoroEngine::Foundation HoroEngine::Runtime)
+target_link_libraries(HoroRuntimeScene PUBLIC HoroEngine::Foundation HoroEngine::Runtime HoroEngine::GameplayApi)
+
+add_library(HoroGameplayRuntime STATIC
+        gameplay/runtime/BehaviorRegistry.cpp
+        gameplay/runtime/BehaviorRuntime.cpp
+)
+add_library(HoroEngine::GameplayRuntime ALIAS HoroGameplayRuntime)
+target_compile_features(HoroGameplayRuntime PUBLIC cxx_std_20)
+target_include_directories(HoroGameplayRuntime PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(HoroGameplayRuntime PUBLIC HoroEngine::GameplayApi HoroEngine::RuntimeScene)
+
+add_library(HoroGameplayModuleHost STATIC
+        gameplay/module/GameModuleHost.cpp
+)
+add_library(HoroEngine::GameplayModuleHost ALIAS HoroGameplayModuleHost)
+target_compile_features(HoroGameplayModuleHost PUBLIC cxx_std_20)
+target_include_directories(HoroGameplayModuleHost PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(HoroGameplayModuleHost PUBLIC HoroEngine::GameplayRuntime PRIVATE HoroEngine::Platform)
+
+add_library(HoroGameplayLua STATIC
+        gameplay/lua/LuaBehavior.cpp
+)
+
+add_library(HoroGameplayBuild STATIC
+        application/gameplay/GameplayBuildService.cpp
+)
+add_library(HoroEngine::GameplayBuild ALIAS HoroGameplayBuild)
+target_compile_features(HoroGameplayBuild PUBLIC cxx_std_20)
+target_include_directories(HoroGameplayBuild PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(HoroGameplayBuild
+        PUBLIC HoroEngine::Foundation
+        PRIVATE HoroEngine::Platform HoroEngine::GameplayModuleHost nlohmann_json::nlohmann_json)
+add_library(HoroEngine::GameplayLua ALIAS HoroGameplayLua)
+target_compile_features(HoroGameplayLua PUBLIC cxx_std_20)
+target_include_directories(HoroGameplayLua PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(HoroGameplayLua
+        PUBLIC HoroEngine::GameplayRuntime
+        PRIVATE HoroThirdParty::Lua nlohmann_json::nlohmann_json
+)
 
 add_library(HoroAssets STATIC
         runtime/assets/AssetErrors.cpp
@@ -343,6 +400,8 @@ add_library(HoroEditorServices STATIC
         editor/document/SceneFileWatchService.cpp
         editor/screens/welcome/WelcomeController.cpp
         editor/screens/project_creation/ProjectCreationController.cpp
+        editor/gameplay/ProjectGameplayRegistry.cpp
+        editor/gameplay/EditorPlaySessionController.cpp
         editor/screens/workspace/ContentBrowserModel.cpp
         editor/project_model/ProjectCreationService.cpp
         editor/project_model/ProjectMutation.cpp
@@ -389,6 +448,9 @@ target_link_libraries(HoroEditorServices
         HoroEngine::Application
         HoroEngine::Platform
         HoroEngine::EditorModel
+        HoroEngine::GameplayLua
+        HoroEngine::GameplayModuleHost
+        HoroEngine::GameplayBuild
         HoroEngine::Input
         PRIVATE
         HoroEngine::Assets
@@ -456,6 +518,7 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/screens/workspace/panels/inspector/InspectorEditSession.cpp
             editor/screens/workspace/panels/inspector/InspectorPanel.cpp
             editor/screens/workspace/panels/input_mapping/InputMappingPanel.cpp
+            editor/screens/workspace/panels/game/GamePanel.cpp
         editor/screens/workspace/panels/viewport/ViewportPanel.cpp
         editor/screens/workspace/panels/viewport/visualizers/light/LightMarkerLayer.cpp
             editor/screens/workspace/panels/viewport/gizmo/TransformGizmoController.cpp

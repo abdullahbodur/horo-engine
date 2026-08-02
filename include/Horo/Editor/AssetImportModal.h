@@ -8,6 +8,7 @@
 #include "Horo/Assets/AssetImportOperation.h"
 #include "Horo/Editor/EditorModalHost.h"
 #include "Horo/Foundation/JobSystem.h"
+#include "Horo/Foundation/OperationStore.h"
 #include "runtime/assets/importer/ProjectAssetImportCommitter.h"
 
 #include <filesystem>
@@ -50,10 +51,13 @@ namespace Horo::Editor
          * @param fonts Theme fonts reference (valid for modal lifetime).
          * @param jobs Job system for background import work.
          * @param catalog Published immutable importer catalog snapshot.
+         * @param assetRegistry Optional mutable asset registry updated by committed imports.
+         * @param operationStore Optional user-facing operation authority.
          */
         AssetImportModal(const Theme::Fonts& fonts, JobSystem& jobs,
                          std::shared_ptr<const Assets::AssetImporterCatalogSnapshot> catalog,
-                         Assets::AssetRegistry* assetRegistry = nullptr) noexcept;
+                         Assets::AssetRegistry* assetRegistry = nullptr,
+                         OperationStore* operationStore = nullptr) noexcept;
 
         [[nodiscard]] ModalId Id() const override;
         [[nodiscard]] ModalPresentation Presentation() const override;
@@ -90,6 +94,9 @@ namespace Horo::Editor
 
         /** @brief Imports a single item by queue index. */
         [[nodiscard]] Result<void> ImportSingleItem(std::size_t index, const CancellationToken& cancellation);
+
+        /** @brief Returns whether every queued item reached a committed or explicitly skipped terminal result. */
+        [[nodiscard]] bool IsImportComplete() const noexcept;
 
         /** @brief Runs the import preparation phase. */
         [[nodiscard]] Result<void> PrepareImport(const CancellationToken& cancellation);
@@ -171,13 +178,22 @@ namespace Horo::Editor
         /** @brief Checks whether importing @p item would overwrite an existing asset. */
         bool WouldConflict(const Assets::AssetImportItem &item) const;
 
-        /** @brief Commits one item and advances the conflict cursor. */
-        void CommitCurrentItem(const Assets::AssetImportItem &item, ConflictChoice choice, bool applyAll);
+        /** @brief Commits or explicitly skips one conflicted item. */
+        [[nodiscard]] bool CommitCurrentItem(const Assets::AssetImportItem &item, ConflictChoice choice, bool applyAll);
+
+        /** @brief Records one terminal item result and completes the visible operation when the queue is finished. */
+        void MarkItemCompleted(std::size_t index);
+
+        /** @brief Moves the visible operation to failed and releases its active handle. */
+        void FailVisibleOperation(const Error &error, std::string_view phase);
 
         const Theme::Fonts &m_fonts;
         JobSystem &m_jobs;
         std::shared_ptr<const Assets::AssetImporterCatalogSnapshot> m_catalog;
         Assets::AssetRegistry* m_assetRegistry{};
+        OperationStore *m_operationStore{};
+        std::optional<OperationId> m_visibleOperationId;
+        std::shared_ptr<CancellationSource> m_operationCancellation;
         EditorDataBus *m_events = nullptr;
         std::filesystem::path m_projectRoot; /**< Stored for committer. */
         std::string m_defaultDestinationFolder;
@@ -185,6 +201,7 @@ namespace Horo::Editor
         std::unique_ptr<Assets::AssetImportOperation> m_operation;
         std::unique_ptr<Assets::ProjectAssetImportCommitter> m_committer;
         Assets::AssetImportSnapshot m_snapshot;
+        std::vector<bool> m_itemCompleted;
         bool m_prepared{false};
 
         // Conflict resolution popup state

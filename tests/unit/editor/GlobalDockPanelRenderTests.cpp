@@ -3,7 +3,9 @@
 #include "Horo/Editor/EditorSettingsService.h"
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/Localization/ILocalizationService.h"
+#include "Horo/Foundation/BuildOutputStore.h"
 #include "Horo/Foundation/DataBus.h"
+#include "Horo/Foundation/OperationStore.h"
 #include "editor/screens/workspace/EditorWorkspaceViewModel.h"
 #include "editor/screens/workspace/panels/global_dock/GlobalDockPanel.h"
 #include "editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserPaneLayout.h"
@@ -81,6 +83,35 @@ namespace {
 
         GlobalDockPanel panel;
         REQUIRE((panel.ActiveTab() == GlobalDockTab::Assets));
+    }
+
+    TEST_CASE("Build and operation projections use typed status and case-insensitive text", "[unit][editor][gui]") {
+        using namespace Horo;
+        using namespace Horo::Editor;
+
+        const std::array buildRecords{
+            BuildOutputRecord{.status = BuildOutputStatus::Succeeded, .phase = "Compile", .message = "Shader complete"},
+            BuildOutputRecord{.status = BuildOutputStatus::Failed,
+                              .phase = "Validate",
+                              .message = "Syntax error",
+                              .source = DiagnosticSourceLocation{.absolutePath = "/project/assets/material.glsl", .line = 8}},
+            BuildOutputRecord{.status = BuildOutputStatus::Cached, .phase = "Cook", .message = "Mesh cached"},
+        };
+        REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::Failed, "MATERIAL") ==
+                 std::vector<std::size_t>{1}));
+        REQUIRE((GlobalDockBuildOutputPane::ProjectRecords(buildRecords, GlobalDockBuildOutputPane::StatusFilter::Cached, {}) ==
+                 std::vector<std::size_t>{2}));
+
+        const std::array operations{
+            OperationRecord{.id = 1, .kind = OperationKind::Import, .state = OperationState::Running, .title = "Import assets"},
+            OperationRecord{.id = 2,
+                            .kind = OperationKind::Validation,
+                            .state = OperationState::Failed,
+                            .title = "Validate project",
+                            .message = "Missing source"},
+        };
+        REQUIRE((GlobalDockOperationsPane::ProjectRecords(operations, "FAILED") == std::vector<std::size_t>{1}));
+        REQUIRE((GlobalDockOperationsPane::ProjectRecords(operations, "import") == std::vector<std::size_t>{0}));
     }
 
     TEST_CASE("Content browser exposes absolute folders assets and breadcrumbs", "[unit][editor][gui]") {
@@ -338,6 +369,9 @@ TEST_CASE("Content browser renders responsive layouts and every dock tab", "[uni
         ImGui::NewFrame();
         RenderAtWidth(900.0F, "GlobalDockTabMatrix", tabPanel, context);
         ImGui::Render();
+        ImGui::NewFrame();
+        RenderAtWidth(260.0F, "GlobalDockNarrowTabMatrix", tabPanel, context);
+        ImGui::Render();
         REQUIRE((tabPanel.ActiveTab() == tab));
     }
 
@@ -358,6 +392,49 @@ TEST_CASE("Content browser renders responsive layouts and every dock tab", "[uni
     RenderAtWidth(900.0F, "LiveConsoleRows", liveConsole, context);
     ImGui::Render();
     liveConsole.OnDetach();
+
+    BuildOutputStore buildOutputStore{8};
+    buildOutputStore.Append({.timestampUtc = std::chrono::system_clock::now(),
+                             .status = BuildOutputStatus::Failed,
+                             .phase = "compile",
+                             .message = "Unable to compile shader",
+                             .source = DiagnosticSourceLocation{.absolutePath = "/tmp/HoroProject/assets/shader.glsl", .line = 12}});
+    OperationStore operationStore{8, 8};
+    const auto operationId = operationStore.Begin({.kind = OperationKind::Cook,
+                                                   .title = "Cook assets",
+                                                   .phase = "cook",
+                                                   .message = "4 of 8",
+                                                   .progress = 0.5F,
+                                                   .cancellable = true,
+                                                   .requestCancel = [] {
+    }});
+    REQUIRE(operationId.has_value());
+    REQUIRE(
+        operationStore.Update(*operationId, {.state = OperationState::Running, .phase = "cook", .message = "4 of 8", .progress = 0.5F}));
+
+    PanelContext activityContext{.dataBus = editorEvents,
+                                 .buildOutputQuery = &buildOutputStore,
+                                 .operationQuery = &operationStore,
+                                 .operationControl = &operationStore};
+    GlobalDockPanel liveBuild{GlobalDockTab::BuildOutput};
+    liveBuild.OnAttach(activityContext);
+    ImGui::NewFrame();
+    RenderAtWidth(900.0F, "LiveBuildRows", liveBuild, context);
+    ImGui::Render();
+    ImGui::NewFrame();
+    RenderAtWidth(260.0F, "LiveBuildRowsNarrow", liveBuild, context);
+    ImGui::Render();
+    liveBuild.OnDetach();
+
+    GlobalDockPanel liveOperations{GlobalDockTab::Operations};
+    liveOperations.OnAttach(activityContext);
+    ImGui::NewFrame();
+    RenderAtWidth(900.0F, "LiveOperationRows", liveOperations, context);
+    ImGui::Render();
+    ImGui::NewFrame();
+    RenderAtWidth(260.0F, "LiveOperationRowsNarrow", liveOperations, context);
+    ImGui::Render();
+    liveOperations.OnDetach();
 
     ImGui::DestroyContext();
 }

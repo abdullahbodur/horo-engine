@@ -1,15 +1,12 @@
-#include <catch2/catch_test_macros.hpp>
-
 #include "Horo/Editor/ActivityBarLayout.h"
 
+#include <catch2/catch_test_macros.hpp>
 #include <vector>
 
-namespace
-{
+namespace {
     using namespace Horo::Editor;
 
-    TEST_CASE("Moves An Item Into An Insertion Slot", "[unit][editor]")
-    {
+    TEST_CASE("Moves An Item Into An Insertion Slot", "[unit][editor]") {
         ActivityBarLayout layout;
         static_cast<void>(layout.Insert("horo.hierarchy", ActivityBarSlot{ActivityBarRail::Left, 0, 0}));
         static_cast<void>(layout.Insert("horo.inspector", ActivityBarSlot{ActivityBarRail::Left, 0, 1}));
@@ -20,8 +17,7 @@ namespace
         REQUIRE((layout.FindSlot("horo.hierarchy").value() == (ActivityBarSlot{ActivityBarRail::Left, 0, 0})));
     }
 
-    TEST_CASE("Moving Within A Group Shifts Existing Items", "[unit][editor]")
-    {
+    TEST_CASE("Moving Within A Group Shifts Existing Items", "[unit][editor]") {
         ActivityBarLayout layout;
         static_cast<void>(layout.Insert("one", ActivityBarSlot{ActivityBarRail::Left, 0, 0}));
         static_cast<void>(layout.Insert("two", ActivityBarSlot{ActivityBarRail::Left, 0, 1}));
@@ -33,8 +29,7 @@ namespace
         REQUIRE((layout.ItemAt(ActivityBarRail::Left, 0, 2) == "two"));
     }
 
-    TEST_CASE("Rejects Unknown Item And Invalid Insertion Without Mutation", "[unit][editor]")
-    {
+    TEST_CASE("Rejects Unknown Item And Invalid Insertion Without Mutation", "[unit][editor]") {
         ActivityBarLayout layout;
         static_cast<void>(layout.Insert("one", ActivityBarSlot{ActivityBarRail::Left, 0, 0}));
 
@@ -43,8 +38,7 @@ namespace
         REQUIRE((layout.ItemAt(ActivityBarRail::Left, 0, 0) == "one"));
     }
 
-    TEST_CASE("Dropping The Only Item Back Into Its Group Is A No Op", "[unit][editor]")
-    {
+    TEST_CASE("Dropping The Only Item Back Into Its Group Is A No Op", "[unit][editor]") {
         ActivityBarLayout layout;
         static_cast<void>(layout.Insert("one", ActivityBarSlot{ActivityBarRail::Left, 0, 0}));
         const auto result = layout.Move("one", ActivityBarSlot{ActivityBarRail::Left, 0, 1});
@@ -52,8 +46,7 @@ namespace
         REQUIRE((layout.ItemAt(ActivityBarRail::Left, 0, 0) == "one"));
     }
 
-    TEST_CASE("Moving Across Groups Compacts The Source And Inserts At The Target Index", "[unit][editor]")
-    {
+    TEST_CASE("Moving Across Groups Compacts The Source And Inserts At The Target Index", "[unit][editor]") {
         ActivityBarLayout layout;
         static_cast<void>(layout.Insert("source-0", ActivityBarSlot{ActivityBarRail::Left, 1, 0}));
         static_cast<void>(layout.Insert("source-1", ActivityBarSlot{ActivityBarRail::Left, 1, 1}));
@@ -79,18 +72,17 @@ namespace
         REQUIRE((layout.ItemAt(ActivityBarRail::Left, 1, 4) == "source-5"));
     }
 
-    TEST_CASE("Supports A Dedicated Document Top Rail", "[unit][editor]")
-    {
+    TEST_CASE("Supports A Dedicated Document Top Rail", "[unit][editor]") {
         ActivityBarLayout layout;
 
         REQUIRE((layout.Groups(ActivityBarRail::DocumentTop).size() == 1));
         REQUIRE((layout.Insert("horo.viewport", ActivityBarSlot{ActivityBarRail::DocumentTop, 0, 0}).Succeeded()));
         REQUIRE((layout.FindSlot("horo.viewport") == ActivityBarSlot{ActivityBarRail::DocumentTop, 0, 0}));
         REQUIRE((layout.Insert("hidden", ActivityBarSlot{ActivityBarRail::DocumentTop, 1, 0}).code ==
-            ActivityBarLayoutOperationCode::InvalidGroup));
+                 ActivityBarLayoutOperationCode::InvalidGroup));
         REQUIRE((layout.Move("horo.viewport", ActivityBarSlot{ActivityBarRail::DocumentTop, 1, 0}).code ==
-            ActivityBarLayoutOperationCode::InvalidGroup));
+                 ActivityBarLayoutOperationCode::InvalidGroup));
         REQUIRE((layout.FindSlot("horo.viewport") == ActivityBarSlot{ActivityBarRail::DocumentTop, 0, 0}));
         REQUIRE((layout.ItemAt(ActivityBarRail::Left, 1, 0).empty()));
     }
-} // namespace
+}  // namespace

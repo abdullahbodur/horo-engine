@@ -1,27 +1,37 @@
 #pragma once
 
+#include "Horo/Application/GameplayBuildService.h"
 #include "Horo/Editor/EditorDataBus.h"
 #include "Horo/Editor/ProjectMutation.h"
 #include "editor/document/EditorViewportSceneExtractor.h"
 #include "editor/document/SceneDocumentComparison.h"
 #include "editor/document/SceneDocumentPersistence.h"
 #include "editor/document/SceneFileWatchService.h"
+#include "editor/gameplay/EditorPlaySessionController.h"
+#include "editor/gameplay/ProjectGameplayRegistry.h"
 #include "editor/project_model/EditorSelectionModel.h"
 #include "editor/project_model/EditorViewportModel.h"
 #include "editor/screens/workspace/EditorWorkspaceViewModel.h"
 
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
 namespace Horo::Editor {
+    /** @brief Platform navigation capability for one validated diagnostic source location. */
+    using DiagnosticSourceNavigator = std::function<bool(const DiagnosticSourceRequest &)>;
+
     class EditorWorkspaceController {
     public:
         EditorWorkspaceController(std::string projectRoot, Runtime::RuntimeSceneService &runtimeScene,
                                   const Assets::AssetRegistrySnapshot &assetRegistry = {},
                                   Assets::AssetRegistry *mutableAssetRegistry = nullptr, ProjectMutationCoordinator *mutations = nullptr,
                                   DurableFileSystem *durableFiles = nullptr,
-                                  const Assets::AssetImporterCatalogSnapshot *importerCatalog = nullptr, JobSystem *jobs = nullptr);
+                                  const Assets::AssetImporterCatalogSnapshot *importerCatalog = nullptr, JobSystem *jobs = nullptr,
+                                  DiagnosticSourceNavigator diagnosticSourceNavigator = {},
+                                  Application::GameplayBuildService *gameplayBuilds = nullptr,
+                                  Application::GameplayBuildEnvironment gameplayBuildEnvironment = {});
         ~EditorWorkspaceController() = default;
 
         [[nodiscard]] const EditorWorkspaceViewModel &ViewModel() const noexcept {
@@ -40,6 +50,11 @@ namespace Horo::Editor {
         /** @brief Returns the current monotonic authoritative viewport revision. */
         [[nodiscard]] ViewportRevision CurrentViewportRevision() const noexcept {
             return m_viewport.Current().revision;
+        }
+
+        /** @brief Returns the monotonic revision of the extracted viewport scene projection. */
+        [[nodiscard]] std::uint64_t CurrentViewportSceneRevision() const noexcept {
+            return m_viewportSceneRevision;
         }
 
         /** @brief Returns the latest owning render snapshot extracted from the authoritative document.
@@ -66,6 +81,8 @@ namespace Horo::Editor {
         /** @brief Advances a requested synchronous Content Browser refresh without blocking the request
          * frame. */
         void UpdateContentBrowser();
+        /** @brief Polls project Lua sources and applies compatible safe-point reload candidates. */
+        void UpdateGameplaySources(float elapsedSeconds);
         /**
          * @brief Advances dirty-scene autosave scheduling from committed editor policy.
          * @param elapsedSeconds Owner-thread elapsed frame time.
@@ -86,6 +103,10 @@ namespace Horo::Editor {
         void FlushAutosave();
         /** @brief Publishes a newly activated runtime scene to the cached viewport snapshot. */
         void SynchronizeRuntimeScenePreview();
+        /** @brief Advances gameplay presentation callbacks without changing authoring state. */
+        void UpdatePlayPresentation(float elapsedSeconds);
+        /** @brief Advances one play-mode fixed tick with already-routed semantic actions. */
+        void UpdatePlayFixed(std::span<const Gameplay::GameplayInputAction> input, double fixedDeltaSeconds);
 
     private:
         Runtime::RuntimeSceneService &m_runtimeScene;
@@ -94,6 +115,12 @@ namespace Horo::Editor {
         ProjectMutationCoordinator *m_mutations{};
         DurableFileSystem *m_durableFiles{};
         const Assets::AssetImporterCatalogSnapshot *m_importerCatalog{};
+        DiagnosticSourceNavigator m_diagnosticSourceNavigator;
+        Application::GameplayBuildService *m_gameplayBuilds{};
+        Application::GameplayBuildEnvironment m_gameplayBuildEnvironment;
+        std::optional<Application::GameplayBuildSessionId> m_gameplayBuildSession;
+        bool m_playAfterGameplayBuild{false};
+        float m_nativeBuildDebounceSeconds{-1.0F};
         std::optional<std::filesystem::path> m_defaultScenePath;
         std::optional<SceneFileFingerprint> m_sceneFingerprint;
         std::optional<Error> m_initializationError;
@@ -108,7 +135,12 @@ namespace Horo::Editor {
         EditorViewportModel m_viewport{m_dataBus};
         Runtime::PrimitiveMeshCache m_primitiveMeshCache;
         EditorViewportSceneSnapshot m_viewportScene;
+        std::uint64_t m_viewportSceneRevision{};
         std::optional<SceneDocumentSnapshot> m_deferredRuntimeSnapshot;
+        std::unique_ptr<ProjectGameplayRegistry> m_gameplayRegistry;
+        std::unique_ptr<ProjectGameplayRegistry> m_pendingGameplayRegistry;
+        EditorPlaySessionController m_playSession;
+        std::string m_prePlayDocumentPanelId{"horo.viewport"};
         std::vector<std::filesystem::path> m_contentBrowserBackHistory;
         std::vector<std::filesystem::path> m_contentBrowserForwardHistory;
         bool m_contentBrowserRefreshPending{false};
@@ -116,6 +148,7 @@ namespace Horo::Editor {
         float m_autosaveElapsedSeconds{0.0F};
         float m_autosaveRetryDelaySeconds{0.0F};
         float m_sceneFileWatchElapsedSeconds{0.0F};
+        float m_gameplaySourceWatchElapsedSeconds{0.0F};
         bool m_sceneFileWatchErrorPresented{false};
         DocumentStateId m_lastAutosavedState{};
         bool m_autosaveSuppressedForDiscard{false};
@@ -139,6 +172,15 @@ namespace Horo::Editor {
         /** @brief Attempts one recovery write when the active document has unsaved content. */
         void WriteAutosaveRecovery();
         void QueueRuntimeScene(SceneDocumentSnapshot snapshot);
+        void StartPlaySession();
+        void BeginPlaySession();
+        void StartGameplayBuild(bool playWhenReady);
+        void UpdateGameplayBuild(float elapsedSeconds);
+        [[nodiscard]] Application::GameplayBuildRequest MakeGameplayBuildRequest() const;
+        [[nodiscard]] bool HasNativeGameplaySources() const;
+        void StopPlaySession();
+        void RefreshPlayStateProjection();
+        void ExtractPlayViewportScene();
         void HandleCreatePrimitive(Runtime::PrimitiveId primitive, std::optional<SceneObjectId> parent);
         void HandleDuplicateObject(SceneObjectId object);
         void HandleDeleteObject(SceneObjectId object);
@@ -161,8 +203,13 @@ namespace Horo::Editor {
         void PasteContentBrowserAsset(const std::string &absoluteDirectory);
         void TransferContentBrowserAsset(const ContentBrowserAssetTransferRequest &request);
         void CreateContentBrowserFolder(const std::string &absoluteDirectory, const std::string &name);
+        void CreateGameplayBehavior(bool nativeBehavior, const std::string &absoluteDirectory);
+        void RefreshGameplayRegistry();
+        void RefreshAvailableBehaviorProjection();
+        void ApplyPendingGameplayRegistry();
         void ReimportContentBrowserAsset(const std::string &absolutePath);
         void RevealContentBrowserEntry(const std::string &absolutePath);
+        void OpenDiagnosticSource(const DiagnosticSourceRequest &source);
         [[nodiscard]] bool CopyContentBrowserAssetTo(const std::filesystem::path &absoluteSource,
                                                      const std::filesystem::path &absoluteDestinationDirectory);
         [[nodiscard]] bool MoveContentBrowserAssetTo(const std::filesystem::path &absoluteSource,

@@ -14,7 +14,7 @@ namespace {
         return std::fabs(lhs - rhs) < 0.0001F;
     }
 
-TEST_CASE("Transform Uses Translation Rotation Scale Order", "[unit][editor]") {
+    TEST_CASE("Transform Uses Translation Rotation Scale Order", "[unit][editor]") {
         using namespace Horo::Math;
         const Transform transform{
             .translation = {2.0F, 3.0F, 4.0F},
@@ -25,64 +25,69 @@ TEST_CASE("Transform Uses Translation Rotation Scale Order", "[unit][editor]") {
         REQUIRE((NearlyEqual(result.x, 2.0F)));
         REQUIRE((NearlyEqual(result.y, 3.0F)));
         REQUIRE((NearlyEqual(result.z, 2.0F)));
-}
+    }
 
-TEST_CASE("Directional Shadow View Fits Submitted World Bounds", "[unit][editor]") {
-    using namespace Horo;
-    using namespace Horo::Editor;
+    TEST_CASE("Directional Shadow View Fits Submitted World Bounds", "[unit][editor]") {
+        using namespace Horo;
+        using namespace Horo::Editor;
 
-    Runtime::PrimitiveMeshCache cache;
-    auto acquired = cache.Acquire(Runtime::PrimitiveMeshDescriptor::Defaults(Runtime::PrimitiveMeshType::Box));
-    REQUIRE(acquired.HasValue());
-    Runtime::PrimitiveMeshLease lease = std::move(acquired).Value();
-    const Render::MeshData &mesh = lease.Data();
-    const Render::RenderMeshHandle meshHandle{Render::MeshResourceId{1}, 1};
-    const std::array resources{EditorViewportMeshResourceView{meshHandle, mesh.vertices, mesh.indices, mesh.localBounds}};
-    const std::array instances{
-        EditorViewportInstance{meshHandle, Math::TranslationMatrix({-4.0F, 0.0F, 2.0F}), mesh.localBounds,
-                               Render::CoreDefaultMaterial, {}},
-        EditorViewportInstance{meshHandle, Math::TranslationMatrix({6.0F, 3.0F, -2.0F}), mesh.localBounds,
-                               Render::CoreDefaultMaterial, {}},
-    };
-    const std::array lights{
-        Render::RenderLight{
-            .kind = Render::RenderLightKind::Point,
-            .position = {0.0F, 3.0F, 0.0F},
-        },
-        Render::RenderLight{
-            .kind = Render::RenderLightKind::Directional,
-            .direction = Math::Normalize(Math::Vec3{-1.0F, -2.0F, -1.0F}),
-        },
-    };
-    const Render::RenderSceneView scene{
-        .camera = ToRenderCamera(EditorViewportCamera{}),
-        .meshResources = resources,
-        .instances = instances,
-        .lights = lights,
-    };
+        Runtime::PrimitiveMeshCache cache;
+        auto acquired = cache.Acquire(Runtime::PrimitiveMeshDescriptor::Defaults(Runtime::PrimitiveMeshType::Box));
+        REQUIRE(acquired.HasValue());
+        Runtime::PrimitiveMeshLease lease = std::move(acquired).Value();
+        const Render::MeshData &mesh = lease.Data();
+        const Render::RenderMeshHandle meshHandle{Render::MeshResourceId{1}, 1};
+        const std::array resources{EditorViewportMeshResourceView{meshHandle, mesh.vertices, mesh.indices, mesh.localBounds}};
+        const std::array instances{
+            EditorViewportInstance{meshHandle,
+                                   Math::TranslationMatrix({-4.0F, 0.0F, 2.0F}),
+                                   mesh.localBounds,
+                                   Render::CoreDefaultMaterial,
+                                   {}},
+            EditorViewportInstance{meshHandle,
+                                   Math::TranslationMatrix({6.0F, 3.0F, -2.0F}),
+                                   mesh.localBounds,
+                                   Render::CoreDefaultMaterial,
+                                   {}},
+        };
+        const std::array lights{
+            Render::RenderLight{
+                .kind = Render::RenderLightKind::Point,
+                .position = {0.0F, 3.0F, 0.0F},
+            },
+            Render::RenderLight{
+                .kind = Render::RenderLightKind::Directional,
+                .direction = Math::Normalize(Math::Vec3{-1.0F, -2.0F, -1.0F}),
+            },
+        };
+        const Render::RenderSceneView scene{
+            .camera = ToRenderCamera(EditorViewportCamera{}),
+            .meshResources = resources,
+            .instances = instances,
+            .lights = lights,
+        };
 
-    const auto openGlShadow =
-        BuildEditorViewportDirectionalShadowView(scene, Math::ClipDepthRange::NegativeOneToOne);
-    const auto metalShadow = BuildEditorViewportDirectionalShadowView(scene, Math::ClipDepthRange::ZeroToOne);
-    REQUIRE(openGlShadow.HasValue());
-    REQUIRE(openGlShadow.Value().has_value());
-    REQUIRE(openGlShadow.Value()->lightIndex == 1);
-    REQUIRE(openGlShadow.Value()->IsValid(scene));
-    REQUIRE(metalShadow.HasValue());
-    REQUIRE(metalShadow.Value().has_value());
-    REQUIRE(metalShadow.Value()->lightIndex == 1);
-    REQUIRE(metalShadow.Value()->IsValid(scene));
+        const auto openGlShadow = BuildEditorViewportDirectionalShadowView(scene, Math::ClipDepthRange::NegativeOneToOne);
+        const auto metalShadow = BuildEditorViewportDirectionalShadowView(scene, Math::ClipDepthRange::ZeroToOne);
+        REQUIRE(openGlShadow.HasValue());
+        REQUIRE(openGlShadow.Value().has_value());
+        REQUIRE(openGlShadow.Value()->lightIndex == 1);
+        REQUIRE(openGlShadow.Value()->IsValid(scene));
+        REQUIRE(metalShadow.HasValue());
+        REQUIRE(metalShadow.Value().has_value());
+        REQUIRE(metalShadow.Value()->lightIndex == 1);
+        REQUIRE(metalShadow.Value()->IsValid(scene));
 
-    const Math::Vec4 worldCenter{-4.0F, 0.0F, 2.0F, 1.0F};
-    const Math::Vec4 glClip = Math::TransformHomogeneous(openGlShadow.Value()->viewProjection, worldCenter);
-    const Math::Vec4 metalClip = Math::TransformHomogeneous(metalShadow.Value()->viewProjection, worldCenter);
-    REQUIRE(std::abs(glClip.x / glClip.w) <= 1.0F);
-    REQUIRE(std::abs(glClip.y / glClip.w) <= 1.0F);
-    REQUIRE(glClip.z / glClip.w >= -1.0F);
-    REQUIRE(glClip.z / glClip.w <= 1.0F);
-    REQUIRE(metalClip.z / metalClip.w >= 0.0F);
-    REQUIRE(metalClip.z / metalClip.w <= 1.0F);
-}
+        const Math::Vec4 worldCenter{-4.0F, 0.0F, 2.0F, 1.0F};
+        const Math::Vec4 glClip = Math::TransformHomogeneous(openGlShadow.Value()->viewProjection, worldCenter);
+        const Math::Vec4 metalClip = Math::TransformHomogeneous(metalShadow.Value()->viewProjection, worldCenter);
+        REQUIRE(std::abs(glClip.x / glClip.w) <= 1.0F);
+        REQUIRE(std::abs(glClip.y / glClip.w) <= 1.0F);
+        REQUIRE(glClip.z / glClip.w >= -1.0F);
+        REQUIRE(glClip.z / glClip.w <= 1.0F);
+        REQUIRE(metalClip.z / metalClip.w >= 0.0F);
+        REQUIRE(metalClip.z / metalClip.w <= 1.0F);
+    }
 
     TEST_CASE("Look At Uses Right Handed Negative Z View Space", "[unit][editor]") {
         using namespace Horo::Math;

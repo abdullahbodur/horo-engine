@@ -1,4 +1,5 @@
 #include "EditorWorkspaceView.h"
+#include "Horo/Application/GameplayBuildService.h"
 #include "Horo/Application/ProjectCompatibility.h"
 #include "Horo/Editor/DefaultScreenFactories.h"
 #include "Horo/Editor/EditorGuiContext.h"
@@ -11,9 +12,11 @@
 #include "Horo/Editor/ProjectOpenService.h"
 #include "Horo/Editor/ScreenRegistry.h"
 #include "Horo/Editor/WorkspacePanelRegistry.h"
+#include "Horo/Foundation/BuildOutputStore.h"
 #include "Horo/Foundation/JobSystem.h"
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Foundation/Logging/StructuredLogStore.h"
+#include "Horo/Foundation/OperationStore.h"
 #include "editor/document/EditorViewportSceneExtractor.h"
 #include "editor/input/EditorInputActions.h"
 #include "editor/modals/scene_compare/SceneConflictCompareModal.h"
@@ -48,7 +51,9 @@ namespace Horo::Editor {
                   assetRegistry_(services.TryGet<Assets::AssetRegistry>()),
                   importerCatalog_(services.TryGetConst<Assets::AssetImporterCatalogSnapshot>()),
                   mutations_(services.TryGet<ProjectMutationCoordinator>()), durableFiles_(services.TryGet<DurableFileSystem>()),
-                  logQuery_(services.TryGetConst<Log::IStructuredLogQuery>()), projectOpenService_(services.Get<ProjectOpenService>()) {}
+                  logQuery_(services.TryGetConst<Log::IStructuredLogQuery>()), buildOutputQuery_(services.TryGetConst<IBuildOutputQuery>()),
+                  operationQuery_(services.TryGetConst<IOperationQuery>()), operationControl_(services.TryGet<IOperationControl>()),
+                  projectOpenService_(services.Get<ProjectOpenService>()) {}
 
             ScreenId Id() const override {
                 return static_cast<ScreenId>(GuiRouteKind::EditorWorkspace);
@@ -68,7 +73,12 @@ namespace Horo::Editor {
                     assetRegistry_ ? assetRegistry_->Snapshot() : Assets::AssetRegistrySnapshot{};
                 controller_ =
                     std::make_unique<EditorWorkspaceController>(std::move(projectRoot), runtimeScene_, assetSnapshot, assetRegistry_,
-                                                                mutations_, durableFiles_, importerCatalog_, &services_.Get<JobSystem>());
+                                                                mutations_, durableFiles_, importerCatalog_, &services_.Get<JobSystem>(),
+                                                                DiagnosticSourceNavigator{},
+                                                                services_.TryGet<Application::GameplayBuildService>(),
+                                                                services_.TryGet<Application::GameplayBuildEnvironment>() != nullptr
+                                                                    ? *services_.TryGet<Application::GameplayBuildEnvironment>()
+                                                                    : Application::GameplayBuildEnvironment{});
                 if (controller_->InitializationError().has_value()) {
                     const Error error = *controller_->InitializationError();
                     controller_.reset();
@@ -80,6 +90,7 @@ namespace Horo::Editor {
                 publishedSceneRevision_ = controller_->ViewportScene().documentRevision;
                 publishedSelectionRevision_ = controller_->CurrentSelectionRevision();
                 publishedViewportRevision_ = controller_->CurrentViewportRevision();
+                publishedViewportSceneRevision_ = controller_->CurrentViewportSceneRevision();
                 LOG_INFO("editor.workspace", "EditorWorkspaceScreen entered for '%s'", controller_->ViewModel().projectRoot.c_str());
 
                 PanelContext panelContext{
@@ -89,6 +100,9 @@ namespace Horo::Editor {
                     .inputRouter = &inputRouter_,
                     .workspaceInputContext = &workspaceInputContext_,
                     .logQuery = logQuery_,
+                    .buildOutputQuery = buildOutputQuery_,
+                    .operationQuery = operationQuery_,
+                    .operationControl = operationControl_,
                 };
                 registry_.AttachAll(panelContext);
                 UpdateStatusItems();
@@ -103,14 +117,31 @@ namespace Horo::Editor {
 
             void OnUpdate(float dt) override {
                 if (controller_) {
+                    controller_->UpdatePlayPresentation(dt);
                     controller_->UpdateAutosave(dt, settings_.Snapshot().settings.autoSaveIntervalMinutes);
                     controller_->UpdateExternalSceneWatch(dt);
+                    controller_->UpdateGameplaySources(dt);
                     if (assetRegistry_ != nullptr)
                         controller_->RefreshAssets(assetRegistry_->Snapshot());
                     controller_->UpdateContentBrowser();
                     controller_->SynchronizeRuntimeScenePreview();
                     controller_->UpdateFps(ImGui::GetIO().Framerate);
                 }
+            }
+
+            void OnFixedUpdate(const double fixedDeltaSeconds) override {
+                if (!controller_ || (controller_->ViewModel().playState != EditorPlayState::Playing &&
+                                     controller_->ViewModel().playState != EditorPlayState::Paused))
+                    return;
+                const Input::ActionValue move = inputRouter_.ReadAction(workspaceInputContext_, Input::ActionId{kGameplayMoveAction});
+                const Gameplay::GameplayInputAction action{Gameplay::GameplayActionId{kGameplayMoveAction},
+                                                           move.x,
+                                                           move.y,
+                                                           move.down,
+                                                           move.pressed,
+                                                           move.released};
+                controller_->UpdatePlayFixed({&action, 1}, fixedDeltaSeconds);
+                PublishViewportSceneIfChanged();
             }
 
             void Draw(const GuiContentRegion &contentRegion) override {
@@ -301,7 +332,8 @@ namespace Horo::Editor {
                 viewportSceneState_.Clear();
                 publishedSceneRevision_ = {};
                 publishedSelectionRevision_ = {};
-                publishedViewportRevision_ = {};
+                    publishedViewportRevision_ = {};
+                    publishedViewportSceneRevision_ = 0;
                 controller_.reset();
             }
 
@@ -401,14 +433,17 @@ namespace Horo::Editor {
                 const DocumentRevision documentRevision = controller_->ViewportScene().documentRevision;
                 const SelectionRevision selectionRevision = controller_->CurrentSelectionRevision();
                 const ViewportRevision viewportRevision = controller_->CurrentViewportRevision();
+                const std::uint64_t viewportSceneRevision = controller_->CurrentViewportSceneRevision();
                 if (documentRevision == publishedSceneRevision_ && selectionRevision == publishedSelectionRevision_ &&
-                    viewportRevision == publishedViewportRevision_) {
+                    viewportRevision == publishedViewportRevision_ &&
+                    viewportSceneRevision == publishedViewportSceneRevision_) {
                     return;
                 }
                 viewportSceneState_.Replace(controller_->ViewportScene());
                 publishedSceneRevision_ = documentRevision;
                 publishedSelectionRevision_ = selectionRevision;
                 publishedViewportRevision_ = viewportRevision;
+                publishedViewportSceneRevision_ = viewportSceneRevision;
             }
 
             void UpdateStatusItems() {
@@ -453,10 +488,14 @@ namespace Horo::Editor {
             ProjectMutationCoordinator *mutations_{};
             DurableFileSystem *durableFiles_{};
             const Log::IStructuredLogQuery *logQuery_{};
+            const IBuildOutputQuery *buildOutputQuery_{};
+            const IOperationQuery *operationQuery_{};
+            IOperationControl *operationControl_{};
             ProjectOpenService &projectOpenService_;
             DocumentRevision publishedSceneRevision_{};
             SelectionRevision publishedSelectionRevision_{};
             ViewportRevision publishedViewportRevision_{};
+            std::uint64_t publishedViewportSceneRevision_{};
             std::unique_ptr<EditorWorkspaceController> controller_;
             std::optional<Input::InputBindingProfile> previousInputProfile_;
         };

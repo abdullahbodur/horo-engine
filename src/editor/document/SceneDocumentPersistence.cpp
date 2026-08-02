@@ -119,6 +119,65 @@ namespace Horo::Editor {
             };
         }
 
+        [[nodiscard]] Result<Math::Vec2> ParseVec2(const Json &value);
+        [[nodiscard]] Result<Math::Vec3> ParseVec3(const Json &value);
+        [[nodiscard]] Result<Math::Quaternion> ParseQuaternion(const Json &value);
+
+        [[nodiscard]] Json BehaviorFieldValueJson(const Gameplay::BehaviorFieldValue &value) {
+            return std::visit([](const auto &typed) -> Json {
+                using T = std::decay_t<decltype(typed)>;
+                if constexpr (std::is_same_v<T, std::monostate>)
+                    return {{"type", "null"}, {"value", nullptr}};
+                else if constexpr (std::is_same_v<T, bool>)
+                    return {{"type", "bool"}, {"value", typed}};
+                else if constexpr (std::is_same_v<T, std::int64_t>)
+                    return {{"type", "int"}, {"value", typed}};
+                else if constexpr (std::is_same_v<T, double>)
+                    return {{"type", "number"}, {"value", typed}};
+                else if constexpr (std::is_same_v<T, std::string>)
+                    return {{"type", "string"}, {"value", typed}};
+                else if constexpr (std::is_same_v<T, Math::Vec2>)
+                    return {{"type", "vec2"}, {"value", Vec2Json(typed)}};
+                else if constexpr (std::is_same_v<T, Math::Vec3>)
+                    return {{"type", "vec3"}, {"value", Vec3Json(typed)}};
+                else
+                    return {{"type", "quaternion"}, {"value", QuaternionJson(typed)}};
+            }, value);
+        }
+
+        [[nodiscard]] Result<Gameplay::BehaviorFieldValue> ParseBehaviorFieldValue(const Json &value) {
+            if (!value.is_object() || !value.contains("type") || !value["type"].is_string() || !value.contains("value"))
+                return Result<Gameplay::BehaviorFieldValue>::Failure(PersistenceError(SceneInvalid, "Behavior field is invalid."));
+            const std::string type = value["type"].get<std::string>();
+            const Json &payload = value["value"];
+            if (type == "null" && payload.is_null())
+                return Result<Gameplay::BehaviorFieldValue>::Success(std::monostate{});
+            if (type == "bool" && payload.is_boolean())
+                return Result<Gameplay::BehaviorFieldValue>::Success(payload.get<bool>());
+            if (type == "int" && payload.is_number_integer())
+                return Result<Gameplay::BehaviorFieldValue>::Success(payload.get<std::int64_t>());
+            if (type == "number" && payload.is_number())
+                return Result<Gameplay::BehaviorFieldValue>::Success(payload.get<double>());
+            if (type == "string" && payload.is_string())
+                return Result<Gameplay::BehaviorFieldValue>::Success(payload.get<std::string>());
+            if (type == "vec2") {
+                auto parsed = ParseVec2(payload);
+                if (parsed.HasValue())
+                    return Result<Gameplay::BehaviorFieldValue>::Success(parsed.Value());
+            }
+            if (type == "vec3") {
+                auto parsed = ParseVec3(payload);
+                if (parsed.HasValue())
+                    return Result<Gameplay::BehaviorFieldValue>::Success(parsed.Value());
+            }
+            if (type == "quaternion") {
+                auto parsed = ParseQuaternion(payload);
+                if (parsed.HasValue())
+                    return Result<Gameplay::BehaviorFieldValue>::Success(parsed.Value());
+            }
+            return Result<Gameplay::BehaviorFieldValue>::Failure(PersistenceError(SceneInvalid, "Behavior field type is unsupported."));
+        }
+
         template <std::size_t Size> [[nodiscard]] bool IsNumberArray(const Json &value) {
             if (!value.is_array() || value.size() != Size)
                 return false;
@@ -320,6 +379,22 @@ namespace Horo::Editor {
                     {"spatial", audio.spatial},
                 };
             }
+            if (!components.behaviors.empty()) {
+                Json behaviors = Json::array();
+                for (const Gameplay::BehaviorComponent &behavior : components.behaviors) {
+                    Json fields = Json::array();
+                    for (const Gameplay::BehaviorField &field : behavior.fields)
+                        fields.push_back({{"name", field.name}, {"value", BehaviorFieldValueJson(field.value)}});
+                    behaviors.push_back({
+                        {"instanceId", behavior.instanceId.value},
+                        {"typeId", behavior.typeId.Value()},
+                        {"schemaVersion", behavior.schemaVersion},
+                        {"enabled", behavior.enabled},
+                        {"fields", std::move(fields)},
+                    });
+                }
+                value["behaviors"] = std::move(behaviors);
+            }
             return value;
         }
 
@@ -375,6 +450,42 @@ namespace Horo::Editor {
                     .gain = audio.at("gain").get<float>(),
                     .spatial = audio.at("spatial").get<bool>(),
                 };
+            }
+            if (value.contains("behaviors")) {
+                const Json &behaviors = value["behaviors"];
+                if (!behaviors.is_array() || behaviors.size() > 128)
+                    return Result<SceneObjectComponentSet>::Failure(PersistenceError(SceneInvalid, "Behavior list is invalid."));
+                components.behaviors.reserve(behaviors.size());
+                for (const Json &behavior : behaviors) {
+                    if (!behavior.is_object() || !behavior.contains("instanceId") || !behavior["instanceId"].is_number_unsigned() ||
+                        !behavior.contains("typeId") || !behavior["typeId"].is_string() || !behavior.contains("schemaVersion") ||
+                        !behavior["schemaVersion"].is_number_unsigned() || !behavior.contains("enabled") ||
+                        !behavior["enabled"].is_boolean() || !behavior.contains("fields") || !behavior["fields"].is_array())
+                        return Result<SceneObjectComponentSet>::Failure(PersistenceError(SceneInvalid, "Behavior entry is invalid."));
+                    auto typeId = Gameplay::BehaviorTypeId::Parse(behavior["typeId"].get<std::string>());
+                    if (typeId.HasError())
+                        return Result<SceneObjectComponentSet>::Failure(PersistenceError(SceneInvalid, "Behavior type ID is invalid."));
+                    Gameplay::BehaviorComponent parsed{
+                        .instanceId = Gameplay::BehaviorInstanceId{behavior["instanceId"].get<std::uint64_t>()},
+                        .typeId = std::move(typeId).Value(),
+                        .schemaVersion = behavior["schemaVersion"].get<std::uint32_t>(),
+                        .enabled = behavior["enabled"].get<bool>(),
+                    };
+                    parsed.fields.reserve(behavior["fields"].size());
+                    for (const Json &fieldEntry : behavior["fields"]) {
+                        if (!fieldEntry.is_object() || !fieldEntry.contains("name") || !fieldEntry["name"].is_string() ||
+                            !fieldEntry.contains("value"))
+                            return Result<SceneObjectComponentSet>::Failure(
+                                PersistenceError(SceneInvalid, "Behavior field entry is invalid."));
+                        auto field = ParseBehaviorFieldValue(fieldEntry["value"]);
+                        if (field.HasError())
+                            return Result<SceneObjectComponentSet>::Failure(field.ErrorValue());
+                        parsed.fields.push_back(Gameplay::BehaviorField{fieldEntry["name"].get<std::string>(), std::move(field).Value()});
+                    }
+                    if (Gameplay::ValidateBehaviorComponent(parsed).HasError())
+                        return Result<SceneObjectComponentSet>::Failure(PersistenceError(SceneInvalid, "Behavior payload is invalid."));
+                    components.behaviors.push_back(std::move(parsed));
+                }
             }
             return Result<SceneObjectComponentSet>::Success(std::move(components));
         }

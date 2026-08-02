@@ -2,6 +2,7 @@
 
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/Localization/ILocalizationService.h"
+#include "editor/screens/workspace/EditorWorkspaceViewModel.h"
 
 #include <algorithm>
 #include <cctype>
@@ -14,7 +15,6 @@
 namespace Horo::Editor {
     namespace {
         constexpr float OuterPaddingX = 10.0F;
-        constexpr std::string_view BuildCategoryPrefix = "Build.";
         constexpr float SearchWidth = 200.0F;
         constexpr float ActionControlWidth = 104.0F;
         constexpr float ControlGap = 8.0F;
@@ -31,30 +31,62 @@ namespace Horo::Editor {
             return DesignSystem::MetricsFor(Theme::GetActiveTokens(), Ui::ComponentSize::Small).minimumHeight;
         }
 
-        [[nodiscard]] ImVec4 StatusColor(const std::string_view status) noexcept {
-            if (status == "FAILED")
-                return Theme::Err();
-            if (status == "CACHED")
-                return Theme::Dim();
-            return Theme::Ok();
+        [[nodiscard]] ImVec4 StatusColor(const BuildOutputStatus status) noexcept {
+            switch (status) {
+                case BuildOutputStatus::Failed:
+                    return Theme::Err();
+                case BuildOutputStatus::Cached:
+                    return Theme::Dim();
+                case BuildOutputStatus::Cancelled:
+                    return Theme::Warn();
+                case BuildOutputStatus::Info:
+                    return Theme::Accent();
+                case BuildOutputStatus::Succeeded:
+                    return Theme::Ok();
+            }
+            return Theme::Text();
+        }
+
+        [[nodiscard]] const char *TechnicalStatusText(const BuildOutputStatus status) noexcept {
+            switch (status) {
+                case BuildOutputStatus::Info:
+                    return "INFO";
+                case BuildOutputStatus::Succeeded:
+                    return "OK";
+                case BuildOutputStatus::Failed:
+                    return "FAILED";
+                case BuildOutputStatus::Cached:
+                    return "CACHED";
+                case BuildOutputStatus::Cancelled:
+                    return "CANCELLED";
+            }
+            return "INFO";
+        }
+
+        [[nodiscard]] const char *StatusLocalizationKey(const BuildOutputStatus status) noexcept {
+            switch (status) {
+                case BuildOutputStatus::Info:
+                    return "workspace.global_dock.build_output.row_status.info";
+                case BuildOutputStatus::Succeeded:
+                    return "workspace.global_dock.build_output.row_status.succeeded";
+                case BuildOutputStatus::Failed:
+                    return "workspace.global_dock.build_output.row_status.failed";
+                case BuildOutputStatus::Cached:
+                    return "workspace.global_dock.build_output.row_status.cached";
+                case BuildOutputStatus::Cancelled:
+                    return "workspace.global_dock.build_output.row_status.cancelled";
+            }
+            return "workspace.global_dock.build_output.row_status.info";
         }
 
         [[nodiscard]] bool ContainsCaseInsensitive(const std::string_view text, const std::string_view needle) {
             if (needle.empty())
                 return true;
-            if (needle.size() > text.size())
-                return false;
             return std::ranges::search(text, needle, [](const char left, const char right) {
                 return std::tolower(static_cast<unsigned char>(left)) == std::tolower(static_cast<unsigned char>(right));
             }).begin() != text.end();
         }
 
-        /** @brief Strips the "Build." category prefix, exposing the underlying build phase name. */
-        [[nodiscard]] std::string_view StripBuildPrefix(const std::string_view category) noexcept {
-            return category.size() > BuildCategoryPrefix.size() ? category.substr(BuildCategoryPrefix.size()) : category;
-        }
-
-        /** @brief Formats a UTC timestamp as a fixed-width "HH:MM:SS" string. */
         [[nodiscard]] std::string FormatTimeOfDay(const std::chrono::system_clock::time_point &timestampUtc) {
             const std::time_t timeT = std::chrono::system_clock::to_time_t(timestampUtc);
             std::tm tmValue{};
@@ -67,31 +99,53 @@ namespace Horo::Editor {
             std::snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d", tmValue.tm_hour, tmValue.tm_min, tmValue.tm_sec);
             return std::string(buffer);
         }
+
+        [[nodiscard]] std::string FormatSource(const std::optional<DiagnosticSourceLocation> &source) {
+            if (!source.has_value())
+                return {};
+            std::string text = source->absolutePath;
+            if (source->line > 0U) {
+                text += ':' + std::to_string(source->line);
+                if (source->column > 0U)
+                    text += ':' + std::to_string(source->column);
+            }
+            return text;
+        }
     }  // namespace
 
     /** @copydoc GlobalDockBuildOutputPane::Attach */
-    void GlobalDockBuildOutputPane::Attach(const Log::IStructuredLogQuery *logQuery) noexcept {
-        m_logQuery = logQuery;
+    void GlobalDockBuildOutputPane::Attach(const IBuildOutputQuery *buildOutputQuery) noexcept {
+        m_buildOutputQuery = buildOutputQuery;
+        m_snapshot = {};
+        m_revision = 0;
+        m_filteredIndices.clear();
         m_filterDirty = true;
+        m_initialFollowTail = true;
     }
 
     /** @copydoc GlobalDockBuildOutputPane::Detach */
     void GlobalDockBuildOutputPane::Detach() noexcept {
-        m_logQuery = nullptr;
+        m_buildOutputQuery = nullptr;
+        m_snapshot = {};
+        m_revision = 0;
+        m_filteredIndices.clear();
     }
 
     /** @copydoc GlobalDockBuildOutputPane::Draw */
-    void GlobalDockBuildOutputPane::Draw(const ImVec2 &contentOrigin, const float contentWidth, const EditorGuiContext &context) {
+    void GlobalDockBuildOutputPane::Draw(const ImVec2 &contentOrigin, const float contentWidth, EditorWorkspaceViewCommandData &command,
+                                         const EditorGuiContext &context) {
         const bool snapshotChanged = RefreshSnapshot();
         const auto &fonts = context.theme.fonts;
         const float barFullWidth = contentWidth + OuterPaddingX * 2.0F;
-        const float barTotalHeight = ToolbarPadY() * 2.0F + ToolbarHeight();
+        const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
+        const bool stackedToolbar = contentWidth / scale < 460.0F;
+        const float barTotalHeight = ToolbarPadY() * 2.0F + ToolbarHeight() * (stackedToolbar ? 2.0F : 1.0F) +
+                                     (stackedToolbar ? Ui::ScaledLayoutValue(ControlGap) : 0.0F);
 
         ImGui::SetCursorScreenPos(contentOrigin);
         {
             Ui::ScopedCard toolbar("##BuildOutputToolbar", {barFullWidth, barTotalHeight}, ToolbarPadX(), ToolbarPadY());
             const float availableWidth = ImGui::GetContentRegionAvail().x;
-            const float scale = std::max(Theme::GetActiveTokens().sizes.uiScale, 0.01F);
             const float availableLogicalWidth = availableWidth / scale;
             const float searchWidth =
                 std::min(SearchWidth, std::max(1.0F, availableLogicalWidth - ActionControlWidth * 3.0F - ControlGap * 3.0F));
@@ -103,12 +157,8 @@ namespace Horo::Editor {
                 context.localization.Get("editor", "workspace.global_dock.build_output.status.failed"),
                 context.localization.Get("editor", "workspace.global_dock.build_output.status.cached"),
             };
-            const std::array<const char *, 4> statusLabels{
-                statusText[0].c_str(),
-                statusText[1].c_str(),
-                statusText[2].c_str(),
-                statusText[3].c_str(),
-            };
+            const std::array<const char *, 4> statusLabels{statusText[0].c_str(), statusText[1].c_str(), statusText[2].c_str(),
+                                                           statusText[3].c_str()};
             int selectedStatus = static_cast<int>(m_statusFilter);
             ImGui::SetNextItemWidth(Ui::ScaledLayoutValue(ActionControlWidth));
             if (Ui::ComboControl("##BuildOutputStatusFilter", &selectedStatus, statusLabels.data(), static_cast<int>(statusLabels.size()),
@@ -118,13 +168,13 @@ namespace Horo::Editor {
             }
 
             const float rightControlsWidth = Ui::ScaledLayoutValue(searchWidth + ActionControlWidth * 2.0F + ControlGap * 2.0F);
-            ImGui::SetCursorScreenPos({controlOrigin.x + std::max(0.0F, availableWidth - rightControlsWidth), controlOrigin.y});
-
+            ImGui::SetCursorScreenPos(
+                {stackedToolbar ? controlOrigin.x : controlOrigin.x + std::max(0.0F, availableWidth - rightControlsWidth),
+                 stackedToolbar ? controlOrigin.y + ToolbarHeight() + Ui::ScaledLayoutValue(ControlGap) : controlOrigin.y});
             const std::string &hint = context.localization.Get("editor", "workspace.global_dock.build_output.search");
             if (Ui::InputTextControl("##BuildOutputSearch", m_search.data(), m_search.size(), fonts, false, searchWidth, hint.c_str(), 0.0F,
-                                     Ui::ComponentSize::Small)) {
+                                     Ui::ComponentSize::Small))
                 m_filterDirty = true;
-            }
 
             ImGui::SameLine(0.0F, Ui::ScaledLayoutValue(ControlGap));
             const std::string &clearLabel = context.localization.Get("editor", "workspace.global_dock.build_output.clear");
@@ -145,12 +195,8 @@ namespace Horo::Editor {
                 context.localization.Get("editor", "workspace.global_dock.build_output.column.message"),
                 context.localization.Get("editor", "workspace.global_dock.build_output.column.source"),
             };
-            const std::array<const char *, 4> columnLabels{
-                columnText[0].c_str(),
-                columnText[1].c_str(),
-                columnText[2].c_str(),
-                columnText[3].c_str(),
-            };
+            const std::array<const char *, 4> columnLabels{columnText[0].c_str(), columnText[1].c_str(), columnText[2].c_str(),
+                                                           columnText[3].c_str()};
             const std::string &columnsLabel = context.localization.Get("editor", "workspace.global_dock.build_output.columns");
             static_cast<void>(Ui::MultiSelectField("##BuildOutputColumns", columnsLabel.c_str(), columnLabels, m_columnVisible, fonts,
                                                    ActionControlWidth, Ui::ComponentSize::Small));
@@ -167,6 +213,12 @@ namespace Horo::Editor {
                           ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_NoSavedSettings);
         const bool wasAtBottom = ImGui::GetScrollY() >= std::max(0.0F, ImGui::GetScrollMaxY() - 2.0F);
 
+        if (m_snapshot.droppedRecordCount > 0U) {
+            const std::string notice = context.localization.Get("editor", "workspace.global_dock.build_output.dropped") + " " +
+                                       std::to_string(m_snapshot.droppedRecordCount);
+            Ui::Hint(notice.c_str(), fonts);
+        }
+
         const std::array<Ui::TableColumn, 4> columns{
             Ui::TableColumn{"time", context.localization.Get("editor", "workspace.global_dock.build_output.column.time"), 120.0F,
                             m_columnVisible[0]},
@@ -174,26 +226,31 @@ namespace Horo::Editor {
                             m_columnVisible[1]},
             Ui::TableColumn{"message", context.localization.Get("editor", "workspace.global_dock.build_output.column.message"), 0.0F,
                             m_columnVisible[2]},
-            Ui::TableColumn{"source", context.localization.Get("editor", "workspace.global_dock.build_output.column.source"), 140.0F,
+            Ui::TableColumn{"source", context.localization.Get("editor", "workspace.global_dock.build_output.column.source"), 220.0F,
                             m_columnVisible[3]},
         };
         std::vector<Ui::TableRow> rows;
         rows.reserve(m_filteredIndices.size());
         for (const std::size_t recordIndex : m_filteredIndices) {
-            const Log::StructuredLogRecord &record = *m_snapshot.records[recordIndex];
-            const std::string_view status{record.context};
-            rows.push_back({
-                .cells =
-                    {
-                        {FormatTimeOfDay(record.timestampUtc), Theme::Muted()},
-                        {record.context, StatusColor(status)},
-                        {record.message, Theme::Text()},
-                        {std::string{StripBuildPrefix(record.category)}, Theme::Muted()},
-                    },
-            });
+            const BuildOutputRecord &record = m_snapshot.records[recordIndex];
+            rows.push_back(
+                {.cells = {{FormatTimeOfDay(record.timestampUtc), Theme::Muted()},
+                           {context.localization.Get("editor", StatusLocalizationKey(record.status)), StatusColor(record.status)},
+                           {record.message, Theme::Text()},
+                           {FormatSource(record.source), record.source.has_value() ? Theme::Accent() : Theme::Muted()}}});
         }
-        Ui::DrawTable({.id = "##BuildOutputTable", .componentSize = Ui::ComponentSize::Small, .selectableCells = true}, columns, rows,
-                      fonts);
+        const Ui::TableInteraction interaction =
+            Ui::DrawTable({.id = "##BuildOutputTable", .componentSize = Ui::ComponentSize::Small, .selectableCells = true}, columns, rows,
+                          fonts);
+        if (interaction.activatedRow.has_value() && interaction.activatedColumn == 3U) {
+            const BuildOutputRecord &record = m_snapshot.records[m_filteredIndices[*interaction.activatedRow]];
+            if (record.source.has_value()) {
+                command.command = EditorWorkspaceViewCommand::OpenDiagnosticSource;
+                command.diagnosticSource = DiagnosticSourceRequest{.absolutePath = record.source->absolutePath,
+                                                                   .line = record.source->line,
+                                                                   .column = record.source->column};
+            }
+        }
 
         if (snapshotChanged && (wasAtBottom || m_initialFollowTail))
             ImGui::SetScrollHereY(1.0F);
@@ -203,9 +260,9 @@ namespace Horo::Editor {
     }
 
     bool GlobalDockBuildOutputPane::RefreshSnapshot() {
-        if (m_logQuery == nullptr)
+        if (m_buildOutputQuery == nullptr)
             return false;
-        auto changed = m_logQuery->SnapshotIfChanged(m_revision);
+        auto changed = m_buildOutputQuery->SnapshotIfChanged(m_revision);
         if (!changed.has_value())
             return false;
         m_snapshot = std::move(*changed);
@@ -214,41 +271,39 @@ namespace Horo::Editor {
         return true;
     }
 
-    bool GlobalDockBuildOutputPane::PassesStatusFilter(const std::string_view status) const noexcept {
-        switch (m_statusFilter) {
+    bool GlobalDockBuildOutputPane::PassesStatusFilter(const BuildOutputStatus status, const StatusFilter filter) noexcept {
+        switch (filter) {
             case StatusFilter::All:
                 return true;
             case StatusFilter::Ok:
-                return status != "FAILED" && status != "CACHED";
+                return status == BuildOutputStatus::Info || status == BuildOutputStatus::Succeeded;
             case StatusFilter::Failed:
-                return status == "FAILED";
+                return status == BuildOutputStatus::Failed || status == BuildOutputStatus::Cancelled;
             case StatusFilter::Cached:
-                return status == "CACHED";
+                return status == BuildOutputStatus::Cached;
         }
         return true;
     }
 
-    void GlobalDockBuildOutputPane::RebuildFilter() {
-        m_filteredIndices.clear();
-        m_filteredIndices.reserve(m_snapshot.records.size());
-        const std::string_view search{m_search.data()};
-
-        for (std::size_t index = 0; index < m_snapshot.records.size(); ++index) {
-            const Log::StructuredLogRecord &record = *m_snapshot.records[index];
-            if (record.category.size() < BuildCategoryPrefix.size() ||
-                record.category.compare(0, BuildCategoryPrefix.size(), BuildCategoryPrefix) != 0) {
+    std::vector<std::size_t> GlobalDockBuildOutputPane::ProjectRecords(const std::span<const BuildOutputRecord> records,
+                                                                       const StatusFilter statusFilter, const std::string_view search) {
+        std::vector<std::size_t> projected;
+        projected.reserve(records.size());
+        for (std::size_t index = 0; index < records.size(); ++index) {
+            const BuildOutputRecord &record = records[index];
+            const std::string source = FormatSource(record.source);
+            if (!PassesStatusFilter(record.status, statusFilter))
                 continue;
-            }
-
-            if (!PassesStatusFilter(record.context))
+            if (!search.empty() && !ContainsCaseInsensitive(record.phase, search) && !ContainsCaseInsensitive(record.message, search) &&
+                !ContainsCaseInsensitive(source, search) && !ContainsCaseInsensitive(TechnicalStatusText(record.status), search))
                 continue;
-
-            if (!search.empty() && !ContainsCaseInsensitive(record.category, search) && !ContainsCaseInsensitive(record.message, search) &&
-                !ContainsCaseInsensitive(record.context, search)) {
-                continue;
-            }
-            m_filteredIndices.push_back(index);
+            projected.push_back(index);
         }
+        return projected;
+    }
+
+    void GlobalDockBuildOutputPane::RebuildFilter() {
+        m_filteredIndices = ProjectRecords(m_snapshot.records, m_statusFilter, std::string_view{m_search.data()});
         m_filterDirty = false;
     }
 }  // namespace Horo::Editor

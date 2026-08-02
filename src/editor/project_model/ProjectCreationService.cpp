@@ -9,6 +9,7 @@
 #include "Horo/Foundation/String.h"
 #include "editor/EditorServiceErrors.h"
 
+#include <cctype>
 #include <chrono>
 #include <exception>
 #include <format>
@@ -85,6 +86,16 @@ namespace {
 [[nodiscard]] std::string MakeProjectId(const ProjectCreationOperationId operationId) {
     const auto now = static_cast<std::uint64_t>(std::chrono::system_clock::now().time_since_epoch().count());
     return std::format("proj_{:x}{:x}", now, static_cast<std::uint64_t>(operationId));
+}
+
+[[nodiscard]] std::string GameplayModuleId(const std::string_view projectName) {
+    std::string slug;
+    slug.reserve(projectName.size());
+    for (const unsigned char character : projectName)
+        slug.push_back(std::isalnum(character) ? static_cast<char>(std::tolower(character)) : '_');
+    if (slug.empty())
+        slug = "project";
+    return "game." + slug;
 }
 
 [[nodiscard]] std::string UtcTimestamp() {
@@ -338,7 +349,21 @@ struct StagingPreparationFailure {
     }
 
     if (request.generateCMakeProject) {
-        if (!WriteDurableFile(staging / "CMakeLists.txt", "cmake_minimum_required(VERSION 3.25)\nproject(HoroGame LANGUAGES CXX)\n"))
+        const std::string cmakeProject =
+            "cmake_minimum_required(VERSION 3.25)\n"
+            "project(HoroGame LANGUAGES CXX)\n\n"
+            "find_package(HoroEngineGameplay CONFIG REQUIRED)\n\n"
+            "file(GLOB_RECURSE HORO_GAMEPLAY_SOURCES CONFIGURE_DEPENDS \"source/gameplay/*.cpp\")\n"
+            "if(HORO_GAMEPLAY_SOURCES)\n"
+            "    horo_add_gameplay_module(HoroGameGameplay\n"
+            "        MODULE_ID " +
+            GameplayModuleId(request.projectName) +
+            "\n"
+            "        SOURCES ${HORO_GAMEPLAY_SOURCES}\n"
+            "    )\n"
+            "endif()\n";
+        std::filesystem::create_directories(staging / "source" / "gameplay", error);
+        if (error || !WriteDurableFile(staging / "CMakeLists.txt", cmakeProject))
             return StagingPreparationFailure{ProjectCreationErrorCode::WriteFailed, "Unable to write the project CMake file."};
     }
 
