@@ -2,6 +2,7 @@
 
 #include "Horo/Gameplay/GameplayErrors.h"
 
+#include <algorithm>
 #include <ranges>
 
 namespace Horo::Editor {

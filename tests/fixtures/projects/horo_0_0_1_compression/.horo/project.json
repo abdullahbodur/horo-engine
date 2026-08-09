@@ -1,0 +1,23 @@
+{
+  "createdAt": "2026-07-19T00:00:00Z",
+  "horoVersion": "0.0.1",
+  "name": "Legacy Migration Test",
+  "persistentContract": "sha256:5ef87e96e24c0a3a5e44f4dee182dbd3bfb5402e08e07aaf3d64d4a3ff24ae6d",
+  "projectId": "legacy-migration-fixture",
+  "projectVersion": "0.7.0",
+  "settings": {
+    "renderBackend": "opengl",
+    "unknownNested": {
+      "array": [
+        1,
+        true,
+        null
+      ],
+      "label": "preserved"
+    }
+  },
+  "unknownRoot": {
+    "enabled": true,
+    "weight": 2.5
+  }
+}
