@@ -175,7 +175,7 @@ namespace Horo::Diagnostics {
         }
 
         void ReopenForAppend() noexcept {
-            file = std::fopen(path.string().c_str(), "a");
+            file = std::fopen(path.string().c_str(), "ab");
             std::error_code error;
             currentBytes = std::filesystem::file_size(path, error);
             if (error)
@@ -207,7 +207,7 @@ namespace Horo::Diagnostics {
                 ReopenForAppend();
                 throw std::runtime_error{"failed to roll operation history"};
             }
-            file = std::fopen(path.string().c_str(), "w");
+            file = std::fopen(path.string().c_str(), "wb");
             if (file == nullptr)
                 throw std::runtime_error{"failed to create operation history segment"};
             currentBytes = 0;

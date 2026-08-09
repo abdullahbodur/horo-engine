@@ -305,7 +305,7 @@ namespace Horo::Log {
                   startedAt_(std::chrono::steady_clock::now()) {
                 if (!RepairPartialTrailingRecord(path_))
                     throw std::runtime_error{"failed to recover partial JSONL record"};
-                file_ = std::fopen(path_.string().c_str(), "a");
+                file_ = std::fopen(path_.string().c_str(), "ab");
                 if (file_ == nullptr)
                     throw std::runtime_error{"failed to open JSONL log"};
                 std::error_code error;
@@ -404,7 +404,7 @@ namespace Horo::Log {
             }
 
             void ReopenCurrentForAppend() noexcept {
-                file_ = std::fopen(path_.string().c_str(), "a");
+                file_ = std::fopen(path_.string().c_str(), "ab");
                 std::error_code error;
                 currentBytes_ = std::filesystem::file_size(path_, error);
                 if (error)
@@ -453,7 +453,7 @@ namespace Horo::Log {
                     }
                 }
 
-                file_ = std::fopen(path_.string().c_str(), "w");
+                file_ = std::fopen(path_.string().c_str(), "wb");
                 if (file_ == nullptr)
                     throw std::runtime_error{"failed to create replacement JSONL log"};
                 currentBytes_ = 0;
