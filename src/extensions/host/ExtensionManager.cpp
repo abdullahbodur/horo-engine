@@ -7,6 +7,7 @@
 #include "Horo/Platform/DynamicLibrary.h"
 #include "../capabilities/asset_pipeline_points/ExternalAssetImporter.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <ranges>
