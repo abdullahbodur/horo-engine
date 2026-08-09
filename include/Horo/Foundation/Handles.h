@@ -1,6 +1,7 @@
 #include <compare>
 #pragma once
 
+#include <cstdint>
 #include <limits>
 
 namespace Horo

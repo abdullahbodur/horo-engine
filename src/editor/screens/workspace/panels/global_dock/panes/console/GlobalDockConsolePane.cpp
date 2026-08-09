@@ -135,7 +135,6 @@ namespace Horo::Editor {
         const bool snapshotChanged = RefreshSnapshot();
         const auto &fonts = context.theme.fonts;
         ImDrawList *drawList = ImGui::GetWindowDrawList();
-        ImFont *font = fonts.sansCompact ? fonts.sansCompact : ImGui::GetFont();
 
         // ── Toolbar bar ──────────────────────────────────────────
         const float barFullWidth = contentWidth + OuterPaddingX * 2.0F;
@@ -242,9 +241,10 @@ namespace Horo::Editor {
             }
             m_textSelectionActive = false;
             const std::string &empty = context.localization.Get("editor", "workspace.global_dock.console.empty");
+            Theme::ScopedTextStyle textStyle(fonts.sans, Theme::FontPx::Sans * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
             ImGui::TextColored(Theme::Dim(), "%s", empty.c_str());
         } else {
-            Theme::ScopedTextStyle textStyle(fonts.sansCompact, 14.0F, Theme::FontPx::SansCompact);
+            Theme::ScopedTextStyle textStyle(fonts.sans, Theme::FontPx::Sans * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
             const float referenceTimestampWidth = ImGui::CalcTextSize("2022-03-15T13:38:15.567+00:00").x;
             const float spaceWidth = ImGui::CalcTextSize(" ").x;
             const float contentColumnX = referenceTimestampWidth + spaceWidth * 3.0F;

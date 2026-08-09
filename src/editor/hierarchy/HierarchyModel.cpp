@@ -209,6 +209,12 @@ namespace Horo::Editor {
                 .name = std::string(input.name),
                 .type = input.type,
                 .expanded = std::ranges::find(collapsed, input.id) == collapsed.end(),
+                .locallyVisible = input.locallyVisible,
+                .locallyLocked = input.locallyLocked,
+                .effectivelyVisible = input.effectivelyVisible,
+                .effectivelyLocked = input.effectivelyLocked,
+                .hiddenByParent = input.hiddenByParent,
+                .lockedByParent = input.lockedByParent,
                 .children = {},
             });
             byId.emplace(input.id, node.get());

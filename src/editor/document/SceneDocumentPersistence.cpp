@@ -499,8 +499,10 @@ namespace Horo::Editor {
                     {"name", object.name},
                     {"transform", TransformJson(object.localTransform)},
                     {"components", ComponentsJson(object.components)},
+                    {"editor", {{"visible", object.editorState.visible}, {"locked", object.editorState.locked}}},
                 };
                 value["primitiveMesh"] = object.primitiveMesh.has_value() ? PrimitiveJson(*object.primitiveMesh) : Json(nullptr);
+                value["meshAsset"] = object.meshAsset.has_value() ? Json(object.meshAsset->ToString()) : Json(nullptr);
                 objects.push_back(std::move(value));
             }
             return Json{{"schemaVersion", kSceneSchemaVersion}, {"objects", std::move(objects)}};
@@ -544,6 +546,30 @@ namespace Horo::Editor {
                             return Result<std::vector<SceneObjectSnapshot>>::Failure(parsed.ErrorValue());
                         primitive = std::move(parsed).Value();
                     }
+                    std::optional<Assets::AssetId> meshAsset;
+                    if (value.contains("meshAsset") && !value["meshAsset"].is_null()) {
+                        if (!value["meshAsset"].is_string())
+                            return Result<std::vector<SceneObjectSnapshot>>::Failure(
+                                PersistenceError(SceneInvalid, "Scene object mesh asset identity is invalid."));
+                        auto parsed = Assets::AssetId::Parse(value["meshAsset"].get<std::string>());
+                        if (parsed.HasError())
+                            return Result<std::vector<SceneObjectSnapshot>>::Failure(
+                                PersistenceError(SceneInvalid, "Scene object mesh asset identity is invalid."));
+                        meshAsset = std::move(parsed).Value();
+                    }
+                    SceneObjectEditorState editorState;
+                    if (value.contains("editor")) {
+                        const Json &editor = value["editor"];
+                        if (!editor.is_object() || !editor.contains("visible") || !editor["visible"].is_boolean() ||
+                            !editor.contains("locked") || !editor["locked"].is_boolean()) {
+                            return Result<std::vector<SceneObjectSnapshot>>::Failure(
+                                PersistenceError(SceneInvalid, "Scene object editor state is invalid."));
+                        }
+                        editorState = SceneObjectEditorState{
+                            .visible = editor["visible"].get<bool>(),
+                            .locked = editor["locked"].get<bool>(),
+                        };
+                    }
                     objects.push_back(SceneObjectSnapshot{
                         .id = SceneObjectId{value["id"].get<std::uint64_t>()},
                         .parent = parent,
@@ -551,6 +577,8 @@ namespace Horo::Editor {
                         .localTransform = transform.Value(),
                         .primitiveMesh = std::move(primitive),
                         .components = components.Value(),
+                        .meshAsset = std::move(meshAsset),
+                        .editorState = editorState,
                     });
                 }
                 return Result<std::vector<SceneObjectSnapshot>>::Success(std::move(objects));

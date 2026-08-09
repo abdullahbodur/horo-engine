@@ -5,6 +5,7 @@
 #include "Horo/Editor/EditorTheme.h"
 
 #include <algorithm>
+#include <array>
 #include <cfloat>
 #include <cmath>
 #include <cstring>
@@ -1849,6 +1850,50 @@ namespace Horo::Editor::Ui {
             drawList->AddRect({x + 4.0F, y + 5.0F}, {x + w - 4.0F, y + h - 1.0F}, color, 1.0F, 0, 1.3F);
             drawList->AddLine({x + 2.0F, y + 4.0F}, {x + w - 2.0F, y + 4.0F}, color, 1.3F);
             drawList->AddLine({x + 6.0F, y + 1.0F}, {x + w - 6.0F, y + 1.0F}, color, 1.3F);
+        } else if (iconToken == "action.visibility" || iconToken == "action.visibility_off") {
+            const float glyphSize = std::min(w, h);
+            const float glyphLeft = center.x - glyphSize * 0.44F;
+            const float glyphRight = center.x + glyphSize * 0.44F;
+            const float glyphTop = center.y - glyphSize * 0.40F;
+            const float glyphBottom = center.y + glyphSize * 0.40F;
+            const float stroke = std::max(1.0F, glyphSize * 0.085F);
+            drawList->AddBezierCubic({glyphLeft, center.y}, {center.x - glyphSize * 0.24F, glyphTop},
+                                     {center.x + glyphSize * 0.24F, glyphTop}, {glyphRight, center.y}, color, stroke);
+            drawList->AddBezierCubic({glyphRight, center.y}, {center.x + glyphSize * 0.24F, glyphBottom},
+                                     {center.x - glyphSize * 0.24F, glyphBottom}, {glyphLeft, center.y}, color, stroke);
+            drawList->AddCircleFilled(center, glyphSize * 0.12F, color, 12);
+            if (iconToken == "action.visibility_off")
+                drawList->AddLine({center.x - glyphSize * 0.34F, center.y - glyphSize * 0.34F},
+                                  {center.x + glyphSize * 0.34F, center.y + glyphSize * 0.34F}, color, std::max(1.25F, glyphSize * 0.11F));
+        } else if (iconToken == "action.lock") {
+            const float glyphSize = std::min(w, h);
+            const float stroke = std::max(1.0F, glyphSize * 0.085F);
+            const float halfWidth = glyphSize * 0.35F;
+            const float bodyTop = center.y - glyphSize * 0.02F;
+            const float bodyBottom = center.y + glyphSize * 0.38F;
+            drawList->AddRect({center.x - halfWidth, bodyTop}, {center.x + halfWidth, bodyBottom}, color, glyphSize * 0.06F, 0, stroke);
+            drawList->PathClear();
+            drawList->PathLineTo({center.x - glyphSize * 0.25F, bodyTop});
+            drawList->PathBezierCubicCurveTo({center.x - glyphSize * 0.25F, center.y - glyphSize * 0.43F},
+                                             {center.x + glyphSize * 0.25F, center.y - glyphSize * 0.43F},
+                                             {center.x + glyphSize * 0.25F, bodyTop}, 10);
+            drawList->PathStroke(color, 0, stroke);
+        } else if (iconToken == "hierarchy.generic" || iconToken == "hierarchy.mesh") {
+            const ImVec2 top{center.x, y + 1.0F};
+            const ImVec2 left{x + 2.0F, y + h * 0.32F};
+            const ImVec2 right{x + w - 2.0F, y + h * 0.32F};
+            const ImVec2 leftBottom{x + 2.0F, y + h * 0.72F};
+            const ImVec2 bottom{center.x, y + h - 1.0F};
+            const ImVec2 rightBottom{x + w - 2.0F, y + h * 0.72F};
+            const std::array outline{top, right, rightBottom, bottom, leftBottom, left};
+            drawList->AddPolyline(outline.data(), outline.size(), color, ImDrawFlags_Closed, 1.35F);
+            drawList->AddLine(left, center, color, 1.15F);
+            drawList->AddLine(right, center, color, 1.15F);
+            drawList->AddLine(center, bottom, color, 1.15F);
+            if (iconToken == "hierarchy.mesh") {
+                drawList->AddLine(top, center, color, 1.15F);
+                drawList->AddCircleFilled(center, 1.15F, color, 8);
+            }
         } else if (iconToken == "primitive.camera") {
             drawList->AddRect({x + 1.0F, y + 4.0F}, {x + w * 0.68F, y + h - 3.0F}, color, 2.0F, 0, 1.4F);
             drawList->AddTriangle({x + w * 0.68F, y + 6.0F}, {x + w - 1.0F, y + 3.0F}, {x + w - 1.0F, y + h - 2.0F}, color, 1.4F);
@@ -1862,11 +1907,19 @@ namespace Horo::Editor::Ui {
                               {x + w * 0.36F, y + h * 0.66F}, color, 1.4F);
         } else if (iconToken == "primitive.light_directional") {
             drawList->AddCircle(center, w * 0.22F, color, 16, 1.4F);
-            for (int ray = 0; ray < 4; ++ray) {
-                const float angle = static_cast<float>(ray) * std::numbers::pi_v<float> * 0.5F;
+            for (int ray = 0; ray < 8; ++ray) {
+                const float angle = static_cast<float>(ray) * std::numbers::pi_v<float> * 0.25F;
                 const ImVec2 direction{std::cos(angle), std::sin(angle)};
                 drawList->AddLine({center.x + direction.x * w * 0.32F, center.y + direction.y * h * 0.32F},
                                   {center.x + direction.x * w * 0.48F, center.y + direction.y * h * 0.48F}, color, 1.3F);
+            }
+        } else if (iconToken == "primitive.light_point") {
+            drawList->AddCircleFilled(center, w * 0.12F, color, 12);
+            for (int ray = 0; ray < 4; ++ray) {
+                const float angle = std::numbers::pi_v<float> * (0.25F + static_cast<float>(ray) * 0.5F);
+                const ImVec2 direction{std::cos(angle), std::sin(angle)};
+                drawList->AddLine({center.x + direction.x * w * 0.26F, center.y + direction.y * h * 0.26F},
+                                  {center.x + direction.x * w * 0.45F, center.y + direction.y * h * 0.45F}, color, 1.3F);
             }
         } else if (iconToken.starts_with("primitive.light") || iconToken == "create.group.lights") {
             drawList->AddCircle(center, w * 0.27F, color, 16, 1.4F);

@@ -4,6 +4,7 @@
 #include "Horo/Editor/DefaultScreenFactories.h"
 #include "Horo/Editor/EditorGuiContext.h"
 #include "Horo/Editor/EditorModalHost.h"
+#include "Horo/Editor/EditorSnackbarHost.h"
 #include "Horo/Editor/EditorServiceRegistry.h"
 #include "Horo/Editor/EditorSettingsService.h"
 #include "Horo/Editor/EditorSettingsStore.h"
@@ -20,6 +21,7 @@
 #include "editor/document/EditorViewportSceneExtractor.h"
 #include "editor/input/EditorInputActions.h"
 #include "editor/modals/scene_compare/SceneConflictCompareModal.h"
+#include "editor/modals/gameplay_behavior/GameplayBehaviorFilenameModal.h"
 #include "editor/renderer/EditorGuiRenderer.h"
 #include "editor/renderer/EditorViewportRenderer.h"
 #include "editor/screens/NavigationErrors.h"
@@ -28,6 +30,7 @@
 #include <filesystem>
 #include <imgui.h>
 #include <memory>
+#include <optional>
 #include <portable-file-dialogs.h>
 #include <string>
 #include <string_view>
@@ -35,6 +38,59 @@
 
 namespace Horo::Editor {
     namespace {
+        [[nodiscard]] std::filesystem::path NormalizeAbsolutePath(const std::filesystem::path &path) {
+            std::error_code error;
+            const std::filesystem::path absolute = std::filesystem::absolute(path, error).lexically_normal();
+            if (error)
+                return {};
+            const std::filesystem::path canonical = std::filesystem::weakly_canonical(absolute, error);
+            return error ? absolute : canonical;
+        }
+
+        [[nodiscard]] bool HasPathPrefix(const std::filesystem::path &root, const std::filesystem::path &candidate) {
+            auto rootPart = root.begin();
+            auto candidatePart = candidate.begin();
+            while (rootPart != root.end() && candidatePart != candidate.end()) {
+                if (*rootPart != *candidatePart)
+                    return false;
+                ++rootPart;
+                ++candidatePart;
+            }
+            return rootPart == root.end();
+        }
+
+        [[nodiscard]] std::optional<std::filesystem::path> ResolveGameplayBehaviorDestination(const std::filesystem::path &projectRoot,
+                                                                                               const GameplayBehaviorKind kind,
+                                                                                               const std::string &requestedDirectory) {
+            const std::filesystem::path normalizedProjectRoot = NormalizeAbsolutePath(projectRoot);
+            const std::filesystem::path assetsRoot = normalizedProjectRoot / "assets";
+            const std::filesystem::path scriptsRoot = assetsRoot / "scripts";
+            const std::filesystem::path requested = NormalizeAbsolutePath(requestedDirectory);
+            std::filesystem::path destination =
+                kind == GameplayBehaviorKind::Native
+                    ? normalizedProjectRoot / "source" / "gameplay"
+                    : (HasPathPrefix(scriptsRoot, requested) ? requested : scriptsRoot);
+            if ((kind == GameplayBehaviorKind::Native && !HasPathPrefix(normalizedProjectRoot, destination)) ||
+                (kind == GameplayBehaviorKind::Lua && !HasPathPrefix(assetsRoot, destination))) {
+                return std::nullopt;
+            }
+            return destination;
+        }
+
+        [[nodiscard]] std::string SuggestGameplayBehaviorBaseName(const std::filesystem::path &destination,
+                                                                  const GameplayBehaviorKind kind) {
+            const std::string extension = kind == GameplayBehaviorKind::Native ? ".cpp" : ".horo_script";
+            std::error_code error;
+            for (std::size_t suffix = 0; suffix < 1000; ++suffix) {
+                const std::string stem = suffix == 0 ? "NewBehavior" : "NewBehavior" + std::to_string(suffix + 1);
+                if (!std::filesystem::exists(destination / (stem + extension), error))
+                    return stem;
+                if (error)
+                    break;
+            }
+            return "NewBehavior";
+        }
+
         class EditorWorkspaceScreen final : public GuiScreen {
         public:
             explicit EditorWorkspaceScreen(const EditorServiceRegistry &services)
@@ -78,12 +134,14 @@ namespace Horo::Editor {
                                                                 services_.TryGet<Application::GameplayBuildService>(),
                                                                 services_.TryGet<Application::GameplayBuildEnvironment>() != nullptr
                                                                     ? *services_.TryGet<Application::GameplayBuildEnvironment>()
-                                                                    : Application::GameplayBuildEnvironment{});
+                                                                    : Application::GameplayBuildEnvironment{},
+                                                                &context_.localization);
                 if (controller_->InitializationError().has_value()) {
                     const Error error = *controller_->InitializationError();
                     controller_.reset();
                     return Result<void>::Failure(error);
                 }
+                snackbarHost_ = std::make_unique<EditorSnackbarHost>(controller_->DataBus());
                 host_.SetCurrentProjectRoot(controller_->ViewModel().projectRoot);
                 LoadProjectInputProfile(controller_->ViewModel().projectRoot);
                 viewportSceneState_.Replace(controller_->ViewportScene());
@@ -163,6 +221,14 @@ namespace Horo::Editor {
                 if (command.command != EditorWorkspaceViewCommand::None) {
                     if (command.command == EditorWorkspaceViewCommand::CompareExternalScene) {
                         OpenSceneComparison();
+                    } else if (command.command == EditorWorkspaceViewCommand::CreateLuaBehavior ||
+                               command.command == EditorWorkspaceViewCommand::CreateNativeBehavior) {
+                        const GameplayBehaviorKind kind = command.command == EditorWorkspaceViewCommand::CreateNativeBehavior
+                                                              ? GameplayBehaviorKind::Native
+                                                              : GameplayBehaviorKind::Lua;
+                        const std::string requestedDirectory =
+                            command.stringPayload.value_or(controller_->ViewModel().contentBrowser.absoluteCurrentPath);
+                        OpenGameplayBehaviorModal(kind, requestedDirectory);
                     } else {
                         controller_->ProcessCommand(command);
                     }
@@ -171,6 +237,16 @@ namespace Horo::Editor {
                     }
                 }
                 PublishViewportSceneIfChanged();
+
+                if (snackbarHost_) {
+                    const std::optional<SnackbarActionInvokedEvent> action =
+                        snackbarHost_->Draw(context_, ImGui::GetIO().DeltaTime);
+                    if (action.has_value() && action->actionId == "open_logs") {
+                        controller_->ProcessCommand(EditorWorkspaceViewCommandData{
+                            .command = EditorWorkspaceViewCommand::ChangeActivePanel,
+                            .stringPayload = "horo.global_dock"});
+                    }
+                }
 
                 UpdateStatusItems();
             }
@@ -352,6 +428,40 @@ namespace Horo::Editor {
                 }
             }
 
+            void OpenGameplayBehaviorModal(const GameplayBehaviorKind kind, const std::string &requestedDirectory) {
+                if (!controller_) {
+                    return;
+                }
+                const std::optional<std::filesystem::path> destination = ResolveGameplayBehaviorDestination(
+                    controller_->ViewModel().projectRoot, kind, requestedDirectory);
+                if (!destination.has_value()) {
+                    EditorWorkspaceViewCommandData fallback;
+                    fallback.command = kind == GameplayBehaviorKind::Native ? EditorWorkspaceViewCommand::CreateNativeBehavior
+                                                                            : EditorWorkspaceViewCommand::CreateLuaBehavior;
+                    fallback.stringPayload = requestedDirectory;
+                    controller_->ProcessCommand(fallback);
+                    return;
+                }
+
+                const std::string baseName = SuggestGameplayBehaviorBaseName(*destination, kind);
+                Result<void> opened = modalHost_.OpenRoot(std::make_unique<GameplayBehaviorFilenameModal>(
+                    context_, kind, destination->string(), baseName, [this](CreateGameplayBehaviorRequest request) {
+                        if (!controller_)
+                            return;
+                        EditorWorkspaceViewCommandData create;
+                        create.command = request.kind == GameplayBehaviorKind::Native
+                                             ? EditorWorkspaceViewCommand::CreateNativeBehavior
+                                             : EditorWorkspaceViewCommand::CreateLuaBehavior;
+                        create.gameplayBehaviorRequest = std::move(request);
+                        controller_->ProcessCommand(create);
+                        PublishViewportSceneIfChanged();
+                    }));
+                if (opened.HasError()) {
+                    LOG_WARN("editor.asset_actions", "Gameplay behavior filename modal could not open: %s",
+                             opened.ErrorValue().message.c_str());
+                }
+            }
+
             void LoadProjectInputProfile(const std::filesystem::path &projectRoot) {
                 previousInputProfile_ = inputRouter_.Profile();
                 Input::InputBindingProfile merged{.profileId = "project-composed"};
@@ -497,6 +607,7 @@ namespace Horo::Editor {
             ViewportRevision publishedViewportRevision_{};
             std::uint64_t publishedViewportSceneRevision_{};
             std::unique_ptr<EditorWorkspaceController> controller_;
+            std::unique_ptr<EditorSnackbarHost> snackbarHost_;
             std::optional<Input::InputBindingProfile> previousInputProfile_;
         };
     }  // namespace

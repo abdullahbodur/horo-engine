@@ -36,6 +36,7 @@ __pycache__/
 # Logs and local caches
 *.log
 .cache/
+.env.local
 
 # IDE and editor state
 .vs/

@@ -26,11 +26,13 @@ namespace Horo::Editor {
         bool parent{};
         bool transform{};
         bool primitive{};
+        bool asset{};
         bool components{};
+        bool editorState{};
 
         /** @brief Reports whether at least one authored field differs. */
         [[nodiscard]] constexpr bool Any() const noexcept {
-            return name || parent || transform || primitive || components;
+            return name || parent || transform || primitive || asset || components || editorState;
         }
     };
 

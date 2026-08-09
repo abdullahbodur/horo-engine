@@ -4,6 +4,7 @@
 #include "Horo/Foundation/Result.h"
 
 #include <cassert>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <optional>

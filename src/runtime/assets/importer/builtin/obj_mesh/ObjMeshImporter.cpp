@@ -7,6 +7,7 @@
 #include "../../../AssetErrors.h"
 #include "../fbx_mesh/FbxMeshImporter.h"
 #include "Horo/Assets/AssetRegistry.h"
+#include "Horo/Assets/MeshEditorPayload.h"
 #include "ObjMeshPreviewProvider.h"
 
 #include <algorithm>
@@ -153,7 +154,7 @@ namespace Horo::Assets {
                 }
 
                 auto &payload = result.editorPayload;
-                WriteLE32(payload, 2);
+                WriteLE32(payload, MeshEditorPayloadSchemaVersion);
                 WriteLE32(payload, static_cast<std::uint32_t>(obj.positions.size()));
                 WriteLE32(payload, static_cast<std::uint32_t>(obj.faces.size()));
                 WriteFloat(payload, minX);

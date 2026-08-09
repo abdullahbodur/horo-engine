@@ -24,7 +24,8 @@ namespace Horo::Editor {
             return Result<EditorViewportPickResult>::Failure(
                 MakePickingError(ViewportPickingErrors::InvalidQuery, "Viewport pick query is outside valid bounds."));
         }
-        if (!scene.View().IsValid() || scene.instances.size() != scene.instanceObjects.size()) {
+        if (!scene.View().IsValid() || scene.instances.size() != scene.instanceObjects.size() ||
+            (!scene.instancePickable.empty() && scene.instancePickable.size() != scene.instances.size())) {
             return Result<EditorViewportPickResult>::Failure(
                 MakePickingError(ViewportPickingErrors::InvalidScene,
                                  "Viewport pick snapshot is invalid or has inconsistent identity data."));
@@ -45,6 +46,8 @@ namespace Horo::Editor {
         float nearestDistance = std::numeric_limits<float>::max();
         std::optional<SceneObjectId> nearestObject;
         for (std::size_t index = 0; index < scene.instances.size(); ++index) {
+            if (!scene.instancePickable.empty() && scene.instancePickable[index] == 0U)
+                continue;
             const Result<Math::Aabb> worldBounds =
                 Math::TransformAabb(scene.instances[index].localBounds, scene.instances[index].localToWorld);
             if (worldBounds.HasError())

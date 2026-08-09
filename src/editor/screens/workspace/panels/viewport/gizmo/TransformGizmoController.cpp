@@ -41,15 +41,16 @@ namespace Horo::Editor {
                                    viewModel.activeTransformTool == EditorTransformTool::Rotate ||
                                    viewModel.activeTransformTool == EditorTransformTool::Scale;
         if (drag_.has_value() && (selectedObject == viewModel.objects.end() || selectedObject->id != drag_->object || !transformTool ||
-                                  viewModel.activeTransformTool != drag_->tool || viewModel.activeTransformSpace != drag_->space)) {
+                                  selectedObject->effectivelyLocked || viewModel.activeTransformTool != drag_->tool ||
+                                  viewModel.activeTransformSpace != drag_->space)) {
             capture.Cancel(Input::CaptureCancellationReason::Explicit);
             cancelPreviewOnNextDraw_ = false;
             command.command = EditorWorkspaceViewCommand::CancelObjectTransformPreview;
             return true;
         }
 
-        if (transformTool && selectedObject != viewModel.objects.end() && viewModel.primarySelectionWorldTransform.has_value() &&
-            viewModel.primarySelectionParentWorldTransform.has_value()) {
+        if (transformTool && selectedObject != viewModel.objects.end() && !selectedObject->effectivelyLocked &&
+            viewModel.primarySelectionWorldTransform.has_value() && viewModel.primarySelectionParentWorldTransform.has_value()) {
             const Math::Mat4 &worldTransform = viewModel.primarySelectionPreviewWorldTransform.has_value()
                                                    ? *viewModel.primarySelectionPreviewWorldTransform
                                                    : *viewModel.primarySelectionWorldTransform;

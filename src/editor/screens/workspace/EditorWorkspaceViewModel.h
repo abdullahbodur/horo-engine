@@ -3,12 +3,13 @@
 #include "Horo/Editor/ActivityBarLayout.h"
 #include "Horo/Editor/EditorMenuModel.h"
 #include "Horo/Editor/EditorWorkspaceEvents.h"
-#include "Horo/Foundation/Result.h"
 #include "Horo/Editor/WorkspacePanelHost.h"
+#include "Horo/Foundation/Result.h"
 #include "Horo/Runtime/Render/RenderScene.h"
 #include "editor/document/SceneDocument.h"
 #include "editor/project_model/EditorTransformTool.h"
 #include "editor/project_model/EditorViewportModel.h"
+#include "editor/screens/workspace/AssetSceneDrop.h"
 #include "editor/screens/workspace/ContentBrowserModel.h"
 #include "editor/screens/workspace/GameplayBehaviorRequest.h"
 
@@ -46,6 +47,11 @@ namespace Horo::Editor {
         SceneObjectKind kind{SceneObjectKind::GameObject};
         Math::Transform localTransform;
         SceneObjectComponentSet components;
+        SceneObjectEditorState editorState;
+        bool effectivelyVisible{true};
+        bool effectivelyLocked{false};
+        bool hiddenByParent{false};
+        bool lockedByParent{false};
     };
 
     /** @brief One world-space Light marker projected from the current viewport render snapshot. */
@@ -73,8 +79,10 @@ namespace Horo::Editor {
         StepPlay,
         StopPlay,
         CreatePrimitive,
+        InstantiateAsset,
         DuplicateObject,
         DeleteObject,
+        DeleteSelectedObjects,
         SelectObject,
         PickViewport,
         NavigateViewport,
@@ -92,6 +100,7 @@ namespace Horo::Editor {
         UpdateLightComponent,
         UpdateTriggerVolumeComponent,
         UpdateAudioSourceComponent,
+        UpdateObjectEditorState,
         AddComponentToObject,
         RemoveComponentFromObject,
         AttachBehaviorToObject,
@@ -182,7 +191,6 @@ namespace Horo::Editor {
         std::uint32_t column{};
     };
 
-
     struct EditorWorkspaceViewCommandData {
         EditorWorkspaceViewCommand command = EditorWorkspaceViewCommand::None;
         std::optional<EditorMenuInvocation> menuInvocation = std::nullopt;
@@ -199,6 +207,7 @@ namespace Horo::Editor {
         std::optional<Runtime::LightComponent> lightPayload = std::nullopt;
         std::optional<Runtime::TriggerVolumeComponent> triggerVolumePayload = std::nullopt;
         std::optional<Runtime::AudioSourceComponent> audioSourcePayload = std::nullopt;
+        std::optional<SceneObjectEditorState> editorStatePayload = std::nullopt;
         std::optional<ComponentType> componentTypePayload = std::nullopt;
         std::optional<Gameplay::BehaviorTypeId> behaviorTypePayload = std::nullopt;
         std::optional<Gameplay::BehaviorComponent> behaviorPayload = std::nullopt;
@@ -216,6 +225,7 @@ namespace Horo::Editor {
         std::optional<ContentBrowserAssetTransferRequest> contentBrowserTransfer = std::nullopt;
         std::optional<DiagnosticSourceRequest> diagnosticSource = std::nullopt;
         std::optional<CreateGameplayBehaviorRequest> gameplayBehaviorRequest = std::nullopt;
+        std::optional<AssetSceneDropRequest> assetSceneDrop = std::nullopt;
     };
 
     /** @brief Pending project-local Content Browser clipboard operation. */

@@ -34,7 +34,7 @@ namespace Horo::Editor {
             if (item.assetIdStrategy == 1) {
                 const std::string sourcePath = item.absoluteSourcePath.generic_string();
                 const Sha256Digest digest =
-                    ComputeSha256(std::span<const std::byte>{reinterpret_cast<const std::byte *>(sourcePath.data()), sourcePath.size()});
+                    ComputeSha256(std::span{reinterpret_cast<const std::byte *>(sourcePath.data()), sourcePath.size()});
                 std::ranges::copy_n(digest.bytes.begin(), bytes.size(), bytes.begin());
             } else {
                 std::random_device random;
@@ -198,7 +198,7 @@ namespace Horo::Editor {
                                          OperationUpdate{.state = completed ? OperationState::Succeeded : OperationState::Cancelled,
                                                          .phase = completed ? "complete" : "cancelled",
                                                          .message = completed ? "Asset import completed" : "Asset import cancelled",
-                                                         .progress = completed ? std::optional<float>{1.0F} : std::nullopt}));
+                                                         .progress = completed ? std::optional{1.0F} : std::nullopt}));
         }
         m_visibleOperationId.reset();
 
@@ -393,12 +393,12 @@ namespace Horo::Editor {
             m_defaultPresetValues.push_back(CapturePresetValues(item, *m_catalog, "Default"));
         LOG_INFO("editor.asset_import", "Import started: %zu files.", m_snapshot.items.size());
         if (m_operationStore != nullptr) {
-            const std::weak_ptr<CancellationSource> weakCancellation = m_operationCancellation;
+            const std::weak_ptr weakCancellation = m_operationCancellation;
             m_visibleOperationId = m_operationStore->Begin(OperationDescriptor{
                 .kind = OperationKind::Import,
                 .title = "Import assets",
                 .phase = "prepare",
-                .message = std::to_string(m_snapshot.items.size()) + " files",
+                .message = std::format("{} files", m_snapshot.items.size()),
                 .progress = 0.0F,
                 .cancellable = true,
                 .requestCancel =

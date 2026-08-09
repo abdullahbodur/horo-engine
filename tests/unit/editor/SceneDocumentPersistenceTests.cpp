@@ -225,6 +225,74 @@ TEST_CASE("Project Scene Save Reopens The Same Authored State", "[unit][editor][
     REQUIRE((reopened.Objects().front().components == authored.objects.front().components));
 }
 
+TEST_CASE("Every authored light kind survives project scene save and reload", "[unit][editor][persistence]") {
+    TemporaryProject project;
+    project.WriteMetadata();
+    project.WriteScene("{\"schemaVersion\":1,\"objects\":[]}\n");
+    const SceneDocumentSnapshot snapshot{
+        .revision = DocumentRevision{3},
+        .state = DocumentStateId{3},
+        .objects =
+            {
+                SceneObjectSnapshot{.id = SceneObjectId{1},
+                                    .name = "Directional",
+                                    .components =
+                                        SceneObjectComponentSet{.light = Runtime::LightComponent{.kind = Runtime::LightKind::Directional}},
+                                    .editorState = SceneObjectEditorState{.visible = false}},
+                SceneObjectSnapshot{.id = SceneObjectId{2},
+                                    .name = "Point",
+                                    .components =
+                                        SceneObjectComponentSet{.light = Runtime::LightComponent{.kind = Runtime::LightKind::Point}},
+                                    .editorState = SceneObjectEditorState{.locked = true}},
+                SceneObjectSnapshot{.id = SceneObjectId{3},
+                                    .name = "Spot",
+                                    .components =
+                                        SceneObjectComponentSet{.light = Runtime::LightComponent{.kind = Runtime::LightKind::Spot}}},
+            },
+    };
+
+    NativeDurableFileSystem files;
+    ProjectMutationCoordinator mutations(files);
+    auto expected = InspectProjectSceneFingerprint(project.Root(), project.ScenePath());
+    REQUIRE((expected.HasValue()));
+    REQUIRE((SaveProjectScene(project.Root(), project.ScenePath(), snapshot, expected.Value(), false, mutations, files).HasValue()));
+
+    auto loaded = LoadProjectDefaultScene(project.Root());
+    REQUIRE((loaded.HasValue() && loaded.Value().has_value()));
+    REQUIRE((loaded.Value()->objects.size() == 3));
+    REQUIRE((loaded.Value()->objects[0].components.light->kind == Runtime::LightKind::Directional));
+    REQUIRE((loaded.Value()->objects[1].components.light->kind == Runtime::LightKind::Point));
+    REQUIRE((loaded.Value()->objects[2].components.light->kind == Runtime::LightKind::Spot));
+    REQUIRE_FALSE((loaded.Value()->objects[0].editorState.visible));
+    REQUIRE((loaded.Value()->objects[1].editorState.locked));
+    REQUIRE((loaded.Value()->objects[2].editorState == SceneObjectEditorState{}));
+}
+
+TEST_CASE("Imported mesh asset identity persists without a source path", "[unit][editor][persistence][asset]") {
+    TemporaryProject project;
+    project.WriteMetadata();
+    project.WriteScene("{\"schemaVersion\":1,\"objects\":[]}\n");
+    const auto asset = Assets::AssetId::Parse("00112233-4455-6677-8899-aabbccddeeff");
+    REQUIRE((asset.HasValue()));
+    SceneDocumentSnapshot snapshot{
+        .revision = DocumentRevision{1},
+        .state = DocumentStateId{1},
+        .objects = {SceneObjectSnapshot{.id = SceneObjectId{1}, .name = "Chair", .meshAsset = asset.Value()}},
+    };
+
+    NativeDurableFileSystem files;
+    ProjectMutationCoordinator mutations(files);
+    auto fingerprint = InspectProjectSceneFingerprint(project.Root(), project.ScenePath());
+    REQUIRE((fingerprint.HasValue()));
+    auto saved = SaveProjectScene(project.Root(), project.ScenePath(), snapshot, fingerprint.Value(), false, mutations, files);
+    REQUIRE((saved.HasValue()));
+    auto loaded = LoadProjectDefaultScene(project.Root());
+    REQUIRE((loaded.HasValue() && loaded.Value().has_value()));
+    REQUIRE((loaded.Value()->objects.size() == 1));
+    CHECK(loaded.Value()->objects.front().meshAsset == asset.Value());
+    CHECK_FALSE(loaded.Value()->objects.front().primitiveMesh.has_value());
+}
+
 TEST_CASE("Scene Comparison Classifies Typed Added Removed And Modified Objects", "[unit][editor][persistence][compare]") {
     SceneObjectSnapshot documentModified{
         .id = SceneObjectId{1},
@@ -236,6 +304,7 @@ TEST_CASE("Scene Comparison Classifies Typed Added Removed And Modified Objects"
     diskModified.name = "Disk Name";
     diskModified.localTransform.translation = {2.0F, 0.0F, 0.0F};
     diskModified.components.light = Runtime::LightComponent{.kind = Runtime::LightKind::Point};
+    diskModified.editorState.locked = true;
 
     const SceneDocumentSnapshot document{
         .objects =
@@ -272,6 +341,7 @@ TEST_CASE("Scene Comparison Classifies Typed Added Removed And Modified Objects"
     REQUIRE((modified.fields.name));
     REQUIRE((modified.fields.transform));
     REQUIRE((modified.fields.components));
+    REQUIRE((modified.fields.editorState));
     REQUIRE((!modified.fields.parent));
     REQUIRE((!modified.fields.primitive));
     REQUIRE((comparison.objects[1].kind == SceneObjectComparisonKind::RemovedFromDisk));

@@ -1,6 +1,7 @@
 #include "ContentBrowserModel.h"
 
 #include "Horo/Assets/AssetImportMetadata.h"
+#include "Horo/Assets/MeshEditorPayload.h"
 #include "Horo/Foundation/PathUtils.h"
 
 #include <algorithm>
@@ -196,7 +197,7 @@ namespace Horo::Editor {
             std::uint32_t positionCount = 0;
             std::uint32_t faceCount = 0;
             if (!input || !ReadLittleEndian32(input, schemaVersion) || !ReadLittleEndian32(input, positionCount) ||
-                !ReadLittleEndian32(input, faceCount) || schemaVersion != 1 || positionCount == 0) {
+                !ReadLittleEndian32(input, faceCount) || schemaVersion != Assets::MeshEditorPayloadSchemaVersion || positionCount == 0) {
                 return {};
             }
             static_cast<void>(faceCount);

@@ -13,6 +13,7 @@ struct Fonts;
 namespace Horo::Editor
 {
 class EditorDataBus;
+class NotificationService;
 class ILocalizationService;
 struct EditorSettingsSnapshot;
 

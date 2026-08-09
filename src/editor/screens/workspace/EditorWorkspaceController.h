@@ -2,8 +2,10 @@
 
 #include "Horo/Application/GameplayBuildService.h"
 #include "Horo/Editor/EditorDataBus.h"
+#include "Horo/Editor/NotificationService.h"
 #include "Horo/Editor/ProjectMutation.h"
 #include "editor/document/EditorViewportSceneExtractor.h"
+#include "editor/document/EditorAssetMeshCache.h"
 #include "editor/document/SceneDocumentComparison.h"
 #include "editor/document/SceneDocumentPersistence.h"
 #include "editor/document/SceneFileWatchService.h"
@@ -19,6 +21,7 @@
 #include <vector>
 
 namespace Horo::Editor {
+    class ILocalizationService;
     /** @brief Platform navigation capability for one validated diagnostic source location. */
     using DiagnosticSourceNavigator = std::function<bool(const DiagnosticSourceRequest &)>;
 
@@ -31,7 +34,8 @@ namespace Horo::Editor {
                                   const Assets::AssetImporterCatalogSnapshot *importerCatalog = nullptr, JobSystem *jobs = nullptr,
                                   DiagnosticSourceNavigator diagnosticSourceNavigator = {},
                                   Application::GameplayBuildService *gameplayBuilds = nullptr,
-                                  Application::GameplayBuildEnvironment gameplayBuildEnvironment = {});
+                                  Application::GameplayBuildEnvironment gameplayBuildEnvironment = {},
+                                  const ILocalizationService *localization = nullptr);
         ~EditorWorkspaceController() = default;
 
         [[nodiscard]] const EditorWorkspaceViewModel &ViewModel() const noexcept {
@@ -40,6 +44,14 @@ namespace Horo::Editor {
 
         [[nodiscard]] EditorDataBus &DataBus() noexcept {
             return m_dataBus;
+        }
+
+        [[nodiscard]] NotificationService &Notifications() noexcept {
+            return m_notifications;
+        }
+
+        [[nodiscard]] const NotificationService &Notifications() const noexcept {
+            return m_notifications;
         }
 
         /** @brief Returns the current monotonic authoritative selection revision. */
@@ -118,6 +130,7 @@ namespace Horo::Editor {
         DiagnosticSourceNavigator m_diagnosticSourceNavigator;
         Application::GameplayBuildService *m_gameplayBuilds{};
         Application::GameplayBuildEnvironment m_gameplayBuildEnvironment;
+        const ILocalizationService *m_localization{};
         std::optional<Application::GameplayBuildSessionId> m_gameplayBuildSession;
         bool m_playAfterGameplayBuild{false};
         float m_nativeBuildDebounceSeconds{-1.0F};
@@ -127,13 +140,16 @@ namespace Horo::Editor {
         std::unique_ptr<SceneFileWatchService> m_sceneFileWatch;
         EditorWorkspaceViewModel m_viewModel;
         EditorDataBus m_dataBus;
+        NotificationService m_notifications{m_dataBus};
         SceneDocument m_document;
         EditorHistory m_history;
         SceneDocumentCommandExecutor m_documentCommands{m_document, m_history};
         CreateSceneObjectUseCase m_createSceneObject{m_document, m_documentCommands};
+        InstantiateSceneAssetUseCase m_instantiateSceneAsset{m_document, m_documentCommands};
         EditorSelectionModel m_selection{m_document, m_dataBus};
         EditorViewportModel m_viewport{m_dataBus};
         Runtime::PrimitiveMeshCache m_primitiveMeshCache;
+        EditorAssetMeshCache m_assetMeshCache;
         EditorViewportSceneSnapshot m_viewportScene;
         std::uint64_t m_viewportSceneRevision{};
         std::optional<SceneDocumentSnapshot> m_deferredRuntimeSnapshot;
@@ -182,8 +198,12 @@ namespace Horo::Editor {
         void RefreshPlayStateProjection();
         void ExtractPlayViewportScene();
         void HandleCreatePrimitive(Runtime::PrimitiveId primitive, std::optional<SceneObjectId> parent);
+        void HandleInstantiateAsset(const AssetSceneDropRequest &request);
+        void LoadDocumentAssetMeshes();
+        [[nodiscard]] std::string Localized(std::string_view key, std::string_view fallback) const;
         void HandleDuplicateObject(SceneObjectId object);
         void HandleDeleteObject(SceneObjectId object);
+        void HandleDeleteSelectedObjects(std::vector<SceneObjectId> objects);
         void HandleDocumentCommandResult(Result<SceneCommandResult> result, const char *operation);
         void PreviewObjectTransform(SceneObjectId object, const Math::Transform &transform);
         void PreviewObjectTransforms(std::span<const SceneObjectTransformUpdate> updates);
@@ -203,6 +223,7 @@ namespace Horo::Editor {
         void PasteContentBrowserAsset(const std::string &absoluteDirectory);
         void TransferContentBrowserAsset(const ContentBrowserAssetTransferRequest &request);
         void CreateContentBrowserFolder(const std::string &absoluteDirectory, const std::string &name);
+        void CreateGameplayBehavior(const CreateGameplayBehaviorRequest &request);
         void CreateGameplayBehavior(bool nativeBehavior, const std::string &absoluteDirectory);
         void RefreshGameplayRegistry();
         void RefreshAvailableBehaviorProjection();

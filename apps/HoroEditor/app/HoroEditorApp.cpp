@@ -1,5 +1,6 @@
 #include "HoroEditorApp.h"
 
+#include "Horo/Application/HostObservability.h"
 #include "Horo/Application/ProjectCompatibility.h"
 #include "Horo/Application/GameplayBuildService.h"
 #include "Horo/Assets/AssetRegistry.h"
@@ -31,6 +32,9 @@
 #include "Horo/Foundation/OperationStore.h"
 #include "Horo/Foundation/Paths.h"
 #include "Horo/Foundation/Platform.h"
+#if defined(HORO_HAS_OPENTELEMETRY)
+#include "Horo/Foundation/Telemetry/OpenTelemetrySink.h"
+#endif
 #include "Horo/Platform/ExternalProcess.h"
 #include "Horo/Runtime/Input.h"
 #include "Horo/Runtime/Render/RenderFrontend.h"
@@ -68,6 +72,7 @@
 #include <cerrno>
 #include <charconv>
 #include <cstdio>
+#include <cstdlib>
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
 #include <memory>
@@ -297,6 +302,57 @@ namespace Horo::Editor {
             }
             guiRenderer.DestroyTexture(textures.logo);
             textures.logo = 0;
+        }
+
+        /** @brief Composes the editor's single local runtime and optional approved OTLP sink. */
+        [[nodiscard]] std::unique_ptr<Application::HostObservabilitySession> InitializeEditorObservability() {
+            Application::HostObservabilityConfiguration hostConfiguration{
+                .logging = {.logDirectory = "~/.horo/logs",
+                            .baseName = "horo-editor",
+                            .hostName = "HoroEditor",
+                            .hostVersion = HORO_ENGINE_VERSION_STRING},
+                .identity = {.processRole = "editor",
+                             .engineVersion = HORO_ENGINE_VERSION_STRING,
+                             .buildConfiguration = HORO_BUILD_CONFIGURATION,
+                             .sourceRevision = HORO_SOURCE_REVISION}};
+#if defined(HORO_HAS_OPENTELEMETRY)
+            const char *endpoint = std::getenv("HORO_OTEL_ENDPOINT");
+            const char *approval = std::getenv("HORO_OTEL_EXPORT_APPROVED");
+            if (endpoint != nullptr && approval != nullptr && std::string_view{approval} == "1") {
+                Telemetry::OpenTelemetryConfiguration exporterConfiguration;
+                exporterConfiguration.endpoint = endpoint;
+                exporterConfiguration.serviceName = "horo-editor";
+                exporterConfiguration.exportApproved = true;
+                if (auto exporter = Telemetry::OpenTelemetrySink::Create(exporterConfiguration); exporter != nullptr)
+                    hostConfiguration.logging.additionalSinks.push_back(std::move(exporter));
+                else
+                    std::fprintf(stderr, "[Observability] approved OTLP configuration was rejected; continuing with local sinks\n");
+            }
+#endif
+            auto session = Application::HostObservabilitySession::Start(std::move(hostConfiguration));
+            if (session == nullptr)
+                std::fprintf(stderr, "[Observability] local runtime initialization failed; emergency logging remains available\n");
+            return session;
+        }
+
+        struct EditorTelemetry {
+            Telemetry::Gauge frameNumber;
+            Telemetry::Gauge frameDuration;
+            Telemetry::Gauge droppedRecords;
+            Telemetry::Gauge sinkFailures;
+        };
+
+        [[nodiscard]] EditorTelemetry RegisterEditorTelemetry() {
+            return {
+                .frameNumber = Telemetry::Runtime::RegisterGauge(
+                    {.name = "horo.editor.frame.number", .subsystem = "Editor.Runtime", .unit = "frames"}),
+                .frameDuration = Telemetry::Runtime::RegisterGauge(
+                    {.name = "horo.editor.frame.duration", .subsystem = "Editor.Runtime", .unit = "seconds"}),
+                .droppedRecords = Telemetry::Runtime::RegisterGauge(
+                    {.name = "horo.observability.records.dropped", .subsystem = "Foundation.Observability", .unit = "records"}),
+                .sinkFailures = Telemetry::Runtime::RegisterGauge(
+                    {.name = "horo.observability.sink.failures", .subsystem = "Foundation.Observability", .unit = "failures"}),
+            };
         }
 
         // Shared components and the welcome screen renderer live under src/editor/design_system and src/editor/screens.
@@ -576,6 +632,7 @@ namespace Horo::Editor {
         struct RunEditorMainLoopParams {
             bool exitAfterFirstFrame;
             std::uint64_t exitAfterFrames;
+            EditorTelemetry &telemetry;
             SDL_Window *window;
             ImGuiIO &io;
             const Fonts &fonts;
@@ -643,6 +700,14 @@ namespace Horo::Editor {
                     case Runtime::RuntimePhase::CommitDeferredLifecycleChanges:
                         return Result<void>::Success();
                     case Runtime::RuntimePhase::EndFrame:
+                        if (context.frameNumber % 60U == 1U) {
+                            p_->telemetry.frameNumber.Set(static_cast<double>(context.frameNumber));
+                            p_->telemetry.frameDuration.Set(
+                                static_cast<double>(context.variableDelta.ToNanoseconds()) / 1'000'000'000.0);
+                            const Telemetry::Statistics statistics = Telemetry::Runtime::GetStatistics();
+                            p_->telemetry.droppedRecords.Set(static_cast<double>(statistics.droppedRecords));
+                            p_->telemetry.sinkFailures.Set(static_cast<double>(statistics.sinkFailures));
+                        }
                         if (p_->exitAfterFirstFrame || (p_->exitAfterFrames > 0 && context.frameNumber >= p_->exitAfterFrames)) {
                             static_cast<void>(screenHost_->RequestCloseApplication());
                         }
@@ -958,11 +1023,12 @@ namespace Horo::Editor {
     /** @copydoc RunEditorGuiApp */
     int RunEditorGuiApp(const int argc, char **argv) {
         // ── Bootstrap logging before any subsystem ───────────────────────
-        Log::Logger::Init("~/.horo/logs", "horo-editor");
+        auto observabilitySession = InitializeEditorObservability();
+        EditorTelemetry editorTelemetry = RegisterEditorTelemetry();
         auto structuredLogStore = std::make_shared<Log::StructuredLogStore>(4096U);
         Log::Logger::SetStructuredLogStore(structuredLogStore);
         BuildOutputStore buildOutputStore{2048U};
-        OperationStore operationStore{64U, 200U};
+        OperationStore operationStore{64U, 200U, std::make_shared<LoggingOperationHistorySink>()};
 
         // Setup base MDC for the whole application run
         Log::LogContext appCtx("app", "horo-editor", "run_id", "1");
@@ -1080,6 +1146,7 @@ namespace Horo::Editor {
                                                                     ProjectLoadingRouteParameters{opts.projectRoot, startupProjectName}};
         RunEditorMainLoopParams loopParams{opts.exitAfterFirstFrame,
                                            opts.exitAfterFrames,
+                                           editorTelemetry,
                                            w,
                                            io,
                                            fonts,

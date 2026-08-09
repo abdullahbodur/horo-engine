@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "Horo/Assets/AssetImporter.h"
+#include "Horo/Assets/MeshEditorPayload.h"
 #include "Horo/Foundation/CancellationToken.h"
 #include "ObjMeshImporter.h"
 
@@ -23,7 +24,6 @@ AssetTypeId Type(const std::string_view value)
     REQUIRE(parsed.HasValue());
     return parsed.Value();
 }
-
 /** @brief Helper: import a string as OBJ and return the editor payload bytes. */
 Result<std::vector<std::uint8_t>> ImportString(const char *objSource)
 {
@@ -79,7 +79,7 @@ f 1 2 3
     REQUIRE(payload.size() > 28); // header at minimum
 
     // Schema version 2 carries preview topology after the vertex streams.
-    REQUIRE(ReadLE32(payload, 0) == 2);
+    REQUIRE(ReadLE32(payload, 0) == MeshEditorPayloadSchemaVersion);
 
     // Vertex count = 3
     REQUIRE(ReadLE32(payload, 4) == 3);
@@ -136,7 +136,7 @@ f 1/1/1 2/2/1 3/3/1
     REQUIRE(result.HasValue());
 
     auto &payload = result.Value();
-    REQUIRE(ReadLE32(payload, 0) == 2);
+    REQUIRE(ReadLE32(payload, 0) == MeshEditorPayloadSchemaVersion);
     REQUIRE(ReadLE32(payload, 4) == 3); // vertices
     REQUIRE(ReadLE32(payload, 8) == 1); // faces
 }

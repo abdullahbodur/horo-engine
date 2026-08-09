@@ -1,6 +1,7 @@
 #include "Horo/Foundation/JobSystem.h"
 
 #include "../FoundationErrors.h"
+#include "Horo/Foundation/Telemetry/Operation.h"
 
 #include <condition_variable>
 #include <deque>
@@ -25,7 +26,8 @@ namespace Horo {
 
     struct JobRecord {
         JobRecord(const JobId jobId, const JobDescriptor &descriptor, JobFunction jobWork)
-            : id(jobId), cancellation(descriptor.parentCancellation), work(std::move(jobWork)) {}
+            : id(jobId), cancellation(descriptor.parentCancellation), work(std::move(jobWork)),
+              operationContext(Telemetry::CaptureOperationContext()) {}
 
         [[nodiscard]] std::mutex &Mutex() const noexcept {
             return mutex;
@@ -41,6 +43,7 @@ namespace Horo {
         std::optional<Error> error;
         CancellationSource cancellation;
         JobFunction work;
+        Telemetry::OperationContext operationContext;
     };
 
     struct JobSystem::State {
@@ -93,6 +96,7 @@ namespace Horo {
                 record->state = JobState::Running;
             }
 
+            const Telemetry::ScopedOperationContext operationContext{record->operationContext};
             try {
                 Result<void> outcome = record->work(record->cancellation.Token());
                 if (outcome.HasError()) {

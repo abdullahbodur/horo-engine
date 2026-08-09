@@ -6,6 +6,7 @@ namespace Horo {
         const ErrorDomainId HashingDomain{"horo.foundation.hashing"};
         const ErrorDomainId JobDomain{"horo.foundation.jobs"};
         const ErrorDomainId MathDomain{"horo.foundation.math"};
+        const ErrorDomainId ObservabilityDomain{"horo.foundation.observability"};
     }  // namespace
 
     namespace ConfigurationErrors {
@@ -134,6 +135,37 @@ namespace Horo {
                                                     .retryable = false,
                                                     .userActionable = true};
     }  // namespace HashingErrors
+
+    namespace ObservabilityErrors {
+        const ErrorCodeDescriptor InvalidBundleRequest{.domain = ObservabilityDomain,
+                                                       .code = ErrorCode{"observability.bundle.invalid_request"},
+                                                       .defaultSeverity = ErrorSeverity::Error,
+                                                       .summary = "Diagnostic bundle request is invalid.",
+                                                       .remediationHint = "Use absolute output and allowlisted regular files.",
+                                                       .retryable = false,
+                                                       .userActionable = true};
+        const ErrorCodeDescriptor BundleReadFailed{.domain = ObservabilityDomain,
+                                                   .code = ErrorCode{"observability.bundle.read_failed"},
+                                                   .defaultSeverity = ErrorSeverity::Error,
+                                                   .summary = "Diagnostic bundle input could not be read.",
+                                                   .remediationHint = "Verify source file permissions.",
+                                                   .retryable = true,
+                                                   .userActionable = true};
+        const ErrorCodeDescriptor BundleWriteFailed{.domain = ObservabilityDomain,
+                                                    .code = ErrorCode{"observability.bundle.write_failed"},
+                                                    .defaultSeverity = ErrorSeverity::Error,
+                                                    .summary = "Diagnostic bundle could not be written.",
+                                                    .remediationHint = "Verify destination permissions and available storage.",
+                                                    .retryable = true,
+                                                    .userActionable = true};
+        const ErrorCodeDescriptor BundleSizeExceeded{.domain = ObservabilityDomain,
+                                                     .code = ErrorCode{"observability.bundle.size_exceeded"},
+                                                     .defaultSeverity = ErrorSeverity::Error,
+                                                     .summary = "Diagnostic bundle input exceeded its size limit.",
+                                                     .remediationHint = "Reduce the allowlist or increase the explicit bound.",
+                                                     .retryable = false,
+                                                     .userActionable = true};
+    }  // namespace ObservabilityErrors
 
     namespace Math::Errors {
         const ErrorCodeDescriptor InvalidAffineMatrix{.domain = MathDomain,

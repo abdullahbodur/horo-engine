@@ -121,10 +121,10 @@ namespace Horo::Editor {
     }
 
     /** @copydoc ExtractEditorViewportScene */
-    Result<EditorViewportSceneSnapshot> ExtractEditorViewportScene(const Runtime::RuntimeSceneView scene,
-                                                                   const DocumentRevision documentRevision,
-                                                                   const EditorViewportCamera &camera,
-                                                                   Runtime::PrimitiveMeshCache &meshCache) {
+    Result<EditorViewportSceneSnapshot> ExtractEditorViewportScene(
+        const Runtime::RuntimeSceneView scene, const DocumentRevision documentRevision, const EditorViewportCamera &camera,
+        Runtime::PrimitiveMeshCache &meshCache, const SceneDocumentSnapshot *document, const EditorAssetMeshCache *assetMeshes,
+        const bool respectEditorVisibility) {
         if (!scene.RuntimeId().IsValid())
             return Result<EditorViewportSceneSnapshot>::Failure(
                 ExtractionError(ViewportSceneErrors::InvalidResult, "Runtime scene view is invalid."));
@@ -135,12 +135,18 @@ namespace Horo::Editor {
         EditorViewportSceneSnapshot extracted{.documentRevision = documentRevision, .runtimeSceneId = scene.RuntimeId(), .camera = camera};
         extracted.instances.reserve(scene.SlotCount());
         extracted.instanceObjects.reserve(scene.SlotCount());
+        extracted.instancePickable.reserve(scene.SlotCount());
         extracted.lights.reserve(std::min(scene.SlotCount(), Render::MaximumForwardLights));
         extracted.lightObjects.reserve(std::min(scene.SlotCount(), Render::MaximumForwardLights));
 
         for (std::size_t slot = 0; slot < scene.SlotCount(); ++slot) {
             const std::optional<Runtime::RuntimeEntityView> entity = scene.EntityAt(slot);
             if (!entity)
+                continue;
+            std::optional<ResolvedSceneObjectEditorState> editorState;
+            if (document != nullptr && entity->authoredObject.has_value())
+                editorState = ResolveSceneObjectEditorState(document->objects, SceneObjectId{entity->authoredObject->value});
+            if (respectEditorVisibility && editorState.has_value() && !editorState->effectivelyVisible)
                 continue;
             if (entity->components->light.has_value() && extracted.lights.size() < Render::MaximumForwardLights) {
                 if (!entity->authoredObject)
@@ -183,6 +189,39 @@ namespace Horo::Editor {
             extracted.instances.push_back(
                 EditorViewportInstance{handle, world.Value(), resource->localBounds, Render::CoreDefaultMaterial, {}});
             extracted.instanceObjects.push_back(SceneObjectId{entity->authoredObject->value});
+            extracted.instancePickable.push_back(editorState.has_value() && editorState->effectivelyLocked ? 0U : 1U);
+        }
+        if (document != nullptr && assetMeshes != nullptr) {
+            for (const SceneObjectSnapshot &object : document->objects) {
+                if (!object.meshAsset.has_value())
+                    continue;
+                const std::optional<ResolvedSceneObjectEditorState> editorState =
+                    ResolveSceneObjectEditorState(document->objects, object.id);
+                if (respectEditorVisibility && editorState.has_value() && !editorState->effectivelyVisible)
+                    continue;
+                const std::optional<EditorAssetMeshView> assetMesh = assetMeshes->Find(*object.meshAsset);
+                if (!assetMesh.has_value() || assetMesh->mesh == nullptr)
+                    continue;
+                const std::optional<Runtime::EntityRef> entity = scene.Find(Runtime::SceneObjectId{object.id.value});
+                if (!entity.has_value())
+                    return Result<EditorViewportSceneSnapshot>::Failure(
+                        ExtractionError(ViewportSceneErrors::ObjectNotFound, "Imported mesh scene object does not exist."));
+                if (std::ranges::find(extracted.meshResources, assetMesh->handle, &EditorViewportMeshResourceView::handle) ==
+                    extracted.meshResources.end()) {
+                    extracted.meshResources.emplace_back(assetMesh->handle, assetMesh->mesh->vertices, assetMesh->mesh->indices,
+                                                         assetMesh->mesh->localBounds);
+                }
+                const Result<Math::Mat4> world = ResolveWorld(scene, *entity, {}, scene.SlotCount() + 1);
+                if (world.HasError())
+                    return Result<EditorViewportSceneSnapshot>::Failure(world.ErrorValue());
+                extracted.instances.push_back(EditorViewportInstance{assetMesh->handle,
+                                                                     world.Value(),
+                                                                     assetMesh->mesh->localBounds,
+                                                                     Render::CoreDefaultMaterial,
+                                                                     {}});
+                extracted.instanceObjects.push_back(object.id);
+                extracted.instancePickable.push_back(editorState.has_value() && editorState->effectivelyLocked ? 0U : 1U);
+            }
         }
         if (!extracted.View().IsValid())
             return Result<EditorViewportSceneSnapshot>::Failure(

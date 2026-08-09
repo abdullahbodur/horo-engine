@@ -3,6 +3,7 @@
 #include "FbxMeshImporter.h"
 
 #include "Horo/Assets/AssetImporter.h"
+#include "Horo/Assets/MeshEditorPayload.h"
 #include "Horo/Foundation/CancellationToken.h"
 
 #include <cstdint>
@@ -27,7 +28,6 @@ using namespace Horo::Assets;
         std::istreambuf_iterator<char>{},
     };
 }
-
 [[nodiscard]] std::uint32_t ReadU32(const std::span<const std::uint8_t> bytes,
                                     const std::size_t offset) {
     return static_cast<std::uint32_t>(bytes[offset]) |
@@ -65,7 +65,7 @@ TEST_CASE("FBX importer combines transformed scene meshes into a shaded preview"
         },
         CancellationToken{});
     REQUIRE(imported.HasValue());
-    REQUIRE((ReadU32(imported.Value().editorPayload, 0) == 2));
+    REQUIRE((ReadU32(imported.Value().editorPayload, 0) == MeshEditorPayloadSchemaVersion));
     REQUIRE((ReadU32(imported.Value().editorPayload, 4) > 8));
     REQUIRE((ReadU32(imported.Value().editorPayload, 8) > 8));
 

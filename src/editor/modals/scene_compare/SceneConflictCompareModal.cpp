@@ -47,7 +47,7 @@ namespace Horo::Editor {
                 append(context.localization.Get("editor", "workspace.scene_compare.field.parent"));
             if (object.fields.transform)
                 append(context.localization.Get("editor", "workspace.scene_compare.field.transform"));
-            if (object.fields.primitive)
+            if (object.fields.primitive || object.fields.asset)
                 append(context.localization.Get("editor", "workspace.scene_compare.field.primitive"));
             if (object.fields.components)
                 append(context.localization.Get("editor", "workspace.scene_compare.field.components"));

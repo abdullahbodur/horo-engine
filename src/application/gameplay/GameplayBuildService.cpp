@@ -97,7 +97,7 @@ namespace Horo::Application {
             if (error || size > maximumBytes)
                 return Result<std::string>::Failure(MakeError(InvalidRequest, "File exceeds the bounded SHA-256 budget."));
             std::ifstream stream{path, std::ios::binary};
-            std::vector<char> bytes(static_cast<std::size_t>(size));
+            std::vector<char> bytes(size);
             stream.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
             if ((!stream && !stream.eof()) || static_cast<std::uintmax_t>(stream.gcount()) != size)
                 return Result<std::string>::Failure(MakeError(InvalidRequest, "File could not be hashed."));
@@ -132,8 +132,7 @@ namespace Horo::Application {
             struct stat information{};
             if (stat(identity.canonicalPath.c_str(), &information) != 0)
                 return Result<CompilerIdentity>::Failure(MakeError(InvalidRequest, "Compiler file identity is unavailable."));
-            identity.nativeFileIdentity = std::to_string(static_cast<std::uintmax_t>(information.st_dev)) + ":" +
-                                          std::to_string(static_cast<std::uintmax_t>(information.st_ino));
+            identity.nativeFileIdentity = std::format("{} : {}", static_cast<std::uintmax_t>(information.st_dev), static_cast<std::uintmax_t>(information.st_ino));
 #endif
             const std::string cacheKey = identity.canonicalPath.generic_string() + "\n" + identity.nativeFileIdentity + "\n" +
                                          std::to_string(identity.size) + "\n" + std::to_string(identity.lastWrite);
@@ -152,7 +151,7 @@ namespace Horo::Application {
             identity.binaryHash = std::move(binaryHash).Value();
             {
                 std::lock_guard lock(cacheMutex);
-                hashes.emplace(cacheKey, identity.binaryHash);
+                hashes.try_emplace(cacheKey, identity.binaryHash);
             }
             return Result<CompilerIdentity>::Success(std::move(identity));
         }
@@ -381,12 +380,12 @@ namespace Horo::Application {
             ~OutputSummaryGuard() {
                 if (state == nullptr || state->output == nullptr || budget == nullptr || budget->suppressedLines == 0)
                     return;
-                BuildOutputRecord record{.timestampUtc = std::chrono::system_clock::now(),
-                                         .status = BuildOutputStatus::Info,
-                                         .phase = "output",
-                                         .message = "Suppressed " + std::to_string(budget->suppressedLines) + " build output lines (" +
-                                                    std::to_string(budget->suppressedBytes) +
-                                                    " bytes) after the session budget was reached."};
+                BuildOutputRecord
+                    record{.timestampUtc = std::chrono::system_clock::now(),
+                           .status = BuildOutputStatus::Info,
+                           .phase = "output",
+                           .message = std::format("Suppressed {} build output lines ({} bytes) after the session budget was reached.",
+                                                  budget->suppressedLines, budget->suppressedBytes)};
                 {
                     std::lock_guard lock(session->mutex);
                     record.operationId = session->snapshot.operationId;

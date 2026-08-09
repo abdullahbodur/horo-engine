@@ -1,14 +1,18 @@
 add_library(HoroFoundation STATIC
         foundation/FoundationErrors.cpp
         foundation/diagnostics/ErrorCode.cpp
+        foundation/diagnostics/DiagnosticBundle.cpp
         foundation/hashing/Sha256.cpp
         foundation/math/SceneMath.cpp
         foundation/text/String.cpp
         foundation/logging/Logger.cpp
         foundation/logging/LogContext.cpp
         foundation/logging/StructuredLogStore.cpp
+        foundation/telemetry/Telemetry.cpp
+        foundation/telemetry/Operation.cpp
         foundation/diagnostics/BuildOutputStore.cpp
         foundation/diagnostics/OperationStore.cpp
+        foundation/diagnostics/OperationHistory.cpp
         foundation/data_bus/DataBus.cpp
         foundation/jobs/JobSystem.cpp
         foundation/config/Configuration.cpp
@@ -19,10 +23,32 @@ add_library(HoroFoundation STATIC
 add_library(HoroEngine::Foundation ALIAS HoroFoundation)
 
 target_compile_features(HoroFoundation PUBLIC cxx_std_20)
+target_compile_definitions(HoroFoundation PUBLIC HORO_ENABLE_TELEMETRY=$<BOOL:${HORO_ENABLE_TELEMETRY}>)
 target_include_directories(HoroFoundation
         PUBLIC
         ${PROJECT_SOURCE_DIR}/include
+        PRIVATE
+        $<TARGET_PROPERTY:nlohmann_json::nlohmann_json,INTERFACE_INCLUDE_DIRECTORIES>
 )
+
+if (HORO_ENABLE_OPENTELEMETRY)
+    add_library(HoroOpenTelemetry STATIC
+            foundation/telemetry/OpenTelemetrySink.cpp
+    )
+    add_library(HoroEngine::OpenTelemetry ALIAS HoroOpenTelemetry)
+    target_compile_features(HoroOpenTelemetry PUBLIC cxx_std_20)
+    target_include_directories(HoroOpenTelemetry
+            PUBLIC
+            ${PROJECT_SOURCE_DIR}/include
+    )
+    target_link_libraries(HoroOpenTelemetry
+            PUBLIC
+            HoroEngine::Foundation
+            PRIVATE
+            nlohmann_json::nlohmann_json
+            CURL::libcurl
+    )
+endif ()
 
 add_library(HoroPlatform STATIC
         platform/Platform.cpp
@@ -50,6 +76,7 @@ target_include_directories(HoroPlatform
 target_link_libraries(HoroPlatform PUBLIC HoroEngine::Foundation)
 
 add_library(HoroApplication STATIC
+        application/observability/HostObservability.cpp
         application/project/ProjectErrors.cpp
         application/project/ProjectVersion.cpp
         application/project/ProjectCompatibility.cpp
@@ -348,9 +375,11 @@ target_include_directories(HoroEditorViewportScene
 target_link_libraries(HoroEditorViewportScene PUBLIC HoroEngine::EditorModel)
 
 add_library(HoroEditorRenderExtraction STATIC
+        editor/document/EditorAssetMeshCache.cpp
         editor/document/EditorRenderExtractionErrors.cpp
         editor/document/EditorViewportSceneExtractor.cpp
         editor/document/EditorViewportPicking.cpp
+        editor/screens/workspace/AssetSceneDrop.cpp
 )
 add_library(HoroEngine::EditorRenderExtraction ALIAS HoroEditorRenderExtraction)
 
@@ -409,6 +438,7 @@ add_library(HoroEditorServices STATIC
         editor/project_model/ProjectMutation.cpp
         editor/project_model/ProjectMigrationTransaction.cpp
         editor/project_model/ProjectOpenService.cpp
+        editor/project_model/ProjectIntegrityValidatorService.cpp
         editor/project_model/RecentProjectInspectionService.cpp
         editor/project_model/ProjectMetadata.cpp
         editor/project_model/RendererAvailability.cpp
@@ -420,6 +450,7 @@ add_library(HoroEditorServices STATIC
         editor/status_bar/EditorStatusBarModel.cpp
         editor/hierarchy/HierarchyModel.cpp
         editor/data_bus/EditorDataBus.cpp
+        editor/NotificationService.cpp
         editor/input/EditorInputActions.cpp
         editor/modals/EditorModalHost.cpp
         editor/modals/settings/SettingsModalLifecycle.cpp
@@ -502,6 +533,7 @@ if (HORO_BUILD_EDITOR_GUI)
 
     add_library(HoroGui STATIC
             editor/design_system/components/EditorUiComponents.cpp
+            editor/design_system/components/EditorSnackbarHost.cpp
             editor/app/EditorTheme.cpp
             editor/menu/EditorMenuPlatform.cpp
             editor/status_bar/EditorStatusBar.cpp

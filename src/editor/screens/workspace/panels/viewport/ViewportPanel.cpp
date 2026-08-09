@@ -4,14 +4,29 @@
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/EditorUiComponents.h"
 #include "Horo/Editor/Localization/ILocalizationService.h"
+#include "editor/screens/workspace/AssetSceneDrop.h"
 #include "visualizers/light/LightMarkerLayer.h"
 
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <format>
+#include <cstring>
 
 namespace Horo::Editor {
+    namespace {
+        [[nodiscard]] std::optional<AssetSceneDragPayload> ReadAssetPayload(const ImGuiPayload *payload) {
+            if (payload == nullptr || !payload->IsDataType(AssetSceneDragPayloadType) || payload->Data == nullptr ||
+                payload->DataSize != sizeof(AssetSceneDragPayload))
+                return std::nullopt;
+            AssetSceneDragPayload result;
+            std::memcpy(&result, payload->Data, sizeof(result));
+            if (result.assetId.back() != '\0' || result.assetType.back() != '\0')
+                return std::nullopt;
+            return result;
+        }
+    }  // namespace
+
     /** @copydoc ViewportPanel::OnAttach */
     void ViewportPanel::OnAttach(PanelContext &context) {
         viewportRenderer_ = context.viewportRenderer;
@@ -89,13 +104,43 @@ namespace Horo::Editor {
                 surfaceHovered = ImGui::IsItemHovered();
             }
             const Math::ClipDepthRange depthRange = viewportRenderer_->ClipDepthRange();
+            bool assetDragActive = false;
+            if ((!pointerOverProjection || interaction_.IsActive()) && ImGui::BeginDragDropTarget()) {
+                const ImGuiPayload *accepted = ImGui::AcceptDragDropPayload(
+                    AssetSceneDragPayloadType,
+                    ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
+                const std::optional<AssetSceneDragPayload> payload = ReadAssetPayload(accepted);
+                if (payload.has_value()) {
+                    assetDragActive = true;
+                    const AssetSceneDropPolicyResult policy = EvaluateAssetSceneDrop(*payload);
+                    drawList.AddRect(origin, {origin.x + width, origin.y + height},
+                                     Theme::U32(policy.canInstantiate ? Theme::Accent() : Theme::Err()), 3.0F, 0, 2.0F);
+                    if (accepted->IsDelivery()) {
+                        const ImVec2 mouse = ImGui::GetMousePos();
+                        command.command = EditorWorkspaceViewCommand::InstantiateAsset;
+                        command.assetSceneDrop = AssetSceneDropRequest{
+                            .assetId = payload->assetId.data(),
+                            .assetType = payload->assetType.data(),
+                            .parent = viewModel.primarySelection,
+                            .target = AssetSceneDropTarget::Viewport,
+                            .normalizedX = std::clamp((mouse.x - origin.x) / width, 0.0F, 1.0F),
+                            .normalizedY = std::clamp((mouse.y - origin.y) / height, 0.0F, 1.0F),
+                            .aspect = width / height,
+                            .depthRange = depthRange,
+                            .documentRevision = viewModel.documentRevision,
+                        };
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
             const std::optional<SceneObjectId> clickedLight =
                 DrawViewportLightMarkers(drawList, origin, width, height, viewModel.viewportCamera, viewModel.viewportLights,
-                                         viewModel.primarySelection, surfaceHovered && !interaction_.IsActive(), depthRange);
+                                         viewModel.primarySelection, surfaceHovered && !interaction_.IsActive() && !assetDragActive,
+                                         depthRange);
             if (clickedLight.has_value()) {
                 command.command = EditorWorkspaceViewCommand::SelectObject;
                 command.objectPayload = *clickedLight;
-            } else if (!pointerOverProjection || interaction_.IsActive()) {
+            } else if ((!pointerOverProjection || interaction_.IsActive()) && !assetDragActive) {
                 interaction_.Draw(drawList, origin, width, height, surfaceHovered, viewModel, command, context, ImGui::GetIO().DeltaTime,
                                   depthRange);
             }

@@ -4,6 +4,18 @@ set(HORO_ENGINE_VERSION "0.1.0")
 
 project(HoroEngine VERSION ${HORO_ENGINE_VERSION} LANGUAGES CXX C)
 
+execute_process(
+    COMMAND git rev-parse --short=12 HEAD
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    RESULT_VARIABLE HORO_GIT_REVISION_RESULT
+    OUTPUT_VARIABLE HORO_SOURCE_REVISION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(NOT HORO_GIT_REVISION_RESULT EQUAL 0 OR HORO_SOURCE_REVISION STREQUAL "")
+    set(HORO_SOURCE_REVISION "unknown")
+endif()
+
 set(HORO_GAMEPLAY_SDK_FINGERPRINT
     "horo-${HORO_ENGINE_VERSION}-gameplay-sdk1-${CMAKE_CXX_COMPILER_ID}-${CMAKE_CXX_COMPILER_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
 )
@@ -27,6 +39,8 @@ endif()
 option(HORO_BUILD_RENDER_METAL "Build the Metal renderer backend" ${_HORO_BUILD_RENDER_METAL_DEFAULT})
 option(HORO_ENABLE_GPU_SMOKE_TESTS "Register tests that require a display server and hardware graphics context" OFF)
 option(HORO_ENABLE_IMGUI_UI_TESTS "Build headless Dear ImGui UI automation tests" OFF)
+option(HORO_ENABLE_TELEMETRY "Compile Horo telemetry producer instrumentation" ON)
+option(HORO_ENABLE_OPENTELEMETRY "Build the optional OpenTelemetry OTLP export sink" OFF)
 option(HORO_BUILD_EXAMPLES "Build SDK and extension examples" ${BUILD_TESTING})
 
 if(HORO_ENABLE_IMGUI_UI_TESTS AND NOT BUILD_TESTING)

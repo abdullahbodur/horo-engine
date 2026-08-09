@@ -1,6 +1,7 @@
 #include "ObjMeshPreviewProvider.h"
 
 #include "../../../AssetErrors.h"
+#include "Horo/Assets/MeshEditorPayload.h"
 
 #include <algorithm>
 #include <bit>
@@ -169,7 +170,7 @@ namespace Horo::Assets {
                 if (input.editorPayload.size() < kHeaderBytes || !ReadU32(input.editorPayload, 0, schema) ||
                     !ReadU32(input.editorPayload, 4, vertexCount) || !ReadU32(input.editorPayload, 8, faceCount) ||
                     !ReadU32(input.editorPayload, 36, positionBytes) || !ReadU32(input.editorPayload, 40, texcoordBytes) ||
-                    !ReadU32(input.editorPayload, 44, normalBytes) || (schema != 1 && schema != 2) || vertexCount == 0 ||
+                    !ReadU32(input.editorPayload, 44, normalBytes) || schema != MeshEditorPayloadSchemaVersion || vertexCount == 0 ||
                     vertexCount > kMaximumVertices || positionBytes != static_cast<std::uint64_t>(vertexCount) * 3U * sizeof(float) ||
                     kHeaderBytes + static_cast<std::uint64_t>(positionBytes) + texcoordBytes + normalBytes > input.editorPayload.size()) {
                     return Result<AssetPreviewImage>::Failure(MakeError(AssetErrors::IndexMalformed));
@@ -193,9 +194,6 @@ namespace Horo::Assets {
                     .height = input.height,
                     .pixels = std::vector<std::uint8_t>(static_cast<std::size_t>(input.width) * input.height * 4U, 0),
                 };
-                if (schema != 2)
-                    return Result<AssetPreviewImage>::Failure(MakeError(AssetErrors::IndexMalformed));
-
                 const std::size_t indexHeader = kHeaderBytes + static_cast<std::size_t>(positionBytes) + texcoordBytes + normalBytes;
                 std::uint32_t indexCount = 0;
                 if (!ReadU32(input.editorPayload, indexHeader, indexCount) || indexCount == 0 || indexCount % 3U != 0 ||
