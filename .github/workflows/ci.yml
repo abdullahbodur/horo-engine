@@ -104,7 +104,9 @@ jobs:
             -DCMAKE_C_COMPILER="${{ matrix.cc }}" \
             -DCMAKE_CXX_COMPILER="${{ matrix.cxx }}" \
             -DCMAKE_C_COMPILER_LAUNCHER="$([[ '${{ runner.os }}' != 'Windows' ]] && echo ccache || true)" \
-            -DCMAKE_CXX_COMPILER_LAUNCHER="$([[ '${{ runner.os }}' != 'Windows' ]] && echo ccache || true)"
+            -DCMAKE_CXX_COMPILER_LAUNCHER="$([[ '${{ runner.os }}' != 'Windows' ]] && echo ccache || true)" \
+            -DHORO_ENABLE_TELEMETRY=ON \
+            -DHORO_ENABLE_OPENTELEMETRY=ON
         env:
           FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
 
@@ -203,7 +205,9 @@ jobs:
             -DCMAKE_CXX_COMPILER=g++ \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DHORO_ENABLE_TELEMETRY=ON \
+            -DHORO_ENABLE_OPENTELEMETRY=ON
         env:
           FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
 
