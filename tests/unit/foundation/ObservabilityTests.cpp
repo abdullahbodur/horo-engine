@@ -184,7 +184,7 @@ TEST_CASE("Asynchronous logger writes structured severity category timestamp and
     REQUIRE(log.find(R"("retry":2)") != std::string::npos);
     REQUIRE(log.find(R"("cached":false)") != std::string::npos);
     REQUIRE(log.find(R"("duration_ms":12.5)") != std::string::npos);
-    REQUIRE(log.find(R"("detail":"quote=\" newline=\n")") != std::string::npos);
+    REQUIRE(log.find("\"detail\":\"quote=\\\" newline=\\n\"") != std::string::npos);
     REQUIRE(log.find(R"("auth.token":"[REDACTED]")") != std::string::npos);
     REQUIRE(log.find("must-not-persist") == std::string::npos);
     REQUIRE(log.find("internal.pointer") == std::string::npos);
