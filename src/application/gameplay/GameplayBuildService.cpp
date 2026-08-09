@@ -183,8 +183,7 @@ namespace Horo::Application {
                     return Result<std::string>::Failure(MakeError(InvalidRequest, "Gameplay build inputs could not be enumerated."));
             }
             const std::filesystem::path resolvedManifest = root / ".horo/local/gameplay_build_inputs.txt";
-            std::ifstream resolvedInputs{resolvedManifest, std::ios::binary};
-            if (resolvedInputs) {
+            if (std::ifstream resolvedInputs{resolvedManifest, std::ios::binary}) {
                 std::string relativeInput;
                 while (std::getline(resolvedInputs, relativeInput)) {
                     if (relativeInput.empty())
@@ -617,15 +616,15 @@ namespace Horo::Application {
                 if (session->request.environment.cxxCompiler)
                     configureArguments.push_back("-DCMAKE_CXX_COMPILER=" + session->request.environment.cxxCompiler->string());
                 if (session->request.environment.generator) {
-                    configureArguments.push_back("-G");
+                    configureArguments.emplace_back("-G");
                     configureArguments.push_back(*session->request.environment.generator);
                 }
                 if (session->request.environment.generatorPlatform) {
-                    configureArguments.push_back("-A");
+                    configureArguments.emplace_back("-A");
                     configureArguments.push_back(*session->request.environment.generatorPlatform);
                 }
                 if (session->request.environment.generatorToolset) {
-                    configureArguments.push_back("-T");
+                    configureArguments.emplace_back("-T");
                     configureArguments.push_back(*session->request.environment.generatorToolset);
                 }
                 if (session->request.environment.toolchainFile)
@@ -791,7 +790,7 @@ namespace Horo::Application {
     }
 
     bool GameplayBuildService::IsUpToDate(const GameplayBuildRequest &request) const {
-        Result<std::string> hash = ComputeInputHash(request);
+        const Result<std::string> hash = ComputeInputHash(request);
         return hash.HasValue() && ReadSuccessfulHash(request.projectRoot) == hash.Value() &&
                std::filesystem::is_regular_file(request.projectRoot / ".horo/local/gameplay_module.json");
     }

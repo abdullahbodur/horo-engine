@@ -73,22 +73,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Linux / telemetry disabled
+          - name: Linux
             runner: ubuntu-24.04
-            telemetry: 'OFF'
-            otel: 'OFF'
-          - name: Linux / OTLP enabled
-            runner: ubuntu-24.04
-            telemetry: 'ON'
-            otel: 'ON'
-          - name: macOS / OTLP enabled
+          - name: macOS
             runner: macos-latest
-            telemetry: 'ON'
-            otel: 'ON'
-          - name: Windows / OTLP enabled
+          - name: Windows
             runner: windows-2022
-            telemetry: 'ON'
-            otel: 'ON'
 
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -122,8 +112,8 @@ jobs:
             -DHORO_BUILD_EDITOR_GUI=OFF \
             -DHORO_BUILD_RENDER_OPENGL=OFF \
             -DHORO_BUILD_RENDER_METAL=OFF \
-            -DHORO_ENABLE_TELEMETRY=${{ matrix.telemetry }} \
-            -DHORO_ENABLE_OPENTELEMETRY=${{ matrix.otel }}
+            -DHORO_ENABLE_TELEMETRY=ON \
+            -DHORO_ENABLE_OPENTELEMETRY=ON
 
       - name: Build qualification targets
         shell: bash
@@ -134,10 +124,8 @@ jobs:
             HoroTelemetryFastPathBenchmark
             HoroFoundationPublicHeaderCompile
             horo-engine
+            HoroOpenTelemetryTests
           )
-          if [[ '${{ matrix.otel }}' == 'ON' ]]; then
-            targets+=(HoroOpenTelemetryTests)
-          fi
           cmake --build build/observability --parallel --target "${targets[@]}"
 
       - name: Run observability qualification
@@ -148,7 +136,6 @@ jobs:
             --output-on-failure
 
       - name: Repeat concurrency and failure isolation stress
-        if: matrix.telemetry == 'ON'
         shell: bash
         run: |
           ctest --test-dir build/observability \
