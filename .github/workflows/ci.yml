@@ -68,6 +68,8 @@ jobs:
             libxi-dev \
             libxext-dev \
             libxss-dev \
+            libxtst-dev \
+            libxxf86vm-dev \
             libgl1-mesa-dev \
             libglu1-mesa-dev
 
@@ -182,6 +184,8 @@ jobs:
             libxi-dev \
             libxext-dev \
             libxss-dev \
+            libxtst-dev \
+            libxxf86vm-dev \
             libgl1-mesa-dev \
             libglu1-mesa-dev
 
