@@ -73,6 +73,7 @@
 #include <charconv>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
 #include <memory>
