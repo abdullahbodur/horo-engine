@@ -453,10 +453,6 @@ add_library(HoroEditorServices STATIC
         editor/NotificationService.cpp
         editor/input/EditorInputActions.cpp
         editor/modals/EditorModalHost.cpp
-        editor/modals/settings/SettingsModalLifecycle.cpp
-        editor/modals/settings/SettingsModalState.cpp
-        editor/modals/asset_import/AssetImportModalLifecycle.cpp
-        editor/modals/asset_import/AssetImportModalDrawStub.cpp
         editor/screens/workspace/WorkspaceLayout.cpp
         editor/screens/workspace/WorkspacePanelHost.cpp
         editor/screens/workspace/WorkspaceLayoutPersistence.cpp
@@ -539,8 +535,12 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/menu/EditorMenuPlatform.cpp
             editor/status_bar/EditorStatusBar.cpp
             editor/modals/settings/SettingsModal.cpp
+            editor/modals/settings/SettingsModalLifecycle.cpp
+            editor/modals/settings/SettingsModalState.cpp
             editor/modals/asset_import/AssetImportModal.cpp
+            editor/modals/asset_import/AssetImportModalLifecycle.cpp
             editor/modals/asset_import/AssetImportModalPresentation.cpp
+            editor/modals/asset_import/AssetImportModalDrawStub.cpp
             editor/modals/scene_compare/SceneConflictCompareModal.cpp
             editor/modals/gameplay_behavior/GameplayBehaviorFilenameModal.cpp
             editor/screens/welcome/WelcomeView.cpp

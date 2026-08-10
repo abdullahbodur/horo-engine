@@ -257,27 +257,28 @@ if (HORO_BUILD_EDITOR_GUI)
     )
     target_compile_features(HoroGuiScreenHostLifecycleTests PRIVATE cxx_std_20)
     target_link_libraries(HoroGuiScreenHostLifecycleTests PRIVATE HoroEngine::Gui)
+
+    add_executable(HoroSettingsModalLifecycleTests
+            unit/editor/SettingsModalLifecycleTests.cpp
+    )
+    target_compile_features(HoroSettingsModalLifecycleTests PRIVATE cxx_std_20)
+    target_link_libraries(HoroSettingsModalLifecycleTests
+            PRIVATE
+            HoroEngine::Gui
+            HoroEngine::EditorServices
+    )
+    add_executable(HoroAssetImportModalLifecycleTests
+            unit/editor/AssetImportModalLifecycleTests.cpp
+    )
+    target_compile_features(HoroAssetImportModalLifecycleTests PRIVATE cxx_std_20)
+    target_link_libraries(HoroAssetImportModalLifecycleTests
+            PRIVATE
+            HoroEngine::Gui
+            HoroEngine::EditorServices
+            HoroEngine::Assets
+            HoroEngine::Foundation
+    )
 endif ()
-
-add_executable(HoroSettingsModalLifecycleTests
-        unit/editor/SettingsModalLifecycleTests.cpp
-)
-
-target_compile_features(HoroSettingsModalLifecycleTests PRIVATE cxx_std_20)
-target_link_libraries(HoroSettingsModalLifecycleTests
-        PRIVATE
-        HoroEngine::EditorServices
-)
-add_executable(HoroAssetImportModalLifecycleTests
-        unit/editor/AssetImportModalLifecycleTests.cpp
-)
-target_compile_features(HoroAssetImportModalLifecycleTests PRIVATE cxx_std_20)
-target_link_libraries(HoroAssetImportModalLifecycleTests
-        PRIVATE
-        HoroEngine::EditorServices
-        HoroEngine::Assets
-        HoroEngine::Foundation
-)
 add_executable(HoroEditorLocalizationServiceTests
         unit/editor/LocalizationServiceTests.cpp
 )
