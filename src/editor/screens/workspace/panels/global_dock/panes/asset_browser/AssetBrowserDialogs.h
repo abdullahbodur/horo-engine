@@ -1,7 +1,7 @@
 #pragma once
 
 namespace Horo::Editor {
-    class EditorGuiContext;
+    struct EditorGuiContext;
     struct AssetBrowserInteractionState;
     struct ContentBrowserDirectory;
     struct EditorWorkspaceViewCommandData;

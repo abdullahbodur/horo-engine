@@ -6,7 +6,7 @@
 struct ImVec2;
 
 namespace Horo::Editor {
-    class EditorGuiContext;
+    struct EditorGuiContext;
     class IEditorGuiRenderer;
 
     /** @brief Owns and draws the Assets story hosted by the global dock. */

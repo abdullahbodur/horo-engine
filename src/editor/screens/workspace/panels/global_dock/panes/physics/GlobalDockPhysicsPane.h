@@ -3,7 +3,7 @@
 struct ImVec2;
 
 namespace Horo::Editor {
-    class EditorGuiContext;
+    struct EditorGuiContext;
 
     /** @brief Physics status story hosted by the global dock. */
     class GlobalDockPhysicsPane {
