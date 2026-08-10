@@ -74,7 +74,7 @@ if(HORO_BUILD_EDITOR_GUI)
     )
 
     if(MSVC)
-        target_link_options(HoroEditor PRIVATE "/WHOLEARCHIVE:HoroGui")
+        target_link_options(HoroEditor PRIVATE "/WHOLEARCHIVE:$<TARGET_FILE:HoroGui>")
     endif()
 
     if(HORO_ENABLE_OPENTELEMETRY)
