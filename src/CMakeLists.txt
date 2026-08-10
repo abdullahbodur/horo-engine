@@ -485,6 +485,7 @@ target_link_libraries(HoroEditorServices
         HoroEngine::GameplayModuleHost
         HoroEngine::GameplayBuild
         HoroEngine::Input
+        HoroEngine::ProjectMigrations
         PRIVATE
         HoroEngine::Assets
         nlohmann_json::nlohmann_json
