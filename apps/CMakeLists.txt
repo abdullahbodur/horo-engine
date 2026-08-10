@@ -73,6 +73,10 @@ if(HORO_BUILD_EDITOR_GUI)
             ${HORO_SDL3_TARGET}
     )
 
+    if(MSVC)
+        target_link_options(HoroEditor PRIVATE "/WHOLEARCHIVE:HoroGui")
+    endif()
+
     if(HORO_ENABLE_OPENTELEMETRY)
         target_compile_definitions(HoroEditor PRIVATE HORO_HAS_OPENTELEMETRY=1)
         target_link_libraries(HoroEditor PRIVATE HoroEngine::OpenTelemetry)

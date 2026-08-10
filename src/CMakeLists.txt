@@ -557,7 +557,7 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/screens/workspace/panels/game/GamePanel.cpp
             editor/screens/workspace/panels/viewport/ViewportPanel.cpp
             editor/screens/workspace/panels/viewport/visualizers/light/LightMarkerLayer.cpp
-            editor/screens/workspace/panels/viewport/gizmo/TransformGizmoController.cpp
+        editor/screens/workspace/panels/viewport/gizmo/TransformGizmoController.cpp
             editor/screens/workspace/panels/viewport/gizmo/TransformGizmoGeometry.cpp
             editor/screens/workspace/panels/viewport/gizmo/TransformGizmoMath.cpp
             editor/screens/workspace/panels/viewport/interaction/ViewportInteractionCapture.cpp
@@ -565,10 +565,11 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/screens/workspace/panels/viewport/navigation/ViewportNavigationController.cpp
             editor/screens/workspace/WorkspacePanelRegistry.cpp
             editor/screens/workspace/DefaultWorkspacePanels.cpp
+            editor/screens/workspace/panels/global_dock/GlobalDockPanel.cpp
+            editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserGrid.cpp
             editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserActions.cpp
             editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserCards.cpp
             editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserDialogs.cpp
-            editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserGrid.cpp
             editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserInteractionSession.cpp
             editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserPane.cpp
             editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserToolbar.cpp
@@ -582,7 +583,6 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/screens/workspace/panels/global_dock/panes/performance/GlobalDockPerformancePane.cpp
             editor/screens/workspace/panels/global_dock/panes/physics/GlobalDockPhysicsPane.cpp
             editor/screens/workspace/panels/global_dock/panes/shared/GlobalDockStatusPane.cpp
-            editor/screens/workspace/panels/global_dock/GlobalDockPanel.cpp
             editor/screens/workspace/EditorWorkspaceController.cpp
             editor/screens/workspace/EditorWorkspaceView.cpp
             editor/screens/workspace/EditorWorkspaceScreen.cpp
