@@ -16,9 +16,9 @@ TEST_CASE("Hierarchy edit session projects scene objects without ImGui", "[unit]
         },
         SceneObject{
             .id = SceneObjectId{2},
+            .parent = SceneObjectId{1},
             .name = "Camera",
             .kind = SceneObjectKind::Camera,
-            .parent = SceneObjectId{1},
         },
     };
     viewModel.primarySelection = SceneObjectId{2};
