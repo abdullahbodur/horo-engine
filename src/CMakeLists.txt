@@ -540,7 +540,6 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/modals/asset_import/AssetImportModal.cpp
             editor/modals/asset_import/AssetImportModalLifecycle.cpp
             editor/modals/asset_import/AssetImportModalPresentation.cpp
-            editor/modals/asset_import/AssetImportModalDrawStub.cpp
             editor/modals/scene_compare/SceneConflictCompareModal.cpp
             editor/modals/gameplay_behavior/GameplayBehaviorFilenameModal.cpp
             editor/screens/welcome/WelcomeView.cpp

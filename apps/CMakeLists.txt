@@ -70,12 +70,7 @@ if(HORO_BUILD_EDITOR_GUI)
             HoroEngine::ProjectMigrations
             HoroEngine::InputSdl
             HoroThirdParty::ImGui
-            ${HORO_SDL3_TARGET}
     )
-
-    if(MSVC)
-        target_link_options(HoroEditor PRIVATE "/WHOLEARCHIVE:$<TARGET_FILE:HoroGui>")
-    endif()
 
     if(HORO_ENABLE_OPENTELEMETRY)
         target_compile_definitions(HoroEditor PRIVATE HORO_HAS_OPENTELEMETRY=1)
