@@ -53,24 +53,26 @@ namespace Horo::Foundation::Paths {
     }
 
     bool HasPathPrefix(const std::filesystem::path &root, const std::filesystem::path &candidate) {
-        if (root.empty() || candidate.empty()) {
-            return false;
+        auto rootPart = root.begin();
+        auto candidatePart = candidate.begin();
+        while (rootPart != root.end() && candidatePart != candidate.end()) {
+#ifdef _WIN32
+            const std::string r = rootPart->string();
+            const std::string c = candidatePart->string();
+            if (r.size() != c.size())
+                return false;
+            for (size_t i = 0; i < r.size(); ++i) {
+                if (std::tolower(static_cast<unsigned char>(r[i])) != std::tolower(static_cast<unsigned char>(c[i])))
+                    return false;
+            }
+#else
+            if (*rootPart != *candidatePart)
+                return false;
+#endif
+            ++rootPart;
+            ++candidatePart;
         }
-        std::error_code ec;
-        auto normRoot = std::filesystem::weakly_canonical(root, ec);
-        if (ec) {
-            normRoot = root.lexically_normal();
-        }
-        auto normCandidate = std::filesystem::weakly_canonical(candidate, ec);
-        if (ec) {
-            normCandidate = candidate.lexically_normal();
-        }
-        auto rel = normCandidate.lexically_relative(normRoot);
-        if (rel.empty()) {
-            return false;
-        }
-        const auto relStr = rel.generic_string();
-        return !relStr.empty() && !relStr.starts_with("..");
+        return rootPart == root.end();
     }
 
 }  // namespace Horo::Foundation::Paths
