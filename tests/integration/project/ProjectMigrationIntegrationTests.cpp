@@ -37,13 +37,12 @@ class MigrationLogCapture final
 
     ~MigrationLogCapture()
     {
-        Log::Logger::Shutdown();
+        Log::Logger::Flush();
     }
 
     [[nodiscard]] std::vector<nlohmann::json> Records() const
     {
         Log::Logger::Flush();
-        Log::Logger::Shutdown();
         std::ifstream input(path_, std::ios::binary);
         REQUIRE((input.good()));
         std::vector<nlohmann::json> records;
