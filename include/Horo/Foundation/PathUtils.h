@@ -65,6 +65,16 @@ Resolve(const std::filesystem::path &projectRoot, std::string_view relative);
  *
  * @param path Path string to normalize in-place.
  */
-void NormalizeSeparators(std::string &path);
+/**
+ * @brief Checks if a path is located inside or equals a root directory.
+ *
+ * Handles cross-platform separator normalization, drive letter casing,
+ * short 8.3 paths, and symlink resolution safely.
+ *
+ * @param root Base path prefix.
+ * @param candidate Target path to check.
+ * @return True if candidate resides within or equals root.
+ */
+[[nodiscard]] bool HasPathPrefix(const std::filesystem::path &root, const std::filesystem::path &candidate);
 
 } // namespace Horo::Foundation::Paths

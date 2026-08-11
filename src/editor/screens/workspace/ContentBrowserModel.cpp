@@ -37,15 +37,7 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] bool HasPathPrefix(const std::filesystem::path &root, const std::filesystem::path &candidate) {
-            auto rootPart = root.begin();
-            auto candidatePart = candidate.begin();
-            while (rootPart != root.end() && candidatePart != candidate.end()) {
-                if (*rootPart != *candidatePart)
-                    return false;
-                ++rootPart;
-                ++candidatePart;
-            }
-            return rootPart == root.end();
+            return Horo::Foundation::Paths::HasPathPrefix(root, candidate);
         }
 
         [[nodiscard]] std::vector<ContentBrowserBreadcrumb> BuildBreadcrumbs(const std::filesystem::path &root,

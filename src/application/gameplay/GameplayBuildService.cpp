@@ -1,5 +1,6 @@
 #include "Horo/Application/GameplayBuildService.h"
 
+#include "Horo/Foundation/PathUtils.h"
 #include "Horo/Foundation/Sha256.h"
 #include "Horo/Gameplay/GameModule.h"
 #include "Horo/Gameplay/GameModuleHost.h"
@@ -72,15 +73,7 @@ namespace Horo::Application {
         }
 
         [[nodiscard]] bool HasPathPrefix(const std::filesystem::path &root, const std::filesystem::path &candidate) {
-            auto rootPart = root.begin();
-            auto candidatePart = candidate.begin();
-            while (rootPart != root.end() && candidatePart != candidate.end()) {
-                if (*rootPart != *candidatePart)
-                    return false;
-                ++rootPart;
-                ++candidatePart;
-            }
-            return rootPart == root.end();
+            return Horo::Foundation::Paths::HasPathPrefix(root, candidate);
         }
 
         struct CompilerIdentity {

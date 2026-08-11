@@ -6,6 +6,7 @@
 #include "Horo/Editor/ProjectIntegrityValidatorService.h"
 #include "Horo/Editor/WorkspacePanelRegistry.h"
 #include "Horo/Foundation/Logging/Logger.h"
+#include "Horo/Foundation/PathUtils.h"
 #include "editor/document/EditorViewportPicking.h"
 #include "editor/document/RuntimeSceneConversion.h"
 #include "editor/document/SceneDocumentComparison.h"
@@ -78,15 +79,7 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] bool HasPathPrefix(const std::filesystem::path &root, const std::filesystem::path &candidate) {
-            auto rootPart = root.begin();
-            auto candidatePart = candidate.begin();
-            while (rootPart != root.end() && candidatePart != candidate.end()) {
-                if (*rootPart != *candidatePart)
-                    return false;
-                ++rootPart;
-                ++candidatePart;
-            }
-            return rootPart == root.end();
+            return Horo::Foundation::Paths::HasPathPrefix(root, candidate);
         }
 
         [[nodiscard]] std::filesystem::path NormalizeAbsolute(const std::filesystem::path &path) {

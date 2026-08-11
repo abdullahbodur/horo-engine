@@ -52,4 +52,25 @@ namespace Horo::Foundation::Paths {
         }
     }
 
+    bool HasPathPrefix(const std::filesystem::path &root, const std::filesystem::path &candidate) {
+        if (root.empty() || candidate.empty()) {
+            return false;
+        }
+        std::error_code ec;
+        auto normRoot = std::filesystem::weakly_canonical(root, ec);
+        if (ec) {
+            normRoot = root.lexically_normal();
+        }
+        auto normCandidate = std::filesystem::weakly_canonical(candidate, ec);
+        if (ec) {
+            normCandidate = candidate.lexically_normal();
+        }
+        auto rel = normCandidate.lexically_relative(normRoot);
+        if (rel.empty()) {
+            return false;
+        }
+        const auto relStr = rel.generic_string();
+        return !relStr.empty() && !relStr.starts_with("..");
+    }
+
 }  // namespace Horo::Foundation::Paths
