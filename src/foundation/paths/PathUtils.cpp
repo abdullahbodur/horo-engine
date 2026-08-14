@@ -7,9 +7,10 @@
 
 #include "../FoundationErrors.h"
 
-#include <cctype>
+#include <cwctype>
 #include <filesystem>
 #include <system_error>
+#include <utility>
 
 namespace Horo::Foundation::Paths {
 
@@ -67,7 +68,7 @@ namespace Horo::Foundation::Paths {
             normalizedCandidate = candidate.lexically_normal();
 
         // Let the host filesystem resolve Windows short names, drive casing, and
-        // junctions before falling back to lexical component comparison.
+        // junctions before falling back to canonical relative-path comparison.
         std::error_code equivalentError;
         for (std::filesystem::path current = normalizedCandidate; !current.empty();) {
             if (std::filesystem::equivalent(normalizedRoot, current, equivalentError))
@@ -79,26 +80,23 @@ namespace Horo::Foundation::Paths {
             current = parent;
         }
 
-        auto rootPart = normalizedRoot.begin();
-        auto candidatePart = normalizedCandidate.begin();
-        while (rootPart != normalizedRoot.end() && candidatePart != normalizedCandidate.end()) {
+        std::filesystem::path comparisonRoot = normalizedRoot;
+        std::filesystem::path comparisonCandidate = normalizedCandidate;
 #ifdef _WIN32
-            const std::string r = rootPart->string();
-            const std::string c = candidatePart->string();
-            if (r.size() != c.size())
-                return false;
-            for (size_t i = 0; i < r.size(); ++i) {
-                if (std::tolower(static_cast<unsigned char>(r[i])) != std::tolower(static_cast<unsigned char>(c[i])))
-                    return false;
-            }
-#else
-            if (*rootPart != *candidatePart)
-                return false;
+        const auto foldCase = [](const std::filesystem::path &path) {
+            std::wstring native = path.native();
+            for (wchar_t &character : native)
+                character = static_cast<wchar_t>(std::towlower(character));
+            return std::filesystem::path{std::move(native)};
+        };
+        comparisonRoot = foldCase(comparisonRoot);
+        comparisonCandidate = foldCase(comparisonCandidate);
 #endif
-            ++rootPart;
-            ++candidatePart;
-        }
-        return rootPart == normalizedRoot.end();
+        const std::filesystem::path relative = comparisonCandidate.lexically_relative(comparisonRoot);
+        if (relative.empty() || relative.is_absolute())
+            return false;
+        const auto first = relative.begin();
+        return first != relative.end() && *first != "..";
     }
 
 }  // namespace Horo::Foundation::Paths

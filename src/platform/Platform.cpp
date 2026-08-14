@@ -192,7 +192,8 @@ Result<void> NativeDurableFileSystem::CopyDurable(const std::filesystem::path &s
     if (error || !std::filesystem::copy_file(source, destination, std::filesystem::copy_options::overwrite_existing, error))
         return Result<void>::Failure(FsError(IoFailed, error ? destination : source));
 #if defined(_WIN32)
-    HANDLE handle = CreateFileW(destination.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    HANDLE handle =
+        CreateFileW(destination.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     const bool flushed = handle != INVALID_HANDLE_VALUE && FlushFileBuffers(handle);
     if (handle != INVALID_HANDLE_VALUE)
         CloseHandle(handle);

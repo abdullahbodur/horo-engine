@@ -146,8 +146,13 @@ int main() {
               << " disabled_logging_allocations=" << disabledLoggingAllocations
               << " disabled_logging_ns_per_call=" << disabledLoggingNanosecondsPerCall << '\n';
 
+    // Allocation counts from an unoptimized runtime are implementation noise, in
+    // particular with MSVC's Debug standard library. Keep reporting them in every
+    // build, but enforce the performance contract only in optimized builds.
+#if defined(NDEBUG)
     if (metricAllocations != 0 || loggingAllocations != 0 || disabledLoggingAllocations != 0)
         return 2;
+#endif
 #if HORO_ENABLE_TELEMETRY
     if (!static_cast<bool>(counter) || !flushed || !shutdown)
         return 3;
