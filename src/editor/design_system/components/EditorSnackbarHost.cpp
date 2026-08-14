@@ -11,7 +11,7 @@ namespace Horo::Editor
 namespace {
     constexpr float kCardWidth          = 360.0f;
     constexpr float kOuterMarginRight   = 24.0f;
-    constexpr float kOuterMarginBottom  = 24.0f;
+    constexpr float kOuterMarginBottom  = 32.0f;
     constexpr float kCardGap            = 10.0f;
     constexpr float kCardPaddingX       = 16.0f;
     constexpr float kCardPaddingTop     = 14.0f;
@@ -21,6 +21,11 @@ namespace {
     constexpr float kCornerRadius       = 10.0f;
     constexpr float kButtonRounding     = 8.0f;
     constexpr float kMinCardHeight      = 54.0f;
+    constexpr float kTextLineGap        = 3.0f;
+    constexpr float kShadowExtent       = 8.0f;
+    constexpr float kProgressInsetX     = 12.0f;
+    constexpr float kProgressBottom     = 6.0f;
+    constexpr float kProgressHeight     = 2.0f;
     constexpr std::size_t kMaxVisibleSnackbars = 3;
 
     enum class IconKind { Cross, Exclaim, Info, Check };
@@ -81,20 +86,28 @@ namespace {
         drawList->AddLine(ImVec2(center.x - r, center.y + r), ImVec2(center.x + r, center.y - r), color, thickness);
     }
 
-    [[nodiscard]] float TextBlockWidth(const bool hasActions, const bool dismissible) noexcept
+    [[nodiscard]] float RightControlsWidth(const NotificationEvent &event) noexcept
     {
-        const float rightControls = (dismissible ? 26.0f : 0.0f) + (hasActions ? 84.0f : 0.0f);
-        return kCardWidth - (kCardPaddingX * 2.0f) - kIconDiameter - kIconTextGap - rightControls;
+        float width = event.dismissible ? 26.0f : 0.0f;
+        for (const NotificationAction &action : event.actions)
+            width += ImGui::CalcTextSize(action.label.c_str()).x + 26.0f;
+        return width;
+    }
+
+    [[nodiscard]] float TextBlockWidth(const NotificationEvent &event) noexcept
+    {
+        return std::max(48.0f,
+                        kCardWidth - (kCardPaddingX * 2.0f) - kIconDiameter - kIconTextGap - RightControlsWidth(event));
     }
 
     // Measures the height a card will need *before* we open the overlay window,
     // so window size/position never depends on a previous frame's cached size.
     [[nodiscard]] float MeasureCardHeight(const ActiveSnackbar &item) noexcept
     {
-        const float wrapWidth = TextBlockWidth(!item.event.actions.empty(), item.event.dismissible);
+        const float wrapWidth = TextBlockWidth(item.event);
         float textHeight = ImGui::CalcTextSize(item.event.message.c_str(), nullptr, false, wrapWidth).y;
         if (!item.event.title.empty()) {
-            textHeight += ImGui::CalcTextSize(item.event.title.c_str(), nullptr, false, wrapWidth).y;
+            textHeight += ImGui::CalcTextSize(item.event.title.c_str(), nullptr, false, wrapWidth).y + kTextLineGap;
         }
         return std::max(kMinCardHeight, textHeight + kCardPaddingTop + kCardPaddingBottom);
     }
@@ -213,7 +226,7 @@ std::optional<SnackbarActionInvokedEvent> EditorSnackbarHost::Draw(const EditorG
     const float topY = bottomY - totalHeight;
 
     ImGui::SetNextWindowPos(ImVec2(posX, topY), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(kCardWidth, totalHeight), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(kCardWidth + kShadowExtent, totalHeight + kShadowExtent), ImGuiCond_Always);
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
     ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
@@ -254,9 +267,10 @@ std::optional<SnackbarActionInvokedEvent> EditorSnackbarHost::Draw(const EditorG
             DrawSeverityIcon(drawList, iconCenter, style.icon, style.accent);
 
             const float textX = pMin.x + kCardPaddingX + kIconDiameter + kIconTextGap;
-            const float textWrapWidth = TextBlockWidth(!snackbar.event.actions.empty(), snackbar.event.dismissible);
+            const float textWrapWidth = TextBlockWidth(snackbar.event);
 
             ImGui::SetCursorScreenPos(ImVec2(textX, pMin.y + kCardPaddingTop));
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, kTextLineGap));
             ImGui::BeginGroup();
             ImGui::PushTextWrapPos(textX + textWrapWidth);
 
@@ -276,6 +290,7 @@ std::optional<SnackbarActionInvokedEvent> EditorSnackbarHost::Draw(const EditorG
             }
             ImGui::PopTextWrapPos();
             ImGui::EndGroup();
+            ImGui::PopStyleVar();
 
             // Actions & close button, right-aligned, vertically centered on the icon row
             const float controlsY = pMin.y + kCardPaddingTop - 3.0f;
@@ -357,17 +372,19 @@ std::optional<SnackbarActionInvokedEvent> EditorSnackbarHost::Draw(const EditorG
             // Bottom progress track + fill
             if (snackbar.event.durationSeconds > 0.0f) {
                 const float fraction = std::clamp(1.0f - (snackbar.elapsedSeconds / snackbar.event.durationSeconds), 0.0f, 1.0f);
-                const float trackY = pMax.y - 5.0f;
-                const ImVec2 trackMin(pMin.x + kCardPaddingX, trackY);
-                const ImVec2 trackMax(pMax.x - kCardPaddingX, trackY + 2.5f);
-                drawList->AddRectFilled(trackMin, trackMax, IM_COL32(255, 255, 255, 18), 2.0f);
+                const float trackY = pMax.y - kProgressBottom;
+                const ImVec2 trackMin(pMin.x + kProgressInsetX, trackY);
+                const ImVec2 trackMax(pMax.x - kProgressInsetX, trackY + kProgressHeight);
+                drawList->AddRectFilled(trackMin, trackMax, IM_COL32(255, 255, 255, 30), kProgressHeight * 0.5f);
                 const ImVec2 fillMax(trackMin.x + (trackMax.x - trackMin.x) * fraction, trackMax.y);
-                drawList->AddRectFilled(trackMin, fillMax, style.accent, 2.0f);
+                if (fillMax.x > trackMin.x)
+                    drawList->AddRectFilled(trackMin, fillMax, style.accent, kProgressHeight * 0.5f);
             }
 
             drawList->ChannelsMerge();
 
-            ImGui::SetCursorScreenPos(ImVec2(pMin.x, pMax.y + kCardGap));
+            const float nextCardY = pMax.y + (idx + 1 < visibleCount ? kCardGap : 0.0f);
+            ImGui::SetCursorScreenPos(ImVec2(pMin.x, nextCardY));
             ImGui::PopID();
         }
     }
