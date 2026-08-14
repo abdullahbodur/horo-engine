@@ -16,6 +16,11 @@ Core engine correctness, project opening, and build execution do not depend on a
 marketplace or network service. Marketplace discovery is optional; local and
 project-declared packages remain first-class.
 
+The ecosystem's staged capability progression is recorded in
+[Extension Capability Roadmap](./extension-capability-roadmap.md). Those stages
+are not product milestones or a serial delivery plan; engine workstreams advance
+in parallel, while GitHub dependencies record the real technical ordering.
+
 ## Scope
 
 This system covers:

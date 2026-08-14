@@ -168,6 +168,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 
 ## Extensions
 
+- [Extension Capability Roadmap](./extensions/extension-capability-roadmap.md):
+  ecosystem capability stages and their separation from product milestones,
+  workstreams, planning horizons, and technical dependencies.
 - [Gameplay Module](./extensions/gameplay-module.md): overview for
   project-owned gameplay modules, behavior authoring, runtime integration, and
   verification.
@@ -233,6 +236,8 @@ dependency direction in [System Design](./foundation/system-design.md).
 
 ## Delivery And Operations
 
+- [Product Roadmap Model](./delivery/product-roadmap.md): product checkpoints,
+  parallel workstreams, planning dimensions, and milestone assignment rules.
 - [Developer Environment](./delivery/developer-environment.md): setup, toolchains, IDEs,
   and daily workflow.
 - [Build System](./delivery/build-system.md): CMake targets, presets, dependencies, and
