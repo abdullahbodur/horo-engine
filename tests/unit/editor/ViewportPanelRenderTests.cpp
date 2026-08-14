@@ -190,6 +190,18 @@ TEST_CASE("Viewport Panel Render Tests", "[unit][editor]") {
     REQUIRE((command.viewportNavigationPayload->yawRadians != 0.0F));
     REQUIRE((command.viewportNavigationPayload->pitchRadians != 0.0F));
     REQUIRE((command.viewportNavigationPayload->moveForward > 0.0F));
+    REQUIRE((command.viewportNavigationPayload->moveForward > 0.016F));
+    REQUIRE((command.viewportNavigationPayload->moveForward < 0.017F));
+    const float oneSixtiethMove = command.viewportNavigationPayload->moveForward;
+
+    command = {};
+    io.DeltaTime = 1.0F / 30.0F;
+    drawFrame();
+    REQUIRE((command.command == EditorWorkspaceViewCommand::NavigateViewport));
+    REQUIRE((command.viewportNavigationPayload.has_value()));
+    REQUIRE((command.viewportNavigationPayload->moveForward > oneSixtiethMove * 1.99F));
+    REQUIRE((command.viewportNavigationPayload->moveForward < oneSixtiethMove * 2.01F));
+    io.DeltaTime = 1.0F / 60.0F;
 
     command = {};
     io.AddMouseButtonEvent(ImGuiMouseButton_Right, false);

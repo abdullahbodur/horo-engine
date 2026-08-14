@@ -358,6 +358,7 @@ namespace Horo::Editor {
                     .aspect = aspect,
                     .viewportHeightPixels = viewportHeightPixels,
                     .targetMinorSpacingPixels = gridOptions_.targetMinorSpacingPixels,
+                    .targetLineWidthPixels = gridOptions_.targetLineWidthPixels,
                 },
                 geometry)) {
             return Result<void>::Failure(
@@ -381,10 +382,10 @@ namespace Horo::Editor {
             glBindBuffer(GL_ARRAY_BUFFER, gridVertexBuffer_);
             glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(batch.positions.size_bytes()), batch.positions.data(), GL_DYNAMIC_DRAW);
             glUniform3f(selectionColorLocation_, batch.color.x, batch.color.y, batch.color.z);
-            glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(batch.positions.size()));
+            const GLenum primitive = batch.topology == ViewportGridPrimitiveTopology::Triangles ? GL_TRIANGLES : GL_LINES;
+            glDrawArrays(primitive, 0, static_cast<GLsizei>(batch.positions.size()));
         };
-        drawBatch(geometry.MinorLines());
-        drawBatch(geometry.MajorLines());
+        drawBatch(geometry.RegularLines());
         drawBatch(geometry.Axes());
         glDepthMask(GL_TRUE);
         return Result<void>::Success();

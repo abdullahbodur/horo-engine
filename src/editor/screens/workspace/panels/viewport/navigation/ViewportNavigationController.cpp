@@ -9,6 +9,9 @@
 
 namespace Horo::Editor {
     namespace {
+        constexpr float FlyMovementSpeed = 1.0F;
+        constexpr float FastFlyMovementSpeed = 4.0F;
+
         [[nodiscard]] bool HasNavigation(const EditorViewportNavigationDelta &delta) noexcept {
             return delta.yawRadians != 0.0F || delta.pitchRadians != 0.0F || delta.moveRight != 0.0F || delta.moveUp != 0.0F ||
                    delta.moveForward != 0.0F || delta.dollyScale != 1.0F;
@@ -69,7 +72,8 @@ namespace Horo::Editor {
                 navigation.moveUp = input.pointer.deltaY * worldUnitsPerPixel * panSensitivity;
             }
             if (mode_ == Mode::Fly) {
-                const float speed = (input.modifiers.shift ? 12.0F : 3.0F) * std::clamp(deltaSeconds, 0.0F, 0.1F);
+                const float speed =
+                    (input.modifiers.shift ? FastFlyMovementSpeed : FlyMovementSpeed) * std::clamp(deltaSeconds, 0.0F, 0.1F);
                 navigation.moveForward =
                     (input.State(Input::Key::W).down ? speed : 0.0F) - (input.State(Input::Key::S).down ? speed : 0.0F);
                 navigation.moveRight += (input.State(Input::Key::D).down ? speed : 0.0F) - (input.State(Input::Key::A).down ? speed : 0.0F);

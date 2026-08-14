@@ -346,8 +346,7 @@ fragment float4 viewport_grid_fragment(GridVertexOut input [[stage_in]],
     gridDepthDescriptor.depthCompareFunction = MTLCompareFunctionLess;
     gridDepthDescriptor.depthWriteEnabled = NO;
     impl_->gridDepthState = [impl_->device newDepthStencilStateWithDescriptor:gridDepthDescriptor];
-    constexpr NSUInteger gridBufferSize =
-        sizeof(Math::Vec3) * (ViewportGridGeometry::MaxVerticesPerBatch * 2 + 4);
+    constexpr NSUInteger gridBufferSize = sizeof(Math::Vec3) * (ViewportGridGeometry::MaxRegularVertices + 4);
     impl_->gridVertexBuffer =
         [impl_->device newBufferWithLength:gridBufferSize options:MTLResourceStorageModeShared];
 
@@ -637,6 +636,7 @@ Result<void> EditorViewportRendererMetal::ExecuteStaticMeshPass(const Render::St
                     .aspect = aspect,
                     .viewportHeightPixels = static_cast<float>(impl_->allocatedExtent.height),
                     .targetMinorSpacingPixels = impl_->gridOptions.targetMinorSpacingPixels,
+                    .targetLineWidthPixels = impl_->gridOptions.targetLineWidthPixels,
                 },
                 grid))
         {
@@ -665,15 +665,17 @@ Result<void> EditorViewportRendererMetal::ExecuteStaticMeshPass(const Render::St
                             atIndex:1];
             const MetalGridStyle style{.color = batch.color};
             [encoder setFragmentBytes:&style length:sizeof(style) atIndex:0];
-            [encoder drawPrimitives:MTLPrimitiveTypeLine
+            const MTLPrimitiveType primitive = batch.topology == ViewportGridPrimitiveTopology::Triangles
+                                                   ? MTLPrimitiveTypeTriangle
+                                                   : MTLPrimitiveTypeLine;
+            [encoder drawPrimitives:primitive
                         vertexStart:0
                         vertexCount:static_cast<NSUInteger>(batch.positions.size())];
             gridOffset += byteCount;
         };
         [encoder setRenderPipelineState:impl_->gridPipeline];
         [encoder setDepthStencilState:impl_->gridDepthState];
-        encodeBatch(grid.MinorLines());
-        encodeBatch(grid.MajorLines());
+        encodeBatch(grid.RegularLines());
         encodeBatch(grid.Axes());
     }
     [encoder setRenderPipelineState:impl_->pipeline];
