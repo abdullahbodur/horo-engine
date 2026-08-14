@@ -7,6 +7,7 @@
 
 #include "../FoundationErrors.h"
 
+#include <cctype>
 #include <filesystem>
 #include <system_error>
 
@@ -53,9 +54,21 @@ namespace Horo::Foundation::Paths {
     }
 
     bool HasPathPrefix(const std::filesystem::path &root, const std::filesystem::path &candidate) {
-        auto rootPart = root.begin();
-        auto candidatePart = candidate.begin();
-        while (rootPart != root.end() && candidatePart != candidate.end()) {
+        if (root.empty() || candidate.empty())
+            return false;
+
+        std::error_code rootError;
+        std::error_code candidateError;
+        std::filesystem::path normalizedRoot = std::filesystem::weakly_canonical(root, rootError);
+        std::filesystem::path normalizedCandidate = std::filesystem::weakly_canonical(candidate, candidateError);
+        if (rootError)
+            normalizedRoot = root.lexically_normal();
+        if (candidateError)
+            normalizedCandidate = candidate.lexically_normal();
+
+        auto rootPart = normalizedRoot.begin();
+        auto candidatePart = normalizedCandidate.begin();
+        while (rootPart != normalizedRoot.end() && candidatePart != normalizedCandidate.end()) {
 #ifdef _WIN32
             const std::string r = rootPart->string();
             const std::string c = candidatePart->string();
@@ -72,7 +85,7 @@ namespace Horo::Foundation::Paths {
             ++rootPart;
             ++candidatePart;
         }
-        return rootPart == root.end();
+        return rootPart == normalizedRoot.end();
     }
 
 }  // namespace Horo::Foundation::Paths

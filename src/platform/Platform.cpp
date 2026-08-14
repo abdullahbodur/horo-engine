@@ -214,9 +214,7 @@ Result<void> NativeDurableFileSystem::AtomicReplace(const std::filesystem::path 
     if (error)
         return Result<void>::Failure(FsError(IoFailed, destination));
 #if defined(_WIN32)
-    const bool exists = std::filesystem::exists(destination, error);
-    BOOL ok = exists ? ReplaceFileW(destination.c_str(), prepared.c_str(), nullptr, REPLACEFILE_WRITE_THROUGH, nullptr, nullptr)
-                     : MoveFileExW(prepared.c_str(), destination.c_str(), MOVEFILE_WRITE_THROUGH);
+    const BOOL ok = MoveFileExW(prepared.c_str(), destination.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
     if (!ok)
         return Result<void>::Failure(FsError(IoFailed, destination));
 #else

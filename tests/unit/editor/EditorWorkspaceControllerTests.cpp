@@ -1166,11 +1166,13 @@ namespace {
         createFolder.stringPayload = sourceDirectory.string();
         createFolder.secondaryStringPayload = "CON";
         controller.ProcessCommand(createFolder);
-        REQUIRE_FALSE(std::filesystem::exists(sourceDirectory / "CON"));
+        std::error_code reservedNameError;
+        REQUIRE_FALSE(std::filesystem::exists(sourceDirectory / "CON", reservedNameError));
         REQUIRE((controller.ViewModel().contentBrowserOperationError == "workspace.content_browser.operation.invalid_name"));
         createFolder.secondaryStringPayload = "unsafe.";
         controller.ProcessCommand(createFolder);
-        REQUIRE_FALSE(std::filesystem::exists(sourceDirectory / "unsafe."));
+        std::error_code trailingDotError;
+        REQUIRE_FALSE(std::filesystem::exists(sourceDirectory / "unsafe.", trailingDotError));
 
         std::error_code symlinkError;
         const std::filesystem::path escape = projectRoot / "assets/Escape";

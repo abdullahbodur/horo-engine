@@ -59,6 +59,10 @@ HORO_BEHAVIOR(Movement, "game.tests.build_movement")
 
         void BreakSource() const {
             Write(root / "source/gameplay/Movement.cpp", "this is intentionally not valid C++\n");
+            // Force the follow-up build through a clean configure so the test does
+            // not depend on generator-specific timestamp/change detection.
+            std::error_code error;
+            std::filesystem::remove_all(root / ".horo/local/build/gameplay-debug", error);
         }
 
         std::filesystem::path root;

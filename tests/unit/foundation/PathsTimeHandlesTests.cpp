@@ -1,9 +1,11 @@
 #include "Horo/Foundation/Handles.h"
+#include "Horo/Foundation/PathUtils.h"
 #include "Horo/Foundation/Paths.h"
 #include "Horo/Foundation/Time.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <filesystem>
 
 namespace {
     struct TextureTag;
@@ -18,6 +20,13 @@ namespace {
     TEST_CASE("Project Path Rejects Root Escape", "[unit][foundation]") {
         const auto result = Horo::ProjectPath::Parse("../../outside.txt");
         REQUIRE((result.HasError()));
+    }
+
+    TEST_CASE("Path Prefix Uses Normalized Components", "[unit][foundation]") {
+        const std::filesystem::path root = std::filesystem::temp_directory_path() / "horo-path-prefix-test";
+        REQUIRE(Horo::Foundation::Paths::HasPathPrefix(root, root / "nested/file.txt"));
+        REQUIRE(Horo::Foundation::Paths::HasPathPrefix(root, root));
+        REQUIRE_FALSE(Horo::Foundation::Paths::HasPathPrefix(root, root.parent_path() / "outside/file.txt"));
     }
 
     TEST_CASE("Typed Handles Reject Different Resource Tags", "[unit][foundation]") {

@@ -74,7 +74,11 @@ namespace Horo::Editor {
     Result<void> ValidateCreateGameplayBehaviorRequest(const CreateGameplayBehaviorRequest &request) {
         const std::filesystem::path destination{request.destination};
         const std::filesystem::path baseName{request.baseName};
-        const bool validPath = !request.destination.empty() && destination.is_absolute() && !request.baseName.empty() &&
+        // Project-relative paths are serialized with a portable '/' root. On Windows
+        // `std::filesystem::path::is_absolute()` rejects that form because it has no
+        // drive root, even though it is an absolute project path for the editor.
+        const bool absoluteDestination = destination.is_absolute() || destination.has_root_directory();
+        const bool validPath = !request.destination.empty() && absoluteDestination && !request.baseName.empty() &&
                                baseName.filename() == baseName && baseName.extension().empty();
         const bool validName = request.kind == GameplayBehaviorKind::Native ? IsCppIdentifier(request.baseName)
                                                                                : IsPortableBehaviorName(request.baseName);
