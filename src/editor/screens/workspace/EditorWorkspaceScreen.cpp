@@ -4,25 +4,25 @@
 #include "Horo/Editor/DefaultScreenFactories.h"
 #include "Horo/Editor/EditorGuiContext.h"
 #include "Horo/Editor/EditorModalHost.h"
-#include "Horo/Editor/EditorSnackbarHost.h"
 #include "Horo/Editor/EditorServiceRegistry.h"
 #include "Horo/Editor/EditorSettingsService.h"
 #include "Horo/Editor/EditorSettingsStore.h"
+#include "Horo/Editor/EditorSnackbarHost.h"
 #include "Horo/Editor/GuiScreenHost.h"
 #include "Horo/Editor/Localization/ILocalizationService.h"
 #include "Horo/Editor/ProjectOpenService.h"
 #include "Horo/Editor/ScreenRegistry.h"
 #include "Horo/Editor/WorkspacePanelRegistry.h"
-#include "Horo/Foundation/PathUtils.h"
 #include "Horo/Foundation/BuildOutputStore.h"
 #include "Horo/Foundation/JobSystem.h"
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Foundation/Logging/StructuredLogStore.h"
 #include "Horo/Foundation/OperationStore.h"
+#include "Horo/Foundation/PathUtils.h"
 #include "editor/document/EditorViewportSceneExtractor.h"
 #include "editor/input/EditorInputActions.h"
-#include "editor/modals/scene_compare/SceneConflictCompareModal.h"
 #include "editor/modals/gameplay_behavior/GameplayBehaviorFilenameModal.h"
+#include "editor/modals/scene_compare/SceneConflictCompareModal.h"
 #include "editor/renderer/EditorGuiRenderer.h"
 #include "editor/renderer/EditorViewportRenderer.h"
 #include "editor/screens/NavigationErrors.h"
@@ -53,16 +53,15 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] std::optional<std::filesystem::path> ResolveGameplayBehaviorDestination(const std::filesystem::path &projectRoot,
-                                                                                               const GameplayBehaviorKind kind,
-                                                                                               const std::string &requestedDirectory) {
+                                                                                              const GameplayBehaviorKind kind,
+                                                                                              const std::string &requestedDirectory) {
             const std::filesystem::path normalizedProjectRoot = NormalizeAbsolutePath(projectRoot);
             const std::filesystem::path assetsRoot = normalizedProjectRoot / "assets";
             const std::filesystem::path scriptsRoot = assetsRoot / "scripts";
             const std::filesystem::path requested = NormalizeAbsolutePath(requestedDirectory);
-            std::filesystem::path destination =
-                kind == GameplayBehaviorKind::Native
-                    ? normalizedProjectRoot / "source" / "gameplay"
-                    : (HasPathPrefix(scriptsRoot, requested) ? requested : scriptsRoot);
+            std::filesystem::path destination = kind == GameplayBehaviorKind::Native
+                                                    ? normalizedProjectRoot / "source" / "gameplay"
+                                                    : (HasPathPrefix(scriptsRoot, requested) ? requested : scriptsRoot);
             if ((kind == GameplayBehaviorKind::Native && !HasPathPrefix(normalizedProjectRoot, destination)) ||
                 (kind == GameplayBehaviorKind::Lua && !HasPathPrefix(assetsRoot, destination))) {
                 return std::nullopt;
@@ -120,15 +119,23 @@ namespace Horo::Editor {
 
                 const Assets::AssetRegistrySnapshot assetSnapshot =
                     assetRegistry_ ? assetRegistry_->Snapshot() : Assets::AssetRegistrySnapshot{};
+                const Application::GameplayBuildEnvironment *gameplayEnvironment =
+                    services_.TryGet<Application::GameplayBuildEnvironment>();
                 controller_ =
-                    std::make_unique<EditorWorkspaceController>(std::move(projectRoot), runtimeScene_, assetSnapshot, assetRegistry_,
-                                                                mutations_, durableFiles_, importerCatalog_, &services_.Get<JobSystem>(),
-                                                                DiagnosticSourceNavigator{},
-                                                                services_.TryGet<Application::GameplayBuildService>(),
-                                                                services_.TryGet<Application::GameplayBuildEnvironment>() != nullptr
-                                                                    ? *services_.TryGet<Application::GameplayBuildEnvironment>()
-                                                                    : Application::GameplayBuildEnvironment{},
-                                                                &context_.localization);
+                    std::make_unique<EditorWorkspaceController>(projectRoot, runtimeScene_, assetSnapshot,
+                                                                EditorWorkspaceDependencies{
+                                                                    .mutableAssetRegistry = assetRegistry_,
+                                                                    .mutations = mutations_,
+                                                                    .durableFiles = durableFiles_,
+                                                                    .importerCatalog = importerCatalog_,
+                                                                    .jobs = &services_.Get<JobSystem>(),
+                                                                    .gameplayBuilds = services_.TryGet<Application::GameplayBuildService>(),
+                                                                    .gameplayBuildEnvironment =
+                                                                        gameplayEnvironment != nullptr
+                                                                            ? *gameplayEnvironment
+                                                                            : Application::GameplayBuildEnvironment{},
+                                                                    .localization = &context_.localization,
+                                                                });
                 if (controller_->InitializationError().has_value()) {
                     const Error error = *controller_->InitializationError();
                     controller_.reset();
@@ -232,12 +239,10 @@ namespace Horo::Editor {
                 PublishViewportSceneIfChanged();
 
                 if (snackbarHost_) {
-                    const std::optional<SnackbarActionInvokedEvent> action =
-                        snackbarHost_->Draw(context_, ImGui::GetIO().DeltaTime);
+                    const std::optional<SnackbarActionInvokedEvent> action = snackbarHost_->Draw(context_, ImGui::GetIO().DeltaTime);
                     if (action.has_value() && action->actionId == "open_logs") {
-                        controller_->ProcessCommand(EditorWorkspaceViewCommandData{
-                            .command = EditorWorkspaceViewCommand::ChangeActivePanel,
-                            .stringPayload = "horo.global_dock"});
+                        controller_->ProcessCommand(EditorWorkspaceViewCommandData{.command = EditorWorkspaceViewCommand::ChangeActivePanel,
+                                                                                   .stringPayload = "horo.global_dock"});
                     }
                 }
 
@@ -401,8 +406,8 @@ namespace Horo::Editor {
                 viewportSceneState_.Clear();
                 publishedSceneRevision_ = {};
                 publishedSelectionRevision_ = {};
-                    publishedViewportRevision_ = {};
-                    publishedViewportSceneRevision_ = 0;
+                publishedViewportRevision_ = {};
+                publishedViewportSceneRevision_ = 0;
                 controller_.reset();
             }
 
@@ -425,8 +430,8 @@ namespace Horo::Editor {
                 if (!controller_) {
                     return;
                 }
-                const std::optional<std::filesystem::path> destination = ResolveGameplayBehaviorDestination(
-                    controller_->ViewModel().projectRoot, kind, requestedDirectory);
+                const std::optional<std::filesystem::path> destination =
+                    ResolveGameplayBehaviorDestination(controller_->ViewModel().projectRoot, kind, requestedDirectory);
                 if (!destination.has_value()) {
                     EditorWorkspaceViewCommandData fallback;
                     fallback.command = kind == GameplayBehaviorKind::Native ? EditorWorkspaceViewCommand::CreateNativeBehavior
@@ -437,18 +442,18 @@ namespace Horo::Editor {
                 }
 
                 const std::string baseName = SuggestGameplayBehaviorBaseName(*destination, kind);
-                Result<void> opened = modalHost_.OpenRoot(std::make_unique<GameplayBehaviorFilenameModal>(
-                    context_, kind, destination->string(), baseName, [this](CreateGameplayBehaviorRequest request) {
-                        if (!controller_)
-                            return;
-                        EditorWorkspaceViewCommandData create;
-                        create.command = request.kind == GameplayBehaviorKind::Native
-                                             ? EditorWorkspaceViewCommand::CreateNativeBehavior
-                                             : EditorWorkspaceViewCommand::CreateLuaBehavior;
-                        create.gameplayBehaviorRequest = std::move(request);
-                        controller_->ProcessCommand(create);
-                        PublishViewportSceneIfChanged();
-                    }));
+                Result<void> opened =
+                    modalHost_.OpenRoot(std::make_unique<GameplayBehaviorFilenameModal>(context_, kind, destination->string(), baseName,
+                                                                                        [this](CreateGameplayBehaviorRequest request) {
+                    if (!controller_)
+                        return;
+                    EditorWorkspaceViewCommandData create;
+                    create.command = request.kind == GameplayBehaviorKind::Native ? EditorWorkspaceViewCommand::CreateNativeBehavior
+                                                                                  : EditorWorkspaceViewCommand::CreateLuaBehavior;
+                    create.gameplayBehaviorRequest = std::move(request);
+                    controller_->ProcessCommand(create);
+                    PublishViewportSceneIfChanged();
+                }));
                 if (opened.HasError()) {
                     LOG_WARN("editor.asset_actions", "Gameplay behavior filename modal could not open: %s",
                              opened.ErrorValue().message.c_str());
@@ -538,8 +543,7 @@ namespace Horo::Editor {
                 const ViewportRevision viewportRevision = controller_->CurrentViewportRevision();
                 const std::uint64_t viewportSceneRevision = controller_->CurrentViewportSceneRevision();
                 if (documentRevision == publishedSceneRevision_ && selectionRevision == publishedSelectionRevision_ &&
-                    viewportRevision == publishedViewportRevision_ &&
-                    viewportSceneRevision == publishedViewportSceneRevision_) {
+                    viewportRevision == publishedViewportRevision_ && viewportSceneRevision == publishedViewportSceneRevision_) {
                     return;
                 }
                 viewportSceneState_.Replace(controller_->ViewportScene());

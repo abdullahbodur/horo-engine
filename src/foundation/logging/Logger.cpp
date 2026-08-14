@@ -10,10 +10,12 @@
 #include <atomic>
 #include <cerrno>
 #include <charconv>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <memory>
 #include <mutex>
@@ -36,18 +38,42 @@
 
 namespace Horo::Log {
     namespace {
-        std::atomic<Level> g_level{Level::Info};
-        std::atomic<std::uint64_t> g_accepted{};
-        std::atomic<std::uint64_t> g_written{};
-        std::atomic<std::uint64_t> g_dropped{};
-        std::atomic<std::uint64_t> g_emergency{};
-        std::atomic<bool> g_ownsRuntime{};
-        std::mutex g_lifecycleMutex;
-        std::shared_ptr<StructuredLogStore> g_store;
-        std::filesystem::path g_shutdownMarkerPath;
-        std::string g_sessionId;
-        bool g_writeSessionMarkers{};
-        std::atomic<std::uint64_t> g_sessionSequence{};
+        /** @brief Dedicated failure raised by the JSONL persistence boundary. */
+        class LoggerPersistenceError final : public std::runtime_error {
+        public:
+            using std::runtime_error::runtime_error;
+        };
+
+        /** @brief Process logger state accessed through one function-local owner. */
+        struct LoggerState {
+            using AtomicLevel = std::atomic<Level>;
+
+            [[nodiscard]] std::shared_ptr<StructuredLogStore> LoadStore() const noexcept {
+                return std::atomic_load(&store);
+            }
+
+            void SetStore(std::shared_ptr<StructuredLogStore> replacement) noexcept {
+                std::atomic_store(&store, std::move(replacement));
+            }
+
+            AtomicLevel level{Level::Info};
+            std::atomic<std::uint64_t> accepted{};
+            std::atomic<std::uint64_t> written{};
+            std::atomic<std::uint64_t> dropped{};
+            std::atomic<std::uint64_t> emergency{};
+            std::atomic<bool> ownsRuntime{};
+            std::mutex lifecycleMutex;
+            std::shared_ptr<StructuredLogStore> store;
+            std::filesystem::path shutdownMarkerPath;
+            std::string sessionId;
+            bool writeSessionMarkers{};
+            std::atomic<std::uint64_t> sessionSequence{};
+        };
+
+        LoggerState &State() {
+            static LoggerState state;
+            return state;
+        }
 
         std::uint64_t ProcessId() noexcept;
 
@@ -86,17 +112,15 @@ namespace Horo::Log {
 #else
             gmtime_r(&time, &parts);
 #endif
-            std::array<char, 32> buffer{};
-            const int size =
-                std::snprintf(buffer.data(), buffer.size(), "%04d-%02d-%02dT%02d:%02d:%02d.%03lldZ", parts.tm_year + 1900, parts.tm_mon + 1,
-                              parts.tm_mday, parts.tm_hour, parts.tm_min, parts.tm_sec, static_cast<long long>(milliseconds.count()));
-            return size <= 0 ? std::string{} : std::string{buffer.data(), static_cast<std::size_t>(size)};
+            return std::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z", parts.tm_year + 1900, parts.tm_mon + 1, parts.tm_mday,
+                               parts.tm_hour, parts.tm_min, parts.tm_sec, milliseconds.count());
         }
 
         /** @brief Appends a JSON-escaped string without creating an intermediate value. */
         void AppendJsonEscaped(std::string &output, const std::string_view value) {
             static constexpr std::array kHex{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
-            for (const unsigned char character : value) {
+            for (const char rawCharacter : value) {
+                const auto character = std::to_integer<unsigned char>(static_cast<std::byte>(rawCharacter));
                 switch (character) {
                     case '"':
                         output += R"(\")";
@@ -134,7 +158,7 @@ namespace Horo::Log {
         /** @brief Atomically replaces one small process-session metadata file. */
         bool WriteMarkerAtomically(const std::filesystem::path &path, const std::string_view content) {
             std::filesystem::path temporary = path;
-            temporary += ".tmp-" + std::to_string(ProcessId());
+            temporary += std::format(".tmp-{}", ProcessId());
             {
                 std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
                 if (!output)
@@ -157,8 +181,7 @@ namespace Horo::Log {
         /** @brief Reads a bounded marker and extracts its restricted session identifier. */
         std::optional<std::string> ReadMarkerSessionId(const std::filesystem::path &path) {
             std::error_code error;
-            const std::uintmax_t size = std::filesystem::file_size(path, error);
-            if (error || size == 0 || size > 16U * 1024U)
+            if (const std::uintmax_t size = std::filesystem::file_size(path, error); error || size == 0 || size > 16U * 1024U)
                 return std::nullopt;
             std::ifstream input(path, std::ios::binary);
             if (!input)
@@ -184,8 +207,7 @@ namespace Horo::Log {
         std::string CreateSessionId() {
             const auto timestamp =
                 std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-            return std::to_string(timestamp) + '-' + std::to_string(ProcessId()) + '-' +
-                   std::to_string(g_sessionSequence.fetch_add(1, std::memory_order_relaxed));
+            return std::format("{}-{}-{}", timestamp, ProcessId(), State().sessionSequence.fetch_add(1));
         }
 
         /** @brief Writes immutable current-session identity without private machine data. */
@@ -201,7 +223,7 @@ namespace Horo::Log {
             AppendJsonEscaped(content, configuration.hostName.empty() ? configuration.baseName : configuration.hostName);
             content += R"(","version":")";
             AppendJsonEscaped(content, configuration.hostVersion);
-            content += R"(","processId":)" + std::to_string(ProcessId());
+            content += std::format(R"(","processId":{})", ProcessId());
             content += R"(,"previousCleanShutdown":)";
             content += previousCleanShutdown ? "true" : "false";
             content += "}\n";
@@ -223,8 +245,7 @@ namespace Horo::Log {
 
         /** @brief Appends one locale-independent JSON scalar. */
         void AppendFieldValue(std::string &output, const Telemetry::FieldValue &value) {
-            std::visit([&output](const auto &typed) {
-                using Value = std::decay_t<decltype(typed)>;
+            std::visit([&output]<typename Value>(const Value &typed) {
                 if constexpr (std::is_same_v<Value, bool>) {
                     output += typed ? "true" : "false";
                 } else if constexpr (std::is_same_v<Value, std::string>) {
@@ -235,7 +256,7 @@ namespace Horo::Log {
                     std::array<char, 64> buffer{};
                     const auto [end, error] = std::to_chars(buffer.data(), buffer.data() + buffer.size(), typed);
                     if (error != std::errc{})
-                        throw std::runtime_error{"failed to format structured log field"};
+                        throw LoggerPersistenceError{"failed to format structured log field"};
                     output.append(buffer.data(), end);
                 }
             }, value);
@@ -301,13 +322,12 @@ namespace Horo::Log {
         class RotatingJsonlSink final : public Telemetry::ISink {
         public:
             explicit RotatingJsonlSink(LoggerConfiguration configuration)
-                : configuration_(std::move(configuration)), path_(configuration_.logDirectory / (configuration_.baseName + ".jsonl")),
-                  startedAt_(std::chrono::steady_clock::now()) {
+                : configuration_(std::move(configuration)), path_(configuration_.logDirectory / (configuration_.baseName + ".jsonl")) {
                 if (!RepairPartialTrailingRecord(path_))
-                    throw std::runtime_error{"failed to recover partial JSONL record"};
+                    throw LoggerPersistenceError{"failed to recover partial JSONL record"};
                 file_ = std::fopen(path_.string().c_str(), "ab");
                 if (file_ == nullptr)
-                    throw std::runtime_error{"failed to open JSONL log"};
+                    throw LoggerPersistenceError{"failed to open JSONL log"};
                 std::error_code error;
                 currentBytes_ = std::filesystem::file_size(path_, error);
                 if (error)
@@ -319,29 +339,34 @@ namespace Horo::Log {
                     std::fclose(file_);
             }
 
+            RotatingJsonlSink(const RotatingJsonlSink &) = delete;
+            RotatingJsonlSink &operator=(const RotatingJsonlSink &) = delete;
+            RotatingJsonlSink(RotatingJsonlSink &&) = delete;
+            RotatingJsonlSink &operator=(RotatingJsonlSink &&) = delete;
+
             void Export(const Telemetry::Record &record, const Telemetry::InstrumentDescriptor *) override {
                 const auto *log = std::get_if<Telemetry::LogRecord>(&record.payload);
                 if (log == nullptr)
                     return;
                 const std::string line = FormatRecord(record, *log);
                 if (line.size() > configuration_.maxFileBytes)
-                    throw std::runtime_error{"structured log record exceeds configured file limit"};
+                    throw LoggerPersistenceError{"structured log record exceeds configured file limit"};
                 if (currentBytes_ != 0 && currentBytes_ + line.size() > configuration_.maxFileBytes)
                     RollFiles();
                 if (file_ == nullptr)
-                    throw std::runtime_error{"JSONL log is unavailable"};
+                    throw LoggerPersistenceError{"JSONL log is unavailable"};
                 const std::size_t written = std::fwrite(line.data(), 1, line.size(), file_);
                 if (written != line.size() || std::fflush(file_) != 0)
-                    throw std::runtime_error{"failed to persist JSONL log record"};
+                    throw LoggerPersistenceError{"failed to persist JSONL log record"};
                 currentBytes_ += written;
-                g_written.fetch_add(1, std::memory_order_relaxed);
+                State().written.fetch_add(1);
                 if (configuration_.echoToStderr)
                     std::fprintf(stderr, "[%s] %s: %s\n", ToString(log->severity), log->category.c_str(), log->message.c_str());
             }
 
             void Flush() override {
                 if (file_ != nullptr && std::fflush(file_) != 0)
-                    throw std::runtime_error{"failed to flush JSONL log"};
+                    throw LoggerPersistenceError{"failed to flush JSONL log"};
             }
 
         private:
@@ -381,8 +406,7 @@ namespace Horo::Log {
                     }
                     output += '}';
                 }
-                const auto context = record.context.Fields();
-                if (!context.empty()) {
+                if (const auto context = record.context.Fields(); !context.empty()) {
                     output += R"(,"context":{)";
                     for (std::size_t index = 0; index < context.size(); ++index) {
                         if (index != 0)
@@ -400,7 +424,7 @@ namespace Horo::Log {
             }
 
             [[nodiscard]] std::filesystem::path RolledPath(const std::size_t index) const {
-                return std::filesystem::path{path_.string() + "." + std::to_string(index)};
+                return std::filesystem::path{std::format("{}.{}", path_.string(), index)};
             }
 
             void ReopenCurrentForAppend() noexcept {
@@ -423,13 +447,13 @@ namespace Horo::Log {
                     std::filesystem::remove(path_, error);
                     if (error) {
                         ReopenCurrentForAppend();
-                        throw std::runtime_error{"failed to replace current JSONL log"};
+                        throw LoggerPersistenceError{"failed to replace current JSONL log"};
                     }
                 } else {
                     std::filesystem::remove(RolledPath(configuration_.maxRolledFiles), error);
                     if (error) {
                         ReopenCurrentForAppend();
-                        throw std::runtime_error{"failed to remove expired JSONL segment"};
+                        throw LoggerPersistenceError{"failed to remove expired JSONL segment"};
                     }
                     for (std::size_t index = configuration_.maxRolledFiles; index > 1; --index) {
                         const auto source = RolledPath(index - 1U);
@@ -440,7 +464,7 @@ namespace Horo::Log {
                         std::filesystem::rename(source, RolledPath(index), error);
                         if (error) {
                             ReopenCurrentForAppend();
-                            throw std::runtime_error{"failed to roll JSONL segment"};
+                            throw LoggerPersistenceError{"failed to roll JSONL segment"};
                         }
                     }
                     if (std::filesystem::exists(path_, error)) {
@@ -449,13 +473,13 @@ namespace Horo::Log {
                     }
                     if (error) {
                         ReopenCurrentForAppend();
-                        throw std::runtime_error{"failed to archive current JSONL log"};
+                        throw LoggerPersistenceError{"failed to archive current JSONL log"};
                     }
                 }
 
                 file_ = std::fopen(path_.string().c_str(), "wb");
                 if (file_ == nullptr)
-                    throw std::runtime_error{"failed to create replacement JSONL log"};
+                    throw LoggerPersistenceError{"failed to create replacement JSONL log"};
                 currentBytes_ = 0;
             }
 
@@ -463,7 +487,7 @@ namespace Horo::Log {
             std::filesystem::path path_;
             std::FILE *file_{};
             std::uintmax_t currentBytes_{};
-            std::chrono::steady_clock::time_point startedAt_;
+            std::chrono::steady_clock::time_point startedAt_{std::chrono::steady_clock::now()};
         };
 
         /** @brief Consumer-thread adapter for the optional bounded editor log store. */
@@ -473,7 +497,7 @@ namespace Horo::Log {
                 const auto *log = std::get_if<Telemetry::LogRecord>(&record.payload);
                 if (log == nullptr)
                     return;
-                const auto store = std::atomic_load_explicit(&g_store, std::memory_order_acquire);
+                const auto store = State().LoadStore();
                 if (store == nullptr)
                     return;
                 store->Append(StructuredLogRecord{.sequence = record.sequence,
@@ -484,46 +508,49 @@ namespace Horo::Log {
                                                   .context = FormatPresentationContext(record.context)});
             }
 
-            void Flush() override {}
+            void Flush() override {
+                // The bounded in-memory store commits synchronously in Append.
+            }
         };
 
         void EmergencyWrite(const Level level, const std::string_view category, const std::string_view message) {
-            g_emergency.fetch_add(1, std::memory_order_relaxed);
+            State().emergency.fetch_add(1);
             std::fprintf(stderr, "[logger-emergency][%s] %.*s: %.*s\n", ToString(level), static_cast<int>(category.size()), category.data(),
                          static_cast<int>(message.size()), message.data());
         }
 
         Level ParseEnvironmentLevel(const Level fallback) {
+            using enum Level;
             const char *environment = std::getenv("HORO_LOG_LEVEL");
             if (environment == nullptr)
                 return fallback;
             const std::string_view value{environment};
             if (value == "trace")
-                return Level::Trace;
+                return Trace;
             if (value == "debug")
-                return Level::Debug;
+                return Debug;
             if (value == "info")
-                return Level::Info;
+                return Info;
             if (value == "warn")
-                return Level::Warn;
+                return Warn;
             if (value == "error")
-                return Level::Error;
+                return Error;
             if (value == "critical")
-                return Level::Critical;
+                return Critical;
             if (value == "off")
-                return Level::Off;
+                return Off;
             return fallback;
         }
 
         bool EmitLog(const std::string_view category, const Level level, const std::string_view message,
                      const std::span<const Telemetry::Field> fields, LogContextSnapshot context) {
-            Telemetry::LogRecord payload{.severity = level,
-                                         .category = std::string{category},
-                                         .message = std::string{message},
-                                         .fields = {fields.begin(), fields.end()}};
-            if (Telemetry::Runtime::EmitRecord(
+            if (Telemetry::LogRecord payload{.severity = level,
+                                             .category = std::string{category},
+                                             .message = std::string{message},
+                                             .fields = {fields.begin(), fields.end()}};
+                Telemetry::Runtime::EmitRecord(
                     Telemetry::Record{.subsystem = std::string{category}, .context = std::move(context), .payload = std::move(payload)})) {
-                g_accepted.fetch_add(1, std::memory_order_relaxed);
+                State().accepted.fetch_add(1);
                 return true;
             }
             return false;
@@ -545,14 +572,18 @@ namespace Horo::Log {
             resolved.sinkFlushInterval <= std::chrono::milliseconds::zero())
             return false;
 
-        std::lock_guard lock(g_lifecycleMutex);
-        if (g_ownsRuntime.load(std::memory_order_acquire))
+        LoggerState &state = State();
+        std::lock_guard lock(state.lifecycleMutex);
+        if (state.ownsRuntime.load())
             return true;
 
         std::shared_ptr<Telemetry::ISink> fileSink;
         try {
             fileSink = std::make_shared<RotatingJsonlSink>(resolved);
-        } catch (const std::exception &error) {
+        } catch (const LoggerPersistenceError &error) {
+            std::fprintf(stderr, "[Logger] failed to open log output (errno=%d): %s (%s)\n", errno, std::strerror(errno), error.what());
+            return false;
+        } catch (const std::bad_alloc &error) {
             std::fprintf(stderr, "[Logger] failed to open log output (errno=%d): %s (%s)\n", errno, std::strerror(errno), error.what());
             return false;
         }
@@ -561,12 +592,12 @@ namespace Horo::Log {
         sinks.reserve(3U + resolved.additionalSinks.size());
         sinks.push_back(std::move(fileSink));
         sinks.push_back(std::make_shared<StructuredLogStoreSink>());
-        const auto historySink = Diagnostics::OperationHistorySink::Create({.directory = resolved.logDirectory,
-                                                                            .baseName = resolved.baseName + ".operations",
-                                                                            .maxFileBytes = resolved.maxFileBytes,
-                                                                            .maxRolledFiles = resolved.maxRolledFiles,
-                                                                            .maxRecoveredRecords = 1024});
-        if (historySink != nullptr)
+        if (const auto historySink = Diagnostics::OperationHistorySink::Create({.directory = resolved.logDirectory,
+                                                                                .baseName = std::format("{}.operations", resolved.baseName),
+                                                                                .maxFileBytes = resolved.maxFileBytes,
+                                                                                .maxRolledFiles = resolved.maxRolledFiles,
+                                                                                .maxRecoveredRecords = 1024});
+            historySink != nullptr)
             sinks.push_back(historySink);
         else
             std::fprintf(stderr, "[Logger] operation history sink is unavailable; continuing without persistent history\n");
@@ -594,11 +625,11 @@ namespace Horo::Log {
             return false;
         }
 
-        g_level.store(ParseEnvironmentLevel(g_level.load(std::memory_order_relaxed)), std::memory_order_release);
-        g_shutdownMarkerPath = shutdownMarkerPath;
-        g_sessionId = sessionId;
-        g_writeSessionMarkers = resolved.writeSessionMarkers;
-        g_ownsRuntime.store(true, std::memory_order_release);
+        state.level.store(ParseEnvironmentLevel(state.level.load()));
+        state.shutdownMarkerPath = shutdownMarkerPath;
+        state.sessionId = sessionId;
+        state.writeSessionMarkers = resolved.writeSessionMarkers;
+        state.ownsRuntime.store(true);
         const std::array startupFields{
             Telemetry::Field{.key = "session.id", .value = sessionId},
             Telemetry::Field{.key = "host.name", .value = resolved.hostName.empty() ? resolved.baseName : resolved.hostName},
@@ -612,17 +643,18 @@ namespace Horo::Log {
 
     /** @copydoc Logger::Shutdown */
     void Logger::Shutdown() {
-        std::lock_guard lock(g_lifecycleMutex);
-        if (g_ownsRuntime.exchange(false, std::memory_order_acq_rel)) {
+        LoggerState &state = State();
+        std::lock_guard lock(state.lifecycleMutex);
+        if (state.ownsRuntime.exchange(false)) {
             static_cast<void>(EmitLog("observability.shutdown", Level::Info, "Observability runtime stopping", {}, {}));
             const bool clean = Telemetry::Runtime::Shutdown();
-            if (clean && g_writeSessionMarkers && !WriteShutdownMarker(g_shutdownMarkerPath, g_sessionId))
+            if (clean && state.writeSessionMarkers && !WriteShutdownMarker(state.shutdownMarkerPath, state.sessionId))
                 std::fprintf(stderr, "[Logger] failed to persist clean-shutdown marker\n");
         }
-        g_shutdownMarkerPath.clear();
-        g_sessionId.clear();
-        g_writeSessionMarkers = false;
-        std::atomic_store_explicit(&g_store, std::shared_ptr<StructuredLogStore>{}, std::memory_order_release);
+        state.shutdownMarkerPath.clear();
+        state.sessionId.clear();
+        state.writeSessionMarkers = false;
+        state.SetStore({});
     }
 
     /** @copydoc Logger::Flush */
@@ -632,31 +664,32 @@ namespace Horo::Log {
 
     /** @copydoc Logger::GetLevel */
     Level Logger::GetLevel() noexcept {
-        return g_level.load(std::memory_order_acquire);
+        return State().level.load();
     }
 
     /** @copydoc Logger::SetLevel */
     void Logger::SetLevel(const Level level) noexcept {
-        g_level.store(level, std::memory_order_release);
+        State().level.store(level);
     }
 
     /** @copydoc Logger::IsEnabled */
     bool Logger::IsEnabled(const Level level) noexcept {
-        const Level minimum = g_level.load(std::memory_order_relaxed);
+        const Level minimum = State().level.load();
         return minimum != Level::Off && level >= minimum;
     }
 
     /** @copydoc Logger::Statistics */
     LoggerStatistics Logger::Statistics() noexcept {
-        return {.acceptedRecords = g_accepted.load(std::memory_order_relaxed),
-                .writtenRecords = g_written.load(std::memory_order_relaxed),
-                .droppedRecords = g_dropped.load(std::memory_order_relaxed),
-                .emergencyRecords = g_emergency.load(std::memory_order_relaxed)};
+        const LoggerState &state = State();
+        return {.acceptedRecords = state.accepted.load(),
+                .writtenRecords = state.written.load(),
+                .droppedRecords = state.dropped.load(),
+                .emergencyRecords = state.emergency.load()};
     }
 
     /** @copydoc Logger::SetStructuredLogStore */
     void Logger::SetStructuredLogStore(std::shared_ptr<StructuredLogStore> store) {
-        std::atomic_store_explicit(&g_store, std::move(store), std::memory_order_release);
+        State().SetStore(std::move(store));
     }
 
     /** @copydoc Logger::Write */
@@ -674,22 +707,22 @@ namespace Horo::Log {
         if (Telemetry::Runtime::IsEnabled()) {
             if (EmitLog(category, level, message, fields, std::move(context)))
                 return;
-            g_dropped.fetch_add(1, std::memory_order_relaxed);
+            State().dropped.fetch_add(1);
             if (level >= Level::Warn)
                 EmergencyWrite(level, category, message);
             return;
         }
 
-        const auto store = std::atomic_load_explicit(&g_store, std::memory_order_acquire);
+        const auto store = State().LoadStore();
         if (store != nullptr) {
-            const std::uint64_t sequence = g_accepted.fetch_add(1, std::memory_order_relaxed) + 1U;
+            const std::uint64_t sequence = State().accepted.fetch_add(1) + 1U;
             store->Append(StructuredLogRecord{.sequence = sequence,
                                               .timestampUtc = std::chrono::system_clock::now(),
                                               .level = level,
                                               .category = std::string{category},
                                               .message = std::string{message},
                                               .context = FormatPresentationContext(context)});
-            g_written.fetch_add(1, std::memory_order_relaxed);
+            State().written.fetch_add(1);
         }
     }
 

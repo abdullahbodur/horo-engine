@@ -583,6 +583,8 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/screens/workspace/panels/global_dock/panes/physics/GlobalDockPhysicsPane.cpp
             editor/screens/workspace/panels/global_dock/panes/shared/GlobalDockStatusPane.cpp
             editor/screens/workspace/EditorWorkspaceController.cpp
+            editor/screens/workspace/EditorWorkspaceControllerCommands.cpp
+            editor/screens/workspace/EditorWorkspaceControllerContentBrowser.cpp
             editor/screens/workspace/EditorWorkspaceView.cpp
             editor/screens/workspace/EditorWorkspaceScreen.cpp
             editor/screens/NavigationErrors.cpp

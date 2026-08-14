@@ -107,8 +107,8 @@ namespace {
     class TestWorkspaceController final {
     public:
         explicit TestWorkspaceController(std::string projectRoot = "test-project", DiagnosticSourceNavigator diagnosticNavigator = {})
-            : controller_(std::move(projectRoot), runtimeScene_, {}, nullptr, nullptr, nullptr, nullptr, nullptr,
-                          std::move(diagnosticNavigator)) {
+            : controller_(projectRoot, runtimeScene_, {},
+                          EditorWorkspaceDependencies{.diagnosticSourceNavigator = std::move(diagnosticNavigator)}) {
             REQUIRE((runtimeScene_.Startup(cancellation_.Token()).HasValue()));
             PumpLifecycleCommit();
         }
@@ -200,7 +200,7 @@ namespace {
         Runtime::RuntimeSceneService runtimeScene;
         CancellationSource cancellation;
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
-        EditorWorkspaceController controller{projectRoot.string(), runtimeScene, {}, nullptr, &mutations, &files};
+        EditorWorkspaceController controller{projectRoot, runtimeScene, {}, {.mutations = &mutations, .durableFiles = &files}};
 
         EditorWorkspaceViewCommandData navigate;
         navigate.command = EditorWorkspaceViewCommand::NavigateContentBrowser;
@@ -256,7 +256,7 @@ namespace {
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
 
         {
-            EditorWorkspaceController controller{projectRoot.string(), runtimeScene, {}, nullptr, &mutations, &files, nullptr};
+            EditorWorkspaceController controller{projectRoot, runtimeScene, {}, {.mutations = &mutations, .durableFiles = &files}};
             REQUIRE((controller.ViewModel().objects.empty()));
             REQUIRE((!controller.ViewModel().isDirty));
 
@@ -290,7 +290,7 @@ namespace {
         }
 
         {
-            EditorWorkspaceController reopened{projectRoot.string(), runtimeScene, {}, nullptr, &mutations, &files, nullptr};
+            EditorWorkspaceController reopened{projectRoot, runtimeScene, {}, {.mutations = &mutations, .durableFiles = &files}};
             REQUIRE((reopened.ViewModel().objects.size() == 1));
             REQUIRE((reopened.ViewModel().objects.front().name == "Box"));
             REQUIRE((!reopened.ViewModel().isDirty));
@@ -321,7 +321,7 @@ namespace {
         CancellationSource cancellation;
         Runtime::RuntimeSceneService runtimeScene;
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
-        EditorWorkspaceController controller{projectRoot.string(), runtimeScene, {}, nullptr, &mutations, &files, nullptr};
+        EditorWorkspaceController controller{projectRoot, runtimeScene, {}, {.mutations = &mutations, .durableFiles = &files}};
 
         EditorWorkspaceViewCommandData create;
         create.command = EditorWorkspaceViewCommand::CreatePrimitive;
@@ -394,7 +394,7 @@ namespace {
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
 
         {
-            EditorWorkspaceController controller{projectRoot.string(), runtimeScene, {}, nullptr, &mutations, &files, nullptr};
+            EditorWorkspaceController controller{projectRoot, runtimeScene, {}, {.mutations = &mutations, .durableFiles = &files}};
             EditorWorkspaceViewCommandData create;
             create.command = EditorWorkspaceViewCommand::CreatePrimitive;
             create.primitivePayload = Runtime::PrimitiveId{"primitive.mesh.box"};
@@ -404,7 +404,7 @@ namespace {
         }
 
         {
-            EditorWorkspaceController reopened{projectRoot.string(), runtimeScene, {}, nullptr, &mutations, &files, nullptr};
+            EditorWorkspaceController reopened{projectRoot, runtimeScene, {}, {.mutations = &mutations, .durableFiles = &files}};
             REQUIRE((reopened.ViewModel().recoveryAvailable));
             REQUIRE((reopened.ViewModel().objects.empty()));
             REQUIRE((!reopened.ViewModel().isDirty));
@@ -452,7 +452,7 @@ namespace {
         CancellationSource cancellation;
         Runtime::RuntimeSceneService runtimeScene;
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
-        EditorWorkspaceController controller{projectRoot.string(), runtimeScene, {}, nullptr, &mutations, &files, nullptr};
+        EditorWorkspaceController controller{projectRoot, runtimeScene, {}, {.mutations = &mutations, .durableFiles = &files}};
 
         EditorWorkspaceViewCommandData create;
         create.command = EditorWorkspaceViewCommand::CreatePrimitive;
@@ -505,7 +505,7 @@ namespace {
         CancellationSource cancellation;
         Runtime::RuntimeSceneService runtimeScene;
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
-        EditorWorkspaceController controller{projectRoot.string(), runtimeScene, {}, nullptr, &mutations, &files, nullptr};
+        EditorWorkspaceController controller{projectRoot, runtimeScene, {}, {.mutations = &mutations, .durableFiles = &files}};
 
         EditorWorkspaceViewCommandData create;
         create.command = EditorWorkspaceViewCommand::CreatePrimitive;
@@ -582,7 +582,10 @@ namespace {
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
         JobSystem jobs(JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 8});
         {
-            EditorWorkspaceController controller{projectRoot.string(), runtimeScene, {}, nullptr, &mutations, &files, nullptr, &jobs};
+            EditorWorkspaceController controller{projectRoot,
+                                                 runtimeScene,
+                                                 {},
+                                                 {.mutations = &mutations, .durableFiles = &files, .jobs = &jobs}};
             REQUIRE((!controller.ViewModel().isDirty));
             REQUIRE((!controller.ViewModel().sceneExternalConflict));
 
@@ -811,7 +814,10 @@ namespace {
         Runtime::RuntimeSceneService runtimeScene;
         CancellationSource cancellation;
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
-        EditorWorkspaceController controller{projectRoot.string(), runtimeScene, registry.Snapshot(), &registry, &mutations, &files};
+        EditorWorkspaceController controller{projectRoot,
+                                             runtimeScene,
+                                             registry.Snapshot(),
+                                             {.mutableAssetRegistry = &registry, .mutations = &mutations, .durableFiles = &files}};
 
         EditorWorkspaceViewCommandData navigate;
         navigate.command = EditorWorkspaceViewCommand::NavigateContentBrowser;
@@ -884,7 +890,10 @@ namespace {
         Runtime::RuntimeSceneService runtimeScene;
         CancellationSource cancellation;
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
-        EditorWorkspaceController controller{projectRoot.string(), runtimeScene, registry.Snapshot(), &registry, &mutations, &files};
+        EditorWorkspaceController controller{projectRoot,
+                                             runtimeScene,
+                                             registry.Snapshot(),
+                                             {.mutableAssetRegistry = &registry, .mutations = &mutations, .durableFiles = &files}};
 
         EditorWorkspaceViewCommandData navigate;
         navigate.command = EditorWorkspaceViewCommand::NavigateContentBrowser;
@@ -1045,7 +1054,10 @@ namespace {
         Runtime::RuntimeSceneService runtimeScene;
         CancellationSource cancellation;
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
-        EditorWorkspaceController controller{projectRoot.string(), runtimeScene, registry.Snapshot(), &registry, &mutations, &files};
+        EditorWorkspaceController controller{projectRoot,
+                                             runtimeScene,
+                                             registry.Snapshot(),
+                                             {.mutableAssetRegistry = &registry, .mutations = &mutations, .durableFiles = &files}};
 
         EditorWorkspaceViewCommandData navigate;
         navigate.command = EditorWorkspaceViewCommand::NavigateContentBrowser;
@@ -1105,7 +1117,10 @@ namespace {
         Runtime::RuntimeSceneService runtimeScene;
         CancellationSource cancellation;
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
-        EditorWorkspaceController controller{projectRoot.string(), runtimeScene, registry.Snapshot(), &registry, &mutations, &files};
+        EditorWorkspaceController controller{projectRoot,
+                                             runtimeScene,
+                                             registry.Snapshot(),
+                                             {.mutableAssetRegistry = &registry, .mutations = &mutations, .durableFiles = &files}};
 
         EditorWorkspaceViewCommandData navigate;
         navigate.command = EditorWorkspaceViewCommand::NavigateContentBrowser;
@@ -1276,7 +1291,10 @@ namespace {
         Runtime::RuntimeSceneService runtimeScene;
         CancellationSource cancellation;
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
-        EditorWorkspaceController controller{projectRoot.string(), runtimeScene, registry.Snapshot(), &registry, &mutations, &files};
+        EditorWorkspaceController controller{projectRoot,
+                                             runtimeScene,
+                                             registry.Snapshot(),
+                                             {.mutableAssetRegistry = &registry, .mutations = &mutations, .durableFiles = &files}};
 
         EditorWorkspaceViewCommandData navigate;
         navigate.command = EditorWorkspaceViewCommand::NavigateContentBrowser;
@@ -1367,7 +1385,10 @@ namespace {
         Runtime::RuntimeSceneService runtimeScene;
         CancellationSource cancellation;
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
-        EditorWorkspaceController controller{projectRoot.string(), runtimeScene, registry.Snapshot(), &registry, &mutations, &files};
+        EditorWorkspaceController controller{projectRoot,
+                                             runtimeScene,
+                                             registry.Snapshot(),
+                                             {.mutableAssetRegistry = &registry, .mutations = &mutations, .durableFiles = &files}};
 
         EditorWorkspaceViewCommandData navigate;
         navigate.command = EditorWorkspaceViewCommand::NavigateContentBrowser;

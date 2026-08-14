@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cstddef>
+#include <format>
 #include <vector>
 
 namespace Horo::Application {
@@ -34,13 +36,11 @@ namespace Horo::Application {
 
         std::vector<std::string_view> SplitIdentifiers(const std::string_view value) {
             std::vector<std::string_view> identifiers;
-            std::size_t begin = 0;
-            while (begin <= value.size()) {
+            for (std::size_t begin = 0;;) {
                 const std::size_t end = value.find('.', begin);
                 identifiers.push_back(value.substr(begin, end == std::string_view::npos ? value.size() - begin : end - begin));
-                if (end == std::string_view::npos) {
+                if (end == std::string_view::npos)
                     break;
-                }
                 begin = end + 1;
             }
             return identifiers;
@@ -52,20 +52,23 @@ namespace Horo::Application {
                 return Result<Hash>::Failure(MakeError(ProjectErrors::HashInvalid));
             }
             Hash result;
-            const auto hexValue = [](const char c) -> int {
+            const auto hexValue = [](const char c) {
                 if (c >= '0' && c <= '9')
                     return c - '0';
                 if (c >= 'a' && c <= 'f')
                     return c - 'a' + 10;
                 return -1;
             };
-            for (std::size_t i = 0; i < result.bytes.size(); ++i) {
-                const int high = hexValue(text[prefix.size() + i * 2]);
-                const int low = hexValue(text[prefix.size() + i * 2 + 1]);
+            const std::string_view encoded = text.substr(prefix.size());
+            auto cursor = encoded.begin();
+            for (auto &byte : result.bytes) {
+                const int high = hexValue(*cursor++);
+                const int low = hexValue(*cursor++);
                 if (high < 0 || low < 0) {
                     return Result<Hash>::Failure(MakeError(ProjectErrors::HashInvalid));
                 }
-                result.bytes[i] = static_cast<std::uint8_t>((high << 4) | low);
+                const auto parsed = static_cast<std::byte>((high << 4) | low);
+                byte = std::to_integer<std::uint8_t>(parsed);
             }
             return Result<Hash>::Success(result);
         }
@@ -74,9 +77,11 @@ namespace Horo::Application {
             constexpr char digits[] = "0123456789abcdef";
             std::string result = "sha256:";
             result.reserve(71);
-            for (const std::uint8_t byte : hash.bytes) {
-                result.push_back(digits[byte >> 4]);
-                result.push_back(digits[byte & 0x0f]);
+            for (const std::uint8_t value : hash.bytes) {
+                const auto byte = static_cast<std::byte>(value);
+                const auto numeric = std::to_integer<unsigned int>(byte);
+                result.push_back(digits[numeric >> 4]);
+                result.push_back(digits[numeric & 0x0f]);
             }
             return result;
         }
@@ -119,11 +124,8 @@ namespace Horo::Application {
 
     /** @copydoc FormatHoroVersion */
     std::string FormatHoroVersion(const HoroVersion &version) {
-        std::string result = std::to_string(version.major) + '.' + std::to_string(version.minor) + '.' + std::to_string(version.patch);
-        if (!version.prerelease.empty()) {
-            result += '-' + version.prerelease;
-        }
-        return result;
+        return version.prerelease.empty() ? std::format("{}.{}.{}", version.major, version.minor, version.patch)
+                                          : std::format("{}.{}.{}-{}", version.major, version.minor, version.patch, version.prerelease);
     }
 
     /** @copydoc CompareHoroVersions */
@@ -145,15 +147,12 @@ namespace Horo::Application {
         const std::size_t common = std::min(left.size(), right.size());
         for (std::size_t i = 0; i < common; ++i) {
             const bool leftNumeric = IsNumericIdentifier(left[i]);
-            const bool rightNumeric = IsNumericIdentifier(right[i]);
-            if (leftNumeric != rightNumeric)
+            if (const bool rightNumeric = IsNumericIdentifier(right[i]); leftNumeric != rightNumeric)
                 return leftNumeric ? std::strong_ordering::less : std::strong_ordering::greater;
             if (left[i] == right[i])
                 continue;
-            if (leftNumeric) {
-                if (left[i].size() != right[i].size())
-                    return left[i].size() <=> right[i].size();
-            }
+            if (leftNumeric && left[i].size() != right[i].size())
+                return left[i].size() <=> right[i].size();
             return left[i] < right[i] ? std::strong_ordering::less : std::strong_ordering::greater;
         }
         return left.size() <=> right.size();

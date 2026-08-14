@@ -27,6 +27,7 @@
 #include <nlohmann/json.hpp>
 #include <random>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace Horo::Editor {
@@ -39,25 +40,6 @@ namespace Horo::Editor {
             .summary = "The active scene is unavailable for comparison.",
         };
 
-        [[nodiscard]] bool TryGetDockArea(const int value, WorkspaceDockArea &area) noexcept {
-            switch (value) {
-                case 0:
-                    area = WorkspaceDockArea::Left;
-                    return true;
-                case 1:
-                    area = WorkspaceDockArea::Right;
-                    return true;
-                case 2:
-                    area = WorkspaceDockArea::Bottom;
-                    return true;
-                case 3:
-                    area = WorkspaceDockArea::Document;
-                    return true;
-                default:
-                    return false;
-            }
-        }
-
         [[nodiscard]] std::string ReplaceMessageToken(std::string message, const std::string_view token, const std::string_view value) {
             std::size_t offset = 0;
             while ((offset = message.find(token, offset)) != std::string::npos) {
@@ -67,401 +49,51 @@ namespace Horo::Editor {
             return message;
         }
 
-        void NormalizeSideDock(SideDockMode &mode, std::string &fullPanel, std::string &topPanel, std::string &bottomPanel) {
-            if (mode != SideDockMode::Split || (!topPanel.empty() && !bottomPanel.empty())) {
-                return;
+        [[nodiscard]] Math::Transform ResolveRuntimeEntityTransform(const Runtime::RuntimeSceneView &runtimeView,
+                                                                    const Runtime::RuntimeEntityView &entity) {
+            if (!entity.authoredObject.has_value())
+                return *entity.localTransform;
+            const Result<SceneObjectWorldTransforms> world =
+                ResolveSceneObjectWorldTransforms(runtimeView, SceneObjectId{entity.authoredObject->value});
+            if (world.HasError())
+                return *entity.localTransform;
+            if (const Result<Math::Transform> decomposed = Math::TryDecomposeAffineTRS(world.Value().localToWorld); decomposed.HasValue()) {
+                return decomposed.Value();
             }
-
-            fullPanel = topPanel.empty() ? std::move(bottomPanel) : std::move(topPanel);
-            topPanel.clear();
-            bottomPanel.clear();
-            mode = SideDockMode::Full;
+            return *entity.localTransform;
         }
 
-        [[nodiscard]] bool HasPathPrefix(const std::filesystem::path &root, const std::filesystem::path &candidate) {
-            return Horo::Foundation::Paths::HasPathPrefix(root, candidate);
-        }
-
-        [[nodiscard]] std::filesystem::path NormalizeAbsolute(const std::filesystem::path &path) {
+        [[nodiscard]] std::filesystem::path ResolveProjectRoot(const std::filesystem::path &projectRoot) {
             std::error_code error;
-            const std::filesystem::path absolute = std::filesystem::absolute(path, error).lexically_normal();
-            if (error)
-                return {};
-            const std::filesystem::path canonical = std::filesystem::weakly_canonical(absolute, error);
-            return error ? absolute : canonical;
-        }
-
-        [[nodiscard]] bool IsDirectContentBrowserEntry(const ContentBrowserDirectory &directory, const std::filesystem::path &candidate) {
-            if (!candidate.is_absolute())
-                return false;
-            const std::filesystem::path normalized = NormalizeAbsolute(candidate);
-            const std::filesystem::path root = NormalizeAbsolute(directory.absoluteRootPath);
-            const std::filesystem::path current = NormalizeAbsolute(directory.absoluteCurrentPath);
-            if (normalized.empty() || root.empty() || current.empty() || normalized.parent_path() != current ||
-                !HasPathPrefix(root, normalized)) {
-                return false;
-            }
-            std::error_code error;
-            const auto status = std::filesystem::symlink_status(normalized, error);
-            return !error && !std::filesystem::is_symlink(status) &&
-                   (std::filesystem::is_directory(status) || std::filesystem::is_regular_file(status));
-        }
-
-        [[nodiscard]] std::optional<std::vector<std::filesystem::path>> ValidatedAssetCompanions(const std::filesystem::path &source,
-                                                                                                 const bool requireIdentitySidecar) {
-            std::error_code error;
-            const std::filesystem::file_status sourceStatus = std::filesystem::symlink_status(source, error);
-            if (error || std::filesystem::is_symlink(sourceStatus) || !std::filesystem::is_regular_file(sourceStatus)) {
-                return std::nullopt;
-            }
-
-            std::vector<std::filesystem::path> paths{source};
-            for (const char *suffix : {".horo", ".meta"}) {
-                std::filesystem::path sidecar = source;
-                sidecar += suffix;
+            std::filesystem::path resolved = std::filesystem::absolute(projectRoot, error).lexically_normal();
+            if (error) {
                 error.clear();
-                const std::filesystem::file_status status = std::filesystem::symlink_status(sidecar, error);
-                if (error) {
-                    if (error != std::errc::no_such_file_or_directory) {
-                        return std::nullopt;
-                    }
-                    error.clear();
-                    if (requireIdentitySidecar && std::string_view{suffix} == ".horo") {
-                        return std::nullopt;
-                    }
-                    continue;
-                }
-                if (!std::filesystem::exists(status)) {
-                    if (requireIdentitySidecar && std::string_view{suffix} == ".horo") {
-                        return std::nullopt;
-                    }
-                    continue;
-                }
-                if (std::filesystem::is_symlink(status) || !std::filesystem::is_regular_file(status)) {
-                    return std::nullopt;
-                }
-                paths.push_back(std::move(sidecar));
+                resolved = (std::filesystem::current_path(error) / projectRoot).lexically_normal();
             }
-            return paths;
-        }
+            if (error)
+                return resolved;
 
-        [[nodiscard]] std::string PortableFold(const std::string_view value) {
-            std::string folded{value};
-            std::ranges::transform(folded, folded.begin(), [](const unsigned char character) {
-                return static_cast<char>(std::tolower(character));
-            });
-            return folded;
-        }
-
-        [[nodiscard]] bool DirectoryContainsPortableName(const std::filesystem::path &directory, const std::string_view name,
-                                                         const std::filesystem::path &ignoredEntry = {}) {
-            const std::string foldedName = PortableFold(name);
-            const std::filesystem::path normalizedIgnored =
-                ignoredEntry.empty() ? std::filesystem::path{} : ignoredEntry.lexically_normal();
-            std::error_code error;
-            std::filesystem::directory_iterator iterator{directory, std::filesystem::directory_options::skip_permission_denied, error};
-            const std::filesystem::directory_iterator end;
-            while (!error && iterator != end) {
-                if (iterator->path().lexically_normal() != normalizedIgnored &&
-                    PortableFold(iterator->path().filename().string()) == foldedName) {
-                    return true;
-                }
-                iterator.increment(error);
-            }
-            return error || iterator != end;
-        }
-
-        [[nodiscard]] bool IsPortableEntryName(const std::string_view name) {
-            if (name.empty() || name == "." || name == ".." || name.ends_with(' ') || name.ends_with('.')) {
-                return false;
-            }
-            for (const unsigned char character : name) {
-                if (character < 32U || std::string_view{"<>:\"/\\|?*"}.find(static_cast<char>(character)) != std::string_view::npos) {
-                    return false;
-                }
-            }
-
-            const std::size_t dot = name.find('.');
-            const std::string stem = PortableFold(name.substr(0, dot));
-            if (stem == "con" || stem == "prn" || stem == "aux" || stem == "nul") {
-                return false;
-            }
-            if (stem.size() == 4 && (stem.starts_with("com") || stem.starts_with("lpt")) && stem[3] >= '1' && stem[3] <= '9') {
-                return false;
-            }
-            return true;
-        }
-
-        [[nodiscard]] bool RollbackPathMoves(const std::vector<std::pair<std::filesystem::path, std::filesystem::path>> &moved) {
-            bool complete = true;
-            for (auto item = moved.rbegin(); item != moved.rend(); ++item) {
-                std::error_code error;
-                std::filesystem::rename(item->second, item->first, error);
-                if (error) {
-                    complete = false;
-                    LOG_ERROR("editor.content_browser", "Rollback rename failed: %s -> %s (%s)", item->second.string().c_str(),
-                              item->first.string().c_str(), error.message().c_str());
-                }
-            }
-            return complete;
-        }
-
-        [[nodiscard]] bool RemoveCreatedPaths(const std::vector<std::filesystem::path> &created) {
-            bool complete = true;
-            for (auto item = created.rbegin(); item != created.rend(); ++item) {
-                std::error_code error;
-                if (!std::filesystem::remove(*item, error) || error) {
-                    complete = false;
-                    LOG_ERROR("editor.content_browser", "Copy rollback removal failed: %s (%s)", item->string().c_str(),
-                              error.message().c_str());
-                }
-            }
-            return complete;
-        }
-
-        [[nodiscard]] std::filesystem::path CompanionDestination(const std::filesystem::path &item, const std::filesystem::path &source,
-                                                                 const std::filesystem::path &destination) {
-            if (item == source)
-                return destination;
-            std::filesystem::path target = destination;
-            target += item.extension().string();
-            return target;
-        }
-
-        [[nodiscard]] bool AssetDestinationAvailable(const std::filesystem::path &source, const std::filesystem::path &destination,
-                                                     const std::vector<std::filesystem::path> &companions) {
-            return std::ranges::all_of(companions, [&source, &destination](const std::filesystem::path &item) {
-                const std::filesystem::path target = CompanionDestination(item, source, destination);
-                return !DirectoryContainsPortableName(target.parent_path(), target.filename().string());
-            });
-        }
-
-        [[nodiscard]] bool PathDoesNotExist(const std::filesystem::path &path) {
-            std::error_code error;
-            const std::filesystem::file_status status = std::filesystem::symlink_status(path, error);
-            if (error == std::errc::no_such_file_or_directory) {
-                return true;
-            }
-            return !error && !std::filesystem::exists(status);
-        }
-
-        [[nodiscard]] std::filesystem::path ResolveDuplicateDestination(const std::filesystem::path &source,
-                                                                        const std::filesystem::path &destinationDirectory,
-                                                                        const std::vector<std::filesystem::path> &companions) {
-            const std::string extension = source.extension().string();
-            const std::string stem = source.stem().string();
-            for (std::uint32_t index = 1; index < 10000; ++index) {
-                const std::filesystem::path candidate = destinationDirectory / std::format("{} ({}){}", stem, index, extension);
-                if (AssetDestinationAvailable(source, candidate, companions)) {
-                    return candidate;
-                }
-            }
-            return {};
-        }
-
-        [[nodiscard]] Assets::AssetId GenerateRandomAssetId(const Assets::AssetRegistrySnapshot &snapshot) {
-            std::random_device random;
-            for (std::uint32_t attempt = 0; attempt < 32; ++attempt) {
-                std::array<std::uint8_t, 16> bytes{};
-                for (std::uint8_t &byte : bytes)
-                    byte = static_cast<std::uint8_t>(random());
-                bytes[6] = static_cast<std::uint8_t>(bytes[6] & 0x0fU | 0x40U);
-                bytes[8] = static_cast<std::uint8_t>(bytes[8] & 0x3fU | 0x80U);
-                const Assets::AssetId candidate = Assets::AssetId::FromBytes(bytes);
-                if (candidate.IsValid() && snapshot.Find(candidate) == nullptr)
-                    return candidate;
-            }
-            return {};
-        }
-
-        [[nodiscard]] std::optional<nlohmann::json> ReadSidecarJson(const std::filesystem::path &path) {
-            std::error_code error;
-            const std::uintmax_t size = std::filesystem::file_size(path, error);
-            if (error || size == 0 || size > 1024U * 1024U)
-                return std::nullopt;
-            std::ifstream input(path, std::ios::binary);
-            if (!input)
-                return std::nullopt;
-            const nlohmann::json parsed = nlohmann::json::parse(input, nullptr, false, true);
-            return parsed.is_object() ? std::optional<nlohmann::json>{parsed} : std::nullopt;
-        }
-
-        [[nodiscard]] std::vector<std::byte> JsonBytes(const nlohmann::json &value) {
-            const std::string serialized = value.dump(2) + '\n';
-            const auto *begin = reinterpret_cast<const std::byte *>(serialized.data());
-            return {begin, begin + serialized.size()};
-        }
-
-        void ActivateSideDock(SideDockMode &mode, std::string &fullPanel, std::string &topPanel, std::string &bottomPanel,
-                              const std::optional<SideDockSlot> targetSlot, const std::string &panelId,
-                              std::vector<std::string> &displacedPanelIds) {
-            if (targetSlot.has_value() && !panelId.empty()) {
-                const std::string previousFull = fullPanel;
-                if (mode == SideDockMode::Full) {
-                    fullPanel.clear();
-                    topPanel.clear();
-                    bottomPanel.clear();
-                    mode = SideDockMode::Split;
-                    if (*targetSlot == SideDockSlot::Top) {
-                        topPanel = panelId;
-                        if (previousFull != panelId)
-                            bottomPanel = previousFull;
-                    } else {
-                        if (previousFull != panelId)
-                            topPanel = previousFull;
-                        bottomPanel = panelId;
-                    }
-                    return;
-                }
-
-                if (topPanel == panelId)
-                    topPanel.clear();
-                if (bottomPanel == panelId)
-                    bottomPanel.clear();
-                std::string &targetPanel = *targetSlot == SideDockSlot::Top ? topPanel : bottomPanel;
-                displacedPanelIds.push_back(targetPanel);
-                targetPanel = panelId;
-                return;
-            }
-
-            displacedPanelIds.push_back(fullPanel);
-            displacedPanelIds.push_back(topPanel);
-            displacedPanelIds.push_back(bottomPanel);
-            mode = SideDockMode::Full;
-            topPanel.clear();
-            bottomPanel.clear();
-            fullPanel = panelId;
-        }
-
-        void NormalizeBottomDock(EditorWorkspaceViewModel &viewModel) {
-            if (viewModel.bottomDockMode != BottomDockMode::Split ||
-                (!viewModel.activeBottomLeftPanelId.empty() && !viewModel.activeBottomRightPanelId.empty())) {
-                return;
-            }
-
-            viewModel.activeBottomPanelId = viewModel.activeBottomLeftPanelId.empty() ? std::move(viewModel.activeBottomRightPanelId)
-                                                                                      : std::move(viewModel.activeBottomLeftPanelId);
-            viewModel.activeBottomLeftPanelId.clear();
-            viewModel.activeBottomRightPanelId.clear();
-            viewModel.bottomDockMode = BottomDockMode::Full;
-        }
-
-        void NormalizeDocks(EditorWorkspaceViewModel &viewModel) {
-            NormalizeSideDock(viewModel.leftDockMode, viewModel.activeLeftPanelId, viewModel.activeLeftTopPanelId,
-                              viewModel.activeLeftBottomPanelId);
-            NormalizeSideDock(viewModel.rightDockMode, viewModel.activeRightPanelId, viewModel.activeRightTopPanelId,
-                              viewModel.activeRightBottomPanelId);
-            NormalizeBottomDock(viewModel);
-        }
-
-        struct ActivityLayoutRegion {
-            WorkspaceDockArea area = WorkspaceDockArea::Document;
-            std::optional<SideDockSlot> sideSlot;
-            std::optional<BottomDockSlot> bottomSlot;
-
-            friend bool operator==(const ActivityLayoutRegion &, const ActivityLayoutRegion &) = default;
-        };
-
-        [[nodiscard]] std::optional<ActivityLayoutRegion> RegionForActivitySlot(const ActivityBarSlot slot) {
-            if (slot.rail == ActivityBarRail::DocumentTop && slot.groupIndex == 0) {
-                return ActivityLayoutRegion{WorkspaceDockArea::Document, std::nullopt, std::nullopt};
-            }
-            if (slot.rail == ActivityBarRail::Left) {
-                switch (slot.groupIndex) {
-                    case 0:
-                        return ActivityLayoutRegion{WorkspaceDockArea::Left, SideDockSlot::Top, std::nullopt};
-                    case 1:
-                        return ActivityLayoutRegion{WorkspaceDockArea::Left, SideDockSlot::Bottom, std::nullopt};
-                    case 2:
-                        return ActivityLayoutRegion{WorkspaceDockArea::Bottom, std::nullopt, BottomDockSlot::Left};
-                    default:
-                        return std::nullopt;
-                }
-            }
-            if (slot.rail == ActivityBarRail::Right) {
-                switch (slot.groupIndex) {
-                    case 0:
-                        return ActivityLayoutRegion{WorkspaceDockArea::Right, SideDockSlot::Top, std::nullopt};
-                    case 1:
-                        return ActivityLayoutRegion{WorkspaceDockArea::Right, SideDockSlot::Bottom, std::nullopt};
-                    case 2:
-                        return ActivityLayoutRegion{WorkspaceDockArea::Bottom, std::nullopt, BottomDockSlot::Right};
-                    default:
-                        return std::nullopt;
-                }
-            }
-            return std::nullopt;
-        }
-
-        [[nodiscard]] bool IsPanelActiveInRegion(const EditorWorkspaceViewModel &viewModel, const std::string_view panelId,
-                                                 const ActivityLayoutRegion &region) {
-            switch (region.area) {
-                case WorkspaceDockArea::Left:
-                    if (viewModel.leftDockMode == SideDockMode::Full) {
-                        return viewModel.activeLeftPanelId == panelId;
-                    }
-                    return region.sideSlot == SideDockSlot::Top ? viewModel.activeLeftTopPanelId == panelId
-                                                                : viewModel.activeLeftBottomPanelId == panelId;
-                case WorkspaceDockArea::Right:
-                    if (viewModel.rightDockMode == SideDockMode::Full) {
-                        return viewModel.activeRightPanelId == panelId;
-                    }
-                    return region.sideSlot == SideDockSlot::Top ? viewModel.activeRightTopPanelId == panelId
-                                                                : viewModel.activeRightBottomPanelId == panelId;
-                case WorkspaceDockArea::Bottom:
-                    if (viewModel.bottomDockMode == BottomDockMode::Full) {
-                        return viewModel.activeBottomPanelId == panelId;
-                    }
-                    return region.bottomSlot == BottomDockSlot::Left ? viewModel.activeBottomLeftPanelId == panelId
-                                                                     : viewModel.activeBottomRightPanelId == panelId;
-                case WorkspaceDockArea::Document:
-                    return viewModel.activeDocumentPanelId == panelId;
-            }
-            return false;
-        }
-
-        [[nodiscard]] EditorWorkspaceViewCommandData MakeRegionActivationCommand(const std::string_view panelId,
-                                                                                 const ActivityLayoutRegion &region) {
-            EditorWorkspaceViewCommandData command;
-            command.command = EditorWorkspaceViewCommand::ChangeActivePanel;
-            command.targetIndex = static_cast<int>(region.area);
-            command.stringPayload = std::string(panelId);
-            command.sideDockSlot = region.sideSlot;
-            command.bottomDockSlot = region.bottomSlot;
-            return command;
+            const std::filesystem::path canonical = std::filesystem::weakly_canonical(resolved, error);
+            return error ? resolved : canonical;
         }
     }  // namespace
 
-    EditorWorkspaceController::EditorWorkspaceController(
-        std::string projectRoot, Runtime::RuntimeSceneService &runtimeScene, const Assets::AssetRegistrySnapshot &assetRegistry,
-        Assets::AssetRegistry *mutableAssetRegistry, ProjectMutationCoordinator *mutations, DurableFileSystem *durableFiles,
-        const Assets::AssetImporterCatalogSnapshot *importerCatalog, JobSystem *jobs, DiagnosticSourceNavigator diagnosticSourceNavigator,
-        Application::GameplayBuildService *gameplayBuilds, Application::GameplayBuildEnvironment gameplayBuildEnvironment,
-        const ILocalizationService *localization)
-        : m_runtimeScene(runtimeScene), m_assetRegistry(assetRegistry), m_mutableAssetRegistry(mutableAssetRegistry),
-          m_mutations(mutations), m_durableFiles(durableFiles), m_importerCatalog(importerCatalog),
-          m_diagnosticSourceNavigator(std::move(diagnosticSourceNavigator)), m_gameplayBuilds(gameplayBuilds),
-          m_gameplayBuildEnvironment(std::move(gameplayBuildEnvironment)), m_localization(localization),
-          m_sceneFileWatch(jobs != nullptr ? std::make_unique<SceneFileWatchService>(*jobs) : nullptr) {
+    EditorWorkspaceController::EditorWorkspaceController(const std::filesystem::path &projectRoot,
+                                                         Runtime::RuntimeSceneService &runtimeScene,
+                                                         const Assets::AssetRegistrySnapshot &assetRegistry,
+                                                         const EditorWorkspaceDependencies &dependencies)
+        : m_runtimeScene(runtimeScene), m_assetRegistry(assetRegistry), m_mutableAssetRegistry(dependencies.mutableAssetRegistry),
+          m_mutations(dependencies.mutations), m_durableFiles(dependencies.durableFiles), m_importerCatalog(dependencies.importerCatalog),
+          m_diagnosticSourceNavigator(dependencies.diagnosticSourceNavigator), m_gameplayBuilds(dependencies.gameplayBuilds),
+          m_gameplayBuildEnvironment(dependencies.gameplayBuildEnvironment), m_localization(dependencies.localization),
+          m_sceneFileWatch(dependencies.jobs != nullptr ? std::make_unique<SceneFileWatchService>(*dependencies.jobs) : nullptr) {
         if (!m_diagnosticSourceNavigator) {
             m_diagnosticSourceNavigator = [](const DiagnosticSourceRequest &source) {
                 const std::filesystem::path path{source.absolutePath};
                 return OpenInExternalEditor(path) || RevealInNativeFileManager(path);
             };
         }
-        std::error_code pathError;
-        std::filesystem::path absoluteProjectRoot =
-            std::filesystem::absolute(std::filesystem::path{projectRoot}, pathError).lexically_normal();
-        if (pathError) {
-            pathError.clear();
-            absoluteProjectRoot = (std::filesystem::current_path(pathError) / std::filesystem::path{projectRoot}).lexically_normal();
-        }
-        if (!pathError) {
-            std::error_code canonicalError;
-            const std::filesystem::path canonicalProjectRoot = std::filesystem::weakly_canonical(absoluteProjectRoot, canonicalError);
-            if (!canonicalError)
-                absoluteProjectRoot = canonicalProjectRoot;
-        }
+        const std::filesystem::path absoluteProjectRoot = ResolveProjectRoot(projectRoot);
         m_viewModel.projectRoot = absoluteProjectRoot.string();
         m_viewModel.assetRegistryRevision = assetRegistry.Revision();
         m_viewModel.contentBrowser = BuildContentBrowserDirectory(m_viewModel.projectRoot, {}, assetRegistry, m_importerCatalog);
@@ -490,14 +122,12 @@ namespace Horo::Editor {
         static_cast<void>(m_viewModel.activityBarLayout.Insert("horo.input_mapping", ActivityBarSlot{ActivityBarRail::Right, 1, 0}));
 
         bool loadedProjectScene = false;
-        const Result<std::optional<LoadedProjectScene>> loaded = LoadProjectDefaultScene(absoluteProjectRoot);
-        if (loaded.HasError()) {
+        if (const Result<std::optional<LoadedProjectScene>> loaded = LoadProjectDefaultScene(absoluteProjectRoot); loaded.HasError()) {
             m_initializationError = loaded.ErrorValue();
             LOG_ERROR("editor.scene_document", "Default scene load failed: %s", loaded.ErrorValue().message.c_str());
         } else if (loaded.Value().has_value()) {
             LoadedProjectScene projectScene = *loaded.Value();
-            const Result<void> installed = m_document.LoadSaved(std::move(projectScene.objects));
-            if (installed.HasError()) {
+            if (const Result<void> installed = m_document.LoadSaved(std::move(projectScene.objects)); installed.HasError()) {
                 m_initializationError = installed.ErrorValue();
                 LOG_ERROR("editor.scene_document", "Default scene validation failed: %s", installed.ErrorValue().message.c_str());
             } else {
@@ -655,10 +285,10 @@ namespace Horo::Editor {
         if (!m_defaultScenePath.has_value() || m_mutations == nullptr || m_durableFiles == nullptr)
             return;
         const SceneDocumentSnapshot snapshot = m_document.Snapshot();
-        const Result<void> written =
-            WriteProjectSceneRecovery(std::filesystem::path{m_viewModel.projectRoot}, *m_defaultScenePath, snapshot,
-                                      m_document.SavedRevision(), m_document.SavedState(), *m_mutations, *m_durableFiles);
-        if (written.HasError()) {
+        if (const Result<void> written =
+                WriteProjectSceneRecovery(std::filesystem::path{m_viewModel.projectRoot}, *m_defaultScenePath, snapshot,
+                                          m_document.SavedRevision(), m_document.SavedState(), *m_mutations, *m_durableFiles);
+            written.HasError()) {
             m_autosaveRetryDelaySeconds = 30.0F;
             LOG_ERROR("editor.scene_recovery", "Autosave recovery write failed: %s", written.ErrorValue().message.c_str());
             return;
@@ -698,8 +328,7 @@ namespace Horo::Editor {
             return;
         }
 
-        const Result<void> marked = m_document.MarkSaved(snapshot.revision, snapshot.state);
-        if (marked.HasError()) {
+        if (const Result<void> marked = m_document.MarkSaved(snapshot.revision, snapshot.state); marked.HasError()) {
             LOG_ERROR("editor.scene_document", "Saved scene state could not be acknowledged: %s", marked.ErrorValue().message.c_str());
             return;
         }
@@ -709,9 +338,9 @@ namespace Horo::Editor {
         m_viewModel.sceneExternalConflict = false;
         m_sceneFileWatchErrorPresented = false;
         m_sceneFileWatchElapsedSeconds = 0.0F;
-        const Result<void> recoveryDiscarded =
-            DiscardProjectSceneRecovery(std::filesystem::path{m_viewModel.projectRoot}, *m_mutations, *m_durableFiles);
-        if (recoveryDiscarded.HasError()) {
+        if (const Result<void> recoveryDiscarded =
+                DiscardProjectSceneRecovery(std::filesystem::path{m_viewModel.projectRoot}, *m_mutations, *m_durableFiles);
+            recoveryDiscarded.HasError()) {
             LOG_WARN("editor.scene_recovery", "Saved scene but could not clean recovery state: %s",
                      recoveryDiscarded.ErrorValue().message.c_str());
         } else {
@@ -779,8 +408,7 @@ namespace Horo::Editor {
             return;
         }
 
-        const Result<void> marked = m_document.MarkSaved(snapshot.revision, snapshot.state);
-        if (marked.HasError()) {
+        if (const Result<void> marked = m_document.MarkSaved(snapshot.revision, snapshot.state); marked.HasError()) {
             LOG_ERROR("editor.scene_document",
                       "Saved As destination is durable but the active document state could not be "
                       "acknowledged: %s",
@@ -795,9 +423,9 @@ namespace Horo::Editor {
         m_viewModel.sceneExternalConflict = false;
         m_sceneFileWatchErrorPresented = false;
         m_sceneFileWatchElapsedSeconds = 0.0F;
-        const Result<void> recoveryDiscarded =
-            DiscardProjectSceneRecovery(std::filesystem::path{m_viewModel.projectRoot}, *m_mutations, *m_durableFiles);
-        if (recoveryDiscarded.HasError()) {
+        if (const Result<void> recoveryDiscarded =
+                DiscardProjectSceneRecovery(std::filesystem::path{m_viewModel.projectRoot}, *m_mutations, *m_durableFiles);
+            recoveryDiscarded.HasError()) {
             LOG_WARN("editor.scene_recovery", "Saved scene to a new path but could not clean recovery state: %s",
                      recoveryDiscarded.ErrorValue().message.c_str());
         } else {
@@ -820,33 +448,31 @@ namespace Horo::Editor {
         if (!m_defaultScenePath.has_value() || m_mutations == nullptr || m_durableFiles == nullptr)
             return;
 
-        const Result<LoadedProjectScene> loaded = LoadProjectScene(std::filesystem::path{m_viewModel.projectRoot}, *m_defaultScenePath);
-        if (loaded.HasError() || !loaded.Value().existed) {
+        if (const Result<LoadedProjectScene> loaded = LoadProjectScene(std::filesystem::path{m_viewModel.projectRoot}, *m_defaultScenePath);
+            loaded.HasError() || !loaded.Value().existed) {
             LOG_ERROR("editor.scene_document", "External scene reload failed because the canonical document is unavailable.");
             return;
-        }
+        } else {
+            LoadedProjectScene external = loaded.Value();
+            SceneDocument validatedExternal;
+            if (const Result<void> validated = validatedExternal.LoadSaved(external.objects); validated.HasError()) {
+                LOG_ERROR("editor.scene_document", "External scene validation failed: %s", validated.ErrorValue().message.c_str());
+                return;
+            }
+            if (const Result<void> recoveryDiscarded =
+                    DiscardProjectSceneRecovery(std::filesystem::path{m_viewModel.projectRoot}, *m_mutations, *m_durableFiles);
+                recoveryDiscarded.HasError()) {
+                LOG_ERROR("editor.scene_recovery", "External reload could not discard superseded recovery state: %s",
+                          recoveryDiscarded.ErrorValue().message.c_str());
+                return;
+            }
+            if (const Result<void> installed = m_document.LoadSaved(std::move(external.objects)); installed.HasError()) {
+                LOG_ERROR("editor.scene_document", "External scene validation failed: %s", installed.ErrorValue().message.c_str());
+                return;
+            }
 
-        LoadedProjectScene external = loaded.Value();
-        SceneDocument validatedExternal;
-        const Result<void> validated = validatedExternal.LoadSaved(external.objects);
-        if (validated.HasError()) {
-            LOG_ERROR("editor.scene_document", "External scene validation failed: %s", validated.ErrorValue().message.c_str());
-            return;
+            m_sceneFingerprint = std::move(external.fingerprint);
         }
-        const Result<void> recoveryDiscarded =
-            DiscardProjectSceneRecovery(std::filesystem::path{m_viewModel.projectRoot}, *m_mutations, *m_durableFiles);
-        if (recoveryDiscarded.HasError()) {
-            LOG_ERROR("editor.scene_recovery", "External reload could not discard superseded recovery state: %s",
-                      recoveryDiscarded.ErrorValue().message.c_str());
-            return;
-        }
-        const Result<void> installed = m_document.LoadSaved(std::move(external.objects));
-        if (installed.HasError()) {
-            LOG_ERROR("editor.scene_document", "External scene validation failed: %s", installed.ErrorValue().message.c_str());
-            return;
-        }
-
-        m_sceneFingerprint = std::move(external.fingerprint);
         if (m_sceneFileWatch != nullptr)
             m_sceneFileWatch->Reset();
         m_history.Clear();
@@ -870,14 +496,14 @@ namespace Horo::Editor {
     void EditorWorkspaceController::RestoreSceneRecovery() {
         if (!m_defaultScenePath.has_value())
             return;
-        const Result<std::optional<ProjectSceneRecoveryRecord>> recovery =
+        Result<std::optional<ProjectSceneRecoveryRecord>> recovery =
             InspectProjectSceneRecovery(std::filesystem::path{m_viewModel.projectRoot}, *m_defaultScenePath);
         if (recovery.HasError() || !recovery.Value().has_value()) {
             LOG_ERROR("editor.scene_recovery", "Recovery restore failed because no valid record is available.");
             return;
         }
-        const Result<void> restored = m_document.LoadRecovered(std::move(recovery.Value()->objects));
-        if (restored.HasError()) {
+        std::optional<ProjectSceneRecoveryRecord> recoveryRecord = std::move(recovery).Value();
+        if (const Result<void> restored = m_document.LoadRecovered(std::move(recoveryRecord->objects)); restored.HasError()) {
             LOG_ERROR("editor.scene_recovery", "Recovery restore validation failed: %s", restored.ErrorValue().message.c_str());
             return;
         }
@@ -894,9 +520,9 @@ namespace Horo::Editor {
     void EditorWorkspaceController::DiscardSceneRecovery() {
         if (m_mutations == nullptr || m_durableFiles == nullptr)
             return;
-        const Result<void> discarded =
-            DiscardProjectSceneRecovery(std::filesystem::path{m_viewModel.projectRoot}, *m_mutations, *m_durableFiles);
-        if (discarded.HasError()) {
+        if (const Result<void> discarded =
+                DiscardProjectSceneRecovery(std::filesystem::path{m_viewModel.projectRoot}, *m_mutations, *m_durableFiles);
+            discarded.HasError()) {
             LOG_ERROR("editor.scene_recovery", "Recovery discard failed: %s", discarded.ErrorValue().message.c_str());
             return;
         }
@@ -907,692 +533,69 @@ namespace Horo::Editor {
     }
 
     /** @copydoc EditorWorkspaceController::RefreshAssets */
-    void EditorWorkspaceController::RefreshAssets(const Assets::AssetRegistrySnapshot &assetRegistry) {
-        if (assetRegistry.Revision() == m_viewModel.assetRegistryRevision)
-            return;
-        m_assetRegistry = assetRegistry;
-        m_viewModel.assetRegistryRevision = assetRegistry.Revision();
-        m_contentBrowserRefreshPending = false;
-        m_contentBrowserLoadingPresented = false;
-        m_viewModel.contentBrowser = BuildContentBrowserDirectory(m_viewModel.projectRoot, m_viewModel.contentBrowser.absoluteCurrentPath,
-                                                                  m_assetRegistry, m_importerCatalog);
-        ReconcileContentBrowserNavigation();
-    }
 
     /** @copydoc EditorWorkspaceController::UpdateContentBrowser */
-    void EditorWorkspaceController::UpdateContentBrowser() {
-        if (!m_contentBrowserRefreshPending)
-            return;
-        if (!m_contentBrowserLoadingPresented) {
-            m_contentBrowserLoadingPresented = true;
-            return;
-        }
-
-        m_contentBrowserRefreshPending = false;
-        m_contentBrowserLoadingPresented = false;
-        RefreshContentBrowserAfterMutation();
-    }
-
-    void EditorWorkspaceController::ProcessCommand(const EditorWorkspaceViewCommandData &cmd) {
-        // Keep a complete audit trail for workspace interactions, including commands that
-        // are rejected by validation or fail during the underlying filesystem operation.
-        // todo: this function is running forever after we resize
-        // LOG_INFO("editor.asset_actions", "Workspace action received: command=%d path='%s' secondary='%s'",
-        //          static_cast<int>(cmd.command), cmd.stringPayload.value_or("").c_str(),
-        //          cmd.secondaryStringPayload.value_or("").c_str());
-        // A transient overlay must not survive the interaction or workspace action that owns it.
-        if (!m_viewport.Current().transformPreviews.empty() && cmd.command != EditorWorkspaceViewCommand::None &&
-            cmd.command != EditorWorkspaceViewCommand::PreviewObjectTransform &&
-            cmd.command != EditorWorkspaceViewCommand::CommitObjectTransform &&
-            cmd.command != EditorWorkspaceViewCommand::CancelObjectTransformPreview) {
-            CancelObjectTransformPreview();
-        }
-        if (m_viewport.Current().lightPreview.has_value() && cmd.command != EditorWorkspaceViewCommand::None &&
-            cmd.command != EditorWorkspaceViewCommand::PreviewLightComponent &&
-            cmd.command != EditorWorkspaceViewCommand::UpdateLightComponent &&
-            cmd.command != EditorWorkspaceViewCommand::CancelLightComponentPreview) {
-            CancelLightComponentPreview();
-        }
-        switch (cmd.command) {
-            case EditorWorkspaceViewCommand::None:
-            case EditorWorkspaceViewCommand::ReturnToWelcome:
-            case EditorWorkspaceViewCommand::CompareExternalScene:
-                break;
-            case EditorWorkspaceViewCommand::SaveScene:
-                SaveScene();
-                break;
-            case EditorWorkspaceViewCommand::SaveSceneAs:
-                if (cmd.stringPayload.has_value())
-                    SaveSceneToPath(std::filesystem::path{*cmd.stringPayload}, false);
-                break;
-            case EditorWorkspaceViewCommand::SaveSceneCopyAs:
-                if (cmd.stringPayload.has_value())
-                    SaveSceneToPath(std::filesystem::path{*cmd.stringPayload}, true);
-                break;
-            case EditorWorkspaceViewCommand::ReloadExternalScene:
-                ReloadExternalScene();
-                break;
-            case EditorWorkspaceViewCommand::OverwriteExternalScene:
-                SaveScene(true);
-                break;
-            case EditorWorkspaceViewCommand::RestoreSceneRecovery:
-                RestoreSceneRecovery();
-                break;
-            case EditorWorkspaceViewCommand::DiscardSceneRecovery:
-                DiscardSceneRecovery();
-                break;
-            case EditorWorkspaceViewCommand::UndoScene:
-                HandleDocumentCommandResult(m_documentCommands.Undo(), "Undo");
-                break;
-            case EditorWorkspaceViewCommand::RedoScene:
-                HandleDocumentCommandResult(m_documentCommands.Redo(), "Redo");
-                break;
-            case EditorWorkspaceViewCommand::StartPlay:
-                StartPlaySession();
-                break;
-            case EditorWorkspaceViewCommand::PausePlay: {
-                const Result<void> paused = m_playSession.Pause();
-                if (paused.HasError())
-                    LOG_WARN("editor.play_mode", "%s", paused.ErrorValue().message.c_str());
-                RefreshPlayStateProjection();
-                break;
-            }
-            case EditorWorkspaceViewCommand::ResumePlay: {
-                const Result<void> resumed = m_playSession.Resume();
-                if (resumed.HasError())
-                    LOG_WARN("editor.play_mode", "%s", resumed.ErrorValue().message.c_str());
-                RefreshPlayStateProjection();
-                break;
-            }
-            case EditorWorkspaceViewCommand::StepPlay: {
-                const Result<void> stepped = m_playSession.Step();
-                if (stepped.HasError())
-                    LOG_WARN("editor.play_mode", "%s", stepped.ErrorValue().message.c_str());
-                RefreshPlayStateProjection();
-                break;
-            }
-            case EditorWorkspaceViewCommand::StopPlay:
-                StopPlaySession();
-                break;
-            case EditorWorkspaceViewCommand::CreatePrimitive:
-                if (cmd.primitivePayload.has_value()) {
-                    HandleCreatePrimitive(*cmd.primitivePayload, cmd.objectPayload);
-                }
-                break;
-            case EditorWorkspaceViewCommand::InstantiateAsset:
-                if (cmd.assetSceneDrop.has_value())
-                    HandleInstantiateAsset(*cmd.assetSceneDrop);
-                break;
-            case EditorWorkspaceViewCommand::DuplicateObject:
-                if (cmd.objectPayload.has_value())
-                    HandleDuplicateObject(*cmd.objectPayload);
-                break;
-            case EditorWorkspaceViewCommand::DeleteObject:
-                if (cmd.objectPayload.has_value())
-                    HandleDeleteObject(*cmd.objectPayload);
-                break;
-            case EditorWorkspaceViewCommand::DeleteSelectedObjects:
-                if (cmd.objectSelection.has_value())
-                    HandleDeleteSelectedObjects(cmd.objectSelection->objects);
-                break;
-            case EditorWorkspaceViewCommand::SelectObject:
-                if (cmd.objectSelection.has_value() || cmd.objectPayload.has_value()) {
-                    ObjectSelectionRequest request;
-                    if (cmd.objectSelection.has_value()) {
-                        request = *cmd.objectSelection;
-                    } else {
-                        request.objects = {*cmd.objectPayload};
-                        request.primary = *cmd.objectPayload;
-                    }
-                    const Result<void> selected = m_selection.SetObjects(std::move(request.objects), request.primary);
-                    if (selected.HasError()) {
-                        LOG_ERROR("editor.selection", "Select object failed: %s", selected.ErrorValue().message.c_str());
-                    }
-                    RefreshSelectionProjection();
-                }
-                break;
-            case EditorWorkspaceViewCommand::PickViewport:
-                if (cmd.viewportPickPayload.has_value()) {
-                    const ViewportPickRequest &request = *cmd.viewportPickPayload;
-                    const Result<EditorViewportPickResult> picked =
-                        PickEditorViewportScene(m_viewportScene, EditorViewportPickQuery{
-                                                                     .normalizedX = request.normalizedX,
-                                                                     .normalizedY = request.normalizedY,
-                                                                     .aspect = request.aspect,
-                                                                     .depthRange = request.depthRange,
-                                                                 });
-                    if (picked.HasError()) {
-                        LOG_ERROR("editor.viewport_picking", "Viewport pick failed: %s", picked.ErrorValue().message.c_str());
-                        break;
-                    }
-                    const std::optional<Runtime::RuntimeSceneView> active = m_runtimeScene.ActiveScene();
-                    if (!active || picked.Value().runtimeScene != active->RuntimeId()) {
-                        LOG_WARN("editor.viewport_picking", "Discarded a stale runtime-scene pick result.");
-                        break;
-                    }
-                    if (picked.Value().object) {
-                        const SceneObjectId object = *picked.Value().object;
-                        std::vector<SceneObjectId> objects;
-                        std::optional<SceneObjectId> primary = object;
-                        if (request.toggleSelection) {
-                            objects = m_selection.Current().objects;
-                            const auto existing = std::ranges::find(objects, object);
-                            if (existing == objects.end()) {
-                                objects.push_back(object);
-                            } else {
-                                objects.erase(existing);
-                                primary = objects.empty() ? std::nullopt : std::optional{objects.back()};
-                            }
-                        } else {
-                            objects.push_back(object);
-                        }
-                        const Result<void> selected = m_selection.SetObjects(std::move(objects), primary);
-                        if (selected.HasError())
-                            LOG_ERROR("editor.selection", "Viewport selection failed: %s", selected.ErrorValue().message.c_str());
-                    } else if (!request.toggleSelection) {
-                        m_selection.Clear();
-                    }
-                    RefreshSelectionProjection();
-                }
-                break;
-            case EditorWorkspaceViewCommand::NavigateViewport:
-                if (cmd.viewportNavigationPayload.has_value()) {
-                    const Result<void> navigated = m_viewport.Navigate(*cmd.viewportNavigationPayload);
-                    if (navigated.HasError()) {
-                        LOG_ERROR("editor.viewport", "Viewport navigation failed: %s", navigated.ErrorValue().message.c_str());
-                    } else {
-                        m_viewportScene.camera = m_viewport.Current().camera;
-                        m_viewModel.viewportCamera = m_viewport.Current().camera;
-                    }
-                }
-                break;
-            case EditorWorkspaceViewCommand::ChangeViewportProjection:
-                if (cmd.viewportProjectionPayload.has_value()) {
-                    const Result<void> changed = m_viewport.SetProjection(*cmd.viewportProjectionPayload);
-                    if (changed.HasError())
-                        LOG_ERROR("editor.viewport", "Viewport projection change failed: %s", changed.ErrorValue().message.c_str());
-                    else {
-                        m_viewportScene.camera = m_viewport.Current().camera;
-                        m_viewModel.viewportCamera = m_viewport.Current().camera;
-                    }
-                }
-                break;
-            case EditorWorkspaceViewCommand::FocusViewportSelection:
-                if (m_viewModel.primarySelectionWorldBounds.has_value() && cmd.floatPayload.has_value()) {
-                    const Result<void> focused = m_viewport.Focus(*m_viewModel.primarySelectionWorldBounds, *cmd.floatPayload);
-                    if (focused.HasError())
-                        LOG_ERROR("editor.viewport", "Viewport focus failed: %s", focused.ErrorValue().message.c_str());
-                    else {
-                        m_viewportScene.camera = m_viewport.Current().camera;
-                        m_viewModel.viewportCamera = m_viewport.Current().camera;
-                    }
-                }
-                break;
-            case EditorWorkspaceViewCommand::ChangeTransformTool:
-                if (cmd.transformToolPayload.has_value()) {
-                    m_viewModel.activeTransformTool = *cmd.transformToolPayload;
-                }
-                break;
-            case EditorWorkspaceViewCommand::ChangeTransformSpace:
-                if (cmd.transformSpacePayload.has_value()) {
-                    m_viewModel.activeTransformSpace = *cmd.transformSpacePayload;
-                }
-                break;
-            case EditorWorkspaceViewCommand::PreviewObjectTransform:
-                if (cmd.transformUpdates.has_value()) {
-                    PreviewObjectTransforms(*cmd.transformUpdates);
-                } else if (cmd.objectPayload.has_value() && cmd.transformPayload.has_value()) {
-                    PreviewObjectTransform(*cmd.objectPayload, *cmd.transformPayload);
-                }
-                break;
-            case EditorWorkspaceViewCommand::CommitObjectTransform:
-                if (cmd.transformUpdates.has_value()) {
-                    HandleDocumentCommandResult(m_documentCommands.Execute(SetSceneObjectTransformsCommand{*cmd.transformUpdates}),
-                                                "Transform objects");
-                } else if (cmd.objectPayload.has_value() && cmd.transformPayload.has_value()) {
-                    HandleDocumentCommandResult(m_documentCommands.Execute(
-                                                    SetSceneObjectTransformCommand{*cmd.objectPayload, *cmd.transformPayload}),
-                                                "Transform object");
-                }
-                break;
-            case EditorWorkspaceViewCommand::CancelObjectTransformPreview:
-                CancelObjectTransformPreview();
-                break;
-            case EditorWorkspaceViewCommand::PreviewLightComponent:
-                if (cmd.objectPayload.has_value() && cmd.lightPayload.has_value())
-                    PreviewLightComponent(*cmd.objectPayload, *cmd.lightPayload);
-                break;
-            case EditorWorkspaceViewCommand::CancelLightComponentPreview:
-                CancelLightComponentPreview();
-                break;
-            case EditorWorkspaceViewCommand::UpdateObjectName:
-                if (cmd.objectPayload.has_value() && cmd.stringPayload.has_value()) {
-                    HandleDocumentCommandResult(m_documentCommands.Execute(
-                                                    RenameSceneObjectCommand{*cmd.objectPayload, *cmd.stringPayload}),
-                                                "Rename object");
-                }
-                break;
-            case EditorWorkspaceViewCommand::UpdateCameraComponent:
-                if (cmd.objectPayload.has_value() && cmd.cameraPayload.has_value()) {
-                    HandleDocumentCommandResult(m_documentCommands.Execute(
-                                                    SetSceneObjectCameraCommand{*cmd.objectPayload, *cmd.cameraPayload}),
-                                                "Update camera");
-                }
-                break;
-            case EditorWorkspaceViewCommand::UpdateLightComponent:
-                if (cmd.objectPayload.has_value() && cmd.lightPayload.has_value()) {
-                    HandleDocumentCommandResult(m_documentCommands.Execute(
-                                                    SetSceneObjectLightCommand{*cmd.objectPayload, *cmd.lightPayload}),
-                                                "Update light");
-                }
-                break;
-            case EditorWorkspaceViewCommand::UpdateTriggerVolumeComponent:
-                if (cmd.objectPayload.has_value() && cmd.triggerVolumePayload.has_value()) {
-                    HandleDocumentCommandResult(m_documentCommands.Execute(
-                                                    SetSceneObjectTriggerVolumeCommand{*cmd.objectPayload, *cmd.triggerVolumePayload}),
-                                                "Update trigger volume");
-                }
-                break;
-            case EditorWorkspaceViewCommand::UpdateAudioSourceComponent:
-                if (cmd.objectPayload.has_value() && cmd.audioSourcePayload.has_value()) {
-                    HandleDocumentCommandResult(m_documentCommands.Execute(
-                                                    SetSceneObjectAudioSourceCommand{*cmd.objectPayload, *cmd.audioSourcePayload}),
-                                                "Update audio source");
-                }
-                break;
-            case EditorWorkspaceViewCommand::UpdateObjectEditorState:
-                if (cmd.objectPayload.has_value() && cmd.editorStatePayload.has_value()) {
-                    HandleDocumentCommandResult(m_documentCommands.Execute(
-                                                    SetSceneObjectEditorStateCommand{*cmd.objectPayload, *cmd.editorStatePayload}),
-                                                "Update object editor state");
-                }
-                break;
-            case EditorWorkspaceViewCommand::AddComponentToObject:
-                if (cmd.objectPayload.has_value() && cmd.componentTypePayload.has_value()) {
-                    HandleDocumentCommandResult(m_documentCommands.Execute(
-                                                    AddSceneObjectComponentCommand{*cmd.objectPayload, *cmd.componentTypePayload}),
-                                                "Add component");
-                }
-                break;
-            case EditorWorkspaceViewCommand::RemoveComponentFromObject:
-                if (cmd.objectPayload.has_value() && cmd.componentTypePayload.has_value()) {
-                    HandleDocumentCommandResult(m_documentCommands.Execute(
-                                                    RemoveSceneObjectComponentCommand{*cmd.objectPayload, *cmd.componentTypePayload}),
-                                                "Remove component");
-                }
-                break;
-            case EditorWorkspaceViewCommand::AttachBehaviorToObject:
-                if (cmd.objectPayload.has_value() && cmd.behaviorTypePayload.has_value()) {
-                    const Gameplay::BehaviorRegistration *registration =
-                        m_gameplayRegistry != nullptr ? m_gameplayRegistry->Registry().Find(*cmd.behaviorTypePayload) : nullptr;
-                    if (registration == nullptr) {
-                        LOG_ERROR("editor.gameplay", "Attach behavior rejected because the descriptor is unavailable.");
-                        break;
-                    }
-                    std::vector<Gameplay::BehaviorField> fields;
-                    fields.reserve(registration->descriptor.fields.size());
-                    for (const Gameplay::BehaviorFieldDescriptor &field : registration->descriptor.fields)
-                        fields.push_back({field.name, field.defaultValue});
-                    HandleDocumentCommandResult(m_documentCommands.Execute(
-                                                    AttachSceneObjectBehaviorCommand{*cmd.objectPayload, registration->descriptor.typeId,
-                                                                                     registration->descriptor.schemaVersion, true,
-                                                                                     registration->descriptor.allowMultiple,
-                                                                                     std::move(fields)}),
-                                                "Attach behavior");
-                }
-                break;
-            case EditorWorkspaceViewCommand::UpdateBehaviorOnObject:
-                if (cmd.objectPayload.has_value() && cmd.behaviorPayload.has_value())
-                    HandleDocumentCommandResult(m_documentCommands.Execute(
-                                                    SetSceneObjectBehaviorCommand{*cmd.objectPayload, *cmd.behaviorPayload}),
-                                                "Update behavior");
-                break;
-            case EditorWorkspaceViewCommand::RemoveBehaviorFromObject:
-                if (cmd.objectPayload.has_value() && cmd.behaviorInstancePayload.has_value())
-                    HandleDocumentCommandResult(m_documentCommands.Execute(
-                                                    RemoveSceneObjectBehaviorCommand{*cmd.objectPayload, *cmd.behaviorInstancePayload}),
-                                                "Remove behavior");
-                break;
-            case EditorWorkspaceViewCommand::NavigateContentBrowser:
-                if (cmd.stringPayload.has_value())
-                    NavigateContentBrowser(*cmd.stringPayload, true);
-                break;
-            case EditorWorkspaceViewCommand::NavigateContentBrowserBack:
-                NavigateContentBrowserBack();
-                break;
-            case EditorWorkspaceViewCommand::NavigateContentBrowserForward:
-                NavigateContentBrowserForward();
-                break;
-            case EditorWorkspaceViewCommand::NavigateContentBrowserUp:
-                NavigateContentBrowserUp();
-                break;
-            case EditorWorkspaceViewCommand::RefreshContentBrowser:
-                RequestContentBrowserRefresh();
-                break;
-            case EditorWorkspaceViewCommand::RenameContentBrowserEntry:
-                if (cmd.stringPayload.has_value() && cmd.secondaryStringPayload.has_value())
-                    RenameContentBrowserEntry(*cmd.stringPayload, *cmd.secondaryStringPayload);
-                break;
-            case EditorWorkspaceViewCommand::DeleteContentBrowserEntry:
-                if (cmd.stringPayload.has_value())
-                    DeleteContentBrowserEntry(*cmd.stringPayload);
-                break;
-            case EditorWorkspaceViewCommand::DuplicateContentBrowserAsset:
-                if (cmd.stringPayload.has_value())
-                    DuplicateContentBrowserAsset(*cmd.stringPayload);
-                break;
-            case EditorWorkspaceViewCommand::CopyContentBrowserAsset:
-                if (cmd.stringPayload.has_value())
-                    SetContentBrowserClipboard(*cmd.stringPayload, ContentBrowserClipboardMode::Copy);
-                break;
-            case EditorWorkspaceViewCommand::CutContentBrowserAsset:
-                if (cmd.stringPayload.has_value())
-                    SetContentBrowserClipboard(*cmd.stringPayload, ContentBrowserClipboardMode::Move);
-                break;
-            case EditorWorkspaceViewCommand::PasteContentBrowserAsset:
-                PasteContentBrowserAsset(cmd.stringPayload.value_or(m_viewModel.contentBrowser.absoluteCurrentPath));
-                break;
-            case EditorWorkspaceViewCommand::TransferContentBrowserAsset:
-                if (cmd.contentBrowserTransfer.has_value())
-                    TransferContentBrowserAsset(*cmd.contentBrowserTransfer);
-                break;
-            case EditorWorkspaceViewCommand::CancelContentBrowserClipboard:
-                ClearContentBrowserClipboard();
-                break;
-            case EditorWorkspaceViewCommand::CreateContentBrowserFolder:
-                if (cmd.stringPayload.has_value() && cmd.secondaryStringPayload.has_value())
-                    CreateContentBrowserFolder(*cmd.stringPayload, *cmd.secondaryStringPayload);
-                break;
-            case EditorWorkspaceViewCommand::CreateLuaBehavior:
-                if (cmd.gameplayBehaviorRequest.has_value()) {
-                    if (cmd.gameplayBehaviorRequest->kind != GameplayBehaviorKind::Lua) {
-                        m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.invalid_name";
-                        break;
-                    }
-                    CreateGameplayBehavior(*cmd.gameplayBehaviorRequest);
-                } else {
-                    LOG_WARN("editor.asset_actions",
-                             "CreateLuaBehavior command received without explicit request details; modal prompt expected.");
-                }
-                break;
-            case EditorWorkspaceViewCommand::CreateNativeBehavior:
-                if (cmd.gameplayBehaviorRequest.has_value()) {
-                    if (cmd.gameplayBehaviorRequest->kind != GameplayBehaviorKind::Native) {
-                        m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.invalid_name";
-                        break;
-                    }
-                    CreateGameplayBehavior(*cmd.gameplayBehaviorRequest);
-                } else {
-                    LOG_WARN("editor.asset_actions",
-                             "CreateNativeBehavior command received without explicit request details; modal prompt expected.");
-                }
-                break;
-            case EditorWorkspaceViewCommand::ReimportContentBrowserAsset:
-                if (cmd.stringPayload.has_value())
-                    ReimportContentBrowserAsset(*cmd.stringPayload);
-                break;
-            case EditorWorkspaceViewCommand::RevealContentBrowserEntry:
-                if (cmd.stringPayload.has_value())
-                    RevealContentBrowserEntry(*cmd.stringPayload);
-                break;
-            case EditorWorkspaceViewCommand::OpenDiagnosticSource:
-                if (cmd.diagnosticSource.has_value())
-                    OpenDiagnosticSource(*cmd.diagnosticSource);
-                break;
-            case EditorWorkspaceViewCommand::ChangeActivePanel:
-                if (cmd.targetIndex.has_value() && cmd.stringPayload.has_value()) {
-                    WorkspaceDockArea area{};
-                    if (!TryGetDockArea(*cmd.targetIndex, area))
-                        break;
-                    const bool panelWasActive =
-                        !cmd.stringPayload->empty() &&
-                        (*cmd.stringPayload == m_viewModel.activeLeftPanelId || *cmd.stringPayload == m_viewModel.activeRightPanelId ||
-                         *cmd.stringPayload == m_viewModel.activeLeftTopPanelId ||
-                         *cmd.stringPayload == m_viewModel.activeLeftBottomPanelId ||
-                         *cmd.stringPayload == m_viewModel.activeRightTopPanelId ||
-                         *cmd.stringPayload == m_viewModel.activeRightBottomPanelId ||
-                         *cmd.stringPayload == m_viewModel.activeBottomPanelId ||
-                         *cmd.stringPayload == m_viewModel.activeBottomLeftPanelId ||
-                         *cmd.stringPayload == m_viewModel.activeBottomRightPanelId ||
-                         *cmd.stringPayload == m_viewModel.activeDocumentPanelId);
-                    std::vector<std::string> displacedPanelIds;
-                    if (!cmd.stringPayload->empty()) {
-                        const auto previousPlacement = m_viewModel.panelDockAreas.find(*cmd.stringPayload);
-                        if (previousPlacement != m_viewModel.panelDockAreas.end() && previousPlacement->second != area) {
-                            switch (previousPlacement->second) {
-                                case WorkspaceDockArea::Left:
-                                    if (m_viewModel.activeLeftPanelId == *cmd.stringPayload)
-                                        m_viewModel.activeLeftPanelId.clear();
-                                    if (m_viewModel.activeLeftTopPanelId == *cmd.stringPayload)
-                                        m_viewModel.activeLeftTopPanelId.clear();
-                                    if (m_viewModel.activeLeftBottomPanelId == *cmd.stringPayload)
-                                        m_viewModel.activeLeftBottomPanelId.clear();
-                                    break;
-                                case WorkspaceDockArea::Right:
-                                    if (m_viewModel.activeRightPanelId == *cmd.stringPayload)
-                                        m_viewModel.activeRightPanelId.clear();
-                                    if (m_viewModel.activeRightTopPanelId == *cmd.stringPayload)
-                                        m_viewModel.activeRightTopPanelId.clear();
-                                    if (m_viewModel.activeRightBottomPanelId == *cmd.stringPayload)
-                                        m_viewModel.activeRightBottomPanelId.clear();
-                                    break;
-                                case WorkspaceDockArea::Bottom:
-                                    if (m_viewModel.activeBottomPanelId == *cmd.stringPayload)
-                                        m_viewModel.activeBottomPanelId.clear();
-                                    if (m_viewModel.activeBottomLeftPanelId == *cmd.stringPayload)
-                                        m_viewModel.activeBottomLeftPanelId.clear();
-                                    if (m_viewModel.activeBottomRightPanelId == *cmd.stringPayload)
-                                        m_viewModel.activeBottomRightPanelId.clear();
-                                    break;
-                                case WorkspaceDockArea::Document:
-                                    if (m_viewModel.activeDocumentPanelId == *cmd.stringPayload)
-                                        m_viewModel.activeDocumentPanelId.clear();
-                                    break;
-                            }
-                            NormalizeDocks(m_viewModel);
-                        }
-                        m_viewModel.panelDockAreas[*cmd.stringPayload] = area;
-                    }
-
-                    switch (area) {
-                        case WorkspaceDockArea::Left:
-                            ActivateSideDock(m_viewModel.leftDockMode, m_viewModel.activeLeftPanelId, m_viewModel.activeLeftTopPanelId,
-                                             m_viewModel.activeLeftBottomPanelId, cmd.sideDockSlot, *cmd.stringPayload, displacedPanelIds);
-                            break;
-                        case WorkspaceDockArea::Right:
-                            ActivateSideDock(m_viewModel.rightDockMode, m_viewModel.activeRightPanelId, m_viewModel.activeRightTopPanelId,
-                                             m_viewModel.activeRightBottomPanelId, cmd.sideDockSlot, *cmd.stringPayload, displacedPanelIds);
-                            break;
-                        case WorkspaceDockArea::Bottom:
-                            if (cmd.bottomDockSlot.has_value() && !cmd.stringPayload->empty()) {
-                                const std::string previousFull = m_viewModel.activeBottomPanelId;
-                                if (m_viewModel.bottomDockMode == BottomDockMode::Full) {
-                                    m_viewModel.activeBottomPanelId.clear();
-                                    m_viewModel.activeBottomLeftPanelId.clear();
-                                    m_viewModel.activeBottomRightPanelId.clear();
-                                    m_viewModel.bottomDockMode = BottomDockMode::Split;
-                                    if (*cmd.bottomDockSlot == BottomDockSlot::Left) {
-                                        m_viewModel.activeBottomLeftPanelId = *cmd.stringPayload;
-                                        if (previousFull != *cmd.stringPayload)
-                                            m_viewModel.activeBottomRightPanelId = previousFull;
-                                    } else {
-                                        if (previousFull != *cmd.stringPayload)
-                                            m_viewModel.activeBottomLeftPanelId = previousFull;
-                                        m_viewModel.activeBottomRightPanelId = *cmd.stringPayload;
-                                    }
-                                } else {
-                                    if (m_viewModel.activeBottomLeftPanelId == *cmd.stringPayload)
-                                        m_viewModel.activeBottomLeftPanelId.clear();
-                                    if (m_viewModel.activeBottomRightPanelId == *cmd.stringPayload)
-                                        m_viewModel.activeBottomRightPanelId.clear();
-
-                                    std::string &targetPanel = *cmd.bottomDockSlot == BottomDockSlot::Left
-                                                                   ? m_viewModel.activeBottomLeftPanelId
-                                                                   : m_viewModel.activeBottomRightPanelId;
-                                    displacedPanelIds.push_back(targetPanel);
-                                    targetPanel = *cmd.stringPayload;
-                                }
-                            } else {
-                                displacedPanelIds.push_back(m_viewModel.activeBottomPanelId);
-                                displacedPanelIds.push_back(m_viewModel.activeBottomLeftPanelId);
-                                displacedPanelIds.push_back(m_viewModel.activeBottomRightPanelId);
-                                m_viewModel.bottomDockMode = BottomDockMode::Full;
-                                m_viewModel.activeBottomLeftPanelId.clear();
-                                m_viewModel.activeBottomRightPanelId.clear();
-                                m_viewModel.activeBottomPanelId = *cmd.stringPayload;
-                            }
-                            break;
-                        case WorkspaceDockArea::Document:
-                            displacedPanelIds.push_back(m_viewModel.activeDocumentPanelId);
-                            m_viewModel.activeDocumentPanelId = *cmd.stringPayload;
-                            break;
-                    }
-
-                    if (!cmd.stringPayload->empty()) {
-                        const char *stackId = nullptr;
-                        switch (area) {
-                            case WorkspaceDockArea::Left:
-                                stackId = "workspace.left";
-                                break;
-                            case WorkspaceDockArea::Document:
-                                stackId = "workspace.document";
-                                break;
-                            case WorkspaceDockArea::Right:
-                                stackId = "workspace.right";
-                                break;
-                            case WorkspaceDockArea::Bottom:
-                                break;
-                        }
-                        if (stackId != nullptr) {
-                            const auto activateResult = m_viewModel.workspacePanelHost.SetActiveTab(stackId, *cmd.stringPayload);
-                            if (!activateResult.Succeeded()) {
-                                static_cast<void>(m_viewModel.workspacePanelHost.DockPanel(*cmd.stringPayload, stackId,
-                                                                                           WorkspacePanelHost::DropKind::TabCenter));
-                            }
-                        }
-                    }
-
-                    for (const std::string &displacedPanelId : displacedPanelIds) {
-                        if (displacedPanelId.empty() || displacedPanelId == *cmd.stringPayload) {
-                            continue;
-                        }
-                        LOG_INFO("editor.workspace", "Panel closed: '%s'", displacedPanelId.c_str());
-                        m_dataBus.Publish(WorkspacePanelClosedEvent{displacedPanelId, area});
-                    }
-
-                    if (!panelWasActive && !cmd.stringPayload->empty()) {
-                        LOG_INFO("editor.workspace", "Panel opened: '%s'", cmd.stringPayload->c_str());
-                        m_dataBus.Publish(WorkspacePanelOpenedEvent{*cmd.stringPayload, area});
-                    }
-
-                    // Workspace allocation drops carry an append slot. Activity Bar slot drops use the
-                    // dedicated reorder command and therefore preserve their exact insertion index.
-                    if (!cmd.stringPayload->empty() && cmd.activityBarSlot.has_value()) {
-                        const auto previousSlot = m_viewModel.activityBarLayout.FindSlot(*cmd.stringPayload);
-                        if (previousSlot.has_value()) {
-                            const auto result = m_viewModel.activityBarLayout.Move(*cmd.stringPayload, *cmd.activityBarSlot);
-                            const auto resultingSlot = m_viewModel.activityBarLayout.FindSlot(*cmd.stringPayload);
-                            if (result.Succeeded() && result.code != ActivityBarLayoutOperationCode::NoOp && resultingSlot.has_value()) {
-                                m_dataBus.Publish(ActivityBarItemReorderedEvent{*cmd.stringPayload, *previousSlot, *resultingSlot});
-                            }
-                        }
-                    }
-                }
-                break;
-            case EditorWorkspaceViewCommand::ReorderActivityBarItem:
-                if (cmd.stringPayload.has_value() && cmd.activityBarSlot.has_value()) {
-                    const auto previousSlot = m_viewModel.activityBarLayout.FindSlot(*cmd.stringPayload);
-                    if (!previousSlot.has_value()) {
-                        break;
-                    }
-
-                    const auto previousRegion = RegionForActivitySlot(*previousSlot);
-                    const auto targetRegion = RegionForActivitySlot(*cmd.activityBarSlot);
-                    const bool activePanelChangesRegion = previousRegion.has_value() && targetRegion.has_value() &&
-                                                          *previousRegion != *targetRegion &&
-                                                          IsPanelActiveInRegion(m_viewModel, *cmd.stringPayload, *previousRegion);
-
-                    const auto result = m_viewModel.activityBarLayout.Move(*cmd.stringPayload, *cmd.activityBarSlot);
-                    if (result.Succeeded() && result.code != ActivityBarLayoutOperationCode::NoOp) {
-                        const auto resultingSlot = m_viewModel.activityBarLayout.FindSlot(*cmd.stringPayload);
-                        if (!resultingSlot.has_value()) {
-                            break;
-                        }
-
-                        if (activePanelChangesRegion) {
-                            const std::string sourceFallback{
-                                m_viewModel.activityBarLayout.ItemAt(previousSlot->rail, previousSlot->groupIndex, 0)};
-                            // The activation path needs the source placement to remove the panel from
-                            // its old runtime region before assigning its destination.
-                            ProcessCommand(MakeRegionActivationCommand(*cmd.stringPayload, *targetRegion));
-                            if (!sourceFallback.empty()) {
-                                ProcessCommand(MakeRegionActivationCommand(sourceFallback, *previousRegion));
-                            }
-                            NormalizeDocks(m_viewModel);
-                        } else if (targetRegion.has_value()) {
-                            m_viewModel.panelDockAreas[*cmd.stringPayload] = targetRegion->area;
-                        }
-
-                        m_dataBus.Publish(ActivityBarItemReorderedEvent{*cmd.stringPayload, *previousSlot, *resultingSlot});
-                    }
-                }
-                break;
-            case EditorWorkspaceViewCommand::DockWorkspacePanel:
-                if (cmd.stringPayload.has_value() && cmd.workspaceDropTarget.has_value()) {
-                    const auto &target = *cmd.workspaceDropTarget;
-                    const auto result = m_viewModel.workspacePanelHost.DockPanel(*cmd.stringPayload, target.targetNodeId, target.kind);
-                    if (result.Succeeded()) {
-                        m_dataBus.Publish(WorkspacePanelDockedEvent{*cmd.stringPayload, target.targetNodeId, target.kind});
-                    }
-                }
-                break;
-            case EditorWorkspaceViewCommand::ResizePanel:
-                if (cmd.targetIndex.has_value() && cmd.floatPayload.has_value()) {
-                    WorkspaceDockArea area{};
-                    if (!TryGetDockArea(*cmd.targetIndex, area)) {
-                        break;
-                    }
-
-                    switch (area) {
-                        case WorkspaceDockArea::Left:
-                            m_viewModel.leftPanelWidth = *cmd.floatPayload;
-                            break;
-                        case WorkspaceDockArea::Right:
-                            m_viewModel.rightPanelWidth = *cmd.floatPayload;
-                            break;
-                        case WorkspaceDockArea::Bottom:
-                            m_viewModel.bottomPanelHeight = *cmd.floatPayload;
-                            break;
-                        case WorkspaceDockArea::Document:
-                            break;
-                    }
-
-                    if (cmd.layoutPayload.has_value()) {
-                        m_dataBus.Publish(WorkspaceLayoutChangedEvent{area, *cmd.layoutPayload});
-                    }
-                }
-                break;
-        }
-    }
 
     void EditorWorkspaceController::HandleCreatePrimitive(const Runtime::PrimitiveId primitive, const std::optional<SceneObjectId> parent) {
         Result<SceneCommandResult> result = m_createSceneObject.Execute(PrimitiveCreationRequest{primitive, parent});
         if (result.HasError()) {
-            HandleDocumentCommandResult(std::move(result), "Create object");
+            HandleDocumentCommandResult(result, "Create object");
             return;
         }
         const SceneObjectId created = result.Value().object;
         const bool committed = result.Value().committed;
-        HandleDocumentCommandResult(std::move(result), "Create object");
+        HandleDocumentCommandResult(result, "Create object");
         if (committed) {
             m_viewModel.hierarchyRevealObject = created;
             m_viewModel.hierarchyRevealRevision = m_document.Revision();
-            const Result<void> selected = m_selection.SetObjects({created}, created);
-            if (selected.HasError()) {
+            if (const Result<void> selected = m_selection.SetObjects({created}, created); selected.HasError()) {
                 LOG_ERROR("editor.selection", "Select created object failed: %s", selected.ErrorValue().message.c_str());
             }
             RefreshSelectionProjection();
         }
+    }
+
+    bool EditorWorkspaceController::ApplyAssetViewportPlacement(const AssetSceneDropRequest &request, const Math::Aabb &localBounds,
+                                                                Math::Transform &localTransform) const {
+        if (request.target != AssetSceneDropTarget::Viewport)
+            return true;
+
+        const Result<AssetViewportPlacement> placement = ResolveAssetViewportPlacement(AssetViewportPlacementRequest{
+            .scene = m_viewportScene,
+            .normalizedX = request.normalizedX,
+            .normalizedY = request.normalizedY,
+            .aspect = request.aspect,
+            .depthRange = request.depthRange,
+            .localBounds = localBounds,
+        });
+        if (placement.HasError()) {
+            m_notifications.Publish("asset", NotificationSeverity::Error, placement.ErrorValue().message,
+                                    Localized("workspace.asset_drop.place_failed_title", "Asset could not be placed"),
+                                    "asset_drop_placement_failed");
+            return false;
+        }
+        localTransform.translation = placement.Value().worldPosition;
+        if (!request.parent.has_value())
+            return true;
+
+        const std::optional<Runtime::RuntimeSceneView> active = m_runtimeScene.ActiveScene();
+        if (!active.has_value()) {
+            m_notifications.Publish("asset", NotificationSeverity::Warning,
+                                    Localized("workspace.asset_drop.parent_missing", "The hierarchy target no longer exists."),
+                                    Localized("workspace.asset_drop.not_added", "Asset not added"), "asset_drop_parent_runtime_missing");
+            return false;
+        }
+        const Result<SceneObjectWorldTransforms> parentWorld = ResolveSceneObjectWorldTransforms(*active, *request.parent);
+        const Result<Math::Mat4> parentInverse = parentWorld.HasValue() ? Math::TryInverseAffine(parentWorld.Value().localToWorld)
+                                                                        : Result<Math::Mat4>::Failure(parentWorld.ErrorValue());
+        if (parentInverse.HasError()) {
+            m_notifications.Publish("asset", NotificationSeverity::Warning,
+                                    Localized("workspace.asset_drop.parent_missing", "The hierarchy target no longer exists."),
+                                    Localized("workspace.asset_drop.not_added", "Asset not added"), "asset_drop_parent_transform_invalid");
+            return false;
+        }
+        localTransform.translation = Math::TransformAffinePoint(parentInverse.Value(), placement.Value().worldPosition);
+        return true;
     }
 
     void EditorWorkspaceController::HandleInstantiateAsset(const AssetSceneDropRequest &request) {
@@ -1616,7 +619,7 @@ namespace Horo::Editor {
                                     Localized("workspace.asset_drop.unsupported",
                                               "This asset type cannot be instantiated as a scene object."),
                                     Localized("workspace.asset_drop.unsupported_title", "Unsupported asset"),
-                                    "asset_drop_unsupported_" + record->type.Value());
+                                    std::format("asset_drop_unsupported_{}", record->type.Value()));
             return;
         }
         if (request.parent.has_value() && !m_document.Contains(*request.parent)) {
@@ -1632,49 +635,13 @@ namespace Horo::Editor {
         if (loaded.HasError()) {
             m_notifications.Publish("asset", NotificationSeverity::Error, loaded.ErrorValue().message,
                                     Localized("workspace.asset_drop.load_failed_title", "Asset could not be loaded"),
-                                    "asset_drop_load_failed_" + request.assetId);
+                                    std::format("asset_drop_load_failed_{}", request.assetId));
             return;
         }
 
         Math::Transform localTransform;
-        if (request.target == AssetSceneDropTarget::Viewport) {
-            auto placement = ResolveAssetViewportPlacement(AssetViewportPlacementRequest{
-                .scene = m_viewportScene,
-                .normalizedX = request.normalizedX,
-                .normalizedY = request.normalizedY,
-                .aspect = request.aspect,
-                .depthRange = request.depthRange,
-                .localBounds = loaded.Value().mesh->localBounds,
-            });
-            if (placement.HasError()) {
-                m_notifications.Publish("asset", NotificationSeverity::Error, placement.ErrorValue().message,
-                                        Localized("workspace.asset_drop.place_failed_title", "Asset could not be placed"),
-                                        "asset_drop_placement_failed");
-                return;
-            }
-            localTransform.translation = placement.Value().worldPosition;
-            if (request.parent.has_value()) {
-                const std::optional<Runtime::RuntimeSceneView> active = m_runtimeScene.ActiveScene();
-                if (!active.has_value()) {
-                    m_notifications.Publish("asset", NotificationSeverity::Warning,
-                                            Localized("workspace.asset_drop.parent_missing", "The hierarchy target no longer exists."),
-                                            Localized("workspace.asset_drop.not_added", "Asset not added"),
-                                            "asset_drop_parent_runtime_missing");
-                    return;
-                }
-                const Result<SceneObjectWorldTransforms> parentWorld = ResolveSceneObjectWorldTransforms(*active, *request.parent);
-                const Result<Math::Mat4> parentInverse = parentWorld.HasValue() ? Math::TryInverseAffine(parentWorld.Value().localToWorld)
-                                                                                : Result<Math::Mat4>::Failure(parentWorld.ErrorValue());
-                if (parentInverse.HasError()) {
-                    m_notifications.Publish("asset", NotificationSeverity::Warning,
-                                            Localized("workspace.asset_drop.parent_missing", "The hierarchy target no longer exists."),
-                                            Localized("workspace.asset_drop.not_added", "Asset not added"),
-                                            "asset_drop_parent_transform_invalid");
-                    return;
-                }
-                localTransform.translation = Math::TransformAffinePoint(parentInverse.Value(), placement.Value().worldPosition);
-            }
-        }
+        if (!ApplyAssetViewportPlacement(request, loaded.Value().mesh->localBounds, localTransform))
+            return;
 
         std::string baseName = source.stem().string();
         if (baseName.empty())
@@ -1683,20 +650,19 @@ namespace Horo::Editor {
             m_instantiateSceneAsset.Execute(AssetInstantiationRequest{record->id, std::move(baseName), request.parent, localTransform});
         if (result.HasError()) {
             const std::string message = result.ErrorValue().message;
-            HandleDocumentCommandResult(std::move(result), "Instantiate asset");
+            HandleDocumentCommandResult(result, "Instantiate asset");
             m_notifications.Publish("asset", NotificationSeverity::Error, message,
                                     Localized("workspace.asset_drop.not_added", "Asset not added"), "asset_drop_command_failed");
             return;
         }
         const SceneObjectId created = result.Value().object;
         const bool committed = result.Value().committed;
-        HandleDocumentCommandResult(std::move(result), "Instantiate asset");
+        HandleDocumentCommandResult(result, "Instantiate asset");
         if (!committed)
             return;
         m_viewModel.hierarchyRevealObject = created;
         m_viewModel.hierarchyRevealRevision = m_document.Revision();
-        const Result<void> selected = m_selection.SetObjects({created}, created);
-        if (selected.HasError())
+        if (const Result<void> selected = m_selection.SetObjects({created}, created); selected.HasError())
             LOG_ERROR("editor.selection", "Select instantiated asset failed: %s", selected.ErrorValue().message.c_str());
         RefreshSelectionProjection();
         m_notifications.Publish("asset", NotificationSeverity::Success,
@@ -1735,7 +701,7 @@ namespace Horo::Editor {
         HandleDeleteSelectedObjects({object});
     }
 
-    void EditorWorkspaceController::HandleDeleteSelectedObjects(std::vector<SceneObjectId> objects) {
+    void EditorWorkspaceController::HandleDeleteSelectedObjects(const std::vector<SceneObjectId> &objects) {
         std::vector<SceneObjectId> requested;
         requested.reserve(objects.size());
         for (const SceneObjectId object : objects) {
@@ -1765,14 +731,14 @@ namespace Horo::Editor {
 
         Result<SceneCommandResult> result = m_documentCommands.Execute(DeleteSceneObjectsCommand{existing});
         if (result.HasError()) {
-            HandleDocumentCommandResult(std::move(result), "Delete selected objects");
+            HandleDocumentCommandResult(result, "Delete selected objects");
             m_notifications.Publish("scene", NotificationSeverity::Error,
                                     Localized("workspace.hierarchy.delete_blocked", "Selected objects cannot be deleted."),
                                     Localized("workspace.hierarchy.delete_failed_title", "Delete failed"), "scene_delete_failed");
             return;
         }
         const bool committed = result.Value().committed;
-        HandleDocumentCommandResult(std::move(result), "Delete selected objects");
+        HandleDocumentCommandResult(result, "Delete selected objects");
         if (!committed)
             return;
 
@@ -1795,7 +761,7 @@ namespace Horo::Editor {
                                 Localized("workspace.hierarchy.delete_success_title", "Objects deleted"), "scene_delete_result");
     }
 
-    void EditorWorkspaceController::HandleDocumentCommandResult(Result<SceneCommandResult> result, const char *operation) {
+    void EditorWorkspaceController::HandleDocumentCommandResult(const Result<SceneCommandResult> &result, const char *operation) {
         if (result.HasError()) {
             LOG_ERROR("editor.scene_document", "%s failed: %s", operation, result.ErrorValue().message.c_str());
             if (result.ErrorValue().code.Value() == SceneDocumentErrors::ObjectLocked.code.Value()) {
@@ -1841,18 +807,16 @@ namespace Horo::Editor {
         std::vector<SceneObjectTransformPreview> previews;
         previews.reserve(updates.size());
         for (const SceneObjectTransformUpdate &update : updates)
-            previews.push_back(SceneObjectTransformPreview{update.object, update.localTransform});
+            previews.emplace_back(update.object, update.localTransform);
 
         const std::vector<SceneObjectTransformPreview> previousPreviews = m_viewport.Current().transformPreviews;
-        Result<void> applied = ApplyEditorViewportTransformPreview(*active, previews, m_viewportScene);
-        if (applied.HasError()) {
+        if (Result<void> applied = ApplyEditorViewportTransformPreview(*active, previews, m_viewportScene); applied.HasError()) {
             LOG_ERROR("editor.viewport", "Transform preview failed: %s", applied.ErrorValue().message.c_str());
             return;
         }
-        Result<void> committed = m_viewport.SetTransformPreviews(previews);
-        if (committed.HasError()) {
-            const Result<void> restored = ApplyEditorViewportTransformPreview(*active, previousPreviews, m_viewportScene);
-            if (restored.HasError()) {
+        if (Result<void> committed = m_viewport.SetTransformPreviews(previews); committed.HasError()) {
+            if (const Result<void> restored = ApplyEditorViewportTransformPreview(*active, previousPreviews, m_viewportScene);
+                restored.HasError()) {
                 LOG_ERROR("editor.viewport", "Transform preview rollback failed: %s", restored.ErrorValue().message.c_str());
             }
             LOG_ERROR("editor.viewport", "Transform preview state failed: %s", committed.ErrorValue().message.c_str());
@@ -1862,7 +826,7 @@ namespace Horo::Editor {
         if (m_viewModel.primarySelection.has_value()) {
             const auto instance = std::ranges::find(m_viewportScene.instanceObjects, *m_viewModel.primarySelection);
             if (instance != m_viewportScene.instanceObjects.end()) {
-                const std::size_t index = static_cast<std::size_t>(std::distance(m_viewportScene.instanceObjects.begin(), instance));
+                const auto index = static_cast<std::size_t>(std::distance(m_viewportScene.instanceObjects.begin(), instance));
                 m_viewModel.primarySelectionPreviewWorldTransform = m_viewportScene.instances[index].localToWorld;
             }
         }
@@ -1876,9 +840,9 @@ namespace Horo::Editor {
         const std::optional<Runtime::RuntimeSceneView> active = m_runtimeScene.ActiveScene();
         if (!active || m_viewportScene.runtimeSceneId != active->RuntimeId())
             return;
-        const Result<void> restored =
-            ApplyEditorViewportTransformPreview(*active, std::span<const SceneObjectTransformPreview>{}, m_viewportScene);
-        if (restored.HasError()) {
+        if (const Result<void> restored =
+                ApplyEditorViewportTransformPreview(*active, std::span<const SceneObjectTransformPreview>{}, m_viewportScene);
+            restored.HasError()) {
             LOG_ERROR("editor.viewport", "Transform preview cancellation failed: %s", restored.ErrorValue().message.c_str());
             return;
         }
@@ -1888,8 +852,8 @@ namespace Horo::Editor {
     }
 
     void EditorWorkspaceController::PreviewLightComponent(const SceneObjectId object, const Runtime::LightComponent &light) {
-        const std::optional<ResolvedSceneObjectEditorState> editorState = ResolveSceneObjectEditorState(m_document.Objects(), object);
-        if (!editorState.has_value() || editorState->effectivelyLocked)
+        if (const std::optional<ResolvedSceneObjectEditorState> editorState = ResolveSceneObjectEditorState(m_document.Objects(), object);
+            !editorState.has_value() || editorState->effectivelyLocked)
             return;
         const std::optional<Runtime::RuntimeSceneView> active = m_runtimeScene.ActiveScene();
         if (!active || m_viewportScene.runtimeSceneId != active->RuntimeId())
@@ -1897,16 +861,13 @@ namespace Horo::Editor {
 
         const SceneObjectLightPreview preview{object, light};
         const std::optional<SceneObjectLightPreview> previousPreview = m_viewport.Current().lightPreview;
-        Result<void> applied = ApplyEditorViewportLightPreview(*active, &preview, m_viewportScene);
-        if (applied.HasError()) {
+        if (Result<void> applied = ApplyEditorViewportLightPreview(*active, &preview, m_viewportScene); applied.HasError()) {
             LOG_ERROR("editor.viewport", "Light preview failed: %s", applied.ErrorValue().message.c_str());
             return;
         }
-        Result<void> committed = m_viewport.SetLightPreview(preview);
-        if (committed.HasError()) {
+        if (Result<void> committed = m_viewport.SetLightPreview(preview); committed.HasError()) {
             const SceneObjectLightPreview *previous = previousPreview.has_value() ? &*previousPreview : nullptr;
-            const Result<void> restored = ApplyEditorViewportLightPreview(*active, previous, m_viewportScene);
-            if (restored.HasError())
+            if (const Result<void> restored = ApplyEditorViewportLightPreview(*active, previous, m_viewportScene); restored.HasError())
                 LOG_ERROR("editor.viewport", "Light preview rollback failed: %s", restored.ErrorValue().message.c_str());
             LOG_ERROR("editor.viewport", "Light preview state failed: %s", committed.ErrorValue().message.c_str());
         }
@@ -1919,8 +880,7 @@ namespace Horo::Editor {
         const std::optional<Runtime::RuntimeSceneView> active = m_runtimeScene.ActiveScene();
         if (!active || m_viewportScene.runtimeSceneId != active->RuntimeId())
             return;
-        const Result<void> restored = ApplyEditorViewportLightPreview(*active, nullptr, m_viewportScene);
-        if (restored.HasError()) {
+        if (const Result<void> restored = ApplyEditorViewportLightPreview(*active, nullptr, m_viewportScene); restored.HasError()) {
             LOG_ERROR("editor.viewport", "Light preview cancellation failed: %s", restored.ErrorValue().message.c_str());
             return;
         }
@@ -1935,30 +895,31 @@ namespace Horo::Editor {
         m_viewModel.objects.reserve(documentSnapshot.objects.size());
         for (const SceneObjectSnapshot &object : documentSnapshot.objects) {
             int componentCount = 0;
-            SceneObjectKind singleComponentKind = SceneObjectKind::GameObject;
+            using enum SceneObjectKind;
+            SceneObjectKind singleComponentKind = GameObject;
 
             if (object.primitiveMesh.has_value() || object.meshAsset.has_value()) {
                 componentCount++;
-                singleComponentKind = SceneObjectKind::Mesh;
+                singleComponentKind = Mesh;
             }
             if (object.components.camera.has_value()) {
                 componentCount++;
-                singleComponentKind = SceneObjectKind::Camera;
+                singleComponentKind = Camera;
             }
             if (object.components.light.has_value()) {
                 componentCount++;
-                singleComponentKind = SceneObjectKind::Light;
+                singleComponentKind = Light;
             }
             if (object.components.triggerVolume.has_value()) {
                 componentCount++;
-                singleComponentKind = SceneObjectKind::TriggerVolume;
+                singleComponentKind = TriggerVolume;
             }
             if (object.components.audioSource.has_value()) {
                 componentCount++;
-                singleComponentKind = SceneObjectKind::AudioSource;
+                singleComponentKind = AudioSource;
             }
 
-            SceneObjectKind kind = (componentCount == 1) ? singleComponentKind : SceneObjectKind::GameObject;
+            SceneObjectKind kind = (componentCount == 1) ? singleComponentKind : GameObject;
             const ResolvedSceneObjectEditorState editorState = *ResolveSceneObjectEditorState(documentSnapshot.objects, object.id);
             m_viewModel.objects.push_back(SceneObject{.id = object.id,
                                                       .parent = object.parent,
@@ -1989,8 +950,7 @@ namespace Horo::Editor {
             LOG_ERROR("editor.runtime_scene", "Scene conversion failed: %s", definition.ErrorValue().message.c_str());
             return;
         }
-        const Result<void> queued = m_runtimeScene.QueuePreparation(definition.Value());
-        if (queued.HasError()) {
+        if (const Result<void> queued = m_runtimeScene.QueuePreparation(definition.Value()); queued.HasError()) {
             m_deferredRuntimeSnapshot = std::move(snapshot);
             return;
         }
@@ -2058,11 +1018,14 @@ namespace Horo::Editor {
         std::error_code error;
         if (!std::filesystem::is_directory(sourceRoot, error))
             return false;
-        for (std::filesystem::recursive_directory_iterator iterator{sourceRoot, error}, end; iterator != end && !error;
-             iterator.increment(error)) {
-            if (!iterator->is_regular_file(error))
+        std::filesystem::recursive_directory_iterator iterator{sourceRoot, error};
+        const std::filesystem::recursive_directory_iterator end;
+        while (iterator != end && !error) {
+            const std::filesystem::directory_entry entry = *iterator;
+            iterator.increment(error);
+            if (!entry.is_regular_file(error))
                 continue;
-            const std::string extension = iterator->path().extension().string();
+            const std::string extension = entry.path().extension().string();
             if (extension == ".c" || extension == ".cc" || extension == ".cpp" || extension == ".cxx" || extension == ".ixx" ||
                 extension == ".cppm")
                 return true;
@@ -2176,8 +1139,7 @@ namespace Horo::Editor {
 
         m_prePlayDocumentPanelId = m_viewModel.activeDocumentPanelId;
         std::unique_ptr<Runtime::RuntimeScene> preparedScene;
-        auto cloned = m_runtimeScene.CloneActive(Runtime::SceneRuntimeId{0x8000000000000001ULL});
-        if (cloned.HasValue())
+        if (auto cloned = m_runtimeScene.CloneActive(Runtime::SceneRuntimeId{0x8000000000000001ULL}); cloned.HasValue())
             preparedScene = std::move(cloned).Value();
         const Result<void> started = m_playSession.Start(m_document.Snapshot(), m_gameplayRegistry->Registry(), std::move(preparedScene));
         m_viewModel.activeDocumentPanelId = "horo.game";
@@ -2237,35 +1199,21 @@ namespace Horo::Editor {
         if (!std::isfinite(fixedDeltaSeconds) || fixedDeltaSeconds <= 0.0)
             return;
         ApplyPendingGameplayRegistry();
-        const Result<void> updated = m_playSession.FixedUpdate(input, Gameplay::FixedDeltaTime{fixedDeltaSeconds});
-        if (updated.HasError())
+        if (const Result<void> updated = m_playSession.FixedUpdate(input, Gameplay::FixedDeltaTime{fixedDeltaSeconds}); updated.HasError())
             LOG_ERROR("editor.play_mode", "Play Mode fixed update failed: %s", updated.ErrorValue().message.c_str());
         RefreshPlayStateProjection();
         ExtractPlayViewportScene();
     }
 
-    void EditorWorkspaceController::ExtractPlayViewportScene() {
-        Runtime::RuntimeScene *scene = m_playSession.Scene();
-        if (scene == nullptr)
-            return;
-        const Runtime::RuntimeSceneView runtimeView = scene->View();
+    EditorViewportCamera EditorWorkspaceController::ResolvePlayViewportCamera(const Runtime::RuntimeSceneView &runtimeView) const {
         EditorViewportCamera camera = m_viewport.Current().camera;
         for (std::size_t slot = 0; slot < runtimeView.SlotCount(); ++slot) {
             const std::optional<Runtime::RuntimeEntityView> entity = runtimeView.EntityAt(slot);
             if (!entity || !entity->components->camera.has_value())
                 continue;
             const Runtime::CameraComponent &authoredCamera = *entity->components->camera;
-            Math::Transform worldTransform = *entity->localTransform;
-            if (entity->authoredObject.has_value()) {
-                const Result<SceneObjectWorldTransforms> world =
-                    ResolveSceneObjectWorldTransforms(runtimeView, SceneObjectId{entity->authoredObject->value});
-                if (world.HasValue()) {
-                    const Result<Math::Transform> decomposed = Math::TryDecomposeAffineTRS(world.Value().localToWorld);
-                    if (decomposed.HasValue())
-                        worldTransform = decomposed.Value();
-                }
-            }
-            camera = EditorViewportCamera{
+            const Math::Transform worldTransform = ResolveRuntimeEntityTransform(runtimeView, *entity);
+            return EditorViewportCamera{
                 .projection = authoredCamera.projection,
                 .position = worldTransform.translation,
                 .target = worldTransform.translation + worldTransform.rotation.Rotate({0.0F, 0.0F, -1.0F}),
@@ -2275,8 +1223,16 @@ namespace Horo::Editor {
                 .nearPlane = authoredCamera.nearPlane,
                 .farPlane = authoredCamera.farPlane,
             };
-            break;
         }
+        return camera;
+    }
+
+    void EditorWorkspaceController::ExtractPlayViewportScene() {
+        const Runtime::RuntimeScene *scene = m_playSession.Scene();
+        if (scene == nullptr)
+            return;
+        const Runtime::RuntimeSceneView runtimeView = scene->View();
+        const EditorViewportCamera camera = ResolvePlayViewportCamera(runtimeView);
         LoadDocumentAssetMeshes();
         const SceneDocumentSnapshot document = m_document.Snapshot();
         Result<EditorViewportSceneSnapshot> extracted =
@@ -2292,1155 +1248,6 @@ namespace Horo::Editor {
         RefreshViewportLightProjection();
     }
 
-    void EditorWorkspaceController::RefreshContentBrowserAfterMutation() {
-        m_contentBrowserRefreshPending = false;
-        m_contentBrowserLoadingPresented = false;
-        if (m_mutableAssetRegistry != nullptr) {
-            auto rebuilt =
-                Assets::RebuildAssetRegistry(*m_mutableAssetRegistry, m_viewModel.projectRoot, Assets::AssetRegistryOpenMode::Edit);
-            if (rebuilt.HasError() || rebuilt.Value().status == Assets::AssetRegistryBuildStatus::Failed) {
-                m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.registry_failed";
-                m_viewModel.contentBrowser =
-                    BuildContentBrowserDirectory(m_viewModel.projectRoot, m_viewModel.contentBrowser.absoluteCurrentPath, m_assetRegistry,
-                                                 m_importerCatalog);
-                ReconcileContentBrowserNavigation();
-                return;
-            }
-            m_assetRegistry = m_mutableAssetRegistry->Snapshot();
-            m_viewModel.assetRegistryRevision = m_assetRegistry.Revision();
-        }
-        m_viewModel.contentBrowser = BuildContentBrowserDirectory(m_viewModel.projectRoot, m_viewModel.contentBrowser.absoluteCurrentPath,
-                                                                  m_assetRegistry, m_importerCatalog);
-        ReconcileContentBrowserNavigation();
-    }
-
-    void EditorWorkspaceController::RequestContentBrowserRefresh() {
-        if (m_contentBrowserRefreshPending)
-            return;
-        m_contentBrowserRefreshPending = true;
-        m_contentBrowserLoadingPresented = false;
-        m_viewModel.contentBrowser.loadState = ContentBrowserLoadState::Loading;
-        m_viewModel.contentBrowserOperationError.clear();
-    }
-
-    void EditorWorkspaceController::ReconcileContentBrowserNavigation() {
-        const std::filesystem::path root = NormalizeAbsolute(m_viewModel.contentBrowser.absoluteRootPath);
-        const std::filesystem::path current = NormalizeAbsolute(m_viewModel.contentBrowser.absoluteCurrentPath);
-        const auto isValidHistoryEntry = [&root, &current](const std::filesystem::path &entry) {
-            const std::filesystem::path normalized = NormalizeAbsolute(entry);
-            return !normalized.empty() && normalized != current && IsContentBrowserDirectoryTargetAllowed(root, normalized);
-        };
-        std::erase_if(m_contentBrowserBackHistory, [&isValidHistoryEntry](const std::filesystem::path &entry) {
-            return !isValidHistoryEntry(entry);
-        });
-        std::erase_if(m_contentBrowserForwardHistory, [&isValidHistoryEntry](const std::filesystem::path &entry) {
-            return !isValidHistoryEntry(entry);
-        });
-        m_viewModel.contentBrowserCanNavigateBack = !m_contentBrowserBackHistory.empty();
-        m_viewModel.contentBrowserCanNavigateForward = !m_contentBrowserForwardHistory.empty();
-    }
-
-    void EditorWorkspaceController::NavigateContentBrowser(const std::filesystem::path &absoluteDirectory, const bool recordHistory) {
-        const std::filesystem::path root = NormalizeAbsolute(m_viewModel.contentBrowser.absoluteRootPath);
-        const std::filesystem::path destination = NormalizeAbsolute(absoluteDirectory);
-        if (!IsContentBrowserDirectoryTargetAllowed(root, destination)) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.invalid_target";
-            return;
-        }
-
-        const std::filesystem::path current = NormalizeAbsolute(m_viewModel.contentBrowser.absoluteCurrentPath);
-        if (destination == current)
-            return;
-
-        m_contentBrowserRefreshPending = false;
-        m_contentBrowserLoadingPresented = false;
-        if (recordHistory && !current.empty()) {
-            m_contentBrowserBackHistory.push_back(current);
-            m_contentBrowserForwardHistory.clear();
-        }
-        m_viewModel.contentBrowser = BuildContentBrowserDirectory(m_viewModel.projectRoot, destination, m_assetRegistry, m_importerCatalog);
-        m_viewModel.contentBrowserOperationError.clear();
-        m_viewModel.contentBrowserCanNavigateBack = !m_contentBrowserBackHistory.empty();
-        m_viewModel.contentBrowserCanNavigateForward = !m_contentBrowserForwardHistory.empty();
-    }
-
-    void EditorWorkspaceController::NavigateContentBrowserBack() {
-        if (m_contentBrowserBackHistory.empty())
-            return;
-        const std::filesystem::path current = NormalizeAbsolute(m_viewModel.contentBrowser.absoluteCurrentPath);
-        while (!m_contentBrowserBackHistory.empty()) {
-            const std::filesystem::path destination = m_contentBrowserBackHistory.back();
-            m_contentBrowserBackHistory.pop_back();
-            if (!IsContentBrowserDirectoryTargetAllowed(m_viewModel.contentBrowser.absoluteRootPath, destination)) {
-                continue;
-            }
-            if (!current.empty())
-                m_contentBrowserForwardHistory.push_back(current);
-            NavigateContentBrowser(destination, false);
-            break;
-        }
-        m_viewModel.contentBrowserCanNavigateBack = !m_contentBrowserBackHistory.empty();
-        m_viewModel.contentBrowserCanNavigateForward = !m_contentBrowserForwardHistory.empty();
-    }
-
-    void EditorWorkspaceController::NavigateContentBrowserForward() {
-        if (m_contentBrowserForwardHistory.empty())
-            return;
-        const std::filesystem::path current = NormalizeAbsolute(m_viewModel.contentBrowser.absoluteCurrentPath);
-        while (!m_contentBrowserForwardHistory.empty()) {
-            const std::filesystem::path destination = m_contentBrowserForwardHistory.back();
-            m_contentBrowserForwardHistory.pop_back();
-            if (!IsContentBrowserDirectoryTargetAllowed(m_viewModel.contentBrowser.absoluteRootPath, destination)) {
-                continue;
-            }
-            if (!current.empty())
-                m_contentBrowserBackHistory.push_back(current);
-            NavigateContentBrowser(destination, false);
-            break;
-        }
-        m_viewModel.contentBrowserCanNavigateBack = !m_contentBrowserBackHistory.empty();
-        m_viewModel.contentBrowserCanNavigateForward = !m_contentBrowserForwardHistory.empty();
-    }
-
-    void EditorWorkspaceController::NavigateContentBrowserUp() {
-        const std::filesystem::path root = NormalizeAbsolute(m_viewModel.contentBrowser.absoluteRootPath);
-        const std::filesystem::path current = NormalizeAbsolute(m_viewModel.contentBrowser.absoluteCurrentPath);
-        if (!root.empty() && current != root)
-            NavigateContentBrowser(current.parent_path(), true);
-    }
-
-    void EditorWorkspaceController::DuplicateContentBrowserAsset(const std::string &absolutePath) {
-        m_viewModel.contentBrowserOperationError.clear();
-        static_cast<void>(CopyContentBrowserAssetTo(NormalizeAbsolute(absolutePath), NormalizeAbsolute(absolutePath).parent_path()));
-    }
-
-    void EditorWorkspaceController::SetContentBrowserClipboard(const std::string &absolutePath, const ContentBrowserClipboardMode mode) {
-        m_viewModel.contentBrowserOperationError.clear();
-        const std::filesystem::path source = NormalizeAbsolute(absolutePath);
-        std::error_code error;
-        const auto status = std::filesystem::symlink_status(source, error);
-        if (!IsDirectContentBrowserEntry(m_viewModel.contentBrowser, source) || error || !std::filesystem::is_regular_file(status)) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.invalid_target";
-            return;
-        }
-        m_viewModel.contentBrowserClipboard = {
-            .mode = mode,
-            .absoluteSourcePath = source.string(),
-        };
-    }
-
-    void EditorWorkspaceController::PasteContentBrowserAsset(const std::string &absoluteDirectory) {
-        m_viewModel.contentBrowserOperationError.clear();
-        const ContentBrowserClipboardState clipboard = m_viewModel.contentBrowserClipboard;
-        if (clipboard.mode == ContentBrowserClipboardMode::None || clipboard.absoluteSourcePath.empty()) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.clipboard_empty";
-            return;
-        }
-
-        const std::filesystem::path source = NormalizeAbsolute(clipboard.absoluteSourcePath);
-        const std::filesystem::path destination = NormalizeAbsolute(absoluteDirectory);
-        const bool succeeded = clipboard.mode == ContentBrowserClipboardMode::Copy ? CopyContentBrowserAssetTo(source, destination)
-                                                                                   : MoveContentBrowserAssetTo(source, destination);
-        if (succeeded && clipboard.mode == ContentBrowserClipboardMode::Move)
-            ClearContentBrowserClipboard();
-    }
-
-    void EditorWorkspaceController::TransferContentBrowserAsset(const ContentBrowserAssetTransferRequest &request) {
-        m_viewModel.contentBrowserOperationError.clear();
-        if (!std::filesystem::path{request.absoluteSourcePath}.is_absolute() ||
-            !std::filesystem::path{request.absoluteDestinationDirectory}.is_absolute()) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.invalid_target";
-            return;
-        }
-        const std::filesystem::path source = NormalizeAbsolute(request.absoluteSourcePath);
-        const std::filesystem::path destination = NormalizeAbsolute(request.absoluteDestinationDirectory);
-        if (request.mode == ContentBrowserTransferMode::Copy)
-            static_cast<void>(CopyContentBrowserAssetTo(source, destination));
-        else
-            static_cast<void>(MoveContentBrowserAssetTo(source, destination));
-    }
-
-    void EditorWorkspaceController::CreateContentBrowserFolder(const std::string &absoluteDirectory, const std::string &name) {
-        LOG_INFO("editor.asset_actions", "Create folder requested: directory='%s' name='%s'", absoluteDirectory.c_str(), name.c_str());
-        m_viewModel.contentBrowserOperationError.clear();
-        if (m_mutations == nullptr || m_durableFiles == nullptr) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.unavailable";
-            return;
-        }
-        const std::filesystem::path directory = NormalizeAbsolute(absoluteDirectory);
-        const std::filesystem::path requestedName{name};
-        if (!IsContentBrowserDirectoryTargetAllowed(m_viewModel.contentBrowser.absoluteRootPath, directory) ||
-            requestedName != requestedName.filename() || !IsPortableEntryName(name)) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.invalid_name";
-            return;
-        }
-        if (DirectoryContainsPortableName(directory, name)) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.name_exists";
-            return;
-        }
-
-        auto lease = m_mutations->TryAcquire(ProjectMutationRequest{
-            .projectRoot = m_viewModel.projectRoot,
-            .owner = ProjectMutationOwner::Asset,
-            .operationId = "content-browser-create-folder",
-        });
-        if (lease.HasError()) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.busy";
-            return;
-        }
-        std::error_code error;
-        if (!std::filesystem::create_directory(directory / requestedName, error) || error) {
-            LOG_ERROR("editor.asset_actions", "Create folder failed: path='%s' error='%s'", (directory / requestedName).string().c_str(),
-                      error.message().c_str());
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.create_folder_failed";
-            return;
-        }
-        static_cast<void>(m_durableFiles->SyncDirectory(directory));
-        LOG_INFO("editor.asset_actions", "Create folder completed: path='%s'", (directory / requestedName).string().c_str());
-        RefreshContentBrowserAfterMutation();
-    }
-
-    void EditorWorkspaceController::CreateGameplayBehavior(const bool nativeBehavior, const std::string &absoluteDirectory) {
-        LOG_INFO("editor.asset_actions", "Create %s behavior requested: directory='%s'", nativeBehavior ? "native" : "lua",
-                 absoluteDirectory.c_str());
-        m_viewModel.contentBrowserOperationError.clear();
-        if (m_mutations == nullptr || m_durableFiles == nullptr) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.unavailable";
-            return;
-        }
-        const std::filesystem::path projectRoot = NormalizeAbsolute(m_viewModel.projectRoot);
-        const std::filesystem::path assetsRoot = projectRoot / "assets";
-        const std::filesystem::path scriptsRoot = assetsRoot / "scripts";
-        const std::filesystem::path requestedDirectory = NormalizeAbsolute(absoluteDirectory);
-        std::filesystem::path directory = nativeBehavior
-                                              ? projectRoot / "source" / "gameplay"
-                                              : (HasPathPrefix(scriptsRoot, requestedDirectory) ? requestedDirectory : scriptsRoot);
-        if ((!nativeBehavior && !HasPathPrefix(assetsRoot, directory)) || (nativeBehavior && !HasPathPrefix(projectRoot, directory))) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.invalid_target";
-            return;
-        }
-        auto lease = m_mutations->TryAcquire(ProjectMutationRequest{
-            .projectRoot = projectRoot,
-            .owner = ProjectMutationOwner::Asset,
-            .operationId = nativeBehavior ? "create-native-behavior" : "create-lua-behavior",
-        });
-        if (lease.HasError()) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.busy";
-            return;
-        }
-        std::error_code filesystemError;
-        std::filesystem::create_directories(directory, filesystemError);
-        if (filesystemError) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.create_behavior_failed";
-            return;
-        }
-
-        const std::filesystem::path extension = nativeBehavior ? ".cpp" : ".horo_script";
-        std::size_t suffix = 0;
-        std::filesystem::path source;
-        do {
-            const std::string stem = suffix == 0 ? "NewBehavior" : "NewBehavior" + std::to_string(suffix + 1);
-            source = directory / (stem + extension.string());
-            ++suffix;
-        } while (std::filesystem::exists(source, filesystemError) && suffix < 1000);
-        if (filesystemError || suffix >= 1000) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.name_exists";
-            return;
-        }
-
-        std::string projectNamespace = projectRoot.filename().string();
-        std::ranges::transform(projectNamespace, projectNamespace.begin(), [](const unsigned char value) {
-            return std::isalnum(value) ? static_cast<char>(std::tolower(value)) : '_';
-        });
-        if (projectNamespace.empty())
-            projectNamespace = "project";
-        std::string behaviorName = source.stem().string();
-        std::string behaviorSlug = behaviorName;
-        std::ranges::transform(behaviorSlug, behaviorSlug.begin(), [](const unsigned char value) {
-            return static_cast<char>(std::tolower(value));
-        });
-        const std::string typeId = "game." + projectNamespace + "." + behaviorSlug;
-        const std::string contents =
-            nativeBehavior
-                ? "#include <Horo/Gameplay/NativeBehavior.h>\n\n"
-                  "class " +
-                      behaviorName +
-                      " final : public Horo::Gameplay::IBehaviorInstance {\n"
-                      "public:\n"
-                      "    static Horo::Gameplay::BehaviorDescriptor DescribeBehavior() {\n"
-                      "        Horo::Gameplay::BehaviorDescriptor descriptor;\n"
-                      "        descriptor.displayName = \"" +
-                      behaviorName +
-                      "\";\n"
-                      "        return descriptor;\n"
-                      "    }\n\n"
-                      "    void OnFixedUpdate(Horo::Gameplay::BehaviorContext& ctx, Horo::Gameplay::FixedDeltaTime dt) override {\n"
-                      "        (void)ctx;\n"
-                      "        (void)dt;\n"
-                      "    }\n"
-                      "};\n\nHORO_BEHAVIOR(" +
-                      behaviorName + ", \"" + typeId + "\")\n"
-                : "return horo.behavior {\n"
-                  "    type_id = \"" +
-                      typeId +
-                      "\",\n"
-                      "    display_name = \"" +
-                      behaviorName +
-                      "\",\n"
-                      "    category = \"Gameplay\",\n"
-                      "    schema_version = 1,\n"
-                      "    fields = {},\n"
-                      "    on_fixed_update = function(ctx, dt)\n"
-                      "    end\n"
-                      "}\n";
-        const Result<void> written = m_durableFiles->WriteDurable(source, std::as_bytes(std::span{contents}));
-        if (written.HasError()) {
-            LOG_ERROR("editor.asset_actions", "Create %s behavior failed writing '%s': %s", nativeBehavior ? "native" : "lua",
-                      source.string().c_str(), written.ErrorValue().message.c_str());
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.create_behavior_failed";
-            return;
-        }
-        if (nativeBehavior) {
-            const std::filesystem::path moduleSource = directory / "GameModule.cpp";
-            if (!std::filesystem::exists(moduleSource, filesystemError)) {
-                const std::string moduleContents =
-                    "#include <Horo/Gameplay/GameModule.h>\n\n"
-                    "namespace {\n"
-                    "class ProjectGameModule final : public Horo::Gameplay::IGameModule {\n"
-                    "public:\n"
-                    "    Horo::Result<void> Start(Horo::Gameplay::GameRuntimeContext&) override {\n"
-                    "        return Horo::Result<void>::Success();\n"
-                    "    }\n"
-                    "    void Stop(Horo::Gameplay::GameRuntimeContext&) noexcept override {}\n"
-                    "};\n"
-                    "}\n\n"
-                    "extern \"C\" HORO_GAME_EXPORT Horo::Gameplay::IGameModule* CreateGameModule() noexcept {\n"
-                    "    return new ProjectGameModule{};\n"
-                    "}\n\n"
-                    "extern \"C\" HORO_GAME_EXPORT void DestroyGameModule(Horo::Gameplay::IGameModule* module) noexcept {\n"
-                    "    delete module;\n"
-                    "}\n";
-                const Result<void> moduleWritten = m_durableFiles->WriteDurable(moduleSource, std::as_bytes(std::span{moduleContents}));
-                if (moduleWritten.HasError()) {
-                    LOG_ERROR("editor.asset_actions", "Create native behavior failed writing module '%s': %s",
-                              moduleSource.string().c_str(), moduleWritten.ErrorValue().message.c_str());
-                    static_cast<void>(m_durableFiles->RemoveDurable(source));
-                    m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.create_behavior_failed";
-                    return;
-                }
-            }
-        }
-        if (!nativeBehavior) {
-            const std::string metadata =
-                "{\n  \"schemaVersion\": 1,\n  \"runtime\": \"lua\",\n  \"behaviorTypeId\": \"" + typeId + "\"\n}\n";
-            const Result<void> sidecar = m_durableFiles->WriteDurable(source.string() + ".meta", std::as_bytes(std::span{metadata}));
-            if (sidecar.HasError()) {
-                LOG_ERROR("editor.asset_actions", "Create lua behavior failed writing metadata for '%s': %s", source.string().c_str(),
-                          sidecar.ErrorValue().message.c_str());
-                static_cast<void>(m_durableFiles->RemoveDurable(source));
-                m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.create_behavior_failed";
-                return;
-            }
-        }
-        static_cast<void>(m_durableFiles->SyncDirectory(directory));
-        RefreshContentBrowserAfterMutation();
-        if (nativeBehavior)
-            m_nativeBuildDebounceSeconds = 0.25F;
-        else
-            RefreshGameplayRegistry();
-        LOG_INFO("editor.asset_actions", "Create %s behavior completed: source='%s'", nativeBehavior ? "native" : "lua",
-                 source.string().c_str());
-    }
-
-    void EditorWorkspaceController::CreateGameplayBehavior(const CreateGameplayBehaviorRequest &request) {
-        m_viewModel.contentBrowserOperationError.clear();
-        const Result<void> validation = ValidateCreateGameplayBehaviorRequest(request);
-        if (validation.HasError()) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.invalid_name";
-            return;
-        }
-        const bool nativeBehavior = request.kind == GameplayBehaviorKind::Native;
-        LOG_INFO("editor.asset_actions", "Create %s behavior requested: directory='%s' base='%s'", nativeBehavior ? "native" : "lua",
-                 request.destination.c_str(), request.baseName.c_str());
-        if (m_mutations == nullptr || m_durableFiles == nullptr) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.unavailable";
-            return;
-        }
-
-        const std::filesystem::path projectRoot = NormalizeAbsolute(m_viewModel.projectRoot);
-        const std::filesystem::path assetsRoot = projectRoot / "assets";
-        const std::filesystem::path scriptsRoot = assetsRoot / "scripts";
-        const std::filesystem::path requestedDirectory = NormalizeAbsolute(request.destination);
-        std::filesystem::path directory = nativeBehavior
-                                              ? projectRoot / "source" / "gameplay"
-                                              : (HasPathPrefix(scriptsRoot, requestedDirectory) ? requestedDirectory : scriptsRoot);
-        if ((!nativeBehavior && !HasPathPrefix(assetsRoot, directory)) || (nativeBehavior && !HasPathPrefix(projectRoot, directory))) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.invalid_target";
-            return;
-        }
-
-        auto lease = m_mutations->TryAcquire(ProjectMutationRequest{
-            .projectRoot = projectRoot,
-            .owner = ProjectMutationOwner::Asset,
-            .operationId = nativeBehavior ? "create-native-behavior" : "create-lua-behavior",
-        });
-        if (lease.HasError()) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.busy";
-            return;
-        }
-
-        std::error_code filesystemError;
-        std::filesystem::create_directories(directory, filesystemError);
-        if (filesystemError) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.create_behavior_failed";
-            return;
-        }
-
-        const std::filesystem::path source = directory / (request.baseName + (nativeBehavior ? ".cpp" : ".horo_script"));
-        if (std::filesystem::exists(source, filesystemError) || filesystemError) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.name_exists";
-            return;
-        }
-
-        std::string projectNamespace = projectRoot.filename().string();
-        std::ranges::transform(projectNamespace, projectNamespace.begin(), [](const unsigned char value) {
-            return std::isalnum(value) ? static_cast<char>(std::tolower(value)) : '_';
-        });
-        if (projectNamespace.empty())
-            projectNamespace = "project";
-        std::string behaviorName = source.stem().string();
-        std::string behaviorSlug = behaviorName;
-        std::ranges::transform(behaviorSlug, behaviorSlug.begin(), [](const unsigned char value) {
-            return static_cast<char>(std::tolower(value));
-        });
-        const std::string typeId = "game." + projectNamespace + "." + (nativeBehavior ? "cpp." : "lua.") + behaviorSlug;
-        const std::string contents =
-            nativeBehavior
-                ? "#include <Horo/Gameplay/NativeBehavior.h>\n\n"
-                  "class " +
-                      behaviorName +
-                      " final : public Horo::Gameplay::IBehaviorInstance {\n"
-                      "public:\n"
-                      "    static Horo::Gameplay::BehaviorDescriptor DescribeBehavior() {\n"
-                      "        Horo::Gameplay::BehaviorDescriptor descriptor;\n"
-                      "        descriptor.displayName = \"" +
-                      behaviorName +
-                      "\";\n"
-                      "        return descriptor;\n"
-                      "    }\n\n"
-                      "    void OnFixedUpdate(Horo::Gameplay::BehaviorContext& ctx, Horo::Gameplay::FixedDeltaTime dt) override {\n"
-                      "        (void)ctx;\n"
-                      "        (void)dt;\n"
-                      "    }\n"
-                      "};\n\nHORO_BEHAVIOR(" +
-                      behaviorName + ", \"" + typeId + "\")\n"
-                : "return horo.behavior {\n"
-                  "    type_id = \"" +
-                      typeId +
-                      "\",\n"
-                      "    display_name = \"" +
-                      behaviorName +
-                      "\",\n"
-                      "    category = \"Gameplay\",\n"
-                      "    schema_version = 1,\n"
-                      "    fields = {},\n"
-                      "    on_fixed_update = function(ctx, dt)\n"
-                      "    end\n"
-                      "}\n";
-        const Result<void> written = m_durableFiles->WriteDurable(source, std::as_bytes(std::span{contents}));
-        if (written.HasError()) {
-            LOG_ERROR("editor.asset_actions", "Create %s behavior failed writing '%s': %s", nativeBehavior ? "native" : "lua",
-                      source.string().c_str(), written.ErrorValue().message.c_str());
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.create_behavior_failed";
-            return;
-        }
-
-        if (nativeBehavior) {
-            const std::filesystem::path moduleSource = directory / "GameModule.cpp";
-            if (!std::filesystem::exists(moduleSource, filesystemError)) {
-                const std::string moduleContents =
-                    "#include <Horo/Gameplay/GameModule.h>\n\n"
-                    "namespace {\n"
-                    "class ProjectGameModule final : public Horo::Gameplay::IGameModule {\n"
-                    "public:\n"
-                    "    Horo::Result<void> Start(Horo::Gameplay::GameRuntimeContext&) override {\n"
-                    "        return Horo::Result<void>::Success();\n"
-                    "    }\n"
-                    "    void Stop(Horo::Gameplay::GameRuntimeContext&) noexcept override {}\n"
-                    "};\n"
-                    "}\n\n"
-                    "extern \"C\" HORO_GAME_EXPORT Horo::Gameplay::IGameModule* CreateGameModule() noexcept {\n"
-                    "    return new ProjectGameModule{};\n"
-                    "}\n\n"
-                    "extern \"C\" HORO_GAME_EXPORT void DestroyGameModule(Horo::Gameplay::IGameModule* module) noexcept {\n"
-                    "    delete module;\n"
-                    "}\n";
-                const Result<void> moduleWritten = m_durableFiles->WriteDurable(moduleSource, std::as_bytes(std::span{moduleContents}));
-                if (moduleWritten.HasError()) {
-                    LOG_ERROR("editor.asset_actions", "Create native behavior failed writing module '%s': %s",
-                              moduleSource.string().c_str(), moduleWritten.ErrorValue().message.c_str());
-                    static_cast<void>(m_durableFiles->RemoveDurable(source));
-                    m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.create_behavior_failed";
-                    return;
-                }
-            }
-        } else {
-            const std::string metadata =
-                "{\n  \"schemaVersion\": 1,\n  \"runtime\": \"lua\",\n  \"behaviorTypeId\": \"" + typeId + "\"\n}\n";
-            const Result<void> sidecar = m_durableFiles->WriteDurable(source.string() + ".meta", std::as_bytes(std::span{metadata}));
-            if (sidecar.HasError()) {
-                LOG_ERROR("editor.asset_actions", "Create lua behavior failed writing metadata for '%s': %s", source.string().c_str(),
-                          sidecar.ErrorValue().message.c_str());
-                static_cast<void>(m_durableFiles->RemoveDurable(source));
-                m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.create_behavior_failed";
-                return;
-            }
-        }
-
-        if (nativeBehavior && m_durableFiles != nullptr) {
-            ProjectIntegrityValidatorService validator{*m_durableFiles};
-            static_cast<void>(validator.Repair(projectRoot));
-        }
-
-        static_cast<void>(m_durableFiles->SyncDirectory(directory));
-        RefreshContentBrowserAfterMutation();
-        if (nativeBehavior)
-            m_nativeBuildDebounceSeconds = 0.25F;
-        else
-            RefreshGameplayRegistry();
-        LOG_INFO("editor.asset_actions", "Create %s behavior completed: source='%s'", nativeBehavior ? "native" : "lua",
-                 source.string().c_str());
-    }
-
-    void EditorWorkspaceController::RefreshGameplayRegistry() {
-        std::unique_ptr<ProjectGameplayRegistry> candidate = ProjectGameplayRegistry::Discover(m_viewModel.projectRoot);
-        if (m_playSession.IsActive()) {
-            m_pendingGameplayRegistry = std::move(candidate);
-            return;
-        }
-        m_gameplayRegistry = std::move(candidate);
-        RefreshAvailableBehaviorProjection();
-    }
-
-    void EditorWorkspaceController::RefreshAvailableBehaviorProjection() {
-        m_viewModel.availableBehaviors.clear();
-        for (const Gameplay::BehaviorRegistration &registration : m_gameplayRegistry->Registry().Registrations())
-            m_viewModel.availableBehaviors.push_back(registration.descriptor);
-        for (const ProjectGameplayDiagnostic &diagnostic : m_gameplayRegistry->Diagnostics())
-            LOG_ERROR("editor.gameplay", "Gameplay source '%s' is invalid: %s", diagnostic.source.string().c_str(),
-                      diagnostic.error.message.c_str());
-    }
-
-    void EditorWorkspaceController::ApplyPendingGameplayRegistry() {
-        if (!m_pendingGameplayRegistry)
-            return;
-        if (m_pendingGameplayRegistry->HasBlockingDiagnostics()) {
-            for (const ProjectGameplayDiagnostic &diagnostic : m_pendingGameplayRegistry->Diagnostics())
-                LOG_ERROR("editor.gameplay", "Gameplay registry candidate was rejected for '%s': %s", diagnostic.source.string().c_str(),
-                          diagnostic.error.message.c_str());
-            m_pendingGameplayRegistry.reset();
-            return;
-        }
-        const Result<void> reloaded = m_playSession.ReloadBehaviors(m_pendingGameplayRegistry->Registry(), m_gameplayRegistry->Registry());
-        if (reloaded.HasError()) {
-            LOG_ERROR("editor.gameplay", "Gameplay reload rolled back to the previous module: %s", reloaded.ErrorValue().message.c_str());
-            m_pendingGameplayRegistry.reset();
-            RefreshPlayStateProjection();
-            return;
-        }
-        m_gameplayRegistry = std::move(m_pendingGameplayRegistry);
-        RefreshAvailableBehaviorProjection();
-        LOG_INFO("editor.gameplay", "Gameplay module reloaded at a fixed-tick safe point.");
-    }
-
-    bool EditorWorkspaceController::CopyContentBrowserAssetTo(const std::filesystem::path &absoluteSource,
-                                                              const std::filesystem::path &absoluteDestinationDirectory) {
-        if (m_mutations == nullptr || m_durableFiles == nullptr || m_mutableAssetRegistry == nullptr) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.unavailable";
-            return false;
-        }
-
-        const std::filesystem::path root = NormalizeAbsolute(m_viewModel.contentBrowser.absoluteRootPath);
-        const std::filesystem::path source = NormalizeAbsolute(absoluteSource);
-        const std::filesystem::path destinationDirectory = NormalizeAbsolute(absoluteDestinationDirectory);
-        std::error_code error;
-        const auto sourceStatus = std::filesystem::symlink_status(source, error);
-        if (error || std::filesystem::is_symlink(sourceStatus) || !std::filesystem::is_regular_file(sourceStatus) ||
-            !HasPathPrefix(root, source) || !IsContentBrowserDirectoryTargetAllowed(root, destinationDirectory)) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.invalid_target";
-            return false;
-        }
-
-        const std::filesystem::path projectRoot = NormalizeAbsolute(m_viewModel.projectRoot);
-        const std::string projectPath = source.lexically_relative(projectRoot).generic_string();
-        const Assets::AssetRecord *sourceRecord = m_assetRegistry.FindByPath(projectPath);
-        std::filesystem::path sourceSidecar = source;
-        sourceSidecar += ".horo";
-        const auto companions = ValidatedAssetCompanions(source, true);
-        if (sourceRecord == nullptr || !companions.has_value()) {
-            m_viewModel.contentBrowserOperationError = sourceRecord == nullptr ? "workspace.content_browser.operation.asset_required"
-                                                                               : "workspace.content_browser.operation.companion_invalid";
-            return false;
-        }
-
-        std::filesystem::path destination = destinationDirectory / source.filename();
-        if (destinationDirectory == source.parent_path() || !AssetDestinationAvailable(source, destination, *companions)) {
-            destination = ResolveDuplicateDestination(source, destinationDirectory, *companions);
-        }
-        if (destination.empty()) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.name_exists";
-            return false;
-        }
-
-        auto sidecar = ReadSidecarJson(sourceSidecar);
-        const Assets::AssetId newId = GenerateRandomAssetId(m_assetRegistry);
-        if (!sidecar.has_value() || !newId.IsValid()) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.copy_failed";
-            return false;
-        }
-        (*sidecar)["assetId"] = newId.ToString();
-
-        auto lease = m_mutations->TryAcquire(ProjectMutationRequest{
-            .projectRoot = m_viewModel.projectRoot,
-            .owner = ProjectMutationOwner::Asset,
-            .operationId = "content-browser-copy",
-        });
-        if (lease.HasError()) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.busy";
-            return false;
-        }
-
-        std::vector<std::filesystem::path> created;
-        for (const std::filesystem::path &item : *companions) {
-            const std::filesystem::path target = CompanionDestination(item, source, destination);
-            if (!PathDoesNotExist(target)) {
-                const bool rollbackComplete = RemoveCreatedPaths(created);
-                m_viewModel.contentBrowserOperationError = rollbackComplete ? "workspace.content_browser.operation.name_exists"
-                                                                            : "workspace.content_browser.operation.rollback_failed";
-                return false;
-            }
-            if (item == sourceSidecar) {
-                const std::vector<std::byte> bytes = JsonBytes(*sidecar);
-                if (m_durableFiles->WriteDurable(target, bytes).HasError()) {
-                    std::error_code cleanupError;
-                    std::filesystem::remove(target, cleanupError);
-                    const bool rollbackComplete = RemoveCreatedPaths(created);
-                    m_viewModel.contentBrowserOperationError = rollbackComplete ? "workspace.content_browser.operation.copy_failed"
-                                                                                : "workspace.content_browser.operation.rollback_failed";
-                    return false;
-                }
-            } else {
-                if (m_durableFiles->CopyDurable(item, target).HasError()) {
-                    std::error_code cleanupError;
-                    std::filesystem::remove(target, cleanupError);
-                    const bool rollbackComplete = RemoveCreatedPaths(created);
-                    m_viewModel.contentBrowserOperationError = rollbackComplete ? "workspace.content_browser.operation.copy_failed"
-                                                                                : "workspace.content_browser.operation.rollback_failed";
-                    return false;
-                }
-            }
-            created.push_back(target);
-        }
-        if (m_durableFiles->SyncDirectory(destinationDirectory).HasError()) {
-            const bool rollbackComplete = RemoveCreatedPaths(created);
-            m_viewModel.contentBrowserOperationError = rollbackComplete ? "workspace.content_browser.operation.copy_failed"
-                                                                        : "workspace.content_browser.operation.rollback_failed";
-            return false;
-        }
-
-        auto rebuilt = Assets::RebuildAssetRegistry(*m_mutableAssetRegistry, projectRoot, Assets::AssetRegistryOpenMode::Edit);
-        const std::string destinationProjectPath = destination.lexically_relative(projectRoot).generic_string();
-        const Assets::AssetRegistrySnapshot rebuiltSnapshot = m_mutableAssetRegistry->Snapshot();
-        const Assets::AssetRecord *copiedRecord = rebuiltSnapshot.Find(newId);
-        if (rebuilt.HasError() || rebuilt.Value().status != Assets::AssetRegistryBuildStatus::Complete || copiedRecord == nullptr ||
-            copiedRecord->sourcePath.String() != destinationProjectPath) {
-            const bool rollbackComplete = RemoveCreatedPaths(created);
-            static_cast<void>(Assets::RebuildAssetRegistry(*m_mutableAssetRegistry, projectRoot, Assets::AssetRegistryOpenMode::Edit));
-            m_viewModel.contentBrowserOperationError = rollbackComplete ? "workspace.content_browser.operation.registry_failed"
-                                                                        : "workspace.content_browser.operation.rollback_failed";
-            return false;
-        }
-        m_assetRegistry = m_mutableAssetRegistry->Snapshot();
-        m_viewModel.assetRegistryRevision = m_assetRegistry.Revision();
-        m_viewModel.contentBrowser =
-            BuildContentBrowserDirectory(projectRoot, m_viewModel.contentBrowser.absoluteCurrentPath, m_assetRegistry, m_importerCatalog);
-        return true;
-    }
-
-    bool EditorWorkspaceController::MoveContentBrowserAssetTo(const std::filesystem::path &absoluteSource,
-                                                              const std::filesystem::path &absoluteDestinationDirectory) {
-        if (m_mutations == nullptr || m_durableFiles == nullptr || m_mutableAssetRegistry == nullptr) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.unavailable";
-            return false;
-        }
-        const std::filesystem::path root = NormalizeAbsolute(m_viewModel.contentBrowser.absoluteRootPath);
-        const std::filesystem::path source = NormalizeAbsolute(absoluteSource);
-        const std::filesystem::path destinationDirectory = NormalizeAbsolute(absoluteDestinationDirectory);
-        std::error_code error;
-        const auto sourceStatus = std::filesystem::symlink_status(source, error);
-        if (error || std::filesystem::is_symlink(sourceStatus) || !std::filesystem::is_regular_file(sourceStatus) ||
-            !HasPathPrefix(root, source) || !IsContentBrowserDirectoryTargetAllowed(root, destinationDirectory)) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.invalid_target";
-            return false;
-        }
-        if (source.parent_path() == destinationDirectory) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.same_folder";
-            return false;
-        }
-        const std::filesystem::path projectRoot = NormalizeAbsolute(m_viewModel.projectRoot);
-        const std::string oldProjectPath = source.lexically_relative(projectRoot).generic_string();
-        const Assets::AssetRecord *record = m_assetRegistry.FindByPath(oldProjectPath);
-        if (record == nullptr) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.asset_required";
-            return false;
-        }
-        const auto companions = ValidatedAssetCompanions(source, true);
-        if (!companions.has_value()) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.companion_invalid";
-            return false;
-        }
-        const Assets::AssetId originalId = record->id;
-        const std::filesystem::path destination = destinationDirectory / source.filename();
-        if (!AssetDestinationAvailable(source, destination, *companions)) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.name_exists";
-            return false;
-        }
-
-        auto lease = m_mutations->TryAcquire(ProjectMutationRequest{
-            .projectRoot = m_viewModel.projectRoot,
-            .owner = ProjectMutationOwner::Asset,
-            .operationId = "content-browser-move",
-        });
-        if (lease.HasError()) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.busy";
-            return false;
-        }
-
-        std::vector<std::pair<std::filesystem::path, std::filesystem::path>> moved;
-        for (const std::filesystem::path &item : *companions) {
-            const std::filesystem::path target = CompanionDestination(item, source, destination);
-            if (!PathDoesNotExist(target)) {
-                const bool rollbackComplete = RollbackPathMoves(moved);
-                m_viewModel.contentBrowserOperationError = rollbackComplete ? "workspace.content_browser.operation.name_exists"
-                                                                            : "workspace.content_browser.operation.rollback_failed";
-                return false;
-            }
-            std::filesystem::rename(item, target, error);
-            if (error) {
-                const bool rollbackComplete = RollbackPathMoves(moved);
-                m_viewModel.contentBrowserOperationError = rollbackComplete ? "workspace.content_browser.operation.move_failed"
-                                                                            : "workspace.content_browser.operation.rollback_failed";
-                return false;
-            }
-            moved.emplace_back(item, target);
-        }
-        if (m_durableFiles->SyncDirectory(source.parent_path()).HasError() ||
-            m_durableFiles->SyncDirectory(destinationDirectory).HasError()) {
-            const bool rollbackComplete = RollbackPathMoves(moved);
-            m_viewModel.contentBrowserOperationError = rollbackComplete ? "workspace.content_browser.operation.move_failed"
-                                                                        : "workspace.content_browser.operation.rollback_failed";
-            return false;
-        }
-
-        auto rebuilt = Assets::RebuildAssetRegistry(*m_mutableAssetRegistry, projectRoot, Assets::AssetRegistryOpenMode::Edit);
-        const std::string newProjectPath = destination.lexically_relative(projectRoot).generic_string();
-        const bool registryValid = rebuilt.HasValue() && rebuilt.Value().status == Assets::AssetRegistryBuildStatus::Complete &&
-                                   m_mutableAssetRegistry->Snapshot().Find(originalId) != nullptr &&
-                                   m_mutableAssetRegistry->Snapshot().Find(originalId)->sourcePath.String() == newProjectPath;
-        if (!registryValid) {
-            const bool rollbackComplete = RollbackPathMoves(moved);
-            static_cast<void>(Assets::RebuildAssetRegistry(*m_mutableAssetRegistry, projectRoot, Assets::AssetRegistryOpenMode::Edit));
-            m_viewModel.contentBrowserOperationError = rollbackComplete ? "workspace.content_browser.operation.registry_failed"
-                                                                        : "workspace.content_browser.operation.rollback_failed";
-            return false;
-        }
-        m_assetRegistry = m_mutableAssetRegistry->Snapshot();
-        m_viewModel.assetRegistryRevision = m_assetRegistry.Revision();
-        m_viewModel.contentBrowser =
-            BuildContentBrowserDirectory(projectRoot, m_viewModel.contentBrowser.absoluteCurrentPath, m_assetRegistry, m_importerCatalog);
-        return true;
-    }
-
-    void EditorWorkspaceController::ClearContentBrowserClipboard() noexcept {
-        m_viewModel.contentBrowserClipboard = {};
-    }
-
-    void EditorWorkspaceController::ReimportContentBrowserAsset(const std::string &absolutePath) {
-        m_viewModel.contentBrowserOperationError.clear();
-        if (m_mutations == nullptr || m_durableFiles == nullptr || m_mutableAssetRegistry == nullptr || m_importerCatalog == nullptr) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.unavailable";
-            return;
-        }
-        const std::filesystem::path target = NormalizeAbsolute(absolutePath);
-        if (!IsDirectContentBrowserEntry(m_viewModel.contentBrowser, target)) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.invalid_target";
-            return;
-        }
-
-        auto lease = m_mutations->TryAcquire(ProjectMutationRequest{
-            .projectRoot = m_viewModel.projectRoot,
-            .owner = ProjectMutationOwner::Asset,
-            .operationId = "content-browser-reimport",
-        });
-        if (lease.HasError()) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.busy";
-            return;
-        }
-
-        auto reimported = Assets::ReimportProjectAsset(
-            Assets::AssetReimportRequest{
-                .absoluteProjectRoot = NormalizeAbsolute(m_viewModel.projectRoot),
-                .absoluteAssetPath = target,
-                .importerCatalog = m_importerCatalog,
-                .registry = m_mutableAssetRegistry,
-                .files = m_durableFiles,
-            },
-            CancellationToken{});
-        if (reimported.HasError()) {
-            LOG_ERROR("editor.content_browser", "Reimport failed for %s: %s", target.string().c_str(),
-                      reimported.ErrorValue().message.c_str());
-            m_viewModel.contentBrowserOperationError = reimported.ErrorValue().code.Value() == "asset.import.no_importer"
-                                                           ? "workspace.content_browser.operation.reimport_importer_missing"
-                                                       : reimported.ErrorValue().code.Value() == "asset.registry.source_missing"
-                                                           ? "workspace.content_browser.operation.reimport_unavailable"
-                                                           : "workspace.content_browser.operation.reimport_failed";
-            return;
-        }
-        m_assetRegistry = m_mutableAssetRegistry->Snapshot();
-        m_viewModel.assetRegistryRevision = m_assetRegistry.Revision();
-        m_viewModel.contentBrowser = BuildContentBrowserDirectory(m_viewModel.projectRoot, m_viewModel.contentBrowser.absoluteCurrentPath,
-                                                                  m_assetRegistry, m_importerCatalog);
-    }
-
-    void EditorWorkspaceController::RevealContentBrowserEntry(const std::string &absolutePath) {
-        m_viewModel.contentBrowserOperationError.clear();
-        const std::filesystem::path target = NormalizeAbsolute(absolutePath);
-        const std::filesystem::path root = NormalizeAbsolute(m_viewModel.contentBrowser.absoluteRootPath);
-        std::error_code error;
-        const auto status = std::filesystem::symlink_status(target, error);
-        if (error || std::filesystem::is_symlink(status) ||
-            (!std::filesystem::is_regular_file(status) && !std::filesystem::is_directory(status)) || !HasPathPrefix(root, target)) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.invalid_target";
-            return;
-        }
-        if (!RevealInNativeFileManager(target)) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.reveal_unavailable";
-        }
-    }
-
-    void EditorWorkspaceController::OpenDiagnosticSource(const DiagnosticSourceRequest &source) {
-        m_viewModel.contentBrowserOperationError.clear();
-        if (!std::filesystem::path{source.absolutePath}.is_absolute()) {
-            m_viewModel.contentBrowserOperationError = "workspace.global_dock.build_output.source.invalid";
-            return;
-        }
-
-        const std::filesystem::path target = NormalizeAbsolute(source.absolutePath);
-        const std::filesystem::path projectRoot = NormalizeAbsolute(m_viewModel.projectRoot);
-        std::error_code error;
-        const auto status = std::filesystem::symlink_status(target, error);
-        if (error || std::filesystem::is_symlink(status) || !std::filesystem::is_regular_file(status) ||
-            !HasPathPrefix(projectRoot, target)) {
-            m_viewModel.contentBrowserOperationError = "workspace.global_dock.build_output.source.invalid";
-            return;
-        }
-        DiagnosticSourceRequest validatedSource = source;
-        validatedSource.absolutePath = target.string();
-        if (!m_diagnosticSourceNavigator(validatedSource))
-            m_viewModel.contentBrowserOperationError = "workspace.global_dock.build_output.source.unavailable";
-    }
-
-    void EditorWorkspaceController::RenameContentBrowserEntry(const std::string &absolutePath, const std::string &newName) {
-        m_viewModel.contentBrowserOperationError.clear();
-        if (m_mutations == nullptr || m_durableFiles == nullptr || m_mutableAssetRegistry == nullptr) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.unavailable";
-            return;
-        }
-
-        if (!std::filesystem::path{absolutePath}.is_absolute()) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.invalid_target";
-            return;
-        }
-        const std::filesystem::path source = NormalizeAbsolute(absolutePath);
-        std::filesystem::path requestedName{newName};
-        if (!IsDirectContentBrowserEntry(m_viewModel.contentBrowser, source) || requestedName != requestedName.filename() ||
-            !IsPortableEntryName(newName)) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.invalid_name";
-            return;
-        }
-        std::error_code error;
-        const bool regularFile = std::filesystem::is_regular_file(source, error);
-        if (regularFile && requestedName.extension().empty())
-            requestedName += source.extension().string();
-        if (regularFile && requestedName.extension() != source.extension()) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.invalid_name";
-            return;
-        }
-        const std::filesystem::path destination = source.parent_path() / requestedName;
-        if (destination == source)
-            return;
-        if (DirectoryContainsPortableName(source.parent_path(), requestedName.string(), source)) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.name_exists";
-            return;
-        }
-
-        const bool directory = std::filesystem::is_directory(source, error);
-        if (error) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.invalid_target";
-            return;
-        }
-        std::vector<std::filesystem::path> sources;
-        if (directory) {
-            sources.push_back(source);
-        } else {
-            const std::filesystem::path projectRoot = NormalizeAbsolute(m_viewModel.projectRoot);
-            const Assets::AssetRecord *record = m_assetRegistry.FindByPath(source.lexically_relative(projectRoot).generic_string());
-            const auto companions = ValidatedAssetCompanions(source, record != nullptr);
-            if (!companions.has_value()) {
-                m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.companion_invalid";
-                return;
-            }
-            sources = *companions;
-            for (const std::filesystem::path &item : sources) {
-                const std::filesystem::path target = CompanionDestination(item, source, destination);
-                if (DirectoryContainsPortableName(target.parent_path(), target.filename().string(), item)) {
-                    m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.name_exists";
-                    return;
-                }
-            }
-        }
-
-        auto lease = m_mutations->TryAcquire(ProjectMutationRequest{
-            .projectRoot = m_viewModel.projectRoot,
-            .owner = ProjectMutationOwner::Asset,
-            .operationId = "content-browser-rename",
-        });
-        if (lease.HasError()) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.busy";
-            return;
-        }
-
-        std::vector<std::pair<std::filesystem::path, std::filesystem::path>> moved;
-        moved.reserve(sources.size());
-        for (const std::filesystem::path &item : sources) {
-            const std::filesystem::path target = CompanionDestination(item, source, destination);
-            if (!PathDoesNotExist(target)) {
-                const bool rollbackComplete = RollbackPathMoves(moved);
-                m_viewModel.contentBrowserOperationError = rollbackComplete ? "workspace.content_browser.operation.name_exists"
-                                                                            : "workspace.content_browser.operation.rollback_failed";
-                return;
-            }
-            std::filesystem::rename(item, target, error);
-            if (error) {
-                const bool rollbackComplete = RollbackPathMoves(moved);
-                m_viewModel.contentBrowserOperationError = rollbackComplete ? "workspace.content_browser.operation.rename_failed"
-                                                                            : "workspace.content_browser.operation.rollback_failed";
-                return;
-            }
-            moved.emplace_back(item, target);
-        }
-        if (m_durableFiles->SyncDirectory(source.parent_path()).HasError()) {
-            const bool rollbackComplete = RollbackPathMoves(moved);
-            m_viewModel.contentBrowserOperationError = rollbackComplete ? "workspace.content_browser.operation.rename_failed"
-                                                                        : "workspace.content_browser.operation.rollback_failed";
-            return;
-        }
-
-        const std::filesystem::path projectRoot = NormalizeAbsolute(m_viewModel.projectRoot);
-        auto rebuilt = Assets::RebuildAssetRegistry(*m_mutableAssetRegistry, projectRoot, Assets::AssetRegistryOpenMode::Edit);
-        const Assets::AssetRegistrySnapshot rebuiltSnapshot = m_mutableAssetRegistry->Snapshot();
-        const bool registryValid = rebuilt.HasValue() && rebuilt.Value().status == Assets::AssetRegistryBuildStatus::Complete &&
-                                   rebuiltSnapshot.Records().size() == m_assetRegistry.Records().size() &&
-                                   std::ranges::all_of(m_assetRegistry.Records(), [&rebuiltSnapshot](const Assets::AssetRecord &record) {
-            return rebuiltSnapshot.Find(record.id) != nullptr;
-        });
-        if (!registryValid) {
-            const bool rollbackComplete = RollbackPathMoves(moved);
-            static_cast<void>(Assets::RebuildAssetRegistry(*m_mutableAssetRegistry, projectRoot, Assets::AssetRegistryOpenMode::Edit));
-            m_viewModel.contentBrowserOperationError = rollbackComplete ? "workspace.content_browser.operation.registry_failed"
-                                                                        : "workspace.content_browser.operation.rollback_failed";
-            return;
-        }
-        m_assetRegistry = rebuiltSnapshot;
-        m_viewModel.assetRegistryRevision = m_assetRegistry.Revision();
-        m_viewModel.contentBrowser =
-            BuildContentBrowserDirectory(projectRoot, m_viewModel.contentBrowser.absoluteCurrentPath, m_assetRegistry, m_importerCatalog);
-    }
-
-    void EditorWorkspaceController::DeleteContentBrowserEntry(const std::string &absolutePath) {
-        m_viewModel.contentBrowserOperationError.clear();
-        if (m_mutations == nullptr || m_durableFiles == nullptr || m_mutableAssetRegistry == nullptr) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.unavailable";
-            return;
-        }
-
-        if (!std::filesystem::path{absolutePath}.is_absolute()) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.invalid_target";
-            return;
-        }
-        const std::filesystem::path source = NormalizeAbsolute(absolutePath);
-        if (!IsDirectContentBrowserEntry(m_viewModel.contentBrowser, source)) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.invalid_target";
-            return;
-        }
-
-        auto lease = m_mutations->TryAcquire(ProjectMutationRequest{
-            .projectRoot = m_viewModel.projectRoot,
-            .owner = ProjectMutationOwner::Asset,
-            .operationId = "content-browser-delete",
-        });
-        if (lease.HasError()) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.busy";
-            return;
-        }
-
-        std::error_code error;
-        const bool directory = std::filesystem::is_directory(source, error);
-        if (error) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.delete_failed";
-            return;
-        }
-        const std::filesystem::path projectRoot = NormalizeAbsolute(m_viewModel.projectRoot);
-        std::optional<Assets::AssetId> deletedAssetId;
-        std::string deletedAssetProjectPath;
-
-        std::vector<std::filesystem::path> sources;
-        if (directory) {
-            sources.push_back(source);
-        } else {
-            deletedAssetProjectPath = source.lexically_relative(projectRoot).generic_string();
-            const Assets::AssetRecord *record = m_assetRegistry.FindByPath(deletedAssetProjectPath);
-            if (record != nullptr)
-                deletedAssetId = record->id;
-            const auto companions = ValidatedAssetCompanions(source, record != nullptr);
-            if (!companions.has_value()) {
-                m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.companion_invalid";
-                return;
-            }
-            sources = *companions;
-        }
-
-        const auto stamp =
-            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-        const std::filesystem::path trashRoot = NormalizeAbsolute(m_viewModel.projectRoot) / ".horo" / "local" / "trash";
-        std::filesystem::create_directories(trashRoot, error);
-        if (error) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.delete_failed";
-            return;
-        }
-        std::filesystem::path trashDirectory;
-        for (std::uint32_t attempt = 0; attempt < 1000; ++attempt) {
-            trashDirectory = trashRoot / std::format("asset-{}-{}", stamp, attempt);
-            error.clear();
-            if (std::filesystem::create_directory(trashDirectory, error)) {
-                break;
-            }
-            if (error) {
-                trashDirectory.clear();
-                break;
-            }
-            trashDirectory.clear();
-        }
-        if (trashDirectory.empty()) {
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.delete_failed";
-            return;
-        }
-
-        nlohmann::json manifest{
-            {"schemaVersion", 1},
-            {"originalAbsolutePath", source.string()},
-            {"deletedAtUnixMicroseconds", stamp},
-            {"entries", nlohmann::json::array()},
-        };
-        for (const std::filesystem::path &item : sources) {
-            manifest["entries"].push_back({
-                {"originalAbsolutePath", item.string()},
-                {"trashFileName", item.filename().string()},
-            });
-        }
-        std::filesystem::path manifestPath;
-        for (std::uint32_t attempt = 0; attempt < 1000; ++attempt) {
-            const std::string fileName = attempt == 0 ? "trash.json" : std::format("trash-{}.json", attempt);
-            const bool collidesWithMovedEntry = std::ranges::any_of(sources, [&fileName](const std::filesystem::path &item) {
-                return PortableFold(item.filename().string()) == PortableFold(fileName);
-            });
-            if (!collidesWithMovedEntry) {
-                manifestPath = trashDirectory / fileName;
-                break;
-            }
-        }
-        if (manifestPath.empty()) {
-            std::filesystem::remove_all(trashDirectory, error);
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.delete_failed";
-            return;
-        }
-        if (m_durableFiles->WriteDurable(manifestPath, JsonBytes(manifest)).HasError()) {
-            std::filesystem::remove_all(trashDirectory, error);
-            m_viewModel.contentBrowserOperationError = "workspace.content_browser.operation.delete_failed";
-            return;
-        }
-
-        std::vector<std::pair<std::filesystem::path, std::filesystem::path>> moved;
-        moved.reserve(sources.size());
-        for (const std::filesystem::path &item : sources) {
-            const std::filesystem::path target = trashDirectory / item.filename();
-            if (!PathDoesNotExist(target)) {
-                const bool rollbackComplete = RollbackPathMoves(moved);
-                if (rollbackComplete)
-                    std::filesystem::remove_all(trashDirectory, error);
-                m_viewModel.contentBrowserOperationError = rollbackComplete ? "workspace.content_browser.operation.delete_failed"
-                                                                            : "workspace.content_browser.operation.rollback_failed";
-                return;
-            }
-            std::filesystem::rename(item, target, error);
-            if (error) {
-                const bool rollbackComplete = RollbackPathMoves(moved);
-                if (rollbackComplete)
-                    std::filesystem::remove_all(trashDirectory, error);
-                m_viewModel.contentBrowserOperationError = rollbackComplete ? "workspace.content_browser.operation.delete_failed"
-                                                                            : "workspace.content_browser.operation.rollback_failed";
-                return;
-            }
-            moved.emplace_back(item, target);
-        }
-
-        if (m_durableFiles->SyncDirectory(source.parent_path()).HasError() || m_durableFiles->SyncDirectory(trashDirectory).HasError()) {
-            const bool rollbackComplete = RollbackPathMoves(moved);
-            if (rollbackComplete)
-                std::filesystem::remove_all(trashDirectory, error);
-            m_viewModel.contentBrowserOperationError = rollbackComplete ? "workspace.content_browser.operation.delete_failed"
-                                                                        : "workspace.content_browser.operation.rollback_failed";
-            return;
-        }
-
-        auto rebuilt = Assets::RebuildAssetRegistry(*m_mutableAssetRegistry, projectRoot, Assets::AssetRegistryOpenMode::Edit);
-        if (rebuilt.HasError() || rebuilt.Value().status == Assets::AssetRegistryBuildStatus::Failed) {
-            const bool rollbackComplete = RollbackPathMoves(moved);
-            if (rollbackComplete)
-                std::filesystem::remove_all(trashDirectory, error);
-            static_cast<void>(Assets::RebuildAssetRegistry(*m_mutableAssetRegistry, projectRoot, Assets::AssetRegistryOpenMode::Edit));
-            m_viewModel.contentBrowserOperationError = rollbackComplete ? "workspace.content_browser.operation.registry_failed"
-                                                                        : "workspace.content_browser.operation.rollback_failed";
-            return;
-        }
-        const Assets::AssetRegistrySnapshot rebuiltSnapshot = m_mutableAssetRegistry->Snapshot();
-        if (deletedAssetId.has_value() &&
-            (rebuiltSnapshot.Find(*deletedAssetId) != nullptr || rebuiltSnapshot.FindByPath(deletedAssetProjectPath) != nullptr)) {
-            const bool rollbackComplete = RollbackPathMoves(moved);
-            if (rollbackComplete)
-                std::filesystem::remove_all(trashDirectory, error);
-            static_cast<void>(Assets::RebuildAssetRegistry(*m_mutableAssetRegistry, projectRoot, Assets::AssetRegistryOpenMode::Edit));
-            m_viewModel.contentBrowserOperationError = rollbackComplete ? "workspace.content_browser.operation.registry_failed"
-                                                                        : "workspace.content_browser.operation.rollback_failed";
-            return;
-        }
-        LOG_INFO("editor.content_browser", "Moved asset entry to recoverable project trash: %s", trashDirectory.string().c_str());
-        m_assetRegistry = rebuiltSnapshot;
-        m_viewModel.assetRegistryRevision = m_assetRegistry.Revision();
-        m_viewModel.contentBrowser =
-            BuildContentBrowserDirectory(projectRoot, m_viewModel.contentBrowser.absoluteCurrentPath, m_assetRegistry, m_importerCatalog);
-    }
-
     void EditorWorkspaceController::RefreshSelectionProjection() {
         const SelectionSnapshot &selection = m_selection.Current();
         m_viewModel.primarySelection = selection.primary;
@@ -3450,8 +1257,8 @@ namespace Horo::Editor {
         m_viewModel.primarySelectionPreviewWorldTransform.reset();
         m_viewModel.primarySelectionParentWorldTransform.reset();
         m_viewModel.primarySelectionWorldBounds.reset();
-        const std::optional<Runtime::RuntimeSceneView> active = m_runtimeScene.ActiveScene();
-        if (selection.primary && active && m_viewportScene.runtimeSceneId == active->RuntimeId()) {
+        if (const std::optional<Runtime::RuntimeSceneView> active = m_runtimeScene.ActiveScene();
+            selection.primary && active && m_viewportScene.runtimeSceneId == active->RuntimeId()) {
             const Result<SceneObjectWorldTransforms> transforms = ResolveSceneObjectWorldTransforms(*active, *selection.primary);
             if (transforms.HasValue()) {
                 m_viewModel.primarySelectionWorldTransform = transforms.Value().localToWorld;
@@ -3480,8 +1287,7 @@ namespace Horo::Editor {
             return;
         m_viewModel.viewportLights.reserve(m_viewportScene.lights.size());
         for (std::size_t index = 0; index < m_viewportScene.lights.size(); ++index) {
-            m_viewModel.viewportLights.push_back(
-                ViewportLightPresentation{m_viewportScene.lightObjects[index], m_viewportScene.lights[index]});
+            m_viewModel.viewportLights.emplace_back(m_viewportScene.lightObjects[index], m_viewportScene.lights[index]);
         }
     }
 }  // namespace Horo::Editor

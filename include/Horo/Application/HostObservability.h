@@ -52,6 +52,9 @@ namespace Horo::Application {
 
     /** @brief RAII owner of the process observability lifecycle and support-bundle composition. */
     class HostObservabilitySession final {
+    private:
+        struct ConstructionToken final {};
+
     public:
         HostObservabilitySession(const HostObservabilitySession &) = delete;
         HostObservabilitySession &operator=(const HostObservabilitySession &) = delete;
@@ -82,9 +85,14 @@ namespace Horo::Application {
         /** @brief Returns the resolved absolute directory containing this session's local diagnostics. */
         [[nodiscard]] const std::filesystem::path &LogDirectory() const noexcept;
 
-    private:
-        explicit HostObservabilitySession(HostObservabilityConfiguration configuration);
+        /**
+         * @brief Constructs a session through the private lifecycle token used by Start.
+         * @param token Internal construction capability; callers cannot create one outside this class.
+         * @param configuration Validated host-owned composition.
+         */
+        explicit HostObservabilitySession(ConstructionToken token, HostObservabilityConfiguration configuration);
 
+    private:
         HostObservabilityConfiguration configuration_;
         bool active_{true};
     };

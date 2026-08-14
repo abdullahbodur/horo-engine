@@ -3,13 +3,17 @@
 #include <array>
 #include <atomic>
 #include <cstdlib>
+#include <format>
 #include <string_view>
 #include <system_error>
 #include <thread>
 
 namespace Horo::Application {
     namespace {
-        std::atomic<bool> g_hostSessionActive{};
+        [[nodiscard]] std::atomic<bool> &HostSessionActive() noexcept {
+            static std::atomic<bool> active{};
+            return active;
+        }
 
         /** @brief Resolves the one legacy home-relative form accepted by logger composition. */
         [[nodiscard]] std::filesystem::path ResolveLogDirectory(const std::filesystem::path &path) {
@@ -70,20 +74,19 @@ namespace Horo::Application {
 
     /** @copydoc HostObservabilitySession::Start */
     std::unique_ptr<HostObservabilitySession> HostObservabilitySession::Start(HostObservabilityConfiguration configuration) {
-        bool expected = false;
-        if (!g_hostSessionActive.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+        if (bool expected = false; !HostSessionActive().compare_exchange_strong(expected, true))
             return nullptr;
         configuration.logging.logDirectory = ResolveLogDirectory(configuration.logging.logDirectory);
         if (configuration.logging.logDirectory.empty() || !configuration.logging.logDirectory.is_absolute()) {
-            g_hostSessionActive.store(false, std::memory_order_release);
+            HostSessionActive().store(false);
             return nullptr;
         }
         if (!Log::Logger::Init(configuration.logging)) {
-            g_hostSessionActive.store(false, std::memory_order_release);
+            HostSessionActive().store(false);
             return nullptr;
         }
 
-        auto session = std::unique_ptr<HostObservabilitySession>{new HostObservabilitySession{std::move(configuration)}};
+        auto session = std::make_unique<HostObservabilitySession>(ConstructionToken{}, std::move(configuration));
         const HostObservabilityIdentity &identity = session->configuration_.identity;
         const std::array fields{
             Telemetry::Field{.key = "process.role", .value = identity.processRole},
@@ -135,30 +138,30 @@ namespace Horo::Application {
 
         const std::filesystem::path &directory = configuration_.logging.logDirectory;
         const std::string &baseName = configuration_.logging.baseName;
-        bundle.entries.push_back({.sourcePath = directory / (baseName + ".jsonl"),
-                                  .archivePath = "logs/" + baseName + ".jsonl",
+        bundle.entries.push_back({.sourcePath = directory / std::format("{}.jsonl", baseName),
+                                  .archivePath = std::format("logs/{}.jsonl", baseName),
                                   .optional = true,
                                   .redactSensitiveText = true});
-        bundle.entries.push_back({.sourcePath = directory / (baseName + ".operations.jsonl"),
-                                  .archivePath = "history/" + baseName + ".operations.jsonl",
+        bundle.entries.push_back({.sourcePath = directory / std::format("{}.operations.jsonl", baseName),
+                                  .archivePath = std::format("history/{}.operations.jsonl", baseName),
                                   .optional = true,
                                   .redactSensitiveText = true});
         for (std::size_t index = 1; index <= configuration_.logging.maxRolledFiles; ++index) {
-            const std::string suffix = "." + std::to_string(index);
-            bundle.entries.push_back({.sourcePath = directory / (baseName + ".jsonl" + suffix),
-                                      .archivePath = "logs/" + baseName + ".jsonl" + suffix,
+            const std::string suffix = std::format(".{}", index);
+            bundle.entries.push_back({.sourcePath = directory / std::format("{}{}.jsonl", baseName, suffix),
+                                      .archivePath = std::format("logs/{}{}.jsonl", baseName, suffix),
                                       .optional = true,
                                       .redactSensitiveText = true});
-            bundle.entries.push_back({.sourcePath = directory / (baseName + ".operations.jsonl" + suffix),
-                                      .archivePath = "history/" + baseName + ".operations.jsonl" + suffix,
+            bundle.entries.push_back({.sourcePath = directory / std::format("{}{}.operations.jsonl", baseName, suffix),
+                                      .archivePath = std::format("history/{}{}.operations.jsonl", baseName, suffix),
                                       .optional = true,
                                       .redactSensitiveText = true});
         }
-        bundle.entries.push_back({.sourcePath = directory / (baseName + ".session.json"),
+        bundle.entries.push_back({.sourcePath = directory / std::format("{}.session.json", baseName),
                                   .archivePath = "metadata/session.json",
                                   .optional = true,
                                   .redactSensitiveText = true});
-        bundle.entries.push_back({.sourcePath = directory / (baseName + ".shutdown.json"),
+        bundle.entries.push_back({.sourcePath = directory / std::format("{}.shutdown.json", baseName),
                                   .archivePath = "metadata/shutdown.json",
                                   .optional = true,
                                   .redactSensitiveText = true});
@@ -174,7 +177,7 @@ namespace Horo::Application {
             return;
         active_ = false;
         Log::Logger::Shutdown();
-        g_hostSessionActive.store(false, std::memory_order_release);
+        HostSessionActive().store(false);
     }
 
     /** @copydoc HostObservabilitySession::LogDirectory */
@@ -182,6 +185,7 @@ namespace Horo::Application {
         return configuration_.logging.logDirectory;
     }
 
-    HostObservabilitySession::HostObservabilitySession(HostObservabilityConfiguration configuration)
+    HostObservabilitySession::HostObservabilitySession(ConstructionToken, HostObservabilityConfiguration configuration)
         : configuration_(std::move(configuration)) {}
+
 }  // namespace Horo::Application

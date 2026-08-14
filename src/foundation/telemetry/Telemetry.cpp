@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <new>
 #include <optional>
 #include <ranges>
 #include <thread>
@@ -34,15 +35,17 @@ namespace Horo::Telemetry {
             std::atomic<std::uint64_t> rejectedMetricSeries{};
         };
 
-        /** @brief Returns counters whose lifetime extends through process teardown. */
-        AtomicStatistics &Health() noexcept {
-            static auto *statistics = new AtomicStatistics{};
-            return *statistics;
+        /** @brief Returns counters shared with workers that may finish after bounded shutdown. */
+        std::shared_ptr<AtomicStatistics> HealthStorage() {
+            static const auto statistics = std::make_shared<AtomicStatistics>();
+            return statistics;
         }
 
-        std::atomic<bool> g_enabled{};
-        std::mutex g_lifecycleMutex;
-        std::atomic<std::uint32_t> g_nextGeneration{1};
+        /** @brief Returns process health counters. */
+        AtomicStatistics &Health() noexcept {
+            static const auto statistics = HealthStorage();
+            return *statistics;
+        }
 
         struct InstrumentRegistration {
             std::uint32_t id{};
@@ -52,6 +55,34 @@ namespace Horo::Telemetry {
         struct RegisteredInstrument {
             InstrumentDescriptor descriptor;
             std::vector<std::array<std::uint16_t, MaximumMetricDimensions>> series;
+        };
+
+        /** @brief Queue data protected by one admission/consumer mutex. */
+        struct TelemetryQueue {
+            explicit TelemetryQueue(const std::size_t capacity) : records(capacity) {}
+
+            std::vector<Record> records;
+            std::size_t head{};
+            std::size_t tail{};
+            std::size_t count{};
+            std::uint64_t nextSequence{1};
+            std::uint64_t lastAccepted{};
+            std::mutex mutex;
+            std::condition_variable ready;
+        };
+
+        /** @brief Export watermark and its waiters. */
+        struct TelemetryFlushState {
+            std::atomic<std::uint64_t> lastExported{};
+            std::mutex mutex;
+            std::condition_variable completed;
+        };
+
+        /** @brief Worker completion state and its waiters. */
+        struct TelemetryExitState {
+            std::atomic<bool> writerExited{};
+            std::mutex mutex;
+            std::condition_variable completed;
         };
 
         [[nodiscard]] bool IsCanonicalMetricName(const std::string_view value) noexcept {
@@ -98,8 +129,7 @@ namespace Horo::Telemetry {
                     redacted = redacted.With(key, IsSensitiveKey(key) ? "[REDACTED]" : value);
                 record.context = std::move(redacted);
             }
-            std::visit([](auto &payload) {
-                using Payload = std::decay_t<decltype(payload)>;
+            std::visit([]<typename Payload>(Payload &payload) {
                 if constexpr (std::is_same_v<Payload, LogRecord> || std::is_same_v<Payload, SpanRecord> ||
                               std::is_same_v<Payload, DiagnosticEvent>)
                     RedactFields(payload.fields);
@@ -133,22 +163,22 @@ namespace Horo::Telemetry {
 
         class TelemetryState final : public std::enable_shared_from_this<TelemetryState> {
         public:
-            TelemetryState(Configuration configuration, std::vector<std::shared_ptr<ISink>> sinks, const std::uint32_t generation)
+            TelemetryState(const Configuration &configuration, std::vector<std::shared_ptr<ISink>> sinks, const std::uint32_t generation)
                 : configuration_(configuration), queue_(configuration.queueCapacity), sinks_(std::move(sinks)), generation_(generation) {}
 
             ~TelemetryState() {
                 if (!writer_.joinable())
                     return;
-                stopping_.store(true, std::memory_order_release);
-                ready_.notify_all();
+                stopping_.store(true);
+                queue_.ready.notify_all();
                 if (writer_.get_id() == std::this_thread::get_id())
-                    writer_.detach();
+                    writer_.detach();  // NOSONAR: self-owned bounded-shutdown worker cannot join itself.
                 else
                     writer_.join();
             }
 
             void Start() {
-                writer_ = std::thread([self = shared_from_this()] {
+                writer_ = std::thread([self = shared_from_this()] {  // NOSONAR: jthread is unavailable on the minimum supported libc++.
                     self->WriterLoop();
                 });
             }
@@ -162,7 +192,7 @@ namespace Horo::Telemetry {
             }
 
             [[nodiscard]] bool HasExited() const noexcept {
-                return writerExited_.load(std::memory_order_acquire);
+                return exit_.writerExited.load();
             }
 
             [[nodiscard]] std::optional<InstrumentRegistration> Register(InstrumentDescriptor descriptor) {
@@ -171,7 +201,7 @@ namespace Horo::Telemetry {
                     std::ranges::any_of(descriptors_, [&descriptor](const RegisteredInstrument &registered) {
                     return registered.descriptor.name == descriptor.name;
                 })) {
-                    Health().invalidInstrumentRegistrations.fetch_add(1, std::memory_order_relaxed);
+                    health_->invalidInstrumentRegistrations.fetch_add(1);
                     return std::nullopt;
                 }
                 RegisteredInstrument registered{.descriptor = std::move(descriptor)};
@@ -220,13 +250,10 @@ namespace Horo::Telemetry {
             [[nodiscard]] bool AllowsSubsystem(const std::string_view subsystem) const noexcept {
                 if (configuration_.subsystemPrefixes.empty())
                     return true;
-                for (const std::string &prefix : configuration_.subsystemPrefixes) {
-                    if (subsystem == prefix)
-                        return true;
-                    if (subsystem.size() > prefix.size() && subsystem.starts_with(prefix) && subsystem[prefix.size()] == '.')
-                        return true;
-                }
-                return false;
+                return std::ranges::any_of(configuration_.subsystemPrefixes, [subsystem](const std::string &prefix) {
+                    return subsystem == prefix ||
+                           (subsystem.size() > prefix.size() && subsystem.starts_with(prefix) && subsystem[prefix.size()] == '.');
+                });
             }
 
             [[nodiscard]] bool AllowsMetric(const InstrumentDescriptor &descriptor) const noexcept {
@@ -249,121 +276,127 @@ namespace Horo::Telemetry {
             }
 
             [[nodiscard]] bool TryPush(Record record) noexcept {
-                std::unique_lock lock(queueMutex_, std::try_to_lock);
-                if (!lock.owns_lock()) {
-                    CountDrop(Health().contentionDrops);
-                    return false;
-                }
-                if (stopping_.load(std::memory_order_acquire)) {
-                    CountDrop(Health().shutdownDrops);
-                    return false;
-                }
-                if (count_ == queue_.size()) {
-                    Health().queueFullDrops.fetch_add(1, std::memory_order_relaxed);
-                    Health().droppedRecords.fetch_add(1, std::memory_order_relaxed);
-                    if (configuration_.overflowPolicy == OverflowPolicy::DropNewest)
+                if (std::unique_lock lock(queue_.mutex, std::try_to_lock); lock.owns_lock()) {
+                    if (stopping_.load()) {
+                        CountDrop(health_->shutdownDrops);
                         return false;
-                    queue_[head_] = Record{};
-                    head_ = (head_ + 1U) % queue_.size();
-                    --count_;
-                }
+                    }
+                    if (queue_.count == queue_.records.size()) {
+                        health_->queueFullDrops.fetch_add(1);
+                        health_->droppedRecords.fetch_add(1);
+                        if (configuration_.overflowPolicy == OverflowPolicy::DropNewest)
+                            return false;
+                        queue_.records[queue_.head] = Record{};
+                        queue_.head = (queue_.head + 1U) % queue_.records.size();
+                        --queue_.count;
+                    }
 
-                record.sequence = nextSequence_++;
-                record.timestampUtc = std::chrono::system_clock::now();
-                record.monotonicTime = std::chrono::steady_clock::now();
-                record.threadId = static_cast<std::uint64_t>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
-                queue_[tail_] = std::move(record);
-                tail_ = (tail_ + 1U) % queue_.size();
-                ++count_;
-                lastAccepted_ = queue_[(tail_ + queue_.size() - 1U) % queue_.size()].sequence;
-                Health().acceptedRecords.fetch_add(1, std::memory_order_relaxed);
-                lock.unlock();
-                ready_.notify_one();
+                    record.sequence = queue_.nextSequence++;
+                    record.timestampUtc = std::chrono::system_clock::now();
+                    record.monotonicTime = std::chrono::steady_clock::now();
+                    record.threadId = static_cast<std::uint64_t>(std::hash<std::thread::id>{}(std::this_thread::get_id()));
+                    queue_.records[queue_.tail] = std::move(record);
+                    queue_.tail = (queue_.tail + 1U) % queue_.records.size();
+                    ++queue_.count;
+                    queue_.lastAccepted = queue_.records[(queue_.tail + queue_.records.size() - 1U) % queue_.records.size()].sequence;
+                    health_->acceptedRecords.fetch_add(1);
+                } else {
+                    CountDrop(health_->contentionDrops);
+                    return false;
+                }
+                queue_.ready.notify_one();
                 return true;
             }
 
             [[nodiscard]] bool Flush(const std::chrono::milliseconds timeout) {
                 std::uint64_t watermark{};
                 {
-                    std::lock_guard lock(queueMutex_);
-                    watermark = lastAccepted_;
+                    std::lock_guard lock(queue_.mutex);
+                    watermark = queue_.lastAccepted;
                 }
-                ready_.notify_one();
-                std::unique_lock lock(flushMutex_);
-                const bool completed = flushed_.wait_for(lock, timeout, [this, watermark] {
-                    return lastExported_.load(std::memory_order_acquire) >= watermark || writerExited_.load(std::memory_order_acquire);
+                queue_.ready.notify_one();
+                std::unique_lock lock(flush_.mutex);
+                const bool completed = flush_.completed.wait_for(lock, timeout, [this, watermark] {
+                    return flush_.lastExported.load() >= watermark || exit_.writerExited.load();
                 });
                 if (!completed)
-                    Health().flushTimeouts.fetch_add(1, std::memory_order_relaxed);
+                    health_->flushTimeouts.fetch_add(1);
                 return completed;
             }
 
             [[nodiscard]] bool Stop(const std::chrono::milliseconds timeout) {
-                bool expected = false;
-                if (!stopping_.compare_exchange_strong(expected, true))
+                if (bool expected = false; !stopping_.compare_exchange_strong(expected, true))
                     return WaitAndJoin(timeout);
                 {
                     // Synchronize the predicate transition with WriterLoop's
                     // condition-variable wait so the stop notification cannot
                     // be lost between its predicate check and sleep.
-                    std::lock_guard lock(queueMutex_);
+                    std::lock_guard lock(queue_.mutex);
                 }
-                ready_.notify_all();
+                queue_.ready.notify_all();
                 return WaitAndJoin(timeout);
             }
 
         private:
-            static void CountDrop(std::atomic<std::uint64_t> &reason) noexcept {
-                reason.fetch_add(1, std::memory_order_relaxed);
-                Health().droppedRecords.fetch_add(1, std::memory_order_relaxed);
+            void CountDrop(std::atomic<std::uint64_t> &reason) const noexcept {
+                reason.fetch_add(1);
+                health_->droppedRecords.fetch_add(1);
             }
 
             [[nodiscard]] bool WaitAndJoin(const std::chrono::milliseconds timeout) {
-                std::unique_lock lock(exitMutex_);
-                const bool exited = exited_.wait_for(lock, timeout, [this] {
-                    return writerExited_.load(std::memory_order_acquire);
-                });
-                lock.unlock();
+                bool exited{};
+                {
+                    std::unique_lock lock(exit_.mutex);
+                    exited = exit_.completed.wait_for(lock, timeout, [this] {
+                        return exit_.writerExited.load();
+                    });
+                }
                 if (!exited) {
                     if (writer_.joinable())
-                        writer_.detach();
+                        writer_.detach();  // NOSONAR: bounded shutdown transfers lifetime to the worker's shared self-capture.
                     return false;
                 }
                 if (writer_.joinable())
                     writer_.join();
-                return flushSucceeded_.load(std::memory_order_acquire);
+                return flushSucceeded_.load();
             }
 
             void WriterLoop() noexcept {
                 while (true) {
                     std::optional<Record> record;
+                    bool periodicFlush{};
                     {
-                        std::unique_lock lock(queueMutex_);
-                        const bool ready = ready_.wait_for(lock, configuration_.sinkFlushInterval, [this] {
-                            return count_ != 0 || stopping_.load(std::memory_order_acquire);
+                        std::unique_lock lock(queue_.mutex);
+                        if (const bool ready = queue_.ready.wait_for(lock, configuration_.sinkFlushInterval,
+                                                                     [this] {
+                            return queue_.count != 0 || stopping_.load();
                         });
-                        if (!ready) {
-                            lock.unlock();
-                            FlushSinks();
-                            continue;
-                        }
-                        if (count_ == 0 && stopping_.load(std::memory_order_acquire))
+                            !ready) {
+                            periodicFlush = true;
+                        } else if (queue_.count == 0 && stopping_.load()) {
                             break;
-                        record.emplace(std::move(queue_[head_]));
-                        queue_[head_] = Record{};
-                        head_ = (head_ + 1U) % queue_.size();
-                        --count_;
+                        } else {
+                            record.emplace(std::move(queue_.records[queue_.head]));
+                            queue_.records[queue_.head] = Record{};
+                            queue_.head = (queue_.head + 1U) % queue_.records.size();
+                            --queue_.count;
+                        }
                     }
-                    Dispatch(*record);
+                    if (periodicFlush) {
+                        FlushSinks();
+                        continue;
+                    }
+                    if (record.has_value())
+                        Dispatch(*record);
                 }
 
                 FlushSinks();
                 {
-                    std::lock_guard lock(exitMutex_);
-                    writerExited_.store(true, std::memory_order_release);
+                    std::lock_guard lock(exit_.mutex);
+                    exit_.writerExited.store(true);
                 }
-                flushed_.notify_all();
-                exited_.notify_all();
+                flush_.completed.notify_all();
+                exit_.completed.notify_all();
             }
 
             void Dispatch(Record &record) noexcept {
@@ -380,16 +413,16 @@ namespace Horo::Telemetry {
                     try {
                         sink->Export(record, descriptor ? &*descriptor : nullptr);
                     } catch (...) {
-                        Health().sinkFailures.fetch_add(1, std::memory_order_relaxed);
+                        health_->sinkFailures.fetch_add(1);
                     }
                 }
 
-                Health().exportedRecords.fetch_add(1, std::memory_order_relaxed);
+                health_->exportedRecords.fetch_add(1);
                 {
-                    std::lock_guard lock(flushMutex_);
-                    lastExported_.store(record.sequence, std::memory_order_release);
+                    std::lock_guard lock(flush_.mutex);
+                    flush_.lastExported.store(record.sequence);
                 }
-                flushed_.notify_all();
+                flush_.completed.notify_all();
             }
 
             void FlushSinks() noexcept {
@@ -397,48 +430,62 @@ namespace Horo::Telemetry {
                     try {
                         sink->Flush();
                     } catch (...) {
-                        flushSucceeded_.store(false, std::memory_order_release);
-                        Health().sinkFailures.fetch_add(1, std::memory_order_relaxed);
+                        flushSucceeded_.store(false);
+                        health_->sinkFailures.fetch_add(1);
                     }
                 }
             }
 
             Configuration configuration_;
-            std::vector<Record> queue_;
-            std::size_t head_{};
-            std::size_t tail_{};
-            std::size_t count_{};
-            std::uint64_t nextSequence_{1};
-            std::uint64_t lastAccepted_{};
-            std::atomic<std::uint64_t> lastExported_{};
-            std::mutex queueMutex_;
-            std::condition_variable ready_;
-            std::mutex flushMutex_;
-            std::condition_variable flushed_;
+            TelemetryQueue queue_;
+            TelemetryFlushState flush_;
             std::mutex descriptorMutex_;
             std::vector<RegisteredInstrument> descriptors_;
             std::vector<std::shared_ptr<ISink>> sinks_;
             const std::uint32_t generation_;
             std::atomic<bool> stopping_{};
-            std::atomic<bool> writerExited_{};
             std::atomic<bool> flushSucceeded_{true};
-            std::mutex exitMutex_;
-            std::condition_variable exited_;
-            std::thread writer_;
+            TelemetryExitState exit_;
+            std::thread writer_;  // NOSONAR: see Start(); bounded shutdown requires explicit detach support.
+            std::shared_ptr<AtomicStatistics> health_{HealthStorage()};
         };
 
-        std::shared_ptr<TelemetryState> g_state;
+        /** @brief Process runtime controls hidden behind one function-local owner. */
+        struct RuntimeGlobals {
+            [[nodiscard]] std::shared_ptr<TelemetryState> LoadState() const noexcept {
+                return std::atomic_load(&state);
+            }
+
+            void StoreState(std::shared_ptr<TelemetryState> replacement) noexcept {
+                std::atomic_store(&state, std::move(replacement));
+            }
+
+            [[nodiscard]] std::shared_ptr<TelemetryState> ExchangeState() noexcept {
+                return std::atomic_exchange(&state, std::shared_ptr<TelemetryState>{});
+            }
+
+            std::atomic<bool> enabled{};
+            std::mutex lifecycleMutex;
+            std::atomic<std::uint32_t> nextGeneration{1};
+            std::shared_ptr<TelemetryState> state;
+        };
+
+        RuntimeGlobals &Globals() {
+            static RuntimeGlobals globals;
+            return globals;
+        }
     }  // namespace
 
     /** @copydoc Record::Kind */
     RecordKind Record::Kind() const noexcept {
+        using enum RecordKind;
         if (std::holds_alternative<LogRecord>(payload))
-            return RecordKind::Log;
+            return Log;
         if (std::holds_alternative<MetricRecord>(payload))
-            return RecordKind::Metric;
+            return Metric;
         if (std::holds_alternative<SpanRecord>(payload))
-            return RecordKind::Span;
-        return RecordKind::Event;
+            return Span;
+        return Event;
     }
 
     /** @copydoc Runtime::Initialize */
@@ -456,47 +503,50 @@ namespace Horo::Telemetry {
             return false;
 
         static_cast<void>(Shutdown());
-        sinks.erase(std::remove(sinks.begin(), sinks.end(), nullptr), sinks.end());
+        std::erase(sinks, nullptr);
+        RuntimeGlobals &globals = Globals();
         if (!configuration.enabled || sinks.empty()) {
-            g_enabled.store(false, std::memory_order_release);
+            globals.enabled.store(false);
             return true;
         }
 
-        const std::uint32_t generation = g_nextGeneration.fetch_add(1, std::memory_order_relaxed);
+        const std::uint32_t generation = globals.nextGeneration.fetch_add(1);
         auto state = std::make_shared<TelemetryState>(configuration, std::move(sinks), generation);
         state->Start();
         {
-            std::lock_guard lock(g_lifecycleMutex);
-            std::atomic_store_explicit(&g_state, std::move(state), std::memory_order_release);
+            std::lock_guard lock(globals.lifecycleMutex);
+            globals.StoreState(std::move(state));
         }
-        g_enabled.store(true, std::memory_order_release);
+        globals.enabled.store(true);
         return true;
     }
 
     /** @copydoc Runtime::Shutdown */
     bool Runtime::Shutdown() {
-        g_enabled.store(false, std::memory_order_release);
+        RuntimeGlobals &globals = Globals();
+        globals.enabled.store(false);
         std::shared_ptr<TelemetryState> state;
         {
-            std::lock_guard lock(g_lifecycleMutex);
-            state = std::atomic_exchange_explicit(&g_state, std::shared_ptr<TelemetryState>{}, std::memory_order_acq_rel);
+            std::lock_guard lock(globals.lifecycleMutex);
+            state = globals.ExchangeState();
         }
         if (state == nullptr)
             return true;
         const bool completed = state->Stop(state->ShutdownTimeout());
         if (!completed && !state->HasExited())
-            Health().shutdownTimeouts.fetch_add(1, std::memory_order_relaxed);
+            Health().shutdownTimeouts.fetch_add(1);
         return completed;
     }
 
     /** @copydoc Runtime::SetEnabled */
     void Runtime::SetEnabled(const bool enabled) noexcept {
-        g_enabled.store(enabled && std::atomic_load_explicit(&g_state, std::memory_order_acquire) != nullptr, std::memory_order_release);
+        RuntimeGlobals &globals = Globals();
+        globals.enabled.store(enabled && globals.LoadState() != nullptr);
     }
 
     /** @copydoc Runtime::IsEnabled */
     bool Runtime::IsEnabled() noexcept {
-        return g_enabled.load(std::memory_order_relaxed);
+        return Globals().enabled.load();
     }
 
     /** @copydoc Runtime::IsEventEnabled */
@@ -508,14 +558,14 @@ namespace Horo::Telemetry {
 #else
         if (!IsEnabled())
             return false;
-        const auto state = std::atomic_load_explicit(&g_state, std::memory_order_acquire);
+        const auto state = Globals().LoadState();
         return state != nullptr && state->AllowsEvent(subsystem, severity);
 #endif
     }
 
     /** @copydoc Runtime::Flush */
     bool Runtime::Flush(const std::chrono::milliseconds timeout) {
-        const auto state = std::atomic_load_explicit(&g_state, std::memory_order_acquire);
+        const auto state = Globals().LoadState();
         return state == nullptr || state->Flush(timeout);
     }
 
@@ -523,21 +573,21 @@ namespace Horo::Telemetry {
     bool Runtime::EmitRecord(Record record) noexcept {
         if (!IsEnabled())
             return false;
-        const auto state = std::atomic_load_explicit(&g_state, std::memory_order_acquire);
+        const auto state = Globals().LoadState();
         if (state == nullptr) {
-            Health().shutdownDrops.fetch_add(1, std::memory_order_relaxed);
-            Health().droppedRecords.fetch_add(1, std::memory_order_relaxed);
+            Health().shutdownDrops.fetch_add(1);
+            Health().droppedRecords.fetch_add(1);
             return false;
         }
         if (!state->Allows(record)) {
-            Health().filteredRecords.fetch_add(1, std::memory_order_relaxed);
+            Health().filteredRecords.fetch_add(1);
             return false;
         }
         try {
             RedactRecord(record);
             return state->TryPush(std::move(record));
-        } catch (...) {
-            Health().droppedRecords.fetch_add(1, std::memory_order_relaxed);
+        } catch (const std::bad_alloc &) {
+            Health().droppedRecords.fetch_add(1);
             return false;
         }
     }
@@ -549,7 +599,7 @@ namespace Horo::Telemetry {
         return {};
 #else
         descriptor.kind = InstrumentKind::Counter;
-        const auto state = std::atomic_load_explicit(&g_state, std::memory_order_acquire);
+        const auto state = Globals().LoadState();
         if (state == nullptr || !state->AllowsMetric(descriptor))
             return {};
         const auto registration = state->Register(std::move(descriptor));
@@ -564,7 +614,7 @@ namespace Horo::Telemetry {
         return {};
 #else
         descriptor.kind = InstrumentKind::Gauge;
-        const auto state = std::atomic_load_explicit(&g_state, std::memory_order_acquire);
+        const auto state = Globals().LoadState();
         if (state == nullptr || !state->AllowsMetric(descriptor))
             return {};
         const auto registration = state->Register(std::move(descriptor));
@@ -579,7 +629,7 @@ namespace Horo::Telemetry {
         return {};
 #else
         descriptor.kind = InstrumentKind::Histogram;
-        const auto state = std::atomic_load_explicit(&g_state, std::memory_order_acquire);
+        const auto state = Globals().LoadState();
         if (state == nullptr || !state->AllowsMetric(descriptor))
             return {};
         const auto registration = state->Register(std::move(descriptor));
@@ -595,7 +645,7 @@ namespace Horo::Telemetry {
 #else
         descriptor.kind = InstrumentKind::Timing;
         descriptor.unit = "seconds";
-        const auto state = std::atomic_load_explicit(&g_state, std::memory_order_acquire);
+        const auto state = Globals().LoadState();
         if (state == nullptr || !state->AllowsMetric(descriptor))
             return {};
         const auto registration = state->Register(std::move(descriptor));
@@ -609,7 +659,7 @@ namespace Horo::Telemetry {
         if (!IsEnabled())
             return false;
         if (!IsEventEnabled(subsystem, severity)) {
-            Health().filteredRecords.fetch_add(1, std::memory_order_relaxed);
+            Health().filteredRecords.fetch_add(1);
             return false;
         }
         return EmitEvent(subsystem, eventName, severity, message, {}, Log::CaptureLogContext());
@@ -626,11 +676,11 @@ namespace Horo::Telemetry {
                             const std::string_view message, const std::span<const Field> fields, const Log::LogContextSnapshot &context) {
         if (!IsEnabled())
             return false;
-        const auto state = std::atomic_load_explicit(&g_state, std::memory_order_acquire);
+        const auto state = Globals().LoadState();
         if (state == nullptr)
             return false;
         if (!state->AllowsEvent(subsystem, severity)) {
-            Health().filteredRecords.fetch_add(1, std::memory_order_relaxed);
+            Health().filteredRecords.fetch_add(1);
             return false;
         }
         Record record{.subsystem = std::string{subsystem},
@@ -642,28 +692,28 @@ namespace Horo::Telemetry {
         try {
             RedactRecord(record);
             return state->TryPush(std::move(record));
-        } catch (...) {
-            Health().droppedRecords.fetch_add(1, std::memory_order_relaxed);
+        } catch (const std::bad_alloc &) {
+            Health().droppedRecords.fetch_add(1);
             return false;
         }
     }
 
     /** @copydoc Runtime::GetStatistics */
     Statistics Runtime::GetStatistics() noexcept {
-        AtomicStatistics &health = Health();
-        return {.acceptedRecords = health.acceptedRecords.load(std::memory_order_relaxed),
-                .exportedRecords = health.exportedRecords.load(std::memory_order_relaxed),
-                .droppedRecords = health.droppedRecords.load(std::memory_order_relaxed),
-                .filteredRecords = health.filteredRecords.load(std::memory_order_relaxed),
-                .contentionDrops = health.contentionDrops.load(std::memory_order_relaxed),
-                .queueFullDrops = health.queueFullDrops.load(std::memory_order_relaxed),
-                .shutdownDrops = health.shutdownDrops.load(std::memory_order_relaxed),
-                .staleHandleDrops = health.staleHandleDrops.load(std::memory_order_relaxed),
-                .sinkFailures = health.sinkFailures.load(std::memory_order_relaxed),
-                .flushTimeouts = health.flushTimeouts.load(std::memory_order_relaxed),
-                .shutdownTimeouts = health.shutdownTimeouts.load(std::memory_order_relaxed),
-                .invalidInstrumentRegistrations = health.invalidInstrumentRegistrations.load(std::memory_order_relaxed),
-                .rejectedMetricSeries = health.rejectedMetricSeries.load(std::memory_order_relaxed)};
+        const AtomicStatistics &health = Health();
+        return {.acceptedRecords = health.acceptedRecords.load(),
+                .exportedRecords = health.exportedRecords.load(),
+                .droppedRecords = health.droppedRecords.load(),
+                .filteredRecords = health.filteredRecords.load(),
+                .contentionDrops = health.contentionDrops.load(),
+                .queueFullDrops = health.queueFullDrops.load(),
+                .shutdownDrops = health.shutdownDrops.load(),
+                .staleHandleDrops = health.staleHandleDrops.load(),
+                .sinkFailures = health.sinkFailures.load(),
+                .flushTimeouts = health.flushTimeouts.load(),
+                .shutdownTimeouts = health.shutdownTimeouts.load(),
+                .invalidInstrumentRegistrations = health.invalidInstrumentRegistrations.load(),
+                .rejectedMetricSeries = health.rejectedMetricSeries.load()};
     }
 
     bool Runtime::BindMetric(const std::uint32_t instrumentId, const std::uint32_t generation, const InstrumentKind kind,
@@ -678,16 +728,17 @@ namespace Horo::Telemetry {
         static_cast<void>(dimensionCount);
         return false;
 #else
-        const auto state = std::atomic_load_explicit(&g_state, std::memory_order_acquire);
+        const auto state = Globals().LoadState();
         if (state == nullptr || state->Generation() != generation)
             return false;
         try {
-            const bool bound = state->Bind(instrumentId, kind, dimensions, valueIds, dimensionCount);
-            if (!bound)
-                Health().rejectedMetricSeries.fetch_add(1, std::memory_order_relaxed);
-            return bound;
-        } catch (...) {
-            Health().rejectedMetricSeries.fetch_add(1, std::memory_order_relaxed);
+            if (const bool bound = state->Bind(instrumentId, kind, dimensions, valueIds, dimensionCount); !bound) {
+                Health().rejectedMetricSeries.fetch_add(1);
+                return false;
+            }
+            return true;
+        } catch (const std::bad_alloc &) {
+            Health().rejectedMetricSeries.fetch_add(1);
             return false;
         }
 #endif
@@ -698,10 +749,10 @@ namespace Horo::Telemetry {
                                const std::uint8_t dimensionCount) noexcept {
         if (instrumentId == 0 || !IsEnabled())
             return false;
-        const auto state = std::atomic_load_explicit(&g_state, std::memory_order_acquire);
+        const auto state = Globals().LoadState();
         if (state == nullptr || state->Generation() != generation) {
-            Health().staleHandleDrops.fetch_add(1, std::memory_order_relaxed);
-            Health().droppedRecords.fetch_add(1, std::memory_order_relaxed);
+            Health().staleHandleDrops.fetch_add(1);
+            Health().droppedRecords.fetch_add(1);
             return false;
         }
         return state->TryPush(Record{.payload = MetricRecord{.kind = kind,

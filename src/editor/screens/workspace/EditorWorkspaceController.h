@@ -4,8 +4,8 @@
 #include "Horo/Editor/EditorDataBus.h"
 #include "Horo/Editor/NotificationService.h"
 #include "Horo/Editor/ProjectMutation.h"
-#include "editor/document/EditorViewportSceneExtractor.h"
 #include "editor/document/EditorAssetMeshCache.h"
+#include "editor/document/EditorViewportSceneExtractor.h"
 #include "editor/document/SceneDocumentComparison.h"
 #include "editor/document/SceneDocumentPersistence.h"
 #include "editor/document/SceneFileWatchService.h"
@@ -15,27 +15,40 @@
 #include "editor/project_model/EditorViewportModel.h"
 #include "editor/screens/workspace/EditorWorkspaceViewModel.h"
 
+#include <cstddef>
 #include <filesystem>
 #include <functional>
+#include <optional>
+#include <span>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 namespace Horo::Editor {
     class ILocalizationService;
+    struct EditorViewportPickResult;
     /** @brief Platform navigation capability for one validated diagnostic source location. */
     using DiagnosticSourceNavigator = std::function<bool(const DiagnosticSourceRequest &)>;
 
+    /** @brief Optional services used by the workspace without transferring their ownership. */
+    struct EditorWorkspaceDependencies {
+        Assets::AssetRegistry *mutableAssetRegistry{};
+        ProjectMutationCoordinator *mutations{};
+        DurableFileSystem *durableFiles{};
+        const Assets::AssetImporterCatalogSnapshot *importerCatalog{};
+        JobSystem *jobs{};
+        DiagnosticSourceNavigator diagnosticSourceNavigator{};
+        Application::GameplayBuildService *gameplayBuilds{};
+        Application::GameplayBuildEnvironment gameplayBuildEnvironment{};
+        const ILocalizationService *localization{};
+    };
+
     class EditorWorkspaceController {
     public:
-        EditorWorkspaceController(std::string projectRoot, Runtime::RuntimeSceneService &runtimeScene,
+        EditorWorkspaceController(const std::filesystem::path &projectRoot, Runtime::RuntimeSceneService &runtimeScene,
                                   const Assets::AssetRegistrySnapshot &assetRegistry = {},
-                                  Assets::AssetRegistry *mutableAssetRegistry = nullptr, ProjectMutationCoordinator *mutations = nullptr,
-                                  DurableFileSystem *durableFiles = nullptr,
-                                  const Assets::AssetImporterCatalogSnapshot *importerCatalog = nullptr, JobSystem *jobs = nullptr,
-                                  DiagnosticSourceNavigator diagnosticSourceNavigator = {},
-                                  Application::GameplayBuildService *gameplayBuilds = nullptr,
-                                  Application::GameplayBuildEnvironment gameplayBuildEnvironment = {},
-                                  const ILocalizationService *localization = nullptr);
+                                  const EditorWorkspaceDependencies &dependencies = {});
         ~EditorWorkspaceController() = default;
 
         [[nodiscard]] const EditorWorkspaceViewModel &ViewModel() const noexcept {
@@ -173,6 +186,53 @@ namespace Horo::Editor {
         Runtime::SceneDefinitionRevision m_queuedDefinitionRevision{};
         Runtime::SceneDefinitionId m_previewSceneId{1};
 
+        struct ContentBrowserDeletePlan {
+            std::filesystem::path projectRoot;
+            std::filesystem::path source;
+            std::vector<std::filesystem::path> sources;
+            std::optional<Assets::AssetId> deletedAssetId;
+            std::string deletedAssetProjectPath;
+        };
+
+        struct ContentBrowserRenamePlan {
+            std::filesystem::path source;
+            std::filesystem::path destination;
+            std::vector<std::filesystem::path> sources;
+        };
+
+        using ContentBrowserPathMoves = std::vector<std::pair<std::filesystem::path, std::filesystem::path>>;
+
+        [[nodiscard]] bool ProcessDocumentCommand(const EditorWorkspaceViewCommandData &cmd);
+        [[nodiscard]] bool ProcessPlayCommand(const EditorWorkspaceViewCommandData &cmd);
+        [[nodiscard]] bool ProcessSceneObjectCommand(const EditorWorkspaceViewCommandData &cmd);
+        [[nodiscard]] bool ProcessViewportPickCommand(const EditorWorkspaceViewCommandData &cmd);
+        void HandleViewportPick(const ViewportPickRequest &request);
+        void ApplyViewportPickSelection(const EditorViewportPickResult &picked, const ViewportPickRequest &request);
+        [[nodiscard]] bool ProcessViewportCommand(const EditorWorkspaceViewCommandData &cmd);
+        [[nodiscard]] bool ProcessViewportCameraCommand(const EditorWorkspaceViewCommandData &cmd);
+        [[nodiscard]] bool ProcessViewportEditCommand(const EditorWorkspaceViewCommandData &cmd);
+        [[nodiscard]] bool ProcessComponentCommand(const EditorWorkspaceViewCommandData &cmd);
+        [[nodiscard]] bool ProcessObjectPropertyCommand(const EditorWorkspaceViewCommandData &cmd);
+        [[nodiscard]] bool ProcessBehaviorCommand(const EditorWorkspaceViewCommandData &cmd);
+        [[nodiscard]] bool ProcessContentBrowserCommand(const EditorWorkspaceViewCommandData &cmd);
+        [[nodiscard]] bool ProcessContentBrowserNavigationCommand(const EditorWorkspaceViewCommandData &cmd);
+        [[nodiscard]] bool ProcessContentBrowserMutationCommand(const EditorWorkspaceViewCommandData &cmd);
+        [[nodiscard]] bool ProcessContentBrowserAssetCommand(const EditorWorkspaceViewCommandData &cmd);
+        [[nodiscard]] bool ProcessContentBrowserSourceCommand(const EditorWorkspaceViewCommandData &cmd);
+        [[nodiscard]] bool ProcessActivePanelCommand(const EditorWorkspaceViewCommandData &cmd);
+        [[nodiscard]] bool ProcessLayoutCommand(const EditorWorkspaceViewCommandData &cmd);
+        void ReorderActivityBarItem(const EditorWorkspaceViewCommandData &cmd);
+        void DockWorkspacePanel(const EditorWorkspaceViewCommandData &cmd);
+        void ResizeWorkspacePanel(const EditorWorkspaceViewCommandData &cmd);
+        [[nodiscard]] bool IsPanelActive(std::string_view panelId) const;
+        void RemovePanelFromDock(std::string_view panelId, WorkspaceDockArea area);
+        void ActivateBottomPanel(const EditorWorkspaceViewCommandData &cmd, std::vector<std::string> &displacedPanelIds);
+        void ActivatePanelDock(WorkspaceDockArea area, const EditorWorkspaceViewCommandData &cmd,
+                               std::vector<std::string> &displacedPanelIds);
+        void SyncPanelHost(WorkspaceDockArea area, std::string_view panelId);
+        void PublishPanelActivation(WorkspaceDockArea area, std::string_view panelId, bool panelWasActive,
+                                    const std::vector<std::string> &displacedPanelIds);
+        void MovePanelActivitySlot(const EditorWorkspaceViewCommandData &cmd);
         void RefreshSceneProjections();
         /** @brief Atomically commits the current default-scene snapshot and updates dirty state on
          * success. */
@@ -196,15 +256,18 @@ namespace Horo::Editor {
         [[nodiscard]] bool HasNativeGameplaySources() const;
         void StopPlaySession();
         void RefreshPlayStateProjection();
+        [[nodiscard]] EditorViewportCamera ResolvePlayViewportCamera(const Runtime::RuntimeSceneView &runtimeView) const;
         void ExtractPlayViewportScene();
         void HandleCreatePrimitive(Runtime::PrimitiveId primitive, std::optional<SceneObjectId> parent);
+        [[nodiscard]] bool ApplyAssetViewportPlacement(const AssetSceneDropRequest &request, const Math::Aabb &localBounds,
+                                                       Math::Transform &localTransform) const;
         void HandleInstantiateAsset(const AssetSceneDropRequest &request);
         void LoadDocumentAssetMeshes();
         [[nodiscard]] std::string Localized(std::string_view key, std::string_view fallback) const;
         void HandleDuplicateObject(SceneObjectId object);
         void HandleDeleteObject(SceneObjectId object);
-        void HandleDeleteSelectedObjects(std::vector<SceneObjectId> objects);
-        void HandleDocumentCommandResult(Result<SceneCommandResult> result, const char *operation);
+        void HandleDeleteSelectedObjects(const std::vector<SceneObjectId> &objects);
+        void HandleDocumentCommandResult(const Result<SceneCommandResult> &result, const char *operation);
         void PreviewObjectTransform(SceneObjectId object, const Math::Transform &transform);
         void PreviewObjectTransforms(std::span<const SceneObjectTransformUpdate> updates);
         void CancelObjectTransformPreview();
@@ -216,26 +279,51 @@ namespace Horo::Editor {
         void NavigateContentBrowserBack();
         void NavigateContentBrowserForward();
         void NavigateContentBrowserUp();
-        void RenameContentBrowserEntry(const std::string &absolutePath, const std::string &newName);
-        void DeleteContentBrowserEntry(const std::string &absolutePath);
-        void DuplicateContentBrowserAsset(const std::string &absolutePath);
-        void SetContentBrowserClipboard(const std::string &absolutePath, ContentBrowserClipboardMode mode);
-        void PasteContentBrowserAsset(const std::string &absoluteDirectory);
+        void RenameContentBrowserEntry(const std::filesystem::path &absolutePath, std::string_view newName);
+        [[nodiscard]] std::optional<ContentBrowserRenamePlan> PrepareContentBrowserRename(const std::filesystem::path &absolutePath,
+                                                                                          std::string_view newName);
+        void DeleteContentBrowserEntry(const std::filesystem::path &absolutePath);
+        [[nodiscard]] std::optional<ContentBrowserDeletePlan> PrepareContentBrowserDelete(const std::filesystem::path &source);
+        [[nodiscard]] std::optional<std::filesystem::path> CreateContentBrowserTrash(const ContentBrowserDeletePlan &plan);
+        [[nodiscard]] std::optional<std::vector<std::pair<std::filesystem::path, std::filesystem::path>>> MoveContentBrowserEntriesToTrash(
+            const ContentBrowserDeletePlan &plan, const std::filesystem::path &trashDirectory);
+        [[nodiscard]] bool PublishContentBrowserDeletion(const ContentBrowserDeletePlan &plan, const std::filesystem::path &trashDirectory,
+                                                         const std::vector<std::pair<std::filesystem::path, std::filesystem::path>> &moved);
+        void DuplicateContentBrowserAsset(const std::filesystem::path &absolutePath);
+        void SetContentBrowserClipboard(const std::filesystem::path &absolutePath, ContentBrowserClipboardMode mode);
+        void PasteContentBrowserAsset(const std::filesystem::path &absoluteDirectory);
         void TransferContentBrowserAsset(const ContentBrowserAssetTransferRequest &request);
-        void CreateContentBrowserFolder(const std::string &absoluteDirectory, const std::string &name);
+        void CreateContentBrowserFolder(const std::filesystem::path &absoluteDirectory, std::string_view name);
         void CreateGameplayBehavior(const CreateGameplayBehaviorRequest &request);
-        void CreateGameplayBehavior(bool nativeBehavior, const std::string &absoluteDirectory);
+        void CreateGameplayBehaviorFiles(const CreateGameplayBehaviorRequest &request, bool nativeBehavior,
+                                         const std::filesystem::path &projectRoot, const std::filesystem::path &directory);
+        void WriteGameplayBehaviorSource(const CreateGameplayBehaviorRequest &request, bool nativeBehavior,
+                                         const std::filesystem::path &projectRoot, const std::filesystem::path &directory);
         void RefreshGameplayRegistry();
         void RefreshAvailableBehaviorProjection();
         void ApplyPendingGameplayRegistry();
-        void ReimportContentBrowserAsset(const std::string &absolutePath);
-        void RevealContentBrowserEntry(const std::string &absolutePath);
+        void ReimportContentBrowserAsset(const std::filesystem::path &absolutePath);
+        void RevealContentBrowserEntry(const std::filesystem::path &absolutePath);
         void OpenDiagnosticSource(const DiagnosticSourceRequest &source);
         [[nodiscard]] bool CopyContentBrowserAssetTo(const std::filesystem::path &absoluteSource,
                                                      const std::filesystem::path &absoluteDestinationDirectory);
+        [[nodiscard]] std::optional<std::vector<std::filesystem::path>> CopyContentBrowserCompanions(
+            const std::filesystem::path &source, const std::filesystem::path &sourceSidecar, const std::filesystem::path &destination,
+            const std::vector<std::filesystem::path> &companions, std::span<const std::byte> sidecarBytes);
+        [[nodiscard]] bool PublishCopiedContentBrowserAsset(const std::filesystem::path &projectRoot,
+                                                            const std::filesystem::path &destination, Assets::AssetId copiedId,
+                                                            const std::vector<std::filesystem::path> &created);
         [[nodiscard]] bool MoveContentBrowserAssetTo(const std::filesystem::path &absoluteSource,
                                                      const std::filesystem::path &absoluteDestinationDirectory);
+        [[nodiscard]] std::optional<ContentBrowserPathMoves> MoveContentBrowserCompanions(
+            const std::filesystem::path &source, const std::filesystem::path &destination,
+            const std::vector<std::filesystem::path> &companions, std::string_view failureKey);
+        [[nodiscard]] bool PublishMovedContentBrowserAsset(const std::filesystem::path &projectRoot,
+                                                           const std::filesystem::path &destination, Assets::AssetId originalId,
+                                                           const ContentBrowserPathMoves &moved);
+        [[nodiscard]] bool PublishRenamedContentBrowserEntries(const ContentBrowserPathMoves &moved);
         void ClearContentBrowserClipboard() noexcept;
+        void SetContentBrowserRollbackError(bool rollbackComplete, std::string_view failureKey);
         void RefreshContentBrowserAfterMutation();
         void RequestContentBrowserRefresh();
         void ReconcileContentBrowserNavigation();
