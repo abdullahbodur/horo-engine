@@ -444,9 +444,11 @@ TEST_CASE("Scene Destination Save Requires Explicit Existing File Approval", "[u
     REQUIRE((rejected.HasValue()));
     REQUIRE((rejected.Value().status == ProjectSceneDestinationSaveStatus::DestinationExists));
 
-    std::ifstream input(destination, std::ios::binary);
-    const std::string unchanged{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
-    REQUIRE((unchanged == original));
+    {
+        std::ifstream input(destination, std::ios::binary);
+        const std::string unchanged{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+        REQUIRE((unchanged == original));
+    }
 
     auto saved = SaveProjectSceneToPath(project.Root(), destination, AuthoredScene(), true, mutations, files);
     REQUIRE((saved.HasValue()));

@@ -11,6 +11,7 @@
 #include <fstream>
 #include <functional>
 #include <iterator>
+#include <nlohmann/json.hpp>
 #include <span>
 #include <string>
 #include <string_view>
@@ -843,9 +844,10 @@ namespace {
         const std::filesystem::path trashEntry = std::filesystem::directory_iterator{trashRoot}->path();
         REQUIRE((std::filesystem::is_regular_file(trashEntry / renamed.filename())));
         REQUIRE((std::filesystem::is_regular_file(trashEntry / (renamed.filename().string() + ".horo"))));
-        std::ifstream manifest(trashEntry / "trash.json");
-        const std::string manifestText{std::istreambuf_iterator<char>{manifest}, std::istreambuf_iterator<char>{}};
-        REQUIRE((manifestText.find(renamed.string()) != std::string::npos));
+        std::ifstream manifestStream(trashEntry / "trash.json");
+        const nlohmann::json manifest = nlohmann::json::parse(manifestStream);
+        const std::filesystem::path recordedOriginal = manifest.at("originalAbsolutePath").get<std::string>();
+        REQUIRE((recordedOriginal == std::filesystem::weakly_canonical(renamed)));
 
         std::error_code cleanupError;
         std::filesystem::remove_all(projectRoot, cleanupError);

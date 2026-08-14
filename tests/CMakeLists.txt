@@ -404,7 +404,7 @@ if (HORO_BUILD_EDITOR_GUI)
     )
 
     target_compile_features(HoroEditorWorkspaceControllerTests PRIVATE cxx_std_20)
-    target_link_libraries(HoroEditorWorkspaceControllerTests PRIVATE HoroEngine::Gui)
+    target_link_libraries(HoroEditorWorkspaceControllerTests PRIVATE HoroEngine::Gui nlohmann_json::nlohmann_json)
 endif ()
 
 add_executable(HoroGameplayBehaviorFilenameModalStateTests

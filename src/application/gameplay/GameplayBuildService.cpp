@@ -179,6 +179,8 @@ namespace Horo::Application {
             if (std::ifstream resolvedInputs{resolvedManifest, std::ios::binary}) {
                 std::string relativeInput;
                 while (std::getline(resolvedInputs, relativeInput)) {
+                    if (!relativeInput.empty() && relativeInput.back() == '\r')
+                        relativeInput.pop_back();
                     if (relativeInput.empty())
                         continue;
                     const std::filesystem::path unresolved{relativeInput};
