@@ -66,6 +66,19 @@ namespace Horo::Foundation::Paths {
         if (candidateError)
             normalizedCandidate = candidate.lexically_normal();
 
+        // Let the host filesystem resolve Windows short names, drive casing, and
+        // junctions before falling back to lexical component comparison.
+        std::error_code equivalentError;
+        for (std::filesystem::path current = normalizedCandidate; !current.empty();) {
+            if (std::filesystem::equivalent(normalizedRoot, current, equivalentError))
+                return true;
+            equivalentError.clear();
+            const std::filesystem::path parent = current.parent_path();
+            if (parent == current)
+                break;
+            current = parent;
+        }
+
         auto rootPart = normalizedRoot.begin();
         auto candidatePart = normalizedCandidate.begin();
         while (rootPart != normalizedRoot.end() && candidatePart != normalizedCandidate.end()) {
