@@ -530,6 +530,7 @@ if (HORO_BUILD_EDITOR_GUI)
 
     add_library(HoroGui STATIC
             editor/design_system/components/EditorUiComponents.cpp
+            editor/design_system/icons/EditorIcons.cpp
             editor/design_system/components/EditorSnackbarHost.cpp
             editor/app/EditorTheme.cpp
             editor/menu/EditorMenuPlatform.cpp

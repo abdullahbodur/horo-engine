@@ -1,5 +1,6 @@
 #include "editor/screens/workspace/panels/hierarchy/HierarchyPanel.h"
 
+#include "Horo/Editor/EditorIcons.h"
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/EditorUiComponents.h"
 #include "Horo/Editor/Localization/ILocalizationService.h"
@@ -29,7 +30,7 @@ namespace Horo::Editor {
         }
 
         struct HierarchyIconPresentation {
-            std::string_view token;
+            Ui::UiIcon icon{Ui::UiIcon::HierarchyGeneric};
             const char *tooltipKey{nullptr};
             ImVec4 color{};
         };
@@ -37,26 +38,29 @@ namespace Horo::Editor {
         [[nodiscard]] HierarchyIconPresentation GetIconPresentation(const HierarchyNodeType type) {
             switch (type) {
                 case HierarchyNodeType::Mesh:
-                    return {"hierarchy.mesh", "workspace.hierarchy.type.mesh", Theme::Ok()};
+                    return {Ui::UiIcon::HierarchyMesh, "workspace.hierarchy.type.mesh", Theme::Ok()};
                 case HierarchyNodeType::Empty:
                 case HierarchyNodeType::Collection:
-                    return {"hierarchy.generic", "workspace.hierarchy.type.empty", Theme::Muted()};
+                    return {Ui::UiIcon::HierarchyGeneric, "workspace.hierarchy.type.empty", Theme::Muted()};
                 case HierarchyNodeType::Light:
-                    return {"primitive.light", "workspace.hierarchy.type.light", Theme::Warn()};
+                    return {Ui::UiIcon::Light, "workspace.hierarchy.type.light", Theme::Warn()};
                 case HierarchyNodeType::PointLight:
-                    return {"primitive.light_point", "workspace.hierarchy.type.light_point", Theme::Warn()};
+                    return {Ui::UiIcon::PointLight, "workspace.hierarchy.type.light_point", Theme::Warn()};
                 case HierarchyNodeType::DirectionalLight:
-                    return {"primitive.light_directional", "workspace.hierarchy.type.light_directional", Theme::Warn()};
+                    return {Ui::UiIcon::DirectionalLight, "workspace.hierarchy.type.light_directional", Theme::Warn()};
                 case HierarchyNodeType::SpotLight:
-                    return {"primitive.light_spot", "workspace.hierarchy.type.light_spot", Theme::Warn()};
+                    return {Ui::UiIcon::SpotLight, "workspace.hierarchy.type.light_spot", Theme::Warn()};
                 case HierarchyNodeType::Camera:
-                    return {"primitive.camera", "workspace.hierarchy.type.camera", Theme::Accent()};
+                    return {Ui::UiIcon::Camera, "workspace.hierarchy.type.camera", Theme::Accent()};
                 case HierarchyNodeType::TriggerVolume:
-                    return {"primitive.trigger_volume", "workspace.hierarchy.type.volume", Theme::Warn()};
+                    return {Ui::UiIcon::TriggerVolume, "workspace.hierarchy.type.volume", Theme::Warn()};
                 case HierarchyNodeType::AudioSource:
-                    return {"primitive.audio_source", "workspace.hierarchy.type.audio", BlendColor(Theme::Accent(), Theme::Err(), 0.45F)};
+                    return {
+                        Ui::UiIcon::AudioSource, "workspace.hierarchy.type.audio",
+                        BlendColor(Theme::Accent(), Theme::Err(), 0.45F)
+                    };
             }
-            return {"hierarchy.generic", "workspace.hierarchy.type.empty", Theme::Muted()};
+            return {Ui::UiIcon::HierarchyGeneric, "workspace.hierarchy.type.empty", Theme::Muted()};
         }
 
         [[nodiscard]] ImFont *ResolveFont(ImFont *preferred) {
@@ -388,7 +392,7 @@ namespace Horo::Editor {
             ImVec4 typeColor = icon.color;
             if (node.effectivelyLocked)
                 typeColor.w *= 0.65F;
-            Ui::DrawEditorIcon(drawList, icon.token, iconPosition, {iconSize, iconSize}, Theme::U32(typeColor));
+            Ui::DrawEditorIcon(drawList, icon.icon, iconPosition, {iconSize, iconSize}, Theme::U32(typeColor));
             if (icon.tooltipKey != nullptr && ImGui::IsMouseHoveringRect(typeIconMin, typeIconMax))
                 ImGui::SetTooltip("%s", ctx.localization.Get("editor", icon.tooltipKey).c_str());
 
@@ -396,8 +400,9 @@ namespace Horo::Editor {
                 const float actionIconSize =
                     std::max(0.0F, std::min({15.0F * uiScale, layout.visibilityAction.Width() - 4.0F * uiScale,
                                              layout.lockAction.Width() - 4.0F * uiScale, layout.height - 4.0F * uiScale}));
-                const auto drawAction = [&](const std::string_view token, const ImVec2 minimum, const ImVec2 maximum,
-                                            const bool actionHovered, const bool active, const bool inherited) {
+                const auto drawAction = [&](const Ui::UiIcon icon, const ImVec2 minimum, const ImVec2 maximum,
+                                            const bool actionHovered,
+                                            const bool active, const bool inherited) {
                     if (actionIconSize <= 0.0F)
                         return;
                     ImVec4 color = actionHovered || active ? Theme::Text() : Theme::Muted();
@@ -407,11 +412,12 @@ namespace Horo::Editor {
                         color.w *= 0.55F;
                     const ImVec2 position{minimum.x + ((maximum.x - minimum.x) - actionIconSize) * 0.5F,
                                           minimum.y + ((maximum.y - minimum.y) - actionIconSize) * 0.5F};
-                    Ui::DrawEditorIcon(drawList, token, position, {actionIconSize, actionIconSize}, Theme::U32(color));
+                    Ui::DrawEditorIcon(drawList, icon, position, {actionIconSize, actionIconSize}, Theme::U32(color));
                 };
-                drawAction(node.effectivelyVisible ? "action.visibility" : "action.visibility_off", visibilityMin, visibilityMax,
+                drawAction(node.effectivelyVisible ? Ui::UiIcon::Visibility : Ui::UiIcon::VisibilityOff, visibilityMin,
+                           visibilityMax,
                            visibilityHovered, !node.effectivelyVisible, node.hiddenByParent && node.locallyVisible);
-                drawAction("action.lock", lockMin, lockMax, lockHovered, node.effectivelyLocked,
+                drawAction(Ui::UiIcon::Lock, lockMin, lockMax, lockHovered, node.effectivelyLocked,
                            node.lockedByParent && !node.locallyLocked);
             }
 

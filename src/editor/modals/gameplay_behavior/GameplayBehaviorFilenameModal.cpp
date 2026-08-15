@@ -56,7 +56,7 @@ namespace Horo::Editor {
         ImGui::Dummy({0.0F, 8.0F});
         Ui::FieldLabel(filenameLabel.c_str(), context_.theme.fonts);
         if (Ui::InputTextControl("##GameplayBehaviorFilename", state_.MutableBaseName(), 256, context_.theme.fonts,
-                                 state_.Validation().HasError())) {
+                                 Ui::InputTextOptions{.error = state_.Validation().HasError()})) {
             confirm = true;
         }
         state_.SetBaseName(state_.BaseName());

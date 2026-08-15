@@ -4,6 +4,7 @@
  */
 #pragma once
 
+#include "Horo/Editor/EditorIcons.h"
 #include "Horo/Editor/EditorTheme.h"
 
 #include <array>
@@ -312,15 +313,21 @@ namespace Horo::Editor::Ui {
 
     /** @brief Non-owning callbacks used by a combo whose entries come from a typed model. */
     struct ComboItemSource {
-        const void *context = nullptr;                                            /**< Model passed unchanged to each callback. */
-        const char *(*label)(const void *context, int index) = nullptr;           /**< Required display-label callback. */
-        bool (*enabled)(const void *context, int index) = nullptr;                /**< Optional selection predicate; null enables all. */
-        const char *(*disabledTooltip)(const void *context, int index) = nullptr; /**< Optional diagnostic for disabled rows. */
+        std::function<const char *(int index)> label;           /**< Required display-label projection. */
+        std::function<bool(int index)> enabled;                 /**< Optional selection predicate; empty enables all. */
+        std::function<const char *(int index)> disabledTooltip; /**< Optional diagnostic for disabled rows. */
+    };
+
+    /** @brief Optional visual configuration shared by combo controls. */
+    struct ComboControlOptions {
+        bool error{false};
+        float height{0.0F};
+        ComponentSize componentSize{ComponentSize::Small};
     };
 
     /** @brief Renders a styled dropdown with optional error styling. Returns true if the selection changed. */
     [[nodiscard]] bool ComboControl(const char *id, int *value, const char *const items[], int itemCount, const Theme::Fonts &fonts,
-                                    bool error = false, float height = 0.0F, ComponentSize componentSize = ComponentSize::Small);
+                                    ComboControlOptions options = {});
 
     /**
      * @brief Renders the shared dropdown design for entries projected from a typed model.
@@ -329,13 +336,20 @@ namespace Horo::Editor::Ui {
      * @param itemCount Number of entries exposed by @p source.
      * @param source Non-owning entry callbacks valid for the duration of this call.
      * @param fonts Editor typography handles.
-     * @param error Whether to render the field in its error state.
-     * @param height Explicit field height, or zero to use the shared default.
-     * @param componentSize Shared theme-backed size preset.
+     * @param options Optional error, height, and size presentation.
      * @return True when an enabled entry changed the selection.
      */
     [[nodiscard]] bool ComboControl(const char *id, int *value, int itemCount, const ComboItemSource &source, const Theme::Fonts &fonts,
-                                    bool error = false, float height = 0.0F, ComponentSize componentSize = ComponentSize::Small);
+                                    ComboControlOptions options = {});
+
+    /** @brief Optional visual configuration shared by text inputs. */
+    struct InputTextOptions {
+        bool error{false};                                     /**< Whether to render validation-error styling. */
+        float width{-1.0F};                                    /**< Logical width; negative fills available content. */
+        const char *hint{nullptr};                              /**< Optional placeholder text. */
+        float prefixIconWidth{0.0F};                            /**< Left padding reserved for a caller-drawn icon. */
+        ComponentSize componentSize{ComponentSize::Small};      /**< Shared theme-backed size preset. */
+    };
 
     /**
      * @brief Renders a themed multi-select field with a checkbox popup.
@@ -357,15 +371,11 @@ namespace Horo::Editor::Ui {
      * @param buffer Mutable null-terminated text buffer.
      * @param bufferSize Capacity of @p buffer, including the null terminator.
      * @param fonts Editor typography handles.
-     * @param error Whether to render the field in its error state.
-     * @param width Requested control width; negative values fill the remaining content width.
-     * @param hint Optional placeholder text shown when the field is empty; nullptr for none.
-     * @param prefixIconWidth Extra left padding reserved for a caller-drawn prefix icon; 0 for none.
+     * @param options Optional validation and presentation configuration.
      * @return True when the text changed.
      */
-    [[nodiscard]] bool InputTextControl(const char *id, char *buffer, size_t bufferSize, const Theme::Fonts &fonts, bool error = false,
-                                        float width = -1.0F, const char *hint = nullptr, float prefixIconWidth = 0.0F,
-                                        ComponentSize componentSize = ComponentSize::Small);
+    [[nodiscard]] bool InputTextControl(const char *id, char *buffer, size_t bufferSize, const Theme::Fonts &fonts,
+                                        InputTextOptions options = {});
 
     /**
      * @brief Renders the string-backed overload of the shared input text field.
@@ -373,14 +383,11 @@ namespace Horo::Editor::Ui {
      * @param value Mutable text value.
      * @param maxSize Maximum storage size, including the null terminator.
      * @param fonts Editor typography handles.
-     * @param error Whether to render the field in its error state.
-     * @param width Requested control width; negative values fill the remaining content width.
-     * @param hint Optional placeholder text shown when the field is empty; nullptr for none.
+     * @param options Optional validation and presentation configuration.
      * @return True when the text changed.
      */
-    [[nodiscard]] bool InputTextControl(const char *id, std::string &value, size_t maxSize, const Theme::Fonts &fonts, bool error = false,
-                                        float width = -1.0F, const char *hint = nullptr, float prefixIconWidth = 0.0F,
-                                        ComponentSize componentSize = ComponentSize::Small);
+    [[nodiscard]] bool InputTextControl(const char *id, std::string &value, size_t maxSize, const Theme::Fonts &fonts,
+                                        InputTextOptions options = {});
 
     /**
      * @brief Presentation metadata for one line in a selectable text block.
@@ -629,20 +636,25 @@ namespace Horo::Editor::Ui {
         bool active{false};    /**< The text widget owns keyboard focus after this frame. */
     };
 
+    /** @brief Presentation of the type badge shown beside an editable object title. */
+    struct EditableObjectTitleBadge {
+        const char *text{""};
+        ImVec4 background{};
+        ImVec4 foreground{};
+    };
+
     /**
      * @brief Draws an editable object title with a right-aligned type badge.
      * @param id Stable UI identity scoped by the caller.
      * @param value Mutable caller-owned title draft.
      * @param maximumBytes Maximum UTF-8 content bytes, excluding the null terminator.
-     * @param badgeText Read-only type badge.
-     * @param badgeBg Badge background color.
-     * @param badgeFg Badge foreground color.
+     * @param badge Type badge text and semantic colors.
      * @param fonts Editor typography handles.
      * @param error Whether to render the title field in its validation-error state.
      * @return Per-frame text interaction state.
      */
-    [[nodiscard]] TextEditResult DrawEditableObjTitle(const char *id, std::string &value, size_t maximumBytes, const char *badgeText,
-                                                      ImVec4 badgeBg, ImVec4 badgeFg, const Theme::Fonts &fonts, bool error = false);
+    [[nodiscard]] TextEditResult DrawEditableObjTitle(const char *id, std::string &value, size_t maximumBytes,
+                                                      const EditableObjectTitleBadge &badge, const Theme::Fonts &fonts, bool error = false);
 
     bool DrawPropSection(const char *label, const Theme::Fonts &fonts, bool removable = false);
     void DrawPropRow(const char *label, const char *value, const Theme::Fonts &fonts);
@@ -689,9 +701,6 @@ namespace Horo::Editor::Ui {
     /** @brief Ends a nested context-menu category opened by @ref BeginContextSubmenu. */
     void EndContextSubmenu();
 
-    /** @brief Draws one centralized editor icon token into the supplied bounds. */
-    void DrawEditorIcon(ImDrawList *drawList, std::string_view iconToken, ImVec2 position, ImVec2 size, ImU32 color);
-
     /** @brief Draws a shared inset context-menu separator. */
     void ContextMenuSeparator();
 
@@ -704,6 +713,15 @@ namespace Horo::Editor::Ui {
     /** @brief Interaction result for a three-axis Inspector property row. */
     struct Float3PropertyEditResult : PropertyEditResult {
         std::array<bool, 3> changedAxes{}; /**< Axes changed during the current frame. */
+    };
+
+    /** @brief Optional interaction and presentation configuration for a floating-point property. */
+    struct FloatPropertyOptions {
+        float speed{0.05F};
+        float minimum{0.0F};
+        float maximum{0.0F};
+        bool error{false};
+        const char *format{"%.2f"};
     };
 
     /**
@@ -724,16 +742,11 @@ namespace Horo::Editor::Ui {
      * @param id Stable UI identity scoped by the caller.
      * @param value Mutable floating-point draft.
      * @param fonts Editor typography handles.
-     * @param speed Mouse-drag increment.
-     * @param minimum Inclusive drag minimum, or zero with @p maximum zero for no clamp.
-     * @param maximum Inclusive drag maximum, or zero with @p minimum zero for no clamp.
-     * @param error Whether to render the control in its validation-error state.
-     * @param format Display format forwarded to ImGui.
+     * @param options Optional drag behavior, validation state, and display format.
      * @return Per-frame change and interaction-commit state.
      */
     [[nodiscard]] PropertyEditResult DrawFloatPropRow(const char *label, const char *id, float &value, const Theme::Fonts &fonts,
-                                                      float speed = 0.05F, float minimum = 0.0F, float maximum = 0.0F, bool error = false,
-                                                      const char *format = "%.2f");
+                                                      FloatPropertyOptions options = {});
 
     /**
      * @brief Draws a shared Inspector row for editing an RGB color.

@@ -99,44 +99,82 @@ namespace Horo::Editor {
     void ProjectGameplayRegistry::DiscoverNativeModule(const std::filesystem::path &projectRoot) {
         const std::filesystem::path nativeManifestPath = projectRoot / ".horo" / "local" / "gameplay_module.json";
         nativeManifestPath_ = nativeManifestPath;
-        std::error_code nativeFilesystemError;
-        const bool nativeManifestExists = std::filesystem::exists(nativeManifestPath, nativeFilesystemError);
-        if (!nativeFilesystemError && nativeManifestExists)
-            nativeManifestWriteTime_ = std::filesystem::last_write_time(nativeManifestPath, nativeFilesystemError);
-        if (!nativeFilesystemError && nativeManifestExists && std::filesystem::is_regular_file(nativeManifestPath, nativeFilesystemError)) {
-            Result<NativeArtifactManifest> manifest = ReadNativeArtifactManifest(nativeManifestPath);
-            if (manifest.HasError()) {
-                diagnostics_.emplace_back(nativeManifestPath, manifest.ErrorValue());
-            } else if (manifest.Value().buildFingerprint != Gameplay::CurrentGameplayBuildFingerprint()) {
-                diagnostics_.emplace_back(nativeManifestPath, ManifestError("the artifact was built for a different Horo SDK generation."));
-            } else {
-                Gameplay::GameModuleHost host;
-                Result<std::unique_ptr<Gameplay::LoadedGameModule>> loaded =
-                    host.LoadShadowCopy(manifest.Value().artifactPath, projectRoot / ".horo" / "local" / "gameplay_module_shadow",
-                                        Gameplay::CurrentGameplayBuildFingerprint());
-                if (loaded.HasError()) {
-                    diagnostics_.emplace_back(manifest.Value().artifactPath, loaded.ErrorValue());
-                } else if (loaded.Value()->ModuleId() != manifest.Value().moduleId ||
-                           loaded.Value()->DescriptorRevision() != manifest.Value().descriptorRevision) {
-                    diagnostics_.emplace_back(nativeManifestPath,
-                                              ManifestError("module identity or descriptor revision does not match the artifact."));
-                } else {
-                    nativeModule_ = std::move(loaded).Value();
-                    for (const Gameplay::BehaviorRegistration &registration : nativeModule_->Registry().Registrations()) {
-                        if (Result<void> registered = registry_.Register(registration); registered.HasError()) {
-                            diagnostics_.emplace_back(manifest.Value().artifactPath, registered.ErrorValue());
-                            break;
-                        }
-                    }
-                }
-            }
-        } else if (!nativeFilesystemError && nativeManifestExists) {
-            diagnostics_.emplace_back(nativeManifestPath, ManifestError("manifest path is not a regular file."));
-        } else if (!nativeFilesystemError && HasNativeGameplaySources(projectRoot)) {
+        if (!PrepareNativeManifestPath(projectRoot, nativeManifestPath))
+            return;
+
+        Result<NativeArtifactManifest> manifest = ReadNativeArtifactManifest(nativeManifestPath);
+        if (manifest.HasError()) {
+            diagnostics_.emplace_back(nativeManifestPath, manifest.ErrorValue());
+            return;
+        }
+        if (manifest.Value().buildFingerprint != Gameplay::CurrentGameplayBuildFingerprint()) {
             diagnostics_.emplace_back(nativeManifestPath,
-                                      ManifestError("native gameplay sources exist, but no successful module build has been published."));
-        } else if (nativeFilesystemError) {
-            diagnostics_.emplace_back(nativeManifestPath, ManifestError(nativeFilesystemError.message()));
+                                      ManifestError("the artifact was built for a different Horo SDK generation."));
+            return;
+        }
+        LoadNativeModule(projectRoot, nativeManifestPath, manifest.Value().artifactPath, manifest.Value().moduleId,
+                         manifest.Value().descriptorRevision);
+    }
+
+    bool ProjectGameplayRegistry::PrepareNativeManifestPath(const std::filesystem::path &projectRoot,
+                                                            const std::filesystem::path &manifestPath) {
+        std::error_code nativeFilesystemError;
+        const bool nativeManifestExists = std::filesystem::exists(manifestPath, nativeFilesystemError);
+        if (nativeFilesystemError) {
+            diagnostics_.emplace_back(manifestPath, ManifestError(nativeFilesystemError.message()));
+            return false;
+        }
+        if (!nativeManifestExists) {
+            if (HasNativeGameplaySources(projectRoot))
+                diagnostics_.emplace_back(manifestPath,
+                                          ManifestError(
+                                              "native gameplay sources exist, but no successful module build has been published."));
+            return false;
+        }
+
+        nativeManifestWriteTime_ = std::filesystem::last_write_time(manifestPath, nativeFilesystemError);
+        if (nativeFilesystemError) {
+            diagnostics_.emplace_back(manifestPath, ManifestError(nativeFilesystemError.message()));
+            return false;
+        }
+        const bool regularManifest = std::filesystem::is_regular_file(manifestPath, nativeFilesystemError);
+        if (nativeFilesystemError) {
+            diagnostics_.emplace_back(manifestPath, ManifestError(nativeFilesystemError.message()));
+            return false;
+        }
+        if (!regularManifest) {
+            diagnostics_.emplace_back(manifestPath, ManifestError("manifest path is not a regular file."));
+            return false;
+        }
+        return true;
+    }
+
+    void ProjectGameplayRegistry::LoadNativeModule(const std::filesystem::path &projectRoot,
+                                                   const std::filesystem::path &manifestPath,
+                                                   const std::filesystem::path &artifactPath,
+                                                   const std::string_view moduleId,
+                                                   const std::uint64_t descriptorRevision) {
+        Gameplay::GameModuleHost host;
+        Result<std::unique_ptr<Gameplay::LoadedGameModule> > loaded =
+                host.LoadShadowCopy(artifactPath, projectRoot / ".horo" / "local" / "gameplay_module_shadow",
+                                    Gameplay::CurrentGameplayBuildFingerprint());
+        if (loaded.HasError()) {
+            diagnostics_.emplace_back(artifactPath, loaded.ErrorValue());
+            return;
+        }
+        if (loaded.Value()->ModuleId() != moduleId || loaded.Value()->DescriptorRevision() != descriptorRevision) {
+            diagnostics_.emplace_back(manifestPath,
+                                      ManifestError(
+                                          "module identity or descriptor revision does not match the artifact."));
+            return;
+        }
+
+        nativeModule_ = std::move(loaded).Value();
+        for (const Gameplay::BehaviorRegistration &registration: nativeModule_->Registry().Registrations()) {
+            if (Result<void> registered = registry_.Register(registration); registered.HasError()) {
+                diagnostics_.emplace_back(artifactPath, registered.ErrorValue());
+                return;
+            }
         }
     }
 

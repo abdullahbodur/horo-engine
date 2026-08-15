@@ -201,8 +201,8 @@ namespace Horo::Editor {
         const float controlsX = stackedToolbar ? barMin.x + ToolbarPadX() : barMax.x - ToolbarPadX() - controlsWidth;
 
         ImGui::SetCursorScreenPos({controlsX, barMin.y + ToolbarPadY() + (stackedToolbar ? ToolbarHeight() + ControlGap() : 0.0F)});
-        if (Ui::InputTextControl("##ConsoleSearch", m_search.data(), m_search.size(), context.theme.fonts, false, resolvedSearchWidth,
-                                 hint.c_str())) {
+        if (Ui::InputTextControl("##ConsoleSearch", m_search.data(), m_search.size(), context.theme.fonts,
+                                 Ui::InputTextOptions{.width = resolvedSearchWidth, .hint = hint.c_str()})) {
             m_filterDirty = true;
         }
 

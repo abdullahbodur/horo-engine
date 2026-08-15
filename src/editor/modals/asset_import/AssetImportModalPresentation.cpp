@@ -869,7 +869,9 @@ namespace Horo::Editor {
                     std::string targetFolder = "assets";
                     if (selItem && !selItem->destinationFolder.empty())
                         targetFolder = selItem->destinationFolder;
-                    if (Ui::InputTextControl("##TargetFolder", targetFolder, 256, fonts, false, targetInputWidth) && selItem)
+                    if (Ui::InputTextControl("##TargetFolder", targetFolder, 256, fonts,
+                                             Ui::InputTextOptions{.width = targetInputWidth}) &&
+                        selItem)
                         selItem->destinationFolder = std::move(targetFolder);
                     ImGui::SameLine(0.0f, browseGap);
                     if (IconButton({
@@ -985,8 +987,9 @@ namespace Horo::Editor {
                     presetIndex = static_cast<int>(std::distance(presetNames.begin(), active));
             }
             ImGui::SetNextItemWidth(presetW);
-            if (Ui::ComboControl("##ImportPreset", &presetIndex, presetLabels.data(), static_cast<int>(presetLabels.size()), fonts, false,
-                                 actionH) &&
+            if (Ui::ComboControl("##ImportPreset", &presetIndex, presetLabels.data(),
+                                 static_cast<int>(presetLabels.size()), fonts,
+                                 Ui::ComboControlOptions{.height = actionH}) &&
                 hasSelected) {
                 static_cast<void>(modal.ApplyPreset(snap.selectedItemIndex, presetNames[presetIndex]));
             }
@@ -1009,7 +1012,9 @@ namespace Horo::Editor {
             if (ImGui::BeginPopupModal("Create Import Preset", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
                 FieldLabel("PRESET NAME", fonts);
                 static_cast<void>(Ui::InputTextControl("##NewImportPresetName", presetNameBuffer, sizeof(presetNameBuffer), fonts,
-                                                       presetNameError, 280.0f));
+                                                       Ui::InputTextOptions{
+                                                           .error = presetNameError, .width = 280.0F
+                                                       }));
                 ImGui::Dummy({0.0f, 10.0f});
 
                 ButtonProps dismissPresetProps{

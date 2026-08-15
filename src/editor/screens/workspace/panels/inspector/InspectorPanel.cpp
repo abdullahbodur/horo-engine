@@ -276,7 +276,8 @@ namespace Horo::Editor {
                     } else if (auto value = std::get_if<std::int64_t>(&field.value)) {
                         float draft = static_cast<float>(*value);
                         const Ui::PropertyEditResult edit =
-                            Ui::DrawFloatPropRow(field.name.c_str(), "value", draft, context.theme.fonts, 1.0F);
+                                Ui::DrawFloatPropRow(field.name.c_str(), "value", draft, context.theme.fonts,
+                                                     Ui::FloatPropertyOptions{.speed = 1.0F});
                         if (edit.committed) {
                             *value = static_cast<std::int64_t>(draft);
                             committed = true;
@@ -322,8 +323,10 @@ namespace Horo::Editor {
         constexpr auto badgeBackground = ImVec4(95.0F / 255.0F, 184.0F / 255.0F, 138.0F / 255.0F, 0.15F);
         const std::string &objectKind = context.localization.Get("editor", KindLocalizationKey(object.kind));
         const bool nameWasValid = IsValidSceneObjectName(draft.name);
-        const Ui::TextEditResult edit = Ui::DrawEditableObjTitle("object_name", draft.name, MaximumSceneObjectNameBytes, objectKind.c_str(),
-                                                                 badgeBackground, Theme::Ok(), context.theme.fonts, !nameWasValid);
+        const Ui::TextEditResult edit = Ui::DrawEditableObjTitle(
+            "object_name", draft.name, MaximumSceneObjectNameBytes,
+            Ui::EditableObjectTitleBadge{objectKind.c_str(), badgeBackground, Theme::Ok()}, context.theme.fonts,
+            !nameWasValid);
 
         if (edit.active && !m_nameInputContext.IsActive() && m_inputRouter != nullptr) {
             m_nameInputContext = m_inputRouter->PushContext(Input::InputContextId{"editor.inspector.object_name"},
@@ -388,8 +391,10 @@ namespace Horo::Editor {
             const bool fieldOfViewValid = IsValidFieldOfViewDegrees(draft.cameraFieldOfViewDegrees);
             const Ui::PropertyEditResult fieldOfView =
                 Ui::DrawFloatPropRow(context.localization.Get("editor", "workspace.inspector.camera_field_of_view").c_str(),
-                                     "camera_field_of_view", draft.cameraFieldOfViewDegrees, context.theme.fonts, 0.25F, 0.0F, 0.0F,
-                                     !fieldOfViewValid, "%.1f°");
+                                     "camera_field_of_view", draft.cameraFieldOfViewDegrees, context.theme.fonts,
+                                     Ui::FloatPropertyOptions{
+                                         .speed = 0.25F, .error = !fieldOfViewValid, .format = "%.1f°"
+                                     });
             if (fieldOfView.changed) {
                 draft.camera->verticalFieldOfViewRadians = draft.cameraFieldOfViewDegrees * DegreesToRadians;
             }
@@ -398,8 +403,9 @@ namespace Horo::Editor {
             const bool orthographicHeightValid = std::isfinite(draft.camera->orthographicHeight) && draft.camera->orthographicHeight > 0.0F;
             const Ui::PropertyEditResult orthographicHeight =
                 Ui::DrawFloatPropRow(context.localization.Get("editor", "workspace.inspector.camera_orthographic_height").c_str(),
-                                     "camera_orthographic_height", draft.camera->orthographicHeight, context.theme.fonts, 0.05F, 0.0F, 0.0F,
-                                     !orthographicHeightValid);
+                                     "camera_orthographic_height", draft.camera->orthographicHeight,
+                                     context.theme.fonts,
+                                     Ui::FloatPropertyOptions{.speed = 0.05F, .error = !orthographicHeightValid});
             committed = committed || orthographicHeight.committed;
         }
 
@@ -407,13 +413,15 @@ namespace Horo::Editor {
                                     std::isfinite(draft.camera->farPlane) && draft.camera->farPlane > draft.camera->nearPlane;
         const Ui::PropertyEditResult nearPlane =
             Ui::DrawFloatPropRow(context.localization.Get("editor", "workspace.inspector.camera_near_plane").c_str(), "camera_near_plane",
-                                 draft.camera->nearPlane, context.theme.fonts, 0.01F, 0.0F, 0.0F, !nearPlaneValid);
+                                 draft.camera->nearPlane, context.theme.fonts,
+                                 Ui::FloatPropertyOptions{.speed = 0.01F, .error = !nearPlaneValid});
         committed = committed || nearPlane.committed;
 
         const bool farPlaneValid = std::isfinite(draft.camera->farPlane) && draft.camera->farPlane > draft.camera->nearPlane;
         const Ui::PropertyEditResult farPlane =
             Ui::DrawFloatPropRow(context.localization.Get("editor", "workspace.inspector.camera_far_plane").c_str(), "camera_far_plane",
-                                 draft.camera->farPlane, context.theme.fonts, 1.0F, 0.0F, 0.0F, !farPlaneValid);
+                                 draft.camera->farPlane, context.theme.fonts,
+                                 Ui::FloatPropertyOptions{.speed = 1.0F, .error = !farPlaneValid});
         committed = committed || farPlane.committed;
         return {.committed = committed, .removeRequested = removeRequested};
     }
@@ -450,7 +458,8 @@ namespace Horo::Editor {
         const bool intensityValid = std::isfinite(draft.light->intensity) && draft.light->intensity >= 0.0F;
         const Ui::PropertyEditResult intensity =
             Ui::DrawFloatPropRow(context.localization.Get("editor", "workspace.inspector.light_intensity").c_str(), "light_intensity",
-                                 draft.light->intensity, context.theme.fonts, 0.05F, 0.0F, 0.0F, !intensityValid);
+                                 draft.light->intensity, context.theme.fonts,
+                                 Ui::FloatPropertyOptions{.speed = 0.05F, .error = !intensityValid});
 
         bool changed = kindChanged || colorEdit.changed || intensity.changed;
         bool committed = kindChanged || colorEdit.committed || intensity.committed;
@@ -458,7 +467,8 @@ namespace Horo::Editor {
             const bool rangeValid = std::isfinite(draft.light->range) && draft.light->range >= 0.0F;
             const Ui::PropertyEditResult range =
                 Ui::DrawFloatPropRow(context.localization.Get("editor", "workspace.inspector.light_range").c_str(), "light_range",
-                                     draft.light->range, context.theme.fonts, 0.1F, 0.0F, 0.0F, !rangeValid);
+                                     draft.light->range, context.theme.fonts,
+                                     Ui::FloatPropertyOptions{.speed = 0.1F, .error = !rangeValid});
             changed = changed || range.changed;
             committed = committed || range.committed;
         }
@@ -469,7 +479,8 @@ namespace Horo::Editor {
                                     draft.lightOuterConeDegrees >= draft.lightInnerConeDegrees;
             const Ui::PropertyEditResult inner =
                 Ui::DrawFloatPropRow(context.localization.Get("editor", "workspace.inspector.light_inner_cone").c_str(), "light_inner_cone",
-                                     draft.lightInnerConeDegrees, context.theme.fonts, 0.25F, 0.0F, 0.0F, !innerValid, "%.1f°");
+                                     draft.lightInnerConeDegrees, context.theme.fonts,
+                                     Ui::FloatPropertyOptions{.speed = 0.25F, .error = !innerValid, .format = "%.1f°"});
             if (inner.changed)
                 draft.light->innerConeRadians = draft.lightInnerConeDegrees * DegreesToRadians;
 
@@ -477,7 +488,8 @@ namespace Horo::Editor {
                 std::isfinite(draft.lightOuterConeDegrees) && draft.lightOuterConeDegrees >= draft.lightInnerConeDegrees;
             const Ui::PropertyEditResult outer =
                 Ui::DrawFloatPropRow(context.localization.Get("editor", "workspace.inspector.light_outer_cone").c_str(), "light_outer_cone",
-                                     draft.lightOuterConeDegrees, context.theme.fonts, 0.25F, 0.0F, 0.0F, !outerValid, "%.1f°");
+                                     draft.lightOuterConeDegrees, context.theme.fonts,
+                                     Ui::FloatPropertyOptions{.speed = 0.25F, .error = !outerValid, .format = "%.1f°"});
             if (outer.changed)
                 draft.light->outerConeRadians = draft.lightOuterConeDegrees * DegreesToRadians;
             changed = changed || inner.changed || outer.changed;
@@ -566,7 +578,8 @@ namespace Horo::Editor {
         const bool gainValid = std::isfinite(draft.audioSource->gain) && draft.audioSource->gain >= 0.0F;
         const Ui::PropertyEditResult gainEdit =
             Ui::DrawFloatPropRow(context.localization.Get("editor", "workspace.inspector.audio_source_gain").c_str(), "audio_source_gain",
-                                 draft.audioSource->gain, context.theme.fonts, 0.01F, 0.0F, 0.0F, !gainValid);
+                                 draft.audioSource->gain, context.theme.fonts,
+                                 Ui::FloatPropertyOptions{.speed = 0.01F, .error = !gainValid});
 
         bool spatialValue = draft.audioSource->spatial;
         const std::array<const char *, 2> spatialEntries{

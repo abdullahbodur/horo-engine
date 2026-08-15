@@ -1,5 +1,6 @@
 #include "LightMarkerLayer.h"
 
+#include "Horo/Editor/EditorIcons.h"
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/EditorUiComponents.h"
 #include "editor/renderer/EditorViewportScene.h"
@@ -23,16 +24,16 @@ namespace Horo::Editor {
             };
         }
 
-        [[nodiscard]] const char *IconToken(const Render::RenderLightKind kind) noexcept {
+        [[nodiscard]] Ui::UiIcon IconFor(const Render::RenderLightKind kind) noexcept {
             switch (kind) {
                 case Render::RenderLightKind::Directional:
-                    return "primitive.light_directional";
+                    return Ui::UiIcon::DirectionalLight;
                 case Render::RenderLightKind::Point:
-                    return "primitive.light_point";
+                    return Ui::UiIcon::PointLight;
                 case Render::RenderLightKind::Spot:
-                    return "primitive.light_spot";
+                    return Ui::UiIcon::SpotLight;
             }
-            return "primitive.light_point";
+            return Ui::UiIcon::PointLight;
         }
 
         [[nodiscard]] float DistanceSquared(const ImVec2 left, const ImVec2 right) noexcept {
@@ -65,7 +66,8 @@ namespace Horo::Editor {
             const ImU32 border = Theme::U32(selected ? Theme::Accent() : Theme::BorderStrong());
             drawList.AddCircleFilled(center, 13.0F, background, 24);
             drawList.AddCircle(center, 13.0F, border, 24, selected ? 2.0F : 1.2F);
-            Ui::DrawEditorIcon(&drawList, IconToken(presentation.light.kind), {center.x - markerSize * 0.5F, center.y - markerSize * 0.5F},
+            Ui::DrawEditorIcon(&drawList, IconFor(presentation.light.kind),
+                               {center.x - markerSize * 0.5F, center.y - markerSize * 0.5F},
                                {markerSize, markerSize}, Theme::U32(Theme::Text()));
 
             if (acceptInput && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
