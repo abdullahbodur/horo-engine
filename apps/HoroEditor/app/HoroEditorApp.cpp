@@ -1,8 +1,8 @@
 #include "HoroEditorApp.h"
 
+#include "Horo/Application/GameplayBuildService.h"
 #include "Horo/Application/HostObservability.h"
 #include "Horo/Application/ProjectCompatibility.h"
-#include "Horo/Application/GameplayBuildService.h"
 #include "Horo/Assets/AssetRegistry.h"
 #include "Horo/Editor/DefaultScreenFactories.h"
 #include "Horo/Editor/DefaultWorkspacePanels.h"
@@ -108,14 +108,14 @@ namespace Horo::Editor {
             Result<std::string> Install() override {
                 Assets::AssetRegistry validationRegistry;
                 Assets::AssetRegistryCandidate diskCandidate = candidate_;
-                const Assets::AssetRegistryBuildReport validated = validationRegistry.Publish(std::move(diskCandidate));
-                if (validated.status == Assets::AssetRegistryBuildStatus::Failed)
+                if (const Assets::AssetRegistryBuildReport validated = validationRegistry.Publish(std::move(diskCandidate));
+                    validated.status == Assets::AssetRegistryBuildStatus::Failed)
                     return Result<std::string>::Failure(
                         MakeError(ProjectOpenErrors::DerivedStateFailed, "Asset registry candidate was rejected."));
-                const auto saved =
-                    Assets::AssetIndexStore::SaveAtomically(projectRoot_ / std::filesystem::path{ProjectLayout::AssetIndexPath},
-                                                            validationRegistry.Snapshot());
-                if (saved.HasError())
+                if (const auto saved =
+                        Assets::AssetIndexStore::SaveAtomically(projectRoot_ / std::filesystem::path{ProjectLayout::AssetIndexPath},
+                                                                validationRegistry.Snapshot());
+                    saved.HasError())
                     return Result<std::string>::Failure(saved.ErrorValue());
                 const Assets::AssetRegistryBuildReport report = registry_.Publish(std::move(candidate_));
                 if (report.status == Assets::AssetRegistryBuildStatus::Failed)
@@ -254,13 +254,13 @@ namespace Horo::Editor {
 
             // Material Symbols icon font — only the codepoints we need for editor UI icons.
             // Covers: error(U+E000), warning(U+E002), check_circle(U+E86C), circle(U+EF4A)
-            static const ImWchar iconRanges[] = {0xE000, 0xE003, 0xE86C, 0xE86D, 0xEF4A, 0xEF4B, 0};
+            static constexpr std::array<ImWchar, 7> iconRanges{0xE000, 0xE003, 0xE86C, 0xE86D, 0xEF4A, 0xEF4B, 0};
             ImFontConfig iconCfg{};
             iconCfg.OversampleH = 3;
             iconCfg.OversampleV = 2;
             iconCfg.RasterizerDensity = rasterizerDensity;
             f.icon = io.Fonts->AddFontFromFileTTF(AssetPath("fonts/MaterialSymbolsOutlined.ttf").c_str(), Theme::FontPx::Icon, &iconCfg,
-                                                  iconRanges);
+                                                  iconRanges.data());
             if (f.sans)
                 io.FontDefault = f.sans;
             return f;
@@ -305,23 +305,46 @@ namespace Horo::Editor {
             textures.logo = 0;
         }
 
+        [[nodiscard]] std::optional<std::string> ReadEnvironmentVariable(const char *name) {
+#if defined(_WIN32)
+            char *value = nullptr;
+            if (std::size_t size = 0; _dupenv_s(&value, &size, name) != 0 || value == nullptr)
+                return std::nullopt;
+            const std::unique_ptr<char, decltype(&std::free)> ownedValue{value, &std::free};
+            return std::string{ownedValue.get()};
+#else
+            if (const char *value = std::getenv(name); value != nullptr)
+                return std::string{value};
+            return std::nullopt;
+#endif
+        }
+
+        [[nodiscard]] std::string CurrentSystemErrorMessage() {
+#if defined(_WIN32)
+            if (std::array<char, 256> buffer{}; strerror_s(buffer.data(), buffer.size(), errno) == 0)
+                return buffer.data();
+            return "unknown system error";
+#else
+            return std::strerror(errno);
+#endif
+        }
+
         /** @brief Composes the editor's single local runtime and optional approved OTLP sink. */
         [[nodiscard]] std::unique_ptr<Application::HostObservabilitySession> InitializeEditorObservability() {
-            Application::HostObservabilityConfiguration hostConfiguration{
-                .logging = {.logDirectory = "~/.horo/logs",
-                            .baseName = "horo-editor",
-                            .hostName = "HoroEditor",
-                            .hostVersion = HORO_ENGINE_VERSION_STRING},
-                .identity = {.processRole = "editor",
-                             .engineVersion = HORO_ENGINE_VERSION_STRING,
-                             .buildConfiguration = HORO_BUILD_CONFIGURATION,
-                             .sourceRevision = HORO_SOURCE_REVISION}};
+            Application::HostObservabilityConfiguration hostConfiguration{.logging = {.logDirectory = "~/.horo/logs",
+                                                                                      .baseName = "horo-editor",
+                                                                                      .hostName = "HoroEditor",
+                                                                                      .hostVersion = HORO_ENGINE_VERSION_STRING},
+                                                                          .identity = {.processRole = "editor",
+                                                                                       .engineVersion = HORO_ENGINE_VERSION_STRING,
+                                                                                       .buildConfiguration = HORO_BUILD_CONFIGURATION,
+                                                                                       .sourceRevision = HORO_SOURCE_REVISION}};
 #if defined(HORO_HAS_OPENTELEMETRY)
-            const char *endpoint = std::getenv("HORO_OTEL_ENDPOINT");
-            const char *approval = std::getenv("HORO_OTEL_EXPORT_APPROVED");
-            if (endpoint != nullptr && approval != nullptr && std::string_view{approval} == "1") {
+            const std::optional<std::string> endpoint = ReadEnvironmentVariable("HORO_OTEL_ENDPOINT");
+            if (const std::optional<std::string> approval = ReadEnvironmentVariable("HORO_OTEL_EXPORT_APPROVED");
+                endpoint.has_value() && approval == "1") {
                 Telemetry::OpenTelemetryConfiguration exporterConfiguration;
-                exporterConfiguration.endpoint = endpoint;
+                exporterConfiguration.endpoint = *endpoint;
                 exporterConfiguration.serviceName = "horo-editor";
                 exporterConfiguration.exportApproved = true;
                 if (auto exporter = Telemetry::OpenTelemetrySink::Create(exporterConfiguration); exporter != nullptr)
@@ -362,23 +385,38 @@ namespace Horo::Editor {
 
     [[nodiscard]] static EditorGuiOptions ParseOptions(const std::span<char *> args) noexcept {
         EditorGuiOptions opts;
-        for (std::size_t i = 1; i < args.size(); ++i) {
-            std::string_view a{args[i]};
+        std::optional<std::string_view> pendingValue;
+        for (const char *rawArgument : args.subspan(std::min<std::size_t>(1, args.size()))) {
+            const std::string_view a{rawArgument};
+            if (pendingValue == "renderer") {
+                opts.rendererBackend = a;
+                pendingValue.reset();
+                continue;
+            }
+            if (pendingValue == "project") {
+                opts.projectRoot = a;
+                pendingValue.reset();
+                continue;
+            }
+            if (pendingValue == "exit-after-frames") {
+                if (const auto parsed = std::from_chars(a.data(), a.data() + a.size(), opts.exitAfterFrames);
+                    parsed.ec != std::errc{} || parsed.ptr != a.data() + a.size())
+                    opts.exitAfterFrames = 0;
+                pendingValue.reset();
+                continue;
+            }
             if (a == "--text-preview")
                 opts.textPreview = true;
             else if (a == "--exit-after-first-frame")
                 opts.exitAfterFirstFrame = true;
-            else if (a == "--exit-after-frames" && i + 1 < args.size()) {
-                const std::string_view value{args[++i]};
-                const auto parsed = std::from_chars(value.data(), value.data() + value.size(), opts.exitAfterFrames);
-                if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size())
-                    opts.exitAfterFrames = 0;
-            } else if (a.starts_with("--renderer="))
+            else if (a == "--exit-after-frames")
+                pendingValue = "exit-after-frames";
+            else if (a.starts_with("--renderer="))
                 opts.rendererBackend = std::string{a.substr(std::string_view{"--renderer="}.size())};
-            else if (args[i] == std::string_view{"--renderer"} && i + 1 < args.size())
-                opts.rendererBackend = args[++i];
-            else if (args[i] == std::string_view{"--project"} && i + 1 < args.size())
-                opts.projectRoot = args[++i];
+            else if (a == "--renderer")
+                pendingValue = "renderer";
+            else if (a == "--project")
+                pendingValue = "project";
         }
         return opts;
     }
@@ -417,11 +455,11 @@ namespace Horo::Editor {
                                                                                      : RendererAvailabilityState::Available,
                                                           {}});
 #else
-            entries.push_back(RendererBackendAvailability{"metal", "Metal", RendererAvailabilityState::NotInstalled,
-                                                          "Metal renderer component is not installed in this editor build."});
+            entries.emplace_back("metal", "Metal", RendererAvailabilityState::NotInstalled,
+                                 "Metal renderer component is not installed in this editor build.");
 #endif
-            entries.push_back(RendererBackendAvailability{"vulkan", "Vulkan", RendererAvailabilityState::NotInstalled,
-                                                          "Vulkan renderer component is not installed in this editor build."});
+            entries.emplace_back("vulkan", "Vulkan", RendererAvailabilityState::NotInstalled,
+                                 "Vulkan renderer component is not installed in this editor build.");
             return RendererAvailabilitySnapshot{std::move(entries), std::string{activeBackendId}};
         }
 
@@ -430,16 +468,17 @@ namespace Horo::Editor {
             std::vector<char *> nativeArguments;
             nativeArguments.reserve(arguments.size() + 1);
             for (std::string &argument : arguments) {
-                nativeArguments.push_back(argument.data());
+                nativeArguments.emplace_back(argument.data());
             }
-            nativeArguments.push_back(nullptr);
+            nativeArguments.emplace_back(nullptr);
 
 #if defined(_WIN32)
             _execvp(executable, nativeArguments.data());
 #else
             execvp(executable, nativeArguments.data());
 #endif
-            std::fprintf(stderr, "Unable to restart HoroEditor for renderer '%s': %s\n", request.backendId.c_str(), std::strerror(errno));
+            const std::string errorMessage = CurrentSystemErrorMessage();
+            std::fprintf(stderr, "Unable to restart HoroEditor for renderer '%s': %s\n", request.backendId.c_str(), errorMessage.c_str());
             return 1;
         }
 
@@ -589,7 +628,7 @@ namespace Horo::Editor {
 
             if (options.rendererBackend == "opengl") {
 #if defined(HORO_HAS_RENDER_OPENGL)
-                auto &port = static_cast<SdlOpenGLPresentationPort &>(*composition.openGlPresentationPort);
+                const auto &port = static_cast<const SdlOpenGLPresentationPort &>(*composition.openGlPresentationPort);
                 auto guiRenderer = std::make_unique<EditorGuiRendererOpenGL>(window, port.Context());
                 if (const Result<void> initialized = guiRenderer->Initialize(); initialized.HasError()) {
                     return Result<EditorRenderComposition>::Failure(initialized.ErrorValue());
@@ -630,12 +669,20 @@ namespace Horo::Editor {
             return Result<EditorRenderComposition>::Success(std::move(composition));
         }
 
+        struct EditorPresentationPorts {
+            SDL_Window *window;
+            ImGuiIO &io;
+            Render::RenderFrontend &renderFrontend;
+            IEditorGuiRenderer &guiRenderer;
+            IEditorViewportRenderer &viewportRenderer;
+            Render::RenderTargetHandle viewportTarget;
+        };
+
         struct RunEditorMainLoopParams {
             bool exitAfterFirstFrame;
             std::uint64_t exitAfterFrames;
             EditorTelemetry &telemetry;
-            SDL_Window *window;
-            ImGuiIO &io;
+            EditorPresentationPorts presentation;
             const Fonts &fonts;
             const EditorTextures &textures;
             ProjectCreationService &projectCreationService;
@@ -649,10 +696,6 @@ namespace Horo::Editor {
             EditorModalHost &modalHost;
             Input::SdlInputBackend &inputBackend;
             Input::InputRouter &inputRouter;
-            Render::RenderFrontend &renderFrontend;
-            IEditorGuiRenderer &guiRenderer;
-            IEditorViewportRenderer &viewportRenderer;
-            Render::RenderTargetHandle viewportTarget;
             const Log::IStructuredLogQuery &logQuery;
             BuildOutputStore &buildOutputStore;
             OperationStore &operationStore;
@@ -695,7 +738,7 @@ namespace Horo::Editor {
                     case Runtime::RuntimePhase::RenderGui:
                         if (!frame_.has_value())
                             return Result<void>::Success();
-                        return p_->guiRenderer.RenderDrawData();
+                        return p_->presentation.guiRenderer.RenderDrawData();
                     case Runtime::RuntimePhase::Presentation:
                         return PresentFrame();
                     case Runtime::RuntimePhase::CommitDeferredLifecycleChanges:
@@ -703,8 +746,7 @@ namespace Horo::Editor {
                     case Runtime::RuntimePhase::EndFrame:
                         if (context.frameNumber % 60U == 1U) {
                             p_->telemetry.frameNumber.Set(static_cast<double>(context.frameNumber));
-                            p_->telemetry.frameDuration.Set(
-                                static_cast<double>(context.variableDelta.ToNanoseconds()) / 1'000'000'000.0);
+                            p_->telemetry.frameDuration.Set(static_cast<double>(context.variableDelta.ToNanoseconds()) / 1'000'000'000.0);
                             const Telemetry::Statistics statistics = Telemetry::Runtime::GetStatistics();
                             p_->telemetry.droppedRecords.Set(static_cast<double>(statistics.droppedRecords));
                             p_->telemetry.sinkFailures.Set(static_cast<double>(statistics.sinkFailures));
@@ -752,8 +794,8 @@ namespace Horo::Editor {
                         }
                     }
 
-                    if (event.type == SDL_EVENT_QUIT ||
-                        (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(p_->window))) {
+                    if (event.type == SDL_EVENT_QUIT || (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
+                                                         event.window.windowID == SDL_GetWindowID(p_->presentation.window))) {
                         static_cast<void>(screenHost_->RequestCloseApplication());
                         host_->RequestShutdown();
                     }
@@ -773,14 +815,13 @@ namespace Horo::Editor {
 
                 focusedWidgetInputContext_.Reset();
                 if (renderBegun.Value()) {
-                    const Result<void> guiBegun = p_->guiRenderer.BeginFrame();
-                    if (guiBegun.HasError()) {
+                    if (const Result<void> guiBegun = p_->presentation.guiRenderer.BeginFrame(); guiBegun.HasError()) {
                         frame_.reset();
                         return guiBegun;
                     }
                     ImGui::NewFrame();
 
-                    if (p_->io.WantTextInput) {
+                    if (p_->presentation.io.WantTextInput) {
                         focusedWidgetInputContext_ = p_->inputRouter.PushContext(Input::InputContextId{"editor.focused_widget"},
                                                                                  Input::InputContextKind::FocusedGuiWidget);
                     }
@@ -803,17 +844,18 @@ namespace Horo::Editor {
 
                 passCount_ = 0;
                 const EditorViewportSceneView viewportScene = viewportSceneState_->View();
-                const EditorViewportExtent viewportExtent = p_->viewportRenderer.RequestedExtent();
-                if (viewportExtent.IsValid()) {
-                    const Result<void> resized =
-                        p_->renderFrontend.ResizeOffscreenTarget(p_->viewportTarget, {viewportExtent.width, viewportExtent.height});
-                    if (resized.HasError())
+                if (const EditorViewportExtent viewportExtent = p_->presentation.viewportRenderer.RequestedExtent();
+                    viewportExtent.IsValid()) {
+                    if (const Result<void> resized =
+                            p_->presentation.renderFrontend.ResizeOffscreenTarget(p_->presentation.viewportTarget,
+                                                                                  {viewportExtent.width, viewportExtent.height});
+                        resized.HasError())
                         return resized;
                     passes_[passCount_++] =
                         Render::RenderPassDescriptor{.id = Render::RenderPassId{1},
                                                      .kind = Render::RenderPassKind::Graphics,
                                                      .staticMesh = Render::
-                                                         StaticMeshPassDescriptor{.target = p_->viewportTarget,
+                                                         StaticMeshPassDescriptor{.target = p_->presentation.viewportTarget,
                                                                                   .extent = {viewportExtent.width, viewportExtent.height},
                                                                                   .scene =
                                                                                       Render::RenderSceneView{.camera = ToRenderCamera(
@@ -843,20 +885,19 @@ namespace Horo::Editor {
             Result<bool> BeginRenderFrame(const Runtime::FrameContext &context) {
                 int drawableWidth = 0;
                 int drawableHeight = 0;
-                SDL_GetWindowSizeInPixels(p_->window, &drawableWidth, &drawableHeight);
+                SDL_GetWindowSizeInPixels(p_->presentation.window, &drawableWidth, &drawableHeight);
                 if (drawableWidth <= 0 || drawableHeight <= 0)
                     return Result<bool>::Success(false);
 
                 const Render::FramebufferExtent outputExtent{static_cast<std::uint32_t>(drawableWidth),
                                                              static_cast<std::uint32_t>(drawableHeight)};
                 if (outputExtent.width != committedOutputExtent_.width || outputExtent.height != committedOutputExtent_.height) {
-                    const Result<void> resized = p_->renderFrontend.Resize(outputExtent);
-                    if (resized.HasError())
+                    if (const Result<void> resized = p_->presentation.renderFrontend.Resize(outputExtent); resized.HasError())
                         return Result<bool>::Failure(resized.ErrorValue());
                     committedOutputExtent_ = outputExtent;
                 }
 
-                auto begun = p_->renderFrontend.BeginFrame(
+                auto begun = p_->presentation.renderFrontend.BeginFrame(
                     Render::FrameDescriptor{.frameNumber = context.frameNumber, .outputExtent = outputExtent});
                 if (begun.HasError())
                     return Result<bool>::Failure(begun.ErrorValue());
@@ -902,8 +943,8 @@ namespace Horo::Editor {
             EditorViewportSceneState viewportSceneState;
             NativeDurableFileSystem durableFiles;
             NativeExternalProcessRunner externalProcesses;
-            Application::GameplayBuildService gameplayBuildService{externalProcesses, p.jobSystem, durableFiles,
-                                                                    &p.buildOutputStore, &p.operationStore};
+            Application::GameplayBuildService gameplayBuildService{externalProcesses, p.jobSystem, durableFiles, &p.buildOutputStore,
+                                                                   &p.operationStore};
             Application::GameplayBuildEnvironment gameplayBuildEnvironment{
                 .gameplaySdkPackage = HORO_GAMEPLAY_SDK_PACKAGE_DIR,
                 .cxxCompiler = std::filesystem::path{HORO_GAMEPLAY_CXX_COMPILER},
@@ -954,8 +995,8 @@ namespace Horo::Editor {
                                      (std::uintptr_t)(void *)(intptr_t)p.textures.logo,
                                      extensionInventoryRefresh.HasValue() ? &extensionInventory : nullptr,
                                      extensionInventoryRefresh.HasValue() ? &extensionMarketplace : nullptr};
-            screenHost.Services().Register<IEditorViewportRenderer>(p.viewportRenderer);
-            screenHost.Services().Register<IEditorGuiRenderer>(p.guiRenderer);
+            screenHost.Services().Register<IEditorViewportRenderer>(p.presentation.viewportRenderer);
+            screenHost.Services().Register<IEditorGuiRenderer>(p.presentation.guiRenderer);
             screenHost.Services().Register<EditorViewportSceneState>(viewportSceneState);
             screenHost.Services().Register<Runtime::RuntimeSceneService>(*runtimeSceneService);
             screenHost.Services().Register<Assets::AssetRegistry>(assetRegistry);
@@ -1019,6 +1060,24 @@ namespace Horo::Editor {
         }
     }  // namespace
 
+    [[nodiscard]] static bool ConfigureStartupProject(EditorGuiOptions &options, std::string &projectName) {
+        if (options.projectRoot.empty())
+            return true;
+
+        const Application::ProjectCompatibilitySnapshot compatibility = Application::InspectProjectCompatibility(options.projectRoot);
+        if (const bool mayOpen = compatibility.status == Application::ProjectCompatibilityStatus::Current ||
+                                 compatibility.status == Application::ProjectCompatibilityStatus::CompatibleReleaseLine;
+            !mayOpen || !compatibility.metadata.has_value()) {
+            LOG_CRITICAL("editor.project", "Project startup preflight failed for '%s': %s", options.projectRoot.c_str(),
+                         compatibility.diagnostic.has_value() ? compatibility.diagnostic->message.c_str()
+                                                              : "Project version is not compatible with this editor.");
+            return false;
+        }
+        options.rendererBackend = compatibility.metadata->renderBackend;
+        projectName = compatibility.metadata->name;
+        return true;
+    }
+
     // ── public entry ─────────────────────────────────────────────────────────
 
     /** @copydoc RunEditorGuiApp */
@@ -1047,19 +1106,9 @@ namespace Horo::Editor {
         }
 
         std::string startupProjectName;
-        if (!opts.projectRoot.empty()) {
-            const Application::ProjectCompatibilitySnapshot compatibility = Application::InspectProjectCompatibility(opts.projectRoot);
-            const bool mayOpen = compatibility.status == Application::ProjectCompatibilityStatus::Current ||
-                                 compatibility.status == Application::ProjectCompatibilityStatus::CompatibleReleaseLine;
-            if (!mayOpen || !compatibility.metadata.has_value()) {
-                LOG_CRITICAL("editor.project", "Project startup preflight failed for '%s': %s", opts.projectRoot.c_str(),
-                             compatibility.diagnostic.has_value() ? compatibility.diagnostic->message.c_str()
-                                                                  : "Project version is not compatible with this editor.");
-                Log::Logger::Shutdown();
-                return 1;
-            }
-            opts.rendererBackend = compatibility.metadata->renderBackend;
-            startupProjectName = compatibility.metadata->name;
+        if (!ConfigureStartupProject(opts, startupProjectName)) {
+            Log::Logger::Shutdown();
+            return 1;
         }
 
         const Render::RenderBackendModuleInfo *moduleInfo = ResolveCompiledBackendModuleInfo(opts.rendererBackend);
@@ -1127,12 +1176,11 @@ namespace Horo::Editor {
 
         Input::SdlInputBackend inputBackend;
         Input::InputRouter inputRouter;
-        const Result<void> installedInputActions = inputRouter.SetActionMap(BuildEditorInputActions());
-        if (installedInputActions.HasError())
+        if (const Result<void> installedInputActions = inputRouter.SetActionMap(BuildEditorInputActions());
+            installedInputActions.HasError())
             LOG_CRITICAL("editor.input", "Built-in input action map is invalid: %s", installedInputActions.ErrorValue().message.c_str());
         const std::filesystem::path editorInputProfile = ResolveEditorSettingsHomeDirectory() / ".horo" / "input" / "editor.json";
-        std::error_code inputProfileError;
-        if (std::filesystem::exists(editorInputProfile, inputProfileError) && !inputProfileError) {
+        if (std::error_code inputProfileError; std::filesystem::exists(editorInputProfile, inputProfileError) && !inputProfileError) {
             const Result<Input::InputBindingProfile> loaded = Input::LoadBindingProfile(editorInputProfile);
             if (loaded.HasError())
                 LOG_ERROR("editor.input", "Keeping default input bindings; unable to load '%s': %s", editorInputProfile.string().c_str(),
@@ -1148,8 +1196,8 @@ namespace Horo::Editor {
         RunEditorMainLoopParams loopParams{opts.exitAfterFirstFrame,
                                            opts.exitAfterFrames,
                                            editorTelemetry,
-                                           w,
-                                           io,
+                                           {w, io, *composition.frontend, *composition.guiRenderer, *composition.viewportRenderer,
+                                            composition.viewportTarget},
                                            fonts,
                                            textures,
                                            projectCreationService,
@@ -1163,10 +1211,6 @@ namespace Horo::Editor {
                                            modalHost,
                                            inputBackend,
                                            inputRouter,
-                                           *composition.frontend,
-                                           *composition.guiRenderer,
-                                           *composition.viewportRenderer,
-                                           composition.viewportTarget,
                                            *structuredLogStore,
                                            buildOutputStore,
                                            operationStore};

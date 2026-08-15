@@ -23,9 +23,13 @@ namespace Horo::Editor {
 
     /** @brief Owns discovered project behavior programs and their frozen registry snapshot. */
     class ProjectGameplayRegistry final {
+        struct ConstructionToken {};
+
     public:
         /** @brief Discovers bounded Lua behavior assets below `<project>/assets/scripts`. */
         [[nodiscard]] static std::unique_ptr<ProjectGameplayRegistry> Discover(const std::filesystem::path &projectRoot);
+
+        explicit ProjectGameplayRegistry(ConstructionToken) noexcept {}
 
         ProjectGameplayRegistry(const ProjectGameplayRegistry &) = delete;
         ProjectGameplayRegistry &operator=(const ProjectGameplayRegistry &) = delete;
@@ -53,7 +57,8 @@ namespace Horo::Editor {
 
         [[nodiscard]] static LuaSourceStat ReadLuaSourceStat(const std::filesystem::path &source, std::error_code &error);
 
-        ProjectGameplayRegistry() = default;
+        void DiscoverNativeModule(const std::filesystem::path &projectRoot);
+        void DiscoverLuaPrograms(const std::filesystem::path &projectRoot);
 
         std::unique_ptr<Gameplay::LoadedGameModule> nativeModule_;
         std::vector<std::unique_ptr<Gameplay::LuaBehaviorProgram>> luaPrograms_;

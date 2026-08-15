@@ -1,14 +1,12 @@
 #include "Horo/Foundation/Telemetry/OpenTelemetrySink.h"
 
 #include <algorithm>
-#include <array>
 #include <atomic>
-#include <cstdio>
 #include <curl/curl.h>
+#include <format>
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <optional>
-#include <stdexcept>
 #include <thread>
 #include <type_traits>
 #include <utility>
@@ -17,6 +15,10 @@
 namespace Horo::Telemetry {
     namespace {
         using Json = nlohmann::json;
+
+        template <typename... Visitors> struct Overloaded : Visitors... {
+            using Visitors::operator()...;
+        };
 
         class CurlOtlpTransport final : public IOtlpTransport {
         public:
@@ -37,7 +39,18 @@ namespace Horo::Telemetry {
                 CURL *curl = curl_easy_init();
                 if (curl == nullptr)
                     return false;
-                const char *suffix = signal == OtlpSignal::Logs ? "/v1/logs" : signal == OtlpSignal::Metrics ? "/v1/metrics" : "/v1/traces";
+                const char *suffix{};
+                switch (signal) {
+                    case OtlpSignal::Logs:
+                        suffix = "/v1/logs";
+                        break;
+                    case OtlpSignal::Metrics:
+                        suffix = "/v1/metrics";
+                        break;
+                    case OtlpSignal::Traces:
+                        suffix = "/v1/traces";
+                        break;
+                }
                 const std::string url = endpoint_ + suffix;
                 curl_slist *headers = curl_slist_append(nullptr, "Content-Type: application/json");
                 if (headers == nullptr) {
@@ -61,6 +74,7 @@ namespace Horo::Telemetry {
                 curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(jsonPayload.size()));
                 curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, static_cast<long>(timeout.count()));
                 curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+                curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_3);
                 const CURLcode result = curl_easy_perform(curl);
                 long responseCode{};
                 curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
@@ -88,12 +102,16 @@ namespace Horo::Telemetry {
         }
 
         [[nodiscard]] bool IsAllowedEndpoint(const OpenTelemetryConfiguration &configuration) noexcept {
+            constexpr std::string_view kInsecureIpv4Loopback{"http://127.0.0.1"};  // NOSONAR: Explicit opt-in loopback transport.
+            constexpr std::string_view kInsecureLocalhost{"http://localhost"};     // NOSONAR: Explicit opt-in loopback transport.
+            constexpr std::string_view kInsecureIpv6Loopback{"http://[::1]"};      // NOSONAR: Explicit opt-in loopback transport.
             if (configuration.endpoint.starts_with("https://"))
                 return configuration.endpoint.size() > std::string_view{"https://"}.size();
             if (!configuration.allowInsecureLocalhost)
                 return false;
-            return MatchesAuthority(configuration.endpoint, "http://127.0.0.1") ||
-                   MatchesAuthority(configuration.endpoint, "http://localhost") || MatchesAuthority(configuration.endpoint, "http://[::1]");
+            return MatchesAuthority(configuration.endpoint, kInsecureIpv4Loopback) ||
+                   MatchesAuthority(configuration.endpoint, kInsecureLocalhost) ||
+                   MatchesAuthority(configuration.endpoint, kInsecureIpv6Loopback);
         }
 
         [[nodiscard]] bool IsValidConfiguration(const OpenTelemetryConfiguration &configuration) noexcept {
@@ -102,7 +120,6 @@ namespace Horo::Telemetry {
             constexpr std::size_t kMaximumPayloadBytes = 16U * 1024U * 1024U;
             constexpr std::size_t kMaximumHeaders = 32;
             constexpr std::size_t kMaximumHeaderBytes = 8U * 1024U;
-            constexpr std::size_t kMaximumRedactionFragments = 32;
             if (!configuration.exportApproved || configuration.serviceName.empty() || !IsAllowedEndpoint(configuration) ||
                 configuration.endpoint.size() > 2048 || configuration.serviceName.size() > 256 || configuration.maxBatchRecords == 0 ||
                 configuration.maxBatchRecords > kMaximumBatchRecords || configuration.maxBufferedRecords < configuration.maxBatchRecords ||
@@ -110,19 +127,20 @@ namespace Horo::Telemetry {
                 configuration.maxPayloadBytes > kMaximumPayloadBytes || configuration.maxAttempts == 0 || configuration.maxAttempts > 8 ||
                 configuration.requestTimeout <= std::chrono::milliseconds::zero() ||
                 configuration.requestTimeout > std::chrono::seconds{30} || configuration.retryDelay < std::chrono::milliseconds::zero() ||
-                configuration.retryDelay > std::chrono::seconds{1} || configuration.headers.size() > kMaximumHeaders ||
+                configuration.retryDelay > std::chrono::seconds{1} || configuration.headers.size() > kMaximumHeaders)
+                return false;
+            if (constexpr std::size_t kMaximumRedactionFragments = 32;
                 configuration.redactedAttributeKeyFragments.size() > kMaximumRedactionFragments)
                 return false;
-            for (const OtlpHttpHeader &header : configuration.headers) {
-                if (header.name.empty() || HasForbiddenHeaderCharacter(header.name) || HasForbiddenHeaderCharacter(header.value) ||
-                    header.name.find(':') != std::string::npos || header.name.size() + header.value.size() > kMaximumHeaderBytes)
-                    return false;
-            }
-            for (const std::string &fragment : configuration.redactedAttributeKeyFragments) {
-                if (fragment.empty() || fragment.size() > 128)
-                    return false;
-            }
-            return true;
+            const bool headersAreValid = std::ranges::all_of(configuration.headers, [](const OtlpHttpHeader &header) {
+                return !header.name.empty() && !HasForbiddenHeaderCharacter(header.name) && !HasForbiddenHeaderCharacter(header.value) &&
+                       header.name.find(':') == std::string::npos && header.name.size() + header.value.size() <= kMaximumHeaderBytes;
+            });
+            const bool redactionFragmentsAreValid =
+                std::ranges::all_of(configuration.redactedAttributeKeyFragments, [](const std::string_view fragment) {
+                return !fragment.empty() && fragment.size() <= 128;
+            });
+            return headersAreValid && redactionFragmentsAreValid;
         }
 
         template <typename Duration>
@@ -131,13 +149,9 @@ namespace Horo::Telemetry {
         }
 
         [[nodiscard]] std::string HexId(const std::uint64_t value, const bool trace) {
-            std::array<char, 33> text{};
             if (trace)
-                std::snprintf(text.data(), text.size(), "%016llx%016llx", static_cast<unsigned long long>(value),
-                              static_cast<unsigned long long>(value ^ 0x9e3779b97f4a7c15ULL));
-            else
-                std::snprintf(text.data(), text.size(), "%016llx", static_cast<unsigned long long>(value));
-            return text.data();
+                return std::format("{:016x}{:016x}", value, value ^ 0x9e3779b97f4a7c15ULL);
+            return std::format("{:016x}", value);
         }
 
         [[nodiscard]] std::uint64_t HashId(const std::string_view value) noexcept {
@@ -163,8 +177,7 @@ namespace Horo::Telemetry {
         }
 
         [[nodiscard]] Json OtlpValue(const FieldValue &value) {
-            return std::visit([](const auto &typed) -> Json {
-                using Value = std::decay_t<decltype(typed)>;
+            return std::visit([]<typename Value>(const Value &typed) -> Json {
                 if constexpr (std::is_same_v<Value, bool>)
                     return {{"boolValue", typed}};
                 else if constexpr (std::is_same_v<Value, std::string>)
@@ -184,25 +197,23 @@ namespace Horo::Telemetry {
             std::string result{value};
             for (char &character : result) {
                 if (character >= 'A' && character <= 'Z')
-                    character = static_cast<char>(character - 'A' + 'a');
+                    character = character - 'A' + 'a';
             }
             return result;
         }
 
         [[nodiscard]] bool IsSensitiveKey(const std::string_view key, const OpenTelemetryConfiguration &configuration) {
             const std::string normalized = Lowercase(key);
-            for (const std::string &fragment : configuration.redactedAttributeKeyFragments) {
-                if (normalized.find(Lowercase(fragment)) != std::string::npos)
-                    return true;
-            }
-            return false;
+            return std::ranges::any_of(configuration.redactedAttributeKeyFragments, [&](const std::string_view fragment) {
+                return normalized.find(Lowercase(fragment)) != std::string::npos;
+            });
         }
 
         void AppendConfiguredAttribute(Json &attributes, const std::string_view key, Json value,
                                        const OpenTelemetryConfiguration &configuration, std::atomic<std::uint64_t> &redactedAttributes) {
             if (IsSensitiveKey(key, configuration)) {
                 value = {{"stringValue", "[REDACTED]"}};
-                redactedAttributes.fetch_add(1, std::memory_order_relaxed);
+                redactedAttributes.fetch_add(1);
             }
             AppendAttribute(attributes, key, std::move(value));
         }
@@ -224,20 +235,21 @@ namespace Horo::Telemetry {
         }
 
         [[nodiscard]] int SeverityNumber(const Log::Level level) noexcept {
+            using enum Log::Level;
             switch (level) {
-                case Log::Level::Trace:
+                case Trace:
                     return 1;
-                case Log::Level::Debug:
+                case Debug:
                     return 5;
-                case Log::Level::Info:
+                case Info:
                     return 9;
-                case Log::Level::Warn:
+                case Warn:
                     return 13;
-                case Log::Level::Error:
+                case Error:
                     return 17;
-                case Log::Level::Critical:
+                case Critical:
                     return 21;
-                case Log::Level::Off:
+                case Off:
                     return 0;
             }
             return 0;
@@ -248,41 +260,50 @@ namespace Horo::Telemetry {
         }
     }  // namespace
 
-    struct OpenTelemetrySink::Impl {
+    class OpenTelemetrySink::Impl {
+    public:
+        Impl(OpenTelemetryConfiguration value, std::shared_ptr<IOtlpTransport> selectedTransport)
+            : configuration_(std::move(value)), transport_(std::move(selectedTransport)) {
+            pending_.reserve(configuration_.maxBufferedRecords);
+        }
+
+        void Export(const Record &record, const InstrumentDescriptor *descriptor) {
+            std::lock_guard lock(mutex_);
+            if (pending_.size() >= configuration_.maxBufferedRecords) {
+                droppedRecords_.fetch_add(1);
+                return;
+            }
+            std::optional<InstrumentDescriptor> ownedDescriptor;
+            if (descriptor != nullptr)
+                ownedDescriptor = *descriptor;
+            pending_.push_back({.record = record, .descriptor = std::move(ownedDescriptor)});
+            acceptedRecords_.fetch_add(1);
+            if (pending_.size() >= configuration_.maxBatchRecords && !ExportBatch())
+                throw OpenTelemetryExportError{"OTLP batch export failed"};
+        }
+
+        void Flush() {
+            std::lock_guard lock(mutex_);
+            if (!ExportBatch())
+                throw OpenTelemetryExportError{"OTLP flush failed"};
+        }
+
+        [[nodiscard]] OpenTelemetryStatistics Statistics() const noexcept {
+            return {.acceptedRecords = acceptedRecords_.load(),
+                    .exportedRecords = exportedRecords_.load(),
+                    .droppedRecords = droppedRecords_.load(),
+                    .failedBatches = failedBatches_.load(),
+                    .retryAttempts = retryAttempts_.load(),
+                    .redactedAttributes = redactedAttributes_.load()};
+        }
+
+    private:
         struct Pending {
             Record record;
             std::optional<InstrumentDescriptor> descriptor;
         };
 
-        Impl(OpenTelemetryConfiguration value, std::shared_ptr<IOtlpTransport> selectedTransport)
-            : configuration(std::move(value)), transport(std::move(selectedTransport)) {
-            pending.reserve(configuration.maxBufferedRecords);
-        }
-
-        [[nodiscard]] bool PostPayload(const OtlpSignal signal, const Json &payload, const std::uint64_t recordCount) {
-            const std::string serialized = payload.dump();
-            if (serialized.size() > configuration.maxPayloadBytes) {
-                droppedRecords.fetch_add(recordCount, std::memory_order_relaxed);
-                return false;
-            }
-            for (std::uint32_t attempt = 0; attempt < configuration.maxAttempts; ++attempt) {
-                if (transport->Post(signal, serialized, configuration.requestTimeout)) {
-                    exportedRecords.fetch_add(recordCount, std::memory_order_relaxed);
-                    return true;
-                }
-                if (attempt + 1U < configuration.maxAttempts) {
-                    retryAttempts.fetch_add(1, std::memory_order_relaxed);
-                    if (configuration.retryDelay > std::chrono::milliseconds::zero())
-                        std::this_thread::sleep_for(configuration.retryDelay);
-                }
-            }
-            droppedRecords.fetch_add(recordCount, std::memory_order_relaxed);
-            return false;
-        }
-
-        [[nodiscard]] bool ExportBatch() {
-            if (pending.empty())
-                return true;
+        struct Batch {
             Json logs = Json::array();
             Json metrics = Json::array();
             Json spans = Json::array();
@@ -290,130 +311,232 @@ namespace Horo::Telemetry {
             std::size_t metricCount{};
             std::size_t spanCount{};
             std::size_t unmappedCount{};
-            for (const Pending &item : pending) {
-                Json attributes = CommonAttributes(item.record, configuration, redactedAttributes);
-                if (const auto *log = std::get_if<LogRecord>(&item.record.payload)) {
-                    AppendAttribute(attributes, "log.category", {{"stringValue", log->category}});
-                    AppendFields(attributes, log->fields, configuration, redactedAttributes);
-                    logs.push_back({{"timeUnixNano", TimeUnixNanos(item.record.timestampUtc)},
-                                    {"severityNumber", SeverityNumber(log->severity)},
-                                    {"severityText", Log::ToString(log->severity)},
-                                    {"body", {{"stringValue", log->message}}},
-                                    {"attributes", std::move(attributes)}});
-                    ++logCount;
-                } else if (const auto *event = std::get_if<DiagnosticEvent>(&item.record.payload)) {
-                    AppendAttribute(attributes, "event.name", {{"stringValue", event->name}});
-                    AppendFields(attributes, event->fields, configuration, redactedAttributes);
-                    logs.push_back({{"timeUnixNano", TimeUnixNanos(item.record.timestampUtc)},
-                                    {"severityNumber", SeverityNumber(event->severity)},
-                                    {"severityText", Log::ToString(event->severity)},
-                                    {"body", {{"stringValue", event->message}}},
-                                    {"attributes", std::move(attributes)}});
-                    ++logCount;
-                } else if (const auto *metric = std::get_if<MetricRecord>(&item.record.payload); metric != nullptr && item.descriptor) {
-                    for (std::size_t index = 0; index < metric->dimensionCount && index < item.descriptor->dimensions.size(); ++index) {
-                        const std::uint16_t valueId = metric->dimensionValueIds[index];
-                        if (valueId > 0 && valueId <= item.descriptor->dimensions[index].allowedValues.size())
-                            AppendConfiguredAttribute(attributes, item.descriptor->dimensions[index].key,
-                                                      {{"stringValue", item.descriptor->dimensions[index].allowedValues[valueId - 1U]}},
-                                                      configuration, redactedAttributes);
-                    }
-                    Json point{{"timeUnixNano", TimeUnixNanos(item.record.timestampUtc)},
-                               {"asDouble", metric->value},
-                               {"attributes", std::move(attributes)}};
-                    Json data;
-                    const char *signalKey{};
-                    if (metric->kind == InstrumentKind::Counter)
-                        signalKey = "sum";
-                    else if (metric->kind == InstrumentKind::Gauge)
-                        signalKey = "gauge";
-                    else {
-                        signalKey = "histogram";
-                        point.erase("asDouble");
-                        point["count"] = "1";
-                        point["sum"] = metric->value;
-                    }
-                    const auto existing = std::find_if(metrics.begin(), metrics.end(), [&](const Json &candidate) {
-                        return candidate.value("name", "") == item.descriptor->name && candidate.contains(signalKey);
-                    });
-                    if (existing != metrics.end())
-                        (*existing)[signalKey]["dataPoints"].push_back(std::move(point));
-                    else {
-                        if (metric->kind == InstrumentKind::Counter)
-                            data = {
-                                {signalKey,
-                                 {{"aggregationTemporality", 1}, {"isMonotonic", true}, {"dataPoints", Json::array({std::move(point)})}}}};
-                        else if (metric->kind == InstrumentKind::Gauge)
-                            data = {{signalKey, {{"dataPoints", Json::array({std::move(point)})}}}};
-                        else
-                            data = {{signalKey, {{"aggregationTemporality", 1}, {"dataPoints", Json::array({std::move(point)})}}}};
-                        data["name"] = item.descriptor->name;
-                        data["unit"] = item.descriptor->unit;
-                        metrics.push_back(std::move(data));
-                    }
-                    ++metricCount;
-                } else if (const auto *span = std::get_if<SpanRecord>(&item.record.payload)) {
-                    AppendFields(attributes, span->fields, configuration, redactedAttributes);
-                    const auto started = item.record.timestampUtc - span->duration;
-                    const int statusCode = span->status == SpanStatus::Succeeded ? 1 : span->status == SpanStatus::Unset ? 0 : 2;
-                    spans.push_back({{"traceId", TraceId(item.record, span->operationId)},
-                                     {"spanId", HexId(span->operationId, false)},
-                                     {"parentSpanId", span->parentOperationId == 0 ? std::string{} : HexId(span->parentOperationId, false)},
-                                     {"name", span->name},
-                                     {"kind", 1},
-                                     {"startTimeUnixNano", TimeUnixNanos(started)},
-                                     {"endTimeUnixNano", TimeUnixNanos(item.record.timestampUtc)},
-                                     {"attributes", std::move(attributes)},
-                                     {"status", {{"code", statusCode}}}});
-                    ++spanCount;
-                } else
-                    ++unmappedCount;
+        };
+
+        [[nodiscard]] bool PostPayload(const OtlpSignal signal, const Json &payload, const std::uint64_t recordCount) {
+            const std::string serialized = payload.dump();
+            if (serialized.size() > configuration_.maxPayloadBytes) {
+                droppedRecords_.fetch_add(recordCount);
+                return false;
             }
+            for (std::uint32_t attempt = 0; attempt < configuration_.maxAttempts; ++attempt) {
+                if (transport_->Post(signal, serialized, configuration_.requestTimeout)) {
+                    exportedRecords_.fetch_add(recordCount);
+                    return true;
+                }
+                if (attempt + 1U >= configuration_.maxAttempts)
+                    continue;
+                retryAttempts_.fetch_add(1);
+                if (configuration_.retryDelay > std::chrono::milliseconds::zero())
+                    std::this_thread::sleep_for(configuration_.retryDelay);
+            }
+            droppedRecords_.fetch_add(recordCount);
+            return false;
+        }
+
+        void MapLog(const Pending &item, const LogRecord &log, Json attributes, Batch &batch) {
+            AppendAttribute(attributes, "log.category", {{"stringValue", log.category}});
+            AppendFields(attributes, log.fields, configuration_, redactedAttributes_);
+            batch.logs.push_back({{"timeUnixNano", TimeUnixNanos(item.record.timestampUtc)},
+                                  {"severityNumber", SeverityNumber(log.severity)},
+                                  {"severityText", Log::ToString(log.severity)},
+                                  {"body", {{"stringValue", log.message}}},
+                                  {"attributes", std::move(attributes)}});
+            ++batch.logCount;
+        }
+
+        void MapEvent(const Pending &item, const DiagnosticEvent &event, Json attributes, Batch &batch) {
+            AppendAttribute(attributes, "event.name", {{"stringValue", event.name}});
+            AppendFields(attributes, event.fields, configuration_, redactedAttributes_);
+            batch.logs.push_back({{"timeUnixNano", TimeUnixNanos(item.record.timestampUtc)},
+                                  {"severityNumber", SeverityNumber(event.severity)},
+                                  {"severityText", Log::ToString(event.severity)},
+                                  {"body", {{"stringValue", event.message}}},
+                                  {"attributes", std::move(attributes)}});
+            ++batch.logCount;
+        }
+
+        void AppendMetricDimensions(Json &attributes, const MetricRecord &metric, const InstrumentDescriptor &descriptor) {
+            const std::size_t dimensionCount = std::min<std::size_t>(metric.dimensionCount, descriptor.dimensions.size());
+            for (std::size_t index = 0; index < dimensionCount; ++index) {
+                const std::uint16_t valueId = metric.dimensionValueIds[index];
+                if (valueId == 0 || valueId > descriptor.dimensions[index].allowedValues.size())
+                    continue;
+                AppendConfiguredAttribute(attributes, descriptor.dimensions[index].key,
+                                          {{"stringValue", descriptor.dimensions[index].allowedValues[valueId - 1U]}}, configuration_,
+                                          redactedAttributes_);
+            }
+        }
+
+        [[nodiscard]] static const char *MetricSignalKey(const InstrumentKind kind) noexcept {
+            using enum InstrumentKind;
+            switch (kind) {
+                case Counter:
+                    return "sum";
+                case Gauge:
+                    return "gauge";
+                case Histogram:
+                case Timing:
+                    return "histogram";
+            }
+            return "histogram";
+        }
+
+        [[nodiscard]] static Json NewMetric(const MetricRecord &metric, const InstrumentDescriptor &descriptor, const char *signalKey,
+                                            Json point) {
+            using enum InstrumentKind;
+            Json data;
+            switch (metric.kind) {
+                case Counter:
+                    data = {{signalKey,
+                             {{"aggregationTemporality", 1}, {"isMonotonic", true}, {"dataPoints", Json::array({std::move(point)})}}}};
+                    break;
+                case Gauge:
+                    data = {{signalKey, {{"dataPoints", Json::array({std::move(point)})}}}};
+                    break;
+                case Histogram:
+                case Timing:
+                    data = {{signalKey, {{"aggregationTemporality", 1}, {"dataPoints", Json::array({std::move(point)})}}}};
+                    break;
+            }
+            data["name"] = descriptor.name;
+            data["unit"] = descriptor.unit;
+            return data;
+        }
+
+        void MapMetric(const Pending &item, const MetricRecord &metric, Json attributes, Batch &batch) {
+            using enum InstrumentKind;
+            if (!item.descriptor) {
+                ++batch.unmappedCount;
+                return;
+            }
+            const InstrumentDescriptor &descriptor = *item.descriptor;
+            AppendMetricDimensions(attributes, metric, descriptor);
+            Json point{{"timeUnixNano", TimeUnixNanos(item.record.timestampUtc)},
+                       {"asDouble", metric.value},
+                       {"attributes", std::move(attributes)}};
+            const char *signalKey = MetricSignalKey(metric.kind);
+            if (metric.kind == Histogram || metric.kind == Timing) {
+                point.erase("asDouble");
+                point["count"] = "1";
+                point["sum"] = metric.value;
+            }
+            if (const auto existing = std::ranges::find_if(batch.metrics,
+                                                           [&](const Json &candidate) {
+                return candidate.value("name", "") == descriptor.name && candidate.contains(signalKey);
+            });
+                existing != batch.metrics.end()) {
+                (*existing)[signalKey]["dataPoints"].push_back(std::move(point));
+            } else {
+                batch.metrics.push_back(NewMetric(metric, descriptor, signalKey, std::move(point)));
+            }
+            ++batch.metricCount;
+        }
+
+        void MapSpan(const Pending &item, const SpanRecord &span, Json attributes, Batch &batch) {
+            AppendFields(attributes, span.fields, configuration_, redactedAttributes_);
+            const auto started = item.record.timestampUtc - span.duration;
+            int statusCode = 2;
+            if (span.status == SpanStatus::Succeeded)
+                statusCode = 1;
+            else if (span.status == SpanStatus::Unset)
+                statusCode = 0;
+            std::string parentSpanId;
+            if (span.parentOperationId != 0)
+                parentSpanId = HexId(span.parentOperationId, false);
+            batch.spans.push_back({{"traceId", TraceId(item.record, span.operationId)},
+                                   {"spanId", HexId(span.operationId, false)},
+                                   {"parentSpanId", std::move(parentSpanId)},
+                                   {"name", span.name},
+                                   {"kind", 1},
+                                   {"startTimeUnixNano", TimeUnixNanos(started)},
+                                   {"endTimeUnixNano", TimeUnixNanos(item.record.timestampUtc)},
+                                   {"attributes", std::move(attributes)},
+                                   {"status", {{"code", statusCode}}}});
+            ++batch.spanCount;
+        }
+
+        void MapPending(const Pending &item, Batch &batch) {
+            Json attributes = CommonAttributes(item.record, configuration_, redactedAttributes_);
+            std::visit(Overloaded{[this, &item, &attributes, &batch](const LogRecord &log) {
+                MapLog(item, log, std::move(attributes), batch);
+            },
+                                  [this, &item, &attributes, &batch](const MetricRecord &metric) {
+                MapMetric(item, metric, std::move(attributes), batch);
+            },
+                                  [this, &item, &attributes, &batch](const SpanRecord &span) {
+                MapSpan(item, span, std::move(attributes), batch);
+            },
+                                  [this, &item, &attributes, &batch](const DiagnosticEvent &event) {
+                MapEvent(item, event, std::move(attributes), batch);
+            }},
+                       item.record.payload);
+        }
+
+        [[nodiscard]] bool ExportLogs(Batch &batch) {
+            if (batch.logs.empty())
+                return true;
+            const Json payload{
+                {"resourceLogs",
+                 Json::array({{{"resource", Resource(configuration_.serviceName)},
+                               {"scopeLogs", Json::array({{{"scope", {{"name", "horo"}}}, {"logRecords", std::move(batch.logs)}}})}}})}};
+            return PostPayload(OtlpSignal::Logs, payload, batch.logCount);
+        }
+
+        [[nodiscard]] bool ExportMetrics(Batch &batch) {
+            if (batch.metrics.empty())
+                return true;
+            const Json payload{
+                {"resourceMetrics",
+                 Json::array({{{"resource", Resource(configuration_.serviceName)},
+                               {"scopeMetrics", Json::array({{{"scope", {{"name", "horo"}}}, {"metrics", std::move(batch.metrics)}}})}}})}};
+            return PostPayload(OtlpSignal::Metrics, payload, batch.metricCount);
+        }
+
+        [[nodiscard]] bool ExportSpans(Batch &batch) {
+            if (batch.spans.empty())
+                return true;
+            const Json payload{
+                {"resourceSpans",
+                 Json::array({{{"resource", Resource(configuration_.serviceName)},
+                               {"scopeSpans", Json::array({{{"scope", {{"name", "horo"}}}, {"spans", std::move(batch.spans)}}})}}})}};
+            return PostPayload(OtlpSignal::Traces, payload, batch.spanCount);
+        }
+
+        [[nodiscard]] bool ExportBatch() {
+            if (pending_.empty())
+                return true;
+            Batch batch;
+            for (const Pending &item : pending_)
+                MapPending(item, batch);
 
             bool success = true;
-            if (!logs.empty()) {
-                const Json payload{
-                    {"resourceLogs",
-                     Json::array({{{"resource", Resource(configuration.serviceName)},
-                                   {"scopeLogs", Json::array({{{"scope", {{"name", "horo"}}}, {"logRecords", std::move(logs)}}})}}})}};
-                success = PostPayload(OtlpSignal::Logs, payload, logCount) && success;
-            }
-            if (!metrics.empty()) {
-                const Json payload{
-                    {"resourceMetrics",
-                     Json::array({{{"resource", Resource(configuration.serviceName)},
-                                   {"scopeMetrics", Json::array({{{"scope", {{"name", "horo"}}}, {"metrics", std::move(metrics)}}})}}})}};
-                success = PostPayload(OtlpSignal::Metrics, payload, metricCount) && success;
-            }
-            if (!spans.empty()) {
-                const Json payload{
-                    {"resourceSpans",
-                     Json::array({{{"resource", Resource(configuration.serviceName)},
-                                   {"scopeSpans", Json::array({{{"scope", {{"name", "horo"}}}, {"spans", std::move(spans)}}})}}})}};
-                success = PostPayload(OtlpSignal::Traces, payload, spanCount) && success;
-            }
-            if (unmappedCount != 0) {
-                droppedRecords.fetch_add(unmappedCount, std::memory_order_relaxed);
+            success = ExportLogs(batch) && success;
+            success = ExportMetrics(batch) && success;
+            success = ExportSpans(batch) && success;
+            if (batch.unmappedCount != 0) {
+                droppedRecords_.fetch_add(batch.unmappedCount);
                 success = false;
             }
             if (!success)
-                failedBatches.fetch_add(1, std::memory_order_relaxed);
-            pending.clear();
+                failedBatches_.fetch_add(1);
+            pending_.clear();
             return success;
         }
 
-        OpenTelemetryConfiguration configuration;
-        std::shared_ptr<IOtlpTransport> transport;
-        mutable std::mutex mutex;
-        std::vector<Pending> pending;
-        std::atomic<std::uint64_t> acceptedRecords{};
-        std::atomic<std::uint64_t> exportedRecords{};
-        std::atomic<std::uint64_t> droppedRecords{};
-        std::atomic<std::uint64_t> failedBatches{};
-        std::atomic<std::uint64_t> retryAttempts{};
-        std::atomic<std::uint64_t> redactedAttributes{};
+        OpenTelemetryConfiguration configuration_;
+        std::shared_ptr<IOtlpTransport> transport_;
+        mutable std::mutex mutex_;
+        std::vector<Pending> pending_;
+        std::atomic<std::uint64_t> acceptedRecords_{};
+        std::atomic<std::uint64_t> exportedRecords_{};
+        std::atomic<std::uint64_t> droppedRecords_{};
+        std::atomic<std::uint64_t> failedBatches_{};
+        std::atomic<std::uint64_t> retryAttempts_{};
+        std::atomic<std::uint64_t> redactedAttributes_{};
     };
 
+    /** @copydoc OpenTelemetrySink::Create */
     std::shared_ptr<OpenTelemetrySink> OpenTelemetrySink::Create(const OpenTelemetryConfiguration &configuration) noexcept {
         if (!IsValidConfiguration(configuration))
             return nullptr;
@@ -424,46 +547,38 @@ namespace Horo::Telemetry {
         }
     }
 
+    /** @copydoc OpenTelemetrySink::Create */
     std::shared_ptr<OpenTelemetrySink> OpenTelemetrySink::Create(const OpenTelemetryConfiguration &configuration,
                                                                  std::shared_ptr<IOtlpTransport> transport) noexcept {
         if (!IsValidConfiguration(configuration) || transport == nullptr)
             return nullptr;
         try {
-            return std::shared_ptr<OpenTelemetrySink>{new OpenTelemetrySink{std::make_unique<Impl>(configuration, std::move(transport))}};
+            return std::make_shared<OpenTelemetrySink>(ConstructionKey{}, configuration, std::move(transport));
         } catch (...) {
             return nullptr;
         }
     }
 
-    OpenTelemetrySink::OpenTelemetrySink(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
+    /** @copydoc OpenTelemetrySink::OpenTelemetrySink */
+    OpenTelemetrySink::OpenTelemetrySink(ConstructionKey, OpenTelemetryConfiguration configuration,
+                                         std::shared_ptr<IOtlpTransport> transport)
+        : impl_(std::make_unique<Impl>(std::move(configuration), std::move(transport))) {}
 
+    /** @copydoc OpenTelemetrySink::~OpenTelemetrySink */
     OpenTelemetrySink::~OpenTelemetrySink() = default;
 
+    /** @copydoc OpenTelemetrySink::Export */
     void OpenTelemetrySink::Export(const Record &record, const InstrumentDescriptor *descriptor) {
-        std::lock_guard lock(impl_->mutex);
-        if (impl_->pending.size() >= impl_->configuration.maxBufferedRecords) {
-            impl_->droppedRecords.fetch_add(1, std::memory_order_relaxed);
-            return;
-        }
-        impl_->pending.push_back(
-            {.record = record, .descriptor = descriptor == nullptr ? std::optional<InstrumentDescriptor>{} : std::optional{*descriptor}});
-        impl_->acceptedRecords.fetch_add(1, std::memory_order_relaxed);
-        if (impl_->pending.size() >= impl_->configuration.maxBatchRecords && !impl_->ExportBatch())
-            throw std::runtime_error{"OTLP batch export failed"};
+        impl_->Export(record, descriptor);
     }
 
+    /** @copydoc OpenTelemetrySink::Flush */
     void OpenTelemetrySink::Flush() {
-        std::lock_guard lock(impl_->mutex);
-        if (!impl_->ExportBatch())
-            throw std::runtime_error{"OTLP flush failed"};
+        impl_->Flush();
     }
 
+    /** @copydoc OpenTelemetrySink::Statistics */
     OpenTelemetryStatistics OpenTelemetrySink::Statistics() const noexcept {
-        return {.acceptedRecords = impl_->acceptedRecords.load(std::memory_order_relaxed),
-                .exportedRecords = impl_->exportedRecords.load(std::memory_order_relaxed),
-                .droppedRecords = impl_->droppedRecords.load(std::memory_order_relaxed),
-                .failedBatches = impl_->failedBatches.load(std::memory_order_relaxed),
-                .retryAttempts = impl_->retryAttempts.load(std::memory_order_relaxed),
-                .redactedAttributes = impl_->redactedAttributes.load(std::memory_order_relaxed)};
+        return impl_->Statistics();
     }
 }  // namespace Horo::Telemetry

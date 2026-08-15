@@ -286,9 +286,17 @@ TEST_CASE("OpenTelemetry export requires explicit approval and safe endpoint pol
     REQUIRE(Horo::Telemetry::OpenTelemetrySink::Create(configuration, transport) == nullptr);
 
     configuration.exportApproved = true;
+    REQUIRE(Horo::Telemetry::OpenTelemetrySink::Create(configuration, transport) != nullptr);
+
     configuration.endpoint = "http://collector.example.com:4318";
     REQUIRE(Horo::Telemetry::OpenTelemetrySink::Create(configuration, transport) == nullptr);
 
+    configuration.endpoint = "http://127.0.0.1:4318";
+    REQUIRE(Horo::Telemetry::OpenTelemetrySink::Create(configuration, transport) == nullptr);
+    configuration.allowInsecureLocalhost = true;
+    REQUIRE(Horo::Telemetry::OpenTelemetrySink::Create(configuration, transport) != nullptr);
+
+    configuration.allowInsecureLocalhost = false;
     configuration.endpoint = "https://collector.example.com";
     REQUIRE(Horo::Telemetry::OpenTelemetrySink::Create(configuration, transport) != nullptr);
 
@@ -399,4 +407,24 @@ TEST_CASE("OpenTelemetry retries are bounded and exporter failure remains isolat
     REQUIRE_FALSE(Horo::Telemetry::Runtime::Shutdown());
     REQUIRE(failingSink->Statistics().failedBatches == 1);
     REQUIRE(failingSink->Statistics().droppedRecords == 1);
+}
+
+TEST_CASE("OpenTelemetry reports direct export failures with its dedicated exception type",
+          "[foundation][observability][opentelemetry][failure][exception]") {
+    auto transport = std::make_shared<CapturingTransport>();
+    transport->defaultOutcome = false;
+    Horo::Telemetry::OpenTelemetryConfiguration configuration;
+    configuration.maxBatchRecords = 1;
+    configuration.maxBufferedRecords = 1;
+    configuration.maxAttempts = 1;
+    configuration.exportApproved = true;
+    const auto sink = Horo::Telemetry::OpenTelemetrySink::Create(configuration, transport);
+    REQUIRE(sink != nullptr);
+
+    const Horo::Telemetry::Record record{.timestampUtc = std::chrono::system_clock::now(),
+                                         .subsystem = "foundation.tests",
+                                         .payload = Horo::Telemetry::DiagnosticEvent{.severity = Horo::Log::Level::Error,
+                                                                                     .name = "offline.test",
+                                                                                     .message = "offline"}};
+    REQUIRE_THROWS_AS(sink->Export(record, nullptr), Horo::Telemetry::OpenTelemetryExportError);
 }

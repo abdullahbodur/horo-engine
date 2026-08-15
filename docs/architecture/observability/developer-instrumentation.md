@@ -237,7 +237,7 @@ if (exporter)
 ```
 
 External plaintext HTTP endpoints are rejected. Plaintext localhost is allowed
-for a developer Collector unless `allowInsecureLocalhost` is disabled. Header
+for a developer Collector only when `allowInsecureLocalhost` is explicitly enabled. Header
 injection is rejected, configured sensitive attribute-key fragments are
 redacted before serialization, payload/batch/retry/time limits are bounded, and
 offline delivery remains best effort. Transport calls occur only on the common
