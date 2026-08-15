@@ -4,6 +4,7 @@
 #include "Horo/Runtime/Scene/PrimitiveCatalog.h"
 
 #include <chrono>
+#include <format>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <string>
@@ -124,8 +125,7 @@ namespace Horo::Editor {
         [[nodiscard]] Result<Math::Quaternion> ParseQuaternion(const Json &value);
 
         [[nodiscard]] Json BehaviorFieldValueJson(const Gameplay::BehaviorFieldValue &value) {
-            return std::visit([](const auto &typed) -> Json {
-                using T = std::decay_t<decltype(typed)>;
+            return std::visit([]<typename T>(const T &typed) -> Json {
                 if constexpr (std::is_same_v<T, std::monostate>)
                     return {{"type", "null"}, {"value", nullptr}};
                 else if constexpr (std::is_same_v<T, bool>)
@@ -181,11 +181,9 @@ namespace Horo::Editor {
         template <std::size_t Size> [[nodiscard]] bool IsNumberArray(const Json &value) {
             if (!value.is_array() || value.size() != Size)
                 return false;
-            for (const Json &item : value) {
-                if (!item.is_number())
-                    return false;
-            }
-            return true;
+            return std::ranges::all_of(value, [](const Json &item) {
+                return item.is_number();
+            });
         }
 
         [[nodiscard]] Result<Math::Vec2> ParseVec2(const Json &value) {
@@ -221,8 +219,7 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] Json PrimitiveParametersJson(const PrimitiveMeshDescriptor &descriptor) {
-            return std::visit([](const auto &parameters) -> Json {
-                using Parameters = std::decay_t<decltype(parameters)>;
+            return std::visit([]<typename Parameters>(const Parameters &parameters) {
                 if constexpr (std::is_same_v<Parameters, Runtime::BoxMeshParameters>)
                     return Json{{"size", Vec3Json(parameters.size)}};
                 if constexpr (std::is_same_v<Parameters, Runtime::SphereMeshParameters>)
@@ -334,9 +331,10 @@ namespace Horo::Editor {
                     auto size = ParseVec2(parameters["size"]);
                     if (size.HasError())
                         return Result<PrimitiveMeshDescriptor>::Failure(size.ErrorValue());
-                    descriptor.parameters = *catalog->meshType == Runtime::PrimitiveMeshType::Plane
-                                                ? Runtime::PrimitiveMeshParameters{Runtime::PlaneMeshParameters{size.Value()}}
-                                                : Runtime::PrimitiveMeshParameters{Runtime::QuadMeshParameters{size.Value()}};
+                    if (*catalog->meshType == Runtime::PrimitiveMeshType::Plane)
+                        descriptor.parameters = Runtime::PlaneMeshParameters{size.Value()};
+                    else
+                        descriptor.parameters = Runtime::QuadMeshParameters{size.Value()};
                     break;
                 }
             }
@@ -357,9 +355,12 @@ namespace Horo::Editor {
             }
             if (components.light.has_value()) {
                 const Runtime::LightComponent &light = *components.light;
-                const char *kind = light.kind == Runtime::LightKind::Directional
-                                       ? "directional"
-                                       : (light.kind == Runtime::LightKind::Point ? "point" : "spot");
+                using enum Runtime::LightKind;
+                const char *kind = "spot";
+                if (light.kind == Directional)
+                    kind = "directional";
+                else if (light.kind == Point)
+                    kind = "point";
                 value["light"] = {
                     {"kind", kind},
                     {"color", Vec3Json(light.color)},
@@ -424,9 +425,13 @@ namespace Horo::Editor {
                 auto color = ParseVec3(light.at("color"));
                 if (color.HasError() || (kind != "directional" && kind != "point" && kind != "spot"))
                     return Result<SceneObjectComponentSet>::Failure(PersistenceError(SceneInvalid, "Light is invalid."));
+                Runtime::LightKind lightKind = Runtime::LightKind::Spot;
+                if (kind == "directional")
+                    lightKind = Runtime::LightKind::Directional;
+                else if (kind == "point")
+                    lightKind = Runtime::LightKind::Point;
                 components.light = Runtime::LightComponent{
-                    .kind = kind == "directional" ? Runtime::LightKind::Directional
-                                                  : (kind == "point" ? Runtime::LightKind::Point : Runtime::LightKind::Spot),
+                    .kind = lightKind,
                     .color = color.Value(),
                     .intensity = light.at("intensity").get<float>(),
                     .range = light.at("range").get<float>(),
@@ -480,7 +485,7 @@ namespace Horo::Editor {
                         auto field = ParseBehaviorFieldValue(fieldEntry["value"]);
                         if (field.HasError())
                             return Result<SceneObjectComponentSet>::Failure(field.ErrorValue());
-                        parsed.fields.push_back(Gameplay::BehaviorField{fieldEntry["name"].get<std::string>(), std::move(field).Value()});
+                        parsed.fields.emplace_back(fieldEntry["name"].get<std::string>(), std::move(field).Value());
                     }
                     if (Gameplay::ValidateBehaviorComponent(parsed).HasError())
                         return Result<SceneObjectComponentSet>::Failure(PersistenceError(SceneInvalid, "Behavior payload is invalid."));
@@ -588,7 +593,7 @@ namespace Horo::Editor {
             }
         }
 
-        [[nodiscard]] std::vector<std::byte> Bytes(const std::string &value) {
+        [[nodiscard]] std::vector<std::byte> Bytes(const std::string_view value) {
             const auto *begin = reinterpret_cast<const std::byte *>(value.data());
             return {begin, begin + value.size()};
         }
@@ -603,7 +608,7 @@ namespace Horo::Editor {
                 ComputeSha256(std::span<const std::byte>{reinterpret_cast<const std::byte *>(canonical.data()), canonical.size()}));
         }
 
-        [[nodiscard]] SceneFileFingerprint Fingerprint(const std::string &bytes) {
+        [[nodiscard]] SceneFileFingerprint Fingerprint(const std::string_view bytes) {
             return SceneFileFingerprint{
                 .exists = true,
                 .byteSize = bytes.size(),
@@ -616,8 +621,7 @@ namespace Horo::Editor {
     /** @copydoc LoadProjectDefaultScene */
     Result<std::optional<LoadedProjectScene>> LoadProjectDefaultScene(const std::filesystem::path &absoluteProjectRoot) {
         const std::filesystem::path metadataPath = absoluteProjectRoot / ".horo/project.json";
-        std::error_code error;
-        if (!std::filesystem::exists(metadataPath, error)) {
+        if (std::error_code error; !std::filesystem::exists(metadataPath, error)) {
             if (error)
                 return Result<std::optional<LoadedProjectScene>>::Failure(
                     PersistenceError(SceneReadFailed, "Unable to inspect '" + metadataPath.string() + "'."));
@@ -670,8 +674,7 @@ namespace Horo::Editor {
                 PersistenceError(ScenePathInvalid, "Scene load requires an absolute project-contained .horo path."));
         }
 
-        std::error_code error;
-        if (!std::filesystem::exists(absoluteScenePath, error)) {
+        if (std::error_code error; !std::filesystem::exists(absoluteScenePath, error)) {
             if (error) {
                 return Result<LoadedProjectScene>::Failure(
                     PersistenceError(SceneReadFailed, "Unable to inspect '" + absoluteScenePath.string() + "'."));
@@ -697,8 +700,7 @@ namespace Horo::Editor {
                 PersistenceError(ScenePathInvalid, "Scene fingerprint inspection requires an absolute project-contained path."));
         }
 
-        std::error_code error;
-        if (!std::filesystem::exists(absoluteScenePath, error)) {
+        if (std::error_code error; !std::filesystem::exists(absoluteScenePath, error)) {
             if (error) {
                 return Result<SceneFileFingerprint>::Failure(
                     PersistenceError(SceneReadFailed, "Unable to inspect '" + absoluteScenePath.string() + "'."));
@@ -725,7 +727,7 @@ namespace Horo::Editor {
         auto lease = mutations.TryAcquire(ProjectMutationRequest{
             .projectRoot = absoluteProjectRoot,
             .owner = ProjectMutationOwner::Save,
-            .operationId = "scene-save-" + std::to_string(snapshot.revision.value),
+            .operationId = std::format("scene-save-{}", snapshot.revision.value),
         });
         if (lease.HasError())
             return Result<ProjectSceneSaveResult>::Failure(lease.ErrorValue());
@@ -818,7 +820,7 @@ namespace Horo::Editor {
         auto lease = mutations.TryAcquire(ProjectMutationRequest{
             .projectRoot = absoluteProjectRoot,
             .owner = ProjectMutationOwner::Autosave,
-            .operationId = "scene-autosave-" + std::to_string(snapshot.revision.value),
+            .operationId = std::format("scene-autosave-{}", snapshot.revision.value),
         });
         if (lease.HasError())
             return Result<void>::Failure(lease.ErrorValue());
@@ -866,8 +868,7 @@ namespace Horo::Editor {
         }
 
         const std::filesystem::path recoveryPath = RecoveryPath(absoluteProjectRoot);
-        std::error_code error;
-        if (!std::filesystem::exists(recoveryPath, error)) {
+        if (std::error_code error; !std::filesystem::exists(recoveryPath, error)) {
             if (error) {
                 return Result<std::optional<ProjectSceneRecoveryRecord>>::Failure(
                     PersistenceError(SceneReadFailed, "Unable to inspect recovery path '" + recoveryPath.string() + "'."));
@@ -929,8 +930,7 @@ namespace Horo::Editor {
             return Result<void>::Failure(PersistenceError(ScenePathInvalid, "Recovery cleanup requires an absolute project root."));
         }
         const std::filesystem::path recoveryPath = RecoveryPath(absoluteProjectRoot);
-        std::error_code error;
-        if (!std::filesystem::exists(recoveryPath, error)) {
+        if (std::error_code error; !std::filesystem::exists(recoveryPath, error)) {
             if (error)
                 return Result<void>::Failure(PersistenceError(SceneReadFailed, "Unable to inspect recovery state."));
             return Result<void>::Success();
