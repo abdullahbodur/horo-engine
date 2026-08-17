@@ -166,7 +166,7 @@ def test_run_editor_configures_builds_and_forwards_arguments_without_a_shell(
         return subprocess.CompletedProcess(arguments, return_code)
 
     monkeypatch.setattr(dev, "DEFAULT_BUILD_DIRECTORY", tmp_path)
-    monkeypatch.setattr(dev, "editor_executable", lambda: executable)
+    monkeypatch.setattr(dev, "editor_executable", lambda *args, **kwargs: executable)
     monkeypatch.setattr(dev.subprocess, "run", fake_run)
     monkeypatch.setattr(dev, "collector_is_reachable", lambda endpoint: False)
     settings = dev.DeveloperSettings(True, dev.validate_endpoint("http://127.0.0.1:4318"))
@@ -220,26 +220,36 @@ def test_keyboard_interrupt_returns_conventional_exit_code(monkeypatch: pytest.M
         return subprocess.CompletedProcess(arguments, 0)
 
     monkeypatch.setattr(dev, "DEFAULT_BUILD_DIRECTORY", tmp_path)
-    monkeypatch.setattr(dev, "editor_executable", lambda: executable)
+    monkeypatch.setattr(dev, "editor_executable", lambda *args, **kwargs: executable)
     monkeypatch.setattr(dev.subprocess, "run", fake_run)
     settings = dev.DeveloperSettings(False, dev.validate_endpoint("http://127.0.0.1:4318"))
 
     assert dev.run_editor(settings, []) == 130
 
 
-def test_cli_separator_is_not_forwarded(monkeypatch: pytest.MonkeyPatch) -> None:
-    forwarded: list[str] = []
+def test_cli_run_supports_all_argument_variations(monkeypatch: pytest.MonkeyPatch) -> None:
+    forwarded: list[list[str]] = []
     settings = dev.DeveloperSettings(False, dev.validate_endpoint("http://127.0.0.1:4318"))
     monkeypatch.setattr(dev, "load_settings", lambda: settings)
 
     def fake_run_editor(_: object, arguments: list[str]) -> int:
-        forwarded.extend(arguments)
+        forwarded.append(arguments)
         return 0
 
     monkeypatch.setattr(dev, "run_editor", fake_run_editor)
 
     assert dev.main(["run", "editor", "--", "--project", "foo"]) == 0
-    assert forwarded == ["--project", "foo"]
+    assert forwarded[-1] == ["--project", "foo"]
+
+    assert dev.main(["run", "--", "--headless"]) == 0
+    assert forwarded[-1] == ["--headless"]
+
+    assert dev.main(["run", "--headless"]) == 0
+    assert forwarded[-1] == ["--headless"]
+
+    assert dev.main(["run", "editor"]) == 0
+    assert forwarded[-1] == []
+
 
 
 def test_grafana_sync_skips_an_unchanged_dashboard(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,5 +1,4 @@
 BasedOnStyle: Microsoft
-Language: Cpp
 Standard: Latest
 
 # Indentation

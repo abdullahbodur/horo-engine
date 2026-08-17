@@ -55,7 +55,7 @@ namespace Horo::Editor {
         }
 
         void DrawSummaryBadge(const std::size_t count, const char *label, const Ui::BadgeTone tone, const Theme::Fonts &fonts) {
-            const std::string text = std::format("{} {}", count, label);
+            const std::string text = std::to_string(count) + " " + (label != nullptr ? label : "");
             Ui::Badge(
                 {
                     .label = text.c_str(),
@@ -75,7 +75,7 @@ namespace Horo::Editor {
             if (object.documentName == object.diskName) {
                 return object.documentName;
             }
-            return std::format("{}  ->  {}", object.documentName, object.diskName);
+            return object.documentName + "  ->  " + object.diskName;
         }
 
         void DrawComparisonRow(const SceneObjectComparison &object, const EditorGuiContext &context) {

@@ -44,7 +44,7 @@ _GRAPHICS_DISPLAY_NAME = "Interactive Display"
 _OBSERVABILITY_OTLP_NAME = "OTLP Collector"
 _OBSERVABILITY_GRAFANA_NAME = "Grafana Service"
 
-_CPP_EXTENSIONS = {".h", ".hpp", ".cpp", ".c", ".cc", ".cxx"}
+_CPP_EXTENSIONS = {".h", ".hpp", ".cpp", ".c", ".cc", ".cxx", ".mm", ".m"}
 _EXCLUDED_PATH_PARTS = {"vendor", "build", "deprecated", ".horo", ".venv"}
 
 
@@ -157,11 +157,19 @@ class DoctorReport:
 
     def render(self, use_color: bool = True) -> str:
         """Format the report into a clean, human-readable terminal string."""
+        encoding = getattr(sys.stdout, "encoding", "") or ""
+        supports_unicode = "utf" in encoding.lower()
+
+        ok_sym = "[✓]" if supports_unicode else "[OK]"
+        warn_sym = "[!]"
+        err_sym = "[✗]" if supports_unicode else "[FAIL]"
+        info_sym = "[i]"
+
         symbols = {
-            CheckStatus.OK: ("\033[32m[✓]\033[0m" if use_color else "[✓]"),
-            CheckStatus.WARN: ("\033[33m[!]\033[0m" if use_color else "[!]"),
-            CheckStatus.ERROR: ("\033[31m[✗]\033[0m" if use_color else "[✗]"),
-            CheckStatus.INFO: ("\033[36m[i]\033[0m" if use_color else "[i]"),
+            CheckStatus.OK: (f"\033[32m{ok_sym}\033[0m" if use_color else ok_sym),
+            CheckStatus.WARN: (f"\033[33m{warn_sym}\033[0m" if use_color else warn_sym),
+            CheckStatus.ERROR: (f"\033[31m{err_sym}\033[0m" if use_color else err_sym),
+            CheckStatus.INFO: (f"\033[36m{info_sym}\033[0m" if use_color else info_sym),
         }
 
         lines: list[str] = ["Horo Developer Doctor Report", "============================", ""]
@@ -345,7 +353,7 @@ def sync_grafana_dashboard(
         return "unavailable"
     dashboard_exists = False
     try:
-        remote = _read_json(Request(f"{endpoint.url}/api/dashboards/uid/{GRAFANA_DASHBOARD_UID}"), 1.0)
+        remote = _read_json(Request(f"{endpoint.url}/api/dashboards/uid/{GRAFANA_DASHBOARD_UID}", headers=headers), 1.0)
         dashboard_exists = True
         remote_dashboard = remote.get("dashboard", {})
         if isinstance(remote_dashboard, dict) and source_tag in remote_dashboard.get("tags", []):
@@ -527,12 +535,7 @@ def run_editor(settings: DeveloperSettings, editor_arguments: Sequence[str], bui
     else:
         print("Grafana dashboard: disabled", flush=True)
 
-    try:
-        executable = editor_executable(build_directory)
-    except TypeError:
-        # Fallback for parameterless monkeypatched tests
-        executable = editor_executable()  # type: ignore[call-arg]
-
+    executable = editor_executable(build_directory)
     if not executable.is_file():
         print(f"error: HoroEditor executable was not produced at {executable}", file=sys.stderr)
         return 1
@@ -633,7 +636,6 @@ def run_check(
         build_directory=build_directory,
         junit=junit,
     )
-
 
 
 def _is_formattable(path: Path) -> bool:
@@ -931,10 +933,9 @@ def create_argument_parser() -> argparse.ArgumentParser:
     )
     commands = parser.add_subparsers(dest="command", required=False)
 
-    # run command (avoiding deprecated REMAINDER in Python 3.13+)
+    # run command
     run = commands.add_parser("run", help="configure, build, and run a supported target")
-    run.add_argument("target", nargs="?", default="editor", choices=("editor",))
-    run.add_argument("arguments", nargs="*", default=[], help="arguments forwarded to the executable after --")
+    run.add_argument("target_or_args", nargs="*", default=[], help="target (default 'editor') or arguments forwarded")
 
     # doctor command
     doc = commands.add_parser("doctor", help="diagnose toolchain, graphics, and environment health")
@@ -979,13 +980,17 @@ def create_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _handle_run(parsed: argparse.Namespace, settings: DeveloperSettings) -> int:
+def _handle_run(parsed: argparse.Namespace, settings: DeveloperSettings, extra_args: Sequence[str] | None = None) -> int:
     """Handle run subcommand."""
-    forwarded = list(parsed.arguments)
-    if forwarded[:1] == ["--"]:
-        forwarded.pop(0)
+    raw_args = list(parsed.target_or_args)
+    if extra_args:
+        raw_args.extend(extra_args)
+    if raw_args and raw_args[0] == "editor":
+        raw_args.pop(0)
+    if raw_args and raw_args[0] == "--":
+        raw_args.pop(0)
     try:
-        return run_editor(settings, forwarded)
+        return run_editor(settings, raw_args)
     except KeyboardInterrupt:
         return 130
 
@@ -1007,6 +1012,7 @@ def _handle_help(parser: argparse.ArgumentParser, topic: str | None) -> int:
         parser.print_help()
         return 0
 
+    # Note: accessing _actions is an internal argparse hook used to display specific subparser help
     subparser_action = next(
         (action for action in parser._actions if isinstance(action, argparse._SubParsersAction)),
         None,
@@ -1019,10 +1025,28 @@ def _handle_help(parser: argparse.ArgumentParser, topic: str | None) -> int:
     return 2
 
 
+def _configure_terminal_environment() -> None:
+    """Enable ANSI/UTF-8 mode on Windows consoles and configure robust encoding fallbacks."""
+    if sys.platform == "win32":
+        try:
+            os.system("")  # Enable VT100 ANSI processing on Windows 10+
+        except OSError:
+            pass
+    if sys.version_info >= (3, 7):
+        try:
+            if hasattr(sys.stdout, "reconfigure"):
+                sys.stdout.reconfigure(errors="replace")
+            if hasattr(sys.stderr, "reconfigure"):
+                sys.stderr.reconfigure(errors="replace")
+        except (AttributeError, OSError, ValueError):
+            pass
+
+
 def main(arguments: Sequence[str] | None = None) -> int:
     """Run the developer command-line interface."""
+    _configure_terminal_environment()
     parser = create_argument_parser()
-    parsed = parser.parse_args(arguments)
+    parsed, unparsed = parser.parse_known_args(arguments)
 
     if not parsed.command or parsed.command == "help":
         return _handle_help(parser, getattr(parsed, "topic", None))
@@ -1035,9 +1059,13 @@ def main(arguments: Sequence[str] | None = None) -> int:
         return _handle_doctor(parsed, doc_settings)
 
     if parsed.command == "format":
+        if unparsed:
+            parser.error(f"unrecognized arguments: {' '.join(unparsed)}")
         return run_format(files=parsed.files, staged=parsed.staged, check=parsed.check)
 
     if parsed.command == "build":
+        if unparsed:
+            parser.error(f"unrecognized arguments: {' '.join(unparsed)}")
         return run_build(
             target=parsed.target,
             build_directory=parsed.dir,
@@ -1047,6 +1075,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
         )
 
     if parsed.command == "test":
+        if unparsed:
+            parser.error(f"unrecognized arguments: {' '.join(unparsed)}")
         active_regex = parsed.regex_opt or parsed.regex
         return run_tests(
             regex=active_regex,
@@ -1058,13 +1088,14 @@ def main(arguments: Sequence[str] | None = None) -> int:
         )
 
     if parsed.command == "check":
+        if unparsed:
+            parser.error(f"unrecognized arguments: {' '.join(unparsed)}")
         return run_check(
             regex=parsed.regex,
             gui=parsed.gui,
             build_directory=parsed.dir,
             junit=parsed.junit,
         )
-
 
     # run command
     try:
@@ -1073,7 +1104,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
         print(f"error: {error}", file=sys.stderr)
         return 2
 
-    return _handle_run(parsed, settings)
+    return _handle_run(parsed, settings, unparsed)
+
 
 
 if __name__ == "__main__":
