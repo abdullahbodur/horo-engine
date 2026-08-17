@@ -18,6 +18,9 @@ sys.modules[SPEC.name] = dev
 SPEC.loader.exec_module(dev)
 
 
+LOCAL_ENV_FILENAME = ".env.local"
+
+
 def write_env(path: Path, text: str) -> Path:
     path.write_text(text, encoding="utf-8")
     return path
@@ -25,7 +28,7 @@ def write_env(path: Path, text: str) -> Path:
 
 def test_dotenv_parser_supports_the_declared_non_executable_grammar(tmp_path: Path) -> None:
     env_file = write_env(
-        tmp_path / ".env.local",
+        tmp_path / LOCAL_ENV_FILENAME,
         """
         # developer settings
         PLAIN=value
@@ -54,14 +57,14 @@ def test_dotenv_parser_supports_the_declared_non_executable_grammar(tmp_path: Pa
     ],
 )
 def test_dotenv_parser_rejects_shell_syntax_and_malformed_lines(tmp_path: Path, line: str) -> None:
-    env_file = write_env(tmp_path / ".env.local", line)
+    env_file = write_env(tmp_path / LOCAL_ENV_FILENAME, line)
     with pytest.raises(dev.ConfigurationError):
         dev.parse_dotenv(env_file)
 
 
 def test_process_environment_overrides_local_configuration(tmp_path: Path) -> None:
     env_file = write_env(
-        tmp_path / ".env.local",
+        tmp_path / LOCAL_ENV_FILENAME,
         "HORO_DEV_OTEL_EXPORT=OFF\nHORO_OTEL_ENDPOINT=http://127.0.0.1:4318\n",
     )
 
@@ -280,3 +283,189 @@ def test_grafana_unavailability_never_blocks_startup(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr(dev, "_read_json", unavailable)
     assert dev.sync_grafana_dashboard(endpoint) == "unavailable"
+
+
+def test_doctor_report_aggregation_and_rendering() -> None:
+    report = dev.DoctorReport()
+    report.add("Toolchain", "C++ Compiler", dev.CheckStatus.OK, "clang 17")
+    report.add("Observability", "Collector", dev.CheckStatus.WARN, "unreachable")
+    report.add("Toolchain", "CMake", dev.CheckStatus.ERROR, "missing")
+
+    assert report.has_errors is True
+    assert report.has_warnings is True
+
+    serialized = report.to_dict()
+    assert serialized["has_errors"] is True
+    assert len(serialized["checks"]) == 3
+
+    rendered = report.render(use_color=False)
+    assert "[✓] C++ Compiler: clang 17" in rendered
+    assert "[!] Collector: unreachable" in rendered
+    assert "[✗] CMake: missing" in rendered
+    assert "Critical issues found" in rendered
+
+
+def test_run_doctor_collects_valid_checks() -> None:
+    settings = dev.DeveloperSettings(False, dev.validate_endpoint("http://127.0.0.1:4318"))
+    report = dev.run_doctor(settings)
+    assert len(report.items) >= 5
+    categories = {item.category for item in report.items}
+    assert "Toolchain" in categories
+    assert "Graphics" in categories or "Platform" in categories
+
+
+def test_main_doctor_command_json_and_exit_code(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = dev.main(["doctor", "--json"])
+    assert exit_code in (0, 1)
+    captured = capsys.readouterr()
+    parsed = json.loads(captured.out)
+    assert "checks" in parsed
+    assert isinstance(parsed["checks"], list)
+
+
+def test_main_build_command_invokes_cmake_build(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+
+    def fake_subprocess(cmd: Sequence[str], **_: object) -> int:
+        calls.append(list(cmd))
+        return 0
+
+    monkeypatch.setattr(dev, "execute_subprocess", fake_subprocess)
+    exit_code = dev.main(["build", "HoroEditorUiComponentsRenderTests", "-B", str(tmp_path)])
+    assert exit_code == 0
+    assert len(calls) == 2
+    assert calls[0][0] == "cmake"
+    assert calls[1][:4] == ["cmake", "--build", str(tmp_path), "--target"]
+    assert calls[1][4] == "HoroEditorUiComponentsRenderTests"
+
+
+def test_main_test_command_filters_and_invokes_ctest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+
+    def fake_subprocess(cmd: Sequence[str], **_: object) -> int:
+        calls.append(list(cmd))
+        return 0
+
+    monkeypatch.setattr(dev, "execute_subprocess", fake_subprocess)
+    exit_code = dev.main(["test", "SceneDocument", "-E", "Slow", "-B", str(tmp_path)])
+    assert exit_code == 0
+    # configure + build + ctest
+    assert len(calls) == 3
+    ctest_call = calls[2]
+    assert ctest_call[0] == "ctest"
+    assert "-R" in ctest_call and "SceneDocument" in ctest_call
+    assert "-E" in ctest_call and "Slow" in ctest_call
+    assert "-LE" in ctest_call and "gui" in ctest_call
+
+
+def test_main_check_command_invokes_full_ci_pass(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+
+    def fake_subprocess(cmd: Sequence[str], **_: object) -> int:
+        calls.append(list(cmd))
+        return 0
+
+    monkeypatch.setattr(dev, "execute_subprocess", fake_subprocess)
+    exit_code = dev.main(["check", "-B", str(tmp_path)])
+    assert exit_code == 0
+    assert len(calls) == 3
+    assert calls[0][0] == "cmake"
+    assert calls[1][:3] == ["cmake", "--build", str(tmp_path)]
+    assert calls[2][0] == "ctest"
+
+
+def test_is_formattable_filters_cpp_extensions_and_ignores_vendor() -> None:
+    assert dev._is_formattable(Path("src/editor/main.cpp")) is True
+    assert dev._is_formattable(Path("include/Horo/Engine.h")) is True
+    assert dev._is_formattable(Path("vendor/imgui/imgui.cpp")) is False
+    assert dev._is_formattable(Path("build/generated.cpp")) is False
+    assert dev._is_formattable(Path("scripts/dev.py")) is False
+
+
+def test_main_format_command_invokes_clang_format(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    test_cpp = tmp_path / "Test.cpp"
+    test_cpp.write_text("int main() { return 0; }\n", encoding="utf-8")
+
+    calls: list[list[str]] = []
+
+    def fake_subprocess(cmd: Sequence[str], **_: object) -> int:
+        calls.append(list(cmd))
+        return 0
+
+    monkeypatch.setattr(dev, "execute_subprocess", fake_subprocess)
+    monkeypatch.setattr(dev.shutil, "which", lambda cmd: "/usr/bin/clang-format" if cmd == "clang-format" else None)
+
+    exit_code = dev.main(["format", str(test_cpp)])
+    assert exit_code == 0
+    assert len(calls) == 1
+    assert calls[0][:2] == ["/usr/bin/clang-format", "-i"]
+    assert str(test_cpp) in calls[0]
+
+
+def test_doctor_runs_gracefully_with_broken_env_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    broken_env = write_env(tmp_path / LOCAL_ENV_FILENAME, "INVALID-ENV-LINE\n")
+    monkeypatch.setattr(dev, "DEFAULT_ENV_FILE", broken_env)
+
+    exit_code = dev.main(["doctor", "--json"])
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+    assert report["has_errors"] is True
+    config_check = next(c for c in report["checks"] if c["category"] == "Configuration")
+    assert config_check["status"] == "ERROR"
+    assert "Syntax/validation error" in config_check["message"]
+
+
+def test_gui_flag_propagates_to_cmake_configure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+
+    def fake_subprocess(cmd: Sequence[str], **_: object) -> int:
+        calls.append(list(cmd))
+        return 0
+
+    monkeypatch.setattr(dev, "execute_subprocess", fake_subprocess)
+    exit_code = dev.main(["test", "--gui", "-B", str(tmp_path)])
+    assert exit_code == 0
+    assert len(calls) == 3
+    # Configure command must have HORO_ENABLE_IMGUI_UI_TESTS=ON
+    cmake_cfg = calls[0]
+    assert "-DHORO_ENABLE_IMGUI_UI_TESTS=ON" in cmake_cfg
+
+
+def test_grafana_sync_passes_authorization_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    endpoint = dev.validate_grafana_url("http://127.0.0.1:3000")
+    source_tag = dev._grafana_source_tag(dev.GRAFANA_DASHBOARD_PATH)
+    responses = iter([{"database": "ok"}, {"dashboard": {"tags": [source_tag]}}])
+    requests: list[Request] = []
+
+    def fake_read_json(request: Request, _timeout: float) -> dict[str, object]:
+        requests.append(request)
+        return next(responses)
+
+    monkeypatch.setattr(dev, "_read_json", fake_read_json)
+    status = dev.sync_grafana_dashboard(endpoint, api_token="secret_token_123")
+    assert status == "current"
+    assert requests[0].headers.get("Authorization") == "Bearer secret_token_123"
+
+
+def test_main_help_command_and_empty_arguments(capsys: pytest.CaptureFixture[str]) -> None:
+    assert dev.main([]) == 0
+    out_empty = capsys.readouterr().out
+    assert "usage:" in out_empty
+    assert "doctor" in out_empty
+
+    assert dev.main(["help"]) == 0
+    out_help = capsys.readouterr().out
+    assert "usage:" in out_help
+
+    assert dev.main(["help", "doctor"]) == 0
+    out_doc = capsys.readouterr().out
+    assert "--json" in out_doc
+
+    assert dev.main(["help", "nonexistent"]) == 2
+    err = capsys.readouterr().err
+    assert "unknown command 'nonexistent'" in err
+
+
+
+

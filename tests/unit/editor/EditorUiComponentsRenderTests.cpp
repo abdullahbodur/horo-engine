@@ -27,7 +27,7 @@ TEST_CASE("Editor icon registry resolves canonical and catalog tokens", "[unit][
     REQUIRE(UiIconRegistry::Resolve("primitive.light.directional") == UiIcon::DirectionalLight);
     REQUIRE(UiIconRegistry::Resolve("primitive.collider.sphere") == UiIcon::Sphere);
     REQUIRE_FALSE(UiIconRegistry::Resolve("unknown.icon").has_value());
-    REQUIRE(UiIconRegistry::Token(UiIcon::VisibilityOff) == "action.visibility_off");
+    REQUIRE(std::string(UiIconRegistry::Token(UiIcon::VisibilityOff)) == "action.visibility_off");
     REQUIRE(UiIconRegistry::Token(UiIcon::None).empty());
 }
 
@@ -97,9 +97,8 @@ TEST_CASE("Small toolbar primitives share height and fixed action width", "[unit
 
     ImGui::NewFrame();
     ImGui::Begin("ToolbarPrimitiveGeometry");
-    static_cast<void>(
-        InputTextControl("##Search", search.data(), search.size(), fonts,
-                         InputTextOptions{.width = 180.0F, .hint = "Filter...", .componentSize = ComponentSize::Small}));
+    static_cast<void>(InputTextControl("##Search", search.data(), search.size(), fonts,
+                                       InputTextOptions{.width = 180.0F, .hint = "Filter...", .componentSize = ComponentSize::Small}));
     inputSize = ImGui::GetItemRectSize();
     ImGui::SameLine();
     static_cast<void>(Button({.label = "Clear",
@@ -111,9 +110,8 @@ TEST_CASE("Small toolbar primitives share height and fixed action width", "[unit
     buttonSize = ImGui::GetItemRectSize();
     ImGui::SameLine();
     ImGui::SetNextItemWidth(104.0F);
-    static_cast<void>(
-        ComboControl("##Status", &status, statuses.data(), static_cast<int>(statuses.size()), fonts,
-                     ComboControlOptions{.componentSize = ComponentSize::Small}));
+    static_cast<void>(ComboControl("##Status", &status, statuses.data(), static_cast<int>(statuses.size()), fonts,
+                                   ComboControlOptions{.componentSize = ComponentSize::Small}));
     comboSize = ImGui::GetItemRectSize();
     ImGui::SameLine();
     static_cast<void>(MultiSelectField("##Columns", "Columns", columns, visible, fonts, 104.0F, ComponentSize::Small));

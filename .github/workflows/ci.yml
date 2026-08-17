@@ -19,9 +19,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  format:
+    name: Format & Tooling Check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+
+      - name: Install system tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-format python3-pytest
+
+      - name: Diagnostics Check
+        run: python3 scripts/dev.py doctor
+
+      - name: Verify C++ Formatting
+        run: python3 scripts/dev.py format --check
+
+      - name: Run Python Runner Tests
+        run: pytest tests/python/
+
   test:
     name: Test · ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
+    needs: [format]
     timeout-minutes: 25
     permissions:
       contents: read
@@ -98,36 +120,23 @@ jobs:
           key: fetchcontent-${{ runner.os }}-${{ hashFiles('**/CMakeLists.txt', 'cmake/**') }}
           restore-keys: fetchcontent-${{ runner.os }}-
 
-      - name: Configure
+      - name: Toolchain & Environment Diagnostics
         shell: bash
-        run: |
-          cmake -S . -B "${{ matrix.build_dir }}" -G Ninja \
-            -DBUILD_TESTING=ON \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_C_COMPILER="${{ matrix.cc }}" \
-            -DCMAKE_CXX_COMPILER="${{ matrix.cxx }}" \
-            -DCMAKE_C_COMPILER_LAUNCHER="$([[ '${{ runner.os }}' != 'Windows' ]] && echo ccache || true)" \
-            -DCMAKE_CXX_COMPILER_LAUNCHER="$([[ '${{ runner.os }}' != 'Windows' ]] && echo ccache || true)" \
-            -DHORO_ENABLE_TELEMETRY=ON \
-            -DHORO_ENABLE_OPENTELEMETRY=ON
-        env:
-          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+        run: python3 scripts/dev.py doctor
 
-      - name: Build
-        run: cmake --build "${{ matrix.build_dir }}" --parallel
-
-      - name: Test
+      - name: Build and Test
         id: native_tests
         shell: bash
         run: |
-          RESULTS_DIR="${{ github.workspace }}/${{ matrix.build_dir }}/test-results"
-          cmake -E make_directory "$RESULTS_DIR"
-          ctest --test-dir "${{ matrix.build_dir }}" \
-            --output-on-failure \
-            --output-junit "$RESULTS_DIR/ctest.xml"
+          python3 scripts/dev.py test \
+            --dir "${{ matrix.build_dir }}" \
+            --junit "${{ github.workspace }}/${{ matrix.build_dir }}/test-results/ctest.xml"
           echo "=== test-results directory ==="
-          ls -la "$RESULTS_DIR" || true
+          ls -la "${{ github.workspace }}/${{ matrix.build_dir }}/test-results" || true
         env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
           HORO_LOG_LEVEL: debug
 
       - name: Publish test results

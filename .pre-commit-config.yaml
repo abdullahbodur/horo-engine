@@ -1,6 +1,13 @@
 repos:
   - repo: local
     hooks:
+      - id: horo-format
+        name: horo clang-format staged
+        entry: python3 scripts/dev.py format --staged
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
       - id: horo-engine-layout-configure
         name: horo-engine layout configure
         entry: cmake -S . -B build/skeleton -DBUILD_TESTING=ON

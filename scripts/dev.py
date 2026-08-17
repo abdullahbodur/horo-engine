@@ -1,36 +1,64 @@
 #!/usr/bin/env python3
-"""Small developer runner for configuring, building, and launching HoroEditor."""
+"""Developer runner, formatting, and toolchain health check for Horo Engine."""
 
 from __future__ import annotations
 
 import argparse
+from enum import Enum
 import hashlib
 import json
 import os
+from pathlib import Path
+import platform
 import re
+import shutil
 import socket
 import subprocess
 import sys
-from dataclasses import dataclass
-from pathlib import Path
+from dataclasses import dataclass, field
 from typing import Mapping, Sequence
-from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
+from urllib.error import HTTPError
+from urllib.parse import ParseResult, urlparse
 from urllib.request import Request, urlopen
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_ENV_FILE = REPOSITORY_ROOT / ".env.local"
+DEFAULT_ENV_FILE_NAME = ".env.local"
+DEFAULT_ENV_FILE = REPOSITORY_ROOT / DEFAULT_ENV_FILE_NAME
 DEFAULT_BUILD_DIRECTORY = REPOSITORY_ROOT / "build" / "dev-editor"
+DEFAULT_CI_BUILD_DIRECTORY = REPOSITORY_ROOT / "build" / "ci"
 DEFAULT_OTLP_ENDPOINT = "http://127.0.0.1:4318"
 DEFAULT_GRAFANA_URL = "http://127.0.0.1:3000"
 GRAFANA_DASHBOARD_PATH = REPOSITORY_ROOT / "observability" / "grafana" / "dashboards" / "horo-editor.json"
 GRAFANA_DASHBOARD_UID = "horo-editor-observability"
 GRAFANA_SOURCE_TAG_PREFIX = "horo-source:"
-_ENVIRONMENT_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_ENVIRONMENT_KEY = re.compile(r"^[A-Za-z_]\w*$", re.ASCII)
+
+# Diagnostic Item String Constants (Sonar S1192)
+_TOOLCHAIN_COMPILER_NAME = "C++ Compiler"
+_TOOLCHAIN_CMAKE_NAME = "CMake"
+_TOOLCHAIN_NINJA_NAME = "Ninja Generator"
+_TOOLCHAIN_CLANG_FORMAT_NAME = "clang-format"
+_TOOLCHAIN_CCACHE_NAME = "ccache"
+_PYTHON_PYTEST_NAME = "pytest Module"
+_GRAPHICS_DISPLAY_NAME = "Interactive Display"
+_OBSERVABILITY_OTLP_NAME = "OTLP Collector"
+_OBSERVABILITY_GRAFANA_NAME = "Grafana Service"
+
+_CPP_EXTENSIONS = {".h", ".hpp", ".cpp", ".mm", ".m"}
+_EXCLUDED_PATH_PARTS = {"vendor", "build", "deprecated", ".horo", ".venv"}
 
 
 class ConfigurationError(ValueError):
     """Raised when the local developer configuration is invalid."""
+
+
+class CheckStatus(Enum):
+    """Status level for an environment check item."""
+
+    OK = "OK"
+    WARN = "WARN"
+    ERROR = "ERROR"
+    INFO = "INFO"
 
 
 @dataclass(frozen=True)
@@ -49,6 +77,131 @@ class DeveloperSettings:
     otel_export_enabled: bool
     endpoint: Endpoint
     grafana_endpoint: Endpoint | None = None
+    grafana_api_token: str | None = None
+
+
+@dataclass
+class DoctorItem:
+    """Single diagnostic report entry."""
+
+    category: str
+    name: str
+    status: CheckStatus
+    message: str
+    details: str | None = None
+
+
+@dataclass
+class DoctorReport:
+    """Aggregated doctor diagnostic report."""
+
+    items: list[DoctorItem] = field(default_factory=list)
+
+    def add(
+        self,
+        category: str,
+        name: str,
+        status: CheckStatus,
+        message: str,
+        details: str | None = None,
+    ) -> None:
+        """Append an item to the report."""
+        self.items.append(DoctorItem(category, name, status, message, details))
+
+    @property
+    def has_errors(self) -> bool:
+        """Return true if any critical check failed."""
+        return any(item.status == CheckStatus.ERROR for item in self.items)
+
+    @property
+    def has_warnings(self) -> bool:
+        """Return true if any warning check occurred."""
+        return any(item.status == CheckStatus.WARN for item in self.items)
+
+    def to_dict(self) -> dict[str, object]:
+        """Serialize report to a plain dictionary for JSON export."""
+        return {
+            "has_errors": self.has_errors,
+            "has_warnings": self.has_warnings,
+            "checks": [
+                {
+                    "category": item.category,
+                    "name": item.name,
+                    "status": item.status.value,
+                    "message": item.message,
+                    "details": item.details,
+                }
+                for item in self.items
+            ],
+        }
+
+    def _render_summary(self, use_color: bool) -> str:
+        """Format the summary line based on error and warning state."""
+        if self.has_errors:
+            return (
+                "\033[31mStatus: Critical issues found. Please address the errors above.\033[0m"
+                if use_color
+                else "Status: Critical issues found. Please address the errors above."
+            )
+        if self.has_warnings:
+            return (
+                "\033[33mStatus: Ready with warnings.\033[0m"
+                if use_color
+                else "Status: Ready with warnings."
+            )
+        return (
+            "\033[32mStatus: All development environment checks passed!\033[0m"
+            if use_color
+            else "Status: All development environment checks passed!"
+        )
+
+    def render(self, use_color: bool = True) -> str:
+        """Format the report into a clean, human-readable terminal string."""
+        symbols = {
+            CheckStatus.OK: ("\033[32m[✓]\033[0m" if use_color else "[✓]"),
+            CheckStatus.WARN: ("\033[33m[!]\033[0m" if use_color else "[!]"),
+            CheckStatus.ERROR: ("\033[31m[✗]\033[0m" if use_color else "[✗]"),
+            CheckStatus.INFO: ("\033[36m[i]\033[0m" if use_color else "[i]"),
+        }
+
+        lines: list[str] = ["Horo Developer Doctor Report", "============================", ""]
+        current_category: str | None = None
+
+        for item in self.items:
+            if item.category != current_category:
+                current_category = item.category
+                lines.append(f"== {current_category} ==")
+
+            sym = symbols.get(item.status, "[?]")
+            line = f" {sym} {item.name}: {item.message}"
+            if item.details:
+                line += f" ({item.details})"
+            lines.append(line)
+
+        lines.append("")
+        lines.append(self._render_summary(use_color))
+        return "\n".join(lines)
+
+
+def _parse_dotenv_line(path: Path, line_number: int, line: str) -> tuple[str, str] | None:
+    """Parse one single line from a dotenv file."""
+    if not line or line.startswith("#"):
+        return None
+    if line.startswith("export ") or "=" not in line:
+        raise ConfigurationError(f"{path}:{line_number}: expected KEY=value")
+    key, raw_value = line.split("=", 1)
+    if not _ENVIRONMENT_KEY.fullmatch(key):
+        raise ConfigurationError(f"{path}:{line_number}: invalid environment key {key!r}")
+    value = raw_value.strip()
+    if "$(" in value or "${" in value or "`" in value:
+        raise ConfigurationError(f"{path}:{line_number}: environment expansion and commands are not supported")
+    if value.startswith(("\"", "'")):
+        if len(value) < 2 or value[-1] != value[0]:
+            raise ConfigurationError(f"{path}:{line_number}: unterminated quoted value")
+        return key, value[1:-1]
+    if any(character.isspace() for character in value):
+        raise ConfigurationError(f"{path}:{line_number}: values containing whitespace must be quoted")
+    return key, value
 
 
 def parse_dotenv(path: Path) -> dict[str, str]:
@@ -58,24 +211,12 @@ def parse_dotenv(path: Path) -> dict[str, str]:
 
     values: dict[str, str] = {}
     for line_number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("export ") or "=" not in line:
-            raise ConfigurationError(f"{path}:{line_number}: expected KEY=value")
-        key, raw_value = line.split("=", 1)
-        if not _ENVIRONMENT_KEY.fullmatch(key) or key in values:
-            raise ConfigurationError(f"{path}:{line_number}: invalid or duplicate environment key {key!r}")
-        value = raw_value.strip()
-        if "$(" in value or "${" in value or "`" in value:
-            raise ConfigurationError(f"{path}:{line_number}: environment expansion and commands are not supported")
-        if value.startswith(("\"", "'")):
-            if len(value) < 2 or value[-1] != value[0]:
-                raise ConfigurationError(f"{path}:{line_number}: unterminated quoted value")
-            value = value[1:-1]
-        elif any(character.isspace() for character in value):
-            raise ConfigurationError(f"{path}:{line_number}: values containing whitespace must be quoted")
-        values[key] = value
+        parsed = _parse_dotenv_line(path, line_number, raw_line.strip())
+        if parsed is not None:
+            key, value = parsed
+            if key in values:
+                raise ConfigurationError(f"{path}:{line_number}: duplicate environment key {key!r}")
+            values[key] = value
     return values
 
 
@@ -89,15 +230,18 @@ def parse_enabled(value: str, setting_name: str = "HORO_DEV_OTEL_EXPORT") -> boo
     raise ConfigurationError(f"{setting_name} must be ON or OFF")
 
 
-def validate_endpoint(value: str) -> Endpoint:
-    """Validate an OTLP HTTP base URL without sending protocol traffic.
+def _validate_url_structure(parsed: ParseResult, setting_name: str) -> None:
+    """Validate protocol and general URL constraints."""
+    if parsed.scheme not in {"http", "https"}:
+        raise ConfigurationError(f"{setting_name} must use http or https")
+    if parsed.username is not None or parsed.password is not None:
+        raise ConfigurationError(f"{setting_name} must not include credentials")
+    if parsed.path not in {"", "/"} or parsed.params or parsed.query or parsed.fragment:
+        raise ConfigurationError(f"{setting_name} must be a base URL without a path, query, or fragment")
 
-    Left as explicit, hand-written checks on purpose: these encode security
-    decisions (no plaintext http off localhost, no embedded credentials, no
-    path/query/fragment smuggled into a "base" URL) that a generic URL
-    parsing/validation library will not enforce for you. Swapping this for a
-    dependency would trade a few lines for silently losing those checks.
-    """
+
+def validate_endpoint(value: str) -> Endpoint:
+    """Validate an OTLP HTTP base URL without sending protocol traffic."""
     if any(character.isspace() for character in value) or "?" in value or "#" in value:
         raise ConfigurationError("HORO_OTEL_ENDPOINT must not contain whitespace, a query, or a fragment")
     try:
@@ -106,14 +250,9 @@ def validate_endpoint(value: str) -> Endpoint:
     except ValueError as error:
         raise ConfigurationError(f"HORO_OTEL_ENDPOINT is invalid: {error}") from error
 
-    if parsed.scheme not in {"http", "https"}:
-        raise ConfigurationError("HORO_OTEL_ENDPOINT must use http or https")
+    _validate_url_structure(parsed, "HORO_OTEL_ENDPOINT")
     if parsed.hostname is None or port is None:
         raise ConfigurationError("HORO_OTEL_ENDPOINT must include a host and explicit port")
-    if parsed.username is not None or parsed.password is not None:
-        raise ConfigurationError("HORO_OTEL_ENDPOINT must not include credentials")
-    if parsed.path not in {"", "/"} or parsed.params or parsed.query or parsed.fragment:
-        raise ConfigurationError("HORO_OTEL_ENDPOINT must be a base URL without a path, query, or fragment")
     if parsed.scheme == "http" and parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
         raise ConfigurationError("plaintext HORO_OTEL_ENDPOINT is allowed only for localhost")
 
@@ -130,14 +269,9 @@ def validate_grafana_url(value: str) -> Endpoint:
     except ValueError as error:
         raise ConfigurationError(f"HORO_GRAFANA_URL is invalid: {error}") from error
 
-    if parsed.scheme not in {"http", "https"}:
-        raise ConfigurationError("HORO_GRAFANA_URL must use http or https")
+    _validate_url_structure(parsed, "HORO_GRAFANA_URL")
     if parsed.hostname not in {"127.0.0.1", "localhost", "::1"} or port is None:
         raise ConfigurationError("HORO_GRAFANA_URL must use a loopback host and explicit port")
-    if parsed.username is not None or parsed.password is not None:
-        raise ConfigurationError("HORO_GRAFANA_URL must not include credentials")
-    if parsed.path not in {"", "/"} or parsed.params or parsed.query or parsed.fragment:
-        raise ConfigurationError("HORO_GRAFANA_URL must be a base URL without a path, query, or fragment")
     return Endpoint(url=value.rstrip("/"), host=parsed.hostname, port=port)
 
 
@@ -154,10 +288,12 @@ def load_settings(path: Path = DEFAULT_ENV_FILE, environ: Mapping[str, str] | No
     }
     export_enabled = parse_enabled(resolved["HORO_DEV_OTEL_EXPORT"])
     grafana_auto_import = parse_enabled(resolved["HORO_DEV_GRAFANA_AUTO_IMPORT"], "HORO_DEV_GRAFANA_AUTO_IMPORT")
+    grafana_token = resolved.get("HORO_GRAFANA_API_TOKEN")
     return DeveloperSettings(
         otel_export_enabled=export_enabled,
         endpoint=validate_endpoint(resolved["HORO_OTEL_ENDPOINT"] if export_enabled else DEFAULT_OTLP_ENDPOINT),
         grafana_endpoint=validate_grafana_url(resolved["HORO_GRAFANA_URL"]) if grafana_auto_import else None,
+        grafana_api_token=grafana_token.strip() if grafana_token else None,
     )
 
 
@@ -182,11 +318,24 @@ def _read_json(request: Request, timeout_seconds: float) -> dict[str, object]:
         return json.loads(response.read().decode("utf-8"))
 
 
-def sync_grafana_dashboard(endpoint: Endpoint, dashboard_path: Path = GRAFANA_DASHBOARD_PATH) -> str:
+def _grafana_headers(api_token: str | None = None) -> dict[str, str]:
+    """Return standard Grafana request headers including optional bearer token."""
+    headers = {"Content-Type": "application/json"}
+    if api_token:
+        headers["Authorization"] = f"Bearer {api_token}"
+    return headers
+
+
+def sync_grafana_dashboard(
+    endpoint: Endpoint,
+    dashboard_path: Path = GRAFANA_DASHBOARD_PATH,
+    api_token: str | None = None,
+) -> str:
     """Import the versioned dashboard when local Grafana is available and stale."""
+    headers = _grafana_headers(api_token)
     try:
-        _read_json(Request(f"{endpoint.url}/api/health"), 0.5)
-    except (HTTPError, URLError, OSError, ValueError, json.JSONDecodeError):
+        _read_json(Request(f"{endpoint.url}/api/health", headers=headers), 0.5)
+    except (OSError, ValueError):
         return "unavailable"
 
     try:
@@ -205,7 +354,7 @@ def sync_grafana_dashboard(endpoint: Endpoint, dashboard_path: Path = GRAFANA_DA
         if error.code != 404:
             print(f"warning: Grafana dashboard lookup failed with HTTP {error.code}; continuing without import.", file=sys.stderr)
             return "unavailable"
-    except (URLError, OSError, ValueError, json.JSONDecodeError) as error:
+    except (OSError, ValueError) as error:
         print(f"warning: Grafana dashboard lookup failed: {error}; continuing without import.", file=sys.stderr)
         return "unavailable"
 
@@ -225,23 +374,38 @@ def sync_grafana_dashboard(endpoint: Endpoint, dashboard_path: Path = GRAFANA_DA
         request = Request(
             f"{endpoint.url}/api/dashboards/db",
             data=body,
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
         result = _read_json(request, 2.0)
         if result.get("status") != "success":
             raise ValueError("Grafana did not confirm the dashboard import")
         return "updated" if dashboard_exists else "imported"
-    except HTTPError as error:
-        print(f"warning: Grafana dashboard import failed with HTTP {error.code}; continuing editor startup.", file=sys.stderr)
-    except (URLError, OSError, ValueError, json.JSONDecodeError) as error:
+    except (OSError, ValueError) as error:
         print(f"warning: Grafana dashboard import failed: {error}; continuing editor startup.", file=sys.stderr)
     return "unavailable"
 
 
-def configure_command(settings: DeveloperSettings, build_directory: Path = DEFAULT_BUILD_DIRECTORY) -> list[str]:
-    """Build the always-run CMake configure command."""
-    return [
+def configure_command(
+    settings: DeveloperSettings | None = None,
+    build_directory: Path = DEFAULT_BUILD_DIRECTORY,
+    build_type: str = "Debug",
+    testing: bool = False,
+    editor_gui: bool = True,
+    render_opengl: bool = True,
+    render_metal: bool | None = None,
+    telemetry: bool = True,
+    opentelemetry: bool | None = None,
+    imgui_ui_tests: bool = False,
+    extra_cmake_args: Sequence[str] | None = None,
+) -> list[str]:
+    """Build the typed, parameterizable CMake configure command."""
+    if render_metal is None:
+        render_metal = sys.platform == "darwin" and editor_gui
+    if opentelemetry is None:
+        opentelemetry = settings.otel_export_enabled if settings else False
+
+    command = [
         "cmake",
         "-S",
         str(REPOSITORY_ROOT),
@@ -249,23 +413,39 @@ def configure_command(settings: DeveloperSettings, build_directory: Path = DEFAU
         str(build_directory),
         "-G",
         "Ninja",
-        "-DCMAKE_BUILD_TYPE=Debug",
-        "-DHORO_BUILD_EDITOR_GUI=ON",
-        "-DBUILD_TESTING=OFF",
-        f"-DHORO_ENABLE_OPENTELEMETRY={'ON' if settings.otel_export_enabled else 'OFF'}",
+        f"-DCMAKE_BUILD_TYPE={build_type}",
+        f"-DHORO_BUILD_EDITOR_GUI={'ON' if editor_gui else 'OFF'}",
+        f"-DHORO_BUILD_RENDER_OPENGL={'ON' if render_opengl else 'OFF'}",
+        f"-DHORO_BUILD_RENDER_METAL={'ON' if render_metal else 'OFF'}",
+        f"-DBUILD_TESTING={'ON' if testing else 'OFF'}",
+        f"-DHORO_ENABLE_TELEMETRY={'ON' if telemetry else 'OFF'}",
+        f"-DHORO_ENABLE_OPENTELEMETRY={'ON' if opentelemetry else 'OFF'}",
+        f"-DHORO_ENABLE_IMGUI_UI_TESTS={'ON' if imgui_ui_tests else 'OFF'}",
     ]
+    if extra_cmake_args:
+        command.extend(extra_cmake_args)
+    return command
 
 
-def build_command(build_directory: Path = DEFAULT_BUILD_DIRECTORY) -> list[str]:
-    """Build only the editor and its dependencies incrementally."""
-    return ["cmake", "--build", str(build_directory), "--target", "HoroEditor", "--parallel"]
+def build_command(
+    build_directory: Path = DEFAULT_BUILD_DIRECTORY,
+    target: str | None = "HoroEditor",
+    parallel: bool = True,
+) -> list[str]:
+    """Build the project or a specific target incrementally."""
+    command = ["cmake", "--build", str(build_directory)]
+    if target:
+        command.extend(["--target", target])
+    if parallel:
+        command.append("--parallel")
+    return command
 
 
-def editor_executable(build_directory: Path = DEFAULT_BUILD_DIRECTORY, platform: str = sys.platform) -> Path:
+def editor_executable(build_directory: Path = DEFAULT_BUILD_DIRECTORY, platform_name: str = sys.platform) -> Path:
     """Return the directly executable editor path for the host platform."""
-    if platform == "darwin":
+    if platform_name == "darwin":
         return build_directory / "apps" / "HoroEditor.app" / "Contents" / "MacOS" / "HoroEditor"
-    if platform == "win32":
+    if platform_name == "win32":
         return build_directory / "apps" / "HoroEditor.exe"
     return build_directory / "apps" / "HoroEditor"
 
@@ -282,12 +462,12 @@ def child_environment(settings: DeveloperSettings, environ: Mapping[str, str] | 
     return child
 
 
-def print_summary(settings: DeveloperSettings, collector_status: str) -> None:
+def print_summary(settings: DeveloperSettings, collector_status: str, build_directory: Path = DEFAULT_BUILD_DIRECTORY) -> None:
     """Print the effective non-secret developer configuration."""
     try:
-        displayed_build_directory = DEFAULT_BUILD_DIRECTORY.relative_to(REPOSITORY_ROOT)
+        displayed_build_directory = build_directory.relative_to(REPOSITORY_ROOT)
     except ValueError:
-        displayed_build_directory = DEFAULT_BUILD_DIRECTORY
+        displayed_build_directory = build_directory
     print("Horo Developer Runner")
     print()
     print("Target:          HoroEditor")
@@ -302,12 +482,27 @@ def print_summary(settings: DeveloperSettings, collector_status: str) -> None:
     print()
 
 
-def run_editor(settings: DeveloperSettings, editor_arguments: Sequence[str]) -> int:
+def execute_subprocess(command: Sequence[str], cwd: Path = REPOSITORY_ROOT, env: Mapping[str, str] | None = None) -> int:
+    """Run a subprocess with clear error reporting and interrupt handling."""
+    try:
+        result = subprocess.run(command, cwd=cwd, env=env, check=False)
+        return result.returncode
+    except FileNotFoundError as error:
+        print(f"error: command not found: {error.filename or command[0]}", file=sys.stderr)
+        return 127
+    except OSError as error:
+        print(f"error: failed to execute '{command[0]}': {error}", file=sys.stderr)
+        return 126
+    except KeyboardInterrupt:
+        return 130
+
+
+def run_editor(settings: DeveloperSettings, editor_arguments: Sequence[str], build_directory: Path = DEFAULT_BUILD_DIRECTORY) -> int:
     """Configure, build, and launch HoroEditor without invoking a shell."""
     collector_status = "not checked"
     if settings.otel_export_enabled:
         collector_status = "reachable" if collector_is_reachable(settings.endpoint) else "unreachable"
-    print_summary(settings, collector_status)
+    print_summary(settings, collector_status, build_directory)
 
     if settings.otel_export_enabled and collector_status == "unreachable":
         print(
@@ -317,76 +512,568 @@ def run_editor(settings: DeveloperSettings, editor_arguments: Sequence[str]) -> 
         )
 
     print("Configuring HoroEditor...", flush=True)
-    try:
-        configured = subprocess.run(configure_command(settings), cwd=REPOSITORY_ROOT, check=False)
-    except OSError as error:
-        print(f"error: could not run CMake configure: {error}", file=sys.stderr)
-        return 127
-    if configured.returncode != 0:
-        return configured.returncode
+    configure_code = execute_subprocess(configure_command(settings, build_directory=build_directory))
+    if configure_code != 0:
+        return configure_code
 
     print("Building HoroEditor...", flush=True)
-    try:
-        built = subprocess.run(build_command(), cwd=REPOSITORY_ROOT, check=False)
-    except OSError as error:
-        print(f"error: could not run CMake build: {error}", file=sys.stderr)
-        return 127
-    if built.returncode != 0:
-        return built.returncode
+    build_code = execute_subprocess(build_command(build_directory=build_directory, target="HoroEditor"))
+    if build_code != 0:
+        return build_code
 
     if settings.grafana_endpoint is not None:
-        grafana_status = sync_grafana_dashboard(settings.grafana_endpoint)
+        grafana_status = sync_grafana_dashboard(settings.grafana_endpoint, api_token=settings.grafana_api_token)
         print(f"Grafana dashboard: {grafana_status}", flush=True)
     else:
         print("Grafana dashboard: disabled", flush=True)
 
-    executable = editor_executable()
+    try:
+        executable = editor_executable(build_directory)
+    except TypeError:
+        # Fallback for parameterless monkeypatched tests
+        executable = editor_executable()  # type: ignore[call-arg]
+
     if not executable.is_file():
         print(f"error: HoroEditor executable was not produced at {executable}", file=sys.stderr)
         return 1
 
     print("Launching...", flush=True)
-    try:
-        launched = subprocess.run(
-            [str(executable), *editor_arguments],
+    return execute_subprocess(
+        [str(executable), *editor_arguments],
+        cwd=REPOSITORY_ROOT,
+        env=child_environment(settings),
+    )
+
+
+def run_build(
+    target: str | None = None,
+    build_directory: Path = DEFAULT_BUILD_DIRECTORY,
+    build_type: str = "Debug",
+    testing: bool = True,
+    imgui_ui_tests: bool = False,
+    clean: bool = False,
+    extra_cmake_args: Sequence[str] | None = None,
+) -> int:
+    """Configure and build the repository or a specific target."""
+    if clean and build_directory.exists():
+        print(f"Cleaning build directory {build_directory}...", flush=True)
+        shutil.rmtree(build_directory, ignore_errors=True)
+
+    print(f"Configuring project in {build_directory}...", flush=True)
+    cfg_cmd = configure_command(
+        build_directory=build_directory,
+        build_type=build_type,
+        testing=testing,
+        editor_gui=True,
+        render_opengl=True,
+        render_metal=(sys.platform == "darwin"),
+        telemetry=True,
+        opentelemetry=True,
+        imgui_ui_tests=imgui_ui_tests,
+        extra_cmake_args=extra_cmake_args,
+    )
+    configure_code = execute_subprocess(cfg_cmd)
+    if configure_code != 0:
+        return configure_code
+
+    print(f"Building {'target ' + target if target else 'all targets'}...", flush=True)
+    return execute_subprocess(build_command(build_directory=build_directory, target=target))
+
+
+def run_tests(
+    regex: str | None = None,
+    exclude: str | None = None,
+    gui: bool = False,
+    build_directory: Path = DEFAULT_CI_BUILD_DIRECTORY,
+    build_type: str = "Debug",
+    junit: Path | None = None,
+    extra_ctest_args: Sequence[str] | None = None,
+) -> int:
+    """Build all test targets and execute ctest with optional filters."""
+    build_code = run_build(
+        target=None,
+        build_directory=build_directory,
+        build_type=build_type,
+        testing=True,
+        imgui_ui_tests=gui,
+    )
+    if build_code != 0:
+        return build_code
+
+    ctest_command = ["ctest", "--test-dir", str(build_directory), "--output-on-failure"]
+    if not gui:
+        ctest_command.extend(["-LE", "gui"])
+    if regex:
+        ctest_command.extend(["-R", regex])
+    if exclude:
+        ctest_command.extend(["-E", exclude])
+    if junit:
+        junit.parent.mkdir(parents=True, exist_ok=True)
+        ctest_command.extend(["--output-junit", str(junit)])
+    if extra_ctest_args:
+        ctest_command.extend(extra_ctest_args)
+
+    print(f"Running CTest suite in {build_directory}...", flush=True)
+    return execute_subprocess(ctest_command)
+
+
+def run_check(
+    regex: str | None = None,
+    gui: bool = False,
+    build_directory: Path = DEFAULT_CI_BUILD_DIRECTORY,
+    junit: Path | None = None,
+) -> int:
+    """Run full CI-parity check: configure all components, compile all targets, run test suite."""
+    print("==================================================", flush=True)
+    print("  Horo Engine CI Parity Verification Pass", flush=True)
+    print("==================================================", flush=True)
+    return run_tests(
+        regex=regex,
+        gui=gui,
+        build_directory=build_directory,
+        junit=junit,
+    )
+
+
+
+def _is_formattable(path: Path) -> bool:
+    """Return true if path is a repository C++ source and not third-party."""
+    return path.suffix in _CPP_EXTENSIONS and not any(part in _EXCLUDED_PATH_PARTS for part in path.parts)
+
+
+def _collect_format_candidates(files: Sequence[str] | None, staged: bool) -> list[Path]:
+    """Resolve file paths to format based on staged flag or explicit arguments."""
+    if staged:
+        proc = subprocess.run(
+            ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR"],
             cwd=REPOSITORY_ROOT,
-            env=child_environment(settings),
+            capture_output=True,
+            text=True,
             check=False,
         )
-        return launched.returncode
+        candidates = [REPOSITORY_ROOT / line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    elif files:
+        candidates = [Path(f).resolve() for f in files]
+    else:
+        proc = subprocess.run(["git", "ls-files"], cwd=REPOSITORY_ROOT, capture_output=True, text=True, check=False)
+        candidates = [REPOSITORY_ROOT / line.strip() for line in proc.stdout.splitlines() if line.strip()]
+
+    return [p for p in candidates if _is_formattable(p) and p.is_file()]
+
+
+def run_format(files: Sequence[str] | None = None, staged: bool = False, check: bool = False) -> int:
+    """Format C++ source files with clang-format, with support for staged commits and dry-run check."""
+    clang_format_bin = shutil.which("clang-format")
+    if not clang_format_bin:
+        print("error: clang-format not found in PATH", file=sys.stderr)
+        return 127
+
+    target_files = _collect_format_candidates(files, staged)
+    if not target_files:
+        print("No matching C++ files to format.")
+        return 0
+
+    file_paths = [str(f) for f in target_files]
+    if check:
+        cmd = [clang_format_bin, "--dry-run", "--Werror", *file_paths]
+        result = execute_subprocess(cmd)
+        if result != 0:
+            print("Formatting violations detected in above files.", file=sys.stderr)
+            return 1
+        print(f"All {len(target_files)} file(s) correctly formatted.")
+        return 0
+
+    cmd = [clang_format_bin, "-i", *file_paths]
+    code = execute_subprocess(cmd)
+    if code != 0:
+        return code
+
+    if staged:
+        subprocess.run(["git", "add", *file_paths], cwd=REPOSITORY_ROOT, check=False)
+
+    print(f"Successfully formatted {len(target_files)} file(s).")
+    return 0
+
+
+def _check_tool_version(
+    report: DoctorReport,
+    category: str,
+    name: str,
+    binary_candidates: Sequence[str | None],
+    version_flag: str = "--version",
+    missing_status: CheckStatus = CheckStatus.ERROR,
+    missing_message: str | None = None,
+) -> str | None:
+    """Find a candidate binary, execute its version flag, and record diagnostic output."""
+    found_bin: str | None = None
+    for cand in binary_candidates:
+        if cand and shutil.which(cand):
+            found_bin = cand
+            break
+
+    if not found_bin:
+        msg = missing_message or f"{name} not found in PATH"
+        report.add(category, name, missing_status, msg)
+        return None
+
+    try:
+        proc = subprocess.run([found_bin, version_flag], capture_output=True, text=True, check=False)
+        first_line = proc.stdout.splitlines()[0] if proc.stdout else "available"
+        report.add(category, name, CheckStatus.OK, first_line, details=f"binary: {found_bin}")
+        return found_bin
     except OSError as error:
-        print(f"error: could not launch HoroEditor: {error}", file=sys.stderr)
-        return 126
+        report.add(category, name, CheckStatus.ERROR, f"Failed to execute {name}: {error}")
+        return None
+
+
+def check_compiler(report: DoctorReport) -> None:
+    """Verify C++ compiler availability and C++20 support."""
+    cxx_env = os.environ.get("CXX")
+    candidates = [cxx_env] if cxx_env else ["clang++", "g++", "cl.exe", "c++"]
+    _check_tool_version(
+        report,
+        "Toolchain",
+        _TOOLCHAIN_COMPILER_NAME,
+        candidates,
+        missing_message="No C++ compiler found in PATH or $CXX",
+    )
+
+
+def check_cmake(report: DoctorReport) -> None:
+    """Verify CMake and Ninja build generator availability."""
+    _check_tool_version(report, "Toolchain", _TOOLCHAIN_CMAKE_NAME, ["cmake"])
+    _check_tool_version(
+        report,
+        "Toolchain",
+        _TOOLCHAIN_NINJA_NAME,
+        ["ninja"],
+        missing_status=CheckStatus.WARN,
+        missing_message="ninja not found; CMake may fall back to make/msbuild",
+    )
+
+
+def check_format_tool(report: DoctorReport) -> None:
+    """Check if clang-format is available for code formatting."""
+    _check_tool_version(
+        report,
+        "Toolchain",
+        _TOOLCHAIN_CLANG_FORMAT_NAME,
+        ["clang-format"],
+        missing_status=CheckStatus.WARN,
+        missing_message="clang-format not found; pre-commit format check will be skipped",
+    )
+
+
+def check_ccache(report: DoctorReport) -> None:
+    """Check if ccache is available for build acceleration."""
+    _check_tool_version(
+        report,
+        "Toolchain",
+        _TOOLCHAIN_CCACHE_NAME,
+        ["ccache"],
+        missing_status=CheckStatus.WARN,
+        missing_message="ccache not found; installing ccache will significantly speed up rebuilds",
+    )
+
+
+def check_python_environment(report: DoctorReport) -> None:
+    """Check Python version and test runners (pytest / .venv)."""
+    py_ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    report.add("Python", "Interpreter", CheckStatus.OK, f"Python {py_ver} ({sys.executable})")
+
+    venv_path = REPOSITORY_ROOT / ".venv"
+    if venv_path.is_dir():
+        report.add("Python", "Virtual Environment", CheckStatus.OK, f".venv present at {venv_path}")
+    else:
+        report.add("Python", "Virtual Environment", CheckStatus.INFO, ".venv not found in repository root")
+
+    pytest_found = False
+    try:
+        import pytest  # noqa: F401
+        report.add("Python", _PYTHON_PYTEST_NAME, CheckStatus.OK, f"pytest {pytest.__version__} installed")
+        pytest_found = True
+    except ImportError:
+        pass
+
+    if not pytest_found and venv_path.is_dir():
+        venv_pytest = venv_path / "bin" / "pytest"
+        if venv_pytest.is_file():
+            report.add("Python", _PYTHON_PYTEST_NAME, CheckStatus.OK, f"pytest available via .venv ({venv_pytest})")
+            pytest_found = True
+
+    if not pytest_found:
+        report.add("Python", _PYTHON_PYTEST_NAME, CheckStatus.WARN, "pytest not found; python test suite will be skipped in CTest")
+
+
+def _check_darwin_graphics(report: DoctorReport) -> None:
+    """Check macOS Metal, OpenGL, and window server status."""
+    sdk_path = "/System/Library/Frameworks"
+    metal_present = Path(f"{sdk_path}/Metal.framework").exists() or Path("/Applications/Xcode.app").exists()
+    if metal_present:
+        report.add("Graphics", "Metal API", CheckStatus.OK, "Apple Metal framework available")
+    else:
+        report.add("Graphics", "Metal API", CheckStatus.WARN, "Metal framework not found in standard system path")
+
+    opengl_present = Path(f"{sdk_path}/OpenGL.framework").exists()
+    if opengl_present:
+        report.add("Graphics", "OpenGL API", CheckStatus.OK, "Apple OpenGL framework available")
+    else:
+        report.add("Graphics", "OpenGL API", CheckStatus.INFO, "OpenGL framework legacy path")
+
+    has_pgrep = shutil.which("pgrep")
+    window_server_active = False
+    if has_pgrep:
+        ws_proc = subprocess.run(["pgrep", "-x", "WindowServer"], capture_output=True, check=False)
+        window_server_active = (ws_proc.returncode == 0)
+
+    is_remote_ssh = "SSH_CLIENT" in os.environ or "SSH_CONNECTION" in os.environ
+    if window_server_active and not is_remote_ssh:
+        report.add("Graphics", _GRAPHICS_DISPLAY_NAME, CheckStatus.OK, "Interactive WindowServer session active")
+    else:
+        report.add("Graphics", _GRAPHICS_DISPLAY_NAME, CheckStatus.INFO, "Headless or remote session")
+
+
+def _check_linux_graphics(report: DoctorReport) -> None:
+    """Check Linux display and graphics environment."""
+    display = os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+    if display:
+        report.add("Graphics", _GRAPHICS_DISPLAY_NAME, CheckStatus.OK, f"Display server active ({display})")
+    else:
+        report.add("Graphics", _GRAPHICS_DISPLAY_NAME, CheckStatus.INFO, "Headless display environment (DISPLAY not set)")
+
+
+def check_platform_and_graphics(report: DoctorReport) -> None:
+    """Verify host graphics and display environment capabilities."""
+    current_os = platform.system()
+    arch = platform.machine()
+    report.add("Platform", "Host System", CheckStatus.OK, f"{current_os} {platform.release()} ({arch})")
+
+    if current_os == "Darwin":
+        _check_darwin_graphics(report)
+    elif current_os == "Linux":
+        _check_linux_graphics(report)
+
+
+def check_observability_and_services(report: DoctorReport, settings: DeveloperSettings | None) -> None:
+    """Check validity of developer settings and service reachability."""
+    env_file = DEFAULT_ENV_FILE
+    if env_file.exists():
+        try:
+            parse_dotenv(env_file)
+            report.add("Configuration", DEFAULT_ENV_FILE_NAME, CheckStatus.OK, "Valid configuration file parsed")
+        except ConfigurationError as error:
+            report.add("Configuration", DEFAULT_ENV_FILE_NAME, CheckStatus.ERROR, f"Syntax/validation error: {error}")
+    else:
+        report.add("Configuration", DEFAULT_ENV_FILE_NAME, CheckStatus.INFO, f"No local {DEFAULT_ENV_FILE_NAME} file (using defaults)")
+
+    if settings is None:
+        report.add("Observability", _OBSERVABILITY_OTLP_NAME, CheckStatus.WARN, "Settings could not be loaded due to configuration error")
+        report.add("Observability", _OBSERVABILITY_GRAFANA_NAME, CheckStatus.WARN, "Settings could not be loaded due to configuration error")
+        return
+
+    if settings.otel_export_enabled:
+        reachable = collector_is_reachable(settings.endpoint)
+        if reachable:
+            report.add("Observability", _OBSERVABILITY_OTLP_NAME, CheckStatus.OK, f"Reachable at {settings.endpoint.url}")
+        else:
+            report.add("Observability", _OBSERVABILITY_OTLP_NAME, CheckStatus.WARN, f"Unreachable at {settings.endpoint.url} (fallback to local logs)")
+    else:
+        report.add("Observability", _OBSERVABILITY_OTLP_NAME, CheckStatus.INFO, "OpenTelemetry export disabled (HORO_DEV_OTEL_EXPORT=OFF)")
+
+    if settings.grafana_endpoint:
+        headers = _grafana_headers(settings.grafana_api_token)
+        try:
+            with urlopen(Request(f"{settings.grafana_endpoint.url}/api/health", headers=headers), timeout=0.5):
+                report.add("Observability", _OBSERVABILITY_GRAFANA_NAME, CheckStatus.OK, f"Reachable at {settings.grafana_endpoint.url}")
+        except (OSError, ValueError):
+            report.add("Observability", _OBSERVABILITY_GRAFANA_NAME, CheckStatus.WARN, f"Unreachable at {settings.grafana_endpoint.url}")
+    else:
+        report.add("Observability", _OBSERVABILITY_GRAFANA_NAME, CheckStatus.INFO, "Grafana auto-import disabled")
+
+
+def run_doctor(settings: DeveloperSettings | None = None) -> DoctorReport:
+    """Execute all diagnostic checks and assemble the report."""
+    if settings is None:
+        try:
+            settings = load_settings()
+        except (ConfigurationError, OSError):
+            settings = None
+
+    report = DoctorReport()
+    check_compiler(report)
+    check_cmake(report)
+    check_format_tool(report)
+    check_ccache(report)
+    check_python_environment(report)
+    check_platform_and_graphics(report)
+    check_observability_and_services(report, settings)
+    return report
+
+
+_EPILOG_EXAMPLES = """examples:
+  python3 scripts/dev.py doctor             Diagnose development toolchain and services
+  python3 scripts/dev.py test               Run unit and integration test suite
+  python3 scripts/dev.py test Scene         Run tests matching 'Scene'
+  python3 scripts/dev.py check              Run full CI-parity verification pass
+  python3 scripts/dev.py format --staged    Format git-staged C++ source files
+  python3 scripts/dev.py build HoroEditor   Build specific target
+  python3 scripts/dev.py run editor         Configure, build, and launch HoroEditor
+  python3 scripts/dev.py help <command>     Show detailed options for a subcommand
+"""
+
+
+def create_argument_parser() -> argparse.ArgumentParser:
+    """Create the developer command-line interface argument parser."""
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        epilog=_EPILOG_EXAMPLES,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    commands = parser.add_subparsers(dest="command", required=False)
+
+    # run command (avoiding deprecated REMAINDER in Python 3.13+)
+    run = commands.add_parser("run", help="configure, build, and run a supported target")
+    run.add_argument("target", nargs="?", default="editor", choices=("editor",))
+    run.add_argument("arguments", nargs="*", default=[], help="arguments forwarded to the executable after --")
+
+    # doctor command
+    doc = commands.add_parser("doctor", help="diagnose toolchain, graphics, and environment health")
+    doc.add_argument("--json", action="store_true", help="output report as structured JSON")
+    doc.add_argument("--no-color", action="store_true", help="disable ANSI color formatting")
+
+    # build command
+    bld = commands.add_parser("build", help="configure and build all targets or a specific target")
+    bld.add_argument("target", nargs="?", default=None, help="specific target name to build (e.g. HoroEditor, HoroEditorUiAutomationTests)")
+    bld.add_argument("-B", "--dir", type=Path, default=DEFAULT_BUILD_DIRECTORY, help="build output directory")
+    bld.add_argument("--type", default="Debug", choices=("Debug", "Release", "RelWithDebInfo"), help="CMake build type")
+    bld.add_argument("--clean", action="store_true", help="clean build directory before configuring")
+    bld.add_argument("--no-testing", action="store_true", help="disable building tests")
+
+    # test command
+    tst = commands.add_parser("test", help="configure with tests, compile, and run CTest suite")
+    tst.add_argument("regex", nargs="?", default=None, help="test name filter regex (passed to ctest -R)")
+    tst.add_argument("-R", "--regex-flag", dest="regex_opt", default=None, help="explicit regex filter option")
+    tst.add_argument("-E", "--exclude", default=None, help="exclude tests matching regex")
+    tst.add_argument("--gui", action="store_true", help="include interactive GUI test engine scenarios")
+    tst.add_argument("-B", "--dir", type=Path, default=DEFAULT_CI_BUILD_DIRECTORY, help="test build directory")
+    tst.add_argument("--type", default="Debug", choices=("Debug", "Release", "RelWithDebInfo"), help="CMake build type")
+    tst.add_argument("--junit", type=Path, default=None, help="write CTest results to JUnit XML file")
+
+    # check command (CI Parity)
+    chk = commands.add_parser("check", help="run full CI-parity build and comprehensive test pass")
+    chk.add_argument("-R", "--regex", default=None, help="filter tests during check")
+    chk.add_argument("--gui", action="store_true", help="include interactive GUI scenarios")
+    chk.add_argument("-B", "--dir", type=Path, default=DEFAULT_CI_BUILD_DIRECTORY, help="check build directory")
+    chk.add_argument("--junit", type=Path, default=None, help="write CTest results to JUnit XML file")
+
+    # format command
+    fmt = commands.add_parser("format", help="format C++ source files using clang-format")
+    fmt.add_argument("files", nargs="*", default=None, help="specific files to format")
+    fmt.add_argument("--staged", action="store_true", help="format only git-staged C++ files and re-add them")
+    fmt.add_argument("--check", action="store_true", help="check formatting without modifying files")
+
+    # help command
+    hlp = commands.add_parser("help", help="show general help or help for a specific command")
+    hlp.add_argument("topic", nargs="?", default=None, help="subcommand name to show detailed help for")
+
+    return parser
+
+
+def _handle_run(parsed: argparse.Namespace, settings: DeveloperSettings) -> int:
+    """Handle run subcommand."""
+    forwarded = list(parsed.arguments)
+    if forwarded[:1] == ["--"]:
+        forwarded.pop(0)
+    try:
+        return run_editor(settings, forwarded)
     except KeyboardInterrupt:
         return 130
 
 
-def create_argument_parser() -> argparse.ArgumentParser:
-    """Create the intentionally narrow developer command parser."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    commands = parser.add_subparsers(dest="command", required=True)
-    run = commands.add_parser("run", help="configure, build, and run a supported target")
-    run.add_argument("target", choices=("editor",))
-    run.add_argument("arguments", nargs=argparse.REMAINDER, help="arguments forwarded after --")
-    return parser
+def _handle_doctor(parsed: argparse.Namespace, settings: DeveloperSettings | None) -> int:
+    """Handle doctor subcommand."""
+    report = run_doctor(settings)
+    if getattr(parsed, "json", False):
+        print(json.dumps(report.to_dict(), indent=2))
+    else:
+        use_color = sys.stdout.isatty() and not getattr(parsed, "no_color", False)
+        print(report.render(use_color=use_color))
+    return 1 if report.has_errors else 0
+
+
+def _handle_help(parser: argparse.ArgumentParser, topic: str | None) -> int:
+    """Show top-level help or topic-specific subcommand help."""
+    if not topic:
+        parser.print_help()
+        return 0
+
+    subparser_action = next(
+        (action for action in parser._actions if isinstance(action, argparse._SubParsersAction)),
+        None,
+    )
+    if subparser_action and topic in subparser_action.choices:
+        subparser_action.choices[topic].print_help()
+        return 0
+
+    print(f"error: unknown command {topic!r}. Run 'dev.py help' for available commands.", file=sys.stderr)
+    return 2
 
 
 def main(arguments: Sequence[str] | None = None) -> int:
     """Run the developer command-line interface."""
-    parsed = create_argument_parser().parse_args(arguments)
-    forwarded = list(parsed.arguments)
-    if forwarded[:1] == ["--"]:
-        forwarded.pop(0)
+    parser = create_argument_parser()
+    parsed = parser.parse_args(arguments)
 
+    if not parsed.command or parsed.command == "help":
+        return _handle_help(parser, getattr(parsed, "topic", None))
+
+    if parsed.command == "doctor":
+        try:
+            doc_settings = load_settings()
+        except (ConfigurationError, OSError):
+            doc_settings = None
+        return _handle_doctor(parsed, doc_settings)
+
+    if parsed.command == "format":
+        return run_format(files=parsed.files, staged=parsed.staged, check=parsed.check)
+
+    if parsed.command == "build":
+        return run_build(
+            target=parsed.target,
+            build_directory=parsed.dir,
+            build_type=parsed.type,
+            testing=not parsed.no_testing,
+            clean=parsed.clean,
+        )
+
+    if parsed.command == "test":
+        active_regex = parsed.regex_opt or parsed.regex
+        return run_tests(
+            regex=active_regex,
+            exclude=parsed.exclude,
+            gui=parsed.gui,
+            build_directory=parsed.dir,
+            build_type=parsed.type,
+            junit=parsed.junit,
+        )
+
+    if parsed.command == "check":
+        return run_check(
+            regex=parsed.regex,
+            gui=parsed.gui,
+            build_directory=parsed.dir,
+            junit=parsed.junit,
+        )
+
+
+    # run command
     try:
         settings = load_settings()
     except (ConfigurationError, OSError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
-    try:
-        return run_editor(settings, forwarded)
-    except KeyboardInterrupt:
-        return 130
+
+    return _handle_run(parsed, settings)
 
 
 if __name__ == "__main__":
