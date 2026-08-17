@@ -1,0 +1,14 @@
+name: Debug Session with Tmate
+
+on:
+  workflow_dispatch:
+
+jobs:
+  tmate-debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Tmate SSH Session
+        uses: mxschmitt/action-tmate@v3
