@@ -6,20 +6,28 @@
 #include "editor/screens/workspace/EditorWorkspaceViewModel.h"
 
 #include <cstdint>
+#include <imgui.h>
 
 namespace Horo::Editor {
     struct GuiContentRegion;
 
     class EditorWorkspaceView final : public Input::IInputCaptureOwner {
     public:
-        EditorWorkspaceView(const EditorGuiContext &context, const WorkspacePanelRegistry &panelRegistry, std::uintptr_t logoTexture,
-                            Input::InputRouter &inputRouter, Input::InputContextToken &workspaceInputContext);
+        struct WorkspaceLayoutGeometry {
+            ImVec2 display{};
+            float curY{0.0F};
+            float leftActivityW{0.0F};
+            float rightActivityW{0.0F};
+            float hierarchyW{0.0F};
+            float inspectorW{0.0F};
+            float centerW{0.0F};
+            float bottomDockW{0.0F};
+            float availableDockW{0.0F};
+            float mainH{0.0F};
+            float contentH{0.0F};
+            float activityBarH{0.0F};
+        };
 
-        void Draw(const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &outCommand,
-                  const GuiContentRegion &contentRegion);
-        void OnInputCaptureCancelled(Input::CaptureCancellationReason reason) noexcept override;
-
-    private:
         struct ActivityBarOptions {
             WorkspaceDockArea area;
             bool indicatorOnRight;
@@ -33,6 +41,26 @@ namespace Horo::Editor {
             ImDrawList *drawList;
         };
 
+        struct ActivityBarGroupParams {
+            std::size_t groupIndex{0};
+            const ActivityBarGroup &group;
+            float groupTop{0.0F};
+            float groupBottom{0.0F};
+            ImVec2 pos{};
+            ImVec2 size{};
+            const ActivityBarGeometry &geometry;
+            const ActivityBarOptions &options;
+            bool draggingActivityItem{false};
+        };
+
+        EditorWorkspaceView(const EditorGuiContext &context, const WorkspacePanelRegistry &panelRegistry, std::uintptr_t logoTexture,
+                            Input::InputRouter &inputRouter, Input::InputContextToken &workspaceInputContext);
+
+        void Draw(const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &outCommand,
+                  const GuiContentRegion &contentRegion);
+        void OnInputCaptureCancelled(Input::CaptureCancellationReason reason) noexcept override;
+
+    private:
         const EditorGuiContext &m_context;
         const WorkspacePanelRegistry &m_panelRegistry;
         std::uintptr_t m_logoTexture;
@@ -58,33 +86,6 @@ namespace Horo::Editor {
         void DrawRecoveryBar(const ImVec2 &pos, const ImVec2 &size, EditorWorkspaceViewCommandData &outCommand) const;
 
         void DrawExternalConflictBar(const ImVec2 &pos, const ImVec2 &size, EditorWorkspaceViewCommandData &outCommand) const;
-
-        struct WorkspaceLayoutGeometry {
-            ImVec2 display{};
-            float curY{0.0F};
-            float leftActivityW{0.0F};
-            float rightActivityW{0.0F};
-            float hierarchyW{0.0F};
-            float inspectorW{0.0F};
-            float centerW{0.0F};
-            float bottomDockW{0.0F};
-            float availableDockW{0.0F};
-            float mainH{0.0F};
-            float contentH{0.0F};
-            float activityBarH{0.0F};
-        };
-
-        struct ActivityBarGroupParams {
-            std::size_t groupIndex{0};
-            const ActivityBarGroup &group;
-            float groupTop{0.0F};
-            float groupBottom{0.0F};
-            ImVec2 pos{};
-            ImVec2 size{};
-            const ActivityBarGeometry &geometry;
-            const ActivityBarOptions &options;
-            bool draggingActivityItem{false};
-        };
 
         void DrawDockArea(WorkspaceDockArea area, const char *windowId, const ImVec2 &pos, const ImVec2 &size,
                           std::string_view activePanelId, const EditorWorkspaceViewModel &viewModel,
