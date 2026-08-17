@@ -237,14 +237,9 @@ namespace Horo::Assets {
         }
 
         // Build and write current.json atomically
-        std::ostringstream currentJson;
-        currentJson << "{\"schemaVersion\":1,"
-                    << "\"target\":\"" << target.Value() << "\","
-                    << "\"manifestDigest\":\"" << manifestHex(manifestDigest) << "\","
-                    << "\"generationPath\":\"" << genRelPath << "\","
-                    << "\"artifactCount\":\"" << entries.size() << "\"}";
-
-        auto currentStr = currentJson.str();
+        const std::string currentStr = "{\"schemaVersion\":1,\"target\":\"" + target.Value() + "\",\"manifestDigest\":\"" +
+                                       manifestHex(manifestDigest) + "\",\"generationPath\":\"" + genRelPath + "\",\"artifactCount\":\"" +
+                                       std::to_string(entries.size()) + "\"}";
         auto currentBytes = std::vector<std::uint8_t>(reinterpret_cast<const std::uint8_t *>(currentStr.data()),
                                                       reinterpret_cast<const std::uint8_t *>(currentStr.data()) + currentStr.size());
 

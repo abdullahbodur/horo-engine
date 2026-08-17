@@ -847,7 +847,7 @@ namespace {
         REQUIRE((registry.Snapshot().Records().empty()));
         const std::filesystem::path trashRoot = projectRoot / ".horo/local/trash";
         REQUIRE((std::filesystem::is_directory(trashRoot)));
-        const std::filesystem::path trashEntry = std::filesystem::directory_iterator{trashRoot}->path();
+        const std::filesystem::path trashEntry = std::filesystem::directory_iterator(trashRoot)->path();
         REQUIRE((std::filesystem::is_regular_file(trashEntry / renamed.filename())));
         REQUIRE((std::filesystem::is_regular_file(trashEntry / (renamed.filename().string() + ".horo"))));
         std::ifstream manifestStream(trashEntry / "trash.json");

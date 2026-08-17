@@ -156,15 +156,10 @@ namespace Horo::Assets {
         if (records.empty()) {
             // Empty snapshot: write an empty current.json directly (no manifest/generation dir needed).
             // Build an empty current.json
-            std::ostringstream currentJson;
-            currentJson << "{\"schemaVersion\":1,"
-                        << "\"target\":\"" << request.target.Value() << "\","
-                        << "\"manifestDigest\":\""
-                        << "0000000000000000000000000000000000000000000000000000000000000000"
-                        << "\","
-                        << "\"generationPath\":\"generations/empty\","
-                        << "\"artifactCount\":\"0\"}";
-            auto currentStr = currentJson.str();
+            const std::string currentStr = "{\"schemaVersion\":1,\"target\":\"" + request.target.Value() +
+                                           "\",\"manifestDigest\":\""
+                                           "0000000000000000000000000000000000000000000000000000000000000000\","
+                                           "\"generationPath\":\"generations/empty\",\"artifactCount\":\"0\"}";
             auto currentBytes = std::vector<std::uint8_t>(reinterpret_cast<const std::uint8_t *>(currentStr.data()),
                                                           reinterpret_cast<const std::uint8_t *>(currentStr.data()) + currentStr.size());
 
