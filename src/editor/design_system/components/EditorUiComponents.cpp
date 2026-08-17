@@ -328,11 +328,12 @@ namespace Horo::Editor::Ui {
             drawList->AddRectFilled(position, {position.x + size.x, position.y + size.y}, U32(surface), 4.0F);
         }
 
-        ImVec4 iconColor = Dim();
-        if (enabled)
-            iconColor = hovered ? Text() : Muted();
-        if (!enabled)
+        ImVec4 iconColor = Theme::Dim();
+        if (enabled) {
+            iconColor = hovered ? Theme::Text() : Theme::Muted();
+        } else {
             iconColor.w *= 0.48F;
+        }
         const ImU32 color = U32(iconColor);
         const ImVec2 center{
             position.x + size.x * 0.5F,
@@ -360,10 +361,9 @@ namespace Horo::Editor::Ui {
     bool IconButton(const IconButtonProps &props) {
         const auto &tokens = Theme::GetActiveTokens();
         const auto &metrics = DesignSystem::MetricsFor(tokens, props.componentSize);
-        const ImVec2 size{
-            props.size.x > 0.0F ? ScaledLayoutValue(props.size.x) : metrics.minimumHeight,
-            props.size.y > 0.0F ? ScaledLayoutValue(props.size.y) : metrics.minimumHeight,
-        };
+        const float widthVal = props.size.x > 0.0F ? ScaledLayoutValue(props.size.x) : metrics.minimumHeight;
+        const float heightVal = props.size.y > 0.0F ? ScaledLayoutValue(props.size.y) : metrics.minimumHeight;
+        const ImVec2 size{widthVal, heightVal};
         ImGui::PushID(props.id);
         const ImVec2 position = ImGui::GetCursorScreenPos();
         ImGui::BeginDisabled(!props.enabled);
@@ -845,8 +845,8 @@ namespace Horo::Editor::Ui {
         const float visibleMaxY = visibleMinY + ImGui::GetWindowHeight();
         drawList->PushClipRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), true);
 
-        const char *lineBegin = buffer;
-        const char *textEnd = std::find(buffer, buffer + bufferSize, '\0');
+        const auto *lineBegin = buffer;
+        const auto *textEnd = std::find(buffer, buffer + bufferSize, '\0');
         for (std::size_t lineIndex = 0; lineIndex < lineLayouts.size(); ++lineIndex) {
             const auto lineEnd = std::find(lineBegin, textEnd, '\n');
 

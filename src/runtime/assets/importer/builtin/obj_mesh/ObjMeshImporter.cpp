@@ -11,6 +11,7 @@
 #include "ObjMeshPreviewProvider.h"
 
 #include <algorithm>
+#include <bit>
 #include <cctype>
 #include <cstdint>
 #include <cstring>
@@ -27,10 +28,8 @@ namespace Horo::Assets {
                 out.push_back(static_cast<std::uint8_t>((value >> (i * 8)) & 0xFF));
         }
 
-        void WriteFloat(std::vector<std::uint8_t> &out, float value) {
-            std::uint32_t raw;
-            std::memcpy(&raw, &value, sizeof(raw));
-            WriteLE32(out, raw);
+        void WriteFloat(std::vector<std::uint8_t> &out, const float value) {
+            WriteLE32(out, std::bit_cast<std::uint32_t>(value));
         }
 
         struct Vec3 {
@@ -164,9 +163,9 @@ namespace Horo::Assets {
                 WriteFloat(payload, maxY);
                 WriteFloat(payload, maxZ);
 
-                std::uint32_t posSize = static_cast<std::uint32_t>(obj.positions.size() * 3 * sizeof(float));
-                std::uint32_t tcSize = static_cast<std::uint32_t>(obj.texcoords.size() * 2 * sizeof(float));
-                std::uint32_t nSize = static_cast<std::uint32_t>(obj.normals.size() * 3 * sizeof(float));
+                const auto posSize = static_cast<std::uint32_t>(obj.positions.size() * 3 * sizeof(float));
+                const auto tcSize = static_cast<std::uint32_t>(obj.texcoords.size() * 2 * sizeof(float));
+                const auto nSize = static_cast<std::uint32_t>(obj.normals.size() * 3 * sizeof(float));
                 WriteLE32(payload, posSize);
                 WriteLE32(payload, tcSize);
                 WriteLE32(payload, nSize);

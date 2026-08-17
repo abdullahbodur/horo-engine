@@ -3,6 +3,7 @@
 #include "Horo/Assets/MeshEditorPayload.h"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -31,7 +32,7 @@ namespace Horo::Editor {
             std::uint32_t raw{};
             if (!ReadU32(bytes, offset, raw))
                 return false;
-            std::memcpy(&value, &raw, sizeof(value));
+            value = std::bit_cast<float>(raw);
             return std::isfinite(value);
         }
 

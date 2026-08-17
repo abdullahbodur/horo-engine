@@ -31,6 +31,6 @@ namespace Horo::Editor {
         GameplayBehaviorKind kind_;
         std::string destination_;
         std::string baseName_;
-        Result<void> validation_;
+        Result<void> validation_{Result<void>::Success()};
     };
 }

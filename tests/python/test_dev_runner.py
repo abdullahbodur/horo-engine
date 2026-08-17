@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import importlib.util
 import json
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 from urllib.error import URLError
 
 import pytest
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("horo_dev_runner", REPOSITORY_ROOT / "scripts" / "dev.py")
-assert SPEC is not None and SPEC.loader is not None
+assert SPEC is not None
+assert SPEC.loader is not None
 dev = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = dev
 SPEC.loader.exec_module(dev)
@@ -54,8 +54,9 @@ def test_dotenv_parser_supports_the_declared_non_executable_grammar(tmp_path: Pa
     ],
 )
 def test_dotenv_parser_rejects_shell_syntax_and_malformed_lines(tmp_path: Path, line: str) -> None:
+    env_file = write_env(tmp_path / ".env.local", line)
     with pytest.raises(dev.ConfigurationError):
-        dev.parse_dotenv(write_env(tmp_path / ".env.local", line))
+        dev.parse_dotenv(env_file)
 
 
 def test_process_environment_overrides_local_configuration(tmp_path: Path) -> None:

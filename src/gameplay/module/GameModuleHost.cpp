@@ -6,6 +6,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstring>
+#include <format>
 #include <system_error>
 #include <utility>
 
@@ -17,9 +18,9 @@ namespace Horo::Gameplay {
         }
 
         [[nodiscard]] Result<void> ValidateText(const char *value, const std::string_view field) {
-            if (value == nullptr || *value == '\0' || std::strlen(value) > 256)
+            if (value == nullptr || *value == '\0' || std::string_view{value}.size() > 256)
                 return Result<void>::Failure(
-                    MakeError(GameplayErrors::InvalidBehaviorComponent, "Gameplay module " + std::string{field} + " is invalid."));
+                    MakeError(GameplayErrors::InvalidBehaviorComponent, std::format("Gameplay module {} is invalid.", field)));
             return Result<void>::Success();
         }
 

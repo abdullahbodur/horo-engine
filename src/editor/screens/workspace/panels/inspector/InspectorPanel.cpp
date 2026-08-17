@@ -77,9 +77,8 @@ namespace Horo::Editor {
         dl->AddLine(ImVec2(ox + 4, oy + 8), ImVec2(ox + 10, oy + 8), color, 1.5f);
     }
 
-    void InspectorPanel::DrawPanel(const ImVec2 &pos, const ImVec2 &size, const EditorWorkspaceViewModel &vm,
+    void InspectorPanel::DrawPanel([[maybe_unused]] const ImVec2 &pos, const ImVec2 &size, const EditorWorkspaceViewModel &vm,
                                    EditorWorkspaceViewCommandData &cmd, const EditorGuiContext &ctx) {
-        static_cast<void>(pos);
         const std::array tabNames{ctx.localization.Get("editor", "workspace.panel.inspector").c_str()};
         Ui::DrawDockTabs(tabNames, 0, ctx.theme.fonts);
 
@@ -100,7 +99,7 @@ namespace Horo::Editor {
 
         ImGui::EndChild();
         if (selectedObjects.size() == 1) {
-            if (const SceneObject *selected = FindSelectedObject(vm); selected != nullptr)
+            if (const auto *selected = FindSelectedObject(vm); selected != nullptr)
                 DrawAddComponent(*selected, vm, cmd, ctx);
         }
         ImGui::PopStyleVar();

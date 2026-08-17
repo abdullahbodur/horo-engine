@@ -263,16 +263,17 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] int CompareCaseInsensitive(const std::string_view left, const std::string_view right) {
-            const auto mismatch = std::mismatch(left.begin(), left.end(), right.begin(), right.end(), [](const char lhs, const char rhs) {
+            const auto [leftMismatch, rightMismatch] =
+                std::mismatch(left.begin(), left.end(), right.begin(), right.end(), [](const char lhs, const char rhs) {
                 return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs));
             });
-            if (mismatch.first == left.end() || mismatch.second == right.end()) {
+            if (leftMismatch == left.end() || rightMismatch == right.end()) {
                 if (left.size() == right.size())
                     return left.compare(right);
                 return left.size() < right.size() ? -1 : 1;
             }
-            const auto lhs = std::tolower(static_cast<unsigned char>(*mismatch.first));
-            const auto rhs = std::tolower(static_cast<unsigned char>(*mismatch.second));
+            const auto lhs = std::tolower(static_cast<unsigned char>(*leftMismatch));
+            const auto rhs = std::tolower(static_cast<unsigned char>(*rightMismatch));
             return lhs < rhs ? -1 : 1;
         }
     }  // namespace
@@ -404,12 +405,14 @@ namespace Horo::Editor {
                 entry.previewFallback = InferFallback(entry.assetType);
                 if (importerCatalog != nullptr && !entry.assetType.empty()) {
                     const auto parsedType = Assets::AssetTypeId::Parse(entry.assetType);
-                    const Assets::AssetImporterContribution *contribution =
-                        !entry.importerContributionId.empty()
-                            ? importerCatalog->FindById(entry.importerContributionId)
-                            : (!legacySourceExtension.empty()
-                                   ? importerCatalog->FindContributionByExtension(legacySourceExtension)
-                                   : (parsedType.HasValue() ? importerCatalog->FindPreviewContribution(parsedType.Value()) : nullptr));
+                    const Assets::AssetImporterContribution *contribution = nullptr;
+                    if (!entry.importerContributionId.empty()) {
+                        contribution = importerCatalog->FindById(entry.importerContributionId);
+                    } else if (!legacySourceExtension.empty()) {
+                        contribution = importerCatalog->FindContributionByExtension(legacySourceExtension);
+                    } else if (parsedType.HasValue()) {
+                        contribution = importerCatalog->FindPreviewContribution(parsedType.Value());
+                    }
                     if (contribution != nullptr) {
                         entry.importerContributionId = contribution->contributionId;
                         if (entry.importerModuleId.empty())

@@ -5,7 +5,7 @@
 namespace Horo::Editor {
     GameplayBehaviorFilenameModalState::GameplayBehaviorFilenameModalState(GameplayBehaviorKind kind, std::string destination,
                                                                              std::string baseName)
-        : kind_(kind), destination_(std::move(destination)), baseName_(std::move(baseName)), validation_(Result<void>::Success()) {
+        : kind_(kind), destination_(std::move(destination)), baseName_(std::move(baseName)) {
         Revalidate();
     }
 

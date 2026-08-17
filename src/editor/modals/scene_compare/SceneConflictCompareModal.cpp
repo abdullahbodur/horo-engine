@@ -55,7 +55,7 @@ namespace Horo::Editor {
         }
 
         void DrawSummaryBadge(const std::size_t count, const char *label, const Ui::BadgeTone tone, const Theme::Fonts &fonts) {
-            const std::string text = std::to_string(count) + " " + label;
+            const std::string text = std::format("{} {}", count, label);
             Ui::Badge(
                 {
                     .label = text.c_str(),
@@ -65,15 +65,22 @@ namespace Horo::Editor {
                 fonts);
         }
 
+        [[nodiscard]] std::string ResolveDisplayName(const SceneObjectComparison &object) {
+            if (object.kind == SceneObjectComparisonKind::AddedOnDisk) {
+                return object.diskName;
+            }
+            if (object.kind == SceneObjectComparisonKind::RemovedFromDisk) {
+                return object.documentName;
+            }
+            if (object.documentName == object.diskName) {
+                return object.documentName;
+            }
+            return std::format("{}  ->  {}", object.documentName, object.diskName);
+        }
+
         void DrawComparisonRow(const SceneObjectComparison &object, const EditorGuiContext &context) {
             const std::string &kindLabel = KindLabel(context, object.kind);
-            const std::string displayName =
-                object.kind == SceneObjectComparisonKind::AddedOnDisk
-                    ? object.diskName
-                    : (object.kind == SceneObjectComparisonKind::RemovedFromDisk
-                           ? object.documentName
-                           : (object.documentName == object.diskName ? object.documentName
-                                                                     : object.documentName + "  ->  " + object.diskName));
+            const std::string displayName = ResolveDisplayName(object);
             const std::string differences = DifferenceLabel(object, context);
 
             const std::string rowId = std::to_string(object.id.value);

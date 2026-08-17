@@ -38,8 +38,9 @@ namespace Horo::Editor {
                 std::ranges::copy_n(digest.bytes.begin(), bytes.size(), bytes.begin());
             } else {
                 std::random_device random;
-                for (std::uint8_t &byte : bytes)
-                    byte = static_cast<std::uint8_t>(random());
+                for (std::uint8_t &b : bytes) {
+                    b = static_cast<std::uint8_t>(random());
+                }
             }
             bytes[6] = static_cast<std::uint8_t>((bytes[6] & 0x0fU) | 0x40U);
             bytes[8] = static_cast<std::uint8_t>((bytes[8] & 0x3fU) | 0x80U);
@@ -103,7 +104,7 @@ namespace Horo::Editor {
                     continue;
                 const std::string key = "settings." + descriptor.id;
                 if (const auto value = item.settings.find(key); value != item.settings.end())
-                    preset.settings.emplace(key, value->second);
+                    preset.settings.try_emplace(key, value->second);
             }
             return preset;
         }
@@ -117,7 +118,7 @@ namespace Horo::Editor {
                     const std::string key = "settings." + descriptor.id;
                     item.settings.erase(key);
                     if (const auto value = preset.settings.find(key); value != preset.settings.end())
-                        item.settings.emplace(key, value->second);
+                        item.settings.try_emplace(key, value->second);
                 }
             }
 
@@ -183,7 +184,12 @@ namespace Horo::Editor {
 
     void AssetImportModal::OnClose(const ModalCloseReason reason) {
         const bool completed = reason == ModalCloseReason::Completed || IsImportComplete();
-        const char *reasonStr = completed ? "completed" : (reason == ModalCloseReason::Cancelled) ? "cancelled" : "app_shutdown";
+        const char *reasonStr = "app_shutdown";
+        if (completed) {
+            reasonStr = "completed";
+        } else if (reason == ModalCloseReason::Cancelled) {
+            reasonStr = "cancelled";
+        }
         LOG_INFO("editor.asset_import", "AssetImportModal closed (reason=%s).", reasonStr);
 
         if (!completed) {
@@ -565,7 +571,7 @@ namespace Horo::Editor {
         if (m_operationStore == nullptr || !m_visibleOperationId.has_value())
             return;
 
-        const std::size_t completedItems = static_cast<std::size_t>(std::ranges::count(m_itemCompleted, true));
+        const auto completedItems = static_cast<std::size_t>(std::ranges::count(m_itemCompleted, true));
         const float progress =
             m_itemCompleted.empty() ? 1.0F : static_cast<float>(completedItems) / static_cast<float>(m_itemCompleted.size());
         if (IsImportComplete()) {
@@ -583,8 +589,7 @@ namespace Horo::Editor {
                                      OperationUpdate{.state = waitingForConflict ? OperationState::Waiting : OperationState::Running,
                                                      .phase = waitingForConflict ? "resolve conflicts" : "import",
                                                      .message = waitingForConflict ? "Waiting for conflict resolution"
-                                                                                   : std::to_string(completedItems) + " of " +
-                                                                                         std::to_string(m_itemCompleted.size()),
+                                                                    : std::format("{} of {}", completedItems, m_itemCompleted.size()),
                                                      .progress = progress}));
     }
 
@@ -612,7 +617,8 @@ namespace Horo::Editor {
         return std::filesystem::exists(targetPath, ec);
     }
 
-    bool AssetImportModal::CommitCurrentItem(const Assets::AssetImportItem &item, ConflictChoice choice, bool applyAll) {
+    bool AssetImportModal::CommitCurrentItem(const Assets::AssetImportItem &item, const ConflictChoice choice,
+                                             [[maybe_unused]] bool applyAll) {
         if (choice == ConflictChoice::Skip) {
             LOG_INFO("editor.asset_import", "Skipped import for %s (user chose Skip)", item.displayName.c_str());
             return true;
@@ -644,7 +650,7 @@ namespace Horo::Editor {
             int suffix = 1;
             std::filesystem::path base = m_projectRoot / destFolder;
             while (std::filesystem::exists(base / (assetName + commitItem.targetExtension)))
-                assetName = commitItem.displayName + "_" + std::to_string(++suffix);
+                assetName = std::format("{}_{}", commitItem.displayName, ++suffix);
         }
 
         // Build a modified batch with the (possibly renamed) name

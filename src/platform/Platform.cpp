@@ -35,7 +35,15 @@ const ErrorCodeDescriptor LockBusy{.domain = PlatformDomain,
                                    .userActionable = true};
 
 std::mutex ProcessLockMutex;
-std::unordered_set<std::string> ProcessLocks;
+struct StringHash {
+    using is_transparent = void;
+
+    [[nodiscard]] std::size_t operator()(const std::string_view sv) const noexcept {
+        return std::hash<std::string_view>{}(sv);
+    }
+};
+
+std::unordered_set<std::string, StringHash, std::equal_to<>> ProcessLocks;
 
 [[nodiscard]] Error FsError(const ErrorCodeDescriptor &code, const std::filesystem::path &path) {
     return MakeError(code, std::string(code.summary) + " Path: " + path.generic_string());
@@ -253,16 +261,16 @@ Result<void> NativeDurableFileSystem::SyncDirectory(const std::filesystem::path 
 PlatformServices::PlatformServices(FileSystem &files, Clock &clock, ProcessService &processes, UserDirectories &directories,
                                    const PlatformCapabilities capabilities, CredentialStore *credentials, NativeDialogs *dialogs,
                                    CrashService *crash) noexcept
-    : files(files), clock(clock), processes(processes), directories(directories), credentials(credentials), dialogs(dialogs), crash(crash),
-      m_capabilities(capabilities) {
-    m_capabilities.hasCredentialStore = credentials != nullptr;
-    m_capabilities.hasNativeDialogs = dialogs != nullptr;
-    m_capabilities.hasCrashService = crash != nullptr;
+    : files(files), clock(clock), processes(processes), directories(directories), capabilities(capabilities), credentials(credentials),
+      dialogs(dialogs), crash(crash) {
+    this->capabilities.hasCredentialStore = credentials != nullptr;
+    this->capabilities.hasNativeDialogs = dialogs != nullptr;
+    this->capabilities.hasCrashService = crash != nullptr;
 }
 
 /** @copydoc PlatformServices::Capabilities */
 const PlatformCapabilities &PlatformServices::Capabilities() const noexcept {
-    return m_capabilities;
+    return capabilities;
 }
 
 /** @copydoc FileSystem::Exists */

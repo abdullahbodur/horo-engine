@@ -828,10 +828,10 @@ namespace Horo::Telemetry {
     }
 
     /** @copydoc ScopedTimer::ScopedTimer */
-    ScopedTimer::ScopedTimer(const Histogram histogram) noexcept : histogram_(histogram), startedAt_(std::chrono::steady_clock::now()) {}
+    ScopedTimer::ScopedTimer(const Histogram histogram) noexcept : histogram_(histogram) {}
 
     /** @copydoc ScopedTimer::ScopedTimer */
-    ScopedTimer::ScopedTimer(const Timing timing) noexcept : timing_(timing), startedAt_(std::chrono::steady_clock::now()) {}
+    ScopedTimer::ScopedTimer(const Timing timing) noexcept : timing_(timing) {}
 
     /** @copydoc ScopedTimer::~ScopedTimer */
     ScopedTimer::~ScopedTimer() {

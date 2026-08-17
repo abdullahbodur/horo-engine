@@ -52,6 +52,8 @@ namespace Horo::Editor {
                          EditorWorkspaceViewCommandData &outCommand);
         void DrawDocumentRail(const ImVec2 &pos, const ImVec2 &size, float centerY, float minimumX, float maximumX,
                               const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &outCommand);
+        void DrawDocumentRailItem(const std::string &panelId, const std::shared_ptr<IWorkspacePanel> &panel, float tabX, float centerY,
+                                  const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &outCommand);
 
         void DrawRecoveryBar(const ImVec2 &pos, const ImVec2 &size, EditorWorkspaceViewCommandData &outCommand) const;
 
@@ -60,14 +62,21 @@ namespace Horo::Editor {
         void DrawDockArea(WorkspaceDockArea area, const char *windowId, const ImVec2 &pos, const ImVec2 &size,
                           std::string_view activePanelId, const EditorWorkspaceViewModel &viewModel,
                           EditorWorkspaceViewCommandData &outCommand);
+        void DrawMiddleAndBottomDocks(float curY, float leftActivityW, float hierarchyW, float inspectorW, float centerW, float bottomDockW,
+                                      float mainH, float contentH, const EditorWorkspaceViewModel &viewModel,
+                                      EditorWorkspaceViewCommandData &outCommand);
         void DrawWorkspaceDropTarget(const char *targetNodeId, const char *id, const ImVec2 &position, const ImVec2 &size,
-                                     WorkspacePanelHost::DropKind kind, EditorWorkspaceViewCommandData &outCommand);
+                                     WorkspacePanelHost::DropKind kind, EditorWorkspaceViewCommandData &outCommand) const;
 
         void DrawActivityBar(const ImVec2 &pos, const ImVec2 &size, const WorkspacePanelRegistry &registry,
                              const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &outCommand,
                              ActivityBarOptions options);
+        void DrawActivityBarGroup(std::size_t groupIndex, const ActivityBarGroup &group, float groupTop, float groupBottom,
+                                  const ImVec2 &pos, const ImVec2 &size, const ActivityBarGeometry &geometry,
+                                  const ActivityBarOptions &options, const EditorWorkspaceViewModel &viewModel,
+                                  EditorWorkspaceViewCommandData &outCommand, bool draggingActivityItem);
         bool DrawActivityDropSlot(ActivityBarSlot slot, float y, bool draggingActivityItem, const ActivityBarGeometry &geometry,
-                                  EditorWorkspaceViewCommandData &outCommand);
+                                  EditorWorkspaceViewCommandData &outCommand) const;
         float DrawActivityItem(const std::string &panelId, float y, const ActivityBarGeometry &geometry,
                                const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &outCommand,
                                ActivityBarOptions options, const std::shared_ptr<IWorkspacePanel> &panel);

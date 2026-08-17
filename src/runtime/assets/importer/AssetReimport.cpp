@@ -32,8 +32,7 @@ namespace Horo::Assets {
 
         [[nodiscard]] std::filesystem::path TemporarySibling(const std::filesystem::path &destination, const std::string_view role) {
             const std::uint64_t sequence = ++g_reimportTemporarySequence;
-            return destination.parent_path() /
-                   ("." + destination.filename().string() + ".horo-reimport-" + std::to_string(sequence) + "-" + std::string{role});
+            return destination.parent_path() / std::format(".{}.horo-reimport-{}-{}", destination.filename().string(), sequence, role);
         }
 
         [[nodiscard]] std::span<const std::byte> AsBytes(const std::vector<std::uint8_t> &bytes) {
@@ -112,7 +111,7 @@ namespace Horo::Assets {
         if (sourceResult.HasError())
             return Result<AssetReimportReport>::Failure(sourceResult.ErrorValue());
         std::vector<std::uint8_t> source = std::move(sourceResult).Value();
-        const std::string sourceHash = HashAssetImportSource(source);
+        std::string sourceHash = HashAssetImportSource(source);
 
         auto settingsResult = ResolveImportSettings(*contribution, metadata.importSettings);
         if (settingsResult.HasError())

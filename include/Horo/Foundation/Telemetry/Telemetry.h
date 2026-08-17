@@ -534,6 +534,6 @@ namespace Horo::Telemetry {
     private:
         Histogram histogram_;
         Timing timing_;
-        std::chrono::steady_clock::time_point startedAt_;
+        std::chrono::steady_clock::time_point startedAt_{std::chrono::steady_clock::now()};
     };
 }  // namespace Horo::Telemetry

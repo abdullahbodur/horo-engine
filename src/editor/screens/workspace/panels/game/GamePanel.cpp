@@ -28,7 +28,7 @@ namespace Horo::Editor {
     }
 
     /** @copydoc GamePanel::DrawPanel */
-    void GamePanel::DrawPanel(const ImVec2 &position, const ImVec2 &size, const EditorWorkspaceViewModel &viewModel,
+    void GamePanel::DrawPanel([[maybe_unused]] const ImVec2 &position, const ImVec2 &size, const EditorWorkspaceViewModel &viewModel,
                               EditorWorkspaceViewCommandData &, const EditorGuiContext &context) {
         const std::array tabNames{context.localization.Get("editor", "workspace.panel.game").c_str()};
         Ui::DrawDockTabs(tabNames, 0, context.theme.fonts);

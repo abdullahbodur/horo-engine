@@ -311,7 +311,7 @@ namespace Horo::Editor {
         const std::string_view search{m_search.data()};
         for (std::size_t index = 0; index < m_snapshot.records.size(); ++index) {
             const Log::StructuredLogRecord &record = *m_snapshot.records[index];
-            if (const std::size_t group = static_cast<std::size_t>(GroupForLevel(record.level)); !m_levelEnabled[group])
+            if (const auto group = static_cast<std::size_t>(GroupForLevel(record.level)); !m_levelEnabled[group])
                 continue;
             if (!ContainsCaseInsensitive(record.category, search) && !ContainsCaseInsensitive(record.message, search) &&
                 !ContainsCaseInsensitive(record.context, search)) {

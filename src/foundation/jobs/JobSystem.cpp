@@ -30,13 +30,9 @@ namespace Horo {
               operationContext(Telemetry::CaptureOperationContext()) {}
 
         [[nodiscard]] std::mutex &Mutex() const noexcept {
-            return mutex;
+            return mutex_;
         }
 
-    private:
-        mutable std::mutex mutex;
-
-    public:
         JobId id;
         std::condition_variable completed;
         JobState state = JobState::Queued;
@@ -44,6 +40,7 @@ namespace Horo {
         CancellationSource cancellation;
         JobFunction work;
         Telemetry::OperationContext operationContext;
+        mutable std::mutex mutex_;
     };
 
     struct JobSystem::State {

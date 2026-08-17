@@ -79,5 +79,5 @@ namespace Horo::Editor {
      * @param request Absolute canonical location and immutable active-document snapshot.
      * @return Typed comparison or a canonical scene load/identity failure.
      */
-    [[nodiscard]] Result<SceneDocumentComparison> LoadSceneDocumentComparison(SceneDocumentComparisonRequest request);
+    [[nodiscard]] Result<SceneDocumentComparison> LoadSceneDocumentComparison(const SceneDocumentComparisonRequest &request);
 }  // namespace Horo::Editor

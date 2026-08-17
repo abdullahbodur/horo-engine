@@ -76,11 +76,13 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] bool IsSafeProjectRelativePath(const std::filesystem::path &path) {
-            if (path.empty() || path.is_absolute() || path.has_root_path())
+            if (path.empty() || path.is_absolute() || path.has_root_path()) {
                 return false;
+            }
             for (const std::filesystem::path &component : path) {
-                if (component == "..")
+                if (component == "..") {
                     return false;
+                }
             }
             return !path.filename().empty();
         }
@@ -94,8 +96,9 @@ namespace Horo::Editor {
                                                  const std::filesystem::path &absoluteCandidate) {
             std::error_code error;
             const std::filesystem::path resolvedRoot = std::filesystem::weakly_canonical(absoluteRoot, error);
-            if (error)
+            if (error) {
                 return false;
+            }
             const std::filesystem::path resolvedCandidate = std::filesystem::weakly_canonical(absoluteCandidate, error);
             return !error && IsContainedBy(resolvedRoot, resolvedCandidate);
         }
@@ -126,81 +129,95 @@ namespace Horo::Editor {
 
         [[nodiscard]] Json BehaviorFieldValueJson(const Gameplay::BehaviorFieldValue &value) {
             return std::visit([]<typename T>(const T &typed) -> Json {
-                if constexpr (std::is_same_v<T, std::monostate>)
+                if constexpr (std::is_same_v<T, std::monostate>) {
                     return {{"type", "null"}, {"value", nullptr}};
-                else if constexpr (std::is_same_v<T, bool>)
+                } else if constexpr (std::is_same_v<T, bool>) {
                     return {{"type", "bool"}, {"value", typed}};
-                else if constexpr (std::is_same_v<T, std::int64_t>)
+                } else if constexpr (std::is_same_v<T, std::int64_t>) {
                     return {{"type", "int"}, {"value", typed}};
-                else if constexpr (std::is_same_v<T, double>)
+                } else if constexpr (std::is_same_v<T, double>) {
                     return {{"type", "number"}, {"value", typed}};
-                else if constexpr (std::is_same_v<T, std::string>)
+                } else if constexpr (std::is_same_v<T, std::string>) {
                     return {{"type", "string"}, {"value", typed}};
-                else if constexpr (std::is_same_v<T, Math::Vec2>)
+                } else if constexpr (std::is_same_v<T, Math::Vec2>) {
                     return {{"type", "vec2"}, {"value", Vec2Json(typed)}};
-                else if constexpr (std::is_same_v<T, Math::Vec3>)
+                } else if constexpr (std::is_same_v<T, Math::Vec3>) {
                     return {{"type", "vec3"}, {"value", Vec3Json(typed)}};
-                else
+                } else {
                     return {{"type", "quaternion"}, {"value", QuaternionJson(typed)}};
+                }
             }, value);
         }
 
         [[nodiscard]] Result<Gameplay::BehaviorFieldValue> ParseBehaviorFieldValue(const Json &value) {
-            if (!value.is_object() || !value.contains("type") || !value["type"].is_string() || !value.contains("value"))
+            if (!value.is_object() || !value.contains("type") || !value["type"].is_string() || !value.contains("value")) {
                 return Result<Gameplay::BehaviorFieldValue>::Failure(PersistenceError(SceneInvalid, "Behavior field is invalid."));
+            }
             const std::string type = value["type"].get<std::string>();
             const Json &payload = value["value"];
-            if (type == "null" && payload.is_null())
+            if (type == "null" && payload.is_null()) {
                 return Result<Gameplay::BehaviorFieldValue>::Success(std::monostate{});
-            if (type == "bool" && payload.is_boolean())
+            }
+            if (type == "bool" && payload.is_boolean()) {
                 return Result<Gameplay::BehaviorFieldValue>::Success(payload.get<bool>());
-            if (type == "int" && payload.is_number_integer())
+            }
+            if (type == "int" && payload.is_number_integer()) {
                 return Result<Gameplay::BehaviorFieldValue>::Success(payload.get<std::int64_t>());
-            if (type == "number" && payload.is_number())
+            }
+            if (type == "number" && payload.is_number()) {
                 return Result<Gameplay::BehaviorFieldValue>::Success(payload.get<double>());
-            if (type == "string" && payload.is_string())
+            }
+            if (type == "string" && payload.is_string()) {
                 return Result<Gameplay::BehaviorFieldValue>::Success(payload.get<std::string>());
+            }
             if (type == "vec2") {
                 auto parsed = ParseVec2(payload);
-                if (parsed.HasValue())
+                if (parsed.HasValue()) {
                     return Result<Gameplay::BehaviorFieldValue>::Success(parsed.Value());
+                }
             }
             if (type == "vec3") {
                 auto parsed = ParseVec3(payload);
-                if (parsed.HasValue())
+                if (parsed.HasValue()) {
                     return Result<Gameplay::BehaviorFieldValue>::Success(parsed.Value());
+                }
             }
             if (type == "quaternion") {
                 auto parsed = ParseQuaternion(payload);
-                if (parsed.HasValue())
+                if (parsed.HasValue()) {
                     return Result<Gameplay::BehaviorFieldValue>::Success(parsed.Value());
+                }
             }
             return Result<Gameplay::BehaviorFieldValue>::Failure(PersistenceError(SceneInvalid, "Behavior field type is unsupported."));
         }
 
         template <std::size_t Size> [[nodiscard]] bool IsNumberArray(const Json &value) {
-            if (!value.is_array() || value.size() != Size)
+            if (!value.is_array() || value.size() != Size) {
                 return false;
+            }
             return std::ranges::all_of(value, [](const Json &item) {
                 return item.is_number();
             });
         }
 
         [[nodiscard]] Result<Math::Vec2> ParseVec2(const Json &value) {
-            if (!IsNumberArray<2>(value))
+            if (!IsNumberArray<2>(value)) {
                 return Result<Math::Vec2>::Failure(PersistenceError(SceneInvalid, "Expected a two-component vector."));
+            }
             return Result<Math::Vec2>::Success({value[0].get<float>(), value[1].get<float>()});
         }
 
         [[nodiscard]] Result<Math::Vec3> ParseVec3(const Json &value) {
-            if (!IsNumberArray<3>(value))
+            if (!IsNumberArray<3>(value)) {
                 return Result<Math::Vec3>::Failure(PersistenceError(SceneInvalid, "Expected a three-component vector."));
+            }
             return Result<Math::Vec3>::Success({value[0].get<float>(), value[1].get<float>(), value[2].get<float>()});
         }
 
         [[nodiscard]] Result<Math::Quaternion> ParseQuaternion(const Json &value) {
-            if (!IsNumberArray<4>(value))
+            if (!IsNumberArray<4>(value)) {
                 return Result<Math::Quaternion>::Failure(PersistenceError(SceneInvalid, "Expected a quaternion."));
+            }
             return Result<Math::Quaternion>::Success(
                 {value[0].get<float>(), value[1].get<float>(), value[2].get<float>(), value[3].get<float>()});
         }
@@ -212,35 +229,38 @@ namespace Horo::Editor {
             auto translation = ParseVec3(value["translation"]);
             auto rotation = ParseQuaternion(value["rotation"]);
             auto scale = ParseVec3(value["scale"]);
-            if (translation.HasError() || rotation.HasError() || scale.HasError())
+            if (translation.HasError() || rotation.HasError() || scale.HasError()) {
                 return Result<Math::Transform>::Failure(PersistenceError(SceneInvalid, "Scene transform is invalid."));
+            }
             return Result<Math::Transform>::Success(
                 {.translation = translation.Value(), .rotation = rotation.Value(), .scale = scale.Value()});
         }
 
-        [[nodiscard]] Json PrimitiveParametersJson(const PrimitiveMeshDescriptor &descriptor) {
-            return std::visit([]<typename Parameters>(const Parameters &parameters) {
-                if constexpr (std::is_same_v<Parameters, Runtime::BoxMeshParameters>)
-                    return Json{{"size", Vec3Json(parameters.size)}};
-                if constexpr (std::is_same_v<Parameters, Runtime::SphereMeshParameters>)
-                    return Json{{"radius", parameters.radius}, {"slices", parameters.slices}, {"stacks", parameters.stacks}};
-                if constexpr (std::is_same_v<Parameters, Runtime::CapsuleMeshParameters>)
-                    return Json{{"radius", parameters.radius},
-                                {"totalHeight", parameters.totalHeight},
-                                {"radialSegments", parameters.radialSegments},
-                                {"hemisphereRings", parameters.hemisphereRings}};
-                if constexpr (std::is_same_v<Parameters, Runtime::CylinderMeshParameters>)
-                    return Json{{"radius", parameters.radius},
-                                {"height", parameters.height},
-                                {"radialSegments", parameters.radialSegments}};
-                if constexpr (std::is_same_v<Parameters, Runtime::ConeMeshParameters>)
-                    return Json{{"radius", parameters.radius},
-                                {"height", parameters.height},
-                                {"radialSegments", parameters.radialSegments}};
-                if constexpr (std::is_same_v<Parameters, Runtime::PlaneMeshParameters> ||
-                              std::is_same_v<Parameters, Runtime::QuadMeshParameters>)
-                    return Json{{"size", Vec2Json(parameters.size)}};
+        template <typename Parameters> [[nodiscard]] Json SerializePrimitiveParameters(const Parameters &parameters) {
+            if constexpr (std::is_same_v<Parameters, Runtime::BoxMeshParameters>) {
+                return Json{{"size", Vec3Json(parameters.size)}};
+            } else if constexpr (std::is_same_v<Parameters, Runtime::SphereMeshParameters>) {
+                return Json{{"radius", parameters.radius}, {"slices", parameters.slices}, {"stacks", parameters.stacks}};
+            } else if constexpr (std::is_same_v<Parameters, Runtime::CapsuleMeshParameters>) {
+                return Json{{"radius", parameters.radius},
+                            {"totalHeight", parameters.totalHeight},
+                            {"radialSegments", parameters.radialSegments},
+                            {"hemisphereRings", parameters.hemisphereRings}};
+            } else if constexpr (std::is_same_v<Parameters, Runtime::CylinderMeshParameters>) {
+                return Json{{"radius", parameters.radius}, {"height", parameters.height}, {"radialSegments", parameters.radialSegments}};
+            } else if constexpr (std::is_same_v<Parameters, Runtime::ConeMeshParameters>) {
+                return Json{{"radius", parameters.radius}, {"height", parameters.height}, {"radialSegments", parameters.radialSegments}};
+            } else if constexpr (std::is_same_v<Parameters, Runtime::PlaneMeshParameters> ||
+                                 std::is_same_v<Parameters, Runtime::QuadMeshParameters>) {
+                return Json{{"size", Vec2Json(parameters.size)}};
+            } else {
                 return Json::object();
+            }
+        }
+
+        [[nodiscard]] Json PrimitiveParametersJson(const PrimitiveMeshDescriptor &descriptor) {
+            return std::visit([]<typename T>(const T &parameters) {
+                return SerializePrimitiveParameters(parameters);
             }, descriptor.parameters);
         }
 
@@ -251,6 +271,85 @@ namespace Horo::Editor {
                 {"version", descriptor.version.value},
                 {"parameters", PrimitiveParametersJson(descriptor)},
             };
+        }
+
+        [[nodiscard]] Result<Runtime::PrimitiveMeshParameters> ParsePrimitiveParameters(const Runtime::PrimitiveMeshType meshType,
+                                                                                        const Json &parameters) {
+            const auto number = [&parameters](const char *key) {
+                return parameters.contains(key) && parameters[key].is_number();
+            };
+            const auto unsignedNumber = [&parameters](const char *key) {
+                return parameters.contains(key) && parameters[key].is_number_unsigned();
+            };
+
+            switch (meshType) {
+                case Runtime::PrimitiveMeshType::Box: {
+                    if (!parameters.contains("size")) {
+                        return Result<Runtime::PrimitiveMeshParameters>::Failure(
+                            PersistenceError(SceneInvalid, "Box primitive parameters are incomplete."));
+                    }
+                    auto size = ParseVec3(parameters["size"]);
+                    if (size.HasError()) {
+                        return Result<Runtime::PrimitiveMeshParameters>::Failure(size.ErrorValue());
+                    }
+                    return Result<Runtime::PrimitiveMeshParameters>::Success(Runtime::BoxMeshParameters{size.Value()});
+                }
+                case Runtime::PrimitiveMeshType::Sphere: {
+                    if (!number("radius") || !unsignedNumber("slices") || !unsignedNumber("stacks")) {
+                        return Result<Runtime::PrimitiveMeshParameters>::Failure(
+                            PersistenceError(SceneInvalid, "Sphere primitive parameters are incomplete."));
+                    }
+                    return Result<Runtime::PrimitiveMeshParameters>::Success(
+                        Runtime::SphereMeshParameters{parameters["radius"].get<float>(), parameters["slices"].get<std::uint32_t>(),
+                                                      parameters["stacks"].get<std::uint32_t>()});
+                }
+                case Runtime::PrimitiveMeshType::Capsule: {
+                    if (!number("radius") || !number("totalHeight") || !unsignedNumber("radialSegments") ||
+                        !unsignedNumber("hemisphereRings")) {
+                        return Result<Runtime::PrimitiveMeshParameters>::Failure(
+                            PersistenceError(SceneInvalid, "Capsule primitive parameters are incomplete."));
+                    }
+                    return Result<Runtime::PrimitiveMeshParameters>::Success(
+                        Runtime::CapsuleMeshParameters{parameters["radius"].get<float>(), parameters["totalHeight"].get<float>(),
+                                                       parameters["radialSegments"].get<std::uint32_t>(),
+                                                       parameters["hemisphereRings"].get<std::uint32_t>()});
+                }
+                case Runtime::PrimitiveMeshType::Cylinder: {
+                    if (!number("radius") || !number("height") || !unsignedNumber("radialSegments")) {
+                        return Result<Runtime::PrimitiveMeshParameters>::Failure(
+                            PersistenceError(SceneInvalid, "Cylinder primitive parameters are incomplete."));
+                    }
+                    return Result<Runtime::PrimitiveMeshParameters>::Success(
+                        Runtime::CylinderMeshParameters{parameters["radius"].get<float>(), parameters["height"].get<float>(),
+                                                        parameters["radialSegments"].get<std::uint32_t>()});
+                }
+                case Runtime::PrimitiveMeshType::Cone: {
+                    if (!number("radius") || !number("height") || !unsignedNumber("radialSegments")) {
+                        return Result<Runtime::PrimitiveMeshParameters>::Failure(
+                            PersistenceError(SceneInvalid, "Cone primitive parameters are incomplete."));
+                    }
+                    return Result<Runtime::PrimitiveMeshParameters>::Success(
+                        Runtime::ConeMeshParameters{parameters["radius"].get<float>(), parameters["height"].get<float>(),
+                                                    parameters["radialSegments"].get<std::uint32_t>()});
+                }
+                case Runtime::PrimitiveMeshType::Plane:
+                case Runtime::PrimitiveMeshType::Quad: {
+                    if (!parameters.contains("size")) {
+                        return Result<Runtime::PrimitiveMeshParameters>::Failure(
+                            PersistenceError(SceneInvalid, "Plane or quad primitive parameters are incomplete."));
+                    }
+                    auto size = ParseVec2(parameters["size"]);
+                    if (size.HasError()) {
+                        return Result<Runtime::PrimitiveMeshParameters>::Failure(size.ErrorValue());
+                    }
+                    if (meshType == Runtime::PrimitiveMeshType::Plane) {
+                        return Result<Runtime::PrimitiveMeshParameters>::Success(Runtime::PlaneMeshParameters{size.Value()});
+                    }
+                    return Result<Runtime::PrimitiveMeshParameters>::Success(Runtime::QuadMeshParameters{size.Value()});
+                }
+            }
+            return Result<Runtime::PrimitiveMeshParameters>::Failure(
+                PersistenceError(SceneInvalid, "Primitive descriptor is unsupported."));
         }
 
         [[nodiscard]] Result<PrimitiveMeshDescriptor> ParsePrimitive(const Json &value) {
@@ -270,74 +369,12 @@ namespace Horo::Editor {
                 return Result<PrimitiveMeshDescriptor>::Failure(
                     PersistenceError(SceneInvalid, "Primitive descriptor version is unsupported."));
             }
-            const Json &parameters = value["parameters"];
-            const auto number = [&parameters](const char *key) {
-                return parameters.contains(key) && parameters[key].is_number();
-            };
-            const auto unsignedNumber = [&parameters](const char *key) {
-                return parameters.contains(key) && parameters[key].is_number_unsigned();
-            };
 
-            switch (*catalog->meshType) {
-                case Runtime::PrimitiveMeshType::Box: {
-                    if (!parameters.contains("size"))
-                        return Result<PrimitiveMeshDescriptor>::Failure(
-                            PersistenceError(SceneInvalid, "Box primitive parameters are incomplete."));
-                    auto size = ParseVec3(parameters["size"]);
-                    if (size.HasError())
-                        return Result<PrimitiveMeshDescriptor>::Failure(size.ErrorValue());
-                    descriptor.parameters = Runtime::BoxMeshParameters{size.Value()};
-                    break;
-                }
-                case Runtime::PrimitiveMeshType::Sphere:
-                    if (!number("radius") || !unsignedNumber("slices") || !unsignedNumber("stacks"))
-                        return Result<PrimitiveMeshDescriptor>::Failure(
-                            PersistenceError(SceneInvalid, "Sphere primitive parameters are incomplete."));
-                    descriptor.parameters =
-                        Runtime::SphereMeshParameters{parameters["radius"].get<float>(), parameters["slices"].get<std::uint32_t>(),
-                                                      parameters["stacks"].get<std::uint32_t>()};
-                    break;
-                case Runtime::PrimitiveMeshType::Capsule:
-                    if (!number("radius") || !number("totalHeight") || !unsignedNumber("radialSegments") ||
-                        !unsignedNumber("hemisphereRings"))
-                        return Result<PrimitiveMeshDescriptor>::Failure(
-                            PersistenceError(SceneInvalid, "Capsule primitive parameters are incomplete."));
-                    descriptor.parameters =
-                        Runtime::CapsuleMeshParameters{parameters["radius"].get<float>(), parameters["totalHeight"].get<float>(),
-                                                       parameters["radialSegments"].get<std::uint32_t>(),
-                                                       parameters["hemisphereRings"].get<std::uint32_t>()};
-                    break;
-                case Runtime::PrimitiveMeshType::Cylinder:
-                    if (!number("radius") || !number("height") || !unsignedNumber("radialSegments"))
-                        return Result<PrimitiveMeshDescriptor>::Failure(
-                            PersistenceError(SceneInvalid, "Cylinder primitive parameters are incomplete."));
-                    descriptor.parameters =
-                        Runtime::CylinderMeshParameters{parameters["radius"].get<float>(), parameters["height"].get<float>(),
-                                                        parameters["radialSegments"].get<std::uint32_t>()};
-                    break;
-                case Runtime::PrimitiveMeshType::Cone:
-                    if (!number("radius") || !number("height") || !unsignedNumber("radialSegments"))
-                        return Result<PrimitiveMeshDescriptor>::Failure(
-                            PersistenceError(SceneInvalid, "Cone primitive parameters are incomplete."));
-                    descriptor.parameters =
-                        Runtime::ConeMeshParameters{parameters["radius"].get<float>(), parameters["height"].get<float>(),
-                                                    parameters["radialSegments"].get<std::uint32_t>()};
-                    break;
-                case Runtime::PrimitiveMeshType::Plane:
-                case Runtime::PrimitiveMeshType::Quad: {
-                    if (!parameters.contains("size"))
-                        return Result<PrimitiveMeshDescriptor>::Failure(
-                            PersistenceError(SceneInvalid, "Plane or quad primitive parameters are incomplete."));
-                    auto size = ParseVec2(parameters["size"]);
-                    if (size.HasError())
-                        return Result<PrimitiveMeshDescriptor>::Failure(size.ErrorValue());
-                    if (*catalog->meshType == Runtime::PrimitiveMeshType::Plane)
-                        descriptor.parameters = Runtime::PlaneMeshParameters{size.Value()};
-                    else
-                        descriptor.parameters = Runtime::QuadMeshParameters{size.Value()};
-                    break;
-                }
+            auto parsedParams = ParsePrimitiveParameters(*catalog->meshType, value["parameters"]);
+            if (parsedParams.HasError()) {
+                return Result<PrimitiveMeshDescriptor>::Failure(parsedParams.ErrorValue());
             }
+            descriptor.parameters = std::move(parsedParams).Value();
             return Result<PrimitiveMeshDescriptor>::Success(std::move(descriptor));
         }
 
@@ -357,10 +394,11 @@ namespace Horo::Editor {
                 const Runtime::LightComponent &light = *components.light;
                 using enum Runtime::LightKind;
                 const char *kind = "spot";
-                if (light.kind == Directional)
+                if (light.kind == Directional) {
                     kind = "directional";
-                else if (light.kind == Point)
+                } else if (light.kind == Point) {
                     kind = "point";
+                }
                 value["light"] = {
                     {"kind", kind},
                     {"color", Vec3Json(light.color)},
@@ -370,8 +408,9 @@ namespace Horo::Editor {
                     {"outerConeRadians", light.outerConeRadians},
                 };
             }
-            if (components.triggerVolume.has_value())
+            if (components.triggerVolume.has_value()) {
                 value["triggerVolume"] = {{"shape", static_cast<std::uint8_t>(components.triggerVolume->shape)}};
+            }
             if (components.audioSource.has_value()) {
                 const Runtime::AudioSourceComponent &audio = *components.audioSource;
                 value["audioSource"] = {
@@ -384,8 +423,9 @@ namespace Horo::Editor {
                 Json behaviors = Json::array();
                 for (const Gameplay::BehaviorComponent &behavior : components.behaviors) {
                     Json fields = Json::array();
-                    for (const Gameplay::BehaviorField &field : behavior.fields)
+                    for (const Gameplay::BehaviorField &field : behavior.fields) {
                         fields.push_back({{"name", field.name}, {"value", BehaviorFieldValueJson(field.value)}});
+                    }
                     behaviors.push_back({
                         {"instanceId", behavior.instanceId.value},
                         {"typeId", behavior.typeId.Value()},
@@ -399,98 +439,158 @@ namespace Horo::Editor {
             return value;
         }
 
+        [[nodiscard]] Result<Runtime::CameraComponent> ParseCameraComponent(const Json &camera) {
+            if (!camera.is_object() || !camera.contains("projection") || !camera["projection"].is_string()) {
+                return Result<Runtime::CameraComponent>::Failure(PersistenceError(SceneInvalid, "Camera is invalid."));
+            }
+            const std::string projection = camera["projection"].get<std::string>();
+            if (projection != "perspective" && projection != "orthographic") {
+                return Result<Runtime::CameraComponent>::Failure(PersistenceError(SceneInvalid, "Camera projection is invalid."));
+            }
+            return Result<Runtime::CameraComponent>::Success(Runtime::CameraComponent{
+                .projection =
+                    projection == "perspective" ? Runtime::CameraProjection::Perspective : Runtime::CameraProjection::Orthographic,
+                .verticalFieldOfViewRadians = camera.at("verticalFieldOfViewRadians").get<float>(),
+                .orthographicHeight = camera.at("orthographicHeight").get<float>(),
+                .nearPlane = camera.at("nearPlane").get<float>(),
+                .farPlane = camera.at("farPlane").get<float>(),
+            });
+        }
+
+        [[nodiscard]] Result<Runtime::LightComponent> ParseLightComponent(const Json &light) {
+            const std::string kind = light.at("kind").get<std::string>();
+            auto color = ParseVec3(light.at("color"));
+            if (color.HasError() || (kind != "directional" && kind != "point" && kind != "spot")) {
+                return Result<Runtime::LightComponent>::Failure(PersistenceError(SceneInvalid, "Light is invalid."));
+            }
+            Runtime::LightKind lightKind = Runtime::LightKind::Spot;
+            if (kind == "directional") {
+                lightKind = Runtime::LightKind::Directional;
+            } else if (kind == "point") {
+                lightKind = Runtime::LightKind::Point;
+            }
+            return Result<Runtime::LightComponent>::Success(Runtime::LightComponent{
+                .kind = lightKind,
+                .color = color.Value(),
+                .intensity = light.at("intensity").get<float>(),
+                .range = light.at("range").get<float>(),
+                .innerConeRadians = light.at("innerConeRadians").get<float>(),
+                .outerConeRadians = light.at("outerConeRadians").get<float>(),
+            });
+        }
+
+        [[nodiscard]] Result<Runtime::TriggerVolumeComponent> ParseTriggerVolumeComponent(const Json &triggerVolume) {
+            const std::uint8_t shape = triggerVolume.at("shape").get<std::uint8_t>();
+            if (shape > static_cast<std::uint8_t>(Runtime::ColliderShapeType::StaticPlane)) {
+                return Result<Runtime::TriggerVolumeComponent>::Failure(PersistenceError(SceneInvalid, "Trigger shape is invalid."));
+            }
+            return Result<Runtime::TriggerVolumeComponent>::Success(
+                Runtime::TriggerVolumeComponent{static_cast<Runtime::ColliderShapeType>(shape)});
+        }
+
+        [[nodiscard]] Result<Runtime::AudioSourceComponent> ParseAudioSourceComponent(const Json &audio) {
+            const std::string kind = audio.at("kind").get<std::string>();
+            if (kind != "native_clip" && kind != "middleware_event") {
+                return Result<Runtime::AudioSourceComponent>::Failure(PersistenceError(SceneInvalid, "Audio source is invalid."));
+            }
+            return Result<Runtime::AudioSourceComponent>::Success(Runtime::AudioSourceComponent{
+                .kind = kind == "native_clip" ? Runtime::AudioSourceKind::NativeClip : Runtime::AudioSourceKind::MiddlewareEvent,
+                .gain = audio.at("gain").get<float>(),
+                .spatial = audio.at("spatial").get<bool>(),
+            });
+        }
+
+        [[nodiscard]] Result<Gameplay::BehaviorComponent> ParseSingleBehavior(const Json &behavior) {
+            if (!behavior.is_object() || !behavior.contains("instanceId") || !behavior["instanceId"].is_number_unsigned() ||
+                !behavior.contains("typeId") || !behavior["typeId"].is_string() || !behavior.contains("schemaVersion") ||
+                !behavior["schemaVersion"].is_number_unsigned() || !behavior.contains("enabled") || !behavior["enabled"].is_boolean() ||
+                !behavior.contains("fields") || !behavior["fields"].is_array()) {
+                return Result<Gameplay::BehaviorComponent>::Failure(PersistenceError(SceneInvalid, "Behavior entry is invalid."));
+            }
+            auto typeId = Gameplay::BehaviorTypeId::Parse(behavior["typeId"].get<std::string>());
+            if (typeId.HasError()) {
+                return Result<Gameplay::BehaviorComponent>::Failure(PersistenceError(SceneInvalid, "Behavior type ID is invalid."));
+            }
+            Gameplay::BehaviorComponent parsed{
+                .instanceId = Gameplay::BehaviorInstanceId{behavior["instanceId"].get<std::uint64_t>()},
+                .typeId = std::move(typeId).Value(),
+                .schemaVersion = behavior["schemaVersion"].get<std::uint32_t>(),
+                .enabled = behavior["enabled"].get<bool>(),
+            };
+            parsed.fields.reserve(behavior["fields"].size());
+            for (const Json &fieldEntry : behavior["fields"]) {
+                if (!fieldEntry.is_object() || !fieldEntry.contains("name") || !fieldEntry["name"].is_string() ||
+                    !fieldEntry.contains("value")) {
+                    return Result<Gameplay::BehaviorComponent>::Failure(PersistenceError(SceneInvalid, "Behavior field entry is invalid."));
+                }
+                auto field = ParseBehaviorFieldValue(fieldEntry["value"]);
+                if (field.HasError()) {
+                    return Result<Gameplay::BehaviorComponent>::Failure(field.ErrorValue());
+                }
+                parsed.fields.emplace_back(fieldEntry["name"].get<std::string>(), std::move(field).Value());
+            }
+            if (Gameplay::ValidateBehaviorComponent(parsed).HasError()) {
+                return Result<Gameplay::BehaviorComponent>::Failure(PersistenceError(SceneInvalid, "Behavior payload is invalid."));
+            }
+            return Result<Gameplay::BehaviorComponent>::Success(std::move(parsed));
+        }
+
+        [[nodiscard]] Result<std::vector<Gameplay::BehaviorComponent>> ParseBehaviors(const Json &behaviors) {
+            if (!behaviors.is_array() || behaviors.size() > 128) {
+                return Result<std::vector<Gameplay::BehaviorComponent>>::Failure(
+                    PersistenceError(SceneInvalid, "Behavior list is invalid."));
+            }
+            std::vector<Gameplay::BehaviorComponent> parsedList;
+            parsedList.reserve(behaviors.size());
+            for (const Json &behavior : behaviors) {
+                auto parsed = ParseSingleBehavior(behavior);
+                if (parsed.HasError()) {
+                    return Result<std::vector<Gameplay::BehaviorComponent>>::Failure(parsed.ErrorValue());
+                }
+                parsedList.push_back(std::move(parsed).Value());
+            }
+            return Result<std::vector<Gameplay::BehaviorComponent>>::Success(std::move(parsedList));
+        }
+
         [[nodiscard]] Result<SceneObjectComponentSet> ParseComponents(const Json &value) {
-            if (!value.is_object())
+            if (!value.is_object()) {
                 return Result<SceneObjectComponentSet>::Failure(PersistenceError(SceneInvalid, "Components must be an object."));
+            }
             SceneObjectComponentSet components;
             if (value.contains("camera")) {
-                const Json &camera = value["camera"];
-                if (!camera.is_object() || !camera.contains("projection") || !camera["projection"].is_string())
-                    return Result<SceneObjectComponentSet>::Failure(PersistenceError(SceneInvalid, "Camera is invalid."));
-                const std::string projection = camera["projection"].get<std::string>();
-                if (projection != "perspective" && projection != "orthographic")
-                    return Result<SceneObjectComponentSet>::Failure(PersistenceError(SceneInvalid, "Camera projection is invalid."));
-                components.camera = Runtime::CameraComponent{
-                    .projection =
-                        projection == "perspective" ? Runtime::CameraProjection::Perspective : Runtime::CameraProjection::Orthographic,
-                    .verticalFieldOfViewRadians = camera.at("verticalFieldOfViewRadians").get<float>(),
-                    .orthographicHeight = camera.at("orthographicHeight").get<float>(),
-                    .nearPlane = camera.at("nearPlane").get<float>(),
-                    .farPlane = camera.at("farPlane").get<float>(),
-                };
+                auto camera = ParseCameraComponent(value["camera"]);
+                if (camera.HasError()) {
+                    return Result<SceneObjectComponentSet>::Failure(camera.ErrorValue());
+                }
+                components.camera = std::move(camera).Value();
             }
             if (value.contains("light")) {
-                const Json &light = value["light"];
-                const std::string kind = light.at("kind").get<std::string>();
-                auto color = ParseVec3(light.at("color"));
-                if (color.HasError() || (kind != "directional" && kind != "point" && kind != "spot"))
-                    return Result<SceneObjectComponentSet>::Failure(PersistenceError(SceneInvalid, "Light is invalid."));
-                Runtime::LightKind lightKind = Runtime::LightKind::Spot;
-                if (kind == "directional")
-                    lightKind = Runtime::LightKind::Directional;
-                else if (kind == "point")
-                    lightKind = Runtime::LightKind::Point;
-                components.light = Runtime::LightComponent{
-                    .kind = lightKind,
-                    .color = color.Value(),
-                    .intensity = light.at("intensity").get<float>(),
-                    .range = light.at("range").get<float>(),
-                    .innerConeRadians = light.at("innerConeRadians").get<float>(),
-                    .outerConeRadians = light.at("outerConeRadians").get<float>(),
-                };
+                auto light = ParseLightComponent(value["light"]);
+                if (light.HasError()) {
+                    return Result<SceneObjectComponentSet>::Failure(light.ErrorValue());
+                }
+                components.light = std::move(light).Value();
             }
             if (value.contains("triggerVolume")) {
-                const std::uint8_t shape = value["triggerVolume"].at("shape").get<std::uint8_t>();
-                if (shape > static_cast<std::uint8_t>(Runtime::ColliderShapeType::StaticPlane))
-                    return Result<SceneObjectComponentSet>::Failure(PersistenceError(SceneInvalid, "Trigger shape is invalid."));
-                components.triggerVolume = Runtime::TriggerVolumeComponent{static_cast<Runtime::ColliderShapeType>(shape)};
+                auto trigger = ParseTriggerVolumeComponent(value["triggerVolume"]);
+                if (trigger.HasError()) {
+                    return Result<SceneObjectComponentSet>::Failure(trigger.ErrorValue());
+                }
+                components.triggerVolume = std::move(trigger).Value();
             }
             if (value.contains("audioSource")) {
-                const Json &audio = value["audioSource"];
-                const std::string kind = audio.at("kind").get<std::string>();
-                if (kind != "native_clip" && kind != "middleware_event")
-                    return Result<SceneObjectComponentSet>::Failure(PersistenceError(SceneInvalid, "Audio source is invalid."));
-                components.audioSource = Runtime::AudioSourceComponent{
-                    .kind = kind == "native_clip" ? Runtime::AudioSourceKind::NativeClip : Runtime::AudioSourceKind::MiddlewareEvent,
-                    .gain = audio.at("gain").get<float>(),
-                    .spatial = audio.at("spatial").get<bool>(),
-                };
+                auto audio = ParseAudioSourceComponent(value["audioSource"]);
+                if (audio.HasError()) {
+                    return Result<SceneObjectComponentSet>::Failure(audio.ErrorValue());
+                }
+                components.audioSource = std::move(audio).Value();
             }
             if (value.contains("behaviors")) {
-                const Json &behaviors = value["behaviors"];
-                if (!behaviors.is_array() || behaviors.size() > 128)
-                    return Result<SceneObjectComponentSet>::Failure(PersistenceError(SceneInvalid, "Behavior list is invalid."));
-                components.behaviors.reserve(behaviors.size());
-                for (const Json &behavior : behaviors) {
-                    if (!behavior.is_object() || !behavior.contains("instanceId") || !behavior["instanceId"].is_number_unsigned() ||
-                        !behavior.contains("typeId") || !behavior["typeId"].is_string() || !behavior.contains("schemaVersion") ||
-                        !behavior["schemaVersion"].is_number_unsigned() || !behavior.contains("enabled") ||
-                        !behavior["enabled"].is_boolean() || !behavior.contains("fields") || !behavior["fields"].is_array())
-                        return Result<SceneObjectComponentSet>::Failure(PersistenceError(SceneInvalid, "Behavior entry is invalid."));
-                    auto typeId = Gameplay::BehaviorTypeId::Parse(behavior["typeId"].get<std::string>());
-                    if (typeId.HasError())
-                        return Result<SceneObjectComponentSet>::Failure(PersistenceError(SceneInvalid, "Behavior type ID is invalid."));
-                    Gameplay::BehaviorComponent parsed{
-                        .instanceId = Gameplay::BehaviorInstanceId{behavior["instanceId"].get<std::uint64_t>()},
-                        .typeId = std::move(typeId).Value(),
-                        .schemaVersion = behavior["schemaVersion"].get<std::uint32_t>(),
-                        .enabled = behavior["enabled"].get<bool>(),
-                    };
-                    parsed.fields.reserve(behavior["fields"].size());
-                    for (const Json &fieldEntry : behavior["fields"]) {
-                        if (!fieldEntry.is_object() || !fieldEntry.contains("name") || !fieldEntry["name"].is_string() ||
-                            !fieldEntry.contains("value"))
-                            return Result<SceneObjectComponentSet>::Failure(
-                                PersistenceError(SceneInvalid, "Behavior field entry is invalid."));
-                        auto field = ParseBehaviorFieldValue(fieldEntry["value"]);
-                        if (field.HasError())
-                            return Result<SceneObjectComponentSet>::Failure(field.ErrorValue());
-                        parsed.fields.emplace_back(fieldEntry["name"].get<std::string>(), std::move(field).Value());
-                    }
-                    if (Gameplay::ValidateBehaviorComponent(parsed).HasError())
-                        return Result<SceneObjectComponentSet>::Failure(PersistenceError(SceneInvalid, "Behavior payload is invalid."));
-                    components.behaviors.push_back(std::move(parsed));
+                auto behaviors = ParseBehaviors(value["behaviors"]);
+                if (behaviors.HasError()) {
+                    return Result<SceneObjectComponentSet>::Failure(behaviors.ErrorValue());
                 }
+                components.behaviors = std::move(behaviors).Value();
             }
             return Result<SceneObjectComponentSet>::Success(std::move(components));
         }
@@ -513,6 +613,70 @@ namespace Horo::Editor {
             return Json{{"schemaVersion", kSceneSchemaVersion}, {"objects", std::move(objects)}};
         }
 
+        [[nodiscard]] Result<SceneObjectSnapshot> ParseSceneObjectSnapshot(const Json &value) {
+            if (!value.is_object() || !value.contains("id") || !value["id"].is_number_unsigned() || !value.contains("name") ||
+                !value["name"].is_string() || !value.contains("parent") || !value.contains("transform") ||
+                !value.contains("primitiveMesh") || !value.contains("components")) {
+                return Result<SceneObjectSnapshot>::Failure(PersistenceError(SceneInvalid, "Scene object schema is incomplete."));
+            }
+            auto transform = ParseTransform(value["transform"]);
+            auto components = ParseComponents(value["components"]);
+            if (transform.HasError() || components.HasError()) {
+                return Result<SceneObjectSnapshot>::Failure(PersistenceError(SceneInvalid, "Scene object values are invalid."));
+            }
+
+            std::optional<SceneObjectId> parent;
+            if (!value["parent"].is_null()) {
+                if (!value["parent"].is_number_unsigned()) {
+                    return Result<SceneObjectSnapshot>::Failure(PersistenceError(SceneInvalid, "Scene object parent is invalid."));
+                }
+                parent = SceneObjectId{value["parent"].get<std::uint64_t>()};
+            }
+            std::optional<PrimitiveMeshDescriptor> primitive;
+            if (!value["primitiveMesh"].is_null()) {
+                auto parsed = ParsePrimitive(value["primitiveMesh"]);
+                if (parsed.HasError()) {
+                    return Result<SceneObjectSnapshot>::Failure(parsed.ErrorValue());
+                }
+                primitive = std::move(parsed).Value();
+            }
+            std::optional<Assets::AssetId> meshAsset;
+            if (value.contains("meshAsset") && !value["meshAsset"].is_null()) {
+                if (!value["meshAsset"].is_string()) {
+                    return Result<SceneObjectSnapshot>::Failure(
+                        PersistenceError(SceneInvalid, "Scene object mesh asset identity is invalid."));
+                }
+                auto parsed = Assets::AssetId::Parse(value["meshAsset"].get<std::string>());
+                if (parsed.HasError()) {
+                    return Result<SceneObjectSnapshot>::Failure(
+                        PersistenceError(SceneInvalid, "Scene object mesh asset identity is invalid."));
+                }
+                meshAsset = std::move(parsed).Value();
+            }
+            SceneObjectEditorState editorState;
+            if (value.contains("editor")) {
+                const Json &editor = value["editor"];
+                if (!editor.is_object() || !editor.contains("visible") || !editor["visible"].is_boolean() || !editor.contains("locked") ||
+                    !editor["locked"].is_boolean()) {
+                    return Result<SceneObjectSnapshot>::Failure(PersistenceError(SceneInvalid, "Scene object editor state is invalid."));
+                }
+                editorState = SceneObjectEditorState{
+                    .visible = editor["visible"].get<bool>(),
+                    .locked = editor["locked"].get<bool>(),
+                };
+            }
+            return Result<SceneObjectSnapshot>::Success(SceneObjectSnapshot{
+                .id = SceneObjectId{value["id"].get<std::uint64_t>()},
+                .parent = parent,
+                .name = value["name"].get<std::string>(),
+                .localTransform = transform.Value(),
+                .primitiveMesh = std::move(primitive),
+                .components = components.Value(),
+                .meshAsset = std::move(meshAsset),
+                .editorState = editorState,
+            });
+        }
+
         [[nodiscard]] Result<std::vector<SceneObjectSnapshot>> ParseScene(const std::string &contents) {
             try {
                 const Json document = Json::parse(contents);
@@ -525,66 +689,11 @@ namespace Horo::Editor {
                 std::vector<SceneObjectSnapshot> objects;
                 objects.reserve(document["objects"].size());
                 for (const Json &value : document["objects"]) {
-                    if (!value.is_object() || !value.contains("id") || !value["id"].is_number_unsigned() || !value.contains("name") ||
-                        !value["name"].is_string() || !value.contains("parent") || !value.contains("transform") ||
-                        !value.contains("primitiveMesh") || !value.contains("components")) {
-                        return Result<std::vector<SceneObjectSnapshot>>::Failure(
-                            PersistenceError(SceneInvalid, "Scene object schema is incomplete."));
+                    auto object = ParseSceneObjectSnapshot(value);
+                    if (object.HasError()) {
+                        return Result<std::vector<SceneObjectSnapshot>>::Failure(object.ErrorValue());
                     }
-                    auto transform = ParseTransform(value["transform"]);
-                    auto components = ParseComponents(value["components"]);
-                    if (transform.HasError() || components.HasError())
-                        return Result<std::vector<SceneObjectSnapshot>>::Failure(
-                            PersistenceError(SceneInvalid, "Scene object values are invalid."));
-
-                    std::optional<SceneObjectId> parent;
-                    if (!value["parent"].is_null()) {
-                        if (!value["parent"].is_number_unsigned())
-                            return Result<std::vector<SceneObjectSnapshot>>::Failure(
-                                PersistenceError(SceneInvalid, "Scene object parent is invalid."));
-                        parent = SceneObjectId{value["parent"].get<std::uint64_t>()};
-                    }
-                    std::optional<PrimitiveMeshDescriptor> primitive;
-                    if (!value["primitiveMesh"].is_null()) {
-                        auto parsed = ParsePrimitive(value["primitiveMesh"]);
-                        if (parsed.HasError())
-                            return Result<std::vector<SceneObjectSnapshot>>::Failure(parsed.ErrorValue());
-                        primitive = std::move(parsed).Value();
-                    }
-                    std::optional<Assets::AssetId> meshAsset;
-                    if (value.contains("meshAsset") && !value["meshAsset"].is_null()) {
-                        if (!value["meshAsset"].is_string())
-                            return Result<std::vector<SceneObjectSnapshot>>::Failure(
-                                PersistenceError(SceneInvalid, "Scene object mesh asset identity is invalid."));
-                        auto parsed = Assets::AssetId::Parse(value["meshAsset"].get<std::string>());
-                        if (parsed.HasError())
-                            return Result<std::vector<SceneObjectSnapshot>>::Failure(
-                                PersistenceError(SceneInvalid, "Scene object mesh asset identity is invalid."));
-                        meshAsset = std::move(parsed).Value();
-                    }
-                    SceneObjectEditorState editorState;
-                    if (value.contains("editor")) {
-                        const Json &editor = value["editor"];
-                        if (!editor.is_object() || !editor.contains("visible") || !editor["visible"].is_boolean() ||
-                            !editor.contains("locked") || !editor["locked"].is_boolean()) {
-                            return Result<std::vector<SceneObjectSnapshot>>::Failure(
-                                PersistenceError(SceneInvalid, "Scene object editor state is invalid."));
-                        }
-                        editorState = SceneObjectEditorState{
-                            .visible = editor["visible"].get<bool>(),
-                            .locked = editor["locked"].get<bool>(),
-                        };
-                    }
-                    objects.push_back(SceneObjectSnapshot{
-                        .id = SceneObjectId{value["id"].get<std::uint64_t>()},
-                        .parent = parent,
-                        .name = value["name"].get<std::string>(),
-                        .localTransform = transform.Value(),
-                        .primitiveMesh = std::move(primitive),
-                        .components = components.Value(),
-                        .meshAsset = std::move(meshAsset),
-                        .editorState = editorState,
-                    });
+                    objects.push_back(std::move(object).Value());
                 }
                 return Result<std::vector<SceneObjectSnapshot>>::Success(std::move(objects));
             } catch (const Json::exception &exception) {
@@ -622,15 +731,17 @@ namespace Horo::Editor {
     Result<std::optional<LoadedProjectScene>> LoadProjectDefaultScene(const std::filesystem::path &absoluteProjectRoot) {
         const std::filesystem::path metadataPath = absoluteProjectRoot / ".horo/project.json";
         if (std::error_code error; !std::filesystem::exists(metadataPath, error)) {
-            if (error)
+            if (error) {
                 return Result<std::optional<LoadedProjectScene>>::Failure(
                     PersistenceError(SceneReadFailed, "Unable to inspect '" + metadataPath.string() + "'."));
+            }
             return Result<std::optional<LoadedProjectScene>>::Success(std::nullopt);
         }
 
         auto metadataBytes = ReadBoundedFile(metadataPath, kMaximumProjectMetadataBytes);
-        if (metadataBytes.HasError())
+        if (metadataBytes.HasError()) {
             return Result<std::optional<LoadedProjectScene>>::Failure(metadataBytes.ErrorValue());
+        }
 
         try {
             const Json metadata = Json::parse(metadataBytes.Value());
@@ -652,8 +763,9 @@ namespace Horo::Editor {
             }
 
             auto loaded = LoadProjectScene(absoluteProjectRoot, absoluteScene);
-            if (loaded.HasError())
+            if (loaded.HasError()) {
                 return Result<std::optional<LoadedProjectScene>>::Failure(loaded.ErrorValue());
+            }
             if (!loaded.Value().existed) {
                 return Result<std::optional<LoadedProjectScene>>::Failure(
                     PersistenceError(SceneReadFailed, "Configured default scene does not exist at '" + absoluteScene.string() + "'."));
@@ -682,11 +794,13 @@ namespace Horo::Editor {
             return Result<LoadedProjectScene>::Success(LoadedProjectScene{absoluteScenePath, {}, false, SceneFileFingerprint{}});
         }
         auto sceneBytes = ReadBoundedFile(absoluteScenePath, kMaximumSceneBytes);
-        if (sceneBytes.HasError())
+        if (sceneBytes.HasError()) {
             return Result<LoadedProjectScene>::Failure(sceneBytes.ErrorValue());
+        }
         auto objects = ParseScene(sceneBytes.Value());
-        if (objects.HasError())
+        if (objects.HasError()) {
             return Result<LoadedProjectScene>::Failure(objects.ErrorValue());
+        }
         return Result<LoadedProjectScene>::Success(
             LoadedProjectScene{absoluteScenePath, std::move(objects).Value(), true, Fingerprint(sceneBytes.Value())});
     }
@@ -708,8 +822,9 @@ namespace Horo::Editor {
             return Result<SceneFileFingerprint>::Success(SceneFileFingerprint{});
         }
         auto bytes = ReadBoundedFile(absoluteScenePath, kMaximumSceneBytes);
-        if (bytes.HasError())
+        if (bytes.HasError()) {
             return Result<SceneFileFingerprint>::Failure(bytes.ErrorValue());
+        }
         return Result<SceneFileFingerprint>::Success(Fingerprint(bytes.Value()));
     }
 
@@ -724,17 +839,19 @@ namespace Horo::Editor {
                 PersistenceError(ScenePathInvalid, "Scene save destination must be an absolute path inside the project."));
         }
 
-        auto lease = mutations.TryAcquire(ProjectMutationRequest{
-            .projectRoot = absoluteProjectRoot,
-            .owner = ProjectMutationOwner::Save,
-            .operationId = std::format("scene-save-{}", snapshot.revision.value),
-        });
-        if (lease.HasError())
+        if (auto lease = mutations.TryAcquire(ProjectMutationRequest{
+                .projectRoot = absoluteProjectRoot,
+                .owner = ProjectMutationOwner::Save,
+                .operationId = std::format("scene-save-{}", snapshot.revision.value),
+            });
+            lease.HasError()) {
             return Result<ProjectSceneSaveResult>::Failure(lease.ErrorValue());
+        }
 
         auto currentFingerprint = InspectProjectSceneFingerprint(absoluteProjectRoot, absoluteScenePath);
-        if (currentFingerprint.HasError())
+        if (currentFingerprint.HasError()) {
             return Result<ProjectSceneSaveResult>::Failure(currentFingerprint.ErrorValue());
+        }
         if (!overwriteConflict && currentFingerprint.Value() != expectedFingerprint) {
             return Result<ProjectSceneSaveResult>::Success(ProjectSceneSaveResult{
                 .status = ProjectSceneSaveStatus::Conflict,
@@ -817,13 +934,14 @@ namespace Horo::Editor {
                 PersistenceError(ScenePathInvalid, "Recovery destination must describe an absolute project scene."));
         }
 
-        auto lease = mutations.TryAcquire(ProjectMutationRequest{
-            .projectRoot = absoluteProjectRoot,
-            .owner = ProjectMutationOwner::Autosave,
-            .operationId = std::format("scene-autosave-{}", snapshot.revision.value),
-        });
-        if (lease.HasError())
+        if (auto lease = mutations.TryAcquire(ProjectMutationRequest{
+                .projectRoot = absoluteProjectRoot,
+                .owner = ProjectMutationOwner::Autosave,
+                .operationId = std::format("scene-autosave-{}", snapshot.revision.value),
+            });
+            lease.HasError()) {
             return Result<void>::Failure(lease.ErrorValue());
+        }
 
         Json scene = SceneJson(snapshot);
         const Json record{
@@ -877,8 +995,9 @@ namespace Horo::Editor {
         }
 
         auto bytes = ReadBoundedFile(recoveryPath, kMaximumRecoveryBytes);
-        if (bytes.HasError())
+        if (bytes.HasError()) {
             return Result<std::optional<ProjectSceneRecoveryRecord>>::Failure(bytes.ErrorValue());
+        }
         try {
             const Json record = Json::parse(bytes.Value());
             if (!record.is_object() || record.value("recordVersion", 0) != 1 || !record.contains("canonicalPath") ||
@@ -902,8 +1021,9 @@ namespace Horo::Editor {
             }
 
             auto objects = ParseScene(record["scene"].dump());
-            if (objects.HasError())
+            if (objects.HasError()) {
                 return Result<std::optional<ProjectSceneRecoveryRecord>>::Failure(objects.ErrorValue());
+            }
             ProjectSceneRecoveryRecord result{
                 .absoluteCanonicalPath = absoluteScenePath,
                 .savedRevision = DocumentRevision{record["savedRevision"].get<std::uint64_t>()},
@@ -931,17 +1051,19 @@ namespace Horo::Editor {
         }
         const std::filesystem::path recoveryPath = RecoveryPath(absoluteProjectRoot);
         if (std::error_code error; !std::filesystem::exists(recoveryPath, error)) {
-            if (error)
+            if (error) {
                 return Result<void>::Failure(PersistenceError(SceneReadFailed, "Unable to inspect recovery state."));
+            }
             return Result<void>::Success();
         }
-        auto lease = mutations.TryAcquire(ProjectMutationRequest{
-            .projectRoot = absoluteProjectRoot,
-            .owner = ProjectMutationOwner::Autosave,
-            .operationId = "scene-recovery-discard",
-        });
-        if (lease.HasError())
+        if (auto lease = mutations.TryAcquire(ProjectMutationRequest{
+                .projectRoot = absoluteProjectRoot,
+                .owner = ProjectMutationOwner::Autosave,
+                .operationId = "scene-recovery-discard",
+            });
+            lease.HasError()) {
             return Result<void>::Failure(lease.ErrorValue());
+        }
         return files.RemoveDurable(recoveryPath);
     }
 }  // namespace Horo::Editor

@@ -171,7 +171,7 @@ namespace Horo::Editor {
             Result<Runtime::PrimitiveMeshLease> acquired = meshCache.Acquire(**entity->primitiveMesh);
             if (acquired.HasError()) {
                 Error error = acquired.ErrorValue();
-                error.message = "Scene object " + std::to_string(entity->authoredObject->value) + ": " + error.message;
+                error.message = std::format("Scene object {}: {}", entity->authoredObject->value, error.message);
                 return Result<EditorViewportSceneSnapshot>::Failure(std::move(error));
             }
             Runtime::PrimitiveMeshLease lease = std::move(acquired).Value();

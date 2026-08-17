@@ -65,8 +65,7 @@ namespace Horo::Telemetry {
     }
 
     /** @copydoc OperationSpan::OperationSpan */
-    OperationSpan::OperationSpan(const std::string_view subsystem, const std::string_view name)
-        : subsystem_(subsystem), name_(name), startedAt_(std::chrono::steady_clock::now()) {
+    OperationSpan::OperationSpan(const std::string_view subsystem, const std::string_view name) : subsystem_(subsystem), name_(name) {
         const OperationContext inherited = CaptureOperationContext();
         context_.operationId = g_nextOperationId.fetch_add(1, std::memory_order_relaxed);
         context_.parentOperationId = inherited.operationId;

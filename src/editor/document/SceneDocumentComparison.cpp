@@ -77,7 +77,7 @@ namespace Horo::Editor {
     }
 
     /** @copydoc LoadSceneDocumentComparison */
-    Result<SceneDocumentComparison> LoadSceneDocumentComparison(SceneDocumentComparisonRequest request) {
+    Result<SceneDocumentComparison> LoadSceneDocumentComparison(const SceneDocumentComparisonRequest &request) {
         if (!request.absoluteProjectRoot.is_absolute() || !request.absoluteScenePath.is_absolute()) {
             return Result<SceneDocumentComparison>::Failure(MakeError(SceneComparisonUnavailable));
         }

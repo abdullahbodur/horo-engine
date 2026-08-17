@@ -318,8 +318,7 @@ namespace Horo::Render {
         public:
             OpenGLBackendProvider(IOpenGLPresentationPort &presentationPort, const OpenGLBackendOptions options,
                                   const Detail::OpenGLCommandFunctions functions)
-                : presentationPort_(&presentationPort), options_(options), functions_(functions),
-                  contextLease_(std::make_shared<OpenGLContextLease>()) {}
+                : presentationPort_(&presentationPort), options_(options), functions_(functions) {}
 
             /** @copydoc IRenderBackendProvider::Create */
             Result<std::unique_ptr<IRenderBackend>> Create() const override {
@@ -331,7 +330,7 @@ namespace Horo::Render {
             IOpenGLPresentationPort *presentationPort_{nullptr};
             OpenGLBackendOptions options_{};
             Detail::OpenGLCommandFunctions functions_{};
-            std::shared_ptr<OpenGLContextLease> contextLease_;
+            std::shared_ptr<OpenGLContextLease> contextLease_{std::make_shared<OpenGLContextLease>()};
         };
     }  // namespace
 

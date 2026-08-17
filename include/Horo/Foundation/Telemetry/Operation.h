@@ -90,7 +90,7 @@ namespace Horo::Telemetry {
         std::string name_;
         OperationContext context_;
         std::optional<ScopedOperationContext> binding_;
-        std::chrono::steady_clock::time_point startedAt_;
+        std::chrono::steady_clock::time_point startedAt_{std::chrono::steady_clock::now()};
         bool completed_{};
     };
 }  // namespace Horo::Telemetry

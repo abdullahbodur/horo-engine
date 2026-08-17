@@ -211,12 +211,10 @@ namespace Horo
         Clock& clock;
         ProcessService& processes;
         UserDirectories& directories;
+        PlatformCapabilities capabilities;
         CredentialStore* credentials;
         NativeDialogs* dialogs;
         CrashService* crash;
-
-    private:
-        PlatformCapabilities m_capabilities;
     };
 
     /** @brief Headless filesystem adapter that reports every path as absent. */

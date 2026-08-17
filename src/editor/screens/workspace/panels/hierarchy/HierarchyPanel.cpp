@@ -331,9 +331,12 @@ namespace Horo::Editor {
                 visibilityHovered = ImGui::IsItemHovered();
                 visibilityPressed = ImGui::IsItemClicked(ImGuiMouseButton_Left);
                 if (visibilityHovered) {
-                    const char *tooltip = node.hiddenByParent && node.locallyVisible
-                                              ? "workspace.hierarchy.hidden_by_parent"
-                                              : (node.locallyVisible ? "workspace.hierarchy.hide" : "workspace.hierarchy.show");
+                    const char *tooltip = "workspace.hierarchy.show";
+                    if (node.hiddenByParent && node.locallyVisible) {
+                        tooltip = "workspace.hierarchy.hidden_by_parent";
+                    } else if (node.locallyVisible) {
+                        tooltip = "workspace.hierarchy.hide";
+                    }
                     ImGui::SetTooltip("%s", ctx.localization.Get("editor", tooltip).c_str());
                 }
                 ImGui::SetCursorScreenPos(lockMin);
@@ -341,9 +344,12 @@ namespace Horo::Editor {
                 lockHovered = ImGui::IsItemHovered();
                 lockPressed = ImGui::IsItemClicked(ImGuiMouseButton_Left);
                 if (lockHovered) {
-                    const char *tooltip = node.lockedByParent && !node.locallyLocked
-                                              ? "workspace.hierarchy.locked_by_parent"
-                                              : (node.locallyLocked ? "workspace.hierarchy.unlock" : "workspace.hierarchy.lock");
+                    const char *tooltip = "workspace.hierarchy.lock";
+                    if (node.lockedByParent && !node.locallyLocked) {
+                        tooltip = "workspace.hierarchy.locked_by_parent";
+                    } else if (node.locallyLocked) {
+                        tooltip = "workspace.hierarchy.unlock";
+                    }
                     ImGui::SetTooltip("%s", ctx.localization.Get("editor", tooltip).c_str());
                 }
                 ImGui::SetCursorScreenPos(nextRowCursor);
@@ -432,9 +438,12 @@ namespace Horo::Editor {
             } else if (!assetDropDelivered && workspaceEligible && rowLeftClicked && !pointerInActions) {
                 editSession_.Select(node.id);
                 const ImGuiIO &io = ImGui::GetIO();
-                const HierarchySelectionGesture gesture =
-                    io.KeyShift ? HierarchySelectionGesture::Range
-                                : ((io.KeyCtrl || io.KeySuper) ? HierarchySelectionGesture::Toggle : HierarchySelectionGesture::Replace);
+                HierarchySelectionGesture gesture = HierarchySelectionGesture::Replace;
+                if (io.KeyShift) {
+                    gesture = HierarchySelectionGesture::Range;
+                } else if (io.KeyCtrl || io.KeySuper) {
+                    gesture = HierarchySelectionGesture::Toggle;
+                }
                 cmd = editSession_.SelectCommand(node.id, gesture);
             }
 

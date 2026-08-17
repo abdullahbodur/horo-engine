@@ -120,8 +120,9 @@ namespace Horo::Log {
         void AppendJsonEscaped(std::string &output, const std::string_view value) {
             static constexpr std::array kHex{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
             for (const char rawCharacter : value) {
-                const auto character = std::to_integer<unsigned char>(static_cast<std::byte>(rawCharacter));
-                switch (character) {
+                const auto byteValue = static_cast<std::byte>(rawCharacter);
+                const auto character = std::to_integer<std::uint8_t>(byteValue);
+                switch (rawCharacter) {
                     case '"':
                         output += R"(\")";
                         break;
@@ -146,10 +147,10 @@ namespace Horo::Log {
                     default:
                         if (character < 0x20U) {
                             output += "\\u00";
-                            output += kHex[(character >> 4U) & 0xFU];
-                            output += kHex[character & 0xFU];
+                            output += kHex[std::to_integer<std::size_t>((byteValue >> 4U) & std::byte{0x0FU})];
+                            output += kHex[std::to_integer<std::size_t>(byteValue & std::byte{0x0FU})];
                         } else {
-                            output += static_cast<char>(character);
+                            output += rawCharacter;
                         }
                 }
             }
