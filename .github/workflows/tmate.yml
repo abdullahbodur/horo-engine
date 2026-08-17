@@ -2,6 +2,7 @@ name: Debug Session with Tmate
 
 on:
   workflow_dispatch:
+  push:
 
 jobs:
   tmate-debug:
