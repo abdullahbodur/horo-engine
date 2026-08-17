@@ -10,8 +10,10 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
-#include <GL/gl.h>
+// clang-format off
 #include <windows.h>
+#include <GL/gl.h>
+// clang-format on
 #else
 #include <GL/gl.h>
 #endif
