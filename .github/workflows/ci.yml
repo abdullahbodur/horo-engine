@@ -26,10 +26,8 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
 
-      - name: Install system tooling
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang-format python3-pytest
+      - name: Setup Python & pytest
+        run: pip install --no-cache-dir pytest
 
       - name: Diagnostics Check
         run: python3 scripts/dev.py doctor
@@ -39,6 +37,7 @@ jobs:
 
       - name: Run Python Runner Tests
         run: pytest tests/python/
+
 
   test:
     name: Test · ${{ matrix.name }}
