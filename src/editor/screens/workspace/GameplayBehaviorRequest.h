@@ -13,4 +13,4 @@ namespace Horo::Editor {
         std::string baseName;
         GameplayBehaviorKind kind;
     };
-}
+}  // namespace Horo::Editor

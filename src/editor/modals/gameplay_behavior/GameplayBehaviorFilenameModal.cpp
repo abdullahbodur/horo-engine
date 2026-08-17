@@ -11,13 +11,15 @@ namespace Horo::Editor {
         const char *ExtensionFor(const GameplayBehaviorKind kind) {
             return kind == GameplayBehaviorKind::Lua ? ".horo_script" : ".cpp";
         }
-    }
+    }  // namespace
 
     GameplayBehaviorFilenameModal::GameplayBehaviorFilenameModal(const EditorGuiContext &context, const GameplayBehaviorKind kind,
-                                                                   std::string destination, std::string baseName, CreateCallback onCreate)
+                                                                 std::string destination, std::string baseName, CreateCallback onCreate)
         : context_(context), state_(kind, std::move(destination), std::move(baseName)), onCreate_(std::move(onCreate)) {}
 
-    ModalId GameplayBehaviorFilenameModal::Id() const { return ModalId{kModalId}; }
+    ModalId GameplayBehaviorFilenameModal::Id() const {
+        return ModalId{kModalId};
+    }
 
     ModalPresentation GameplayBehaviorFilenameModal::Presentation() const {
         return {.size = ModalSizePolicy::Compact, .dimWorkspace = true};
@@ -27,13 +29,21 @@ namespace Horo::Editor {
         return {.allowCloseButton = true, .allowEscape = true, .allowOutsideClick = false, .allowApplicationShutdown = true};
     }
 
-    Result<void> GameplayBehaviorFilenameModal::OnOpen(EditorModalContext &) { return Result<void>::Success(); }
+    Result<void> GameplayBehaviorFilenameModal::OnOpen(EditorModalContext &) {
+        return Result<void>::Success();
+    }
 
     ModalFrameResult GameplayBehaviorFilenameModal::Draw() {
         const std::string title = context_.localization.Get("editor", "workspace.gameplay_behavior.create.title");
-        Ui::ScopedModalShell modal({.id = "GameplayBehaviorFilename", .title = title.c_str(), .requestedSize = {520.0F, 320.0F},
-                                    .viewportPadding = 48.0F, .minimumWidth = 420.0F, .minimumHeight = 260.0F,
-                                    .footerHeight = Theme::Layout::FooterH, .showClose = true, .titleFontSize = 14.0F},
+        Ui::ScopedModalShell modal({.id = "GameplayBehaviorFilename",
+                                    .title = title.c_str(),
+                                    .requestedSize = {520.0F, 320.0F},
+                                    .viewportPadding = 48.0F,
+                                    .minimumWidth = 420.0F,
+                                    .minimumHeight = 260.0F,
+                                    .footerHeight = Theme::Layout::FooterH,
+                                    .showClose = true,
+                                    .titleFontSize = 14.0F},
                                    context_.theme.fonts);
 
         bool confirm = false;
@@ -44,8 +54,9 @@ namespace Horo::Editor {
         const std::string typeLabel = context_.localization.Get("editor", "workspace.gameplay_behavior.create.type");
         const std::string destinationLabel = context_.localization.Get("editor", "workspace.gameplay_behavior.create.destination");
         const std::string filenameLabel = context_.localization.Get("editor", "workspace.gameplay_behavior.create.filename");
-        const std::string kind = context_.localization.Get(
-            "editor", state_.Kind() == GameplayBehaviorKind::Lua ? "workspace.gameplay_behavior.create.lua" : "workspace.gameplay_behavior.create.native");
+        const std::string kind =
+            context_.localization.Get("editor", state_.Kind() == GameplayBehaviorKind::Lua ? "workspace.gameplay_behavior.create.lua"
+                                                                                           : "workspace.gameplay_behavior.create.native");
         Ui::FieldLabel(typeLabel.c_str(), context_.theme.fonts);
         ImGui::TextUnformatted(kind.c_str());
         ImGui::Dummy({0.0F, 8.0F});
@@ -92,7 +103,11 @@ namespace Horo::Editor {
         return ModalFrameResult::None();
     }
 
-    CloseDecision GameplayBehaviorFilenameModal::CanClose(ModalCloseReason) { return CloseDecision::Allow; }
+    CloseDecision GameplayBehaviorFilenameModal::CanClose(ModalCloseReason) {
+        return CloseDecision::Allow;
+    }
 
-    const GameplayBehaviorFilenameModalState &GameplayBehaviorFilenameModal::State() const noexcept { return state_; }
+    const GameplayBehaviorFilenameModalState &GameplayBehaviorFilenameModal::State() const noexcept {
+        return state_;
+    }
 }  // namespace Horo::Editor

@@ -2,39 +2,35 @@
 
 #include <atomic>
 
-namespace Horo::Editor
-{
-namespace {
-    std::atomic<std::uint64_t> g_notificationIdCounter{1};
-}
-
-void NotificationService::Publish(std::string_view source, NotificationSeverity severity, std::string message,
-                                  std::string title, std::string deduplicationKey, float durationSeconds,
-                                  std::vector<NotificationAction> actions) const
-{
-    Publish(NotificationEvent{.id = g_notificationIdCounter.fetch_add(1, std::memory_order_relaxed),
-                               .source = std::string(source),
-                               .severity = severity,
-                               .title = std::move(title),
-                               .message = std::move(message),
-                               .deduplicationKey = std::move(deduplicationKey),
-                               .durationSeconds = durationSeconds,
-                               .dismissible = true,
-                               .actions = std::move(actions)});
-}
-
-void NotificationService::Publish(NotificationEvent event) const
-{
-    if (events_ == nullptr)
-        return;
-
-    if (event.id == 0)
-        event.id = g_notificationIdCounter.fetch_add(1, std::memory_order_relaxed);
-
-    if (!event.deduplicationKey.empty() && event.deduplicationKey.find("::") == std::string::npos) {
-        event.deduplicationKey = event.source + "::" + event.deduplicationKey;
+namespace Horo::Editor {
+    namespace {
+        std::atomic<std::uint64_t> g_notificationIdCounter{1};
     }
 
-    events_->Publish(std::move(event));
-}
-} // namespace Horo::Editor
+    void NotificationService::Publish(std::string_view source, NotificationSeverity severity, std::string message, std::string title,
+                                      std::string deduplicationKey, float durationSeconds, std::vector<NotificationAction> actions) const {
+        Publish(NotificationEvent{.id = g_notificationIdCounter.fetch_add(1, std::memory_order_relaxed),
+                                  .source = std::string(source),
+                                  .severity = severity,
+                                  .title = std::move(title),
+                                  .message = std::move(message),
+                                  .deduplicationKey = std::move(deduplicationKey),
+                                  .durationSeconds = durationSeconds,
+                                  .dismissible = true,
+                                  .actions = std::move(actions)});
+    }
+
+    void NotificationService::Publish(NotificationEvent event) const {
+        if (events_ == nullptr)
+            return;
+
+        if (event.id == 0)
+            event.id = g_notificationIdCounter.fetch_add(1, std::memory_order_relaxed);
+
+        if (!event.deduplicationKey.empty() && event.deduplicationKey.find("::") == std::string::npos) {
+            event.deduplicationKey = event.source + "::" + event.deduplicationKey;
+        }
+
+        events_->Publish(std::move(event));
+    }
+}  // namespace Horo::Editor

@@ -1,10 +1,7 @@
 #include "Horo/Platform/ExternalProcess.h"
-
 #include "Horo/Platform/PlatformErrors.h"
 
 #define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-
 #include <algorithm>
 #include <array>
 #include <cwchar>
@@ -12,20 +9,26 @@
 #include <string_view>
 #include <thread>
 #include <utility>
+#include <windows.h>
 
 namespace Horo {
     namespace {
         struct Handle final {
             HANDLE value{INVALID_HANDLE_VALUE};
             Handle() = default;
+
             explicit Handle(HANDLE handle) : value(handle) {}
+
             ~Handle() {
                 if (value != nullptr && value != INVALID_HANDLE_VALUE)
                     CloseHandle(value);
             }
+
             Handle(const Handle &) = delete;
             Handle &operator=(const Handle &) = delete;
+
             Handle(Handle &&other) noexcept : value(std::exchange(other.value, INVALID_HANDLE_VALUE)) {}
+
             Handle &operator=(Handle &&other) noexcept {
                 if (this != &other) {
                     if (value != nullptr && value != INVALID_HANDLE_VALUE)
@@ -38,8 +41,7 @@ namespace Horo {
 
         class LineDecoder final {
         public:
-            LineDecoder(const ProcessOutputStream stream, const std::size_t maximum,
-                        const std::function<void(ProcessOutputLine)> &callback)
+            LineDecoder(const ProcessOutputStream stream, const std::size_t maximum, const std::function<void(ProcessOutputLine)> &callback)
                 : stream_(stream), maximum_(std::max<std::size_t>(maximum, 1U)), callback_(&callback) {}
 
             void Append(const char *bytes, const std::size_t count) {
@@ -68,6 +70,7 @@ namespace Horo {
                 pending_.clear();
                 truncated_ = false;
             }
+
             ProcessOutputStream stream_;
             std::size_t maximum_;
             const std::function<void(ProcessOutputLine)> *callback_;
@@ -177,7 +180,7 @@ namespace Horo {
 
     /** @copydoc NativeExternalProcessRunner::Run */
     Result<ExternalProcessResult> NativeExternalProcessRunner::Run(const ExternalProcessRequest &request,
-                                                                    const CancellationToken &cancellation) {
+                                                                   const CancellationToken &cancellation) {
         if (request.executable.empty())
             return Result<ExternalProcessResult>::Failure(MakeError(PlatformErrors::ProcessLaunchFailed, "Executable is empty."));
 
@@ -267,8 +270,10 @@ namespace Horo {
                     break;
                 DWORD stdoutAvailable = 0;
                 DWORD stderrAvailable = 0;
-                const bool stdoutEmpty = !PeekNamedPipe(stdoutRead.value, nullptr, 0, nullptr, &stdoutAvailable, nullptr) || stdoutAvailable == 0;
-                const bool stderrEmpty = !PeekNamedPipe(stderrRead.value, nullptr, 0, nullptr, &stderrAvailable, nullptr) || stderrAvailable == 0;
+                const bool stdoutEmpty =
+                    !PeekNamedPipe(stdoutRead.value, nullptr, 0, nullptr, &stdoutAvailable, nullptr) || stdoutAvailable == 0;
+                const bool stderrEmpty =
+                    !PeekNamedPipe(stderrRead.value, nullptr, 0, nullptr, &stderrAvailable, nullptr) || stderrAvailable == 0;
                 if (stdoutEmpty && stderrEmpty) {
                     standardOutput.Finish();
                     standardError.Finish();
@@ -279,10 +284,10 @@ namespace Horo {
         DWORD exitCode = 0;
         GetExitCodeProcess(processHandle.value, &exitCode);
         ExternalProcessResult result;
-        result.reason = timedOut ? ProcessTerminationReason::TimedOut
-            : terminationRequested ? ProcessTerminationReason::Cancelled
-            : forceTerminated ? ProcessTerminationReason::Signalled
-                              : ProcessTerminationReason::Exited;
+        result.reason = timedOut               ? ProcessTerminationReason::TimedOut
+                        : terminationRequested ? ProcessTerminationReason::Cancelled
+                        : forceTerminated      ? ProcessTerminationReason::Signalled
+                                               : ProcessTerminationReason::Exited;
         result.exitCode = static_cast<int>(exitCode);
         return Result<ExternalProcessResult>::Success(result);
     }

@@ -33,4 +33,4 @@ namespace Horo::Editor {
         std::string baseName_;
         Result<void> validation_{Result<void>::Success()};
     };
-}
+}  // namespace Horo::Editor

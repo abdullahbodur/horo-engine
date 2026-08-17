@@ -41,4 +41,4 @@ namespace {
         REQUIRE(state.Validation().HasError());
         REQUIRE(!state.Dispatch(GameplayBehaviorFilenameModalAction::Confirm).has_value());
     }
-}
+}  // namespace

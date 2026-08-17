@@ -16,7 +16,7 @@ namespace Horo::Editor {
         using CreateCallback = std::function<void(CreateGameplayBehaviorRequest)>;
 
         GameplayBehaviorFilenameModal(const EditorGuiContext &context, GameplayBehaviorKind kind, std::string destination,
-                                       std::string baseName, CreateCallback onCreate);
+                                      std::string baseName, CreateCallback onCreate);
 
         [[nodiscard]] ModalId Id() const override;
         [[nodiscard]] ModalPresentation Presentation() const override;

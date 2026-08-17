@@ -36,25 +36,38 @@ namespace Horo {
 
         [[nodiscard]] const char *ToString(const OperationKind kind) noexcept {
             switch (kind) {
-                case OperationKind::Build: return "build";
-                case OperationKind::Cook: return "cook";
-                case OperationKind::Import: return "import";
-                case OperationKind::Index: return "index";
-                case OperationKind::Validation: return "validation";
-                case OperationKind::Other: return "other";
+                case OperationKind::Build:
+                    return "build";
+                case OperationKind::Cook:
+                    return "cook";
+                case OperationKind::Import:
+                    return "import";
+                case OperationKind::Index:
+                    return "index";
+                case OperationKind::Validation:
+                    return "validation";
+                case OperationKind::Other:
+                    return "other";
             }
             return "other";
         }
 
         [[nodiscard]] const char *ToString(const OperationState state) noexcept {
             switch (state) {
-                case OperationState::Queued: return "queued";
-                case OperationState::Running: return "running";
-                case OperationState::Waiting: return "waiting";
-                case OperationState::Cancelling: return "cancelling";
-                case OperationState::Succeeded: return "succeeded";
-                case OperationState::Failed: return "failed";
-                case OperationState::Cancelled: return "cancelled";
+                case OperationState::Queued:
+                    return "queued";
+                case OperationState::Running:
+                    return "running";
+                case OperationState::Waiting:
+                    return "waiting";
+                case OperationState::Cancelling:
+                    return "cancelling";
+                case OperationState::Succeeded:
+                    return "succeeded";
+                case OperationState::Failed:
+                    return "failed";
+                case OperationState::Cancelled:
+                    return "cancelled";
             }
             return "unknown";
         }
@@ -68,8 +81,8 @@ namespace Horo {
 
     /** @copydoc LoggingOperationHistorySink::AppendTerminal */
     void LoggingOperationHistorySink::AppendTerminal(const OperationRecord &record) {
-        const Log::LogContext context("operation.id", std::to_string(record.id), "operation.kind", ToString(record.kind),
-                                      "operation.state", ToString(record.state));
+        const Log::LogContext context("operation.id", std::to_string(record.id), "operation.kind", ToString(record.kind), "operation.state",
+                                      ToString(record.state));
         LOG_INFO("jobs.history", "Operation completed: %s", record.title.c_str());
     }
 

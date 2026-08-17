@@ -21,53 +21,45 @@
 #include <utility>
 #include <vector>
 
-namespace Horo::Application
-{
+namespace Horo::Application {
     /** @brief Stable authored identity of one immutable migration definition. */
-    struct StableMigrationId
-    {
+    struct StableMigrationId {
         std::string value;
-        [[nodiscard]] bool operator==(const StableMigrationId&) const noexcept = default;
+        [[nodiscard]] bool operator==(const StableMigrationId &) const noexcept = default;
     };
 
     /** @brief Stable authored identity of one stage inside a definition. */
-    struct MigrationStageId
-    {
+    struct MigrationStageId {
         std::string value;
-        [[nodiscard]] bool operator==(const MigrationStageId&) const noexcept = default;
+        [[nodiscard]] bool operator==(const MigrationStageId &) const noexcept = default;
     };
 
     /** @brief Stable identity of a package or core provider required by a migration. */
-    struct MigrationProviderId
-    {
+    struct MigrationProviderId {
         std::string value;
-        [[nodiscard]] bool operator==(const MigrationProviderId&) const noexcept = default;
+        [[nodiscard]] bool operator==(const MigrationProviderId &) const noexcept = default;
     };
 
     /** @brief Canonical SHA-256 identity of a generated migration definition. */
-    struct MigrationDefinitionHash
-    {
+    struct MigrationDefinitionHash {
         std::array<std::uint8_t, 32> bytes{};
-        [[nodiscard]] bool operator==(const MigrationDefinitionHash&) const noexcept = default;
+        [[nodiscard]] bool operator==(const MigrationDefinitionHash &) const noexcept = default;
     };
 
     /** @brief Canonical SHA-256 identity of the complete generated definition set. */
-    struct MigrationDefinitionSetHash
-    {
+    struct MigrationDefinitionSetHash {
         std::array<std::uint8_t, 32> bytes{};
-        [[nodiscard]] bool operator==(const MigrationDefinitionSetHash&) const noexcept = default;
+        [[nodiscard]] bool operator==(const MigrationDefinitionSetHash &) const noexcept = default;
     };
 
     /** @brief Distinguishes retained sequential edges from declared checkpoint shortcuts. */
-    enum class ProjectMigrationDefinitionKind : std::uint8_t
-    {
+    enum class ProjectMigrationDefinitionKind : std::uint8_t {
         Sequential,
         Checkpoint,
     };
 
     /** @brief Portable authored document family available to migration queries. */
-    enum class MigrationDocumentKind : std::uint8_t
-    {
+    enum class MigrationDocumentKind : std::uint8_t {
         ProjectMetadata,
         Scene,
         Prefab,
@@ -80,32 +72,27 @@ namespace Horo::Application
     };
 
     /** @brief Query evaluated against the current candidate at a node boundary. */
-    struct MigrationDocumentQuery
-    {
+    struct MigrationDocumentQuery {
         std::optional<MigrationDocumentKind> kind;
 
-        [[nodiscard]] static MigrationDocumentQuery Any() noexcept
-        {
+        [[nodiscard]] static MigrationDocumentQuery Any() noexcept {
             return {};
         }
 
-        [[nodiscard]] static MigrationDocumentQuery Kind(MigrationDocumentKind value) noexcept
-        {
+        [[nodiscard]] static MigrationDocumentQuery Kind(MigrationDocumentKind value) noexcept {
             return MigrationDocumentQuery{.kind = value};
         }
     };
 
     /** @brief Operation-generation-safe inventory handle. */
-    struct MigrationDocumentHandle
-    {
+    struct MigrationDocumentHandle {
         std::uint32_t index{};
         std::uint32_t generation{};
-        [[nodiscard]] bool operator==(const MigrationDocumentHandle&) const noexcept = default;
+        [[nodiscard]] bool operator==(const MigrationDocumentHandle &) const noexcept = default;
     };
 
     /** @brief Immutable document view owned by the migration candidate. */
-    struct ProjectDocumentView
-    {
+    struct ProjectDocumentView {
         MigrationDocumentHandle handle;
         std::string_view path;
         MigrationDocumentKind kind{MigrationDocumentKind::Other};
@@ -113,8 +100,7 @@ namespace Horo::Application
     };
 
     /** @brief Owned replacement returned by a parallel document stage. */
-    struct MigrationDocumentChange
-    {
+    struct MigrationDocumentChange {
         MigrationDocumentHandle document;
         std::vector<std::byte> replacement;
         bool remove{false};
@@ -122,8 +108,7 @@ namespace Horo::Application
     };
 
     /** @brief Bounded migration execution limits injected by application composition. */
-    struct ProjectMigrationLimits
-    {
+    struct ProjectMigrationLimits {
         std::size_t maxDocuments{100'000};
         std::uint64_t maxInputBytes{4ULL * 1024ULL * 1024ULL * 1024ULL};
         std::uint64_t maxOutputBytes{4ULL * 1024ULL * 1024ULL * 1024ULL};
@@ -134,16 +119,14 @@ namespace Horo::Application
     };
 
     /** @brief Conservative storage-growth declaration used before transformation admission. */
-    struct MigrationStorageEstimate
-    {
+    struct MigrationStorageEstimate {
         std::uint32_t maximumOutputRatioPermille{1000};
         std::uint64_t maximumAddedBytesPerDocument{};
         std::uint64_t maximumFixedBytes{};
     };
 
     /** @brief Stable metadata declared by one pipeline stage. */
-    struct MigrationStageDescriptor
-    {
+    struct MigrationStageDescriptor {
         MigrationStageId id;
         std::vector<std::string> readFamilies;
         std::vector<std::string> writeFamilies;
@@ -151,8 +134,7 @@ namespace Horo::Application
     };
 
     /** @brief Read-only context supplied to parallel document transformations. */
-    struct MigrationStageContext
-    {
+    struct MigrationStageContext {
         StableMigrationId definitionId;
         MigrationStageId stageId;
     };
@@ -160,47 +142,41 @@ namespace Horo::Application
     class ProjectMigrationContext;
 
     /** @brief Immutable per-document transformation suitable for bounded fan-out. */
-    class IProjectMigrationDocumentStage
-    {
+    class IProjectMigrationDocumentStage {
     public:
         virtual ~IProjectMigrationDocumentStage() = default;
         [[nodiscard]] virtual MigrationStageDescriptor Describe() const = 0;
-        [[nodiscard]] virtual Result<MigrationDocumentChange> Execute(const ProjectDocumentView& source,
-                                                                      const MigrationStageContext& context,
-                                                                      const CancellationToken& cancellation) const = 0;
+        [[nodiscard]] virtual Result<MigrationDocumentChange> Execute(const ProjectDocumentView &source,
+                                                                      const MigrationStageContext &context,
+                                                                      const CancellationToken &cancellation) const = 0;
     };
 
     /** @brief Serialized cross-document migration stage with constrained candidate access. */
-    class IProjectMigrationStage
-    {
+    class IProjectMigrationStage {
     public:
         virtual ~IProjectMigrationStage() = default;
         [[nodiscard]] virtual MigrationStageDescriptor Describe() const = 0;
-        [[nodiscard]] virtual Result<void> Execute(ProjectMigrationContext& context,
-                                                   const CancellationToken& cancellation) const = 0;
+        [[nodiscard]] virtual Result<void> Execute(ProjectMigrationContext &context, const CancellationToken &cancellation) const = 0;
     };
 
     /** @brief Read-only validation barrier; it cannot access mutation methods. */
-    class IProjectMigrationValidator
-    {
+    class IProjectMigrationValidator {
     public:
         virtual ~IProjectMigrationValidator() = default;
         [[nodiscard]] virtual MigrationStageDescriptor Describe() const = 0;
-        [[nodiscard]] virtual Result<void> Validate(const ProjectMigrationContext& context,
-                                                    const CancellationToken& cancellation) const = 0;
+        [[nodiscard]] virtual Result<void> Validate(const ProjectMigrationContext &context,
+                                                    const CancellationToken &cancellation) const = 0;
     };
 
     /** @brief Typed node shape retained by an immutable migration pipeline. */
-    enum class ProjectMigrationNodeKind : std::uint8_t
-    {
+    enum class ProjectMigrationNodeKind : std::uint8_t {
         ForEach,
         Then,
         Validate,
     };
 
     /** @brief One immutable pipeline node and its owned stage implementation. */
-    struct ProjectMigrationNode
-    {
+    struct ProjectMigrationNode {
         ProjectMigrationNodeKind kind{ProjectMigrationNodeKind::Then};
         MigrationDocumentQuery query;
         std::shared_ptr<const IProjectMigrationDocumentStage> documentStage;
@@ -209,68 +185,53 @@ namespace Horo::Application
     };
 
     /** @brief Immutable ordered pipeline for exactly one migration definition. */
-    class ProjectMigrationPipeline
-    {
+    class ProjectMigrationPipeline {
     public:
-        [[nodiscard]] std::span<const ProjectMigrationNode> Nodes() const noexcept
-        {
+        [[nodiscard]] std::span<const ProjectMigrationNode> Nodes() const noexcept {
             return nodes_;
         }
 
     private:
         friend class ProjectMigrationPipelineBuilder;
 
-        explicit ProjectMigrationPipeline(std::vector<ProjectMigrationNode> nodes) : nodes_(std::move(nodes))
-        {
-        }
+        explicit ProjectMigrationPipeline(std::vector<ProjectMigrationNode> nodes) : nodes_(std::move(nodes)) {}
 
         std::vector<ProjectMigrationNode> nodes_;
     };
 
     /** @brief Fluent typed builder; execution remains owned by the migration executor. */
-    class ProjectMigrationPipelineBuilder
-    {
+    class ProjectMigrationPipelineBuilder {
     public:
         [[nodiscard]] static ProjectMigrationPipelineBuilder Begin(StableMigrationId definitionId);
 
         template <typename T, typename... Args>
-        [[nodiscard]] ProjectMigrationPipelineBuilder& ForEach(MigrationDocumentQuery query, Args&&... args)
-        {
+        [[nodiscard]] ProjectMigrationPipelineBuilder &ForEach(MigrationDocumentQuery query, Args &&...args) {
             return AddForEach(std::move(query), std::make_shared<T>(std::forward<Args>(args)...));
         }
 
-        template <typename T, typename... Args>
-        [[nodiscard]] ProjectMigrationPipelineBuilder& Then(Args&&... args)
-        {
+        template <typename T, typename... Args> [[nodiscard]] ProjectMigrationPipelineBuilder &Then(Args &&...args) {
             return AddThen(std::make_shared<T>(std::forward<Args>(args)...));
         }
 
-        template <typename T, typename... Args>
-        [[nodiscard]] ProjectMigrationPipelineBuilder& Validate(Args&&... args)
-        {
+        template <typename T, typename... Args> [[nodiscard]] ProjectMigrationPipelineBuilder &Validate(Args &&...args) {
             return AddValidator(std::make_shared<T>(std::forward<Args>(args)...));
         }
 
-        [[nodiscard]] ProjectMigrationPipelineBuilder& AddForEach(
-            MigrationDocumentQuery query, std::shared_ptr<const IProjectMigrationDocumentStage> stage);
-        [[nodiscard]] ProjectMigrationPipelineBuilder& AddThen(std::shared_ptr<const IProjectMigrationStage> stage);
-        [[nodiscard]] ProjectMigrationPipelineBuilder& AddValidator(
-            std::shared_ptr<const IProjectMigrationValidator> validator);
+        [[nodiscard]] ProjectMigrationPipelineBuilder &AddForEach(MigrationDocumentQuery query,
+                                                                  std::shared_ptr<const IProjectMigrationDocumentStage> stage);
+        [[nodiscard]] ProjectMigrationPipelineBuilder &AddThen(std::shared_ptr<const IProjectMigrationStage> stage);
+        [[nodiscard]] ProjectMigrationPipelineBuilder &AddValidator(std::shared_ptr<const IProjectMigrationValidator> validator);
         [[nodiscard]] Result<std::shared_ptr<const ProjectMigrationPipeline>> Build() &&;
 
     private:
-        explicit ProjectMigrationPipelineBuilder(StableMigrationId definitionId) : definitionId_(
-            std::move(definitionId))
-        {
-        }
+        explicit ProjectMigrationPipelineBuilder(StableMigrationId definitionId) : definitionId_(std::move(definitionId)) {}
 
         StableMigrationId definitionId_;
         std::vector<ProjectMigrationNode> nodes_;
     };
 
     /** @brief Immutable exact-baseline migration edge discovered at build time. */
-    struct ProjectMigrationDefinition
-    {
+    struct ProjectMigrationDefinition {
         StableMigrationId id;
         ProjectMigrationDefinitionKind kind{ProjectMigrationDefinitionKind::Sequential};
         ContractBaselineVersion from;
@@ -284,16 +245,14 @@ namespace Horo::Application
     };
 
     /** @brief Exact checkpoint declaration frozen by the target release. */
-    struct MigrationCheckpointDeclaration
-    {
+    struct MigrationCheckpointDeclaration {
         StableMigrationId id;
         ContractBaselineVersion source;
         ContractBaselineVersion target;
     };
 
     /** @brief Bounded migration support horizon and canonical checkpoint choices. */
-    struct ProjectMigrationSupportDescriptor
-    {
+    struct ProjectMigrationSupportDescriptor {
         ContractBaselineVersion target;
         ContractBaselineVersion minimumMigratable;
         PersistentContractHash targetContract;
@@ -303,8 +262,7 @@ namespace Horo::Application
     };
 
     /** @brief Deterministic ordered definition chain without transformation execution. */
-    struct ProjectMigrationPlan
-    {
+    struct ProjectMigrationPlan {
         ContractBaselineVersion source;
         ContractBaselineVersion target;
         std::vector<ProjectMigrationDefinition> definitions;
@@ -313,32 +271,24 @@ namespace Horo::Application
     };
 
     /** @brief Immutable validated migration graph and deterministic planner. */
-    class ProjectMigrationRegistry
-    {
+    class ProjectMigrationRegistry {
     public:
-        [[nodiscard]] static Result<ProjectMigrationRegistry> Create(
-            std::span<const ProjectMigrationDefinition> definitions);
-        [[nodiscard]] Result<ProjectMigrationPlan> Plan(ContractBaselineVersion source,
-                                                        PersistentContractHash sourceContract,
-                                                        const ProjectMigrationSupportDescriptor& support) const;
+        [[nodiscard]] static Result<ProjectMigrationRegistry> Create(std::span<const ProjectMigrationDefinition> definitions);
+        [[nodiscard]] Result<ProjectMigrationPlan> Plan(ContractBaselineVersion source, PersistentContractHash sourceContract,
+                                                        const ProjectMigrationSupportDescriptor &support) const;
 
-        [[nodiscard]] std::span<const ProjectMigrationDefinition> Definitions() const noexcept
-        {
+        [[nodiscard]] std::span<const ProjectMigrationDefinition> Definitions() const noexcept {
             return definitions_;
         }
 
     private:
-        explicit ProjectMigrationRegistry(std::vector<ProjectMigrationDefinition> definitions)
-            : definitions_(std::move(definitions))
-        {
-        }
+        explicit ProjectMigrationRegistry(std::vector<ProjectMigrationDefinition> definitions) : definitions_(std::move(definitions)) {}
 
         std::vector<ProjectMigrationDefinition> definitions_;
     };
 
     /** @brief Stable inventory entry reported without exposing an unrestricted filesystem path. */
-    struct MigrationDocumentEntry
-    {
+    struct MigrationDocumentEntry {
         MigrationDocumentHandle handle;
         std::string path;
         MigrationDocumentKind kind{MigrationDocumentKind::Other};
@@ -346,32 +296,27 @@ namespace Horo::Application
     };
 
     /** @brief Constrained mutable candidate used by serialized stages and read-only validators. */
-    class ProjectMigrationContext
-    {
+    class ProjectMigrationContext {
     public:
         struct State;
 
-        [[nodiscard]] std::vector<MigrationDocumentEntry> ListDocuments(const MigrationDocumentQuery& query) const;
+        [[nodiscard]] std::vector<MigrationDocumentEntry> ListDocuments(const MigrationDocumentQuery &query) const;
         [[nodiscard]] Result<ProjectDocumentView> ReadDocument(MigrationDocumentHandle document) const;
-        [[nodiscard]] Result<void>
-        ReplaceDocument(MigrationDocumentHandle document, std::vector<std::byte> replacement);
-        [[nodiscard]] Result<void> AddDocument(const std::string& projectRelativePath, MigrationDocumentKind kind,
+        [[nodiscard]] Result<void> ReplaceDocument(MigrationDocumentHandle document, std::vector<std::byte> replacement);
+        [[nodiscard]] Result<void> AddDocument(const std::string &projectRelativePath, MigrationDocumentKind kind,
                                                std::vector<std::byte> document);
         [[nodiscard]] Result<void> RemoveDocument(MigrationDocumentHandle document);
 
     private:
         friend class ProjectMigrationExecutor;
 
-        explicit ProjectMigrationContext(std::shared_ptr<State> state) : state_(std::move(state))
-        {
-        }
+        explicit ProjectMigrationContext(std::shared_ptr<State> state) : state_(std::move(state)) {}
 
         std::shared_ptr<State> state_;
     };
 
     /** @brief Per-stage bounded diagnostic returned by verified execution. */
-    struct ProjectMigrationDiagnostic
-    {
+    struct ProjectMigrationDiagnostic {
         StableMigrationId definitionId;
         MigrationStageId stageId;
         std::optional<std::string> document;
@@ -379,8 +324,7 @@ namespace Horo::Application
     };
 
     /** @brief Verified dry-run result over a disposable real filesystem candidate. */
-    struct ProjectMigrationDryRunResult
-    {
+    struct ProjectMigrationDryRunResult {
         std::vector<std::string> changedFiles;
         std::uint64_t inputBytes{};
         std::uint64_t outputBytes{};
@@ -388,11 +332,14 @@ namespace Horo::Application
     };
 
     /** @brief Type of authoritative change represented by a prepared candidate. */
-    enum class PreparedMigrationChangeKind : std::uint8_t { Add, Replace, Remove };
+    enum class PreparedMigrationChangeKind : std::uint8_t {
+        Add,
+        Replace,
+        Remove
+    };
 
     /** @brief Immutable changed-file summary produced before publication authority is acquired. */
-    struct PreparedMigrationChange
-    {
+    struct PreparedMigrationChange {
         std::string path;
         PreparedMigrationChangeKind kind{PreparedMigrationChangeKind::Replace};
         std::uint64_t originalBytes{};
@@ -400,25 +347,23 @@ namespace Horo::Application
     };
 
     /** @brief Transaction-owned document applied to a prepared candidate before final validation. */
-    struct PreparedMigrationDocument
-    {
+    struct PreparedMigrationDocument {
         std::string path;
         MigrationDocumentKind kind{MigrationDocumentKind::Other};
         std::vector<std::byte> bytes;
     };
 
     /** @brief Move-only unpublished filesystem candidate; destruction removes its disposable state. */
-    class PreparedProjectMigration
-    {
+    class PreparedProjectMigration {
     public:
         struct State;
         ~PreparedProjectMigration();
-        PreparedProjectMigration(PreparedProjectMigration&&) noexcept;
-        PreparedProjectMigration& operator=(PreparedProjectMigration&&) noexcept;
-        PreparedProjectMigration(const PreparedProjectMigration&) = delete;
-        PreparedProjectMigration& operator=(const PreparedProjectMigration&) = delete;
+        PreparedProjectMigration(PreparedProjectMigration &&) noexcept;
+        PreparedProjectMigration &operator=(PreparedProjectMigration &&) noexcept;
+        PreparedProjectMigration(const PreparedProjectMigration &) = delete;
+        PreparedProjectMigration &operator=(const PreparedProjectMigration &) = delete;
 
-        [[nodiscard]] const std::filesystem::path& CandidateRoot() const noexcept;
+        [[nodiscard]] const std::filesystem::path &CandidateRoot() const noexcept;
         [[nodiscard]] std::span<const PreparedMigrationChange> Changes() const noexcept;
         [[nodiscard]] std::uint64_t InputBytes() const noexcept;
         [[nodiscard]] std::uint64_t OutputBytes() const noexcept;
@@ -427,8 +372,7 @@ namespace Horo::Application
          * @param projectRelativePath Canonical project-relative inventory path.
          * @return Owned bytes, or a typed failure when the path is absent or removed.
          */
-        [[nodiscard]] Result<std::vector<std::byte>> ReadCandidateDocument(
-            std::string_view projectRelativePath) const;
+        [[nodiscard]] Result<std::vector<std::byte>> ReadCandidateDocument(std::string_view projectRelativePath) const;
         [[nodiscard]] Result<void> VerifySourceUnchanged() const;
         /** @brief Transfers cleanup ownership to a durable recovery journal before authoritative publication. */
         void PreserveForRecovery() const noexcept;
@@ -440,14 +384,14 @@ namespace Horo::Application
     };
 
     /** @brief Executes planned definitions without owning authoritative publication. */
-    class ProjectMigrationExecutor
-    {
+    class ProjectMigrationExecutor {
     public:
         /** @brief Builds an unpublished candidate through all definition-local validation barriers. */
-        [[nodiscard]] static Result<PreparedProjectMigration> Prepare(
-            const std::filesystem::path& projectRoot, const std::filesystem::path& candidateRoot,
-            const ProjectMigrationPlan& plan, JobSystem& jobs, const ProjectMigrationLimits& limits = {},
-            CancellationToken cancellation = {});
+        [[nodiscard]] static Result<PreparedProjectMigration> Prepare(const std::filesystem::path &projectRoot,
+                                                                      const std::filesystem::path &candidateRoot,
+                                                                      const ProjectMigrationPlan &plan, JobSystem &jobs,
+                                                                      const ProjectMigrationLimits &limits = {},
+                                                                      CancellationToken cancellation = {});
 
         /**
          * @brief Applies transaction-owned documents and runs the final target-contract validator.
@@ -457,10 +401,9 @@ namespace Horo::Application
          * @param cancellation Parent operation cancellation, honored before publication begins.
          * @return Success after materialization and source revalidation, or a typed failure.
          */
-        [[nodiscard]] static Result<void> Finalize(
-            PreparedProjectMigration& prepared, std::span<const PreparedMigrationDocument> documents,
-            std::shared_ptr<const IProjectMigrationValidator> targetValidator,
-            CancellationToken cancellation = {});
+        [[nodiscard]] static Result<void> Finalize(PreparedProjectMigration &prepared, std::span<const PreparedMigrationDocument> documents,
+                                                   std::shared_ptr<const IProjectMigrationValidator> targetValidator,
+                                                   CancellationToken cancellation = {});
 
         /**
          * @brief Runs the real pipeline against disposable same-filesystem state and deletes it afterward.
@@ -471,14 +414,12 @@ namespace Horo::Application
          * @param cancellation Parent operation cancellation.
          * @return Verified change summary or a typed inventory/stage/validation failure.
          */
-        [[nodiscard]] static Result<ProjectMigrationDryRunResult> VerifiedDryRun(
-            const std::filesystem::path& projectRoot,
-            const ProjectMigrationPlan& plan,
-            JobSystem& jobs,
-            const ProjectMigrationLimits& limits = {},
-            CancellationToken cancellation = {});
+        [[nodiscard]] static Result<ProjectMigrationDryRunResult> VerifiedDryRun(const std::filesystem::path &projectRoot,
+                                                                                 const ProjectMigrationPlan &plan, JobSystem &jobs,
+                                                                                 const ProjectMigrationLimits &limits = {},
+                                                                                 CancellationToken cancellation = {});
     };
 
     /** @brief Constructs the build-generated core migration catalog. */
     [[nodiscard]] Result<std::vector<ProjectMigrationDefinition>> BuildBuiltInProjectMigrationCatalog();
-} // namespace Horo::Application
+}  // namespace Horo::Application

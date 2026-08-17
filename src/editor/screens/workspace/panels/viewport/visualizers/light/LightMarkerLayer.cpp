@@ -66,8 +66,7 @@ namespace Horo::Editor {
             const ImU32 border = Theme::U32(selected ? Theme::Accent() : Theme::BorderStrong());
             drawList.AddCircleFilled(center, 13.0F, background, 24);
             drawList.AddCircle(center, 13.0F, border, 24, selected ? 2.0F : 1.2F);
-            Ui::DrawEditorIcon(&drawList, IconFor(presentation.light.kind),
-                               {center.x - markerSize * 0.5F, center.y - markerSize * 0.5F},
+            Ui::DrawEditorIcon(&drawList, IconFor(presentation.light.kind), {center.x - markerSize * 0.5F, center.y - markerSize * 0.5F},
                                {markerSize, markerSize}, Theme::U32(Theme::Text()));
 
             if (acceptInput && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {

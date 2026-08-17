@@ -3,11 +3,9 @@
 #include <string>
 #include <string_view>
 
-namespace Horo::Editor
-{
+namespace Horo::Editor {
     /** @brief Headless interface for resolving localized strings. */
-    class ILocalizationService
-    {
+    class ILocalizationService {
     public:
         virtual ~ILocalizationService() = default;
 
@@ -19,4 +17,4 @@ namespace Horo::Editor
          */
         [[nodiscard]] virtual const std::string &Get(std::string_view namespaceId, std::string_view localKey) const = 0;
     };
-} // namespace Horo::Editor
+}  // namespace Horo::Editor

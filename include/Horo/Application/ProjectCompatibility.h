@@ -8,23 +8,20 @@
 #include <string>
 #include <vector>
 
-namespace Horo::Application
-{
+namespace Horo::Application {
     /**
      * @file ProjectCompatibility.h
      * @brief Immutable release compatibility and read-only project inspection contracts.
      */
 
     /** @brief Release decision category retained in the generated compatibility catalog. */
-    enum class CompatibilityDecisionKind : std::uint8_t
-    {
+    enum class CompatibilityDecisionKind : std::uint8_t {
         EstablishBaseline,
         CompatibleReleaseLine,
     };
 
     /** @brief Exact release-to-contract compatibility decision. */
-    struct ReleaseCompatibilityDecision
-    {
+    struct ReleaseCompatibilityDecision {
         EngineReleaseVersion release;
         ContractBaselineVersion contractBaseline;
         PersistentContractHash persistentContract;
@@ -33,8 +30,7 @@ namespace Horo::Application
     };
 
     /** @brief Optional signed proof embedded in project metadata for an exact release decision. */
-    struct CompatibilityProof
-    {
+    struct CompatibilityProof {
         EngineReleaseVersion release;
         ContractBaselineVersion contractBaseline;
         CompatibilityDecisionHash decisionHash;
@@ -42,23 +38,21 @@ namespace Horo::Application
     };
 
     /** @brief Immutable validated release compatibility lookup. */
-    class ReleaseCompatibilityRegistry
-    {
+    class ReleaseCompatibilityRegistry {
     public:
         /**
          * @brief Validates and freezes exact release decisions.
          * @param decisions Candidate release decisions.
          * @return Immutable registry or a typed catalog diagnostic.
          */
-        [[nodiscard]] static Result<ReleaseCompatibilityRegistry> Create(
-            std::span<const ReleaseCompatibilityDecision> decisions);
+        [[nodiscard]] static Result<ReleaseCompatibilityRegistry> Create(std::span<const ReleaseCompatibilityDecision> decisions);
 
         /**
          * @brief Finds an exact release decision.
          * @param release Exact release identity.
          * @return Stable pointer owned by this registry, or null when unknown.
          */
-        [[nodiscard]] const ReleaseCompatibilityDecision* Find(const EngineReleaseVersion& release) const noexcept;
+        [[nodiscard]] const ReleaseCompatibilityDecision *Find(const EngineReleaseVersion &release) const noexcept;
         /** @brief Returns immutable decisions in deterministic SemVer order. */
         [[nodiscard]] std::span<const ReleaseCompatibilityDecision> Decisions() const noexcept;
 
@@ -68,8 +62,7 @@ namespace Horo::Application
     };
 
     /** @brief Verification boundary for future-patch compatibility proof envelopes. */
-    class ICompatibilityProofVerifier
-    {
+    class ICompatibilityProofVerifier {
     public:
         virtual ~ICompatibilityProofVerifier() = default;
         /**
@@ -78,22 +71,19 @@ namespace Horo::Application
          * @param expectedContract Contract trusted by the current release line.
          * @return Success only when the proof is trusted and correctly bound.
          */
-        [[nodiscard]] virtual Result<void> Verify(const CompatibilityProof& proof,
-                                                  const PersistentContractHash& expectedContract) const = 0;
+        [[nodiscard]] virtual Result<void> Verify(const CompatibilityProof &proof,
+                                                  const PersistentContractHash &expectedContract) const = 0;
     };
 
     /** @brief Production-safe baseline verifier that rejects unknown proof envelopes. */
-    class RejectingCompatibilityProofVerifier final : public ICompatibilityProofVerifier
-    {
+    class RejectingCompatibilityProofVerifier final : public ICompatibilityProofVerifier {
     public:
         /** @copydoc ICompatibilityProofVerifier::Verify */
-        [[nodiscard]] Result<void> Verify(const CompatibilityProof& proof,
-                                          const PersistentContractHash& expectedContract) const override;
+        [[nodiscard]] Result<void> Verify(const CompatibilityProof &proof, const PersistentContractHash &expectedContract) const override;
     };
 
     /** @brief Startup-relevant durable subset of `.horo/project.json`. */
-    struct ProjectMetadata
-    {
+    struct ProjectMetadata {
         EngineReleaseVersion horoVersion;
         PersistentContractHash persistentContract;
         std::optional<CompatibilityProof> compatibilityProof;
@@ -106,8 +96,7 @@ namespace Horo::Application
     };
 
     /** @brief Compatibility classification produced before a writable project session exists. */
-    enum class ProjectCompatibilityStatus : std::uint8_t
-    {
+    enum class ProjectCompatibilityStatus : std::uint8_t {
         Current,
         CompatibleReleaseLine,
         AutomaticMigrationRequired,
@@ -120,8 +109,7 @@ namespace Horo::Application
     };
 
     /** @brief Immutable read-only project compatibility result. */
-    struct ProjectCompatibilitySnapshot
-    {
+    struct ProjectCompatibilitySnapshot {
         ProjectCompatibilityStatus status{ProjectCompatibilityStatus::Corrupt};
         std::optional<ProjectMetadata> metadata;
         EngineReleaseVersion targetVersion;
@@ -131,8 +119,7 @@ namespace Horo::Application
     };
 
     /** @brief Read-only bounded project compatibility inspector with injected trust policy. */
-    class ProjectCompatibilityInspector
-    {
+    class ProjectCompatibilityInspector {
     public:
         /**
          * @brief Creates a read-only inspector over immutable release policy.
@@ -140,21 +127,20 @@ namespace Horo::Application
          * @param currentRelease Exact running engine release.
          * @param proofVerifier Trust boundary that outlives the inspector.
          */
-        ProjectCompatibilityInspector(const ReleaseCompatibilityRegistry& registry,
-                                      const EngineReleaseVersion& currentRelease,
-                                      const ICompatibilityProofVerifier& proofVerifier) noexcept;
+        ProjectCompatibilityInspector(const ReleaseCompatibilityRegistry &registry, const EngineReleaseVersion &currentRelease,
+                                      const ICompatibilityProofVerifier &proofVerifier) noexcept;
 
         /**
          * @brief Reads and classifies one project without mutating it.
          * @param projectRoot Root containing `.horo/project.json`.
          * @return Typed compatibility snapshot with bounded metadata and diagnostics.
          */
-        [[nodiscard]] ProjectCompatibilitySnapshot Inspect(const std::filesystem::path& projectRoot) const;
+        [[nodiscard]] ProjectCompatibilitySnapshot Inspect(const std::filesystem::path &projectRoot) const;
 
     private:
-        const ReleaseCompatibilityRegistry& registry_;
+        const ReleaseCompatibilityRegistry &registry_;
         EngineReleaseVersion currentRelease_;
-        const ICompatibilityProofVerifier& proofVerifier_;
+        const ICompatibilityProofVerifier &proofVerifier_;
     };
 
     /**
@@ -162,10 +148,10 @@ namespace Horo::Application
      * @param projectRoot Root containing `.horo/project.json`.
      * @return Parsed durable metadata or a typed read/validation error.
      */
-    [[nodiscard]] Result<ProjectMetadata> LoadProjectMetadata(const std::filesystem::path& projectRoot);
+    [[nodiscard]] Result<ProjectMetadata> LoadProjectMetadata(const std::filesystem::path &projectRoot);
 
     /** @brief Returns the immutable generated release compatibility catalog. */
-    [[nodiscard]] const ReleaseCompatibilityRegistry& BuiltInReleaseCompatibilityRegistry();
+    [[nodiscard]] const ReleaseCompatibilityRegistry &BuiltInReleaseCompatibilityRegistry();
 
     /** @brief Returns the current exact engine release generated from CMake `PROJECT_VERSION`. */
     [[nodiscard]] EngineReleaseVersion CurrentEngineReleaseVersion();
@@ -175,5 +161,5 @@ namespace Horo::Application
      * @param projectRoot Root containing `.horo/project.json`.
      * @return Read-only compatibility snapshot.
      */
-    [[nodiscard]] ProjectCompatibilitySnapshot InspectProjectCompatibility(const std::filesystem::path& projectRoot);
-} // namespace Horo::Application
+    [[nodiscard]] ProjectCompatibilitySnapshot InspectProjectCompatibility(const std::filesystem::path &projectRoot);
+}  // namespace Horo::Application

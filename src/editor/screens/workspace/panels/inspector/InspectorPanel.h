@@ -36,8 +36,8 @@ namespace Horo::Editor {
     private:
         void DrawSelection(const EditorWorkspaceViewModel &viewModel, std::span<const SceneObjectId> selectedObjects,
                            EditorWorkspaceViewCommandData &command, const EditorGuiContext &context);
-        void DrawAddComponent(const SceneObject &object, const EditorWorkspaceViewModel &viewModel,
-                              EditorWorkspaceViewCommandData &command, const EditorGuiContext &context);
+        void DrawAddComponent(const SceneObject &object, const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &command,
+                              const EditorGuiContext &context);
         void DrawMultiSelectionTitle(std::size_t selectedObjectCount, const EditorGuiContext &context);
         [[nodiscard]] InspectorNameEdit DrawObjectTitleWidgets(const SceneObject &object, const EditorGuiContext &context);
         [[nodiscard]] InspectorTransformEdit DrawTransformWidgets(const EditorGuiContext &context);
@@ -53,8 +53,7 @@ namespace Horo::Editor {
         void ApplyLightEdit(const InspectorLightEdit &edit, const SceneObject &object, EditorWorkspaceViewCommandData &command);
         void ApplyTriggerVolumeEdit(const InspectorTriggerVolumeEdit &edit, const SceneObject &object,
                                     EditorWorkspaceViewCommandData &command);
-        void ApplyAudioSourceEdit(const InspectorAudioSourceEdit &edit, const SceneObject &object,
-                                  EditorWorkspaceViewCommandData &command);
+        void ApplyAudioSourceEdit(const InspectorAudioSourceEdit &edit, const SceneObject &object, EditorWorkspaceViewCommandData &command);
         void DrawEmptyState(EditorWorkspaceViewCommandData &command, const EditorGuiContext &context);
         static void AdoptCommand(EditorWorkspaceViewCommandData &destination, EditorWorkspaceViewCommandData source);
 

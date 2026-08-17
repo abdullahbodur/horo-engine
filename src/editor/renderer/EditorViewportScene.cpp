@@ -80,25 +80,21 @@ namespace Horo::Editor {
     }
 
     /** @copydoc BuildEditorViewportDirectionalShadowView */
-    Result<std::optional<EditorViewportDirectionalShadowView>>
-    BuildEditorViewportDirectionalShadowView(const Render::RenderSceneView &scene,
-                                             const Math::ClipDepthRange depthRange) noexcept {
+    Result<std::optional<EditorViewportDirectionalShadowView>> BuildEditorViewportDirectionalShadowView(
+        const Render::RenderSceneView &scene, const Math::ClipDepthRange depthRange) noexcept {
         if (!scene.IsValid()) {
             return Result<std::optional<EditorViewportDirectionalShadowView>>::Failure(
                 MakeError(RendererErrors::ViewportInvalidScene, "Cannot fit a directional shadow view to an invalid render scene."));
         }
         const auto light = std::ranges::find_if(scene.lights, [](const Render::RenderLight &candidate) {
-            return candidate.kind == Render::RenderLightKind::Directional &&
-                   candidate.intensity > Math::DefaultEpsilon;
+            return candidate.kind == Render::RenderLightKind::Directional && candidate.intensity > Math::DefaultEpsilon;
         });
         if (light == scene.lights.end() || scene.instances.empty())
             return Result<std::optional<EditorViewportDirectionalShadowView>>::Success(std::nullopt);
 
         Math::Aabb worldBounds{
-            .minimum = {std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
-                        std::numeric_limits<float>::max()},
-            .maximum = {std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(),
-                        std::numeric_limits<float>::lowest()},
+            .minimum = {std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max()},
+            .maximum = {std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest()},
         };
         for (const Render::RenderStaticMeshInstance &instance : scene.instances) {
             const Result<Math::Aabb> transformed = Math::TransformAabb(instance.localBounds, instance.localToWorld);
@@ -120,13 +116,11 @@ namespace Horo::Editor {
         const float radius = std::max(Math::Length(worldBounds.Extents()), 1.0F);
         const float paddedRadius = radius * 1.15F;
         const Math::Vec3 direction = Math::Normalize(light->direction);
-        const Math::Vec3 up = std::abs(Math::Dot(direction, Math::Vec3{0.0F, 1.0F, 0.0F})) > 0.95F
-                                  ? Math::Vec3{1.0F, 0.0F, 0.0F}
-                                  : Math::Vec3{0.0F, 1.0F, 0.0F};
+        const Math::Vec3 up = std::abs(Math::Dot(direction, Math::Vec3{0.0F, 1.0F, 0.0F})) > 0.95F ? Math::Vec3{1.0F, 0.0F, 0.0F}
+                                                                                                   : Math::Vec3{0.0F, 1.0F, 0.0F};
         const Math::Vec3 side = Math::Normalize(Math::Cross(direction, up));
         const Math::Vec3 lightUp = Math::Cross(side, direction);
-        const float worldUnitsPerTexel =
-            (paddedRadius * 2.0F) / static_cast<float>(EditorViewportDirectionalShadowMapResolution);
+        const float worldUnitsPerTexel = (paddedRadius * 2.0F) / static_cast<float>(EditorViewportDirectionalShadowMapResolution);
         const auto snapToTexel = [worldUnitsPerTexel](const float coordinate) {
             return std::round(coordinate / worldUnitsPerTexel) * worldUnitsPerTexel;
         };
@@ -136,8 +130,7 @@ namespace Horo::Editor {
         const Result<Math::Mat4> view = Math::TryLookAt(eye, center, lightUp);
         if (view.HasError())
             return Result<std::optional<EditorViewportDirectionalShadowView>>::Failure(view.ErrorValue());
-        const Result<Math::Mat4> projection =
-            Math::TryOrthographic(paddedRadius * 2.0F, 1.0F, 0.1F, paddedRadius * 4.0F, depthRange);
+        const Result<Math::Mat4> projection = Math::TryOrthographic(paddedRadius * 2.0F, 1.0F, 0.1F, paddedRadius * 4.0F, depthRange);
         if (projection.HasError())
             return Result<std::optional<EditorViewportDirectionalShadowView>>::Failure(projection.ErrorValue());
 

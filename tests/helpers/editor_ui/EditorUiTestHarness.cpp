@@ -50,8 +50,9 @@ namespace Horo::Tests {
             }
         }
 
-        constexpr ImGuiKey kBridgedKeys[]{ImGuiKey_A, ImGuiKey_D, ImGuiKey_E,      ImGuiKey_F,     ImGuiKey_Q,      ImGuiKey_R,
-                                          ImGuiKey_S, ImGuiKey_W, ImGuiKey_Escape, ImGuiKey_Enter, ImGuiKey_Delete, ImGuiKey_F2,
+        constexpr ImGuiKey kBridgedKeys[]{ImGuiKey_A,         ImGuiKey_D,          ImGuiKey_E,         ImGuiKey_F,
+                                          ImGuiKey_Q,         ImGuiKey_R,          ImGuiKey_S,         ImGuiKey_W,
+                                          ImGuiKey_Escape,    ImGuiKey_Enter,      ImGuiKey_Delete,    ImGuiKey_F2,
                                           ImGuiKey_LeftArrow, ImGuiKey_RightArrow, ImGuiKey_DownArrow, ImGuiKey_UpArrow};
 
         constexpr std::size_t kNormalInteractiveFrameBudgetScale = 10;

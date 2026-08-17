@@ -6,8 +6,7 @@
 #include <mutex>
 #include <vector>
 
-namespace Horo
-{
+namespace Horo {
     class EngineDataBus;
 
     /** @file DiagnosticsEngine.h
@@ -15,8 +14,7 @@ namespace Horo
      */
 
     /** @brief Process-scoped diagnostic and error hub that stores bounded history and immediately notifies DataBus subscribers. */
-    class DiagnosticsEngine
-    {
+    class DiagnosticsEngine {
     public:
         /**
          * @brief Constructs the engine with optional connection to the process DataBus.
@@ -63,4 +61,4 @@ namespace Horo
         std::vector<Error> m_errors;
         static constexpr std::size_t kMaxHistory = 256;
     };
-} // namespace Horo
+}  // namespace Horo

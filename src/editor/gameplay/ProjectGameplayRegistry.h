@@ -61,12 +61,10 @@ namespace Horo::Editor {
 
         void DiscoverNativeModule(const std::filesystem::path &projectRoot);
 
-        [[nodiscard]] bool PrepareNativeManifestPath(const std::filesystem::path &projectRoot,
-                                                     const std::filesystem::path &manifestPath);
+        [[nodiscard]] bool PrepareNativeManifestPath(const std::filesystem::path &projectRoot, const std::filesystem::path &manifestPath);
 
         void LoadNativeModule(const std::filesystem::path &projectRoot, const std::filesystem::path &manifestPath,
-                              const std::filesystem::path &artifactPath, std::string_view moduleId,
-                              std::uint64_t descriptorRevision);
+                              const std::filesystem::path &artifactPath, std::string_view moduleId, std::uint64_t descriptorRevision);
 
         void DiscoverLuaPrograms(const std::filesystem::path &projectRoot);
 

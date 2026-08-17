@@ -44,8 +44,8 @@ namespace Horo::Editor {
             if (name.empty() || !(std::isalpha(static_cast<unsigned char>(name.front())) || name.front() == '_'))
                 return false;
             if (!std::ranges::all_of(name, [](const unsigned char character) {
-                    return std::isalnum(character) || character == '_';
-                }))
+                return std::isalnum(character) || character == '_';
+            }))
                 return false;
             constexpr auto keywords = std::to_array<std::string_view>({"alignas",
                                                                        "alignof",
@@ -134,7 +134,7 @@ namespace Horo::Editor {
             };
             return MakeError(descriptor);
         }
-    }
+    }  // namespace
 
     Result<void> ValidateCreateGameplayBehaviorRequest(const CreateGameplayBehaviorRequest &request) {
         const std::filesystem::path destination{request.destination};
@@ -145,10 +145,10 @@ namespace Horo::Editor {
         const bool absoluteDestination = destination.is_absolute() || destination.has_root_directory();
         const bool validPath = !request.destination.empty() && absoluteDestination && !request.baseName.empty() &&
                                baseName.filename() == baseName && baseName.extension().empty();
-        const bool validName = request.kind == GameplayBehaviorKind::Native ? IsCppIdentifier(request.baseName)
-                                                                               : IsPortableBehaviorName(request.baseName);
+        const bool validName =
+            request.kind == GameplayBehaviorKind::Native ? IsCppIdentifier(request.baseName) : IsPortableBehaviorName(request.baseName);
         if (!validPath || !validName)
             return Result<void>::Failure(InvalidRequestError());
         return Result<void>::Success();
     }
-}
+}  // namespace Horo::Editor

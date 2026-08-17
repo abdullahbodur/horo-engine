@@ -3,33 +3,29 @@
 #include "Horo/Editor/Localization/ILocalizationService.h"
 #include "Horo/Editor/Localization/LocalizationTypes.h"
 
-#include <memory>
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 
-namespace Horo::Editor
-{
+namespace Horo::Editor {
     /** @brief Immutable message catalog for one normalized locale. */
-    struct LocalizationCatalog
-    {
+    struct LocalizationCatalog {
         LocaleTag locale;
         std::unordered_map<MessageKey, std::string, MessageKeyHash> messages;
     };
 
     /** @brief Read-only localization view captured for one presentation snapshot. */
-    struct LocalizationSnapshot
-    {
+    struct LocalizationSnapshot {
         std::shared_ptr<const LocalizationCatalog> catalog;
         std::shared_ptr<const LocalizationCatalog> fallbackCatalog;
         std::uint64_t revision = 0;
     };
 
     /** @brief Editor-localization error returned when a candidate cannot activate. */
-    struct LocalizationError
-    {
+    struct LocalizationError {
         std::string code;
         std::string message;
     };
@@ -41,8 +37,7 @@ namespace Horo::Editor
      * not mutate the active snapshot; ActivatePrepared is the only operation that
      * changes the visible locale and is intended to run at a frame boundary.
      */
-    class LocalizationService final : public ILocalizationService
-    {
+    class LocalizationService final : public ILocalizationService {
     public:
         explicit LocalizationService(LocaleTag sourceFallback);
 
@@ -67,7 +62,7 @@ namespace Horo::Editor
         [[nodiscard]] LocalizationSnapshot Snapshot() const noexcept;
 
         /** @brief Resolves a message. Returns a reference to the mapped string or a cached missing-key string. */
-        [[nodiscard]] const std::string& Get(std::string_view namespaceId, std::string_view localKey) const override;
+        [[nodiscard]] const std::string &Get(std::string_view namespaceId, std::string_view localKey) const override;
 
         /** @brief Returns the currently active locale. */
         [[nodiscard]] LocaleTag ActiveLocale() const;
@@ -83,4 +78,4 @@ namespace Horo::Editor
         std::uint64_t m_revision = 0;
         mutable std::unordered_set<std::string> m_missingCache;
     };
-} // namespace Horo::Editor
+}  // namespace Horo::Editor

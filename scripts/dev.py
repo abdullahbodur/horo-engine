@@ -44,7 +44,7 @@ _GRAPHICS_DISPLAY_NAME = "Interactive Display"
 _OBSERVABILITY_OTLP_NAME = "OTLP Collector"
 _OBSERVABILITY_GRAFANA_NAME = "Grafana Service"
 
-_CPP_EXTENSIONS = {".h", ".hpp", ".cpp", ".mm", ".m"}
+_CPP_EXTENSIONS = {".h", ".hpp", ".cpp", ".c", ".cc", ".cxx"}
 _EXCLUDED_PATH_PARTS = {"vendor", "build", "deprecated", ".horo", ".venv"}
 
 

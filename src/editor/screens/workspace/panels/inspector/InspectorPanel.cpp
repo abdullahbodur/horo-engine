@@ -161,68 +161,68 @@ namespace Horo::Editor {
 
         if (m_editSession.Draft().selectedObjectCount == 1)
             DrawBehaviors(*primaryObject, viewModel, command, context);
-
     }
 
     void InspectorPanel::DrawAddComponent(const SceneObject &object, const EditorWorkspaceViewModel &viewModel,
                                           EditorWorkspaceViewCommandData &command, const EditorGuiContext &context) {
-            ImGui::SetCursorPosX(14.0F);
-            const std::string addComponentLabel =
-                context.localization.Get("editor", "workspace.inspector.add_component") + "###InspectorAddComponent";
-            if (Ui::Button({.label = addComponentLabel.c_str(),
-                            .variant = Ui::ButtonVariant::Secondary,
-                            .font = context.theme.fonts.sans,
-                            .componentSize = Ui::ComponentSize::Medium,
-                            .style = {.width = Ui::StyleWidth::FillAvailable}})) {
-                ImGui::OpenPopup("AddComponentPopup");
-            }
+        ImGui::SetCursorPosX(14.0F);
+        const std::string addComponentLabel =
+            context.localization.Get("editor", "workspace.inspector.add_component") + "###InspectorAddComponent";
+        if (Ui::Button({.label = addComponentLabel.c_str(),
+                        .variant = Ui::ButtonVariant::Secondary,
+                        .font = context.theme.fonts.sans,
+                        .componentSize = Ui::ComponentSize::Medium,
+                        .style = {.width = Ui::StyleWidth::FillAvailable}})) {
+            ImGui::OpenPopup("AddComponentPopup");
+        }
 
-            if (Ui::BeginMenuPopup("AddComponentPopup")) {
-                if (!object.components.camera.has_value() &&
-                    Ui::ContextMenuItem((context.localization.Get("editor", "workspace.inspector.kind.camera") +
-                                         "###inspector_component_camera").c_str(), nullptr,
-                                        context.theme.fonts)) {
-                    command.command = EditorWorkspaceViewCommand::AddComponentToObject;
-                    command.objectPayload = object.id;
-                    command.componentTypePayload = ComponentType::Camera;
-                }
-                if (!object.components.light.has_value() &&
-                    Ui::ContextMenuItem((context.localization.Get("editor", "workspace.inspector.kind.light") +
-                                         "###inspector_component_light").c_str(), nullptr,
-                                        context.theme.fonts)) {
-                    command.command = EditorWorkspaceViewCommand::AddComponentToObject;
-                    command.objectPayload = object.id;
-                    command.componentTypePayload = ComponentType::Light;
-                }
-                if (!object.components.triggerVolume.has_value() &&
-                    Ui::ContextMenuItem(context.localization.Get("editor", "workspace.inspector.kind.trigger_volume").c_str(), nullptr,
-                                        context.theme.fonts)) {
-                    command.command = EditorWorkspaceViewCommand::AddComponentToObject;
-                    command.objectPayload = object.id;
-                    command.componentTypePayload = ComponentType::TriggerVolume;
-                }
-                if (!object.components.audioSource.has_value() &&
-                    Ui::ContextMenuItem(context.localization.Get("editor", "workspace.inspector.kind.audio_source").c_str(), nullptr,
-                                        context.theme.fonts)) {
-                    command.command = EditorWorkspaceViewCommand::AddComponentToObject;
-                    command.objectPayload = object.id;
-                    command.componentTypePayload = ComponentType::AudioSource;
-                }
-                for (const Gameplay::BehaviorDescriptor &descriptor : viewModel.availableBehaviors) {
-                    const bool alreadyAttached = std::ranges::any_of(object.components.behaviors,
-                                                                     [&descriptor](const Gameplay::BehaviorComponent &behavior) {
-                        return behavior.typeId == descriptor.typeId;
-                    });
-                    const std::string behaviorLabel = descriptor.displayName + "###inspector_behavior_" + descriptor.typeId.Value();
-                    if ((!alreadyAttached || descriptor.allowMultiple) &&
-                        Ui::ContextMenuItem(behaviorLabel.c_str(), nullptr, context.theme.fonts)) {
-                        command.command = EditorWorkspaceViewCommand::AttachBehaviorToObject;
-                        command.objectPayload = object.id;
-                        command.behaviorTypePayload = descriptor.typeId;
-                    }
-                }
-                Ui::EndMenuPopup();
+        if (Ui::BeginMenuPopup("AddComponentPopup")) {
+            if (!object.components.camera.has_value() &&
+                Ui::ContextMenuItem((context.localization.Get("editor", "workspace.inspector.kind.camera") +
+                                     "###inspector_component_camera")
+                                        .c_str(),
+                                    nullptr, context.theme.fonts)) {
+                command.command = EditorWorkspaceViewCommand::AddComponentToObject;
+                command.objectPayload = object.id;
+                command.componentTypePayload = ComponentType::Camera;
             }
+            if (!object.components.light.has_value() &&
+                Ui::ContextMenuItem((context.localization.Get("editor", "workspace.inspector.kind.light") + "###inspector_component_light")
+                                        .c_str(),
+                                    nullptr, context.theme.fonts)) {
+                command.command = EditorWorkspaceViewCommand::AddComponentToObject;
+                command.objectPayload = object.id;
+                command.componentTypePayload = ComponentType::Light;
+            }
+            if (!object.components.triggerVolume.has_value() &&
+                Ui::ContextMenuItem(context.localization.Get("editor", "workspace.inspector.kind.trigger_volume").c_str(), nullptr,
+                                    context.theme.fonts)) {
+                command.command = EditorWorkspaceViewCommand::AddComponentToObject;
+                command.objectPayload = object.id;
+                command.componentTypePayload = ComponentType::TriggerVolume;
+            }
+            if (!object.components.audioSource.has_value() &&
+                Ui::ContextMenuItem(context.localization.Get("editor", "workspace.inspector.kind.audio_source").c_str(), nullptr,
+                                    context.theme.fonts)) {
+                command.command = EditorWorkspaceViewCommand::AddComponentToObject;
+                command.objectPayload = object.id;
+                command.componentTypePayload = ComponentType::AudioSource;
+            }
+            for (const Gameplay::BehaviorDescriptor &descriptor : viewModel.availableBehaviors) {
+                const bool alreadyAttached =
+                    std::ranges::any_of(object.components.behaviors, [&descriptor](const Gameplay::BehaviorComponent &behavior) {
+                    return behavior.typeId == descriptor.typeId;
+                });
+                const std::string behaviorLabel = descriptor.displayName + "###inspector_behavior_" + descriptor.typeId.Value();
+                if ((!alreadyAttached || descriptor.allowMultiple) &&
+                    Ui::ContextMenuItem(behaviorLabel.c_str(), nullptr, context.theme.fonts)) {
+                    command.command = EditorWorkspaceViewCommand::AttachBehaviorToObject;
+                    command.objectPayload = object.id;
+                    command.behaviorTypePayload = descriptor.typeId;
+                }
+            }
+            Ui::EndMenuPopup();
+        }
     }
 
     void InspectorPanel::DrawBehaviors(const SceneObject &object, const EditorWorkspaceViewModel &viewModel,
@@ -274,9 +274,8 @@ namespace Horo::Editor {
                         }
                     } else if (auto value = std::get_if<std::int64_t>(&field.value)) {
                         float draft = static_cast<float>(*value);
-                        const Ui::PropertyEditResult edit =
-                                Ui::DrawFloatPropRow(field.name.c_str(), "value", draft, context.theme.fonts,
-                                                     Ui::FloatPropertyOptions{.speed = 1.0F});
+                        const Ui::PropertyEditResult edit = Ui::DrawFloatPropRow(field.name.c_str(), "value", draft, context.theme.fonts,
+                                                                                 Ui::FloatPropertyOptions{.speed = 1.0F});
                         if (edit.committed) {
                             *value = static_cast<std::int64_t>(draft);
                             committed = true;
@@ -322,10 +321,10 @@ namespace Horo::Editor {
         constexpr auto badgeBackground = ImVec4(95.0F / 255.0F, 184.0F / 255.0F, 138.0F / 255.0F, 0.15F);
         const std::string &objectKind = context.localization.Get("editor", KindLocalizationKey(object.kind));
         const bool nameWasValid = IsValidSceneObjectName(draft.name);
-        const Ui::TextEditResult edit = Ui::DrawEditableObjTitle(
-            "object_name", draft.name, MaximumSceneObjectNameBytes,
-            Ui::EditableObjectTitleBadge{objectKind.c_str(), badgeBackground, Theme::Ok()}, context.theme.fonts,
-            !nameWasValid);
+        const Ui::TextEditResult edit =
+            Ui::DrawEditableObjTitle("object_name", draft.name, MaximumSceneObjectNameBytes,
+                                     Ui::EditableObjectTitleBadge{objectKind.c_str(), badgeBackground, Theme::Ok()}, context.theme.fonts,
+                                     !nameWasValid);
 
         if (edit.active && !m_nameInputContext.IsActive() && m_inputRouter != nullptr) {
             m_nameInputContext = m_inputRouter->PushContext(Input::InputContextId{"editor.inspector.object_name"},
@@ -391,9 +390,7 @@ namespace Horo::Editor {
             const Ui::PropertyEditResult fieldOfView =
                 Ui::DrawFloatPropRow(context.localization.Get("editor", "workspace.inspector.camera_field_of_view").c_str(),
                                      "camera_field_of_view", draft.cameraFieldOfViewDegrees, context.theme.fonts,
-                                     Ui::FloatPropertyOptions{
-                                         .speed = 0.25F, .error = !fieldOfViewValid, .format = "%.1f°"
-                                     });
+                                     Ui::FloatPropertyOptions{.speed = 0.25F, .error = !fieldOfViewValid, .format = "%.1f°"});
             if (fieldOfView.changed) {
                 draft.camera->verticalFieldOfViewRadians = draft.cameraFieldOfViewDegrees * DegreesToRadians;
             }
@@ -402,8 +399,7 @@ namespace Horo::Editor {
             const bool orthographicHeightValid = std::isfinite(draft.camera->orthographicHeight) && draft.camera->orthographicHeight > 0.0F;
             const Ui::PropertyEditResult orthographicHeight =
                 Ui::DrawFloatPropRow(context.localization.Get("editor", "workspace.inspector.camera_orthographic_height").c_str(),
-                                     "camera_orthographic_height", draft.camera->orthographicHeight,
-                                     context.theme.fonts,
+                                     "camera_orthographic_height", draft.camera->orthographicHeight, context.theme.fonts,
                                      Ui::FloatPropertyOptions{.speed = 0.05F, .error = !orthographicHeightValid});
             committed = committed || orthographicHeight.committed;
         }

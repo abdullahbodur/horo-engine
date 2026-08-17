@@ -1,63 +1,50 @@
-#include <catch2/catch_test_macros.hpp>
-
 #include "Horo/Assets/AssetImportMetadata.h"
 #include "Horo/Assets/AssetReimport.h"
 #include "Horo/Foundation/Platform.h"
 
+#include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <memory>
 
-namespace
-{
-using namespace Horo;
-using namespace Horo::Assets;
+namespace {
+    using namespace Horo;
+    using namespace Horo::Assets;
 
-class VersionedTestImporter final : public IAssetImporter
-{
-public:
-    [[nodiscard]] Result<PreparedAssetImport> Import(
-        const AssetImportInput& input, const CancellationToken&) const override
-    {
-        PreparedAssetImport output{
-            .type = AssetTypeId::Parse("core.mesh").Value(),
-            .editorPayload = {'v', '2', ':'},
-        };
-        output.editorPayload.insert(
-            output.editorPayload.end(), input.sourceBytes.begin(), input.sourceBytes.end());
-        return Result<PreparedAssetImport>::Success(std::move(output));
+    class VersionedTestImporter final : public IAssetImporter {
+    public:
+        [[nodiscard]] Result<PreparedAssetImport> Import(const AssetImportInput &input, const CancellationToken &) const override {
+            PreparedAssetImport output{
+                .type = AssetTypeId::Parse("core.mesh").Value(),
+                .editorPayload = {'v', '2', ':'},
+            };
+            output.editorPayload.insert(output.editorPayload.end(), input.sourceBytes.begin(), input.sourceBytes.end());
+            return Result<PreparedAssetImport>::Success(std::move(output));
+        }
+    };
+
+    struct TemporaryProject {
+        std::filesystem::path root = std::filesystem::temp_directory_path() /
+                                     ("horo_reimport_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+
+        TemporaryProject() {
+            std::filesystem::create_directories(root / "assets");
+        }
+
+        ~TemporaryProject() {
+            std::error_code error;
+            std::filesystem::remove_all(root, error);
+        }
+    };
+
+    void WriteText(const std::filesystem::path &path, const std::string_view text) {
+        std::ofstream output(path, std::ios::binary | std::ios::trunc);
+        output.write(text.data(), static_cast<std::streamsize>(text.size()));
     }
-};
+}  // namespace
 
-struct TemporaryProject
-{
-    std::filesystem::path root =
-        std::filesystem::temp_directory_path() /
-        ("horo_reimport_" + std::to_string(
-            std::chrono::steady_clock::now().time_since_epoch().count()));
-
-    TemporaryProject()
-    {
-        std::filesystem::create_directories(root / "assets");
-    }
-
-    ~TemporaryProject()
-    {
-        std::error_code error;
-        std::filesystem::remove_all(root, error);
-    }
-};
-
-void WriteText(const std::filesystem::path& path, const std::string_view text)
-{
-    std::ofstream output(path, std::ios::binary | std::ios::trunc);
-    output.write(text.data(), static_cast<std::streamsize>(text.size()));
-}
-} // namespace
-
-TEST_CASE("Asset reimport preserves identity and records all detected reasons", "[native][assets]")
-{
+TEST_CASE("Asset reimport preserves identity and records all detected reasons", "[native][assets]") {
     TemporaryProject project;
     const std::filesystem::path source = project.root / "source.obj";
     const std::filesystem::path asset = project.root / "assets/model.horoasset";
@@ -65,8 +52,7 @@ TEST_CASE("Asset reimport preserves identity and records all detected reasons", 
     WriteText(source, "old");
     WriteText(asset, "old-payload");
 
-    const AssetId id =
-        AssetId::Parse("00112233-4455-6677-8899-aabbccddeeff").Value();
+    const AssetId id = AssetId::Parse("00112233-4455-6677-8899-aabbccddeeff").Value();
     auto oldBytes = ReadAssetImportSource(source);
     REQUIRE(oldBytes.HasValue());
     AssetImportMetadata metadata{
@@ -92,22 +78,23 @@ TEST_CASE("Asset reimport preserves identity and records all detected reasons", 
     WriteText(source, "new-source");
 
     AssetImporterCatalog catalog;
-    REQUIRE(catalog.Register(AssetImporterContribution{
-        .contributionId = "test.obj",
-        .packageId = "test.package",
-        .moduleId = "test.module",
-        .moduleVersion = "2.0.0",
-        .version = "1.1.0",
-        .fileExtensions = {"obj"},
-        .assetTypes = {AssetTypeId::Parse("core.mesh").Value()},
-        .strategy = std::make_shared<const VersionedTestImporter>(),
-    }).HasValue());
+    REQUIRE(catalog
+                .Register(AssetImporterContribution{
+                    .contributionId = "test.obj",
+                    .packageId = "test.package",
+                    .moduleId = "test.module",
+                    .moduleVersion = "2.0.0",
+                    .version = "1.1.0",
+                    .fileExtensions = {"obj"},
+                    .assetTypes = {AssetTypeId::Parse("core.mesh").Value()},
+                    .strategy = std::make_shared<const VersionedTestImporter>(),
+                })
+                .HasValue());
     auto snapshot = catalog.Publish();
     REQUIRE(snapshot.HasValue());
 
     AssetRegistry registry;
-    auto initialRegistry = RebuildAssetRegistry(
-        registry, project.root, AssetRegistryOpenMode::Edit);
+    auto initialRegistry = RebuildAssetRegistry(registry, project.root, AssetRegistryOpenMode::Edit);
     REQUIRE(initialRegistry.HasValue());
 
     NativeDurableFileSystem files;
@@ -136,7 +123,6 @@ TEST_CASE("Asset reimport preserves identity and records all detected reasons", 
     REQUIRE(registry.Snapshot().Find(id) != nullptr);
 
     std::ifstream payload(asset, std::ios::binary);
-    const std::string contents{
-        std::istreambuf_iterator<char>{payload}, std::istreambuf_iterator<char>{}};
+    const std::string contents{std::istreambuf_iterator<char>{payload}, std::istreambuf_iterator<char>{}};
     REQUIRE(contents == "v2:new-source");
 }

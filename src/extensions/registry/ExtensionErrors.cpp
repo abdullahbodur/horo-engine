@@ -1,7 +1,6 @@
 #include "Horo/Extensions/ExtensionErrors.h"
 
-namespace Horo::Extensions::ExtensionErrors
-{
+namespace Horo::Extensions::ExtensionErrors {
     const ErrorDomainId Domain{"horo.extensions"};
 
     const ErrorCodeDescriptor InvalidManifest{
@@ -53,4 +52,4 @@ namespace Horo::Extensions::ExtensionErrors
         .retryable = false,
         .userActionable = true,
     };
-} // namespace Horo::Extensions::ExtensionErrors
+}  // namespace Horo::Extensions::ExtensionErrors

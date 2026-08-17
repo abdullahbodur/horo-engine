@@ -55,10 +55,7 @@ namespace Horo::Editor {
                 case HierarchyNodeType::TriggerVolume:
                     return {Ui::UiIcon::TriggerVolume, "workspace.hierarchy.type.volume", Theme::Warn()};
                 case HierarchyNodeType::AudioSource:
-                    return {
-                        Ui::UiIcon::AudioSource, "workspace.hierarchy.type.audio",
-                        BlendColor(Theme::Accent(), Theme::Err(), 0.45F)
-                    };
+                    return {Ui::UiIcon::AudioSource, "workspace.hierarchy.type.audio", BlendColor(Theme::Accent(), Theme::Err(), 0.45F)};
             }
             return {Ui::UiIcon::HierarchyGeneric, "workspace.hierarchy.type.empty", Theme::Muted()};
         }
@@ -406,8 +403,7 @@ namespace Horo::Editor {
                 const float actionIconSize =
                     std::max(0.0F, std::min({15.0F * uiScale, layout.visibilityAction.Width() - 4.0F * uiScale,
                                              layout.lockAction.Width() - 4.0F * uiScale, layout.height - 4.0F * uiScale}));
-                const auto drawAction = [&](const Ui::UiIcon icon, const ImVec2 minimum, const ImVec2 maximum,
-                                            const bool actionHovered,
+                const auto drawAction = [&](const Ui::UiIcon icon, const ImVec2 minimum, const ImVec2 maximum, const bool actionHovered,
                                             const bool active, const bool inherited) {
                     if (actionIconSize <= 0.0F)
                         return;
@@ -420,8 +416,7 @@ namespace Horo::Editor {
                                           minimum.y + ((maximum.y - minimum.y) - actionIconSize) * 0.5F};
                     Ui::DrawEditorIcon(drawList, icon, position, {actionIconSize, actionIconSize}, Theme::U32(color));
                 };
-                drawAction(node.effectivelyVisible ? Ui::UiIcon::Visibility : Ui::UiIcon::VisibilityOff, visibilityMin,
-                           visibilityMax,
+                drawAction(node.effectivelyVisible ? Ui::UiIcon::Visibility : Ui::UiIcon::VisibilityOff, visibilityMin, visibilityMax,
                            visibilityHovered, !node.effectivelyVisible, node.hiddenByParent && node.locallyVisible);
                 drawAction(Ui::UiIcon::Lock, lockMin, lockMax, lockHovered, node.effectivelyLocked,
                            node.lockedByParent && !node.locallyLocked);

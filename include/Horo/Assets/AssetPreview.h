@@ -9,17 +9,15 @@
 #include "Horo/Foundation/CancellationToken.h"
 #include "Horo/Foundation/Result.h"
 
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <string_view>
 #include <vector>
 
-namespace Horo::Assets
-{
+namespace Horo::Assets {
     /** @brief Host fallback selected when an importer does not provide a usable preview image. */
-    enum class AssetPreviewFallback : std::uint8_t
-    {
+    enum class AssetPreviewFallback : std::uint8_t {
         Automatic,
         Mesh,
         Image,
@@ -28,8 +26,7 @@ namespace Horo::Assets
     };
 
     /** @brief Borrowed bounded input passed to one asset preview provider invocation. */
-    struct AssetPreviewInput
-    {
+    struct AssetPreviewInput {
         std::span<const std::uint8_t> editorPayload; /**< Immutable imported editor payload. */
         std::string_view absoluteAssetPath;          /**< Absolute source path for diagnostics only. */
         AssetTypeId assetType;                       /**< Stable type produced by the importer. */
@@ -38,17 +35,14 @@ namespace Horo::Assets
     };
 
     /** @brief Owned tightly packed RGBA8 image returned by a preview provider. */
-    struct AssetPreviewImage
-    {
+    struct AssetPreviewImage {
         std::uint32_t width{};
         std::uint32_t height{};
         std::vector<std::uint8_t> pixels;
 
         /** @brief Reports whether dimensions and tightly packed pixel storage agree. */
-        [[nodiscard]] bool IsValid() const noexcept
-        {
-            return width > 0 && height > 0 &&
-                pixels.size() == static_cast<std::size_t>(width) * height * 4U;
+        [[nodiscard]] bool IsValid() const noexcept {
+            return width > 0 && height > 0 && pixels.size() == static_cast<std::size_t>(width) * height * 4U;
         }
     };
 
@@ -59,8 +53,7 @@ namespace Horo::Assets
      * ImGui or renderer callback. The host owns scheduling, validation, texture
      * upload, caching, fallback presentation, and resource destruction.
      */
-    class IAssetPreviewProvider
-    {
+    class IAssetPreviewProvider {
     public:
         virtual ~IAssetPreviewProvider() = default;
 
@@ -70,7 +63,7 @@ namespace Horo::Assets
          * @param cancellation Host-owned cooperative cancellation token.
          * @return Owned preview image or a typed failure that selects the host fallback.
          */
-        [[nodiscard]] virtual Result<AssetPreviewImage> GeneratePreview(
-            const AssetPreviewInput& input, const CancellationToken& cancellation) const = 0;
+        [[nodiscard]] virtual Result<AssetPreviewImage> GeneratePreview(const AssetPreviewInput &input,
+                                                                        const CancellationToken &cancellation) const = 0;
     };
-} // namespace Horo::Assets
+}  // namespace Horo::Assets

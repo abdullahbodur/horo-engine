@@ -5,21 +5,18 @@
 #include <string>
 #include <vector>
 
-TEST_CASE("NotificationService publishes events across EditorDataBus", "[editor][notifications]")
-{
+TEST_CASE("NotificationService publishes events across EditorDataBus", "[editor][notifications]") {
     Horo::Editor::EditorDataBus dataBus;
     Horo::Editor::NotificationService notificationService(dataBus);
 
     std::vector<Horo::Editor::NotificationEvent> receivedEvents;
-    const auto subscription = dataBus.Subscribe<Horo::Editor::NotificationEvent>(
-        [&receivedEvents](const Horo::Editor::NotificationEvent &event) {
-            receivedEvents.push_back(event);
-        });
+    const auto subscription =
+        dataBus.Subscribe<Horo::Editor::NotificationEvent>([&receivedEvents](const Horo::Editor::NotificationEvent &event) {
+        receivedEvents.push_back(event);
+    });
 
-    SECTION("Publish with default parameters")
-    {
-        notificationService.Publish("gameplay", Horo::Editor::NotificationSeverity::Error,
-                                    "A behavior type ID is duplicated.");
+    SECTION("Publish with default parameters") {
+        notificationService.Publish("gameplay", Horo::Editor::NotificationSeverity::Error, "A behavior type ID is duplicated.");
 
         REQUIRE(receivedEvents.size() == 1);
         CHECK(receivedEvents[0].id != 0);
@@ -30,11 +27,9 @@ TEST_CASE("NotificationService publishes events across EditorDataBus", "[editor]
         CHECK(receivedEvents[0].actions.empty());
     }
 
-    SECTION("Publish with deduplication key namespacing and action button")
-    {
-        notificationService.Publish("gameplay", Horo::Editor::NotificationSeverity::Error,
-                                    "Play session blocked due to invalid manifest", "Play session blocked",
-                                    "play_blocked", 0.0f,
+    SECTION("Publish with deduplication key namespacing and action button") {
+        notificationService.Publish("gameplay", Horo::Editor::NotificationSeverity::Error, "Play session blocked due to invalid manifest",
+                                    "Play session blocked", "play_blocked", 0.0f,
                                     {Horo::Editor::NotificationAction{.label = "Open logs", .actionId = "open_logs"}});
 
         REQUIRE(receivedEvents.size() == 1);

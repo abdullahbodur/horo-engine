@@ -8,11 +8,9 @@
 #include <memory>
 #include <vector>
 
-namespace Horo::Extensions
-{
+namespace Horo::Extensions {
     /** @brief Shared library/module lease retained by every external contribution adapter. */
-    struct ExtensionModuleLifetime final
-    {
+    struct ExtensionModuleLifetime final {
         ~ExtensionModuleLifetime();
 
         std::shared_ptr<Platform::DynamicLibrary> library;
@@ -22,10 +20,9 @@ namespace Horo::Extensions
     };
 
     /** @brief Host-side state used only during one module load transaction. */
-    struct AssetImporterRegistrationSession final
-    {
-        const ExtensionManifest* manifest{};
-        const ExtensionModuleManifest* module{};
+    struct AssetImporterRegistrationSession final {
+        const ExtensionManifest *manifest{};
+        const ExtensionModuleManifest *module{};
         std::shared_ptr<ExtensionModuleLifetime> lifetime;
         std::vector<Assets::AssetImporterContribution> contributions;
         Error error;
@@ -38,6 +35,5 @@ namespace Horo::Extensions
      * @param descriptor Borrowed module-owned descriptor.
      * @return C ABI status; failure leaves the live host catalog untouched.
      */
-    HoroExtensionStatus RegisterExternalAssetImporter(
-        void* hostContext, const HoroAssetImporterDescriptor* descriptor) noexcept;
-} // namespace Horo::Extensions
+    HoroExtensionStatus RegisterExternalAssetImporter(void *hostContext, const HoroAssetImporterDescriptor *descriptor) noexcept;
+}  // namespace Horo::Extensions

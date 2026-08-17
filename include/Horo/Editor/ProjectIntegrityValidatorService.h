@@ -27,7 +27,10 @@ namespace Horo::Editor {
         std::filesystem::path projectRoot;
         std::vector<ProjectIntegrityIssue> issues;
 
-        [[nodiscard]] bool HasIssues() const noexcept { return !issues.empty(); }
+        [[nodiscard]] bool HasIssues() const noexcept {
+            return !issues.empty();
+        }
+
         [[nodiscard]] bool HasAutoFixableIssues() const noexcept;
     };
 

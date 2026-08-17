@@ -28,8 +28,7 @@ namespace Horo::Editor::Ui {
             IconRenderer renderer;
         };
 
-        void DrawNothing(const IconDrawContext &) {
-        }
+        void DrawNothing(const IconDrawContext &) {}
 
         void DrawGenericIcon(const IconDrawContext &context) {
             const auto [x, y] = context.position;
@@ -42,11 +41,9 @@ namespace Horo::Editor::Ui {
 
         void DrawCreateIcon(const IconDrawContext &context) {
             const ImVec2 center = context.Center();
-            context.drawList.AddLine({center.x, context.position.y + 2.0F},
-                                     {center.x, context.position.y + context.size.y - 2.0F},
+            context.drawList.AddLine({center.x, context.position.y + 2.0F}, {center.x, context.position.y + context.size.y - 2.0F},
                                      context.color, 1.5F);
-            context.drawList.AddLine({context.position.x + 2.0F, center.y},
-                                     {context.position.x + context.size.x - 2.0F, center.y},
+            context.drawList.AddLine({context.position.x + 2.0F, center.y}, {context.position.x + context.size.x - 2.0F, center.y},
                                      context.color, 1.5F);
         }
 
@@ -54,8 +51,7 @@ namespace Horo::Editor::Ui {
             const auto [x, y] = context.position;
             const auto [w, h] = context.size;
             context.drawList.AddLine({x + 3.0F, y + h - 3.0F}, {x + w - 3.0F, y + 3.0F}, context.color, 2.0F);
-            context.drawList.AddTriangleFilled({x + 1.0F, y + h - 1.0F}, {x + 5.0F, y + h - 3.0F},
-                                               {x + 3.0F, y + h - 5.0F}, context.color);
+            context.drawList.AddTriangleFilled({x + 1.0F, y + h - 1.0F}, {x + 5.0F, y + h - 3.0F}, {x + 3.0F, y + h - 5.0F}, context.color);
         }
 
         void DrawDuplicateIcon(const IconDrawContext &context) {
@@ -82,11 +78,9 @@ namespace Horo::Editor::Ui {
             const float glyphBottom = center.y + glyphSize * 0.40F;
             const float stroke = std::max(1.0F, glyphSize * 0.085F);
             context.drawList.AddBezierCubic({glyphLeft, center.y}, {center.x - glyphSize * 0.24F, glyphTop},
-                                            {center.x + glyphSize * 0.24F, glyphTop}, {glyphRight, center.y},
-                                            context.color, stroke);
+                                            {center.x + glyphSize * 0.24F, glyphTop}, {glyphRight, center.y}, context.color, stroke);
             context.drawList.AddBezierCubic({glyphRight, center.y}, {center.x + glyphSize * 0.24F, glyphBottom},
-                                            {center.x - glyphSize * 0.24F, glyphBottom}, {glyphLeft, center.y},
-                                            context.color, stroke);
+                                            {center.x - glyphSize * 0.24F, glyphBottom}, {glyphLeft, center.y}, context.color, stroke);
             context.drawList.AddCircleFilled(center, glyphSize * 0.12F, context.color, 12);
             if (crossedOut)
                 context.drawList.AddLine({center.x - glyphSize * 0.34F, center.y - glyphSize * 0.34F},
@@ -109,8 +103,7 @@ namespace Horo::Editor::Ui {
             const float halfWidth = glyphSize * 0.35F;
             const float bodyTop = center.y - glyphSize * 0.02F;
             const float bodyBottom = center.y + glyphSize * 0.38F;
-            context.drawList.AddRect({center.x - halfWidth, bodyTop}, {center.x + halfWidth, bodyBottom}, context.color,
-                                     glyphSize * 0.06F,
+            context.drawList.AddRect({center.x - halfWidth, bodyTop}, {center.x + halfWidth, bodyBottom}, context.color, glyphSize * 0.06F,
                                      0, stroke);
             context.drawList.PathClear();
             context.drawList.PathLineTo({center.x - glyphSize * 0.25F, bodyTop});
@@ -153,8 +146,7 @@ namespace Horo::Editor::Ui {
             const auto [x, y] = context.position;
             const auto [w, h] = context.size;
             context.drawList.AddRect({x + 1.0F, y + 4.0F}, {x + w * 0.68F, y + h - 3.0F}, context.color, 2.0F, 0, 1.4F);
-            context.drawList.AddTriangle({x + w * 0.68F, y + 6.0F}, {x + w - 1.0F, y + 3.0F},
-                                         {x + w - 1.0F, y + h - 2.0F}, context.color,
+            context.drawList.AddTriangle({x + w * 0.68F, y + 6.0F}, {x + w - 1.0F, y + 3.0F}, {x + w - 1.0F, y + h - 2.0F}, context.color,
                                          1.4F);
         }
 
@@ -162,8 +154,7 @@ namespace Horo::Editor::Ui {
             const auto [x, y] = context.position;
             const auto [w, h] = context.size;
             const ImVec2 center = context.Center();
-            context.drawList.AddTriangleFilled({x + 1.0F, center.y}, {x + 6.0F, y + 4.0F}, {x + 6.0F, y + h - 4.0F},
-                                               context.color);
+            context.drawList.AddTriangleFilled({x + 1.0F, center.y}, {x + 6.0F, y + 4.0F}, {x + 6.0F, y + h - 4.0F}, context.color);
             context.drawList.AddCircle(center, w * 0.30F, context.color, 16, 1.3F);
             context.drawList.AddCircle(center, w * 0.48F, context.color, 16, 1.3F);
         }
@@ -173,8 +164,7 @@ namespace Horo::Editor::Ui {
             const auto [w, h] = context.size;
             const ImVec2 center = context.Center();
             context.drawList.AddCircleFilled({x + w * 0.30F, center.y}, w * 0.16F, context.color, 14);
-            context.drawList.AddQuad({x + w * 0.36F, y + h * 0.34F}, {x + w - 1.0F, y + 2.0F},
-                                     {x + w - 1.0F, y + h - 2.0F},
+            context.drawList.AddQuad({x + w * 0.36F, y + h * 0.34F}, {x + w - 1.0F, y + 2.0F}, {x + w - 1.0F, y + h - 2.0F},
                                      {x + w * 0.36F, y + h * 0.66F}, context.color, 1.4F);
         }
 
@@ -184,14 +174,8 @@ namespace Horo::Editor::Ui {
             for (int ray = 0; ray < 8; ++ray) {
                 const float angle = static_cast<float>(ray) * std::numbers::pi_v<float> * 0.25F;
                 const ImVec2 direction{std::cos(angle), std::sin(angle)};
-                context.drawList.AddLine({
-                                             center.x + direction.x * context.size.x * 0.32F,
-                                             center.y + direction.y * context.size.y * 0.32F
-                                         },
-                                         {
-                                             center.x + direction.x * context.size.x * 0.48F,
-                                             center.y + direction.y * context.size.y * 0.48F
-                                         },
+                context.drawList.AddLine({center.x + direction.x * context.size.x * 0.32F, center.y + direction.y * context.size.y * 0.32F},
+                                         {center.x + direction.x * context.size.x * 0.48F, center.y + direction.y * context.size.y * 0.48F},
                                          context.color, 1.3F);
             }
         }
@@ -202,14 +186,8 @@ namespace Horo::Editor::Ui {
             for (int ray = 0; ray < 4; ++ray) {
                 const float angle = std::numbers::pi_v<float> * (0.25F + static_cast<float>(ray) * 0.5F);
                 const ImVec2 direction{std::cos(angle), std::sin(angle)};
-                context.drawList.AddLine({
-                                             center.x + direction.x * context.size.x * 0.26F,
-                                             center.y + direction.y * context.size.y * 0.26F
-                                         },
-                                         {
-                                             center.x + direction.x * context.size.x * 0.45F,
-                                             center.y + direction.y * context.size.y * 0.45F
-                                         },
+                context.drawList.AddLine({center.x + direction.x * context.size.x * 0.26F, center.y + direction.y * context.size.y * 0.26F},
+                                         {center.x + direction.x * context.size.x * 0.45F, center.y + direction.y * context.size.y * 0.45F},
                                          context.color, 1.3F);
             }
         }
@@ -228,15 +206,13 @@ namespace Horo::Editor::Ui {
         void DrawSphereIcon(const IconDrawContext &context) {
             const ImVec2 center = context.Center();
             context.drawList.AddCircle(center, context.size.x * 0.43F, context.color, 18, 1.4F);
-            context.drawList.AddEllipse(center, {context.size.x * 0.18F, context.size.y * 0.43F}, context.color, 0.0F,
-                                        18, 1.0F);
+            context.drawList.AddEllipse(center, {context.size.x * 0.18F, context.size.y * 0.43F}, context.color, 0.0F, 18, 1.0F);
         }
 
         void DrawCapsuleIcon(const IconDrawContext &context) {
             const auto [x, y] = context.position;
             const auto [w, h] = context.size;
-            context.drawList.AddRect({x + w * 0.25F, y + 1.0F}, {x + w * 0.75F, y + h - 1.0F}, context.color, w * 0.25F,
-                                     0, 1.4F);
+            context.drawList.AddRect({x + w * 0.25F, y + 1.0F}, {x + w * 0.75F, y + h - 1.0F}, context.color, w * 0.25F, 0, 1.4F);
         }
 
         void DrawCylinderIcon(const IconDrawContext &context) {
@@ -253,8 +229,7 @@ namespace Horo::Editor::Ui {
             const auto [x, y] = context.position;
             const auto [w, h] = context.size;
             const ImVec2 center = context.Center();
-            context.drawList.AddTriangle({center.x, y + 1.0F}, {x + 2.0F, y + h - 3.0F}, {x + w - 2.0F, y + h - 3.0F},
-                                         context.color, 1.4F);
+            context.drawList.AddTriangle({center.x, y + 1.0F}, {x + 2.0F, y + h - 3.0F}, {x + w - 2.0F, y + h - 3.0F}, context.color, 1.4F);
             context.drawList.AddEllipse({center.x, y + h - 3.0F}, {w * 0.38F, 2.0F}, context.color, 0.0F, 16, 1.0F);
         }
 
@@ -262,8 +237,7 @@ namespace Horo::Editor::Ui {
             const auto [x, y] = context.position;
             const auto [w, h] = context.size;
             const ImVec2 center = context.Center();
-            context.drawList.AddQuad({center.x, y + 2.0F}, {x + w - 1.0F, center.y}, {center.x, y + h - 2.0F},
-                                     {x + 1.0F, center.y},
+            context.drawList.AddQuad({center.x, y + 2.0F}, {x + w - 1.0F, center.y}, {center.x, y + h - 2.0F}, {x + 1.0F, center.y},
                                      context.color, 1.4F);
         }
 
@@ -325,7 +299,7 @@ namespace Horo::Editor::Ui {
             const std::size_t index = static_cast<std::size_t>(icon);
             return index < kIconDescriptors.size() ? std::optional{index} : std::nullopt;
         }
-    } // namespace
+    }  // namespace
 
     /** @copydoc UiIconRegistry::Resolve */
     std::optional<UiIcon> UiIconRegistry::Resolve(const std::string_view token) noexcept {
@@ -348,12 +322,11 @@ namespace Horo::Editor::Ui {
     }
 
     /** @copydoc DrawEditorIcon */
-    void DrawEditorIcon(ImDrawList *drawList, const UiIcon icon, const ImVec2 position, const ImVec2 size,
-                        const ImU32 color) {
+    void DrawEditorIcon(ImDrawList *drawList, const UiIcon icon, const ImVec2 position, const ImVec2 size, const ImU32 color) {
         if (drawList == nullptr || icon == UiIcon::None)
             return;
         const std::optional<std::size_t> index = IconIndex(icon);
         if (index.has_value())
             kIconDescriptors[*index].renderer(IconDrawContext{*drawList, position, size, color});
     }
-} // namespace Horo::Editor::Ui
+}  // namespace Horo::Editor::Ui

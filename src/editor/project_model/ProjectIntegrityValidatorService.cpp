@@ -41,11 +41,12 @@ namespace Horo::Editor {
     }  // namespace
 
     bool ProjectIntegrityReport::HasAutoFixableIssues() const noexcept {
-        return std::ranges::any_of(issues, [](const ProjectIntegrityIssue &issue) { return issue.isAutoFixable; });
+        return std::ranges::any_of(issues, [](const ProjectIntegrityIssue &issue) {
+            return issue.isAutoFixable;
+        });
     }
 
-    ProjectIntegrityValidatorService::ProjectIntegrityValidatorService(DurableFileSystem &durableFiles)
-        : durableFiles_(durableFiles) {}
+    ProjectIntegrityValidatorService::ProjectIntegrityValidatorService(DurableFileSystem &durableFiles) : durableFiles_(durableFiles) {}
 
     /** @copydoc ProjectIntegrityValidatorService::Inspect */
     ProjectIntegrityReport ProjectIntegrityValidatorService::Inspect(const std::filesystem::path &projectRoot) const {
@@ -130,8 +131,8 @@ namespace Horo::Editor {
                         "endif()\n";
                     const Result<void> written = durableFiles_.WriteDurable(issue.targetPath, std::as_bytes(std::span{cmakeContent}));
                     if (written.HasError()) {
-                        LOG_ERROR("editor.project_validator", "Failed to repair CMakeLists.txt for '%s': %s",
-                                  projectRoot.string().c_str(), written.ErrorValue().message.c_str());
+                        LOG_ERROR("editor.project_validator", "Failed to repair CMakeLists.txt for '%s': %s", projectRoot.string().c_str(),
+                                  written.ErrorValue().message.c_str());
                         return written;
                     }
                     LOG_INFO("editor.project_validator", "Repaired missing CMakeLists.txt at '%s'", issue.targetPath.string().c_str());

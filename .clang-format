@@ -50,7 +50,7 @@ AllowAllParametersOfDeclarationOnNextLine: false
 BinPackArguments: true
 BinPackParameters: true
 
-BreakAfterReturnType: None
+AlwaysBreakAfterReturnType: None
 PenaltyReturnTypeOnItsOwnLine: 1000000
 PenaltyBreakBeforeFirstCallParameter: 1000000
 

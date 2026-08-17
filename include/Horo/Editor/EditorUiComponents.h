@@ -344,11 +344,11 @@ namespace Horo::Editor::Ui {
 
     /** @brief Optional visual configuration shared by text inputs. */
     struct InputTextOptions {
-        bool error{false};                                     /**< Whether to render validation-error styling. */
-        float width{-1.0F};                                    /**< Logical width; negative fills available content. */
-        const char *hint{nullptr};                              /**< Optional placeholder text. */
-        float prefixIconWidth{0.0F};                            /**< Left padding reserved for a caller-drawn icon. */
-        ComponentSize componentSize{ComponentSize::Small};      /**< Shared theme-backed size preset. */
+        bool error{false};                                 /**< Whether to render validation-error styling. */
+        float width{-1.0F};                                /**< Logical width; negative fills available content. */
+        const char *hint{nullptr};                         /**< Optional placeholder text. */
+        float prefixIconWidth{0.0F};                       /**< Left padding reserved for a caller-drawn icon. */
+        ComponentSize componentSize{ComponentSize::Small}; /**< Shared theme-backed size preset. */
     };
 
     /**

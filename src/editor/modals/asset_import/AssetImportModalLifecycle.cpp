@@ -588,7 +588,8 @@ namespace Horo::Editor {
             m_operationStore->Update(*m_visibleOperationId,
                                      OperationUpdate{.state = waitingForConflict ? OperationState::Waiting : OperationState::Running,
                                                      .phase = waitingForConflict ? "resolve conflicts" : "import",
-                                                     .message = waitingForConflict ? "Waiting for conflict resolution"
+                                                     .message = waitingForConflict
+                                                                    ? "Waiting for conflict resolution"
                                                                     : std::format("{} of {}", completedItems, m_itemCompleted.size()),
                                                      .progress = progress}));
     }

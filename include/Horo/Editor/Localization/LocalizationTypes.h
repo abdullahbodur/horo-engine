@@ -4,11 +4,9 @@
 #include <string>
 #include <string_view>
 
-namespace Horo::Editor
-{
+namespace Horo::Editor {
     /** @brief Normalized BCP 47 locale identity used by editor localization. */
-    struct LocaleTag
-    {
+    struct LocaleTag {
         std::string value;
 
         [[nodiscard]] static std::optional<LocaleTag> Parse(std::string_view tag);
@@ -16,8 +14,7 @@ namespace Horo::Editor
     };
 
     /** @brief Stable namespace and semantic local key identifying one message. */
-    struct MessageKey
-    {
+    struct MessageKey {
         std::string namespaceId;
         std::string localKey;
 
@@ -26,10 +23,9 @@ namespace Horo::Editor
     };
 
     /** @brief Hash for MessageKey storage without constructing canonical lookup strings. */
-    struct MessageKeyHash
-    {
+    struct MessageKeyHash {
         [[nodiscard]] std::size_t operator()(const MessageKey &key) const noexcept;
     };
 
     /** @brief Value-owned deferred message reference resolved against the active snapshot. */
-} // namespace Horo::Editor
+}  // namespace Horo::Editor

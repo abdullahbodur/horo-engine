@@ -168,11 +168,9 @@ namespace Horo::Editor {
 
             const std::string &hint = context.localization.Get("editor", "workspace.global_dock.operations.search");
             if (Ui::InputTextControl("##OperationsSearch", m_search.data(), m_search.size(), fonts,
-                                     Ui::InputTextOptions{
-                                         .width = searchWidth,
-                                         .hint = hint.c_str(),
-                                         .componentSize = Ui::ComponentSize::Small
-                                     }))
+                                     Ui::InputTextOptions{.width = searchWidth,
+                                                          .hint = hint.c_str(),
+                                                          .componentSize = Ui::ComponentSize::Small}))
                 m_filterDirty = true;
 
             ImGui::SameLine(0.0F, Ui::ScaledLayoutValue(ControlGap));

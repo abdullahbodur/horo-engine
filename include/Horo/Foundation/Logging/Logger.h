@@ -34,8 +34,8 @@ namespace Horo::Log {
         Level minimumEventSeverity{Level::Trace};                                        /**< Common log/event severity gate. */
         std::vector<std::string> subsystemPrefixes;                                      /**< Optional hierarchical subsystem allowlist. */
         Telemetry::MetricCollectionLevel metricCollectionLevel{Telemetry::MetricCollectionLevel::Core}; /**< Host metric policy. */
-        std::vector<std::shared_ptr<Telemetry::ISink>> additionalSinks;                  /**< Host-composed local or external consumers. */
-        bool writeSessionMarkers{true}; /**< Whether session and clean-shutdown markers are persisted. */
+        std::vector<std::shared_ptr<Telemetry::ISink>> additionalSinks; /**< Host-composed local or external consumers. */
+        bool writeSessionMarkers{true};                                 /**< Whether session and clean-shutdown markers are persisted. */
         bool echoToStderr{
 #ifndef NDEBUG
             true

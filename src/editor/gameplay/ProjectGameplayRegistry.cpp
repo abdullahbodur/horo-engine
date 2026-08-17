@@ -108,8 +108,7 @@ namespace Horo::Editor {
             return;
         }
         if (manifest.Value().buildFingerprint != Gameplay::CurrentGameplayBuildFingerprint()) {
-            diagnostics_.emplace_back(nativeManifestPath,
-                                      ManifestError("the artifact was built for a different Horo SDK generation."));
+            diagnostics_.emplace_back(nativeManifestPath, ManifestError("the artifact was built for a different Horo SDK generation."));
             return;
         }
         LoadNativeModule(projectRoot, nativeManifestPath, manifest.Value().artifactPath, manifest.Value().moduleId,
@@ -149,28 +148,24 @@ namespace Horo::Editor {
         return true;
     }
 
-    void ProjectGameplayRegistry::LoadNativeModule(const std::filesystem::path &projectRoot,
-                                                   const std::filesystem::path &manifestPath,
-                                                   const std::filesystem::path &artifactPath,
-                                                   const std::string_view moduleId,
+    void ProjectGameplayRegistry::LoadNativeModule(const std::filesystem::path &projectRoot, const std::filesystem::path &manifestPath,
+                                                   const std::filesystem::path &artifactPath, const std::string_view moduleId,
                                                    const std::uint64_t descriptorRevision) {
         Gameplay::GameModuleHost host;
-        Result<std::unique_ptr<Gameplay::LoadedGameModule> > loaded =
-                host.LoadShadowCopy(artifactPath, projectRoot / ".horo" / "local" / "gameplay_module_shadow",
-                                    Gameplay::CurrentGameplayBuildFingerprint());
+        Result<std::unique_ptr<Gameplay::LoadedGameModule>> loaded =
+            host.LoadShadowCopy(artifactPath, projectRoot / ".horo" / "local" / "gameplay_module_shadow",
+                                Gameplay::CurrentGameplayBuildFingerprint());
         if (loaded.HasError()) {
             diagnostics_.emplace_back(artifactPath, loaded.ErrorValue());
             return;
         }
         if (loaded.Value()->ModuleId() != moduleId || loaded.Value()->DescriptorRevision() != descriptorRevision) {
-            diagnostics_.emplace_back(manifestPath,
-                                      ManifestError(
-                                          "module identity or descriptor revision does not match the artifact."));
+            diagnostics_.emplace_back(manifestPath, ManifestError("module identity or descriptor revision does not match the artifact."));
             return;
         }
 
         nativeModule_ = std::move(loaded).Value();
-        for (const Gameplay::BehaviorRegistration &registration: nativeModule_->Registry().Registrations()) {
+        for (const Gameplay::BehaviorRegistration &registration : nativeModule_->Registry().Registrations()) {
             if (Result<void> registered = registry_.Register(registration); registered.HasError()) {
                 diagnostics_.emplace_back(artifactPath, registered.ErrorValue());
                 return;

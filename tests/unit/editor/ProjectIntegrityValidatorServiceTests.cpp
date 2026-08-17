@@ -1,8 +1,8 @@
 #include "Horo/Editor/ProjectIntegrityValidatorService.h"
 #include "Horo/Foundation/Platform.h"
 
-#include <catch2/catch_test_macros.hpp>
 #include <algorithm>
+#include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -11,9 +11,8 @@ namespace {
     using namespace Horo;
 
     struct TemporaryProject {
-        std::filesystem::path root =
-            std::filesystem::temp_directory_path() /
-            ("horo-integrity-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        std::filesystem::path root = std::filesystem::temp_directory_path() /
+                                     ("horo-integrity-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
 
         TemporaryProject() {
             std::filesystem::create_directories(root);

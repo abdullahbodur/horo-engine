@@ -4,20 +4,30 @@
 
 namespace Horo::Editor {
     GameplayBehaviorFilenameModalState::GameplayBehaviorFilenameModalState(GameplayBehaviorKind kind, std::string destination,
-                                                                             std::string baseName)
+                                                                           std::string baseName)
         : kind_(kind), destination_(std::move(destination)), baseName_(std::move(baseName)) {
         Revalidate();
     }
 
-    GameplayBehaviorKind GameplayBehaviorFilenameModalState::Kind() const noexcept { return kind_; }
+    GameplayBehaviorKind GameplayBehaviorFilenameModalState::Kind() const noexcept {
+        return kind_;
+    }
 
-    const std::string &GameplayBehaviorFilenameModalState::Destination() const noexcept { return destination_; }
+    const std::string &GameplayBehaviorFilenameModalState::Destination() const noexcept {
+        return destination_;
+    }
 
-    const std::string &GameplayBehaviorFilenameModalState::BaseName() const noexcept { return baseName_; }
+    const std::string &GameplayBehaviorFilenameModalState::BaseName() const noexcept {
+        return baseName_;
+    }
 
-    std::string &GameplayBehaviorFilenameModalState::MutableBaseName() noexcept { return baseName_; }
+    std::string &GameplayBehaviorFilenameModalState::MutableBaseName() noexcept {
+        return baseName_;
+    }
 
-    const Result<void> &GameplayBehaviorFilenameModalState::Validation() const noexcept { return validation_; }
+    const Result<void> &GameplayBehaviorFilenameModalState::Validation() const noexcept {
+        return validation_;
+    }
 
     void GameplayBehaviorFilenameModalState::SetBaseName(std::string baseName) {
         baseName_ = std::move(baseName);
@@ -30,8 +40,8 @@ namespace Horo::Editor {
         return CreateGameplayBehaviorRequest{.destination = destination_, .baseName = baseName_, .kind = kind_};
     }
 
-    std::optional<CreateGameplayBehaviorRequest>
-    GameplayBehaviorFilenameModalState::Dispatch(GameplayBehaviorFilenameModalAction action) const {
+    std::optional<CreateGameplayBehaviorRequest> GameplayBehaviorFilenameModalState::Dispatch(
+        GameplayBehaviorFilenameModalAction action) const {
         return action == GameplayBehaviorFilenameModalAction::Confirm ? Confirm() : std::nullopt;
     }
 
@@ -39,4 +49,4 @@ namespace Horo::Editor {
         validation_ = ValidateCreateGameplayBehaviorRequest(
             CreateGameplayBehaviorRequest{.destination = destination_, .baseName = baseName_, .kind = kind_});
     }
-}
+}  // namespace Horo::Editor

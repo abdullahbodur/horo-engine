@@ -173,11 +173,9 @@ namespace Horo::Editor {
                  stackedToolbar ? controlOrigin.y + ToolbarHeight() + Ui::ScaledLayoutValue(ControlGap) : controlOrigin.y});
             const std::string &hint = context.localization.Get("editor", "workspace.global_dock.build_output.search");
             if (Ui::InputTextControl("##BuildOutputSearch", m_search.data(), m_search.size(), fonts,
-                                     Ui::InputTextOptions{
-                                         .width = searchWidth,
-                                         .hint = hint.c_str(),
-                                         .componentSize = Ui::ComponentSize::Small
-                                     }))
+                                     Ui::InputTextOptions{.width = searchWidth,
+                                                          .hint = hint.c_str(),
+                                                          .componentSize = Ui::ComponentSize::Small}))
                 m_filterDirty = true;
 
             ImGui::SameLine(0.0F, Ui::ScaledLayoutValue(ControlGap));

@@ -10,8 +10,8 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <format>
 #include <cstring>
+#include <format>
 
 namespace Horo::Editor {
     namespace {
@@ -106,9 +106,9 @@ namespace Horo::Editor {
             const Math::ClipDepthRange depthRange = viewportRenderer_->ClipDepthRange();
             bool assetDragActive = false;
             if ((!pointerOverProjection || interaction_.IsActive()) && ImGui::BeginDragDropTarget()) {
-                const ImGuiPayload *accepted = ImGui::AcceptDragDropPayload(
-                    AssetSceneDragPayloadType,
-                    ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
+                const ImGuiPayload *accepted =
+                    ImGui::AcceptDragDropPayload(AssetSceneDragPayloadType,
+                                                 ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
                 const std::optional<AssetSceneDragPayload> payload = ReadAssetPayload(accepted);
                 if (payload.has_value()) {
                     assetDragActive = true;

@@ -1,6 +1,5 @@
 #include "Horo/Gameplay/BehaviorRuntime.h"
 
-
 #include "Horo/Gameplay/GameplayErrors.h"
 
 #include <algorithm>

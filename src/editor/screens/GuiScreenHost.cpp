@@ -474,7 +474,8 @@ namespace Horo::Editor {
                 return;
             case EditorMenuAction::ImportAssets:
                 if (context_ && modalHost_ && !modalHost_->HasOpenModal()) {
-                    auto modal = std::make_unique<AssetImportModal>(context_->theme.fonts, m_importJobs, importerCatalog_,
+                    auto modal =
+                        std::make_unique<AssetImportModal>(context_->theme.fonts, m_importJobs, importerCatalog_,
                                                            services_.TryGet<Assets::AssetRegistry>(), services_.TryGet<OperationStore>());
                     modal->SetProjectRoot(CurrentProjectRoot());
                     if (invocation.assetDestination.has_value())

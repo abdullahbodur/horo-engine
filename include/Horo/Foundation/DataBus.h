@@ -7,45 +7,38 @@
 #include <string_view>
 #include <utility>
 
-namespace Horo
-{
+namespace Horo {
     using EventTypeId = std::uint64_t;
 
     /** @brief Polymorphic transport base for a typed event payload owned by the bus operation. */
-    struct EventPayload
-    {
+    struct EventPayload {
         virtual ~EventPayload() = default;
     };
 
-    template <typename EventT>
-    struct TypedEventPayload final : EventPayload
-    {
+    template <typename EventT> struct TypedEventPayload final : EventPayload {
         explicit TypedEventPayload(const EventT &event) : value(event) {}
+
         explicit TypedEventPayload(EventT &&event) : value(std::move(event)) {}
+
         EventT value;
     };
 
     /** @brief Hashes an explicit, stable event name with FNV-1a. */
-    constexpr EventTypeId HashEventTypeName(const std::string_view name) noexcept
-    {
+    constexpr EventTypeId HashEventTypeName(const std::string_view name) noexcept {
         EventTypeId hash = 14695981039346656037ull;
-        for (const char character : name)
-        {
+        for (const char character : name) {
             hash ^= static_cast<EventTypeId>(static_cast<unsigned char>(character));
             hash *= 1099511628211ull;
         }
         return hash;
     }
 
-    template <typename EventT>
-    [[nodiscard]] constexpr EventTypeId EventType() noexcept
-    {
+    template <typename EventT> [[nodiscard]] constexpr EventTypeId EventType() noexcept {
         return HashEventTypeName(EventT::HoroEventTypeName);
     }
 
     /** @brief Move-only RAII ownership of one data-bus handler. */
-    class Subscription
-    {
+    class Subscription {
     public:
         Subscription() = default;
         ~Subscription();
@@ -54,23 +47,27 @@ namespace Horo
         Subscription(Subscription &&other) noexcept;
         Subscription &operator=(Subscription &&other) noexcept;
         void Reset() noexcept;
-        [[nodiscard]] explicit operator bool() const noexcept { return static_cast<bool>(m_release); }
+
+        [[nodiscard]] explicit operator bool() const noexcept {
+            return static_cast<bool>(m_release);
+        }
+
     private:
         friend class EngineDataBus;
+
         explicit Subscription(std::function<void()> release) : m_release(std::move(release)) {}
+
         std::function<void()> m_release;
     };
 
-    struct EngineDataBusConfig
-    {
+    struct EngineDataBusConfig {
         std::size_t maxAsyncQueueSize = 1024;
         bool traceDispatch = true;
         const char *logCategory = "engine.data_bus";
     };
 
     /** @brief Process-scoped typed notification bus; commands and state ownership remain external. */
-    class EngineDataBus
-    {
+    class EngineDataBus {
     public:
         explicit EngineDataBus(EngineDataBusConfig config = {});
         ~EngineDataBus();
@@ -79,37 +76,34 @@ namespace Horo
         EngineDataBus(EngineDataBus &&) noexcept;
         EngineDataBus &operator=(EngineDataBus &&) noexcept;
 
-        template <typename EventT, typename Handler>
-        Subscription Subscribe(Handler &&handler)
-        {
+        template <typename EventT, typename Handler> Subscription Subscribe(Handler &&handler) {
             static_assert(requires { EventT::HoroEventTypeName; }, "Events require a stable HoroEventTypeName.");
             auto typed = [callback = std::forward<Handler>(handler)](const EventPayload *raw) {
                 const auto *payload = dynamic_cast<const TypedEventPayload<EventT> *>(raw);
-                if (payload != nullptr) callback(payload->value);
+                if (payload != nullptr)
+                    callback(payload->value);
             };
             return SubscribeErased(EventType<EventT>(), EventT::HoroEventTypeName, std::move(typed));
         }
 
-        template <typename EventT>
-        void Publish(const EventT &event)
-        {
+        template <typename EventT> void Publish(const EventT &event) {
             static_assert(requires { EventT::HoroEventTypeName; }, "Events require a stable HoroEventTypeName.");
             auto replay = std::make_shared<TypedEventPayload<EventT>>(event);
             const auto *raw = replay.get();
-            PublishErased(EventType<EventT>(), EventT::HoroEventTypeName, raw,
-                          [replay = std::move(replay)](EngineDataBus &bus) { bus.Publish(replay->value); });
+            PublishErased(EventType<EventT>(), EventT::HoroEventTypeName, raw, [replay = std::move(replay)](EngineDataBus &bus) {
+                bus.Publish(replay->value);
+            });
         }
 
-        template <typename EventT>
-        void PublishAsync(EventT event)
-        {
+        template <typename EventT> void PublishAsync(EventT event) {
             static_assert(requires { EventT::HoroEventTypeName; }, "Events require a stable HoroEventTypeName.");
             auto payload = std::make_shared<TypedEventPayload<EventT>>(std::move(event));
             QueueErased(EventType<EventT>(), EventT::HoroEventTypeName, std::move(payload),
                         [](EngineDataBus &bus, const EventPayload *raw) {
-                            const auto *typed = dynamic_cast<const TypedEventPayload<EventT> *>(raw);
-                            if (typed != nullptr) bus.Publish(typed->value);
-                        });
+                const auto *typed = dynamic_cast<const TypedEventPayload<EventT> *>(raw);
+                if (typed != nullptr)
+                    bus.Publish(typed->value);
+            });
         }
 
         /** @brief Delivers worker-thread notifications at the owner synchronization point. */
@@ -127,4 +121,4 @@ namespace Horo
         void QueueErased(EventTypeId type, std::string_view name, std::shared_ptr<const EventPayload> payload, QueuedPublisher publish);
         std::shared_ptr<State> m_state;
     };
-} // namespace Horo
+}  // namespace Horo
