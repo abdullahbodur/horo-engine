@@ -85,6 +85,7 @@ SpacesInAngles: Never
 SpacesInParentheses: false
 SpacesInSquareBrackets: false
 Cpp11BracedListStyle: true
+SpaceBeforeCpp11BracedList: false
 
 # Empty lines
 MaxEmptyLinesToKeep: 1
