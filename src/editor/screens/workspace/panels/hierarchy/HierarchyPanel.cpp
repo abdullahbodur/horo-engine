@@ -248,8 +248,7 @@ namespace Horo::Editor {
 
         for (const HierarchyVisibleRow &row : visibleRows) {
             const HierarchyNode &node = *row.node;
-            const char *stableIdBegin = reinterpret_cast<const char *>(&node.id);
-            ImGui::PushID(stableIdBegin, stableIdBegin + sizeof(node.id));
+            ImGui::PushID(&node.id);
             ImGui::SetCursorPosX(outerPadding);
             const ImVec2 rowMin = ImGui::GetCursorScreenPos();
             const HierarchyRowLayout layout = CalculateHierarchyRowLayout(listWidth, row.depth, uiScale, kRowActionsWidth * uiScale);
@@ -403,8 +402,8 @@ namespace Horo::Editor {
                 const float actionIconSize =
                     std::max(0.0F, std::min({15.0F * uiScale, layout.visibilityAction.Width() - 4.0F * uiScale,
                                              layout.lockAction.Width() - 4.0F * uiScale, layout.height - 4.0F * uiScale}));
-                const auto drawAction = [&](const Ui::UiIcon icon, const ImVec2 minimum, const ImVec2 maximum, const bool actionHovered,
-                                            const bool active, const bool inherited) {
+                const auto drawAction = [&](const Ui::UiIcon actionIcon, const ImVec2 minimum, const ImVec2 maximum,
+                                            const bool actionHovered, const bool active, const bool inherited) {
                     if (actionIconSize <= 0.0F)
                         return;
                     ImVec4 color = actionHovered || active ? Theme::Text() : Theme::Muted();
@@ -414,7 +413,7 @@ namespace Horo::Editor {
                         color.w *= 0.55F;
                     const ImVec2 position{minimum.x + ((maximum.x - minimum.x) - actionIconSize) * 0.5F,
                                           minimum.y + ((maximum.y - minimum.y) - actionIconSize) * 0.5F};
-                    Ui::DrawEditorIcon(drawList, icon, position, {actionIconSize, actionIconSize}, Theme::U32(color));
+                    Ui::DrawEditorIcon(drawList, actionIcon, position, {actionIconSize, actionIconSize}, Theme::U32(color));
                 };
                 drawAction(node.effectivelyVisible ? Ui::UiIcon::Visibility : Ui::UiIcon::VisibilityOff, visibilityMin, visibilityMax,
                            visibilityHovered, !node.effectivelyVisible, node.hiddenByParent && node.locallyVisible);

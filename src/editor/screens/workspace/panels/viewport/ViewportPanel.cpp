@@ -116,15 +116,15 @@ namespace Horo::Editor {
                     drawList.AddRect(origin, {origin.x + width, origin.y + height},
                                      Theme::U32(policy.canInstantiate ? Theme::Accent() : Theme::Err()), 3.0F, 0, 2.0F);
                     if (accepted->IsDelivery()) {
-                        const ImVec2 mouse = ImGui::GetMousePos();
+                        const ImVec2 dropMousePos = ImGui::GetMousePos();
                         command.command = EditorWorkspaceViewCommand::InstantiateAsset;
                         command.assetSceneDrop = AssetSceneDropRequest{
                             .assetId = payload->assetId.data(),
                             .assetType = payload->assetType.data(),
                             .parent = viewModel.primarySelection,
                             .target = AssetSceneDropTarget::Viewport,
-                            .normalizedX = std::clamp((mouse.x - origin.x) / width, 0.0F, 1.0F),
-                            .normalizedY = std::clamp((mouse.y - origin.y) / height, 0.0F, 1.0F),
+                            .normalizedX = std::clamp((dropMousePos.x - origin.x) / width, 0.0F, 1.0F),
+                            .normalizedY = std::clamp((dropMousePos.y - origin.y) / height, 0.0F, 1.0F),
                             .aspect = width / height,
                             .depthRange = depthRange,
                             .documentRevision = viewModel.documentRevision,

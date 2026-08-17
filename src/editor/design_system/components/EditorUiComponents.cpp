@@ -742,9 +742,9 @@ namespace Horo::Editor::Ui {
 
     // ── InputTextControl ─────────────────────────────────────────────────
 
-    /** @copydoc InputTextControl(const char *, char *, size_t, const Theme::Fonts &, InputTextOptions) */
+    /** @copydoc InputTextControl(const char *, char *, size_t, const Theme::Fonts &, const InputTextOptions &) */
     bool InputTextControl(const char *id, char *buffer, const size_t bufferSize, const Theme::Fonts &fonts,
-                          const InputTextOptions options) {
+                          const InputTextOptions &options) {
         const auto &tokens = Theme::GetActiveTokens();
         const auto &metrics = DesignSystem::MetricsFor(tokens, options.componentSize);
         const float renderedTextHeight =
@@ -788,9 +788,9 @@ namespace Horo::Editor::Ui {
         return changed;
     }
 
-    /** @copydoc InputTextControl(const char *, std::string &, size_t, const Theme::Fonts &, InputTextOptions) */
+    /** @copydoc InputTextControl(const char *, std::string &, size_t, const Theme::Fonts &, const InputTextOptions &) */
     bool InputTextControl(const char *id, std::string &value, const size_t maxSize, const Theme::Fonts &fonts,
-                          const InputTextOptions options) {
+                          const InputTextOptions &options) {
         if (maxSize == 0)
             return false;
         value.resize(std::min(value.size(), maxSize - 1));

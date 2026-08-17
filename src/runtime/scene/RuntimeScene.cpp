@@ -266,7 +266,7 @@ namespace Horo::Runtime {
     }
 
     /** @copydoc RuntimeScene::Commit */
-    Result<StructuralCommitResult> RuntimeScene::Commit(SceneCommandBuffer commands) {
+    Result<StructuralCommitResult> RuntimeScene::Commit(const SceneCommandBuffer &commands) {
         if (commands.Empty())
             return Result<StructuralCommitResult>::Success({});
         RuntimeSceneStorage candidate = storage_;

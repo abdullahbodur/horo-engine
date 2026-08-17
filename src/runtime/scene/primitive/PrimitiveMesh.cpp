@@ -462,10 +462,7 @@ namespace Horo::Runtime {
         std::size_t bytes{0};
         std::uint64_t nextId{1};
         std::uint64_t useClock{0};
-
-    private:
         mutable std::mutex mutex;
-        friend class PrimitiveMeshCache;
     };
 
     PrimitiveMeshCache::PrimitiveMeshCache(const PrimitiveMeshCacheLimits limits) : m_impl(std::make_unique<Impl>()) {

@@ -296,7 +296,7 @@ namespace Horo::Editor::Ui {
         static_assert(kIconDescriptors.size() == static_cast<std::size_t>(UiIcon::Count));
 
         [[nodiscard]] std::optional<std::size_t> IconIndex(const UiIcon icon) noexcept {
-            const std::size_t index = static_cast<std::size_t>(icon);
+            const auto index = static_cast<std::size_t>(icon);
             return index < kIconDescriptors.size() ? std::optional{index} : std::nullopt;
         }
     }  // namespace

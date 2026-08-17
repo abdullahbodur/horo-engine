@@ -31,6 +31,6 @@ namespace Horo::Editor {
             event.deduplicationKey = event.source + "::" + event.deduplicationKey;
         }
 
-        events_->Publish(std::move(event));
+        events_->Publish(event);
     }
 }  // namespace Horo::Editor

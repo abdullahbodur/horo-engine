@@ -97,10 +97,7 @@ namespace Horo::Editor {
             ImGui::PopStyleVar(3);
         }
 
-        [[nodiscard]] WorkspaceSplitterInteractionResult UpdateSplitters(const float curY, const ImVec2 &display, const float leftActivityW,
-                                                                         const float rightActivityW, const float hierarchyW,
-                                                                         const float inspectorW, const float bottomDockW, const float mainH,
-                                                                         const float contentH,
+        [[nodiscard]] WorkspaceSplitterInteractionResult UpdateSplitters(const EditorWorkspaceView::WorkspaceLayoutGeometry &geo,
                                                                          WorkspaceSplitterInteraction &splitterInteraction,
                                                                          Input::InputRouter &inputRouter,
                                                                          Input::InputContextToken &workspaceInputContext) {
@@ -116,17 +113,17 @@ namespace Horo::Editor {
                                                                                  .maxX = pos.x + size.x,
                                                                                  .maxY = pos.y + size.y};
             };
-            if (hierarchyW > 0.0F) {
+            if (geo.hierarchyW > 0.0F) {
                 addSplitterRegion(WorkspaceSplitterId::Left, WorkspaceSplitterAxis::Horizontal,
-                                  ImVec2(leftActivityW + hierarchyW - 4.0F, curY), ImVec2(8.0F, mainH));
+                                  ImVec2(geo.leftActivityW + geo.hierarchyW - 4.0F, geo.curY), ImVec2(8.0F, geo.mainH));
             }
-            if (inspectorW > 0.0F) {
+            if (geo.inspectorW > 0.0F) {
                 addSplitterRegion(WorkspaceSplitterId::Right, WorkspaceSplitterAxis::Horizontal,
-                                  ImVec2(display.x - rightActivityW - inspectorW - 4.0F, curY), ImVec2(8.0F, mainH));
+                                  ImVec2(geo.display.x - geo.rightActivityW - geo.inspectorW - 4.0F, geo.curY), ImVec2(8.0F, geo.mainH));
             }
-            if (contentH > 0.0F) {
-                addSplitterRegion(WorkspaceSplitterId::Bottom, WorkspaceSplitterAxis::Vertical, ImVec2(leftActivityW, curY + mainH - 4.0F),
-                                  ImVec2(bottomDockW, 8.0F));
+            if (geo.contentH > 0.0F) {
+                addSplitterRegion(WorkspaceSplitterId::Bottom, WorkspaceSplitterAxis::Vertical,
+                                  ImVec2(geo.leftActivityW, geo.curY + geo.mainH - 4.0F), ImVec2(geo.bottomDockW, 8.0F));
             }
 
             const Input::RawInputSnapshot &inputSnapshot = inputRouter.Snapshot();
@@ -152,9 +149,7 @@ namespace Horo::Editor {
             return splitter;
         }
 
-        void DrawPanelAllocationTargets(const ImVec2 &display, const float curY, const float leftActivityW, const float rightActivityW,
-                                        const float hierarchyW, const float inspectorW, const float availableDockW, const float mainH,
-                                        const float contentH, const float activityBarH, const EditorWorkspaceViewModel &viewModel,
+        void DrawPanelAllocationTargets(const EditorWorkspaceView::WorkspaceLayoutGeometry &geo, const EditorWorkspaceViewModel &viewModel,
                                         const WorkspacePanelRegistry &panelRegistry, EditorWorkspaceViewCommandData &outCommand,
                                         const bool panelDragEligible) {
             const ImGuiPayload *payload = ImGui::GetDragDropPayload();
@@ -172,80 +167,83 @@ namespace Horo::Editor {
             }
 
             const float retainedBottomH =
-                (std::min)((std::max)(0.0F, viewModel.bottomPanelHeight), (std::max)(0.0F, activityBarH - kMinimumMainH));
-            const float retainedMainH = (std::max)(0.0F, activityBarH - retainedBottomH);
+                (std::min)((std::max)(0.0F, viewModel.bottomPanelHeight), (std::max)(0.0F, geo.activityBarH - kMinimumMainH));
+            const float retainedMainH = (std::max)(0.0F, geo.activityBarH - retainedBottomH);
             const float retainedLeftW =
-                (std::min)((std::max)(0.0F, viewModel.leftPanelWidth), (std::max)(0.0F, availableDockW - kMinimumDocumentW));
+                (std::min)((std::max)(0.0F, viewModel.leftPanelWidth), (std::max)(0.0F, geo.availableDockW - kMinimumDocumentW));
             const float retainedRightW = (std::min)((std::max)(0.0F, viewModel.rightPanelWidth),
-                                                    (std::max)(0.0F, availableDockW - retainedLeftW - kMinimumDocumentW));
-            const float retainedDocumentW = (std::max)(0.0F, availableDockW - retainedLeftW - retainedRightW);
+                                                    (std::max)(0.0F, geo.availableDockW - retainedLeftW - kMinimumDocumentW));
+            const float retainedDocumentW = (std::max)(0.0F, geo.availableDockW - retainedLeftW - retainedRightW);
 
             const auto appendIndex = [&viewModel](const ActivityBarRail rail, const std::size_t groupIndex) {
                 return viewModel.activityBarLayout.Groups(rail)[groupIndex].items.size();
             };
-            const float retainedBottomHalfW = availableDockW * 0.5F;
+            const float retainedBottomHalfW = geo.availableDockW * 0.5F;
             const float retainedMainHalfH = retainedMainH * 0.5F;
-            const float retainedRightX = display.x - rightActivityW - retainedRightW;
+            const float retainedRightX = geo.display.x - geo.rightActivityW - retainedRightW;
             constexpr float mergeHalfSpan = 8.0F;
-            const float actualRightX = display.x - rightActivityW - inspectorW;
+            const float actualRightX = geo.display.x - geo.rightActivityW - geo.inspectorW;
             const std::array<AllocationTarget, 10> targets =
                 {AllocationTarget{"##ActivityPanelPreviewLeftTop", WorkspaceDockArea::Left,
                                   ActivityBarSlot{ActivityBarRail::Left, 0, appendIndex(ActivityBarRail::Left, 0)}, std::nullopt,
-                                  SideDockSlot::Top, ImVec2(leftActivityW, curY), ImVec2(retainedLeftW, retainedMainHalfH),
-                                  ImVec2(leftActivityW, curY), ImVec2(retainedLeftW, retainedMainHalfH)},
+                                  SideDockSlot::Top, ImVec2(geo.leftActivityW, geo.curY), ImVec2(retainedLeftW, retainedMainHalfH),
+                                  ImVec2(geo.leftActivityW, geo.curY), ImVec2(retainedLeftW, retainedMainHalfH)},
                  AllocationTarget{"##ActivityPanelPreviewLeftBottom", WorkspaceDockArea::Left,
                                   ActivityBarSlot{ActivityBarRail::Left, 1, appendIndex(ActivityBarRail::Left, 1)}, std::nullopt,
-                                  SideDockSlot::Bottom, ImVec2(leftActivityW, curY + retainedMainHalfH),
-                                  ImVec2(retainedLeftW, retainedMainH - retainedMainHalfH), ImVec2(leftActivityW, curY + retainedMainHalfH),
+                                  SideDockSlot::Bottom, ImVec2(geo.leftActivityW, geo.curY + retainedMainHalfH),
+                                  ImVec2(retainedLeftW, retainedMainH - retainedMainHalfH),
+                                  ImVec2(geo.leftActivityW, geo.curY + retainedMainHalfH),
                                   ImVec2(retainedLeftW, retainedMainH - retainedMainHalfH)},
                  AllocationTarget{"##ActivityPanelPreviewDocument", WorkspaceDockArea::Document,
                                   ActivityBarSlot{ActivityBarRail::DocumentTop, 0, appendIndex(ActivityBarRail::DocumentTop, 0)},
-                                  std::nullopt, std::nullopt, ImVec2(leftActivityW + retainedLeftW, curY),
-                                  ImVec2(retainedDocumentW, retainedMainH), ImVec2(leftActivityW + retainedLeftW, curY),
+                                  std::nullopt, std::nullopt, ImVec2(geo.leftActivityW + retainedLeftW, geo.curY),
+                                  ImVec2(retainedDocumentW, retainedMainH), ImVec2(geo.leftActivityW + retainedLeftW, geo.curY),
                                   ImVec2(retainedDocumentW, retainedMainH)},
                  AllocationTarget{"##ActivityPanelPreviewRightTop", WorkspaceDockArea::Right,
                                   ActivityBarSlot{ActivityBarRail::Right, 0, appendIndex(ActivityBarRail::Right, 0)}, std::nullopt,
-                                  SideDockSlot::Top, ImVec2(retainedRightX, curY), ImVec2(retainedRightW, retainedMainHalfH),
-                                  ImVec2(retainedRightX, curY), ImVec2(retainedRightW, retainedMainHalfH)},
+                                  SideDockSlot::Top, ImVec2(retainedRightX, geo.curY), ImVec2(retainedRightW, retainedMainHalfH),
+                                  ImVec2(retainedRightX, geo.curY), ImVec2(retainedRightW, retainedMainHalfH)},
                  AllocationTarget{"##ActivityPanelPreviewRightBottom", WorkspaceDockArea::Right,
                                   ActivityBarSlot{ActivityBarRail::Right, 1, appendIndex(ActivityBarRail::Right, 1)}, std::nullopt,
-                                  SideDockSlot::Bottom, ImVec2(retainedRightX, curY + retainedMainHalfH),
+                                  SideDockSlot::Bottom, ImVec2(retainedRightX, geo.curY + retainedMainHalfH),
                                   ImVec2(retainedRightW, retainedMainH - retainedMainHalfH),
-                                  ImVec2(retainedRightX, curY + retainedMainHalfH),
+                                  ImVec2(retainedRightX, geo.curY + retainedMainHalfH),
                                   ImVec2(retainedRightW, retainedMainH - retainedMainHalfH)},
                  AllocationTarget{"##ActivityPanelPreviewBottomLeft", WorkspaceDockArea::Bottom,
                                   ActivityBarSlot{ActivityBarRail::Left, 2, appendIndex(ActivityBarRail::Left, 2)}, BottomDockSlot::Left,
-                                  std::nullopt, ImVec2(leftActivityW, curY + retainedMainH), ImVec2(retainedBottomHalfW, retainedBottomH),
-                                  ImVec2(leftActivityW, curY + retainedMainH), ImVec2(retainedBottomHalfW, retainedBottomH)},
+                                  std::nullopt, ImVec2(geo.leftActivityW, geo.curY + retainedMainH),
+                                  ImVec2(retainedBottomHalfW, retainedBottomH), ImVec2(geo.leftActivityW, geo.curY + retainedMainH),
+                                  ImVec2(retainedBottomHalfW, retainedBottomH)},
                  AllocationTarget{"##ActivityPanelPreviewBottomRight", WorkspaceDockArea::Bottom,
                                   ActivityBarSlot{ActivityBarRail::Right, 2, appendIndex(ActivityBarRail::Right, 2)}, BottomDockSlot::Right,
-                                  std::nullopt, ImVec2(leftActivityW + retainedBottomHalfW, curY + retainedMainH),
-                                  ImVec2(availableDockW - retainedBottomHalfW, retainedBottomH),
-                                  ImVec2(leftActivityW + retainedBottomHalfW, curY + retainedMainH),
-                                  ImVec2(availableDockW - retainedBottomHalfW, retainedBottomH)},
+                                  std::nullopt, ImVec2(geo.leftActivityW + retainedBottomHalfW, geo.curY + retainedMainH),
+                                  ImVec2(geo.availableDockW - retainedBottomHalfW, retainedBottomH),
+                                  ImVec2(geo.leftActivityW + retainedBottomHalfW, geo.curY + retainedMainH),
+                                  ImVec2(geo.availableDockW - retainedBottomHalfW, retainedBottomH)},
                  AllocationTarget{"##ActivityPanelMergeLeft", WorkspaceDockArea::Left,
                                   ActivityBarSlot{ActivityBarRail::Left, 0, appendIndex(ActivityBarRail::Left, 0)}, std::nullopt,
-                                  std::nullopt, ImVec2(leftActivityW, curY + mainH * 0.5F - mergeHalfSpan),
-                                  ImVec2(hierarchyW, mergeHalfSpan * 2.0F), ImVec2(leftActivityW, curY), ImVec2(hierarchyW, mainH), true},
+                                  std::nullopt, ImVec2(geo.leftActivityW, geo.curY + geo.mainH * 0.5F - mergeHalfSpan),
+                                  ImVec2(geo.hierarchyW, mergeHalfSpan * 2.0F), ImVec2(geo.leftActivityW, geo.curY),
+                                  ImVec2(geo.hierarchyW, geo.mainH), true},
                  AllocationTarget{"##ActivityPanelMergeRight", WorkspaceDockArea::Right,
                                   ActivityBarSlot{ActivityBarRail::Right, 0, appendIndex(ActivityBarRail::Right, 0)}, std::nullopt,
-                                  std::nullopt, ImVec2(actualRightX, curY + mainH * 0.5F - mergeHalfSpan),
-                                  ImVec2(inspectorW, mergeHalfSpan * 2.0F), ImVec2(actualRightX, curY), ImVec2(inspectorW, mainH), true},
+                                  std::nullopt, ImVec2(actualRightX, geo.curY + geo.mainH * 0.5F - mergeHalfSpan),
+                                  ImVec2(geo.inspectorW, mergeHalfSpan * 2.0F), ImVec2(actualRightX, geo.curY),
+                                  ImVec2(geo.inspectorW, geo.mainH), true},
                  AllocationTarget{"##ActivityPanelMergeBottom", WorkspaceDockArea::Bottom,
                                   ActivityBarSlot{ActivityBarRail::Left, 2, appendIndex(ActivityBarRail::Left, 2)}, std::nullopt,
-                                  std::nullopt, ImVec2(leftActivityW + availableDockW * 0.5F - mergeHalfSpan, curY + mainH),
-                                  ImVec2(mergeHalfSpan * 2.0F, contentH), ImVec2(leftActivityW, curY + mainH),
-                                  ImVec2(availableDockW, contentH), true}};
+                                  std::nullopt, ImVec2(geo.leftActivityW + geo.availableDockW * 0.5F - mergeHalfSpan, geo.curY + geo.mainH),
+                                  ImVec2(mergeHalfSpan * 2.0F, geo.contentH), ImVec2(geo.leftActivityW, geo.curY + geo.mainH),
+                                  ImVec2(geo.availableDockW, geo.contentH), true}};
 
             for (const AllocationTarget &target : targets) {
                 DrawAllocationTarget(target, viewModel, outCommand, panelDragEligible);
             }
         }
 
-        void HandleSplitterResize(const WorkspaceSplitterInteractionResult &splitter, const ImVec2 &display, const float leftActivityW,
-                                  const float rightActivityW, const float mainH, const float contentH, const float hierarchyW,
-                                  const float inspectorW, const float centerW, const float bottomDockW, const float activityBarH,
-                                  const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &outCommand) {
+        void HandleSplitterResize(const WorkspaceSplitterInteractionResult &splitter,
+                                  const EditorWorkspaceView::WorkspaceLayoutGeometry &geo, const EditorWorkspaceViewModel &viewModel,
+                                  EditorWorkspaceViewCommandData &outCommand) {
             if (splitter.delta == 0.0F) {
                 return;
             }
@@ -253,43 +251,47 @@ namespace Horo::Editor {
             if (splitter.active == WorkspaceSplitterId::Left) {
                 outCommand.command = EditorWorkspaceViewCommand::ResizePanel;
                 outCommand.targetIndex = 0;
-                outCommand.floatPayload = std::max(100.0f, std::min(display.x - leftActivityW - rightActivityW - inspectorW - 100.0f,
-                                                                    viewModel.leftPanelWidth + splitter.delta));
+                outCommand.floatPayload =
+                    std::max(100.0f, std::min(geo.display.x - geo.leftActivityW - geo.rightActivityW - geo.inspectorW - 100.0f,
+                                              viewModel.leftPanelWidth + splitter.delta));
                 outCommand.layoutPayload =
                     WorkspaceLayoutSize{.leftWidth = *outCommand.floatPayload,
-                                        .leftHeight = mainH,
-                                        .rightWidth = inspectorW,
-                                        .rightHeight = mainH,
-                                        .bottomWidth = bottomDockW,
-                                        .bottomHeight = contentH,
-                                        .documentWidth = display.x - leftActivityW - *outCommand.floatPayload - inspectorW - rightActivityW,
-                                        .documentHeight = mainH};
+                                        .leftHeight = geo.mainH,
+                                        .rightWidth = geo.inspectorW,
+                                        .rightHeight = geo.mainH,
+                                        .bottomWidth = geo.bottomDockW,
+                                        .bottomHeight = geo.contentH,
+                                        .documentWidth = geo.display.x - geo.leftActivityW - *outCommand.floatPayload - geo.inspectorW -
+                                                         geo.rightActivityW,
+                                        .documentHeight = geo.mainH};
             } else if (splitter.active == WorkspaceSplitterId::Right) {
                 outCommand.command = EditorWorkspaceViewCommand::ResizePanel;
                 outCommand.targetIndex = 1;
-                outCommand.floatPayload = std::max(100.0f, std::min(display.x - leftActivityW - rightActivityW - hierarchyW - 100.0f,
-                                                                    viewModel.rightPanelWidth - splitter.delta));
-                outCommand.layoutPayload =
-                    WorkspaceLayoutSize{.leftWidth = hierarchyW,
-                                        .leftHeight = mainH,
-                                        .rightWidth = *outCommand.floatPayload,
-                                        .rightHeight = mainH,
-                                        .bottomWidth = bottomDockW,
-                                        .bottomHeight = contentH,
-                                        .documentWidth = display.x - leftActivityW - hierarchyW - *outCommand.floatPayload - rightActivityW,
-                                        .documentHeight = mainH};
+                outCommand.floatPayload =
+                    std::max(100.0f, std::min(geo.display.x - geo.leftActivityW - geo.rightActivityW - geo.hierarchyW - 100.0f,
+                                              viewModel.rightPanelWidth - splitter.delta));
+                outCommand.layoutPayload = WorkspaceLayoutSize{.leftWidth = geo.hierarchyW,
+                                                               .leftHeight = geo.mainH,
+                                                               .rightWidth = *outCommand.floatPayload,
+                                                               .rightHeight = geo.mainH,
+                                                               .bottomWidth = geo.bottomDockW,
+                                                               .bottomHeight = geo.contentH,
+                                                               .documentWidth = geo.display.x - geo.leftActivityW - geo.hierarchyW -
+                                                                                *outCommand.floatPayload - geo.rightActivityW,
+                                                               .documentHeight = geo.mainH};
             } else if (splitter.active == WorkspaceSplitterId::Bottom) {
                 outCommand.command = EditorWorkspaceViewCommand::ResizePanel;
                 outCommand.targetIndex = 2;
-                outCommand.floatPayload = std::max(100.0f, std::min(activityBarH - 100.0f, viewModel.bottomPanelHeight - splitter.delta));
-                const float newMainH = activityBarH - *outCommand.floatPayload;
-                outCommand.layoutPayload = WorkspaceLayoutSize{.leftWidth = hierarchyW,
+                outCommand.floatPayload =
+                    std::max(100.0f, std::min(geo.activityBarH - 100.0f, viewModel.bottomPanelHeight - splitter.delta));
+                const float newMainH = geo.activityBarH - *outCommand.floatPayload;
+                outCommand.layoutPayload = WorkspaceLayoutSize{.leftWidth = geo.hierarchyW,
                                                                .leftHeight = newMainH,
-                                                               .rightWidth = inspectorW,
+                                                               .rightWidth = geo.inspectorW,
                                                                .rightHeight = newMainH,
-                                                               .bottomWidth = bottomDockW,
+                                                               .bottomWidth = geo.bottomDockW,
                                                                .bottomHeight = *outCommand.floatPayload,
-                                                               .documentWidth = centerW,
+                                                               .documentWidth = geo.centerW,
                                                                .documentHeight = newMainH};
             }
         }
@@ -399,28 +401,40 @@ namespace Horo::Editor {
             curY += externalConflictH;
         }
 
+        const WorkspaceLayoutGeometry geo{
+            .display = display,
+            .curY = curY,
+            .leftActivityW = leftActivityW,
+            .rightActivityW = rightActivityW,
+            .hierarchyW = hierarchyW,
+            .inspectorW = inspectorW,
+            .centerW = centerW,
+            .bottomDockW = bottomDockW,
+            .availableDockW = availableDockW,
+            .mainH = mainH,
+            .contentH = contentH,
+            .activityBarH = activityBarH,
+        };
+
         const WorkspaceSplitterInteractionResult splitter =
-            UpdateSplitters(curY, display, leftActivityW, rightActivityW, hierarchyW, inspectorW, bottomDockW, mainH, contentH,
-                            m_splitterInteraction, m_inputRouter, m_workspaceInputContext);
+            UpdateSplitters(geo, m_splitterInteraction, m_inputRouter, m_workspaceInputContext);
 
         // ── Left Activity Bar ───────────────────────────────────────────
         DrawActivityBar(ImVec2(0.0F, curY), ImVec2(leftActivityW, activityBarH), m_panelRegistry, viewModel, outCommand,
                         {WorkspaceDockArea::Left, false, !m_splitterInteraction.OwnsPrimaryPointer()});
 
         // ── Middle Row and Bottom Dock ──────────────────────────────────
-        DrawMiddleAndBottomDocks(curY, leftActivityW, hierarchyW, inspectorW, centerW, bottomDockW, mainH, contentH, viewModel, outCommand);
+        DrawMiddleAndBottomDocks(geo, viewModel, outCommand);
 
         // ── Right Activity Bar ──────────────────────────────────────────
         DrawActivityBar(ImVec2(display.x - rightActivityW, curY), ImVec2(rightActivityW, activityBarH), m_panelRegistry, viewModel,
                         outCommand, {WorkspaceDockArea::Right, true, !m_splitterInteraction.OwnsPrimaryPointer()});
 
         // ── Allocation & merge drop targets ─────────────────────────────
-        DrawPanelAllocationTargets(display, curY, leftActivityW, rightActivityW, hierarchyW, inspectorW, availableDockW, mainH, contentH,
-                                   activityBarH, viewModel, m_panelRegistry, outCommand, PanelDragEligible());
+        DrawPanelAllocationTargets(geo, viewModel, m_panelRegistry, outCommand, PanelDragEligible());
 
         // ── Splitter Resizing ───────────────────────────────────────────
-        HandleSplitterResize(splitter, display, leftActivityW, rightActivityW, mainH, contentH, hierarchyW, inspectorW, centerW,
-                             bottomDockW, activityBarH, viewModel, outCommand);
+        HandleSplitterResize(splitter, geo, viewModel, outCommand);
     }
 
     namespace {
@@ -1063,61 +1077,60 @@ namespace Horo::Editor {
         ImGui::PopStyleColor(2);
     }
 
-    void EditorWorkspaceView::DrawMiddleAndBottomDocks(const float curY, const float leftActivityW, const float hierarchyW,
-                                                       const float inspectorW, const float centerW, const float bottomDockW,
-                                                       const float mainH, const float contentH, const EditorWorkspaceViewModel &viewModel,
+    void EditorWorkspaceView::DrawMiddleAndBottomDocks(const WorkspaceLayoutGeometry &geo, const EditorWorkspaceViewModel &viewModel,
                                                        EditorWorkspaceViewCommandData &outCommand) {
-        float curX = leftActivityW;
+        float curX = geo.leftActivityW;
 
         // Left Dock
-        if (hierarchyW > 0.0F) {
+        if (geo.hierarchyW > 0.0F) {
             if (viewModel.leftDockMode == SideDockMode::Full) {
-                DrawDockArea(WorkspaceDockArea::Left, "##DockLeft", ImVec2(curX, curY), ImVec2(hierarchyW, mainH),
+                DrawDockArea(WorkspaceDockArea::Left, "##DockLeft", ImVec2(curX, geo.curY), ImVec2(geo.hierarchyW, geo.mainH),
                              viewModel.activeLeftPanelId, viewModel, outCommand);
             } else {
-                const float halfHeight = mainH * 0.5F;
-                DrawDockArea(WorkspaceDockArea::Left, "##DockLeftTop", ImVec2(curX, curY), ImVec2(hierarchyW, halfHeight),
+                const float halfHeight = geo.mainH * 0.5F;
+                DrawDockArea(WorkspaceDockArea::Left, "##DockLeftTop", ImVec2(curX, geo.curY), ImVec2(geo.hierarchyW, halfHeight),
                              viewModel.activeLeftTopPanelId, viewModel, outCommand);
-                DrawDockArea(WorkspaceDockArea::Left, "##DockLeftBottom", ImVec2(curX, curY + halfHeight),
-                             ImVec2(hierarchyW, mainH - halfHeight), viewModel.activeLeftBottomPanelId, viewModel, outCommand);
+                DrawDockArea(WorkspaceDockArea::Left, "##DockLeftBottom", ImVec2(curX, geo.curY + halfHeight),
+                             ImVec2(geo.hierarchyW, geo.mainH - halfHeight), viewModel.activeLeftBottomPanelId, viewModel, outCommand);
             }
-            curX += hierarchyW;
+            curX += geo.hierarchyW;
         }
 
         // Document Dock
-        DrawDockArea(WorkspaceDockArea::Document, "##DockDocument", ImVec2(curX, curY), ImVec2(centerW, mainH),
+        DrawDockArea(WorkspaceDockArea::Document, "##DockDocument", ImVec2(curX, geo.curY), ImVec2(geo.centerW, geo.mainH),
                      viewModel.activeDocumentPanelId, viewModel, outCommand);
-        curX += centerW;
+        curX += geo.centerW;
 
         // Right Dock
-        if (inspectorW > 0.0F) {
+        if (geo.inspectorW > 0.0F) {
             if (viewModel.rightDockMode == SideDockMode::Full) {
-                DrawDockArea(WorkspaceDockArea::Right, "##DockRight", ImVec2(curX, curY), ImVec2(inspectorW, mainH),
+                DrawDockArea(WorkspaceDockArea::Right, "##DockRight", ImVec2(curX, geo.curY), ImVec2(geo.inspectorW, geo.mainH),
                              viewModel.activeRightPanelId, viewModel, outCommand);
             } else {
-                const float halfHeight = mainH * 0.5F;
-                DrawDockArea(WorkspaceDockArea::Right, "##DockRightTop", ImVec2(curX, curY), ImVec2(inspectorW, halfHeight),
+                const float halfHeight = geo.mainH * 0.5F;
+                DrawDockArea(WorkspaceDockArea::Right, "##DockRightTop", ImVec2(curX, geo.curY), ImVec2(geo.inspectorW, halfHeight),
                              viewModel.activeRightTopPanelId, viewModel, outCommand);
-                DrawDockArea(WorkspaceDockArea::Right, "##DockRightBottom", ImVec2(curX, curY + halfHeight),
-                             ImVec2(inspectorW, mainH - halfHeight), viewModel.activeRightBottomPanelId, viewModel, outCommand);
+                DrawDockArea(WorkspaceDockArea::Right, "##DockRightBottom", ImVec2(curX, geo.curY + halfHeight),
+                             ImVec2(geo.inspectorW, geo.mainH - halfHeight), viewModel.activeRightBottomPanelId, viewModel, outCommand);
             }
         }
 
         // Bottom Dock
-        if (contentH > 0.0F) {
-            const ImVec2 bottomPos(leftActivityW, curY + mainH);
+        if (geo.contentH > 0.0F) {
+            const ImVec2 bottomPos(geo.leftActivityW, geo.curY + geo.mainH);
             if (viewModel.bottomDockMode == BottomDockMode::Full) {
-                DrawDockArea(WorkspaceDockArea::Bottom, "##DockBottom", bottomPos, ImVec2(bottomDockW, contentH),
+                DrawDockArea(WorkspaceDockArea::Bottom, "##DockBottom", bottomPos, ImVec2(geo.bottomDockW, geo.contentH),
                              viewModel.activeBottomPanelId, viewModel, outCommand);
             } else {
-                const float halfWidth = bottomDockW * 0.5F;
+                const float halfWidth = geo.bottomDockW * 0.5F;
                 if (!viewModel.activeBottomLeftPanelId.empty()) {
-                    DrawDockArea(WorkspaceDockArea::Bottom, "##DockBottomLeft", bottomPos, ImVec2(halfWidth, contentH),
+                    DrawDockArea(WorkspaceDockArea::Bottom, "##DockBottomLeft", bottomPos, ImVec2(halfWidth, geo.contentH),
                                  viewModel.activeBottomLeftPanelId, viewModel, outCommand);
                 }
                 if (!viewModel.activeBottomRightPanelId.empty()) {
                     DrawDockArea(WorkspaceDockArea::Bottom, "##DockBottomRight", ImVec2(bottomPos.x + halfWidth, bottomPos.y),
-                                 ImVec2(bottomDockW - halfWidth, contentH), viewModel.activeBottomRightPanelId, viewModel, outCommand);
+                                 ImVec2(geo.bottomDockW - halfWidth, geo.contentH), viewModel.activeBottomRightPanelId, viewModel,
+                                 outCommand);
                 }
             }
         }
@@ -1147,25 +1160,25 @@ namespace Horo::Editor {
         ImGui::PopID();
     }
 
-    void EditorWorkspaceView::DrawActivityBarGroup(const std::size_t groupIndex, const ActivityBarGroup &group, const float groupTop,
-                                                   const float groupBottom, const ImVec2 &pos, const ImVec2 &size,
-                                                   const ActivityBarGeometry &geometry, const ActivityBarOptions &options,
-                                                   const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &outCommand,
-                                                   const bool draggingActivityItem) {
-        if (groupIndex > 0) {
-            geometry.drawList->AddLine(ImVec2(geometry.cellX + 6.0F, geometry.contentY + groupTop),
-                                       ImVec2(geometry.cellX + geometry.cellSize - 6.0F, geometry.contentY + groupTop),
-                                       Theme::U32(Theme::Border()), 1.0F);
+    void EditorWorkspaceView::DrawActivityBarGroup(const ActivityBarGroupParams &params, const EditorWorkspaceViewModel &viewModel,
+                                                   EditorWorkspaceViewCommandData &outCommand) {
+        if (params.groupIndex > 0) {
+            params.geometry.drawList->AddLine(ImVec2(params.geometry.cellX + 6.0F, params.geometry.contentY + params.groupTop),
+                                              ImVec2(params.geometry.cellX + params.geometry.cellSize - 6.0F,
+                                                     params.geometry.contentY + params.groupTop),
+                                              Theme::U32(Theme::Border()), 1.0F);
         }
 
-        ImGui::PushClipRect(ImVec2(pos.x, geometry.contentY + groupTop), ImVec2(pos.x + size.x, geometry.contentY + groupBottom), true);
+        ImGui::PushClipRect(ImVec2(params.pos.x, params.geometry.contentY + params.groupTop),
+                            ImVec2(params.pos.x + params.size.x, params.geometry.contentY + params.groupBottom), true);
 
-        const ActivityBarRail rail = options.area == WorkspaceDockArea::Right ? ActivityBarRail::Right : ActivityBarRail::Left;
-        float currentY = groupTop;
+        const ActivityBarRail rail = params.options.area == WorkspaceDockArea::Right ? ActivityBarRail::Right : ActivityBarRail::Left;
+        float currentY = params.groupTop;
 
-        if (group.items.empty()) {
-            if (draggingActivityItem) {
-                DrawActivityDropSlot(ActivityBarSlot{rail, groupIndex, 0}, currentY, draggingActivityItem, geometry, outCommand);
+        if (params.group.items.empty()) {
+            if (params.draggingActivityItem) {
+                DrawActivityDropSlot(ActivityBarSlot{rail, params.groupIndex, 0}, currentY, params.draggingActivityItem, params.geometry,
+                                     outCommand);
             }
             ImGui::PopClipRect();
             return;
@@ -1180,21 +1193,23 @@ namespace Horo::Editor {
             return {};
         };
 
-        for (std::size_t itemIndex = 0; itemIndex < group.items.size(); ++itemIndex) {
-            if (DrawActivityDropSlot(ActivityBarSlot{rail, groupIndex, itemIndex}, currentY, draggingActivityItem, geometry, outCommand)) {
-                currentY += geometry.cellSize;
+        for (std::size_t itemIndex = 0; itemIndex < params.group.items.size(); ++itemIndex) {
+            if (DrawActivityDropSlot(ActivityBarSlot{rail, params.groupIndex, itemIndex}, currentY, params.draggingActivityItem,
+                                     params.geometry, outCommand)) {
+                currentY += params.geometry.cellSize;
             }
 
-            const std::string &panelId = group.items[itemIndex];
+            const std::string &panelId = params.group.items[itemIndex];
             const auto panel = findPanel(panelId);
             if (!panel) {
                 continue;
             }
 
-            currentY = DrawActivityItem(panelId, currentY, geometry, viewModel, outCommand, options, panel);
+            currentY = DrawActivityItem(panelId, currentY, params.geometry, viewModel, outCommand, params.options, panel);
         }
 
-        DrawActivityDropSlot(ActivityBarSlot{rail, groupIndex, group.items.size()}, currentY, draggingActivityItem, geometry, outCommand);
+        DrawActivityDropSlot(ActivityBarSlot{rail, params.groupIndex, params.group.items.size()}, currentY, params.draggingActivityItem,
+                             params.geometry, outCommand);
 
         ImGui::PopClipRect();
     }
@@ -1240,8 +1255,16 @@ namespace Horo::Editor {
         for (std::size_t groupIndex = 0; groupIndex < groups.size(); ++groupIndex) {
             const float groupTop = static_cast<float>(groupIndex) * groupHeight;
             const float groupBottom = groupTop + groupHeight;
-            DrawActivityBarGroup(groupIndex, groups[groupIndex], groupTop, groupBottom, pos, size, geometry, options, viewModel, outCommand,
-                                 draggingActivityItem);
+            DrawActivityBarGroup(ActivityBarGroupParams{.groupIndex = groupIndex,
+                                                        .group = groups[groupIndex],
+                                                        .groupTop = groupTop,
+                                                        .groupBottom = groupBottom,
+                                                        .pos = pos,
+                                                        .size = size,
+                                                        .geometry = geometry,
+                                                        .options = options,
+                                                        .draggingActivityItem = draggingActivityItem},
+                                 viewModel, outCommand);
         }
 
         ImGui::End();

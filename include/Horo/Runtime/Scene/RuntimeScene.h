@@ -208,7 +208,7 @@ namespace Horo::Runtime {
         /** @brief Applies a structural batch atomically, leaving the scene unchanged on failure. @param commands
          * Owner-thread command batch consumed by the operation. @return Created-token resolutions and destroy count, or the
          * first typed error. */
-        [[nodiscard]] Result<StructuralCommitResult> Commit(SceneCommandBuffer commands);
+        [[nodiscard]] Result<StructuralCommitResult> Commit(const SceneCommandBuffer &commands);
 
     private:
         friend class RuntimeSceneView;

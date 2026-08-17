@@ -346,7 +346,6 @@ namespace Horo::Editor {
         EditorSettingsService *settingsService_;
         LocalizationService *localization_;
         EngineDataBus *engineEvents_;
-        ProjectCreationService *creationService_;
         std::uintptr_t logoTexture_{0};
         Extensions::ExtensionInventory *extensionInventory_{};
         Extensions::ExtensionMarketplaceService *extensionMarketplace_{};
@@ -365,8 +364,6 @@ namespace Horo::Editor {
 
         GuiRoute activeRoute_;
         GuiRouteRevision activeRevision_{0};
-        ScreenInstanceId nextScreenInstanceId_{1};
-        NavigationAttemptId nextAttemptId_{1};
 
         std::unique_ptr<GuiScreen> activeScreen_;
         std::optional<GuiRoute> pendingNavigation_;

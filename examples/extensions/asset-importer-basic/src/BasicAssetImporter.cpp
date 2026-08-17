@@ -1,6 +1,7 @@
 #include "Horo/Extensions/ExtensionAbi.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <new>
@@ -16,7 +17,7 @@ namespace {
     constexpr char kSettingId[] = "invertPreview";
     constexpr char kSettingLabel[] = "examples.asset_importer_basic.invert_preview";
     constexpr char kSettingDescription[] = "examples.asset_importer_basic.invert_preview.description";
-    constexpr std::uint8_t kPayloadMagic[]{'H', 'R', 'A', 'W', 1U};
+    constexpr std::array<std::uint8_t, 5> kPayloadMagic{'H', 'R', 'A', 'W', 1U};
 
     template <std::size_t Size> constexpr HoroExtensionStringView Text(const char (&value)[Size]) {
         return {value, static_cast<std::uint32_t>(Size - 1)};
@@ -39,15 +40,15 @@ namespace {
             request->cancellation.isCancellationRequested(request->cancellation.context) != 0)
             return HORO_EXTENSION_ERROR_CANCELLED;
 
-        const std::uint64_t outputSize = sizeof(kPayloadMagic) + request->sourceByteCount;
+        const std::uint64_t outputSize = kPayloadMagic.size() + request->sourceByteCount;
         std::uint8_t *output = nullptr;
         if (response->editorPayload.resize(response->editorPayload.context, outputSize, &output) != HORO_EXTENSION_SUCCESS ||
             output == nullptr)
             return HORO_EXTENSION_ERROR_OUTPUT_REJECTED;
 
-        std::memcpy(output, kPayloadMagic, sizeof(kPayloadMagic));
+        std::memcpy(output, kPayloadMagic.data(), kPayloadMagic.size());
         if (request->sourceByteCount != 0)
-            std::memcpy(output + sizeof(kPayloadMagic), request->sourceBytes, static_cast<std::size_t>(request->sourceByteCount));
+            std::memcpy(output + kPayloadMagic.size(), request->sourceBytes, static_cast<std::size_t>(request->sourceByteCount));
         response->assetType = Text(kAssetType);
         ++static_cast<ImporterState *>(context)->invocationCount;
         return HORO_EXTENSION_SUCCESS;

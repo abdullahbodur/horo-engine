@@ -49,8 +49,8 @@ namespace Horo::Editor {
                                  Extensions::ExtensionInventory *extensionInventory,
                                  Extensions::ExtensionMarketplaceService *extensionMarketplace)
         : context_(&context), modalHost_(&modalHost), settingsService_(&settingsService), localization_(&localization),
-          engineEvents_(&engineEvents), creationService_(&creationService), logoTexture_(logoTexture),
-          extensionInventory_(extensionInventory), extensionMarketplace_(extensionMarketplace), screenRegistry_(std::move(screenRegistry)),
+          engineEvents_(&engineEvents), logoTexture_(logoTexture), extensionInventory_(extensionInventory),
+          extensionMarketplace_(extensionMarketplace), screenRegistry_(std::move(screenRegistry)),
           workspacePanelRegistry_(std::move(workspacePanelRegistry)), activeRoute_{GuiRouteKind::Welcome, WelcomeRouteParameters{}} {
         services_.Register(*this);
         services_.RegisterConst(context);

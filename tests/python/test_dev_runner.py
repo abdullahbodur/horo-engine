@@ -363,9 +363,12 @@ def test_main_test_command_filters_and_invokes_ctest(monkeypatch: pytest.MonkeyP
     assert len(calls) == 3
     ctest_call = calls[2]
     assert ctest_call[0] == "ctest"
-    assert "-R" in ctest_call and "SceneDocument" in ctest_call
-    assert "-E" in ctest_call and "Slow" in ctest_call
-    assert "-LE" in ctest_call and "gui" in ctest_call
+    assert "-R" in ctest_call
+    assert "SceneDocument" in ctest_call
+    assert "-E" in ctest_call
+    assert "Slow" in ctest_call
+    assert "-LE" in ctest_call
+    assert "gui" in ctest_call
 
 
 def test_main_check_command_invokes_full_ci_pass(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

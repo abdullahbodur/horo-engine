@@ -375,7 +375,7 @@ namespace Horo::Editor::Ui {
      * @return True when the text changed.
      */
     [[nodiscard]] bool InputTextControl(const char *id, char *buffer, size_t bufferSize, const Theme::Fonts &fonts,
-                                        InputTextOptions options = {});
+                                        const InputTextOptions &options = {});
 
     /**
      * @brief Renders the string-backed overload of the shared input text field.
@@ -387,7 +387,7 @@ namespace Horo::Editor::Ui {
      * @return True when the text changed.
      */
     [[nodiscard]] bool InputTextControl(const char *id, std::string &value, size_t maxSize, const Theme::Fonts &fonts,
-                                        InputTextOptions options = {});
+                                        const InputTextOptions &options = {});
 
     /**
      * @brief Presentation metadata for one line in a selectable text block.

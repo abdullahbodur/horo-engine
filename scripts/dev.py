@@ -645,6 +645,9 @@ def _is_formattable(path: Path) -> bool:
 
 def _collect_format_candidates(files: Sequence[str] | None, staged: bool) -> list[Path]:
     """Resolve file paths to format based on staged flag or explicit arguments."""
+    if files:
+        return [p for f in files if (p := Path(f).resolve()).is_file() and p.suffix in _CPP_EXTENSIONS]
+
     if staged:
         proc = subprocess.run(
             ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR"],
@@ -654,8 +657,6 @@ def _collect_format_candidates(files: Sequence[str] | None, staged: bool) -> lis
             check=False,
         )
         candidates = [REPOSITORY_ROOT / line.strip() for line in proc.stdout.splitlines() if line.strip()]
-    elif files:
-        candidates = [Path(f).resolve() for f in files]
     else:
         proc = subprocess.run(["git", "ls-files"], cwd=REPOSITORY_ROOT, capture_output=True, text=True, check=False)
         candidates = [REPOSITORY_ROOT / line.strip() for line in proc.stdout.splitlines() if line.strip()]
@@ -1042,12 +1043,14 @@ def _configure_terminal_environment() -> None:
             pass
 
 
-def main(arguments: Sequence[str] | None = None) -> int:
-    """Run the developer command-line interface."""
-    _configure_terminal_environment()
-    parser = create_argument_parser()
-    parsed, unparsed = parser.parse_known_args(arguments)
+def _require_no_unparsed(parser: argparse.ArgumentParser, unparsed: Sequence[str]) -> None:
+    """Ensure no extra positional or unknown option arguments were provided."""
+    if unparsed:
+        parser.error(f"unrecognized arguments: {' '.join(unparsed)}")
 
+
+def _dispatch_command(parsed: argparse.Namespace, unparsed: Sequence[str], parser: argparse.ArgumentParser) -> int:
+    """Dispatch parsed subcommand to its respective handler."""
     if not parsed.command or parsed.command == "help":
         return _handle_help(parser, getattr(parsed, "topic", None))
 
@@ -1059,13 +1062,11 @@ def main(arguments: Sequence[str] | None = None) -> int:
         return _handle_doctor(parsed, doc_settings)
 
     if parsed.command == "format":
-        if unparsed:
-            parser.error(f"unrecognized arguments: {' '.join(unparsed)}")
+        _require_no_unparsed(parser, unparsed)
         return run_format(files=parsed.files, staged=parsed.staged, check=parsed.check)
 
     if parsed.command == "build":
-        if unparsed:
-            parser.error(f"unrecognized arguments: {' '.join(unparsed)}")
+        _require_no_unparsed(parser, unparsed)
         return run_build(
             target=parsed.target,
             build_directory=parsed.dir,
@@ -1075,8 +1076,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         )
 
     if parsed.command == "test":
-        if unparsed:
-            parser.error(f"unrecognized arguments: {' '.join(unparsed)}")
+        _require_no_unparsed(parser, unparsed)
         active_regex = parsed.regex_opt or parsed.regex
         return run_tests(
             regex=active_regex,
@@ -1088,8 +1088,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         )
 
     if parsed.command == "check":
-        if unparsed:
-            parser.error(f"unrecognized arguments: {' '.join(unparsed)}")
+        _require_no_unparsed(parser, unparsed)
         return run_check(
             regex=parsed.regex,
             gui=parsed.gui,
@@ -1106,6 +1105,13 @@ def main(arguments: Sequence[str] | None = None) -> int:
 
     return _handle_run(parsed, settings, unparsed)
 
+
+def main(arguments: Sequence[str] | None = None) -> int:
+    """Run the developer command-line interface."""
+    _configure_terminal_environment()
+    parser = create_argument_parser()
+    parsed, unparsed = parser.parse_known_args(arguments)
+    return _dispatch_command(parsed, unparsed, parser)
 
 
 if __name__ == "__main__":

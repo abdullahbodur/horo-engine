@@ -2,6 +2,7 @@
 
 #include "Horo/Editor/EditorSettingsStore.h"
 
+#include <array>
 #include <cstdint>
 #include <string>
 
@@ -83,7 +84,7 @@ namespace Horo::Editor {
         std::string selectedExtensionId;
         std::string marketplaceQuery;
         int selectedPlugin = 0;
-        int pluginDetailTab[3] = {};
+        std::array<int, 3> pluginDetailTab{};
         std::string pluginFilter;
         std::string modalFeedback;
 
