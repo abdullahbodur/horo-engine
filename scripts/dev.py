@@ -493,8 +493,10 @@ def print_summary(settings: DeveloperSettings, collector_status: str, build_dire
 def execute_subprocess(command: Sequence[str], cwd: Path = REPOSITORY_ROOT, env: Mapping[str, str] | None = None) -> int:
     """Run a subprocess with clear error reporting and interrupt handling."""
     try:
-        use_shell = sys.platform == "win32" and bool(command) and str(command[0]).lower().endswith((".cmd", ".bat"))
-        result = subprocess.run(command, cwd=cwd, env=env, check=False, shell=use_shell)
+        kwargs = {}
+        if sys.platform == "win32" and bool(command) and str(command[0]).lower().endswith((".cmd", ".bat")):
+            kwargs["shell"] = True
+        result = subprocess.run(command, cwd=cwd, env=env, check=False, **kwargs)
         return result.returncode
     except FileNotFoundError as error:
         print(f"error: command not found: {error.filename or command[0]}", file=sys.stderr)
@@ -736,8 +738,10 @@ def _check_tool_version(
         return None
 
     try:
-        use_shell = sys.platform == "win32" and found_bin.lower().endswith((".cmd", ".bat"))
-        proc = subprocess.run([found_bin, version_flag], capture_output=True, text=True, check=False, shell=use_shell)
+        kwargs = {}
+        if sys.platform == "win32" and found_bin.lower().endswith((".cmd", ".bat")):
+            kwargs["shell"] = True
+        proc = subprocess.run([found_bin, version_flag], capture_output=True, text=True, check=False, **kwargs)
         first_line = proc.stdout.splitlines()[0] if proc.stdout else "available"
         report.add(category, name, CheckStatus.OK, first_line, details=f"binary: {found_bin}")
         return found_bin
