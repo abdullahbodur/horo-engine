@@ -65,39 +65,30 @@ namespace Horo::Editor {
 
     SceneObjectId InspectorEditSession::ResolvePrimaryId(const std::span<const ObjectTransformBaseline> baselines,
                                                          const std::optional<SceneObjectId> primary) noexcept {
-        if (primary.has_value() && std::ranges::find(baselines, *primary, &ObjectTransformBaseline::object) != baselines
-            .end())
+        if (primary.has_value() && std::ranges::find(baselines, *primary, &ObjectTransformBaseline::object) != baselines.end())
             return *primary;
         return baselines.empty() ? SceneObjectId{} : baselines.front().object;
     }
 
     std::optional<Math::Transform> InspectorEditSession::CalculateUpdatedTransform(
-        const Math::Transform &baselineTransform, const InspectorObjectDraft &draft,
-        const std::array<float, 3> &referencePosition, const std::array<float, 3> &referenceRotationDegrees,
-        const std::array<float, 3> &referenceScale, const InspectorTransformAxisMask &editedAxes,
-        const InspectorTransformAxisMask &relativeAxes) {
+        const Math::Transform &baselineTransform, const InspectorObjectDraft &draft, const std::array<float, 3> &referencePosition,
+        const std::array<float, 3> &referenceRotationDegrees, const std::array<float, 3> &referenceScale,
+        const InspectorTransformAxisMask &editedAxes, const InspectorTransformAxisMask &relativeAxes) {
         std::array position = ToArray(baselineTransform.translation);
         std::array rotation = ToEulerDegrees(baselineTransform.rotation);
         std::array scale = ToArray(baselineTransform.scale);
         for (std::size_t axis = 0; axis < 3; ++axis) {
             if (editedAxes.position[axis])
-                position[axis] = relativeAxes.position[axis]
-                                     ? position[axis] + (draft.position[axis] - referencePosition[axis])
-                                     : draft.position[axis];
+                position[axis] =
+                    relativeAxes.position[axis] ? position[axis] + (draft.position[axis] - referencePosition[axis]) : draft.position[axis];
             if (editedAxes.rotation[axis])
                 rotation[axis] = relativeAxes.rotation[axis]
                                      ? rotation[axis] + (draft.rotationDegrees[axis] - referenceRotationDegrees[axis])
                                      : draft.rotationDegrees[axis];
             if (editedAxes.scale[axis])
-                scale[axis] =
-                        relativeAxes.scale[axis]
-                            ? scale[axis] + (draft.scale[axis] - referenceScale[axis])
-                            : draft.scale[axis];
+                scale[axis] = relativeAxes.scale[axis] ? scale[axis] + (draft.scale[axis] - referenceScale[axis]) : draft.scale[axis];
         }
-        const Math::Vec3 rotationRadians{
-            rotation[0] * DegreesToRadians, rotation[1] * DegreesToRadians,
-            rotation[2] * DegreesToRadians
-        };
+        const Math::Vec3 rotationRadians{rotation[0] * DegreesToRadians, rotation[1] * DegreesToRadians, rotation[2] * DegreesToRadians};
         const Result<Math::Quaternion> quaternion = Math::Quaternion::TryFromEulerRadians(rotationRadians);
         if (quaternion.HasError())
             return std::nullopt;
@@ -454,8 +445,7 @@ namespace Horo::Editor {
         updates.reserve(m_baselines.size());
         for (const ObjectTransformBaseline &baseline : m_baselines) {
             const auto updated = CalculateUpdatedTransform(baseline.localTransform, m_draft, m_referencePosition,
-                                                           m_referenceRotationDegrees, m_referenceScale, m_editedAxes,
-                                                           m_relativeAxes);
+                                                           m_referenceRotationDegrees, m_referenceScale, m_editedAxes, m_relativeAxes);
             if (!updated.has_value())
                 return {};
             updates.emplace_back(baseline.object, *updated);

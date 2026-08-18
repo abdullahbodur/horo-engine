@@ -27,31 +27,25 @@ namespace Horo::Runtime {
             return error;
         }
 
-        [[nodiscard]] Result<void> ValidatePreparation(const RuntimeSceneDefinition &definition,
-                                                       const RuntimeSceneConfig config,
-                                                       const RuntimeSceneAssetLimits &limits,
-                                                       const std::uint64_t nextRuntimeId) {
+        [[nodiscard]] Result<void> ValidatePreparation(const RuntimeSceneDefinition &definition, const RuntimeSceneConfig config,
+                                                       const RuntimeSceneAssetLimits &limits, const std::uint64_t nextRuntimeId) {
             if (nextRuntimeId == 0)
-                return Result<void>::Failure(MakeError(SceneErrors::InvalidCandidate,
-                                                       "Runtime scene identity space is exhausted."));
-            if (config.maximumGeneration == 0 || limits.maximumDependencies == 0 || limits.maximumConcurrentLoads == 0
-                ||
+                return Result<void>::Failure(MakeError(SceneErrors::InvalidCandidate, "Runtime scene identity space is exhausted."));
+            if (config.maximumGeneration == 0 || limits.maximumDependencies == 0 || limits.maximumConcurrentLoads == 0 ||
                 limits.maximumResidentBytes == 0)
                 return Result<void>::Failure(MakeError(SceneErrors::AssetLimitsInvalid));
             if (definition.AssetDependencies().size() > limits.maximumDependencies)
                 return Result<void>::Failure(
-                    MakeError(SceneErrors::AssetBudgetExceeded,
-                              "Runtime scene dependency count exceeds the configured limit."));
+                    MakeError(SceneErrors::AssetBudgetExceeded, "Runtime scene dependency count exceeds the configured limit."));
             return Result<void>::Success();
         }
 
         [[nodiscard]] Result<void> CheckDependenciesExist(const RuntimeSceneDefinition &definition,
                                                           const Assets::AssetRegistrySnapshot &snapshot) {
-            for (const SceneAssetDependency &dependency: definition.AssetDependencies()) {
+            for (const SceneAssetDependency &dependency : definition.AssetDependencies()) {
                 const Assets::AssetRecord *record = snapshot.Find(dependency.id);
                 if (!record)
-                    return Result<void>::Failure(
-                        WithAssetContext(MakeError(SceneErrors::AssetMissing), definition.Id(), dependency.id));
+                    return Result<void>::Failure(WithAssetContext(MakeError(SceneErrors::AssetMissing), definition.Id(), dependency.id));
                 if (record->type != dependency.expectedType)
                     return Result<void>::Failure(
                         WithAssetContext(MakeError(SceneErrors::AssetTypeMismatch), definition.Id(), dependency.id));
@@ -187,9 +181,8 @@ namespace Horo::Runtime {
         if (assets.size() != definition.AssetDependencies().size())
             return Failure<std::unique_ptr<RuntimeScene>>(SceneErrors::InvalidCandidate,
                                                           "Resolved asset set does not match the definition.");
-        auto scene = std::make_unique < RuntimeScene > (
-                         runtimeId, definition.Id(), definition.Revision(), config, assetRevision,
-                         std::move(assets));
+        auto scene =
+            std::make_unique<RuntimeScene>(runtimeId, definition.Id(), definition.Revision(), config, assetRevision, std::move(assets));
         scene->storage_.slots.reserve(definition.Entities().size());
         scene->storage_.authoredIndex.reserve(definition.Entities().size());
 
@@ -217,9 +210,8 @@ namespace Horo::Runtime {
         if (!active_ || !runtimeId.IsValid() || runtimeId == active_->runtimeId_)
             return Failure<std::unique_ptr<RuntimeScene>>(SceneErrors::InvalidCandidate,
                                                           "An active scene and a distinct runtime identity are required.");
-        auto clone = std::make_unique < RuntimeScene > (runtimeId, active_->definitionId_, active_->definitionRevision_,
-                                                        active_->config_, active_->assetRegistryRevision_, active_->
-                                                        assets_);
+        auto clone = std::make_unique<RuntimeScene>(runtimeId, active_->definitionId_, active_->definitionRevision_, active_->config_,
+                                                    active_->assetRegistryRevision_, active_->assets_);
         clone->storage_ = active_->storage_;
         return Result<std::unique_ptr<RuntimeScene>>::Success(std::move(clone));
     }
@@ -313,8 +305,7 @@ namespace Horo::Runtime {
         }
 
         Result<void> operator()(const SceneCommandBuffer::DestroyCommand &destroy) const {
-            if (const Result<void> destroyedResult = scene.DestroyEntity(candidate, destroy.entity); destroyedResult.
-                HasError())
+            if (const Result<void> destroyedResult = scene.DestroyEntity(candidate, destroy.entity); destroyedResult.HasError())
                 return Result<void>::Failure(destroyedResult.ErrorValue());
             ++result.destroyed;
             return Result<void>::Success();
@@ -322,8 +313,7 @@ namespace Horo::Runtime {
 
         Result<void> operator()(const SceneCommandBuffer::SetLocalTransformCommand &transform) const {
             if (!scene.IsValid(candidate, transform.entity) || transform.localTransform.TryToMatrix().HasError())
-                return Result<void>::Failure(
-                    MakeError(SceneErrors::InvalidEntity, "Deferred transform target or value is invalid."));
+                return Result<void>::Failure(MakeError(SceneErrors::InvalidEntity, "Deferred transform target or value is invalid."));
             candidate.slots[transform.entity.entity.index].localTransform = transform.localTransform;
             ++result.transformsUpdated;
             return Result<void>::Success();
@@ -386,20 +376,14 @@ namespace Horo::Runtime {
         return BeginPreparation(definition, config);
     }
 
-    Result<void> RuntimeSceneService::PopulatePreparationEntries(Preparation &prep,
-                                                                 const RuntimeSceneDefinition &definition) const {
+    Result<void> RuntimeSceneService::PopulatePreparationEntries(Preparation &prep, const RuntimeSceneDefinition &definition) const {
         prep.entries.reserve(definition.AssetDependencies().size());
-        for (const SceneAssetDependency &dependency: definition.AssetDependencies()) {
+        for (const SceneAssetDependency &dependency : definition.AssetDependencies()) {
             Preparation::Entry entry{dependency};
-            if (active_ &&active_
-            ->
-            assetRegistryRevision_ == prep.snapshot.Revision()
-            )
-            {
-                const auto reusable = std::ranges::find(active_->assets_, dependency.id,
-                                                        [](const RuntimeScene::ResolvedAsset &asset) {
-                                                            return asset.dependency.id;
-                                                        });
+            if (active_ && active_->assetRegistryRevision_ == prep.snapshot.Revision()) {
+                const auto reusable = std::ranges::find(active_->assets_, dependency.id, [](const RuntimeScene::ResolvedAsset &asset) {
+                    return asset.dependency.id;
+                });
                 if (reusable != active_->assets_.end() && reusable->dependency.expectedType == dependency.expectedType)
                     entry.payload = reusable->payload;
             }
@@ -415,10 +399,8 @@ namespace Horo::Runtime {
         return Result<void>::Success();
     }
 
-    Result<void> RuntimeSceneService::BeginPreparation(const RuntimeSceneDefinition &definition,
-                                                       const RuntimeSceneConfig config) {
-        if (const auto validation = ValidatePreparation(definition, config, assetLimits_, nextRuntimeId_); validation.
-            HasError())
+    Result<void> RuntimeSceneService::BeginPreparation(const RuntimeSceneDefinition &definition, const RuntimeSceneConfig config) {
+        if (const auto validation = ValidatePreparation(definition, config, assetLimits_, nextRuntimeId_); validation.HasError())
             return validation;
 
         if (definition.AssetDependencies().empty()) {
@@ -603,10 +585,8 @@ namespace Horo::Runtime {
 
         if (!assetRegistry_ || assetRegistry_->Snapshot().Revision() != preparation_->snapshot.Revision()) {
             Error error = MakeError(SceneErrors::AssetRevisionStale);
-            error.diagnostics.emplace_back(DiagnosticCode{"scene.asset.registry_revision"},
-                                           DiagnosticSeverity::Note,
-                                           "The authoritative registry revision changed before activation.",
-                                           SourceLocation{});
+            error.diagnostics.emplace_back(DiagnosticCode{"scene.asset.registry_revision"}, DiagnosticSeverity::Note,
+                                           "The authoritative registry revision changed before activation.", SourceLocation{});
             CancelPreparation(false);
             operationError_ = std::move(error);
             return;

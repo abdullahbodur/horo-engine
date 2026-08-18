@@ -493,7 +493,8 @@ def print_summary(settings: DeveloperSettings, collector_status: str, build_dire
 def execute_subprocess(command: Sequence[str], cwd: Path = REPOSITORY_ROOT, env: Mapping[str, str] | None = None) -> int:
     """Run a subprocess with clear error reporting and interrupt handling."""
     try:
-        result = subprocess.run(command, cwd=cwd, env=env, check=False)
+        use_shell = sys.platform == "win32" and bool(command) and str(command[0]).lower().endswith((".cmd", ".bat"))
+        result = subprocess.run(command, cwd=cwd, env=env, check=False, shell=use_shell)
         return result.returncode
     except FileNotFoundError as error:
         print(f"error: command not found: {error.filename or command[0]}", file=sys.stderr)
@@ -664,9 +665,18 @@ def _collect_format_candidates(files: Sequence[str] | None, staged: bool) -> lis
     return [p for p in candidates if _is_formattable(p) and p.is_file()]
 
 
+def _find_clang_format() -> str | None:
+    """Resolve clang-format binary, preferring native executable over batch/cmd wrappers on Windows."""
+    if sys.platform == "win32":
+        exe = shutil.which("clang-format.exe")
+        if exe:
+            return exe
+    return shutil.which("clang-format")
+
+
 def run_format(files: Sequence[str] | None = None, staged: bool = False, check: bool = False) -> int:
     """Format C++ source files with clang-format, with support for staged commits and dry-run check."""
-    clang_format_bin = shutil.which("clang-format")
+    clang_format_bin = _find_clang_format()
     if not clang_format_bin:
         print("error: clang-format not found in PATH", file=sys.stderr)
         return 127
@@ -677,24 +687,30 @@ def run_format(files: Sequence[str] | None = None, staged: bool = False, check: 
         return 0
 
     file_paths = [str(f) for f in target_files]
+    chunk_size = 50
+    chunks = [file_paths[i:i + chunk_size] for i in range(0, len(file_paths), chunk_size)]
+
+    for chunk in chunks:
+        if check:
+            cmd = [clang_format_bin, "--dry-run", "--Werror", *chunk]
+            result = execute_subprocess(cmd)
+            if result != 0:
+                print("Formatting violations detected in above files.", file=sys.stderr)
+                return 1
+        else:
+            cmd = [clang_format_bin, "-i", *chunk]
+            code = execute_subprocess(cmd)
+            if code != 0:
+                return code
+
+    if staged and not check:
+        for chunk in chunks:
+            subprocess.run(["git", "add", *chunk], cwd=REPOSITORY_ROOT, check=False)
+
     if check:
-        cmd = [clang_format_bin, "--dry-run", "--Werror", *file_paths]
-        result = execute_subprocess(cmd)
-        if result != 0:
-            print("Formatting violations detected in above files.", file=sys.stderr)
-            return 1
         print(f"All {len(target_files)} file(s) correctly formatted.")
-        return 0
-
-    cmd = [clang_format_bin, "-i", *file_paths]
-    code = execute_subprocess(cmd)
-    if code != 0:
-        return code
-
-    if staged:
-        subprocess.run(["git", "add", *file_paths], cwd=REPOSITORY_ROOT, check=False)
-
-    print(f"Successfully formatted {len(target_files)} file(s).")
+    else:
+        print(f"Successfully formatted {len(target_files)} file(s).")
     return 0
 
 
@@ -720,7 +736,8 @@ def _check_tool_version(
         return None
 
     try:
-        proc = subprocess.run([found_bin, version_flag], capture_output=True, text=True, check=False)
+        use_shell = sys.platform == "win32" and found_bin.lower().endswith((".cmd", ".bat"))
+        proc = subprocess.run([found_bin, version_flag], capture_output=True, text=True, check=False, shell=use_shell)
         first_line = proc.stdout.splitlines()[0] if proc.stdout else "available"
         report.add(category, name, CheckStatus.OK, first_line, details=f"binary: {found_bin}")
         return found_bin
@@ -761,7 +778,7 @@ def check_format_tool(report: DoctorReport) -> None:
         report,
         "Toolchain",
         _TOOLCHAIN_CLANG_FORMAT_NAME,
-        ["clang-format"],
+        ["clang-format.exe", "clang-format"],
         missing_status=CheckStatus.WARN,
         missing_message="clang-format not found; pre-commit format check will be skipped",
     )

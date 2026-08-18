@@ -81,7 +81,8 @@ namespace Horo {
                 CloseHandle(handle);
 #else
             if (descriptor >= 0) {
-                struct flock unlock{};
+                struct flock unlock {};
+
                 unlock.l_type = F_UNLCK;
                 unlock.l_whence = SEEK_SET;
                 static_cast<void>(fcntl(descriptor, F_SETLK, &unlock));
@@ -134,7 +135,9 @@ namespace Horo {
         state->descriptor = open(path.c_str(), O_RDWR | O_CREAT, 0600);
         if (state->descriptor < 0)
             return Result<ExclusiveFileLock>::Failure(FsError(IoFailed, path));
-        struct flock lock{};
+
+        struct flock lock {};
+
         lock.l_type = F_WRLCK;
         lock.l_whence = SEEK_SET;
         if (fcntl(state->descriptor, F_SETLK, &lock) != 0)

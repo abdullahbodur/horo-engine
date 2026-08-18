@@ -67,8 +67,8 @@ namespace Horo::Editor {
             const EditorGuiContext &context;
 
             bool operator()(bool &fieldVal) const {
-                if (int selected = fieldVal ? 1 : 0; Ui::DrawComboPropRow(
-                    field.name.c_str(), "value", selected, enabledEntries, context.theme.fonts)) {
+                if (int selected = fieldVal ? 1 : 0;
+                    Ui::DrawComboPropRow(field.name.c_str(), "value", selected, enabledEntries, context.theme.fonts)) {
                     fieldVal = selected != 0;
                     return true;
                 }
@@ -77,8 +77,8 @@ namespace Horo::Editor {
 
             bool operator()(double &fieldVal) const {
                 auto draft = static_cast<float>(fieldVal);
-                if (const auto [changed, committed] = Ui::DrawFloatPropRow(
-                    field.name.c_str(), "value", draft, context.theme.fonts); committed) {
+                if (const auto [changed, committed] = Ui::DrawFloatPropRow(field.name.c_str(), "value", draft, context.theme.fonts);
+                    committed) {
                     fieldVal = static_cast<double>(draft);
                     return true;
                 }
@@ -87,9 +87,8 @@ namespace Horo::Editor {
 
             bool operator()(std::int64_t &fieldVal) const {
                 auto draft = static_cast<float>(fieldVal);
-                const auto [changed, committed] = Ui::DrawFloatPropRow(field.name.c_str(), "value", draft,
-                                                                       context.theme.fonts,
-                                                                       Ui::FloatPropertyOptions{.speed = 1.0F});
+                const auto [changed, committed] =
+                    Ui::DrawFloatPropRow(field.name.c_str(), "value", draft, context.theme.fonts, Ui::FloatPropertyOptions{.speed = 1.0F});
                 if (committed) {
                     fieldVal = static_cast<std::int64_t>(draft);
                     return true;
@@ -99,8 +98,7 @@ namespace Horo::Editor {
 
             bool operator()(Math::Vec3 &fieldVal) const {
                 std::array draft{fieldVal.x, fieldVal.y, fieldVal.z};
-                if (const auto edit = Ui::DrawFloat3PropRow(field.name.c_str(), "value", draft, context.theme.fonts);
-                    edit.committed) {
+                if (const auto edit = Ui::DrawFloat3PropRow(field.name.c_str(), "value", draft, context.theme.fonts); edit.committed) {
                     fieldVal = {draft[0], draft[1], draft[2]};
                     return true;
                 }
@@ -112,8 +110,7 @@ namespace Horo::Editor {
                 return false;
             }
 
-            template<typename T>
-            bool operator()([[maybe_unused]] const T &) const noexcept {
+            template <typename T> bool operator()([[maybe_unused]] const T &) const noexcept {
                 return false;
             }
         };
@@ -234,15 +231,12 @@ namespace Horo::Editor {
     }
 
     void InspectorPanel::DrawAddComponent(const SceneObject &object, const EditorWorkspaceViewModel &viewModel,
-                                          EditorWorkspaceViewCommandData &command,
-                                          const EditorGuiContext &context) const {
+                                          EditorWorkspaceViewCommandData &command, const EditorGuiContext &context) const {
         ImGui::SetCursorPosX(14.0F);
         if (const std::string addComponentLabel =
-                    context.localization.Get("editor", "workspace.inspector.add_component") + "###InspectorAddComponent"
-            ;
-            Ui::Button({
-                .label = addComponentLabel.c_str(),
-                .variant = Ui::ButtonVariant::Secondary,
+                context.localization.Get("editor", "workspace.inspector.add_component") + "###InspectorAddComponent";
+            Ui::Button({.label = addComponentLabel.c_str(),
+                        .variant = Ui::ButtonVariant::Secondary,
                         .font = context.theme.fonts.sans,
                         .componentSize = Ui::ComponentSize::Medium,
                         .style = {.width = Ui::StyleWidth::FillAvailable}})) {
@@ -324,8 +318,7 @@ namespace Horo::Editor {
             Gameplay::BehaviorComponent edited = attached;
             bool committed = false;
             if (int enabled = edited.enabled ? 1 : 0;
-                Ui::DrawComboPropRow(context.localization.Get("editor", "workspace.inspector.behavior_enabled").c_str(),
-                                     "enabled", enabled,
+                Ui::DrawComboPropRow(context.localization.Get("editor", "workspace.inspector.behavior_enabled").c_str(), "enabled", enabled,
                                      enabledEntries, context.theme.fonts)) {
                 edited.enabled = enabled != 0;
                 committed = true;
@@ -344,12 +337,10 @@ namespace Horo::Editor {
         }
     }
 
-    void InspectorPanel::DrawMultiSelectionTitle(const std::size_t selectedObjectCount,
-                                                 const EditorGuiContext &context) const {
+    void InspectorPanel::DrawMultiSelectionTitle(const std::size_t selectedObjectCount, const EditorGuiContext &context) const {
         ImGui::SetCursorPos({14.0F, ImGui::GetCursorPosY() + 14.0F});
         const std::string label =
-                std::format("{} {}", selectedObjectCount,
-                            context.localization.Get("editor", "workspace.inspector.objects_selected"));
+            std::format("{} {}", selectedObjectCount, context.localization.Get("editor", "workspace.inspector.objects_selected"));
         {
             Theme::ScopedTextStyle textStyle(context.theme.fonts.sansEmphasis, 16.0F, Theme::FontPx::SansEmphasis);
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());

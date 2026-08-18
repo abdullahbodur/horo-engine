@@ -131,8 +131,7 @@ namespace Horo::Editor {
                     return;
                 cleaned.remove_prefix(prefix.size());
                 while (!cleaned.empty() &&
-                       (cleaned.front() == ' ' || cleaned.front() == ':' || cleaned.front() == '-' || cleaned.front() ==
-                        '\t')) {
+                       (cleaned.front() == ' ' || cleaned.front() == ':' || cleaned.front() == '-' || cleaned.front() == '\t')) {
                     cleaned.remove_prefix(1);
                 }
             };
@@ -309,18 +308,17 @@ namespace Horo::Editor {
             std::vector<DiagnosticRow> rows;
             rows.reserve(16);
 
-            for (const auto &item: snap.items) {
+            for (const auto &item : snap.items) {
                 const std::filesystem::path sourcePath{item.sourceFile.String()};
                 const std::string assetLabel = DisplayAssetLabel(sourcePath);
 
-                for (const auto &diagnostic: item.diagnostics) {
+                for (const auto &diagnostic : item.diagnostics) {
                     const std::string cleanedMessage = CleanDiagnosticMessage(sourcePath, diagnostic.message);
                     if (cleanedMessage.empty())
                         continue;
 
                     const auto isDuplicate = [&](const DiagnosticRow &row) {
-                        return row.assetLabel == assetLabel && row.message == cleanedMessage && row.severity ==
-                               diagnostic.severity;
+                        return row.assetLabel == assetLabel && row.message == cleanedMessage && row.severity == diagnostic.severity;
                     };
 
                     if (std::find_if(rows.begin(), rows.end(), isDuplicate) == rows.end()) {
@@ -376,8 +374,7 @@ namespace Horo::Editor {
             return "SELECTING";
         }
 
-        void DrawSummary(const Assets::AssetImportSnapshot &snap, const Fonts &fonts, std::size_t doneCount,
-                         std::size_t errorCount,
+        void DrawSummary(const Assets::AssetImportSnapshot &snap, const Fonts &fonts, std::size_t doneCount, std::size_t errorCount,
                          std::size_t warningCount) {
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{22.0f, 13.0f});
             ImGui::PushStyleColor(ImGuiCol_ChildBg, Bg2());
@@ -474,8 +471,7 @@ namespace Horo::Editor {
             ImGui::PopStyleVar();
         }
 
-        void DrawSidebar(AssetImportModal &modal, const Assets::AssetImportSnapshot &snap, const Fonts &fonts,
-                         float bodyH) {
+        void DrawSidebar(AssetImportModal &modal, const Assets::AssetImportSnapshot &snap, const Fonts &fonts, float bodyH) {
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{16.0f, 16.0f});
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{8.0f, 8.0f});
             ImGui::PushStyleColor(ImGuiCol_ChildBg, Bg0());
@@ -506,8 +502,7 @@ namespace Horo::Editor {
             PopFont(fonts.sansCompact);
 
             if (ImGui::BeginDragDropTarget()) {
-                if (const auto droppedFiles = ParseDroppedFiles(ImGui::AcceptDragDropPayload("FILES")); !droppedFiles.
-                    empty()) {
+                if (const auto droppedFiles = ParseDroppedFiles(ImGui::AcceptDragDropPayload("FILES")); !droppedFiles.empty()) {
                     CancellationToken cancellation;
                     static_cast<void>(modal.BeginImport(droppedFiles, cancellation));
                 }
@@ -638,8 +633,7 @@ namespace Horo::Editor {
 
                 const ImVec2 rowMin = ImGui::GetCursorScreenPos();
                 const float rowWidth = ImGui::GetContentRegionAvail().x;
-                ImGui::InvisibleButton(std::format("##DiagnosticRow{}", diagnosticIndex).c_str(),
-                                       {rowWidth, rowHeight});
+                ImGui::InvisibleButton(std::format("##DiagnosticRow{}", diagnosticIndex).c_str(), {rowWidth, rowHeight});
                 const ImVec2 rowMax{rowMin.x + rowWidth, rowMin.y + rowHeight};
 
                 const float textY = rowMin.y + (rowHeight - ImGui::GetTextLineHeight()) * 0.5f;
@@ -663,8 +657,8 @@ namespace Horo::Editor {
             PopFont(fonts.sansCompact);
         }
 
-        void DrawBooleanSettingField(const Assets::ImportSettingDescriptor &setting, const std::string &key,
-                                     Assets::AssetImportItem &item, const Fonts &fonts) {
+        void DrawBooleanSettingField(const Assets::ImportSettingDescriptor &setting, const std::string &key, Assets::AssetImportItem &item,
+                                     const Fonts &fonts) {
             bool defaultValue = false;
             if (std::holds_alternative<bool>(setting.defaultValue))
                 defaultValue = std::get<bool>(setting.defaultValue);
@@ -674,20 +668,19 @@ namespace Horo::Editor {
             }
         }
 
-        void DrawChoiceSettingField(const Assets::ImportSettingDescriptor &setting, const std::string &key,
-                                    Assets::AssetImportItem &item, const Fonts &fonts) {
+        void DrawChoiceSettingField(const Assets::ImportSettingDescriptor &setting, const std::string &key, Assets::AssetImportItem &item,
+                                    const Fonts &fonts) {
             std::vector<const char *> labels;
-            for (const auto &c: setting.choices)
+            for (const auto &c : setting.choices)
                 labels.push_back(c.labelKey.c_str());
             if (int current = item.settings.contains(key) ? std::stoi(item.settings[key]) : 0;
-                ComboControl(("##Setting_" + setting.id).c_str(), &current, labels.data(),
-                             static_cast<int>(labels.size()), fonts)) {
+                ComboControl(("##Setting_" + setting.id).c_str(), &current, labels.data(), static_cast<int>(labels.size()), fonts)) {
                 item.settings[key] = std::to_string(current);
             }
         }
 
-        void DrawNumberSettingField(const Assets::ImportSettingDescriptor &setting, const std::string &key,
-                                    Assets::AssetImportItem &item, const Fonts &fonts) {
+        void DrawNumberSettingField(const Assets::ImportSettingDescriptor &setting, const std::string &key, Assets::AssetImportItem &item,
+                                    const Fonts &fonts) {
             if (setting.kind == Assets::ImportSettingKind::Integer) {
                 int defaultValue = 0;
                 if (std::holds_alternative<std::int64_t>(setting.defaultValue))
@@ -705,16 +698,15 @@ namespace Horo::Editor {
             }
         }
 
-        void DrawTextSettingField(const Assets::ImportSettingDescriptor &setting, const std::string &key,
-                                  Assets::AssetImportItem &item, const Fonts &fonts) {
+        void DrawTextSettingField(const Assets::ImportSettingDescriptor &setting, const std::string &key, Assets::AssetImportItem &item,
+                                  const Fonts &fonts) {
             if (std::string textVal = item.settings.contains(key) ? item.settings[key] : std::string{};
                 InputTextControl(("##Setting_" + setting.id).c_str(), textVal, 256, fonts)) {
                 item.settings[key] = std::move(textVal);
             }
         }
 
-        void DrawDynamicSettingRow(const Assets::ImportSettingDescriptor &setting, Assets::AssetImportItem &item,
-                                   const Fonts &fonts) {
+        void DrawDynamicSettingRow(const Assets::ImportSettingDescriptor &setting, Assets::AssetImportItem &item, const Fonts &fonts) {
             PushFont(fonts.sansCompact);
             FieldLabel(setting.labelKey.c_str(), fonts);
 
@@ -740,8 +732,7 @@ namespace Horo::Editor {
         }
 
         void DrawSettingsTab(const AssetImportModal &modal, Assets::AssetImportSnapshot &snap, const Fonts &fonts) {
-            if (const bool hasSelection = !snap.items.empty() && snap.selectedItemIndex < snap.items.size(); !
-                hasSelection) {
+            if (const bool hasSelection = !snap.items.empty() && snap.selectedItemIndex < snap.items.size(); !hasSelection) {
                 ImGui::TextColored(Dim(), "Select a file from the queue to view its importer settings.");
                 return;
             }
@@ -754,11 +745,9 @@ namespace Horo::Editor {
             const auto *contrib = modal.Catalog().FindContributionByExtension(sel.sourceExtension);
             if (!contrib) {
                 PushFont(fonts.sansCompact);
-                ImGui::TextColored(ImVec4{0.83f, 0.32f, 0.29f, 1.0f}, "No importer available for .%s files.",
-                                   sel.sourceExtension.c_str());
+                ImGui::TextColored(ImVec4{0.83f, 0.32f, 0.29f, 1.0f}, "No importer available for .%s files.", sel.sourceExtension.c_str());
                 ImGui::Dummy({0.0f, 4.0f});
-                ImGui::TextColored(Dim(), "Install or enable an importer extension that handles .%s files.",
-                                   sel.sourceExtension.c_str());
+                ImGui::TextColored(Dim(), "Install or enable an importer extension that handles .%s files.", sel.sourceExtension.c_str());
                 PopFont(fonts.sansCompact);
                 return;
             }
@@ -781,7 +770,7 @@ namespace Horo::Editor {
                 LabeledSeparator("SETTINGS", fonts);
                 ImGui::Dummy({0.0f, 4.0f});
 
-                for (const auto &setting: contrib->settings) {
+                for (const auto &setting : contrib->settings) {
                     DrawDynamicSettingRow(setting, sel, fonts);
                 }
             }
@@ -794,19 +783,12 @@ namespace Horo::Editor {
             }
         }
 
-        void DrawDestinationPathRow(const AssetImportModal &modal, Assets::AssetImportItem *selItem,
-                                    const Fonts &fonts) {
+        void DrawDestinationPathRow(const AssetImportModal &modal, Assets::AssetImportItem *selItem, const Fonts &fonts) {
             constexpr float browseButtonWidth = 38.0f;
             constexpr float browseGap = 8.0f;
-            const float targetInputWidth = std::max(
-                1.0f, ImGui::GetContentRegionAvail().x - browseButtonWidth - browseGap);
-            if (std::string targetFolder = (selItem && !selItem->destinationFolder.empty())
-                                               ? selItem->destinationFolder
-                                               : "assets"; InputTextControl("##TargetFolder", targetFolder, 256, fonts,
-                                                                            InputTextOptions{
-                                                                                .width = targetInputWidth
-                                                                            }) &&
-                                                           selItem)
+            const float targetInputWidth = std::max(1.0f, ImGui::GetContentRegionAvail().x - browseButtonWidth - browseGap);
+            if (std::string targetFolder = (selItem && !selItem->destinationFolder.empty()) ? selItem->destinationFolder : "assets";
+                InputTextControl("##TargetFolder", targetFolder, 256, fonts, InputTextOptions{.width = targetInputWidth}) && selItem)
                 selItem->destinationFolder = std::move(targetFolder);
             ImGui::SameLine(0.0f, browseGap);
 
@@ -814,18 +796,17 @@ namespace Horo::Editor {
                 const auto selectedFolder = OpenFolderSelectionDialog("Select asset destination");
                 if (!selectedFolder)
                     return;
-                if (const auto relative = ProjectRelativeFolder(modal.ProjectRoot(), *selectedFolder);
-                    relative && selItem)
+                if (const auto relative = ProjectRelativeFolder(modal.ProjectRoot(), *selectedFolder); relative && selItem)
                     selItem->destinationFolder = relative->empty() ? "assets" : *relative;
             };
 
             if (IconButton({
-                .id = "##BrowseTargetFolder",
-                .glyph = IconButtonGlyph::Folder,
-                .size = {browseButtonWidth, ImGui::GetFrameHeight()},
-                .tooltip = "Browse project folders",
-                .enabled = selItem != nullptr,
-            })) {
+                    .id = "##BrowseTargetFolder",
+                    .glyph = IconButtonGlyph::Folder,
+                    .size = {browseButtonWidth, ImGui::GetFrameHeight()},
+                    .tooltip = "Browse project folders",
+                    .enabled = selItem != nullptr,
+                })) {
                 handleBrowseDestination();
             }
         }
@@ -842,8 +823,8 @@ namespace Horo::Editor {
             ImGui::BeginGroup();
             FieldLabel("SUBFOLDER BY TYPE", fonts);
             ImGui::SetNextItemWidth(columns.width);
-            if (ComboControl("##SubfolderByType", &subfolderByType, kSubfolderModes.data(),
-                             static_cast<int>(std::size(kSubfolderModes)), fonts) &&
+            if (ComboControl("##SubfolderByType", &subfolderByType, kSubfolderModes.data(), static_cast<int>(std::size(kSubfolderModes)),
+                             fonts) &&
                 selItem) {
                 selItem->subfolderByType = subfolderByType;
             }
@@ -853,8 +834,8 @@ namespace Horo::Editor {
             ImGui::BeginGroup();
             FieldLabel("ASSETID STRATEGY", fonts);
             ImGui::SetNextItemWidth(columns.width);
-            if (ComboControl("##AssetIdStrategy", &assetIdStrategy, kAssetIdModes.data(),
-                             static_cast<int>(std::size(kAssetIdModes)), fonts) &&
+            if (ComboControl("##AssetIdStrategy", &assetIdStrategy, kAssetIdModes.data(), static_cast<int>(std::size(kAssetIdModes)),
+                             fonts) &&
                 selItem) {
                 selItem->assetIdStrategy = assetIdStrategy;
             }
@@ -890,16 +871,14 @@ namespace Horo::Editor {
                 selItem->createMetaSidecar = createMetaSidecar;
             }
             ImGui::Dummy({0.0f, 5.0f});
-            if (CheckboxControl("Overwrite existing assets without prompt", &overwriteWithoutPrompt, fonts) &&
-                selItem) {
+            if (CheckboxControl("Overwrite existing assets without prompt", &overwriteWithoutPrompt, fonts) && selItem) {
                 selItem->overwriteWithoutPrompt = overwriteWithoutPrompt;
             }
 
             ImGui::PopStyleVar();
         }
 
-        void DrawCreatePresetModal(AssetImportModal &modal, const Assets::AssetImportSnapshot &snap, const Fonts &fonts,
-                                   float actionH,
+        void DrawCreatePresetModal(AssetImportModal &modal, const Assets::AssetImportSnapshot &snap, const Fonts &fonts, float actionH,
                                    float gap) {
             static std::string s_presetNameBuffer;
             static bool presetNameError = false;
@@ -939,8 +918,7 @@ namespace Horo::Editor {
             }
         }
 
-        void DrawFooter(AssetImportModal &modal, const Assets::AssetImportSnapshot &snap, const Fonts &fonts,
-                        ScopedModalShell &modalShell,
+        void DrawFooter(AssetImportModal &modal, const Assets::AssetImportSnapshot &snap, const Fonts &fonts, ScopedModalShell &modalShell,
                         ModalFrameResult &frameResult) {
             modalShell.BeginFooter({28.0F, 0.0F}, true);
 
@@ -988,8 +966,7 @@ namespace Horo::Editor {
                     presetIndex = static_cast<int>(std::distance(presetNames.begin(), active));
             }
             ImGui::SetNextItemWidth(presetW);
-            if (ComboControl("##ImportPreset", &presetIndex, presetLabels.data(), static_cast<int>(presetLabels.size()),
-                             fonts,
+            if (ComboControl("##ImportPreset", &presetIndex, presetLabels.data(), static_cast<int>(presetLabels.size()), fonts,
                              ComboControlOptions{.height = actionH}) &&
                 hasSelected) {
                 static_cast<void>(modal.ApplyPreset(snap.selectedItemIndex, presetNames[presetIndex]));
@@ -1035,7 +1012,7 @@ namespace Horo::Editor {
 
             modalShell.EndFooter();
         }
-    } // namespace
+    }  // namespace
 
     ModalFrameResult DrawAssetImportModalPresentation(AssetImportModal &modal, const Fonts &fonts) {
         auto &snap = modal.MutableSnapshot();
@@ -1054,18 +1031,16 @@ namespace Horo::Editor {
             fonts);
         if (modalShell.CloseRequested())
             frameResult =
-                    ModalFrameResult::RequestClose(modal.IsImportComplete()
-                                                       ? ModalCloseReason::Completed
-                                                       : ModalCloseReason::Cancelled);
+                ModalFrameResult::RequestClose(modal.IsImportComplete() ? ModalCloseReason::Completed : ModalCloseReason::Cancelled);
 
         std::size_t doneCount = 0;
         std::size_t errorCount = 0;
         std::size_t warningCount = 0;
 
-        for (const auto &item: snap.items) {
+        for (const auto &item : snap.items) {
             bool hasError = false;
             bool hasWarning = false;
-            for (const auto &diagnostic: item.diagnostics) {
+            for (const auto &diagnostic : item.diagnostics) {
                 hasError |= diagnostic.severity == Assets::ImportDiagnostic::Severity::Error;
                 hasWarning |= diagnostic.severity == Assets::ImportDiagnostic::Severity::Warning;
             }

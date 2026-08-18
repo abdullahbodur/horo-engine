@@ -27,7 +27,7 @@ namespace Horo::Assets {
         [[nodiscard]] std::string HexEncodeSha256(const Sha256Digest &digest) {
             std::string result;
             result.reserve(64);
-            for (const auto byte: digest.bytes)
+            for (const auto byte : digest.bytes)
                 result += std::format("{:02x}", byte);
             return result;
         }
@@ -48,9 +48,9 @@ namespace Horo::Assets {
                     json << ',';
                 const auto &e = entries[i];
                 json << R"({"assetId":")" << e.assetId.ToString() << R"(",)"
-                        << R"("assetType":")" << e.assetType.Value() << R"(",)"
-                        << R"("artifact":")" << e.artifactFile << R"(",)"
-                        << R"("artifactHash":"sha256:)" << HexEncodeSha256(e.artifactHash) << R"("})";
+                     << R"("assetType":")" << e.assetType.Value() << R"(",)"
+                     << R"("artifact":")" << e.artifactFile << R"(",)"
+                     << R"("artifactHash":"sha256:)" << HexEncodeSha256(e.artifactHash) << R"("})";
             }
 
             json << "]}";
@@ -196,7 +196,7 @@ namespace Horo::Assets {
         }
 
         // Verify artifact payloads are within bounds
-        for (const auto &payload: artifactPayloads) {
+        for (const auto &payload : artifactPayloads) {
             if (payload.size() > limits.maximumArtifactBytes) {
                 return Result<AssetCookGeneration>::Failure(Error{CookErrors::TooLarge.code});
             }
@@ -233,9 +233,8 @@ namespace Horo::Assets {
 
         // Build and write current.json atomically
         const std::string currentStr =
-                std::format(
-                    R"({{"schemaVersion":1,"target":"{}","manifestDigest":"{}","generationPath":"{}","artifactCount":"{}"}})",
-                    target.Value(), HexEncodeSha256(manifestDigest), genRelPath, entries.size());
+            std::format(R"({{"schemaVersion":1,"target":"{}","manifestDigest":"{}","generationPath":"{}","artifactCount":"{}"}})",
+                        target.Value(), HexEncodeSha256(manifestDigest), genRelPath, entries.size());
         auto currentBytes = std::vector<std::uint8_t>(reinterpret_cast<const std::uint8_t *>(currentStr.data()),
                                                       reinterpret_cast<const std::uint8_t *>(currentStr.data()) + currentStr.size());
 
