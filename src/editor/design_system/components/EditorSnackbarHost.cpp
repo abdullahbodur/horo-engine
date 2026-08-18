@@ -322,7 +322,7 @@ namespace Horo::Editor {
         // is the emitting call site not setting this key for repeated triggers of
         // the same logical message (e.g. re-validating on every Play attempt).
         if (!event.deduplicationKey.empty()) {
-            const auto it = std::find_if(activeSnackbars_.begin(), activeSnackbars_.end(), [&event](const ActiveSnackbar &item) {
+            const auto it = std::ranges::find_if(activeSnackbars_, [&event](const ActiveSnackbar &item) {
                 return item.event.deduplicationKey == event.deduplicationKey;
             });
             if (it != activeSnackbars_.end()) {

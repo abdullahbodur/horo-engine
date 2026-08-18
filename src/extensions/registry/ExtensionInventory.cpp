@@ -59,13 +59,13 @@ namespace Horo::Extensions {
         [[nodiscard]] std::string BuildCompositionVersion(const std::string_view packageVersion,
                                                           const std::vector<ExtensionModuleManifest> &modules) {
             std::string fingerprint{packageVersion};
-            for (const auto &module : modules) {
+            for (const auto &mod : modules) {
                 fingerprint.append("|");
-                fingerprint.append(std::to_string(module.id.size()));
+                fingerprint.append(std::to_string(mod.id.size()));
                 fingerprint.append(":");
-                fingerprint.append(module.id);
+                fingerprint.append(mod.id);
                 fingerprint.append("@");
-                fingerprint.append(module.version);
+                fingerprint.append(mod.version);
             }
             return fingerprint;
         }
@@ -101,7 +101,8 @@ namespace Horo::Extensions {
             std::uintmax_t totalBytes = 0;
             for (fs::recursive_directory_iterator it{source, fs::directory_options::skip_permission_denied, error}, end; it != end;
                  it.increment(error)) {
-                if (error || ++entryCount > kMaximumPackageEntries)
+                ++entryCount;
+                if (error || entryCount > kMaximumPackageEntries)
                     return Result<void>::Failure(
                         MakeError(ExtensionErrors::LoadFailed, "Extension package traversal failed or exceeded entry limits."));
                 const fs::file_status status = it->symlink_status(error);

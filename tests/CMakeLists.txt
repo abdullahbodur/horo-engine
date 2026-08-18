@@ -615,6 +615,8 @@ add_executable(HoroGameplayBuildServiceTests
 target_compile_features(HoroGameplayBuildServiceTests PRIVATE cxx_std_20)
 target_compile_definitions(HoroGameplayBuildServiceTests PRIVATE
         HORO_GAMEPLAY_SDK_PACKAGE_DIR="${HORO_GAMEPLAY_SDK_PACKAGE_DIR}"
+        HORO_GAMEPLAY_CXX_COMPILER="${CMAKE_CXX_COMPILER}"
+        HORO_TEST_CMAKE_GENERATOR="${CMAKE_GENERATOR}"
 )
 target_link_libraries(HoroGameplayBuildServiceTests PRIVATE HoroEngine::GameplayBuild)
 add_executable(HoroEditorViewportSceneTests

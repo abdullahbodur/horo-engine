@@ -124,15 +124,22 @@ namespace Horo::Extensions {
         }
 
         struct ExternalImporterInstance final {
+            ExternalImporterInstance() = default;
+
             ~ExternalImporterInstance() {
                 if (destroy != nullptr)
                     destroy(context);
             }
 
+            ExternalImporterInstance(const ExternalImporterInstance &) = delete;
+            ExternalImporterInstance &operator=(const ExternalImporterInstance &) = delete;
+            ExternalImporterInstance(ExternalImporterInstance &&) noexcept = default;
+            ExternalImporterInstance &operator=(ExternalImporterInstance &&) noexcept = default;
+
             std::shared_ptr<ExtensionModuleLifetime> lifetime;
             void *context{};
             HoroAssetImporterDestroyFunc destroy{};
-            HoroAssetImportFunc import{};
+            HoroAssetImportFunc importFn{};
             HoroAssetPreviewFunc preview{};
         };
 
@@ -165,7 +172,9 @@ namespace Horo::Extensions {
 
                 HoroExtensionStatus status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 try {
-                    status = instance_->import(instance_->context, &request, &response);
+                    status = instance_->importFn(instance_->context, &request, &response);
+                } catch (const std::exception &) {
+                    status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 } catch (...) {
                     status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 }
@@ -217,6 +226,8 @@ namespace Horo::Extensions {
                 HoroExtensionStatus status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 try {
                     status = instance_->preview(instance_->context, &request, &response);
+                } catch (const std::exception &) {
+                    status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 } catch (...) {
                     status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 }
@@ -259,7 +270,10 @@ namespace Horo::Extensions {
         if (loaded && unload != nullptr) {
             try {
                 unload(&moduleApi);
+            } catch (const std::exception &) {
+                // Ignore exceptions crossing extension unload boundary
             } catch (...) {
+                // Ignore non-standard exceptions crossing extension unload boundary
             }
         }
     }
@@ -288,17 +302,18 @@ namespace Horo::Extensions {
                 !CopyText(descriptor->targetExtension, contribution.targetExtension))
                 throw std::invalid_argument{"invalid text"};
 
-            const bool declared = std::ranges::any_of(session->manifest->contributions,
-                                                      [&contribution, session](const ExtensionContributionManifest &candidate) {
+            if (const bool declared = std::ranges::any_of(session->manifest->contributions,
+                                                          [&contribution, session](const ExtensionContributionManifest &candidate) {
                 return candidate.type == "asset.importer" && candidate.id == contribution.contributionId &&
-                       candidate.module == session->module->id;
+                       candidate.module == session->extensionModule->id;
             });
-            if (!declared)
+                !declared) {
                 throw std::invalid_argument{"undeclared contribution"};
+            }
 
             contribution.packageId = session->manifest->id;
-            contribution.moduleId = session->module->id;
-            contribution.moduleVersion = session->module->version;
+            contribution.moduleId = session->extensionModule->id;
+            contribution.moduleVersion = session->extensionModule->version;
             contribution.supportsMetaSidecar = descriptor->supportsMetaSidecar != 0;
             if (descriptor->previewFallback > static_cast<std::uint8_t>(Assets::AssetPreviewFallback::Generic))
                 throw std::invalid_argument{"invalid fallback"};
@@ -308,15 +323,16 @@ namespace Horo::Extensions {
             for (std::uint32_t index = 0; index < descriptor->fileExtensionCount; ++index) {
                 std::string extension;
                 if (!CopyText(descriptor->fileExtensions[index], extension) || !IsLowerExtension(extension))
-                    throw std::invalid_argument{"invalid extension"};
+                    throw std::invalid_argument{"invalid file extension"};
                 contribution.fileExtensions.push_back(std::move(extension));
             }
+
             contribution.assetTypes.reserve(descriptor->assetTypeCount);
             for (std::uint32_t index = 0; index < descriptor->assetTypeCount; ++index) {
-                std::string type;
-                if (!CopyText(descriptor->assetTypes[index], type))
-                    throw std::invalid_argument{"invalid type"};
-                auto parsed = Assets::AssetTypeId::Parse(type);
+                std::string assetType;
+                if (!CopyText(descriptor->assetTypes[index], assetType))
+                    throw std::invalid_argument{"invalid asset type"};
+                auto parsed = Assets::AssetTypeId::Parse(assetType);
                 if (parsed.HasError())
                     throw std::invalid_argument{"invalid type"};
                 contribution.assetTypes.push_back(std::move(parsed).Value());
@@ -331,7 +347,7 @@ namespace Horo::Extensions {
             instance->lifetime = session->lifetime;
             instance->context = descriptor->importerContext;
             instance->destroy = descriptor->destroyImporter;
-            instance->import = descriptor->importAsset;
+            instance->importFn = descriptor->importAsset;
             instance->preview = descriptor->generatePreview;
             contribution.strategy = std::make_shared<ExternalAssetImporter>(instance);
             if (instance->preview != nullptr)

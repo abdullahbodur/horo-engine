@@ -8,11 +8,12 @@
 #include "Horo/Foundation/Result.h"
 
 #include <array>
+#include <numbers>
 #include <optional>
 
 namespace Horo::Math {
     inline constexpr float DefaultEpsilon = 0.000001F;
-    inline constexpr float Pi = 3.14159265358979323846F;
+    inline constexpr float Pi = std::numbers::pi_v<float>;
 
     /** @brief Two-dimensional float vector. */
     struct Vec2 {
@@ -27,20 +28,24 @@ namespace Horo::Math {
             return {-x, -y};
         }
 
-        [[nodiscard]] constexpr Vec2 operator+(Vec2 rhs) const noexcept {
-            return {x + rhs.x, y + rhs.y};
+        [[nodiscard]] friend constexpr Vec2 operator+(Vec2 lhs, Vec2 rhs) noexcept {
+            return {lhs.x + rhs.x, lhs.y + rhs.y};
         }
 
-        [[nodiscard]] constexpr Vec2 operator-(Vec2 rhs) const noexcept {
-            return {x - rhs.x, y - rhs.y};
+        [[nodiscard]] friend constexpr Vec2 operator-(Vec2 lhs, Vec2 rhs) noexcept {
+            return {lhs.x - rhs.x, lhs.y - rhs.y};
         }
 
-        [[nodiscard]] constexpr Vec2 operator*(float scalar) const noexcept {
-            return {x * scalar, y * scalar};
+        [[nodiscard]] friend constexpr Vec2 operator*(Vec2 lhs, float scalar) noexcept {
+            return {lhs.x * scalar, lhs.y * scalar};
         }
 
-        [[nodiscard]] constexpr Vec2 operator/(float scalar) const noexcept {
-            return {x / scalar, y / scalar};
+        [[nodiscard]] friend constexpr Vec2 operator*(float scalar, Vec2 value) noexcept {
+            return {value.x * scalar, value.y * scalar};
+        }
+
+        [[nodiscard]] friend constexpr Vec2 operator/(Vec2 lhs, float scalar) noexcept {
+            return {lhs.x / scalar, lhs.y / scalar};
         }
 
         constexpr Vec2 &operator+=(Vec2 rhs) noexcept {
@@ -70,10 +75,6 @@ namespace Horo::Math {
         [[nodiscard]] constexpr auto operator<=>(const Vec2 &) const noexcept = default;
     };
 
-    [[nodiscard]] constexpr Vec2 operator*(float scalar, Vec2 value) noexcept {
-        return value * scalar;
-    }
-
     /** @brief Three-dimensional float vector in Horo's right-handed, Y-up scene space. */
     struct Vec3 {
         float x{0.0F};
@@ -88,20 +89,24 @@ namespace Horo::Math {
             return {-x, -y, -z};
         }
 
-        [[nodiscard]] constexpr Vec3 operator+(Vec3 rhs) const noexcept {
-            return {x + rhs.x, y + rhs.y, z + rhs.z};
+        [[nodiscard]] friend constexpr Vec3 operator+(Vec3 lhs, Vec3 rhs) noexcept {
+            return {lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z};
         }
 
-        [[nodiscard]] constexpr Vec3 operator-(Vec3 rhs) const noexcept {
-            return {x - rhs.x, y - rhs.y, z - rhs.z};
+        [[nodiscard]] friend constexpr Vec3 operator-(Vec3 lhs, Vec3 rhs) noexcept {
+            return {lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z};
         }
 
-        [[nodiscard]] constexpr Vec3 operator*(float scalar) const noexcept {
-            return {x * scalar, y * scalar, z * scalar};
+        [[nodiscard]] friend constexpr Vec3 operator*(Vec3 lhs, float scalar) noexcept {
+            return {lhs.x * scalar, lhs.y * scalar, lhs.z * scalar};
         }
 
-        [[nodiscard]] constexpr Vec3 operator/(float scalar) const noexcept {
-            return {x / scalar, y / scalar, z / scalar};
+        [[nodiscard]] friend constexpr Vec3 operator*(float scalar, Vec3 value) noexcept {
+            return {value.x * scalar, value.y * scalar, value.z * scalar};
+        }
+
+        [[nodiscard]] friend constexpr Vec3 operator/(Vec3 lhs, float scalar) noexcept {
+            return {lhs.x / scalar, lhs.y / scalar, lhs.z / scalar};
         }
 
         constexpr Vec3 &operator+=(Vec3 rhs) noexcept {
@@ -135,10 +140,6 @@ namespace Horo::Math {
         [[nodiscard]] constexpr auto operator<=>(const Vec3 &) const noexcept = default;
     };
 
-    [[nodiscard]] constexpr Vec3 operator*(float scalar, Vec3 value) noexcept {
-        return value * scalar;
-    }
-
     /** @brief Four-dimensional float vector used for homogeneous coordinates. */
     struct Vec4 {
         float x{0.0F};
@@ -154,20 +155,24 @@ namespace Horo::Math {
             return {-x, -y, -z, -w};
         }
 
-        [[nodiscard]] constexpr Vec4 operator+(Vec4 rhs) const noexcept {
-            return {x + rhs.x, y + rhs.y, z + rhs.z, w + rhs.w};
+        [[nodiscard]] friend constexpr Vec4 operator+(Vec4 lhs, Vec4 rhs) noexcept {
+            return {lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z, lhs.w + rhs.w};
         }
 
-        [[nodiscard]] constexpr Vec4 operator-(Vec4 rhs) const noexcept {
-            return {x - rhs.x, y - rhs.y, z - rhs.z, w - rhs.w};
+        [[nodiscard]] friend constexpr Vec4 operator-(Vec4 lhs, Vec4 rhs) noexcept {
+            return {lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z, lhs.w - rhs.w};
         }
 
-        [[nodiscard]] constexpr Vec4 operator*(float scalar) const noexcept {
-            return {x * scalar, y * scalar, z * scalar, w * scalar};
+        [[nodiscard]] friend constexpr Vec4 operator*(Vec4 lhs, float scalar) noexcept {
+            return {lhs.x * scalar, lhs.y * scalar, lhs.z * scalar, lhs.w * scalar};
         }
 
-        [[nodiscard]] constexpr Vec4 operator/(float scalar) const noexcept {
-            return {x / scalar, y / scalar, z / scalar, w / scalar};
+        [[nodiscard]] friend constexpr Vec4 operator*(float scalar, Vec4 value) noexcept {
+            return {value.x * scalar, value.y * scalar, value.z * scalar, value.w * scalar};
+        }
+
+        [[nodiscard]] friend constexpr Vec4 operator/(Vec4 lhs, float scalar) noexcept {
+            return {lhs.x / scalar, lhs.y / scalar, lhs.z / scalar, lhs.w / scalar};
         }
 
         constexpr Vec4 &operator+=(Vec4 rhs) noexcept {
@@ -204,10 +209,6 @@ namespace Horo::Math {
 
         [[nodiscard]] constexpr auto operator<=>(const Vec4 &) const noexcept = default;
     };
-
-    [[nodiscard]] constexpr Vec4 operator*(float scalar, Vec4 value) noexcept {
-        return value * scalar;
-    }
 
     [[nodiscard]] bool IsFinite(Vec2 value) noexcept;
     [[nodiscard]] bool IsFinite(Vec3 value) noexcept;
@@ -326,7 +327,14 @@ namespace Horo::Math {
          * @return Rotated vector, or a typed quaternion/input error.
          */
         [[nodiscard]] Result<Vec3> TryRotate(Vec3 value) const noexcept;
-        [[nodiscard]] Quaternion operator*(const Quaternion &rhs) const noexcept;
+
+        [[nodiscard]] friend constexpr Quaternion operator*(const Quaternion &lhs, const Quaternion &rhs) noexcept {
+            return {lhs.w * rhs.x + lhs.x * rhs.w + lhs.y * rhs.z - lhs.z * rhs.y,
+                    lhs.w * rhs.y - lhs.x * rhs.z + lhs.y * rhs.w + lhs.z * rhs.x,
+                    lhs.w * rhs.z + lhs.x * rhs.y - lhs.y * rhs.x + lhs.z * rhs.w,
+                    lhs.w * rhs.w - lhs.x * rhs.x - lhs.y * rhs.y - lhs.z * rhs.z};
+        }
+
         [[nodiscard]] constexpr bool operator==(const Quaternion &) const noexcept = default;
     };
 

@@ -154,7 +154,7 @@ namespace Horo::Runtime {
         const auto found = std::ranges::find_if(kCorePrimitives, [id](const PrimitiveDescriptor &descriptor) {
             return descriptor.id.value == id;
         });
-        return found == kCorePrimitives.end() ? nullptr : &*found;
+        return found == kCorePrimitives.end() ? nullptr : std::to_address(found);
     }
 
     /** @copydoc PrimitiveCatalog::Find(PrimitiveMeshType) */
@@ -162,6 +162,6 @@ namespace Horo::Runtime {
         const auto found = std::ranges::find_if(kCorePrimitives, [meshType](const PrimitiveDescriptor &descriptor) {
             return descriptor.meshType == meshType;
         });
-        return found == kCorePrimitives.end() ? nullptr : &*found;
+        return found == kCorePrimitives.end() ? nullptr : std::to_address(found);
     }
 }  // namespace Horo::Runtime

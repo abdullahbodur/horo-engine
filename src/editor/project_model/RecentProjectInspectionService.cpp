@@ -25,7 +25,7 @@ namespace Horo::Editor {
 
     /** @copydoc RecentProjectInspectionService::RecentProjectInspectionService */
     RecentProjectInspectionService::RecentProjectInspectionService(JobSystem &jobs, const ProjectOpenPreflightService &preflight)
-        : state_(std::make_unique<State>(State{jobs, preflight})) {}
+        : state_(std::make_unique<State>(jobs, preflight)) {}
 
     /** @copydoc RecentProjectInspectionService::~RecentProjectInspectionService */
     RecentProjectInspectionService::~RecentProjectInspectionService() {

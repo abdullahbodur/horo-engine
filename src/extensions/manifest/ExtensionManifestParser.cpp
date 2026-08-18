@@ -114,15 +114,15 @@ namespace Horo::Extensions {
             if (json.contains("modules")) {
                 if (!json["modules"].is_array())
                     return Result<ExtensionManifest>::Failure(MakeError(ExtensionErrors::InvalidManifest, "'modules' must be an array."));
-                for (const auto &module : json["modules"]) {
-                    if (!module.is_object() || !module.contains("id") || !module["id"].is_string())
+                for (const auto &moduleJson : json["modules"]) {
+                    if (!moduleJson.is_object() || !moduleJson.contains("id") || !moduleJson["id"].is_string())
                         return Result<ExtensionManifest>::Failure(
                             MakeError(ExtensionErrors::InvalidManifest, "Every extension module requires a stable 'id'."));
                     ExtensionModuleManifest parsed{
-                        .id = module["id"].get<std::string>(),
-                        .version = module.value("version", manifest.version),
-                        .kind = module.value("kind", std::string{}),
-                        .entry = module.value("entry", std::string{}),
+                        .id = moduleJson["id"].get<std::string>(),
+                        .version = moduleJson.value("version", manifest.version),
+                        .kind = moduleJson.value("kind", std::string{}),
+                        .entry = moduleJson.value("entry", std::string{}),
                     };
                     if (parsed.id.empty() || !IsCanonicalSemanticVersion(parsed.version))
                         return Result<ExtensionManifest>::Failure(
@@ -162,8 +162,8 @@ namespace Horo::Extensions {
                     };
                     if (parsed.type.empty() || parsed.id.empty() ||
                         !std::ranges::any_of(manifest.modules,
-                                             [&parsed](const ExtensionModuleManifest &module) {
-                        return module.id == parsed.module;
+                                             [&parsed](const ExtensionModuleManifest &manifestModule) {
+                        return manifestModule.id == parsed.module;
                     }) ||
                         std::ranges::any_of(manifest.contributions, [&parsed](const ExtensionContributionManifest &existing) {
                         return existing.id == parsed.id;

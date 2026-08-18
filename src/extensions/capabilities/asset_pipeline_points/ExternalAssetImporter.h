@@ -11,7 +11,12 @@
 namespace Horo::Extensions {
     /** @brief Shared library/module lease retained by every external contribution adapter. */
     struct ExtensionModuleLifetime final {
+        ExtensionModuleLifetime() = default;
         ~ExtensionModuleLifetime();
+        ExtensionModuleLifetime(const ExtensionModuleLifetime &) = delete;
+        ExtensionModuleLifetime &operator=(const ExtensionModuleLifetime &) = delete;
+        ExtensionModuleLifetime(ExtensionModuleLifetime &&) noexcept = default;
+        ExtensionModuleLifetime &operator=(ExtensionModuleLifetime &&) noexcept = default;
 
         std::shared_ptr<Platform::DynamicLibrary> library;
         HoroExtensionModuleApi moduleApi{};
@@ -22,7 +27,7 @@ namespace Horo::Extensions {
     /** @brief Host-side state used only during one module load transaction. */
     struct AssetImporterRegistrationSession final {
         const ExtensionManifest *manifest{};
-        const ExtensionModuleManifest *module{};
+        const ExtensionModuleManifest *extensionModule{};
         std::shared_ptr<ExtensionModuleLifetime> lifetime;
         std::vector<Assets::AssetImporterContribution> contributions;
         Error error;

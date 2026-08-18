@@ -33,7 +33,7 @@ namespace Horo::Gameplay {
         std::unique_ptr<Platform::DynamicLibrary> library;
         std::unique_ptr<BehaviorRegistry> registry;
         GameRuntimeContext runtimeContext;
-        IGameModule *module{};
+        IGameModule *gameplayModule{};
         DestroyGameModuleFunction destroy{};
         std::string moduleId;
         std::string buildFingerprint;
@@ -48,11 +48,11 @@ namespace Horo::Gameplay {
     LoadedGameModule::~LoadedGameModule() {
         if (!impl_)
             return;
-        if (impl_->module != nullptr) {
+        if (impl_->gameplayModule != nullptr) {
             if (impl_->started)
-                impl_->module->Stop(impl_->runtimeContext);
-            impl_->destroy(impl_->module);
-            impl_->module = nullptr;
+                impl_->gameplayModule->Stop(impl_->runtimeContext);
+            impl_->destroy(impl_->gameplayModule);
+            impl_->gameplayModule = nullptr;
         }
         impl_->registry.reset();
         impl_->library.reset();
@@ -135,15 +135,15 @@ namespace Horo::Gameplay {
         if (Result<void> frozen = impl->registry->Freeze(); frozen.HasError())
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(frozen.ErrorValue());
 
-        impl->module = create();
-        if (impl->module == nullptr)
+        impl->gameplayModule = create();
+        if (impl->gameplayModule == nullptr)
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(
                 MakeError(GameplayErrors::InvalidBehaviorComponent, "Gameplay module factory returned no module object."));
-        Result<void> started = impl->module->Start(impl->runtimeContext);
+        Result<void> started = impl->gameplayModule->Start(impl->runtimeContext);
         if (started.HasError()) {
-            impl->module->Stop(impl->runtimeContext);
-            impl->destroy(impl->module);
-            impl->module = nullptr;
+            impl->gameplayModule->Stop(impl->runtimeContext);
+            impl->destroy(impl->gameplayModule);
+            impl->gameplayModule = nullptr;
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(started.ErrorValue());
         }
         impl->started = true;

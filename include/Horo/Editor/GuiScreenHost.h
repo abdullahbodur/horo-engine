@@ -338,7 +338,7 @@ namespace Horo::Editor {
         void FlushPendingNavigation();
         void CommitRoute(GuiRoute destination);
         void PresentLeaveDialog(const LeaveRequirement &requirement, const LeaveTarget &target);
-        void ExecuteLeaveResolution(LeaveAction action, LeaveRequirement requirement, LeaveTarget target);
+        void ExecuteLeaveResolution(LeaveAction action, const LeaveRequirement &requirement, const LeaveTarget &target);
         std::unique_ptr<GuiScreen> CreateScreen(const GuiRoute &route);
 
         const EditorGuiContext *context_;
@@ -362,7 +362,7 @@ namespace Horo::Editor {
         std::unique_ptr<Extensions::ExtensionManager> extensionManager_;
         std::shared_ptr<const Assets::AssetImporterCatalogSnapshot> importerCatalog_;
 
-        GuiRoute activeRoute_;
+        GuiRoute activeRoute_{GuiRouteKind::Welcome, WelcomeRouteParameters{}};
         GuiRouteRevision activeRevision_{0};
 
         std::unique_ptr<GuiScreen> activeScreen_;

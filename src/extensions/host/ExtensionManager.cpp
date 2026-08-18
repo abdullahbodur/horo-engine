@@ -28,7 +28,7 @@ namespace Horo::Extensions {
             return (value.data != nullptr || value.length == 0) && value.length <= kMaximumModuleIdentityBytes;
         }
 
-        [[nodiscard]] fs::path NativeLibraryPath(const ExtensionManifest &manifest, const ExtensionModuleManifest &module) {
+        [[nodiscard]] fs::path NativeLibraryPath(const ExtensionManifest &manifest, const ExtensionModuleManifest &manifestModule) {
 #if defined(_WIN32)
             constexpr std::string_view extension = ".dll";
 #elif defined(__APPLE__)
@@ -36,7 +36,7 @@ namespace Horo::Extensions {
 #else
             constexpr std::string_view extension = ".so";
 #endif
-            fs::path entry = module.entry.empty() ? fs::path{manifest.id} : fs::path{module.entry};
+            fs::path entry = manifestModule.entry.empty() ? fs::path{manifest.id} : fs::path{manifestModule.entry};
             if (!entry.has_extension())
                 entry += extension;
             return fs::path{manifest.rootPath} / entry;
@@ -127,11 +127,11 @@ namespace Horo::Extensions {
             return Result<std::string>::Failure(
                 MakeError(ExtensionErrors::InvalidManifest, "The current native loader requires exactly one module per package."));
 
-        const ExtensionModuleManifest &module = manifest.modules.front();
-        const std::string declaredModuleId = module.id;
-        const std::string declaredModuleVersion = module.version;
-        const fs::path libraryPath = NativeLibraryPath(manifest, module);
-        fs::path moduleEntry = module.entry.empty() ? fs::path{manifest.id} : fs::path{module.entry};
+        const ExtensionModuleManifest &manifestModule = manifest.modules.front();
+        const std::string declaredModuleId = manifestModule.id;
+        const std::string declaredModuleVersion = manifestModule.version;
+        const fs::path libraryPath = NativeLibraryPath(manifest, manifestModule);
+        fs::path moduleEntry = manifestModule.entry.empty() ? fs::path{manifest.id} : fs::path{manifestModule.entry};
         if (!moduleEntry.has_extension()) {
 #if defined(_WIN32)
             moduleEntry += ".dll";
@@ -160,7 +160,7 @@ namespace Horo::Extensions {
 
         AssetImporterRegistrationSession registration{
             .manifest = &manifest,
-            .module = &module,
+            .extensionModule = &manifestModule,
             .lifetime = lifetime,
         };
         constexpr std::string_view engineVersion = "0.1.0";

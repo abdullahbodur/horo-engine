@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <numbers>
 #include <span>
 
 namespace Horo::Render {
@@ -41,7 +42,8 @@ namespace Horo::Render {
 
         /** @brief Reports whether the light has finite, normalized, and ordered render values. */
         [[nodiscard]] bool IsValid() const noexcept {
-            const bool kindValid = kind == RenderLightKind::Directional || kind == RenderLightKind::Point || kind == RenderLightKind::Spot;
+            using enum RenderLightKind;
+            const bool kindValid = kind == Directional || kind == Point || kind == Spot;
             const float directionLength = Math::Length(direction);
             return kindValid && Math::IsFinite(position) && Math::IsFinite(direction) && Math::IsFinite(color) && color.x >= 0.0F &&
                    color.y >= 0.0F && color.z >= 0.0F && std::isfinite(directionLength) &&
@@ -93,9 +95,10 @@ namespace Horo::Render {
             const bool common = std::isfinite(nearPlane) && std::isfinite(farPlane) && nearPlane > 0.0F && farPlane > nearPlane;
             if (!common)
                 return false;
-            if (kind == RenderProjectionKind::Perspective)
-                return std::isfinite(verticalFovRadians) && verticalFovRadians > 0.0F && verticalFovRadians < 3.14159265358979323846F;
-            return kind == RenderProjectionKind::Orthographic && std::isfinite(orthographicHeight) && orthographicHeight > 0.0F;
+            using enum RenderProjectionKind;
+            if (kind == Perspective)
+                return std::isfinite(verticalFovRadians) && verticalFovRadians > 0.0F && verticalFovRadians < std::numbers::pi_v<float>;
+            return kind == Orthographic && std::isfinite(orthographicHeight) && orthographicHeight > 0.0F;
         }
     };
 

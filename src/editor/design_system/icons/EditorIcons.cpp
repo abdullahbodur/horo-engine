@@ -28,7 +28,9 @@ namespace Horo::Editor::Ui {
             IconRenderer renderer;
         };
 
-        void DrawNothing(const IconDrawContext &) {}
+        void DrawNothing(const IconDrawContext &) {
+            // Explicit no-op placeholder renderer for empty or unmapped icon tokens.
+        }
 
         void DrawGenericIcon(const IconDrawContext &context) {
             const auto [x, y] = context.position;

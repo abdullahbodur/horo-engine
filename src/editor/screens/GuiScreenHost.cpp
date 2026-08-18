@@ -51,7 +51,7 @@ namespace Horo::Editor {
         : context_(&context), modalHost_(&modalHost), settingsService_(&settingsService), localization_(&localization),
           engineEvents_(&engineEvents), logoTexture_(logoTexture), extensionInventory_(extensionInventory),
           extensionMarketplace_(extensionMarketplace), screenRegistry_(std::move(screenRegistry)),
-          workspacePanelRegistry_(std::move(workspacePanelRegistry)), activeRoute_{GuiRouteKind::Welcome, WelcomeRouteParameters{}} {
+          workspacePanelRegistry_(std::move(workspacePanelRegistry)) {
         services_.Register(*this);
         services_.RegisterConst(context);
         services_.Register(modalHost);
@@ -72,8 +72,8 @@ namespace Horo::Editor {
             services_.Register<Extensions::ExtensionMarketplaceService>(*extensionMarketplace_);
         importerCatalogCandidate_ = std::make_unique<Assets::AssetImporterCatalog>();
         extensionManager_ = std::make_unique<Extensions::ExtensionManager>(importerCatalogCandidate_.get());
-        const bool enableBuiltIns = extensionInventory_ == nullptr || extensionInventory_->IsEnabled("horo.builtin.assets");
-        if (enableBuiltIns) {
+        if (const bool enableBuiltIns = extensionInventory_ == nullptr || extensionInventory_->IsEnabled("horo.builtin.assets");
+            enableBuiltIns) {
             const Result<void> registered = RegisterAllBuiltinImporters(*importerCatalogCandidate_);
             if (registered.HasValue() && extensionInventory_ != nullptr)
                 extensionInventory_->MarkRuntimeActive("horo.builtin.assets");
@@ -91,8 +91,7 @@ namespace Horo::Editor {
                     extensionInventory_->SetLoadError(extension.packageId, loaded.ErrorValue().message);
             }
         }
-        auto published = importerCatalogCandidate_->Publish();
-        if (published.HasValue())
+        if (auto published = importerCatalogCandidate_->Publish(); published.HasValue())
             importerCatalog_ = std::move(published).Value();
         if (!importerCatalog_) {
             LOG_ERROR("editor.asset_import", "Unable to publish the built-in asset importer catalog.");
@@ -397,8 +396,7 @@ namespace Horo::Editor {
                                                                                                              ? "status.navigation.busy"
                                                                                                              : "status.navigation.idle")}));
         }
-        char cpuFrameTime[32]{};
-        std::snprintf(cpuFrameTime, sizeof(cpuFrameTime), "%.1f ms", static_cast<double>(dt * 1000.0F));
+        const std::string cpuFrameTime = std::format("{:.1f} ms", static_cast<double>(dt * 1000.0F));
         static_cast<void>(statusItemRegistry_.Update("horo.status.cpu", EditorStatusItemContent{.value = cpuFrameTime}));
 
         if (activeScreen_) {
@@ -408,6 +406,7 @@ namespace Horo::Editor {
         }
         FlushPendingNavigation();
     }
+
 
     /** @copydoc GuiScreenHost::OnFixedUpdate */
     void GuiScreenHost::OnFixedUpdate(const double fixedDeltaSeconds) {
@@ -464,15 +463,15 @@ namespace Horo::Editor {
 
     /** @copydoc GuiScreenHost::DispatchMenuInvocation */
     void GuiScreenHost::DispatchMenuInvocation(const EditorMenuInvocation &invocation) {
-        const EditorMenuAction action = invocation.action;
-        switch (action) {
-            case EditorMenuAction::NewProject:
+        using enum EditorMenuAction;
+        switch (invocation.action) {
+            case NewProject:
                 static_cast<void>(Navigate(GuiRoute{GuiRouteKind::ProjectCreation, ProjectCreationRouteParameters{}}));
                 return;
-            case EditorMenuAction::OpenProject:
+            case OpenProject:
                 static_cast<void>(Navigate(GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}}));
                 return;
-            case EditorMenuAction::ImportAssets:
+            case ImportAssets:
                 if (context_ && modalHost_ && !modalHost_->HasOpenModal()) {
                     auto modal =
                         std::make_unique<AssetImportModal>(context_->theme.fonts, m_importJobs, importerCatalog_,
@@ -483,27 +482,27 @@ namespace Horo::Editor {
                     static_cast<void>(modalHost_->OpenRoot(std::move(modal)));
                 }
                 return;
-            case EditorMenuAction::OpenEditorSettings:
+            case OpenEditorSettings:
                 if (context_ && settingsService_ && modalHost_) {
                     auto modal = std::make_unique<SettingsModal>(*context_, *settingsService_, logoTexture_, extensionInventory_,
                                                                  extensionMarketplace_);
                     static_cast<void>(modalHost_->OpenRoot(std::move(modal)));
                 }
                 return;
-            case EditorMenuAction::ExitApplication:
+            case ExitApplication:
                 static_cast<void>(RequestCloseApplication());
                 return;
-            case EditorMenuAction::SaveScene:
-            case EditorMenuAction::SaveSceneAs:
-            case EditorMenuAction::SaveSceneCopyAs:
-            case EditorMenuAction::Undo:
-            case EditorMenuAction::Redo:
-            case EditorMenuAction::CreatePrimitive:
+            case SaveScene:
+            case SaveSceneAs:
+            case SaveSceneCopyAs:
+            case Undo:
+            case Redo:
+            case CreatePrimitive:
                 if (activeScreen_) {
                     static_cast<void>(activeScreen_->HandleMenuInvocation(invocation));
                 }
                 return;
-            case EditorMenuAction::None:
+            case None:
                 return;
         }
     }
@@ -527,7 +526,7 @@ namespace Horo::Editor {
         }
     }
 
-    void GuiScreenHost::ExecuteLeaveResolution(LeaveAction action, LeaveRequirement requirement, LeaveTarget target) {
+    void GuiScreenHost::ExecuteLeaveResolution(LeaveAction action, const LeaveRequirement &requirement, const LeaveTarget &target) {
         if (action == LeaveAction::Stay) {
             pendingRequirement_.reset();
             pendingTarget_.reset();
@@ -540,8 +539,8 @@ namespace Horo::Editor {
 
         const LeaveRequirement current = *pendingRequirement_;
         const bool staleRequirement = current.subject != requirement.subject || current.revision != requirement.revision;
-        const bool actionAllowed = std::ranges::find(current.allowedActions, action) != current.allowedActions.end();
-        if (staleRequirement || !actionAllowed) {
+        if (const bool actionAllowed = std::ranges::find(current.allowedActions, action) != current.allowedActions.end();
+            staleRequirement || !actionAllowed) {
             LOG_ERROR("editor.screens", "Rejected stale or disallowed leave resolution.");
             return;
         }
@@ -566,7 +565,8 @@ namespace Horo::Editor {
             }
             const LeaveRequirement &next = *decision.requirement;
             const bool progressed = next.subject != current.subject || next.revision > current.revision;
-            if (!progressed || ++resolutionAttemptCount_ >= 5) {
+            ++resolutionAttemptCount_;
+            if (!progressed || resolutionAttemptCount_ >= 5) {
                 LOG_ERROR("editor.screens", "Leave resolution chain made no progress or exceeded its limit.");
                 pendingRequirement_.reset();
                 pendingTarget_.reset();
@@ -580,12 +580,10 @@ namespace Horo::Editor {
         pendingRequirement_.reset();
         pendingTarget_.reset();
         resolutionAttemptCount_ = 0;
-        if (std::holds_alternative<GuiRoute>(target.value)) {
-            CommitRoute(std::get<GuiRoute>(target.value));
+        if (std::holds_alternative<ApplicationCloseTarget>(target.value)) {
+            static_cast<void>(CommitApplicationClose());
         } else {
-            const Result<void> closed = CommitApplicationClose();
-            if (closed.HasError())
-                LOG_WARN("editor.screens", "Application close was rejected: %s", closed.ErrorValue().message.c_str());
+            CommitRoute(std::get<GuiRoute>(target.value));
         }
     }
 

@@ -635,6 +635,11 @@ namespace Horo::Input {
         explicit VirtualGamepad(RawInputCollector &collector) noexcept : collector_(&collector) {}
 
         ~VirtualGamepad();
+        VirtualGamepad(const VirtualGamepad &) = delete;
+        VirtualGamepad &operator=(const VirtualGamepad &) = delete;
+        VirtualGamepad(VirtualGamepad &&) noexcept = default;
+        VirtualGamepad &operator=(VirtualGamepad &&) noexcept = default;
+
         [[nodiscard]] GamepadDeviceId Connect(std::string name = "Virtual Gamepad");
         void Disconnect();
         [[nodiscard]] bool Press(GamepadButton button);
