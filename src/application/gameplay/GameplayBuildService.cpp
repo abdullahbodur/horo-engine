@@ -136,7 +136,7 @@ namespace Horo::Application {
             identity.nativeFileIdentity =
                 std::format("{}:{}:{}", information.dwVolumeSerialNumber, information.nFileIndexHigh, information.nFileIndexLow);
 #else
-            struct stat information {};
+            struct stat information = {};
 
             if (stat(identity.canonicalPath.c_str(), &information) != 0)
                 return Result<CompilerIdentity>::Failure(MakeError(InvalidRequest, "Compiler file identity is unavailable."));
