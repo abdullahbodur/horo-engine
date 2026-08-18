@@ -8,9 +8,11 @@
 #include "Horo/Foundation/Sha256.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <span>
 #include <sstream>
@@ -20,6 +22,17 @@
 namespace Horo::Assets {
     namespace {
         /**
+         * @brief Formats a SHA-256 digest into a 64-character lowercase hex string.
+         */
+        [[nodiscard]] std::string HexEncodeSha256(const Sha256Digest &digest) {
+            std::string result;
+            result.reserve(64);
+            for (const auto byte: digest.bytes)
+                result += std::format("{:02x}", byte);
+            return result;
+        }
+
+        /**
          * @brief Produces the canonical manifest JSON text.
          *        Schema: {"schemaVersion":1,"target":"...","artifacts":[...]}
          *        Sorted deterministically by assetId in the entries array.
@@ -28,23 +41,16 @@ namespace Horo::Assets {
             // Manual JSON construction to avoid nlohmann dependency.
             // Format: compact JSON with no trailing whitespace, fixed ordering.
             std::ostringstream json;
-            json << "{\"schemaVersion\":1,\"target\":\"" << target << "\",\"artifacts\":[";
+            json << R"({"schemaVersion":1,"target":")" << target << R"(","artifacts":[)";
 
             for (std::size_t i = 0; i < entries.size(); ++i) {
                 if (i > 0)
                     json << ',';
                 const auto &e = entries[i];
-                json << "{\"assetId\":\"" << e.assetId.ToString() << "\","
-                     << "\"assetType\":\"" << e.assetType.Value() << "\","
-                     << "\"artifact\":\"" << e.artifactFile << "\","
-                     << "\"artifactHash\":\"sha256:";
-
-                // Hex-encode the artifact hash
-                for (auto byte : e.artifactHash.bytes) {
-                    constexpr char hex[] = "0123456789abcdef";
-                    json << hex[(byte >> 4) & 0x0F] << hex[byte & 0x0F];
-                }
-                json << "\"}";
+                json << R"({"assetId":")" << e.assetId.ToString() << R"(",)"
+                        << R"("assetType":")" << e.assetType.Value() << R"(",)"
+                        << R"("artifact":")" << e.artifactFile << R"(",)"
+                        << R"("artifactHash":"sha256:)" << HexEncodeSha256(e.artifactHash) << R"("})";
             }
 
             json << "]}";
@@ -77,7 +83,7 @@ namespace Horo::Assets {
          */
         Result<void> WriteAtomic(const std::filesystem::path &path, std::span<const std::uint8_t> bytes) {
             auto tempPath = path;
-            tempPath += ".tmp." + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+            tempPath += std::format(".tmp.{}", std::chrono::steady_clock::now().time_since_epoch().count());
 
             {
                 std::ofstream temp(tempPath, std::ios::binary | std::ios::trunc);
@@ -143,7 +149,7 @@ namespace Horo::Assets {
 
         auto targetStr = JsonStringValue(json, "target");
         auto manifestHex = JsonStringValue(json, "manifestDigest");
-        auto relPath = JsonStringValue(json, "generationPath");
+        std::filesystem::path relPath = JsonStringValue(json, "generationPath");
         auto countStr = JsonStringValue(json, "artifactCount");
 
         if (targetStr.empty() || manifestHex.empty() || relPath.empty()) {
@@ -190,8 +196,8 @@ namespace Horo::Assets {
         }
 
         // Verify artifact payloads are within bounds
-        for (std::size_t i = 0; i < artifactPayloads.size(); ++i) {
-            if (artifactPayloads[i].size() > limits.maximumArtifactBytes) {
+        for (const auto &payload: artifactPayloads) {
+            if (payload.size() > limits.maximumArtifactBytes) {
                 return Result<AssetCookGeneration>::Failure(Error{CookErrors::TooLarge.code});
             }
         }
@@ -202,19 +208,8 @@ namespace Horo::Assets {
             std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t *>(manifestJson.data()), manifestJson.size());
         auto manifestDigest = ComputeSha256(std::as_bytes(manifestBytes));
 
-        auto manifestHex = [](const Sha256Digest &d) {
-            std::string h(64, '0');
-            for (std::size_t i = 0; i < 32; ++i) {
-                constexpr char hex[] = "0123456789abcdef";
-                h[i * 2] = hex[(d.bytes[i] >> 4) & 0x0F];
-                h[i * 2 + 1] = hex[d.bytes[i] & 0x0F];
-            }
-            return h;
-        };
-
-        auto genRelPath = std::string("generations/") + manifestHex(manifestDigest);
+        auto genRelPath = std::string("generations/") + HexEncodeSha256(manifestDigest);
         auto genRoot = targetRoot / genRelPath;
-        auto gensDir = targetRoot / "generations";
 
         // Create generations directory
         std::filesystem::create_directories(genRoot);
@@ -237,14 +232,14 @@ namespace Horo::Assets {
         }
 
         // Build and write current.json atomically
-        const std::string currentStr = "{\"schemaVersion\":1,\"target\":\"" + target.Value() + "\",\"manifestDigest\":\"" +
-                                       manifestHex(manifestDigest) + "\",\"generationPath\":\"" + genRelPath + "\",\"artifactCount\":\"" +
-                                       std::to_string(entries.size()) + "\"}";
+        const std::string currentStr =
+                std::format(
+                    R"({{"schemaVersion":1,"target":"{}","manifestDigest":"{}","generationPath":"{}","artifactCount":"{}"}})",
+                    target.Value(), HexEncodeSha256(manifestDigest), genRelPath, entries.size());
         auto currentBytes = std::vector<std::uint8_t>(reinterpret_cast<const std::uint8_t *>(currentStr.data()),
                                                       reinterpret_cast<const std::uint8_t *>(currentStr.data()) + currentStr.size());
 
-        auto writeResult = WriteAtomic(targetRoot / "current.json", currentBytes);
-        if (writeResult.HasError())
+        if (const auto writeResult = WriteAtomic(targetRoot / "current.json", currentBytes); writeResult.HasError())
             return Result<AssetCookGeneration>::Failure(writeResult.ErrorValue());
 
         return Result<AssetCookGeneration>::Success(AssetCookGeneration{

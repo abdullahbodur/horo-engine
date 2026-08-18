@@ -306,7 +306,7 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] std::optional<std::string> ReadEnvironmentVariable(const char *name) {
-#if defined(_WIN32)
+#if defined(_MSC_VER)
             char *value = nullptr;
             if (std::size_t size = 0; _dupenv_s(&value, &size, name) != 0 || value == nullptr)
                 return std::nullopt;
@@ -320,7 +320,7 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] std::string CurrentSystemErrorMessage() {
-#if defined(_WIN32)
+#if defined(_MSC_VER)
             if (std::array<char, 256> buffer{}; strerror_s(buffer.data(), buffer.size(), errno) == 0)
                 return buffer.data();
             return "unknown system error";

@@ -28,6 +28,10 @@ include(GNUInstallDirs)
 include(CTest)
 include(CMakePackageConfigHelpers)
 
+if(MSVC)
+    add_compile_options(/FS)
+endif()
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 option(HORO_BUILD_EDITOR_GUI "Build the graphical HoroEditor bootstrap" ON)

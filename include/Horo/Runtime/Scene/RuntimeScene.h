@@ -199,6 +199,14 @@ namespace Horo::Runtime {
          * scene or a typed construction error. */
         [[nodiscard]] static Result<std::unique_ptr<RuntimeScene>> Create(const RuntimeSceneDefinition &definition,
                                                                           SceneRuntimeId runtimeId, RuntimeSceneConfig config = {});
+
+        struct ResolvedAsset {
+            SceneAssetDependency dependency;
+            std::shared_ptr<const std::vector<std::uint8_t>> payload;
+        };
+
+        RuntimeScene(SceneRuntimeId runtimeId, SceneDefinitionId definitionId, SceneDefinitionRevision revision, RuntimeSceneConfig config,
+                     Assets::AssetRegistryRevision assetRevision, std::vector<ResolvedAsset> assets) noexcept;
         RuntimeScene(const RuntimeScene &) = delete;
         RuntimeScene &operator=(const RuntimeScene &) = delete;
         RuntimeScene(RuntimeScene &&) = delete;
@@ -213,11 +221,6 @@ namespace Horo::Runtime {
     private:
         friend class RuntimeSceneView;
         friend class RuntimeSceneService;
-
-        struct ResolvedAsset {
-            SceneAssetDependency dependency;
-            std::shared_ptr<const std::vector<std::uint8_t>> payload;
-        };
 
         [[nodiscard]] static Result<std::unique_ptr<RuntimeScene>> CreateResolved(const RuntimeSceneDefinition &definition,
                                                                                   SceneRuntimeId runtimeId, RuntimeSceneConfig config,
@@ -242,8 +245,7 @@ namespace Horo::Runtime {
             std::vector<std::pair<SceneObjectId, EntityId>> authoredIndex;
         };
 
-        RuntimeScene(SceneRuntimeId runtimeId, SceneDefinitionId definitionId, SceneDefinitionRevision revision, RuntimeSceneConfig config,
-                     Assets::AssetRegistryRevision assetRevision, std::vector<ResolvedAsset> assets) noexcept;
+        struct CommandApplier;
         [[nodiscard]] Result<EntityRef> CreateEntity(RuntimeSceneStorage &storage, const RuntimeEntityCreateInfo &info) const;
         [[nodiscard]] Result<void> DestroyEntity(RuntimeSceneStorage &storage, EntityRef entity) const;
         [[nodiscard]] bool IsValid(const RuntimeSceneStorage &storage, EntityRef entity) const noexcept;
@@ -304,6 +306,7 @@ namespace Horo::Runtime {
 
         struct Preparation;
         [[nodiscard]] Result<void> BeginPreparation(const RuntimeSceneDefinition &definition, RuntimeSceneConfig config);
+        [[nodiscard]] Result<void> PopulatePreparationEntries(Preparation &prep, const RuntimeSceneDefinition &definition) const;
         void AdvancePreparation();
         void CancelPreparation(bool waitForCompletion) noexcept;
         [[nodiscard]] Result<void> SubmitPreparationLoads();

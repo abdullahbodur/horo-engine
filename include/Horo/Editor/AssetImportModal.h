@@ -63,6 +63,9 @@ namespace Horo::Editor {
         /** @brief Returns the current operation snapshot for presentation rendering. */
         [[nodiscard]] const Assets::AssetImportSnapshot &Snapshot() const noexcept;
 
+        /** @brief Returns mutable access to the operation snapshot for modal editing. */
+        [[nodiscard]] Assets::AssetImportSnapshot &MutableSnapshot() noexcept;
+
         /** @brief Returns the pinned importer catalog snapshot. */
         [[nodiscard]] const Assets::AssetImporterCatalogSnapshot &Catalog() const noexcept;
 
@@ -93,7 +96,7 @@ namespace Horo::Editor {
         [[nodiscard]] bool IsImportComplete() const noexcept;
 
         /** @brief Runs the import preparation phase. */
-        [[nodiscard]] Result<void> PrepareImport(const CancellationToken &cancellation);
+        [[nodiscard]] Result<void> PrepareImport(const CancellationToken &cancellation) const;
 
         /** @brief Selects an item by index for the settings panel. */
         void SelectItem(std::size_t index);

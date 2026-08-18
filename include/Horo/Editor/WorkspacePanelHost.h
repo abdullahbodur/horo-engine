@@ -3,6 +3,7 @@
 #include "Horo/Editor/WorkspaceLayout.h"
 #include "Horo/Editor/WorkspaceLayoutPersistence.h"
 
+#include <cstdint>
 #include <string_view>
 
 namespace Horo::Editor {

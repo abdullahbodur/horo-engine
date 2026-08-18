@@ -7,8 +7,11 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <format>
+#include <memory>
 #include <numbers>
 #include <utility>
+#include <variant>
 
 namespace Horo::Editor {
     namespace {
@@ -16,18 +19,19 @@ namespace Horo::Editor {
 
         /** @brief Maps the typed authored object kind to its localized Inspector label. */
         [[nodiscard]] const char *KindLocalizationKey(const SceneObjectKind kind) noexcept {
+            using enum SceneObjectKind;
             switch (kind) {
-                case SceneObjectKind::Mesh:
+                case Mesh:
                     return "workspace.inspector.kind.mesh";
-                case SceneObjectKind::GameObject:
+                case GameObject:
                     return "workspace.inspector.kind.empty";
-                case SceneObjectKind::Camera:
+                case Camera:
                     return "workspace.inspector.kind.camera";
-                case SceneObjectKind::Light:
+                case Light:
                     return "workspace.inspector.kind.light";
-                case SceneObjectKind::TriggerVolume:
+                case TriggerVolume:
                     return "workspace.inspector.kind.trigger_volume";
-                case SceneObjectKind::AudioSource:
+                case AudioSource:
                     return "workspace.inspector.kind.audio_source";
             }
             return "workspace.inspector.kind.empty";
@@ -43,7 +47,7 @@ namespace Horo::Editor {
             if (!viewModel.primarySelection.has_value())
                 return nullptr;
             const auto selected = std::ranges::find(viewModel.objects, *viewModel.primarySelection, &SceneObject::id);
-            return selected == viewModel.objects.end() ? nullptr : &*selected;
+            return selected == viewModel.objects.end() ? nullptr : std::to_address(selected);
         }
 
         /** @brief Draws one localized Inspector validation message with consistent spacing. */
@@ -55,6 +59,72 @@ namespace Horo::Editor {
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + topSpacing);
             Ui::ErrorText(message.c_str(), fonts);
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + bottomSpacing);
+        }
+
+        struct BehaviorFieldVisitor {
+            Gameplay::BehaviorField &field;
+            const std::span<const char *const, 2> enabledEntries;
+            const EditorGuiContext &context;
+
+            bool operator()(bool &fieldVal) const {
+                if (int selected = fieldVal ? 1 : 0; Ui::DrawComboPropRow(
+                    field.name.c_str(), "value", selected, enabledEntries, context.theme.fonts)) {
+                    fieldVal = selected != 0;
+                    return true;
+                }
+                return false;
+            }
+
+            bool operator()(double &fieldVal) const {
+                auto draft = static_cast<float>(fieldVal);
+                if (const auto [changed, committed] = Ui::DrawFloatPropRow(
+                    field.name.c_str(), "value", draft, context.theme.fonts); committed) {
+                    fieldVal = static_cast<double>(draft);
+                    return true;
+                }
+                return false;
+            }
+
+            bool operator()(std::int64_t &fieldVal) const {
+                auto draft = static_cast<float>(fieldVal);
+                const auto [changed, committed] = Ui::DrawFloatPropRow(field.name.c_str(), "value", draft,
+                                                                       context.theme.fonts,
+                                                                       Ui::FloatPropertyOptions{.speed = 1.0F});
+                if (committed) {
+                    fieldVal = static_cast<std::int64_t>(draft);
+                    return true;
+                }
+                return false;
+            }
+
+            bool operator()(Math::Vec3 &fieldVal) const {
+                std::array draft{fieldVal.x, fieldVal.y, fieldVal.z};
+                if (const auto edit = Ui::DrawFloat3PropRow(field.name.c_str(), "value", draft, context.theme.fonts);
+                    edit.committed) {
+                    fieldVal = {draft[0], draft[1], draft[2]};
+                    return true;
+                }
+                return false;
+            }
+
+            bool operator()(const std::string &fieldVal) const {
+                Ui::DrawPropRow(field.name.c_str(), fieldVal.c_str(), context.theme.fonts);
+                return false;
+            }
+
+            template<typename T>
+            bool operator()([[maybe_unused]] const T &) const noexcept {
+                return false;
+            }
+        };
+
+        /** @brief Renders a single dynamic behavior field using typed std::visit dispatch. */
+        bool DrawBehaviorField(Gameplay::BehaviorField &field, const std::span<const char *const, 2> enabledEntries,
+                               const EditorGuiContext &context) {
+            ImGui::PushID(field.name.c_str());
+            const bool fieldCommitted = std::visit(BehaviorFieldVisitor{field, enabledEntries, context}, field.value);
+            ImGui::PopID();
+            return fieldCommitted;
         }
     }  // namespace
 
@@ -164,12 +234,15 @@ namespace Horo::Editor {
     }
 
     void InspectorPanel::DrawAddComponent(const SceneObject &object, const EditorWorkspaceViewModel &viewModel,
-                                          EditorWorkspaceViewCommandData &command, const EditorGuiContext &context) {
+                                          EditorWorkspaceViewCommandData &command,
+                                          const EditorGuiContext &context) const {
         ImGui::SetCursorPosX(14.0F);
-        const std::string addComponentLabel =
-            context.localization.Get("editor", "workspace.inspector.add_component") + "###InspectorAddComponent";
-        if (Ui::Button({.label = addComponentLabel.c_str(),
-                        .variant = Ui::ButtonVariant::Secondary,
+        if (const std::string addComponentLabel =
+                    context.localization.Get("editor", "workspace.inspector.add_component") + "###InspectorAddComponent"
+            ;
+            Ui::Button({
+                .label = addComponentLabel.c_str(),
+                .variant = Ui::ButtonVariant::Secondary,
                         .font = context.theme.fonts.sans,
                         .componentSize = Ui::ComponentSize::Medium,
                         .style = {.width = Ui::StyleWidth::FillAvailable}})) {
@@ -226,7 +299,7 @@ namespace Horo::Editor {
     }
 
     void InspectorPanel::DrawBehaviors(const SceneObject &object, const EditorWorkspaceViewModel &viewModel,
-                                       EditorWorkspaceViewCommandData &command, const EditorGuiContext &context) {
+                                       EditorWorkspaceViewCommandData &command, const EditorGuiContext &context) const {
         const std::array<const char *, 2> enabledEntries{
             context.localization.Get("editor", "workspace.value.off").c_str(),
             context.localization.Get("editor", "workspace.value.on").c_str(),
@@ -250,48 +323,16 @@ namespace Horo::Editor {
 
             Gameplay::BehaviorComponent edited = attached;
             bool committed = false;
-            int enabled = edited.enabled ? 1 : 0;
-            if (Ui::DrawComboPropRow(context.localization.Get("editor", "workspace.inspector.behavior_enabled").c_str(), "enabled", enabled,
+            if (int enabled = edited.enabled ? 1 : 0;
+                Ui::DrawComboPropRow(context.localization.Get("editor", "workspace.inspector.behavior_enabled").c_str(),
+                                     "enabled", enabled,
                                      enabledEntries, context.theme.fonts)) {
                 edited.enabled = enabled != 0;
                 committed = true;
             }
             if (!missing) {
                 for (Gameplay::BehaviorField &field : edited.fields) {
-                    ImGui::PushID(field.name.c_str());
-                    if (auto value = std::get_if<bool>(&field.value)) {
-                        int selected = *value ? 1 : 0;
-                        if (Ui::DrawComboPropRow(field.name.c_str(), "value", selected, enabledEntries, context.theme.fonts)) {
-                            *value = selected != 0;
-                            committed = true;
-                        }
-                    } else if (auto value = std::get_if<double>(&field.value)) {
-                        float draft = static_cast<float>(*value);
-                        const Ui::PropertyEditResult edit = Ui::DrawFloatPropRow(field.name.c_str(), "value", draft, context.theme.fonts);
-                        if (edit.committed) {
-                            *value = static_cast<double>(draft);
-                            committed = true;
-                        }
-                    } else if (auto value = std::get_if<std::int64_t>(&field.value)) {
-                        float draft = static_cast<float>(*value);
-                        const Ui::PropertyEditResult edit = Ui::DrawFloatPropRow(field.name.c_str(), "value", draft, context.theme.fonts,
-                                                                                 Ui::FloatPropertyOptions{.speed = 1.0F});
-                        if (edit.committed) {
-                            *value = static_cast<std::int64_t>(draft);
-                            committed = true;
-                        }
-                    } else if (auto value = std::get_if<Math::Vec3>(&field.value)) {
-                        std::array draft{value->x, value->y, value->z};
-                        const Ui::Float3PropertyEditResult edit =
-                            Ui::DrawFloat3PropRow(field.name.c_str(), "value", draft, context.theme.fonts);
-                        if (edit.committed) {
-                            *value = {draft[0], draft[1], draft[2]};
-                            committed = true;
-                        }
-                    } else if (const auto value = std::get_if<std::string>(&field.value)) {
-                        Ui::DrawPropRow(field.name.c_str(), value->c_str(), context.theme.fonts);
-                    }
-                    ImGui::PopID();
+                    committed |= DrawBehaviorField(field, enabledEntries, context);
                 }
             }
             if (committed && command.command == EditorWorkspaceViewCommand::None) {
@@ -303,10 +344,12 @@ namespace Horo::Editor {
         }
     }
 
-    void InspectorPanel::DrawMultiSelectionTitle(const std::size_t selectedObjectCount, const EditorGuiContext &context) {
+    void InspectorPanel::DrawMultiSelectionTitle(const std::size_t selectedObjectCount,
+                                                 const EditorGuiContext &context) const {
         ImGui::SetCursorPos({14.0F, ImGui::GetCursorPosY() + 14.0F});
         const std::string label =
-            std::to_string(selectedObjectCount) + " " + context.localization.Get("editor", "workspace.inspector.objects_selected");
+                std::format("{} {}", selectedObjectCount,
+                            context.localization.Get("editor", "workspace.inspector.objects_selected"));
         {
             Theme::ScopedTextStyle textStyle(context.theme.fonts.sansEmphasis, 16.0F, Theme::FontPx::SansEmphasis);
             ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
@@ -434,7 +477,7 @@ namespace Horo::Editor {
             context.localization.Get("editor", "workspace.inspector.light_kind_point").c_str(),
             context.localization.Get("editor", "workspace.inspector.light_kind_spot").c_str(),
         };
-        int kind = static_cast<int>(draft.light->kind);
+        auto kind = static_cast<int>(draft.light->kind);
         const bool kindChanged = Ui::DrawComboPropRow(context.localization.Get("editor", "workspace.inspector.light_kind").c_str(),
                                                       "light_kind", kind, kindEntries, context.theme.fonts);
         if (kindChanged)
@@ -507,25 +550,27 @@ namespace Horo::Editor {
     }
 
     void InspectorPanel::ApplyCameraEdit(const InspectorCameraEdit &edit, const SceneObject &object,
-                                         EditorWorkspaceViewCommandData &command) {
-        if (edit.removeRequested && command.command == EditorWorkspaceViewCommand::None) {
-            command.command = EditorWorkspaceViewCommand::RemoveComponentFromObject;
+                                         EditorWorkspaceViewCommandData &command) const {
+        using enum EditorWorkspaceViewCommand;
+        if (edit.removeRequested && command.command == None) {
+            command.command = RemoveComponentFromObject;
             command.objectPayload = object.id;
             command.componentTypePayload = ComponentType::Camera;
             return;
         }
-        AdoptCommand(command, m_editSession.ApplyCameraEdit(edit, object, command.command == EditorWorkspaceViewCommand::None));
+        AdoptCommand(command, m_editSession.ApplyCameraEdit(edit, object, command.command == None));
     }
 
     void InspectorPanel::ApplyLightEdit(const InspectorLightEdit &edit, const SceneObject &object,
                                         EditorWorkspaceViewCommandData &command) {
-        if (edit.removeRequested && command.command == EditorWorkspaceViewCommand::None) {
-            command.command = EditorWorkspaceViewCommand::RemoveComponentFromObject;
+        using enum EditorWorkspaceViewCommand;
+        if (edit.removeRequested && command.command == None) {
+            command.command = RemoveComponentFromObject;
             command.objectPayload = object.id;
             command.componentTypePayload = ComponentType::Light;
             return;
         }
-        AdoptCommand(command, m_editSession.ApplyLightEdit(edit, object, command.command == EditorWorkspaceViewCommand::None));
+        AdoptCommand(command, m_editSession.ApplyLightEdit(edit, object, command.command == None));
     }
 
     InspectorTriggerVolumeEdit InspectorPanel::DrawTriggerVolumeWidgets(const EditorGuiContext &context) {
@@ -542,7 +587,7 @@ namespace Horo::Editor {
             context.localization.Get("editor", "workspace.inspector.trigger_volume_shape_capsule").c_str(),
             context.localization.Get("editor", "workspace.inspector.trigger_volume_shape_plane").c_str(),
         };
-        int shape = static_cast<int>(draft.triggerVolume->shape);
+        auto shape = static_cast<int>(draft.triggerVolume->shape);
         const bool shapeChanged =
             Ui::DrawComboPropRow(context.localization.Get("editor", "workspace.inspector.trigger_volume_shape").c_str(),
                                  "trigger_volume_shape", shape, shapeEntries, context.theme.fonts);
@@ -564,7 +609,7 @@ namespace Horo::Editor {
             context.localization.Get("editor", "workspace.inspector.audio_source_kind_native_clip").c_str(),
             context.localization.Get("editor", "workspace.inspector.audio_source_kind_middleware_event").c_str(),
         };
-        int kind = static_cast<int>(draft.audioSource->kind);
+        auto kind = static_cast<int>(draft.audioSource->kind);
         const bool kindChanged = Ui::DrawComboPropRow(context.localization.Get("editor", "workspace.inspector.audio_source_kind").c_str(),
                                                       "audio_source_kind", kind, kindEntries, context.theme.fonts);
         if (kindChanged)
@@ -593,25 +638,27 @@ namespace Horo::Editor {
     }
 
     void InspectorPanel::ApplyTriggerVolumeEdit(const InspectorTriggerVolumeEdit &edit, const SceneObject &object,
-                                                EditorWorkspaceViewCommandData &command) {
-        if (edit.removeRequested && command.command == EditorWorkspaceViewCommand::None) {
-            command.command = EditorWorkspaceViewCommand::RemoveComponentFromObject;
+                                                EditorWorkspaceViewCommandData &command) const {
+        using enum EditorWorkspaceViewCommand;
+        if (edit.removeRequested && command.command == None) {
+            command.command = RemoveComponentFromObject;
             command.objectPayload = object.id;
             command.componentTypePayload = ComponentType::TriggerVolume;
             return;
         }
-        AdoptCommand(command, m_editSession.ApplyTriggerVolumeEdit(edit, object, command.command == EditorWorkspaceViewCommand::None));
+        AdoptCommand(command, m_editSession.ApplyTriggerVolumeEdit(edit, object, command.command == None));
     }
 
     void InspectorPanel::ApplyAudioSourceEdit(const InspectorAudioSourceEdit &edit, const SceneObject &object,
-                                              EditorWorkspaceViewCommandData &command) {
-        if (edit.removeRequested && command.command == EditorWorkspaceViewCommand::None) {
-            command.command = EditorWorkspaceViewCommand::RemoveComponentFromObject;
+                                              EditorWorkspaceViewCommandData &command) const {
+        using enum EditorWorkspaceViewCommand;
+        if (edit.removeRequested && command.command == None) {
+            command.command = RemoveComponentFromObject;
             command.objectPayload = object.id;
             command.componentTypePayload = ComponentType::AudioSource;
             return;
         }
-        AdoptCommand(command, m_editSession.ApplyAudioSourceEdit(edit, object, command.command == EditorWorkspaceViewCommand::None));
+        AdoptCommand(command, m_editSession.ApplyAudioSourceEdit(edit, object, command.command == None));
     }
 
     void InspectorPanel::DrawEmptyState(EditorWorkspaceViewCommandData &command, const EditorGuiContext &context) {
