@@ -407,7 +407,6 @@ namespace Horo::Editor {
         FlushPendingNavigation();
     }
 
-
     /** @copydoc GuiScreenHost::OnFixedUpdate */
     void GuiScreenHost::OnFixedUpdate(const double fixedDeltaSeconds) {
         if (activeScreen_) {
