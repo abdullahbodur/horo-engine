@@ -8,6 +8,7 @@
 #include <cctype>
 #include <cstddef>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -54,11 +55,9 @@ namespace Horo::Diagnostics {
         [[nodiscard]] bool IsSafeArchivePath(const std::filesystem::path &path) {
             if (path.empty() || path.is_absolute() || path.has_root_name() || path.has_root_directory())
                 return false;
-            for (const auto &component : path) {
-                if (component == ".." || component == "." || component.empty())
-                    return false;
-            }
-            return true;
+            return std::ranges::none_of(path, [](const auto &component) {
+                return component == ".." || component == "." || component.empty();
+            });
         }
 
         /** @brief Restricts support bundles to known diagnostic namespaces by default. */
@@ -85,9 +84,9 @@ namespace Horo::Diagnostics {
 
         [[nodiscard]] bool ContainsAbsolutePath(const std::string_view value) noexcept {
             for (std::size_t index = 0; index < value.size(); ++index) {
-                const bool boundary = index == 0 || std::isspace(static_cast<unsigned char>(value[index - 1])) || value[index - 1] == '=' ||
-                                      value[index - 1] == '"' || value[index - 1] == '\'';
-                if (boundary && (value[index] == '/' || value[index] == '\\'))
+                if (const bool boundary = index == 0 || std::isspace(static_cast<unsigned char>(value[index - 1])) ||
+                                          value[index - 1] == '=' || value[index - 1] == '"' || value[index - 1] == '\'';
+                    boundary && (value[index] == '/' || value[index] == '\\'))
                     return true;
                 if (index + 2 < value.size() && std::isalpha(static_cast<unsigned char>(value[index])) && value[index + 1] == ':' &&
                     (value[index + 2] == '/' || value[index + 2] == '\\'))
@@ -328,7 +327,7 @@ namespace Horo::Diagnostics {
                 continue;
             }
             const bool symlink = std::filesystem::is_symlink(entry.sourcePath, error);
-            if (!exists || error || symlink || !std::filesystem::is_regular_file(entry.sourcePath, error) || error)
+            if (!exists || error || symlink || !std::filesystem::is_regular_file(entry.sourcePath, error))
                 return Failure(ObservabilityErrors::InvalidBundleRequest,
                                "Every diagnostic bundle source must be an existing non-symlink regular file.");
             const std::uintmax_t size = std::filesystem::file_size(entry.sourcePath, error);
@@ -383,7 +382,7 @@ namespace Horo::Diagnostics {
                 manifest += ',';
             manifest += R"({"path":)";
             AppendJsonString(manifest, prepared[index].archivePath.generic_string());
-            manifest += R"(,"bytes":)" + std::to_string(prepared[index].bytes.size()) + R"(,"sha256":)";
+            manifest += std::format(R"(,"bytes":{},"sha256":)", prepared[index].bytes.size());
             AppendJsonString(manifest, prepared[index].digest);
             manifest += '}';
         }

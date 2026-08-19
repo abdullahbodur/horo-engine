@@ -61,21 +61,22 @@ namespace Horo::Extensions {
         }
 
         [[nodiscard]] bool ConvertKind(const HoroAssetImportSettingKind source, Assets::ImportSettingKind &destination) {
+            using enum Assets::ImportSettingKind;
             switch (source) {
                 case HORO_ASSET_IMPORT_SETTING_BOOLEAN:
-                    destination = Assets::ImportSettingKind::Boolean;
+                    destination = Boolean;
                     return true;
                 case HORO_ASSET_IMPORT_SETTING_INTEGER:
-                    destination = Assets::ImportSettingKind::Integer;
+                    destination = Integer;
                     return true;
                 case HORO_ASSET_IMPORT_SETTING_FLOAT:
-                    destination = Assets::ImportSettingKind::Float;
+                    destination = Float;
                     return true;
                 case HORO_ASSET_IMPORT_SETTING_TEXT:
-                    destination = Assets::ImportSettingKind::Text;
+                    destination = Text;
                     return true;
                 case HORO_ASSET_IMPORT_SETTING_CHOICE:
-                    destination = Assets::ImportSettingKind::Choice;
+                    destination = Choice;
                     return true;
                 default:
                     return false;
@@ -84,8 +85,7 @@ namespace Horo::Extensions {
 
         [[nodiscard]] HoroAssetImportSettingValue ToAbiValue(const Assets::ImportSettingValue &value) {
             HoroAssetImportSettingValue result{};
-            std::visit([&result](const auto &typed) {
-                using T = std::decay_t<decltype(typed)>;
+            std::visit([&result]<typename T>(const T &typed) {
                 if constexpr (std::is_same_v<T, bool>) {
                     result.kind = HORO_ASSET_IMPORT_SETTING_BOOLEAN;
                     result.booleanValue = typed ? 1U : 0U;
@@ -106,7 +106,10 @@ namespace Horo::Extensions {
             return result;
         }
 
-        [[nodiscard]] uint8_t IsCancelled(void *context) {
+        [[nodiscard]] uint8_t IsCancelled(const void *context) {
+            if (context == nullptr) {
+                return 0U;
+            }
             return static_cast<const CancellationToken *>(context)->IsCancellationRequested() ? 1U : 0U;
         }
 
@@ -118,7 +121,13 @@ namespace Horo::Extensions {
                 bytes.resize(static_cast<std::size_t>(byteCount));
                 *outBytes = bytes.empty() ? nullptr : bytes.data();
                 return HORO_EXTENSION_SUCCESS;
+            } catch (const std::bad_alloc &) {
+                return HORO_EXTENSION_ERROR_OUTPUT_REJECTED;
+            } catch (const std::exception &exception) {
+                LOG_WARN("extensions.importer", "ResizeVector failed: %s", exception.what());
+                return HORO_EXTENSION_ERROR_OUTPUT_REJECTED;
             } catch (...) {
+                LOG_WARN("extensions.importer", "ResizeVector failed with unknown exception.");
                 return HORO_EXTENSION_ERROR_OUTPUT_REJECTED;
             }
         }
@@ -133,8 +142,24 @@ namespace Horo::Extensions {
 
             ExternalImporterInstance(const ExternalImporterInstance &) = delete;
             ExternalImporterInstance &operator=(const ExternalImporterInstance &) = delete;
-            ExternalImporterInstance(ExternalImporterInstance &&) noexcept = default;
-            ExternalImporterInstance &operator=(ExternalImporterInstance &&) noexcept = default;
+
+            ExternalImporterInstance(ExternalImporterInstance &&other) noexcept
+                : lifetime(std::move(other.lifetime)), context(std::exchange(other.context, nullptr)),
+                  destroy(std::exchange(other.destroy, nullptr)), importFn(std::exchange(other.importFn, nullptr)),
+                  preview(std::exchange(other.preview, nullptr)) {}
+
+            ExternalImporterInstance &operator=(ExternalImporterInstance &&other) noexcept {
+                if (this != &other) {
+                    if (destroy != nullptr)
+                        destroy(context);
+                    lifetime = std::move(other.lifetime);
+                    context = std::exchange(other.context, nullptr);
+                    destroy = std::exchange(other.destroy, nullptr);
+                    importFn = std::exchange(other.importFn, nullptr);
+                    preview = std::exchange(other.preview, nullptr);
+                }
+                return *this;
+            }
 
             std::shared_ptr<ExtensionModuleLifetime> lifetime;
             void *context{};
@@ -162,7 +187,7 @@ namespace Horo::Extensions {
                     .sourceExtension = {input.sourceExtension.data(), static_cast<std::uint32_t>(input.sourceExtension.size())},
                     .settings = settings.data(),
                     .settingCount = static_cast<std::uint32_t>(settings.size()),
-                    .cancellation = {const_cast<CancellationToken *>(&cancellation), IsCancelled},
+                    .cancellation = {&cancellation, IsCancelled},
                 };
                 HoroAssetImportResponse response{
                     .structSize = sizeof(HoroAssetImportResponse),
@@ -173,9 +198,11 @@ namespace Horo::Extensions {
                 HoroExtensionStatus status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 try {
                     status = instance_->importFn(instance_->context, &request, &response);
-                } catch (const std::exception &) {
+                } catch (const std::exception &exception) {
+                    LOG_WARN("extensions.importer", "External importer threw exception: %s", exception.what());
                     status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 } catch (...) {
+                    LOG_WARN("extensions.importer", "External importer threw unknown exception.");
                     status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 }
                 if (status != HORO_EXTENSION_SUCCESS)
@@ -217,7 +244,7 @@ namespace Horo::Extensions {
                     .assetType = {input.assetType.Value().data(), static_cast<std::uint32_t>(input.assetType.Value().size())},
                     .width = input.width,
                     .height = input.height,
-                    .cancellation = {const_cast<CancellationToken *>(&cancellation), IsCancelled},
+                    .cancellation = {&cancellation, IsCancelled},
                 };
                 HoroAssetPreviewResponse response{
                     .structSize = sizeof(HoroAssetPreviewResponse),
@@ -226,9 +253,11 @@ namespace Horo::Extensions {
                 HoroExtensionStatus status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 try {
                     status = instance_->preview(instance_->context, &request, &response);
-                } catch (const std::exception &) {
+                } catch (const std::exception &exception) {
+                    LOG_WARN("extensions.importer", "External preview threw exception: %s", exception.what());
                     status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 } catch (...) {
+                    LOG_WARN("extensions.importer", "External preview threw unknown exception.");
                     status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 }
                 image.width = response.width;
@@ -270,10 +299,10 @@ namespace Horo::Extensions {
         if (loaded && unload != nullptr) {
             try {
                 unload(&moduleApi);
-            } catch (const std::exception &) {
-                // Ignore exceptions crossing extension unload boundary
+            } catch (const std::exception &exception) {
+                LOG_WARN("extensions.importer", "Exception during module unload: %s", exception.what());
             } catch (...) {
-                // Ignore non-standard exceptions crossing extension unload boundary
+                LOG_WARN("extensions.importer", "Unknown exception during module unload.");
             }
         }
     }

@@ -72,6 +72,11 @@ namespace Horo::Render {
                 Shutdown();
             }
 
+            OpenGLRenderBackend(const OpenGLRenderBackend &) = delete;
+            OpenGLRenderBackend &operator=(const OpenGLRenderBackend &) = delete;
+            OpenGLRenderBackend(OpenGLRenderBackend &&) = delete;
+            OpenGLRenderBackend &operator=(OpenGLRenderBackend &&) = delete;
+
             /** @copydoc IRenderBackend::Initialize */
             Result<void> Initialize(const RenderBackendConfig &config) override {
                 if (initialized_) {
@@ -92,25 +97,23 @@ namespace Horo::Render {
                 // contractually non-retaining; an exception may occur after native creation,
                 // so the frontend's rollback must still call DestroyContext().
                 contextCreated_ = true;
-                const Result<void> created = presentationPort_->CreateContext(OpenGLContextDescriptor{
-                    .majorVersion = options_.majorVersion,
-                    .minorVersion = options_.minorVersion,
-                    .profile = OpenGLContextProfile::Core,
-                    .enableDebugContext = config.enableValidation,
-                });
-                if (created.HasError()) {
+                if (const Result<void> created = presentationPort_->CreateContext(OpenGLContextDescriptor{
+                        .majorVersion = options_.majorVersion,
+                        .minorVersion = options_.minorVersion,
+                        .profile = OpenGLContextProfile::Core,
+                        .enableDebugContext = config.enableValidation,
+                    });
+                    created.HasError()) {
                     contextCreated_ = false;
                     ReleaseContextLease();
                     return Result<void>::Failure(created.ErrorValue());
                 }
 
-                const Result<void> current = presentationPort_->MakeCurrent();
-                if (current.HasError()) {
+                if (const Result<void> current = presentationPort_->MakeCurrent(); current.HasError()) {
                     DestroyContext();
                     return Result<void>::Failure(current.ErrorValue());
                 }
-                const Result<void> presentMode = presentationPort_->SetPresentMode(config.presentMode);
-                if (presentMode.HasError()) {
+                if (const Result<void> presentMode = presentationPort_->SetPresentMode(config.presentMode); presentMode.HasError()) {
                     DestroyContext();
                     return Result<void>::Failure(presentMode.ErrorValue());
                 }
@@ -145,8 +148,7 @@ namespace Horo::Render {
                         MakeOpenGLError(OpenGLBackendErrors::FrameTokenExhausted, "Frame token space is exhausted."));
                 }
 
-                const Result<void> current = presentationPort_->MakeCurrent();
-                if (current.HasError()) {
+                if (const Result<void> current = presentationPort_->MakeCurrent(); current.HasError()) {
                     return Result<FrameToken>::Failure(current.ErrorValue());
                 }
 
@@ -159,8 +161,7 @@ namespace Horo::Render {
 
             /** @copydoc IRenderBackend::Execute */
             Result<void> Execute(const RenderExecutionPlan &plan) override {
-                const Result<void> valid = ValidatePlan(plan);
-                if (valid.HasError()) {
+                if (const Result<void> valid = ValidatePlan(plan); valid.HasError()) {
                     return valid;
                 }
 
@@ -180,13 +181,11 @@ namespace Horo::Render {
 
             /** @copydoc IRenderBackend::Present */
             Result<void> Present(const FrameToken frame) override {
-                const Result<void> state = ValidateActiveFrame(frame);
-                if (state.HasError()) {
+                if (const Result<void> state = ValidateActiveFrame(frame); state.HasError()) {
                     return state;
                 }
 
-                const Result<void> presented = presentationPort_->SwapBuffers();
-                if (presented.HasError()) {
+                if (const Result<void> presented = presentationPort_->SwapBuffers(); presented.HasError()) {
                     return Result<void>::Failure(presented.ErrorValue());
                 }
 
@@ -249,8 +248,7 @@ namespace Horo::Render {
             }
 
             [[nodiscard]] Result<void> ValidatePlan(const RenderExecutionPlan &plan) const {
-                const Result<void> state = ValidateActiveFrame(plan.frame);
-                if (state.HasError()) {
+                if (const Result<void> state = ValidateActiveFrame(plan.frame); state.HasError()) {
                     return state;
                 }
 

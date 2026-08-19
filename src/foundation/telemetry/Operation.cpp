@@ -33,8 +33,8 @@ namespace Horo::Telemetry {
         }
 
         [[nodiscard]] bool IsTerminalStatus(const SpanStatus status) noexcept {
-            return status == SpanStatus::Succeeded || status == SpanStatus::Failed || status == SpanStatus::Cancelled ||
-                   status == SpanStatus::TimedOut;
+            using enum SpanStatus;
+            return status == Succeeded || status == Failed || status == Cancelled || status == TimedOut;
         }
     }  // namespace
 
@@ -67,14 +67,14 @@ namespace Horo::Telemetry {
     /** @copydoc OperationSpan::OperationSpan */
     OperationSpan::OperationSpan(const std::string_view subsystem, const std::string_view name) : subsystem_(subsystem), name_(name) {
         const OperationContext inherited = CaptureOperationContext();
-        context_.operationId = g_nextOperationId.fetch_add(1, std::memory_order_relaxed);
+        context_.operationId = g_nextOperationId.fetch_add(1, std::memory_order::seq_cst);
         context_.parentOperationId = inherited.operationId;
         context_.diagnosticContext = inherited.diagnosticContext.With("operation.id", std::to_string(context_.operationId));
         if (context_.parentOperationId != 0)
             context_.diagnosticContext = context_.diagnosticContext.With("operation.parent_id", std::to_string(context_.parentOperationId));
-        const auto correlation =
-            std::ranges::find(context_.diagnosticContext.Fields(), std::string_view{"correlation.id"}, &Log::MdcField::first);
-        if (correlation == context_.diagnosticContext.Fields().end())
+        if (const auto correlation =
+                std::ranges::find(context_.diagnosticContext.Fields(), std::string_view{"correlation.id"}, &Log::MdcField::first);
+            correlation == context_.diagnosticContext.Fields().end())
             context_.diagnosticContext = context_.diagnosticContext.With("correlation.id", std::to_string(context_.operationId));
         binding_.emplace(context_);
     }
@@ -119,6 +119,8 @@ namespace Horo::Telemetry {
                                                     std::chrono::steady_clock::now() - startedAt_),
                                                 .fields = {fields.begin(), fields.end()}}};
             static_cast<void>(Runtime::EmitRecord(std::move(record)));
+        } catch (const std::exception &) {
+            // Lifecycle completion remains authoritative even if diagnostic record construction fails.
         } catch (...) {
             // Lifecycle completion remains authoritative even if diagnostic record construction fails.
         }

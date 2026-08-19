@@ -8,8 +8,10 @@
 #include <vector>
 
 #if defined(_WIN32)
+#ifndef NOMINMAX
 #define NOMINMAX
-#include <Windows.h>
+#endif
+#include <windows.h>
 #else
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -68,6 +70,12 @@ namespace Horo {
     }  // namespace
 
     struct ExclusiveFileLock::State {
+        State() = default;
+        State(const State &) = delete;
+        State &operator=(const State &) = delete;
+        State(State &&) noexcept = default;
+        State &operator=(State &&) noexcept = default;
+
         std::string processKey;
 #if defined(_WIN32)
         HANDLE handle{INVALID_HANDLE_VALUE};
@@ -227,8 +235,7 @@ namespace Horo {
         if (error)
             return Result<void>::Failure(FsError(IoFailed, destination));
 #if defined(_WIN32)
-        const BOOL ok = MoveFileExW(prepared.c_str(), destination.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
-        if (!ok)
+        if (const BOOL ok = MoveFileExW(prepared.c_str(), destination.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH); !ok)
             return Result<void>::Failure(FsError(IoFailed, destination));
 #else
         std::filesystem::rename(prepared, destination, error);
@@ -240,8 +247,7 @@ namespace Horo {
 
     /** @copydoc DurableFileSystem::RemoveDurable */
     Result<void> NativeDurableFileSystem::RemoveDurable(const std::filesystem::path &path) {
-        std::error_code error;
-        if (!std::filesystem::remove(path, error) && error)
+        if (std::error_code error; !std::filesystem::remove(path, error) && error)
             return Result<void>::Failure(FsError(IoFailed, path));
         return SyncDirectory(path.parent_path());
     }

@@ -109,8 +109,7 @@ namespace Horo::Editor {
                 const ImGuiPayload *accepted =
                     ImGui::AcceptDragDropPayload(AssetSceneDragPayloadType,
                                                  ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
-                const std::optional<AssetSceneDragPayload> payload = ReadAssetPayload(accepted);
-                if (payload.has_value()) {
+                if (const std::optional<AssetSceneDragPayload> payload = ReadAssetPayload(accepted); payload.has_value()) {
                     assetDragActive = true;
                     const AssetSceneDropPolicyResult policy = EvaluateAssetSceneDrop(*payload);
                     drawList.AddRect(origin, {origin.x + width, origin.y + height},
@@ -208,17 +207,17 @@ namespace Horo::Editor {
 
     void ViewportPanel::DrawProjectionControl(const ImVec2 &origin, const EditorWorkspaceViewModel &viewModel,
                                               EditorWorkspaceViewCommandData &command, const EditorGuiContext &context) {
+        using enum Runtime::CameraProjection;
         ImGui::SetCursorScreenPos(ImVec2(origin.x + 10.0F, origin.y + 8.0F));
-        const char *projectionItems[]{
+        const std::array<const char *, 2> projectionItems{
             context.localization.Get("editor", "workspace.viewport.perspective_shaded").c_str(),
             context.localization.Get("editor", "workspace.viewport.orthographic_shaded").c_str(),
         };
-        int projectionIndex = viewModel.viewportCamera.projection == Runtime::CameraProjection::Perspective ? 0 : 1;
+        int projectionIndex = viewModel.viewportCamera.projection == Perspective ? 0 : 1;
         ImGui::PushItemWidth(190.0F);
-        if (Ui::ComboControl("viewport_projection", &projectionIndex, projectionItems, 2, context.theme.fonts)) {
+        if (Ui::ComboControl("viewport_projection", &projectionIndex, projectionItems.data(), 2, context.theme.fonts)) {
             command.command = EditorWorkspaceViewCommand::ChangeViewportProjection;
-            command.viewportProjectionPayload =
-                projectionIndex == 0 ? Runtime::CameraProjection::Perspective : Runtime::CameraProjection::Orthographic;
+            command.viewportProjectionPayload = projectionIndex == 0 ? Perspective : Orthographic;
         }
         ImGui::PopItemWidth();
     }

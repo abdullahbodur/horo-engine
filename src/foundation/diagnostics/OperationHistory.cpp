@@ -15,30 +15,32 @@ namespace Horo::Diagnostics {
         using Json = nlohmann::json;
 
         [[nodiscard]] const char *ToString(const Telemetry::SpanStatus status) noexcept {
+            using enum Telemetry::SpanStatus;
             switch (status) {
-                case Telemetry::SpanStatus::Succeeded:
+                case Succeeded:
                     return "succeeded";
-                case Telemetry::SpanStatus::Failed:
+                case Failed:
                     return "failed";
-                case Telemetry::SpanStatus::Cancelled:
+                case Cancelled:
                     return "cancelled";
-                case Telemetry::SpanStatus::TimedOut:
+                case TimedOut:
                     return "timed_out";
-                case Telemetry::SpanStatus::Unset:
+                case Unset:
                     return "unset";
             }
             return "unset";
         }
 
         [[nodiscard]] std::optional<Telemetry::SpanStatus> ParseStatus(const std::string_view value) noexcept {
+            using enum Telemetry::SpanStatus;
             if (value == "succeeded")
-                return Telemetry::SpanStatus::Succeeded;
+                return Succeeded;
             if (value == "failed")
-                return Telemetry::SpanStatus::Failed;
+                return Failed;
             if (value == "cancelled")
-                return Telemetry::SpanStatus::Cancelled;
+                return Cancelled;
             if (value == "timed_out")
-                return Telemetry::SpanStatus::TimedOut;
+                return TimedOut;
             return std::nullopt;
         }
 
@@ -115,6 +117,8 @@ namespace Horo::Diagnostics {
                 }
                 record.context = Log::LogContextSnapshot{std::move(context)};
                 return record;
+            } catch (const std::exception &) {
+                return std::nullopt;
             } catch (...) {
                 return std::nullopt;
             }
@@ -151,7 +155,7 @@ namespace Horo::Diagnostics {
             : configuration(std::move(value)), path(configuration.directory / (configuration.baseName + ".jsonl")) {}
 
         [[nodiscard]] std::filesystem::path RolledPath(const std::size_t index) const {
-            return std::filesystem::path{path.string() + "." + std::to_string(index)};
+            return std::filesystem::path{std::format("{}.{}", path.string(), index)};
         }
 
         void AppendRecovered(OperationHistoryRecord record) {
@@ -193,10 +197,10 @@ namespace Horo::Diagnostics {
                 std::filesystem::remove(path, error);
             } else {
                 std::filesystem::remove(RolledPath(configuration.maxRolledFiles), error);
-                for (std::size_t index = configuration.maxRolledFiles; !error && index > 1; --index) {
-                    const auto source = RolledPath(index - 1U);
+                for (auto index = static_cast<std::ptrdiff_t>(configuration.maxRolledFiles); !error && index > 1; --index) {
+                    const auto source = RolledPath(static_cast<std::size_t>(index) - 1U);
                     if (std::filesystem::exists(source, error))
-                        std::filesystem::rename(source, RolledPath(index), error);
+                        std::filesystem::rename(source, RolledPath(static_cast<std::size_t>(index)), error);
                     else
                         error.clear();
                 }
@@ -217,8 +221,16 @@ namespace Horo::Diagnostics {
         std::filesystem::path path;
         std::FILE *file{};
         std::uintmax_t currentBytes{};
-        mutable std::mutex mutex;
         std::deque<OperationHistoryRecord> records;
+
+    private:
+        /// Guards all mutable fields accessed from Export and Snapshot.
+        mutable std::mutex mutex;
+
+    public:
+        [[nodiscard]] std::mutex &Mutex() const noexcept {
+            return mutex;
+        }
     };
 
     /** @copydoc OperationHistorySink::Create */
@@ -272,7 +284,7 @@ namespace Horo::Diagnostics {
         if (line.size() > impl_->configuration.maxFileBytes)
             throw std::runtime_error{"operation history record exceeds file limit"};
 
-        std::lock_guard lock(impl_->mutex);
+        std::lock_guard lock(impl_->Mutex());
         if (impl_->currentBytes != 0 && impl_->currentBytes + line.size() > impl_->configuration.maxFileBytes)
             impl_->Roll();
         const std::size_t written = std::fwrite(line.data(), 1, line.size(), impl_->file);
@@ -284,14 +296,14 @@ namespace Horo::Diagnostics {
 
     /** @copydoc OperationHistorySink::Flush */
     void OperationHistorySink::Flush() {
-        std::lock_guard lock(impl_->mutex);
+        std::lock_guard lock(impl_->Mutex());
         if (impl_->file != nullptr && std::fflush(impl_->file) != 0)
             throw std::runtime_error{"failed to flush operation history"};
     }
 
     /** @copydoc OperationHistorySink::Snapshot */
     std::vector<OperationHistoryRecord> OperationHistorySink::Snapshot() const {
-        std::lock_guard lock(impl_->mutex);
+        std::lock_guard lock(impl_->Mutex());
         return {impl_->records.begin(), impl_->records.end()};
     }
 }  // namespace Horo::Diagnostics

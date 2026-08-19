@@ -56,8 +56,8 @@ using HoroExtensionByteSink = struct HoroExtensionByteSink;
 
 /** @brief Cooperative cancellation query valid only during one callback. */
 struct HoroExtensionCancellation {
-    void *context;
-    uint8_t (*isCancellationRequested)(void *context);
+    const void *context;
+    uint8_t (*isCancellationRequested)(const void *context);
 };
 using HoroExtensionCancellation = struct HoroExtensionCancellation;
 

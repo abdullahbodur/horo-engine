@@ -194,9 +194,9 @@ namespace Horo::Editor {
             }
             static_cast<void>(faceCount);
 
-            const std::uintmax_t requiredSize =
-                static_cast<std::uintmax_t>(kMeshPositionPayloadOffset) + static_cast<std::uintmax_t>(positionCount) * 3U * sizeof(float);
-            if (requiredSize > payloadSize)
+            if (const std::uintmax_t requiredSize = static_cast<std::uintmax_t>(kMeshPositionPayloadOffset) +
+                                                    static_cast<std::uintmax_t>(positionCount) * 3U * sizeof(float);
+                requiredSize > payloadSize)
                 return {};
 
             const std::size_t sampleCount = std::min<std::size_t>(positionCount, kMaximumMeshPreviewPoints);
@@ -242,14 +242,15 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] Assets::AssetPreviewFallback InferFallback(const std::string_view assetType) {
+            using enum Assets::AssetPreviewFallback;
             if (assetType.find("mesh") != std::string_view::npos)
-                return Assets::AssetPreviewFallback::Mesh;
+                return Mesh;
             if (assetType.find("texture") != std::string_view::npos || assetType.find("image") != std::string_view::npos) {
-                return Assets::AssetPreviewFallback::Image;
+                return Image;
             }
             if (assetType.find("audio") != std::string_view::npos)
-                return Assets::AssetPreviewFallback::Audio;
-            return Assets::AssetPreviewFallback::Generic;
+                return Audio;
+            return Generic;
         }
 
         [[nodiscard]] bool ContainsCaseInsensitive(const std::string_view text, const std::string_view needle) {
@@ -257,14 +258,13 @@ namespace Horo::Editor {
                 return true;
             if (needle.size() > text.size())
                 return false;
-            return std::search(text.begin(), text.end(), needle.begin(), needle.end(), [](const char left, const char right) {
+            return std::ranges::search(text, needle, [](const char left, const char right) {
                 return std::tolower(static_cast<unsigned char>(left)) == std::tolower(static_cast<unsigned char>(right));
-            }) != text.end();
+            }).begin() != text.end();
         }
 
         [[nodiscard]] int CompareCaseInsensitive(const std::string_view left, const std::string_view right) {
-            const auto [leftMismatch, rightMismatch] =
-                std::mismatch(left.begin(), left.end(), right.begin(), right.end(), [](const char lhs, const char rhs) {
+            const auto [leftMismatch, rightMismatch] = std::ranges::mismatch(left, right, [](const char lhs, const char rhs) {
                 return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs));
             });
             if (leftMismatch == left.end() || rightMismatch == right.end()) {
@@ -287,8 +287,8 @@ namespace Horo::Editor {
         const std::filesystem::path lexicalTarget = std::filesystem::absolute(absoluteTarget, error).lexically_normal();
         if (error)
             return false;
-        const std::filesystem::file_status lexicalStatus = std::filesystem::symlink_status(lexicalTarget, error);
-        if (error || std::filesystem::is_symlink(lexicalStatus))
+        if (const std::filesystem::file_status lexicalStatus = std::filesystem::symlink_status(lexicalTarget, error);
+            error || std::filesystem::is_symlink(lexicalStatus))
             return false;
 
         const std::filesystem::path root = NormalizeAbsolute(absoluteRoot);

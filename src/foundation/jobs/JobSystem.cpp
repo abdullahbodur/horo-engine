@@ -20,14 +20,14 @@ namespace Horo {
         }
 
         [[nodiscard]] bool IsTerminal(const JobState state) noexcept {
-            return state == JobState::Succeeded || state == JobState::Failed || state == JobState::Cancelled;
+            using enum JobState;
+            return state == Succeeded || state == Failed || state == Cancelled;
         }
     }  // namespace
 
     struct JobRecord {
         JobRecord(const JobId jobId, const JobDescriptor &descriptor, JobFunction jobWork)
-            : id(jobId), cancellation(descriptor.parentCancellation), work(std::move(jobWork)),
-              operationContext(Telemetry::CaptureOperationContext()) {}
+            : id(jobId), cancellation(descriptor.parentCancellation), work(std::move(jobWork)) {}
 
         [[nodiscard]] std::mutex &Mutex() const noexcept {
             return mutex_;
@@ -39,7 +39,9 @@ namespace Horo {
         std::optional<Error> error;
         CancellationSource cancellation;
         JobFunction work;
-        Telemetry::OperationContext operationContext;
+        Telemetry::OperationContext operationContext = Telemetry::CaptureOperationContext();
+
+    private:
         mutable std::mutex mutex_;
     };
 
@@ -259,8 +261,12 @@ namespace Horo {
         : m_state(std::make_shared<State>(jobs, policy, parentCancellation)) {}
 
     TaskGroup::~TaskGroup() {
-        RequestCancel();
-        static_cast<void>(Join());
+        try {
+            RequestCancel();
+            static_cast<void>(Join());
+        } catch (...) {
+            // Destructors must swallow any unexpected exceptions per noexcept contract
+        }
     }
 
     Result<JobId> TaskGroup::Spawn(JobDescriptor descriptor, JobFunction work) {

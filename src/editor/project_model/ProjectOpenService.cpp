@@ -27,33 +27,34 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] float PhaseProgress(const ProjectOpenPhase phase) noexcept {
+            using enum ProjectOpenPhase;
             switch (phase) {
-                case ProjectOpenPhase::Inspecting:
+                case Inspecting:
                     return 0.05F;
-                case ProjectOpenPhase::CleaningRecovery:
+                case CleaningRecovery:
                     return 0.12F;
-                case ProjectOpenPhase::Recovering:
+                case Recovering:
                     return 0.20F;
-                case ProjectOpenPhase::ValidatingCompatibility:
+                case ValidatingCompatibility:
                     return 0.30F;
-                case ProjectOpenPhase::PlanningMigration:
+                case PlanningMigration:
                     return 0.40F;
-                case ProjectOpenPhase::Migrating:
+                case Migrating:
                     return 0.62F;
-                case ProjectOpenPhase::UpdatingProjectMetadata:
+                case UpdatingProjectMetadata:
                     return 0.68F;
-                case ProjectOpenPhase::ValidatingDefaultScene:
+                case ValidatingDefaultScene:
                     return 0.74F;
-                case ProjectOpenPhase::RebuildingDerivedState:
+                case RebuildingDerivedState:
                     return 0.80F;
-                case ProjectOpenPhase::RendererPreflight:
+                case RendererPreflight:
                     return 0.88F;
-                case ProjectOpenPhase::PreparingWorkspace:
+                case PreparingWorkspace:
                     return 0.96F;
-                case ProjectOpenPhase::ReadyToActivate:
-                case ProjectOpenPhase::RequiresRendererRestart:
-                case ProjectOpenPhase::Failed:
-                case ProjectOpenPhase::Cancelled:
+                case ReadyToActivate:
+                case RequiresRendererRestart:
+                case Failed:
+                case Cancelled:
                     return 1.0F;
             }
             return 0.0F;
@@ -94,7 +95,7 @@ namespace Horo::Editor {
             nlohmann::json metadata;
             try {
                 stream >> metadata;
-            } catch (...) {
+            } catch (const nlohmann::json::exception &) {
                 return Result<void>::Failure(OpenError(ProjectOpenErrors::MetadataUpdateFailed));
             }
             metadata["horoVersion"] = FormatHoroVersion(target.release.value);
@@ -126,7 +127,7 @@ namespace Horo::Editor {
         };
 
         void SetPhase(const std::shared_ptr<BackgroundCompletion> &completion, const ProjectOpenPhase phase) noexcept {
-            completion->phase.store(phase, std::memory_order_release);
+            completion->phase.store(phase, std::memory_order::seq_cst);
         }
     }  // namespace
 
@@ -218,18 +219,15 @@ namespace Horo::Editor {
     /** @copydoc ProjectOpenPreflightService::ProjectOpenPreflightService */
     ProjectOpenPreflightService::ProjectOpenPreflightService(ProjectMigrationTransactionService &transactions)
         : transactions_(transactions) {
-        auto catalog = BuildBuiltInProjectMigrationCatalog();
-        if (catalog.HasError())
+        if (auto catalog = BuildBuiltInProjectMigrationCatalog(); catalog.HasError())
             catalogError_ = catalog.ErrorValue();
         else {
-            auto registry = ProjectMigrationRegistry::Create(catalog.Value());
-            if (registry.HasError())
+            if (auto registry = ProjectMigrationRegistry::Create(catalog.Value()); registry.HasError())
                 catalogError_ = registry.ErrorValue();
             else
                 registry_.emplace(std::move(registry).Value());
         }
-        auto support = BuildBuiltInProjectMigrationSupportDescriptor();
-        if (support.HasError())
+        if (auto support = BuildBuiltInProjectMigrationSupportDescriptor(); support.HasError())
             catalogError_ = support.ErrorValue();
         else
             support_.emplace(std::move(support).Value());
@@ -237,30 +235,30 @@ namespace Horo::Editor {
 
     /** @copydoc ProjectOpenPreflightService::Inspect */
     ProjectOpenPreflightSnapshot ProjectOpenPreflightService::Inspect(const std::filesystem::path &projectRoot) const {
+        using enum ProjectCompatibilityStatus;
         ProjectOpenPreflightSnapshot snapshot{.compatibility = InspectProjectCompatibility(projectRoot),
                                               .recovery = transactions_.InspectPendingRecovery(projectRoot)};
         if (snapshot.recovery.action != MigrationRecoveryAction::None) {
-            snapshot.compatibility.status = ProjectCompatibilityStatus::RecoveryRequired;
+            snapshot.compatibility.status = RecoveryRequired;
             snapshot.compatibility.diagnostic = snapshot.recovery.diagnostic;
             return snapshot;
         }
-        if ((snapshot.compatibility.status == ProjectCompatibilityStatus::MigrationPathMissing ||
-             snapshot.compatibility.status == ProjectCompatibilityStatus::AutomaticMigrationRequired) &&
+        if ((snapshot.compatibility.status == MigrationPathMissing || snapshot.compatibility.status == AutomaticMigrationRequired) &&
             snapshot.compatibility.metadata.has_value() && snapshot.compatibility.sourceBaseline.has_value()) {
             if (!registry_.has_value() || !support_.has_value()) {
-                snapshot.compatibility.status = ProjectCompatibilityStatus::MigrationPathMissing;
+                snapshot.compatibility.status = MigrationPathMissing;
                 snapshot.compatibility.diagnostic = catalogError_;
                 return snapshot;
             }
             auto plan =
                 registry_->Plan(*snapshot.compatibility.sourceBaseline, snapshot.compatibility.metadata->persistentContract, *support_);
             if (plan.HasValue()) {
-                snapshot.compatibility.status = ProjectCompatibilityStatus::AutomaticMigrationRequired;
+                snapshot.compatibility.status = AutomaticMigrationRequired;
                 snapshot.migrationPlan.emplace(std::move(plan).Value());
             } else {
                 snapshot.compatibility.status = plan.ErrorValue().code.Value() == "project.migration.provider_missing"
-                                                    ? ProjectCompatibilityStatus::RequiredProviderUnavailable
-                                                    : ProjectCompatibilityStatus::MigrationPathMissing;
+                                                    ? RequiredProviderUnavailable
+                                                    : MigrationPathMissing;
                 snapshot.compatibility.diagnostic = plan.ErrorValue();
             }
         }
@@ -285,12 +283,12 @@ namespace Horo::Editor {
         if (state_->shutdown || (state_->operation.has_value() && state_->operation->snapshot.outcome == ProjectOpenOutcome::Running))
             return Result<ProjectOpenOperationHandle>::Failure(OpenError(ProjectOpenErrors::Busy));
         {
+            using enum ProjectSessionActivationLease::State::Status;
             std::lock_guard lock(state_->sessions->mutex);
-            if (state_->sessions->status == ProjectSessionActivationLease::State::Status::Ready ||
-                state_->sessions->status == ProjectSessionActivationLease::State::Status::Reserved)
+            if (state_->sessions->status == Ready || state_->sessions->status == Reserved)
                 return Result<ProjectOpenOperationHandle>::Failure(OpenError(ProjectOpenErrors::Busy));
             state_->sessions->candidate.reset();
-            state_->sessions->status = ProjectSessionActivationLease::State::Status::Empty;
+            state_->sessions->status = Empty;
         }
 
         const ProjectOpenOperationId id{state_->nextOperation++};
@@ -306,10 +304,10 @@ namespace Horo::Editor {
 
         const auto requestCopy = operation.request;
         const CancellationToken cancellation = operation.cancellation.Token();
-        auto submitted = state_->jobs.SubmitResult(JobDescriptor{.parentCancellation = cancellation},
-                                                   [state = state_.get(), completion, requestCopy,
-                                                    id](const CancellationToken &jobCancellation) -> Result<void> {
-            const auto fail = [&](Error error) -> Result<void> {
+        auto submitted =
+            state_->jobs.SubmitResult(JobDescriptor{.parentCancellation = cancellation},
+                                      [state = state_.get(), completion, requestCopy, id](const CancellationToken &jobCancellation) {
+            const auto fail = [&](Error error) {
                 LOG_ERROR("editor.project_open", "Project open failed operation=%llu code=%s.", static_cast<unsigned long long>(id.value),
                           error.code.Value().c_str());
                 std::lock_guard lock(completion->mutex);
@@ -404,7 +402,7 @@ namespace Horo::Editor {
                 if (prepared.HasError())
                     return fail(OpenError(ProjectOpenErrors::DerivedStateFailed,
                                           std::string(contributor->Id()) + ": " + prepared.ErrorValue().message));
-                result.derived.push_back({std::string(contributor->Id()), std::move(prepared).Value()});
+                result.derived.emplace_back(std::string(contributor->Id()), std::move(prepared).Value());
             }
             std::lock_guard lock(completion->mutex);
             completion->result.emplace(std::move(result));
@@ -463,7 +461,7 @@ namespace Horo::Editor {
             return;
         auto &operation = *state_->operation;
         auto &snapshot = operation.snapshot;
-        snapshot.phase = operation.completion->phase.load(std::memory_order_acquire);
+        snapshot.phase = operation.completion->phase.load(std::memory_order::seq_cst);
         snapshot.progress = std::max(snapshot.progress, PhaseProgress(snapshot.phase));
         if (!operation.job.has_value())
             return;
@@ -484,7 +482,10 @@ namespace Horo::Editor {
             snapshot.outcome =
                 operation.cancellation.Token().IsCancellationRequested() ? ProjectOpenOutcome::Cancelled : ProjectOpenOutcome::Failed;
             snapshot.progress = 1.0F;
-            snapshot.diagnostic = error.has_value() ? std::move(error) : job.error;
+            if (error.has_value())
+                snapshot.diagnostic = std::move(error);
+            else
+                snapshot.diagnostic = job.error;
             if (snapshot.outcome == ProjectOpenOutcome::Cancelled)
                 LOG_WARN("editor.project_open", "Project open cancelled operation=%llu.",
                          static_cast<unsigned long long>(snapshot.operationId.value));

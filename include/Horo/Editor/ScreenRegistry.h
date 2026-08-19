@@ -25,8 +25,7 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] std::unique_ptr<GuiScreen> CreateScreen(const GuiRoute &route, const EditorServiceRegistry &services) const {
-            auto it = factories_.find(route.kind);
-            if (it != factories_.end()) {
+            if (const auto it = factories_.find(route.kind); it != factories_.end()) {
                 return it->second(services, route);
             }
             return nullptr;

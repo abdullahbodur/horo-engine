@@ -54,8 +54,8 @@ namespace Horo::Editor {
         std::error_code error;
 
         const bool hasNativeSources = HasNativeGameplaySources(projectRoot);
-        const std::filesystem::path cmakeLists = projectRoot / "CMakeLists.txt";
-        if (hasNativeSources && !std::filesystem::is_regular_file(cmakeLists, error)) {
+        if (const std::filesystem::path cmakeLists = projectRoot / "CMakeLists.txt";
+            hasNativeSources && !std::filesystem::is_regular_file(cmakeLists, error)) {
             report.issues.push_back(ProjectIntegrityIssue{
                 .kind = ProjectIntegrityIssueKind::MissingCMakeLists,
                 .targetPath = cmakeLists,
@@ -65,8 +65,8 @@ namespace Horo::Editor {
         }
         error.clear();
 
-        const std::filesystem::path gameModule = projectRoot / "source" / "gameplay" / "GameModule.cpp";
-        if (hasNativeSources && !std::filesystem::is_regular_file(gameModule, error)) {
+        if (const std::filesystem::path gameModule = projectRoot / "source" / "gameplay" / "GameModule.cpp";
+            hasNativeSources && !std::filesystem::is_regular_file(gameModule, error)) {
             report.issues.push_back(ProjectIntegrityIssue{
                 .kind = ProjectIntegrityIssueKind::MissingGameModuleBootstrap,
                 .targetPath = gameModule,
@@ -76,8 +76,8 @@ namespace Horo::Editor {
         }
         error.clear();
 
-        const std::filesystem::path scriptsDir = projectRoot / "assets" / "scripts";
-        if (!std::filesystem::is_directory(scriptsDir, error)) {
+        if (const std::filesystem::path scriptsDir = projectRoot / "assets" / "scripts";
+            !std::filesystem::is_directory(scriptsDir, error)) {
             report.issues.push_back(ProjectIntegrityIssue{
                 .kind = ProjectIntegrityIssueKind::MissingScriptsDirectory,
                 .targetPath = scriptsDir,
@@ -87,8 +87,7 @@ namespace Horo::Editor {
         }
         error.clear();
 
-        const std::filesystem::path scenesDir = projectRoot / "assets" / "scenes";
-        if (!std::filesystem::is_directory(scenesDir, error)) {
+        if (const std::filesystem::path scenesDir = projectRoot / "assets" / "scenes"; !std::filesystem::is_directory(scenesDir, error)) {
             report.issues.push_back(ProjectIntegrityIssue{
                 .kind = ProjectIntegrityIssueKind::MissingScenesDirectory,
                 .targetPath = scenesDir,
@@ -129,8 +128,8 @@ namespace Horo::Editor {
                         "        SOURCES ${HORO_GAMEPLAY_SOURCES}\n"
                         "    )\n"
                         "endif()\n";
-                    const Result<void> written = durableFiles_.WriteDurable(issue.targetPath, std::as_bytes(std::span{cmakeContent}));
-                    if (written.HasError()) {
+                    if (const Result<void> written = durableFiles_.WriteDurable(issue.targetPath, std::as_bytes(std::span{cmakeContent}));
+                        written.HasError()) {
                         LOG_ERROR("editor.project_validator", "Failed to repair CMakeLists.txt for '%s': %s", projectRoot.string().c_str(),
                                   written.ErrorValue().message.c_str());
                         return written;
@@ -156,8 +155,8 @@ namespace Horo::Editor {
                         "extern \"C\" HORO_GAME_EXPORT void DestroyGameModule(Horo::Gameplay::IGameModule* module) noexcept {\n"
                         "    delete module;\n"
                         "}\n";
-                    const Result<void> written = durableFiles_.WriteDurable(issue.targetPath, std::as_bytes(std::span{moduleContent}));
-                    if (written.HasError()) {
+                    if (const Result<void> written = durableFiles_.WriteDurable(issue.targetPath, std::as_bytes(std::span{moduleContent}));
+                        written.HasError()) {
                         LOG_ERROR("editor.project_validator", "Failed to repair GameModule.cpp for '%s': %s", projectRoot.string().c_str(),
                                   written.ErrorValue().message.c_str());
                         return written;

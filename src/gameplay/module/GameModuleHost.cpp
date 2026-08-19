@@ -14,7 +14,9 @@ namespace Horo::Gameplay {
     namespace {
         template <typename Function>
         [[nodiscard]] Function Resolve(const Platform::DynamicLibrary &library, const std::string_view name) noexcept {
-            return reinterpret_cast<Function>(library.GetSymbol(name));
+            // void* to function pointer via dlsym/GetProcAddress requires reinterpret_cast per
+            // [expr.reinterpret.cast]/8.
+            return reinterpret_cast<Function>(library.GetSymbol(name));  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
         }
 
         [[nodiscard]] Result<void> ValidateText(const char *value, const std::string_view field) {
@@ -139,8 +141,7 @@ namespace Horo::Gameplay {
         if (impl->gameplayModule == nullptr)
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(
                 MakeError(GameplayErrors::InvalidBehaviorComponent, "Gameplay module factory returned no module object."));
-        Result<void> started = impl->gameplayModule->Start(impl->runtimeContext);
-        if (started.HasError()) {
+        if (Result<void> started = impl->gameplayModule->Start(impl->runtimeContext); started.HasError()) {
             impl->gameplayModule->Stop(impl->runtimeContext);
             impl->destroy(impl->gameplayModule);
             impl->gameplayModule = nullptr;
@@ -165,8 +166,8 @@ namespace Horo::Gameplay {
         static std::atomic<std::uint64_t> sequence{1};
         const auto timestamp = std::chrono::steady_clock::now().time_since_epoch().count();
         const std::filesystem::path shadowPath =
-            shadowRoot / (libraryPath.stem().string() + ".horo_reload_" + std::to_string(timestamp) + "_" +
-                          std::to_string(sequence.fetch_add(1, std::memory_order_relaxed)) + libraryPath.extension().string());
+            shadowRoot / std::format("{}.horo_reload_{}_{}{}", libraryPath.stem().string(), timestamp,
+                                     sequence.fetch_add(1, std::memory_order::relaxed), libraryPath.extension().string());
         if (!std::filesystem::copy_file(libraryPath, shadowPath, std::filesystem::copy_options::none, filesystemError)) {
             const std::string message = filesystemError ? filesystemError.message() : "candidate could not be copied.";
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError(message));

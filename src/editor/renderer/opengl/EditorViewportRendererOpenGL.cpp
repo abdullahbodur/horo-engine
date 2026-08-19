@@ -212,13 +212,13 @@ namespace Horo::Editor {
         GLint previousCullFaceMode = 0;
         GLint previousActiveTexture = 0;
         GLint previousShadowTexture = 0;
-        GLint previousViewport[4]{};
-        GLfloat previousClearColor[4]{};
+        std::array<GLint, 4> previousViewport{};
+        std::array<GLfloat, 4> previousClearColor{};
         const GLboolean depthTestWasEnabled = glIsEnabled(GL_DEPTH_TEST);
         const GLboolean scissorTestWasEnabled = glIsEnabled(GL_SCISSOR_TEST);
         const GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
         const GLboolean cullFaceWasEnabled = glIsEnabled(GL_CULL_FACE);
-        GLboolean previousColorMask[4]{};
+        std::array<GLboolean, 4> previousColorMask{};
         GLboolean previousDepthMask = GL_TRUE;
         glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previousDrawFramebuffer);
         glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFramebuffer);
@@ -230,9 +230,9 @@ namespace Horo::Editor {
         glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
         glActiveTexture(GL_TEXTURE7);
         glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousShadowTexture);
-        glGetIntegerv(GL_VIEWPORT, previousViewport);
-        glGetFloatv(GL_COLOR_CLEAR_VALUE, previousClearColor);
-        glGetBooleanv(GL_COLOR_WRITEMASK, previousColorMask);
+        glGetIntegerv(GL_VIEWPORT, previousViewport.data());
+        glGetFloatv(GL_COLOR_CLEAR_VALUE, previousClearColor.data());
+        glGetBooleanv(GL_COLOR_WRITEMASK, previousColorMask.data());
         glGetBooleanv(GL_DEPTH_WRITEMASK, &previousDepthMask);
 
         if (shadow.Value().has_value()) {
@@ -376,7 +376,7 @@ namespace Horo::Editor {
         const Math::Mat4 identity = Math::Mat4::Identity();
         glUniformMatrix4fv(modelLocation_, 1, GL_FALSE, identity.values.data());
         glUniform1f(selectionStrengthLocation_, 1.0F);
-        const auto drawBatch = [&](const ViewportGridLineBatch batch) {
+        const auto drawBatch = [&](const ViewportGridLineBatch &batch) {
             if (batch.positions.empty())
                 return;
             glBindBuffer(GL_ARRAY_BUFFER, gridVertexBuffer_);
@@ -617,7 +617,7 @@ void main() {}
                 MakeViewportError(RendererErrors::ViewportShaderContractInvalid, "Viewport shadow shader is missing its matrix uniform."));
         }
 
-        constexpr GLsizei shadowMapResolution = static_cast<GLsizei>(EditorViewportDirectionalShadowMapResolution);
+        constexpr auto shadowMapResolution = static_cast<GLsizei>(EditorViewportDirectionalShadowMapResolution);
         GLint previousDrawFramebuffer = 0;
         GLint previousReadFramebuffer = 0;
         GLint previousTexture = 0;
@@ -633,8 +633,8 @@ void main() {}
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-        constexpr GLfloat borderColor[]{1.0F, 1.0F, 1.0F, 1.0F};
-        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+        constexpr std::array<GLfloat, 4> borderColor{1.0F, 1.0F, 1.0F, 1.0F};
+        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor.data());
         glBindFramebuffer(GL_FRAMEBUFFER, shadowFramebuffer_);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowDepthTexture_, 0);
         glDrawBuffer(GL_NONE);
@@ -652,7 +652,7 @@ void main() {}
 
     Result<void> EditorViewportRendererOpenGL::DrawDirectionalShadowMap(const Render::RenderSceneView &scene,
                                                                         const EditorViewportDirectionalShadowView &shadow) {
-        constexpr GLsizei shadowMapResolution = static_cast<GLsizei>(EditorViewportDirectionalShadowMapResolution);
+        constexpr auto shadowMapResolution = static_cast<GLsizei>(EditorViewportDirectionalShadowMapResolution);
         glBindFramebuffer(GL_FRAMEBUFFER, shadowFramebuffer_);
         glViewport(0, 0, shadowMapResolution, shadowMapResolution);
         glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
@@ -755,7 +755,7 @@ void main() {}
                 return Result<void>::Failure(
                     MakeViewportError(RendererErrors::ViewportGeometryCreationFailed, "Failed to upload a viewport mesh resource."));
             }
-            meshes_.emplace(resource.handle.id.value, mesh);
+            meshes_.try_emplace(resource.handle.id.value, mesh);
         }
         for (auto mesh = meshes_.begin(); mesh != meshes_.end();) {
             const bool present = std::ranges::any_of(resources, [&](const EditorViewportMeshResourceView &resource) {

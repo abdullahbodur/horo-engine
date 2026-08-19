@@ -20,8 +20,8 @@ namespace Horo::Extensions {
                 const std::size_t end = component == 2 ? core.size() : core.find('.', componentStart);
                 if (end == std::string_view::npos || end == componentStart)
                     return false;
-                const std::string_view digits = core.substr(componentStart, end - componentStart);
-                if ((digits.size() > 1 && digits.front() == '0') || !std::ranges::all_of(digits, [](const unsigned char character) {
+                if (const std::string_view digits = core.substr(componentStart, end - componentStart);
+                    (digits.size() > 1 && digits.front() == '0') || !std::ranges::all_of(digits, [](const unsigned char character) {
                     return std::isdigit(character) != 0;
                 })) {
                     return false;
@@ -46,10 +46,11 @@ namespace Horo::Extensions {
                 })) {
                     return false;
                 }
-                const bool numeric = std::ranges::all_of(identifier, [](const unsigned char character) {
+                if (const bool numeric = std::ranges::all_of(identifier,
+                                                             [](const unsigned char character) {
                     return std::isdigit(character) != 0;
                 });
-                if (numeric && identifier.size() > 1 && identifier.front() == '0')
+                    numeric && identifier.size() > 1 && identifier.front() == '0')
                     return false;
                 if (end == std::string_view::npos)
                     return true;

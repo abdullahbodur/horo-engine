@@ -298,22 +298,19 @@ namespace Horo::Editor {
                                                                                        const std::filesystem::path &parent,
                                                                                        const std::filesystem::path &staging,
                                                                                        std::error_code &error) {
+            using enum ProjectCreationErrorCode;
             if (std::filesystem::exists(destination, error) &&
                 (!std::filesystem::is_directory(destination, error) || !std::filesystem::is_empty(destination, error))) {
-                return StagingPreparationFailure{ProjectCreationErrorCode::DestinationOccupied,
-                                                 "Project destination became occupied before promotion."};
+                return StagingPreparationFailure{DestinationOccupied, "Project destination became occupied before promotion."};
             }
             if (error)
-                return StagingPreparationFailure{ProjectCreationErrorCode::DestinationOccupied,
-                                                 "Project destination became occupied before promotion."};
+                return StagingPreparationFailure{DestinationOccupied, "Project destination became occupied before promotion."};
             std::filesystem::create_directories(parent, error);
             if (error)
-                return StagingPreparationFailure{ProjectCreationErrorCode::ParentUnavailable,
-                                                 "Unable to create the project destination parent directory."};
+                return StagingPreparationFailure{ParentUnavailable, "Unable to create the project destination parent directory."};
             std::filesystem::create_directory(staging, error);
             if (error)
-                return StagingPreparationFailure{ProjectCreationErrorCode::StagingFailed,
-                                                 "Unable to create a sibling project staging directory."};
+                return StagingPreparationFailure{StagingFailed, "Unable to create a sibling project staging directory."};
             return std::nullopt;
         }
 
@@ -378,7 +375,7 @@ namespace Horo::Editor {
             const std::filesystem::path parent =
                 destination.has_parent_path() ? destination.parent_path() : std::filesystem::current_path();
             const std::filesystem::path staging =
-                parent / ("." + destination.filename().string() + ".horo-create-" + std::to_string(operation->snapshot.id));
+                parent / std::format(".{}.horo-create-{}", destination.filename().string(), operation->snapshot.id);
             std::error_code error;
             auto cleanup = [&] {
                 std::filesystem::remove_all(staging, error);
@@ -487,11 +484,10 @@ namespace Horo::Editor {
             if (request.targetFrameRate <= 0 || request.minimumCxxStandard < 20)
                 return MakeFoundationError(ProjectCreationErrors::InvalidRequest, "Project numeric settings are outside supported bounds.");
             std::error_code error;
-            if (std::filesystem::exists(request.projectRoot, error)) {
-                if (!std::filesystem::is_directory(request.projectRoot, error) || !std::filesystem::is_empty(request.projectRoot, error)) {
-                    return MakeFoundationError(ProjectCreationErrors::DestinationOccupied,
-                                               "Project destination already exists and will not be overwritten.");
-                }
+            if (std::filesystem::exists(request.projectRoot, error) &&
+                (!std::filesystem::is_directory(request.projectRoot, error) || !std::filesystem::is_empty(request.projectRoot, error))) {
+                return MakeFoundationError(ProjectCreationErrors::DestinationOccupied,
+                                           "Project destination already exists and will not be overwritten.");
             }
             if (error)
                 return MakeFoundationError(ProjectCreationErrors::InvalidRequest, "Project destination cannot be inspected.");

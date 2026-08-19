@@ -60,19 +60,20 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] ImVec4 ConsoleLevelColor(const Log::Level level) noexcept {
+            using enum Log::Level;
             switch (level) {
-                case Log::Level::Critical:
-                case Log::Level::Error:
+                case Critical:
+                case Error:
                     return Theme::Err();
-                case Log::Level::Warn:
+                case Warn:
                     return {0.91F, 0.64F, 0.24F, 1.0F};
-                case Log::Level::Info:
+                case Info:
                     return Theme::Muted();
-                case Log::Level::Debug:
+                case Debug:
                     return {0.35F, 0.72F, 0.95F, 1.0F};
-                case Log::Level::Trace:
+                case Trace:
                     return {0.72F, 0.55F, 0.94F, 1.0F};
-                case Log::Level::Off:
+                case Off:
                     return Theme::Dim();
             }
             return Theme::Muted();
@@ -87,9 +88,9 @@ namespace Horo::Editor {
                 return true;
             if (needle.size() > text.size())
                 return false;
-            return std::search(text.begin(), text.end(), needle.begin(), needle.end(), [](const char left, const char right) {
+            return !std::ranges::search(text, needle, [](const char left, const char right) {
                 return std::tolower(static_cast<unsigned char>(left)) == std::tolower(static_cast<unsigned char>(right));
-            }) != text.end();
+            }).empty();
         }
 
         [[nodiscard]] std::string FormatConsoleTimestamp(const std::chrono::system_clock::time_point timestamp) {
@@ -176,13 +177,13 @@ namespace Horo::Editor {
         } else {
             for (std::size_t index = 0; index < filterKeys.size(); ++index) {
                 const std::string &label = context.localization.Get("editor", filterKeys[index]);
-                const Ui::ButtonProps button{
-                    .label = label.c_str(),
-                    .variant = m_levelEnabled[index] ? Ui::ButtonVariant::Primary : Ui::ButtonVariant::Secondary,
-                    .font = fonts.sansCompact,
-                    .componentSize = Ui::ComponentSize::Small,
-                };
-                if (Ui::Button(button)) {
+                if (const Ui::ButtonProps button{
+                        .label = label.c_str(),
+                        .variant = m_levelEnabled[index] ? Ui::ButtonVariant::Primary : Ui::ButtonVariant::Secondary,
+                        .font = fonts.sansCompact,
+                        .componentSize = Ui::ComponentSize::Small,
+                    };
+                    Ui::Button(button)) {
                     m_levelEnabled[index] = !m_levelEnabled[index];
                     m_filterDirty = true;
                 }

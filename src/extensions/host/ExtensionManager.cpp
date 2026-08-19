@@ -178,14 +178,21 @@ namespace Horo::Extensions {
         HoroExtensionStatus status = HORO_EXTENSION_ERROR_INIT_FAILED;
         try {
             status = loadFunc(&hostApi, &moduleApi);
+        } catch (const std::exception &exception) {
+            LOG_ERROR("extensions", "Extension %s threw during load: %s", manifest.id.c_str(), exception.what());
+            status = HORO_EXTENSION_ERROR_INIT_FAILED;
         } catch (...) {
+            LOG_ERROR("extensions", "Extension %s threw unknown exception during load.", manifest.id.c_str());
             status = HORO_EXTENSION_ERROR_INIT_FAILED;
         }
         if (status != HORO_EXTENSION_SUCCESS || registration.failed) {
             if (lifetime->unload != nullptr && moduleApi.moduleContext != nullptr) {
                 try {
                     lifetime->unload(&moduleApi);
+                } catch (const std::exception &exception) {
+                    LOG_WARN("extensions", "Exception during rollback unload: %s", exception.what());
                 } catch (...) {
+                    LOG_WARN("extensions", "Unknown exception during rollback unload.");
                 }
             }
             if (registration.failed)
@@ -199,7 +206,10 @@ namespace Horo::Extensions {
             if (lifetime->unload != nullptr) {
                 try {
                     lifetime->unload(&moduleApi);
+                } catch (const std::exception &exception) {
+                    LOG_WARN("extensions", "Exception during module unload: %s", exception.what());
                 } catch (...) {
+                    LOG_WARN("extensions", "Unknown exception during module unload.");
                 }
             }
             return Result<std::string>::Failure(
@@ -225,7 +235,7 @@ namespace Horo::Extensions {
         loadedExtension->moduleId = declaredModuleId;
         loadedExtension->moduleVersion = declaredModuleVersion;
         const std::string extensionId = loadedExtension->manifest.id;
-        m_loadedExtensions.emplace(extensionId, std::move(loadedExtension));
+        m_loadedExtensions.try_emplace(extensionId, std::move(loadedExtension));
 
         LOG_INFO("extensions", "Successfully loaded extension: %s", extensionId.c_str());
         return Result<std::string>::Success(extensionId);

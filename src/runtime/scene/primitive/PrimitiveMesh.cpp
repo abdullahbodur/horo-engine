@@ -41,7 +41,7 @@ namespace Horo::Runtime {
         }
 
         void AddQuad(MeshData &mesh, const Math::Vec3 center, const Math::Vec3 axisU, const Math::Vec3 axisV, const Math::Vec3 normal) {
-            const std::uint32_t base = static_cast<std::uint32_t>(mesh.vertices.size());
+            const auto base = static_cast<std::uint32_t>(mesh.vertices.size());
             mesh.vertices.push_back({center - axisU - axisV, normal, {0.0F, 0.0F}});
             mesh.vertices.push_back({center + axisU - axisV, normal, {1.0F, 0.0F}});
             mesh.vertices.push_back({center + axisU + axisV, normal, {1.0F, 1.0F}});
@@ -94,7 +94,7 @@ namespace Horo::Runtime {
                     mesh.vertices.push_back({normal * parameters.radius, normal, {u, v}});
                 }
             }
-            const std::uint32_t bottom = static_cast<std::uint32_t>(mesh.vertices.size());
+            const auto bottom = static_cast<std::uint32_t>(mesh.vertices.size());
             mesh.vertices.push_back({{0, -parameters.radius, 0}, {0, -1, 0}, {0.5F, 1}});
             const std::uint32_t stride = parameters.slices + 1;
             for (std::uint32_t slice = 0; slice < parameters.slices; ++slice)
@@ -114,9 +114,9 @@ namespace Horo::Runtime {
 
         void AddDisc(MeshData &mesh, const float y, const float radius, const std::uint32_t segments, const bool top) {
             const Math::Vec3 normal = top ? Math::Vec3{0, 1, 0} : Math::Vec3{0, -1, 0};
-            const std::uint32_t center = static_cast<std::uint32_t>(mesh.vertices.size());
+            const auto center = static_cast<std::uint32_t>(mesh.vertices.size());
             mesh.vertices.push_back({{0, y, 0}, normal, {0.5F, 0.5F}});
-            const std::uint32_t ring = static_cast<std::uint32_t>(mesh.vertices.size());
+            const auto ring = static_cast<std::uint32_t>(mesh.vertices.size());
             for (std::uint32_t slice = 0; slice <= segments; ++slice) {
                 const float phi = 2.0F * Math::Pi * static_cast<float>(slice) / static_cast<float>(segments);
                 const float x = radius * std::cos(phi);
@@ -212,7 +212,7 @@ namespace Horo::Runtime {
                                              {u, ring.v}});
                 }
             }
-            const std::uint32_t top = static_cast<std::uint32_t>(mesh.vertices.size());
+            const auto top = static_cast<std::uint32_t>(mesh.vertices.size());
             mesh.vertices.push_back({{0, parameters.totalHeight * 0.5F, 0}, {0, 1, 0}, {0.5F, 1}});
             for (std::uint32_t slice = 0; slice < parameters.radialSegments; ++slice)
                 mesh.indices.insert(mesh.indices.end(), {0, 1 + slice, 1 + slice + 1});
@@ -267,7 +267,7 @@ namespace Horo::Runtime {
 
         struct DescriptorHash {
             [[nodiscard]] std::size_t operator()(const PrimitiveMeshDescriptor &descriptor) const noexcept {
-                std::size_t hash = static_cast<std::size_t>(descriptor.type);
+                auto hash = static_cast<std::size_t>(descriptor.type);
                 HashCombine(hash, descriptor.version.value);
                 HashCombine(hash, descriptor.parameters.index());
                 std::visit(ParameterHashVisitor{hash}, descriptor.parameters);

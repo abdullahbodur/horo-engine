@@ -76,12 +76,11 @@ namespace Horo::Extensions {
                     MakeError(ExtensionErrors::InvalidManifest, "Extension manifest path must be absolute."));
             std::error_code error;
             if (!fs::is_regular_file(absoluteManifestPath, error) || error ||
-                fs::is_symlink(fs::symlink_status(absoluteManifestPath, error)) || error) {
+                fs::is_symlink(fs::symlink_status(absoluteManifestPath, error))) {
                 return Result<ExtensionManifest>::Failure(
                     MakeError(ExtensionErrors::InvalidManifest, "Extension manifest must be a regular non-symlink file."));
             }
-            const std::uintmax_t size = fs::file_size(absoluteManifestPath, error);
-            if (error || size > kMaximumManifestBytes)
+            if (const std::uintmax_t size = fs::file_size(absoluteManifestPath, error); error || size > kMaximumManifestBytes)
                 return Result<ExtensionManifest>::Failure(
                     MakeError(ExtensionErrors::InvalidManifest, "Extension manifest exceeds the bounded size."));
             std::ifstream input(absoluteManifestPath, std::ios::binary);
@@ -169,9 +168,9 @@ namespace Horo::Extensions {
         std::unordered_map<std::string, RuntimeState> runtimeStates;
         runtimeStates.reserve(entries_.size());
         for (auto &entry : entries_) {
-            runtimeStates.emplace(entry.packageId, RuntimeState{.active = entry.runtimeActive,
-                                                                .loadError = std::move(entry.loadError),
-                                                                .compositionVersion = std::move(entry.runtimeCompositionVersion)});
+            runtimeStates.try_emplace(entry.packageId, RuntimeState{.active = entry.runtimeActive,
+                                                                    .loadError = std::move(entry.loadError),
+                                                                    .compositionVersion = std::move(entry.runtimeCompositionVersion)});
         }
         entries_.clear();
         if (auto loaded = LoadState(); loaded.HasError())
@@ -185,8 +184,8 @@ namespace Horo::Extensions {
         for (const auto &directory : fs::directory_iterator(installRoot_, error)) {
             if (error)
                 return Result<void>::Failure(MakeError(ExtensionErrors::LoadFailed, "Unable to enumerate installed extensions."));
-            const fs::file_status status = directory.symlink_status(error);
-            if (error || fs::is_symlink(status) || !fs::is_directory(status) ||
+            if (const fs::file_status status = directory.symlink_status(error);
+                error || fs::is_symlink(status) || !fs::is_directory(status) ||
                 directory.path().filename().string().starts_with(".install-"))
                 continue;
             auto parsed = ReadManifest(fs::absolute(directory.path() / "extension.json"));
@@ -247,12 +246,12 @@ namespace Horo::Extensions {
                 MakeError(ExtensionErrors::InvalidManifest, "Extension source directory must be absolute."));
         std::error_code error;
         const fs::path source = fs::weakly_canonical(absoluteSourceDirectory, error);
-        if (error || !fs::is_directory(source, error) || fs::is_symlink(fs::symlink_status(source, error)) || error) {
+        if (error || !fs::is_directory(source, error) || fs::is_symlink(fs::symlink_status(source, error))) {
             return Result<std::string>::Failure(
                 MakeError(ExtensionErrors::InvalidManifest, "Extension source must be a regular non-symlink directory."));
         }
-        const fs::path canonicalInstallRoot = fs::weakly_canonical(installRoot_, error);
-        if (!error && IsPathContainedBy(canonicalInstallRoot, source)) {
+        if (const fs::path canonicalInstallRoot = fs::weakly_canonical(installRoot_, error);
+            !error && IsPathContainedBy(canonicalInstallRoot, source)) {
             return Result<std::string>::Failure(
                 MakeError(ExtensionErrors::InvalidManifest, "Extension source must be outside the managed installation directory."));
         }
@@ -271,7 +270,7 @@ namespace Horo::Extensions {
             return Result<std::string>::Failure(
                 MakeError(ExtensionErrors::LoadFailed, "An extension with this package ID is already installed."));
         const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
-        const fs::path staging = installRoot_ / (".install-" + manifest.id + "-" + std::to_string(nonce));
+        const fs::path staging = installRoot_ / std::format(".install-{}-{}", manifest.id, nonce);
         const auto cleanup = [&staging]() {
             std::error_code ignored;
             fs::remove_all(staging, ignored);
@@ -362,10 +361,9 @@ namespace Horo::Extensions {
     Result<void> ExtensionInventory::LoadState() {
         enabled_.clear();
         trusted_.clear();
-        std::error_code error;
-        if (!fs::exists(statePath_, error)) {
-            enabled_.insert("horo.builtin.assets");
-            trusted_.insert("horo.builtin.assets");
+        if (std::error_code error; !fs::exists(statePath_, error) || error) {
+            enabled_.emplace("horo.builtin.assets");
+            trusted_.emplace("horo.builtin.assets");
             return Result<void>::Success();
         }
         std::ifstream input(statePath_, std::ios::binary);

@@ -320,7 +320,7 @@ namespace Horo::Editor {
             const auto presets = m_presetsByImporterAndExtension.find(PresetScopeKey(item));
             if (presets == m_presetsByImporterAndExtension.end())
                 return false;
-            const auto preset = std::find_if(presets->second.begin(), presets->second.end(), [presetName](const ImportPreset &candidate) {
+            const auto preset = std::ranges::find_if(presets->second, [presetName](const ImportPreset &candidate) {
                 return candidate.name == presetName;
             });
             if (preset == presets->second.end())
@@ -343,7 +343,7 @@ namespace Horo::Editor {
             return false;
 
         auto &presets = m_presetsByImporterAndExtension[PresetScopeKey(item)];
-        if (std::any_of(presets.begin(), presets.end(), [presetName](const ImportPreset &preset) {
+        if (std::ranges::any_of(presets, [presetName](const ImportPreset &preset) {
             return preset.name == presetName;
         }))
             return false;
@@ -510,10 +510,10 @@ namespace Horo::Editor {
         if (commitItem.namingConvention == 1)  // Lowercase + underscore
         {
             std::string name = commitItem.displayName;
-            std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) {
+            std::ranges::transform(name, name.begin(), [](unsigned char c) {
                 return static_cast<char>(std::tolower(c));
             });
-            std::replace(name.begin(), name.end(), ' ', '_');
+            std::ranges::replace(name, ' ', '_');
             commitItem.displayName = name;
         } else if (commitItem.namingConvention == 2)  // AssetId prefix
         {
@@ -633,10 +633,10 @@ namespace Horo::Editor {
         if (commitItem.namingConvention == 1)  // Lowercase + underscore
         {
             std::string name = commitItem.displayName;
-            std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) {
+            std::ranges::transform(name, name.begin(), [](unsigned char c) {
                 return static_cast<char>(std::tolower(c));
             });
-            std::replace(name.begin(), name.end(), ' ', '_');
+            std::ranges::replace(name, ' ', '_');
             commitItem.displayName = name;
         } else if (commitItem.namingConvention == 2)  // AssetId prefix
         {

@@ -10,7 +10,8 @@
 namespace Horo {
     namespace {
         [[nodiscard]] bool IsTerminal(const OperationState state) noexcept {
-            return state == OperationState::Succeeded || state == OperationState::Failed || state == OperationState::Cancelled;
+            using enum OperationState;
+            return state == Succeeded || state == Failed || state == Cancelled;
         }
 
         [[nodiscard]] bool IsTransitionAllowed(const OperationState from, const OperationState to) noexcept {
@@ -35,38 +36,40 @@ namespace Horo {
         }
 
         [[nodiscard]] const char *ToString(const OperationKind kind) noexcept {
+            using enum OperationKind;
             switch (kind) {
-                case OperationKind::Build:
+                case Build:
                     return "build";
-                case OperationKind::Cook:
+                case Cook:
                     return "cook";
-                case OperationKind::Import:
+                case Import:
                     return "import";
-                case OperationKind::Index:
+                case Index:
                     return "index";
-                case OperationKind::Validation:
+                case Validation:
                     return "validation";
-                case OperationKind::Other:
+                case Other:
                     return "other";
             }
             return "other";
         }
 
         [[nodiscard]] const char *ToString(const OperationState state) noexcept {
+            using enum OperationState;
             switch (state) {
-                case OperationState::Queued:
+                case Queued:
                     return "queued";
-                case OperationState::Running:
+                case Running:
                     return "running";
-                case OperationState::Waiting:
+                case Waiting:
                     return "waiting";
-                case OperationState::Cancelling:
+                case Cancelling:
                     return "cancelling";
-                case OperationState::Succeeded:
+                case Succeeded:
                     return "succeeded";
-                case OperationState::Failed:
+                case Failed:
                     return "failed";
-                case OperationState::Cancelled:
+                case Cancelled:
                     return "cancelled";
             }
             return "unknown";
@@ -117,38 +120,40 @@ namespace Horo {
     bool OperationStore::Update(const OperationId id, OperationUpdate update) {
         std::optional<OperationRecord> terminalRecord;
         std::shared_ptr<IOperationHistorySink> historySink;
-        std::unique_lock lock(mutex_);
-        const auto found = active_.find(id);
-        if (found == active_.end() || !IsTransitionAllowed(found->second.record.state, update.state))
-            return false;
-
-        OperationRecord &record = found->second.record;
-        if (update.progress.has_value()) {
-            const float bounded = std::clamp(*update.progress, 0.0F, 1.0F);
-            const std::string_view effectivePhase = update.phase.empty() ? std::string_view{record.phase} : std::string_view{update.phase};
-            if (effectivePhase == record.phase && record.progress.has_value() && bounded < *record.progress)
+        {
+            std::lock_guard lock(mutex_);
+            const auto found = active_.find(id);
+            if (found == active_.end() || !IsTransitionAllowed(found->second.record.state, update.state))
                 return false;
-            record.progress = bounded;
-        }
-        if (!update.phase.empty())
-            record.phase = std::move(update.phase);
-        record.message = std::move(update.message);
-        record.error = std::move(update.error);
-        record.state = update.state;
 
-        if (IsTerminal(record.state)) {
-            record.finishedAt = std::chrono::steady_clock::now();
-            terminalRecord = record;
-            historySink = historySink_;
-            recent_.push_back(std::move(record));
-            active_.erase(found);
-            if (recent_.size() > recentCapacity_) {
-                recent_.pop_front();
-                ++droppedTerminalCount_;
+            OperationRecord &record = found->second.record;
+            if (update.progress.has_value()) {
+                const float bounded = std::clamp(*update.progress, 0.0F, 1.0F);
+                if (const std::string_view effectivePhase =
+                        update.phase.empty() ? std::string_view{record.phase} : std::string_view{update.phase};
+                    effectivePhase == record.phase && record.progress.has_value() && bounded < *record.progress)
+                    return false;
+                record.progress = bounded;
             }
+            if (!update.phase.empty())
+                record.phase = std::move(update.phase);
+            record.message = std::move(update.message);
+            record.error = std::move(update.error);
+            record.state = update.state;
+
+            if (IsTerminal(record.state)) {
+                record.finishedAt = std::chrono::steady_clock::now();
+                terminalRecord = record;
+                historySink = historySink_;
+                recent_.push_back(std::move(record));
+                active_.erase(found);
+                if (recent_.size() > recentCapacity_) {
+                    recent_.pop_front();
+                    ++droppedTerminalCount_;
+                }
+            }
+            ++revision_;
         }
-        ++revision_;
-        lock.unlock();
         if (terminalRecord.has_value() && historySink != nullptr)
             historySink->AppendTerminal(*terminalRecord);
         return true;

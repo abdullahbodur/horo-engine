@@ -42,7 +42,7 @@ namespace Horo::Assets {
             };
         }
 
-        [[nodiscard]] std::span<const std::byte> AsBytes(const std::string &text) {
+        [[nodiscard]] std::span<const std::byte> AsBytes(const std::string_view text) {
             return {
                 reinterpret_cast<const std::byte *>(text.data()),
                 text.size(),
@@ -85,8 +85,8 @@ namespace Horo::Assets {
         }
 
         std::error_code error;
-        const auto targetStatus = std::filesystem::symlink_status(assetPath, error);
-        if (error || std::filesystem::is_symlink(targetStatus) || !std::filesystem::is_regular_file(targetStatus)) {
+        if (const auto targetStatus = std::filesystem::symlink_status(assetPath, error);
+            error || std::filesystem::is_symlink(targetStatus) || !std::filesystem::is_regular_file(targetStatus)) {
             return Result<AssetReimportReport>::Failure(MakeError(AssetErrors::SourceMissing, "Reimport target is missing or unsafe."));
         }
 
@@ -193,8 +193,8 @@ namespace Horo::Assets {
             return Result<AssetReimportReport>::Failure(result.ErrorValue());
         }
 
-        auto rebuilt = RebuildAssetRegistry(*request.registry, projectRoot, AssetRegistryOpenMode::Edit);
-        if (rebuilt.HasError() || rebuilt.Value().status == AssetRegistryBuildStatus::Failed) {
+        if (const auto rebuilt = RebuildAssetRegistry(*request.registry, projectRoot, AssetRegistryOpenMode::Edit);
+            rebuilt.HasError() || rebuilt.Value().status == AssetRegistryBuildStatus::Failed) {
             static_cast<void>(RestorePair(*request.files, payloadBackup, assetPath, metadataBackup, metadataPath));
             static_cast<void>(RebuildAssetRegistry(*request.registry, projectRoot, AssetRegistryOpenMode::Edit));
             cleanup();

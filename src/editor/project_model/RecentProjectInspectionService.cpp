@@ -38,9 +38,9 @@ namespace Horo::Editor {
             return Result<std::uint64_t>::Failure(MakeError(ProjectOpenErrors::Cancelled));
         if (!state_->jobsInFlight.empty()) {
             state_->cancellation.RequestCancellation();
-            for (JobHandle &job : state_->jobsInFlight)
+            for (const JobHandle &job : state_->jobsInFlight)
                 static_cast<void>(state_->jobs.RequestCancel(job.Id()));
-            for (JobHandle &job : state_->jobsInFlight)
+            for (const JobHandle &job : state_->jobsInFlight)
                 static_cast<void>(job.Wait());
             state_->jobsInFlight.clear();
         }
@@ -74,15 +74,15 @@ namespace Horo::Editor {
                                                                     .targetVersion = inspected.compatibility.targetVersion,
                                                                     .inspectionState = RecentProjectInspectionState::Fresh};
                     std::lock_guard lock(completion->mutex);
-                    completion->updates.push_back({generation, rootText, std::move(projection)});
+                    completion->updates.emplace_back(generation, rootText, std::move(projection));
                 }
                 return Result<void>::Success();
             });
             if (submitted.HasError()) {
                 state_->cancellation.RequestCancellation();
-                for (JobHandle &job : state_->jobsInFlight)
+                for (const JobHandle &job : state_->jobsInFlight)
                     static_cast<void>(state_->jobs.RequestCancel(job.Id()));
-                for (JobHandle &job : state_->jobsInFlight)
+                for (const JobHandle &job : state_->jobsInFlight)
                     static_cast<void>(job.Wait());
                 state_->jobsInFlight.clear();
                 return Result<std::uint64_t>::Failure(submitted.ErrorValue());
@@ -110,9 +110,9 @@ namespace Horo::Editor {
         state_->shutdown = true;
         state_->cancellation.RequestCancellation();
         if (!state_->jobsInFlight.empty()) {
-            for (JobHandle &job : state_->jobsInFlight)
+            for (const JobHandle &job : state_->jobsInFlight)
                 static_cast<void>(state_->jobs.RequestCancel(job.Id()));
-            for (JobHandle &job : state_->jobsInFlight)
+            for (const JobHandle &job : state_->jobsInFlight)
                 static_cast<void>(job.Wait());
             state_->jobsInFlight.clear();
         }

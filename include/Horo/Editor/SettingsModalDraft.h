@@ -14,8 +14,117 @@ namespace Horo::Extensions {
 namespace Horo::Editor {
     class EditorSettingsService;
 
+    struct SettingsGeneralTab {
+        int startupAction = 0;
+        int autoSaveInterval = 5;
+        bool confirmExit = true;
+        bool restoreWorkspace = true;
+        std::string defaultScene = "Assets/Scenes/Main";
+        std::string languageTag = "en-US";
+    };
+
+    struct SettingsAppearanceTab {
+        int themeIndex = 0;
+        std::string customThemePath = "~/.horo/themes/my-theme.json";
+        int uiScale = 100;
+        std::string editorFontSize = "15";
+        std::string accentHex = "#04A5FC";
+        int pendingThemeIndex = -1;
+    };
+
+    struct SettingsInputTab {
+        int orbitSensitivity = 100;
+        int panSensitivity = 100;
+        bool invertOrbitY = false;
+    };
+
+    struct SettingsRenderingTab {
+        int viewportMode = 0;
+        bool gridOverlay = true;
+        int renderingTier = 0;
+        std::string textureBudget = "2048 MB";
+        int renderBackend = 0;
+    };
+
+    struct SettingsAudioTab {
+        int masterVolume = 80;
+        int audioOutputDevice = 0;
+        bool audioEnabled = true;
+    };
+
+    struct SettingsNetworkTab {
+        int maxPreviewClients = 4;
+        int simulatedLatencyMs = 0;
+        int packageDownloadThreads = 8;
+    };
+
+    struct SettingsDiagnosticsTab {
+        int consoleLogLevel = 2;
+        bool writeLogToFile = true;
+        bool autoCaptureStutter = false;
+        float stutterThresholdMs = 33.3F;
+        bool showFps = false;
+        bool anonymousTelemetry = false;
+    };
+
+    struct SettingsPluginToggles {
+        bool horoMcpBridge = true;
+        bool fmodIntegration = true;
+        bool steamworksSdk = false;
+    };
+
+    struct SettingsMcpSettings {
+        int transportMode = 0;
+        int port = 8080;
+        bool requireToken = true;
+        bool allowRemote = false;
+        int toolScope = 0;
+        std::string assetRoot = "Assets/Generated";
+    };
+
+    struct SettingsFmodSettings {
+        std::string studioPath = "/Applications/FMOD Studio.app";
+        std::string projectFile = "Audio/HoroAudio.fspro";
+        std::string bankPath = "Assets/Audio/Banks";
+        bool liveUpdate = true;
+        bool failOnMissing = true;
+        int targetPlatform = 0;
+    };
+
+    struct SettingsSteamSettings {
+        std::string sdkPath = "ThirdParty/Steamworks";
+        int initMode = 0;
+        bool overlay = true;
+        bool achievements = true;
+        bool networking = false;
+    };
+
+    struct SettingsPluginRuntime {
+        std::string discoveryPaths = "{project}/plugins; ~/.horo/plugins";
+        int loadOrder = 0;
+        std::string devPath = "~/dev/horo-plugins";
+        bool sandbox = true;
+        int unsignedPolicy = 0;
+        int networkPolicy = 0;
+        int updateCheck = 0;
+        int compatMode = 0;
+    };
+
     /** @brief Modal-owned mutable draft for the editor settings workflow. */
     struct SettingsState {
+        using GeneralTab = SettingsGeneralTab;
+        using AppearanceTab = SettingsAppearanceTab;
+        using InputTab = SettingsInputTab;
+        using RenderingTab = SettingsRenderingTab;
+        using AudioTab = SettingsAudioTab;
+        using NetworkTab = SettingsNetworkTab;
+        using DiagnosticsTab = SettingsDiagnosticsTab;
+        using PluginToggles = SettingsPluginToggles;
+        using McpSettings = SettingsMcpSettings;
+        using FmodSettings = SettingsFmodSettings;
+        using SteamSettings = SettingsSteamSettings;
+        using PluginRuntime = SettingsPluginRuntime;
+
         bool initialized = false;
         bool wasOpen = false;
         bool dirty = false;
@@ -25,58 +134,13 @@ namespace Horo::Editor {
         int activeTab = 0;
         std::uint64_t settingsRevision = 0;
 
-        struct GeneralTab {
-            int startupAction = 0;
-            int autoSaveInterval = 5;
-            bool confirmExit = true;
-            bool restoreWorkspace = true;
-            std::string defaultScene = "Assets/Scenes/Main";
-            std::string languageTag = "en-US";
-        } general;
-
-        struct AppearanceTab {
-            int themeIndex = 0;
-            std::string customThemePath = "~/.horo/themes/my-theme.json";
-            int uiScale = 100;
-            std::string editorFontSize = "15";
-            std::string accentHex = "#04A5FC";
-            int pendingThemeIndex = -1;
-        } appearance;
-
-        struct InputTab {
-            int orbitSensitivity = 100;
-            int panSensitivity = 100;
-            bool invertOrbitY = false;
-        } input;
-
-        struct RenderingTab {
-            int viewportMode = 0;
-            bool gridOverlay = true;
-            int renderingTier = 0;
-            std::string textureBudget = "2048 MB";
-            int renderBackend = 0;
-        } rendering;
-
-        struct AudioTab {
-            int masterVolume = 80;
-            int audioOutputDevice = 0;
-            bool audioEnabled = true;
-        } audio;
-
-        struct NetworkTab {
-            int maxPreviewClients = 4;
-            int simulatedLatencyMs = 0;
-            int packageDownloadThreads = 8;
-        } network;
-
-        struct DiagnosticsTab {
-            int consoleLogLevel = 2;
-            bool writeLogToFile = true;
-            bool autoCaptureStutter = false;
-            float stutterThresholdMs = 33.3F;
-            bool showFps = false;
-            bool anonymousTelemetry = false;
-        } diagnostics;
+        GeneralTab general{};
+        AppearanceTab appearance{};
+        InputTab input{};
+        RenderingTab rendering{};
+        AudioTab audio{};
+        NetworkTab network{};
+        DiagnosticsTab diagnostics{};
 
         int pluginSectionTab = 0;
         Extensions::ExtensionInventory *extensionInventory = nullptr;
@@ -88,48 +152,11 @@ namespace Horo::Editor {
         std::string pluginFilter;
         std::string modalFeedback;
 
-        struct PluginToggles {
-            bool horoMcpBridge = true;
-            bool fmodIntegration = true;
-            bool steamworksSdk = false;
-        } plugins;
-
-        struct McpSettings {
-            int transportMode = 0;
-            int port = 8080;
-            bool requireToken = true;
-            bool allowRemote = false;
-            int toolScope = 0;
-            std::string assetRoot = "Assets/Generated";
-        } mcp;
-
-        struct FmodSettings {
-            std::string studioPath = "/Applications/FMOD Studio.app";
-            std::string projectFile = "Audio/HoroAudio.fspro";
-            std::string bankPath = "Assets/Audio/Banks";
-            bool liveUpdate = true;
-            bool failOnMissing = true;
-            int targetPlatform = 0;
-        } fmod;
-
-        struct SteamSettings {
-            std::string sdkPath = "ThirdParty/Steamworks";
-            int initMode = 0;
-            bool overlay = true;
-            bool achievements = true;
-            bool networking = false;
-        } steam;
-
-        struct PluginRuntime {
-            std::string discoveryPaths = "{project}/plugins; ~/.horo/plugins";
-            int loadOrder = 0;
-            std::string devPath = "~/dev/horo-plugins";
-            bool sandbox = true;
-            int unsignedPolicy = 0;
-            int networkPolicy = 0;
-            int updateCheck = 0;
-            int compatMode = 0;
-        } runtime;
+        PluginToggles plugins{};
+        McpSettings mcp{};
+        FmodSettings fmod{};
+        SteamSettings steam{};
+        PluginRuntime runtime{};
     };
 
     [[nodiscard]] EditorSettings CollectDraftSettings(const SettingsState &state);

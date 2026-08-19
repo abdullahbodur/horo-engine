@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <format>
 #include <optional>
 #include <string_view>
 
@@ -113,8 +114,7 @@ namespace Horo::Editor {
             const ImGuiPayload *accepted =
                 ImGui::AcceptDragDropPayload(AssetSceneDragPayloadType,
                                              ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
-            const std::optional<AssetSceneDragPayload> payload = ReadAssetPayload(accepted);
-            if (payload.has_value()) {
+            if (const std::optional<AssetSceneDragPayload> payload = ReadAssetPayload(accepted); payload.has_value()) {
                 const AssetSceneDropPolicyResult policy = EvaluateAssetSceneDrop(*payload);
                 drawList.AddRect(minimum, maximum, Theme::U32(policy.canInstantiate ? Theme::Accent() : Theme::Err()),
                                  Theme::Layout::Radius, 0, 2.0F);
@@ -170,7 +170,8 @@ namespace Horo::Editor {
         if (node == nullptr) {
             return;
         }
-        std::snprintf(renameBuffer_.data(), renameBuffer_.size(), "%s", node->name.c_str());
+        const auto result = std::format_to_n(renameBuffer_.data(), renameBuffer_.size() - 1U, "{}", node->name);
+        *result.out = '\0';
         renamingId_ = id;
         requestRenameFocus_ = true;
     }
@@ -228,12 +229,11 @@ namespace Horo::Editor {
             inputRouter_ != nullptr && workspaceInputContext_ != nullptr && inputRouter_->IsContextActive(*workspaceInputContext_);
 
         const std::vector<HierarchyVisibleRow> &visibleRows = editSession_.VisibleRows(searchBuffer_.data());
-        if (workspaceEligible && panelFocused && !searchActive && !renamingId_.has_value() && editSession_.SelectedId().has_value()) {
-            if (inputRouter_->ConsumeKey(*workspaceInputContext_, Input::Key::F2)) {
-                const HierarchyNode *selectedNode = editSession_.Find(*editSession_.SelectedId());
-                if (selectedNode != nullptr && !selectedNode->effectivelyLocked)
-                    BeginRename(*editSession_.SelectedId());
-            }
+        if (workspaceEligible && panelFocused && !searchActive && !renamingId_.has_value() && editSession_.SelectedId().has_value() &&
+            inputRouter_->ConsumeKey(*workspaceInputContext_, Input::Key::F2)) {
+            const HierarchyNode *selectedNode = editSession_.Find(*editSession_.SelectedId());
+            if (selectedNode != nullptr && !selectedNode->effectivelyLocked)
+                BeginRename(*editSession_.SelectedId());
         }
 
         bool pendingDelete = false;

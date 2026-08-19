@@ -43,6 +43,8 @@ _PYTHON_PYTEST_NAME = "pytest Module"
 _GRAPHICS_DISPLAY_NAME = "Interactive Display"
 _OBSERVABILITY_OTLP_NAME = "OTLP Collector"
 _OBSERVABILITY_GRAFANA_NAME = "Grafana Service"
+_SONAR_TOKEN_ENV_KEY = "HORO_SONAR_TOKEN"
+_SONAR_DEFAULT_COMPILE_COMMANDS = "build/ci/compile_commands.json"
 
 _CPP_EXTENSIONS = {".h", ".hpp", ".cpp", ".c", ".cc", ".cxx", ".mm", ".m"}
 _EXCLUDED_PATH_PARTS = {"vendor", "build", "deprecated", ".horo", ".venv"}
@@ -496,7 +498,7 @@ def execute_subprocess(command: Sequence[str], cwd: Path = REPOSITORY_ROOT, env:
         kwargs = {}
         if sys.platform == "win32" and bool(command) and str(command[0]).lower().endswith((".cmd", ".bat")):
             kwargs["shell"] = True
-        result = subprocess.run(command, cwd=cwd, env=env, check=False, **kwargs)
+        result = subprocess.run(command, cwd=cwd, env=env, check=False, **kwargs)  # noqa: S603
         return result.returncode
     except FileNotFoundError as error:
         print(f"error: command not found: {error.filename or command[0]}", file=sys.stderr)
@@ -676,6 +678,17 @@ def _find_clang_format() -> str | None:
     return shutil.which("clang-format")
 
 
+def _apply_format_chunk(clang_format_bin: str, chunk: list[str], check: bool) -> int:
+    """Apply or verify clang-format on one chunk of files. Returns 0 on success."""
+    if check:
+        result = execute_subprocess([clang_format_bin, "--dry-run", "--Werror", *chunk])
+        if result != 0:
+            print("Formatting violations detected in above files.", file=sys.stderr)
+            return 1
+        return 0
+    return execute_subprocess([clang_format_bin, "-i", *chunk])
+
+
 def run_format(files: Sequence[str] | None = None, staged: bool = False, check: bool = False) -> int:
     """Format C++ source files with clang-format, with support for staged commits and dry-run check."""
     clang_format_bin = _find_clang_format()
@@ -693,21 +706,13 @@ def run_format(files: Sequence[str] | None = None, staged: bool = False, check: 
     chunks = [file_paths[i:i + chunk_size] for i in range(0, len(file_paths), chunk_size)]
 
     for chunk in chunks:
-        if check:
-            cmd = [clang_format_bin, "--dry-run", "--Werror", *chunk]
-            result = execute_subprocess(cmd)
-            if result != 0:
-                print("Formatting violations detected in above files.", file=sys.stderr)
-                return 1
-        else:
-            cmd = [clang_format_bin, "-i", *chunk]
-            code = execute_subprocess(cmd)
-            if code != 0:
-                return code
+        code = _apply_format_chunk(clang_format_bin, chunk, check)
+        if code != 0:
+            return code
 
     if staged and not check:
         for chunk in chunks:
-            subprocess.run(["git", "add", *chunk], cwd=REPOSITORY_ROOT, check=False)
+            subprocess.run(["git", "add", *chunk], cwd=REPOSITORY_ROOT, check=False)  # noqa: S603
 
     if check:
         print(f"All {len(target_files)} file(s) correctly formatted.")
@@ -915,6 +920,161 @@ def check_observability_and_services(report: DoctorReport, settings: DeveloperSe
         report.add("Observability", _OBSERVABILITY_GRAFANA_NAME, CheckStatus.INFO, "Grafana auto-import disabled")
 
 
+
+def _find_sonar_scanner() -> Path | None:
+    """Locate the bundled SonarScanner executable under tools/sonar-scanner-*/bin/."""
+    tools_dir = REPOSITORY_ROOT / "tools"
+    if not tools_dir.is_dir():
+        return None
+    for entry in sorted(tools_dir.iterdir(), reverse=True):
+        if not entry.is_dir() or not entry.name.startswith("sonar-scanner"):
+            continue
+        bin_dir = entry / "bin"
+        for candidate in ("sonar-scanner.bat", "sonar-scanner.cmd", "sonar-scanner"):
+            exe = bin_dir / candidate
+            if exe.is_file():
+                return exe
+    return None
+
+
+def _persist_sonar_token(token: str, env_file: Path = DEFAULT_ENV_FILE) -> None:
+    """Append or update the sonar token entry in the local .env file.
+
+    ``env_file`` must resolve to a path inside the repository root.
+    """
+    # Validate the resolved path stays within the repository tree to prevent
+    # path-traversal from caller-supplied values.
+    resolved = env_file.resolve()
+    try:
+        resolved.relative_to(REPOSITORY_ROOT.resolve())
+    except ValueError as error:
+        raise ValueError(f"env_file must be inside the repository root: {env_file}") from error
+
+    key = _SONAR_TOKEN_ENV_KEY
+    if resolved.exists():
+        lines = resolved.read_text(encoding="utf-8").splitlines(keepends=True)
+        new_lines: list[str] = []
+        replaced = False
+        for line in lines:
+            if line.startswith((f"{key}=", f"{key} =")):  # noqa: S8513
+                new_lines.append(f"{key}={token}\n")
+                replaced = True
+            else:
+                new_lines.append(line)
+        if not replaced:
+            if new_lines and not new_lines[-1].endswith("\n"):
+                new_lines.append("\n")
+            new_lines.append(f"{key}={token}\n")
+        resolved.write_text("".join(new_lines), encoding="utf-8")
+    else:
+        resolved.write_text(f"{key}={token}\n", encoding="utf-8")
+
+
+def _resolve_sonar_token(cli_token: str | None, env_file: Path = DEFAULT_ENV_FILE) -> str | None:
+    """Resolve the SonarCloud token using the priority chain: CLI arg → env/dotenv → interactive prompt.
+
+    When the token is obtained interactively, the user is offered the option to
+    persist it to the local .env file so it is available in future runs.
+    """
+    # 1. Explicit CLI argument takes priority.
+    if cli_token:
+        return cli_token.strip()
+
+    # 2. Environment variable / .env.local file.
+    dotenv = parse_dotenv(env_file)
+    from_env = os.environ.get(_SONAR_TOKEN_ENV_KEY) or dotenv.get(_SONAR_TOKEN_ENV_KEY)
+    if from_env and from_env.strip():
+        return from_env.strip()
+
+    # 3. Interactive prompt — only if stdin is a TTY.
+    if not sys.stdin.isatty():
+        print(
+            f"error: SonarCloud token not found. Set {_SONAR_TOKEN_ENV_KEY} in the environment, "
+            f"{DEFAULT_ENV_FILE_NAME}, or pass --token.",
+            file=sys.stderr,
+        )
+        return None
+
+    print(f"SonarCloud token not found in environment or {DEFAULT_ENV_FILE_NAME}.")
+    print(f"Set {_SONAR_TOKEN_ENV_KEY} in {DEFAULT_ENV_FILE_NAME} to skip this prompt in future runs.")
+    try:
+        token = input("Enter SonarCloud token: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print("", file=sys.stderr)
+        return None
+
+    if not token:
+        print("error: empty token provided.", file=sys.stderr)
+        return None
+
+    # Offer to persist.
+    try:
+        answer = input(f"Save token to {DEFAULT_ENV_FILE_NAME} for future runs? [y/N] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        answer = ""
+    if answer in {"y", "yes"}:
+        try:
+            _persist_sonar_token(token, env_file)
+            print(f"Token saved to {DEFAULT_ENV_FILE_NAME}.")
+        except OSError as error:
+            print(f"warning: could not persist token: {error}", file=sys.stderr)
+
+    return token
+
+
+def run_sonar(
+    token: str | None = None,
+    pr_key: str | None = None,
+    compile_commands: Path | None = None,
+    env_file: Path = DEFAULT_ENV_FILE,
+    extra_sonar_args: Sequence[str] | None = None,
+) -> int:
+    """Run the local SonarScanner against the current working tree and upload results to SonarCloud."""
+    # Resolve token.
+    resolved_token = _resolve_sonar_token(token, env_file)
+    if not resolved_token:
+        return 2
+
+    # Locate scanner executable.
+    scanner = _find_sonar_scanner()
+    if scanner is None:
+        print(
+            "error: SonarScanner not found under tools/sonar-scanner-*/bin/.\n"
+            "       Download from https://docs.sonarsource.com/sonarcloud/advanced-setup/ci-based-analysis/sonarscanner-cli/",
+            file=sys.stderr,
+        )
+        return 127
+
+    # Resolve compile-commands path.
+    cc_path = compile_commands if compile_commands is not None else REPOSITORY_ROOT / _SONAR_DEFAULT_COMPILE_COMMANDS
+    if not cc_path.is_file():
+        print(
+            f"error: compile_commands.json not found at {cc_path}.\n"
+            "       Run 'python scripts/dev.py test' first to build the CI configuration.",
+            file=sys.stderr,
+        )
+        return 1
+
+    command: list[str] = [
+        str(scanner),
+        f"-Dsonar.token={resolved_token}",
+        f"-Dsonar.cfamily.compile-commands={cc_path}",
+    ]
+    if pr_key:
+        command.append(f"-Dsonar.pullrequest.key={pr_key}")
+    if extra_sonar_args:
+        command.extend(extra_sonar_args)
+
+    print("Running SonarScanner...", flush=True)
+    if pr_key:
+        print(f"  Pull request: {pr_key}", flush=True)
+    print(f"  Compile commands: {cc_path}", flush=True)
+    print(f"  Scanner: {scanner}", flush=True)
+    print()
+
+    return execute_subprocess(command)
+
+
 def run_doctor(settings: DeveloperSettings | None = None) -> DoctorReport:
     """Execute all diagnostic checks and assemble the report."""
     if settings is None:
@@ -941,6 +1101,8 @@ _EPILOG_EXAMPLES = """examples:
   python3 scripts/dev.py check              Run full CI-parity verification pass
   python3 scripts/dev.py format --staged    Format git-staged C++ source files
   python3 scripts/dev.py build HoroEditor   Build specific target
+  python3 scripts/dev.py sonar              Run local SonarScanner and upload to SonarCloud
+  python3 scripts/dev.py sonar --pr 47      Run scan against pull request #47
   python3 scripts/dev.py run editor         Configure, build, and launch HoroEditor
   python3 scripts/dev.py help <command>     Show detailed options for a subcommand
 """
@@ -999,7 +1161,53 @@ def create_argument_parser() -> argparse.ArgumentParser:
     hlp = commands.add_parser("help", help="show general help or help for a specific command")
     hlp.add_argument("topic", nargs="?", default=None, help="subcommand name to show detailed help for")
 
+    # sonar command
+    snr = commands.add_parser(
+        "sonar",
+        help="run local SonarScanner and upload analysis to SonarCloud",
+        description=(
+            "Run the bundled SonarScanner CLI against the repository and upload the analysis report to SonarCloud.\n\n"
+            "Token resolution order:\n"
+            "  1. --token argument\n"
+            f"  2. {_SONAR_TOKEN_ENV_KEY} environment variable\n"
+            f"  3. {_SONAR_TOKEN_ENV_KEY} entry in {DEFAULT_ENV_FILE_NAME}\n"
+            "  4. Interactive prompt (TTY only) with optional save to .env.local"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    snr.add_argument(
+        "--token",
+        default=None,
+        metavar="TOKEN",
+        help=f"SonarCloud authentication token (overrides {_SONAR_TOKEN_ENV_KEY} env var / .env.local)",
+    )
+    snr.add_argument(
+        "--pr",
+        "--pullrequest",
+        dest="pr_key",
+        default=None,
+        metavar="PR_NUMBER",
+        help="pull request key to analyze (e.g. 47)",
+    )
+    snr.add_argument(
+        "--compile-commands",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=f"path to compile_commands.json (default: {_SONAR_DEFAULT_COMPILE_COMMANDS})",
+    )
+
     return parser
+
+
+def _handle_sonar(parsed: argparse.Namespace, extra_args: Sequence[str]) -> int:
+    """Handle sonar subcommand."""
+    return run_sonar(
+        token=parsed.token,
+        pr_key=parsed.pr_key,
+        compile_commands=parsed.compile_commands,
+        extra_sonar_args=list(extra_args) if extra_args else None,
+    )
 
 
 def _handle_run(parsed: argparse.Namespace, settings: DeveloperSettings, extra_args: Sequence[str] | None = None) -> int:
@@ -1085,6 +1293,9 @@ def _dispatch_command(parsed: argparse.Namespace, unparsed: Sequence[str], parse
     if parsed.command == "format":
         _require_no_unparsed(parser, unparsed)
         return run_format(files=parsed.files, staged=parsed.staged, check=parsed.check)
+
+    if parsed.command == "sonar":
+        return _handle_sonar(parsed, unparsed)
 
     if parsed.command == "build":
         _require_no_unparsed(parser, unparsed)

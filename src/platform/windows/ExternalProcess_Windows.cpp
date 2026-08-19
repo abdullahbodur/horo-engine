@@ -44,9 +44,8 @@ namespace Horo {
             LineDecoder(const ProcessOutputStream stream, const std::size_t maximum, const std::function<void(ProcessOutputLine)> &callback)
                 : stream_(stream), maximum_(std::max<std::size_t>(maximum, 1U)), callback_(&callback) {}
 
-            void Append(const char *bytes, const std::size_t count) {
-                for (std::size_t index = 0; index < count; ++index) {
-                    const char value = bytes[index];
+            void Append(const std::span<const char> bytes) {
+                for (const char value : bytes) {
                     if (value == '\n')
                         Emit();
                     else if (value != '\r') {
@@ -112,8 +111,12 @@ namespace Horo {
         }
 
         struct CaseInsensitiveWideLess {
-            bool operator()(const std::wstring &left, const std::wstring &right) const noexcept {
-                return _wcsicmp(left.c_str(), right.c_str()) < 0;
+            using is_transparent = void;
+
+            bool operator()(const std::wstring_view left, const std::wstring_view right) const noexcept {
+                if (const int cmp = _wcsnicmp(left.data(), right.data(), std::min(left.size(), right.size())); cmp != 0)
+                    return cmp < 0;
+                return left.size() < right.size();
             }
         };
 
@@ -123,11 +126,11 @@ namespace Horo {
                 wchar_t *block = GetEnvironmentStringsW();
                 if (block == nullptr)
                     return Result<std::vector<wchar_t>>::Failure(MakeError(PlatformErrors::ProcessLaunchFailed));
-                for (const wchar_t *entry = block; *entry != L'\0'; entry += std::wcslen(entry) + 1U) {
+                for (const wchar_t *entry = block; *entry != L'\0'; entry += std::wstring_view{entry}.size() + 1U) {
                     const std::wstring_view text{entry};
                     const std::size_t separator = text.find(L'=', text.starts_with(L'=') ? 1U : 0U);
                     if (separator != std::wstring_view::npos)
-                        values.emplace(std::wstring{text.substr(0, separator)}, std::wstring{text.substr(separator + 1U)});
+                        values.try_emplace(std::wstring{text.substr(0, separator)}, std::wstring{text.substr(separator + 1U)});
                 }
                 FreeEnvironmentStringsW(block);
             }
@@ -173,7 +176,7 @@ namespace Horo {
                     decoder.Finish();
                     return;
                 }
-                decoder.Append(buffer.data(), static_cast<std::size_t>(read));
+                decoder.Append(std::span{buffer.data(), static_cast<std::size_t>(read)});
             }
         }
     }  // namespace
@@ -220,8 +223,8 @@ namespace Horo {
         startup.hStdOutput = stdoutWrite.value;
         startup.hStdError = stderrWrite.value;
         PROCESS_INFORMATION process{};
-        const DWORD flags = CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_PROCESS_GROUP | CREATE_SUSPENDED | CREATE_NO_WINDOW;
-        if (!CreateProcessW(nullptr, commandLine.data(), nullptr, nullptr, TRUE, flags, environmentBlock.data(),
+        if (const DWORD flags = CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_PROCESS_GROUP | CREATE_SUSPENDED | CREATE_NO_WINDOW;
+            !CreateProcessW(nullptr, commandLine.data(), nullptr, nullptr, TRUE, flags, environmentBlock.data(),
                             workingDirectory.empty() ? nullptr : workingDirectory.c_str(), &startup, &process))
             return Result<ExternalProcessResult>::Failure(MakeError(PlatformErrors::ProcessLaunchFailed));
         Handle processHandle{process.hProcess};
@@ -253,8 +256,8 @@ namespace Horo {
             DrainAvailable(stderrRead.value, stderrOpen, standardError);
             const DWORD wait = WaitForSingleObject(processHandle.value, 10);
             const auto now = std::chrono::steady_clock::now();
-            const bool cancelled = cancellation.IsCancellationRequested();
-            if (!terminationRequested && (cancelled || now - started >= request.timeout)) {
+            if (const bool cancelled = cancellation.IsCancellationRequested();
+                !terminationRequested && (cancelled || now - started >= request.timeout)) {
                 terminationRequested = true;
                 timedOut = !cancelled;
                 terminationStarted = now;
@@ -266,17 +269,17 @@ namespace Horo {
             if (wait == WAIT_OBJECT_0) {
                 DrainAvailable(stdoutRead.value, stdoutOpen, standardOutput);
                 DrainAvailable(stderrRead.value, stderrOpen, standardError);
-                if (!stdoutOpen && !stderrOpen)
-                    break;
                 DWORD stdoutAvailable = 0;
                 DWORD stderrAvailable = 0;
                 const bool stdoutEmpty =
                     !PeekNamedPipe(stdoutRead.value, nullptr, 0, nullptr, &stdoutAvailable, nullptr) || stdoutAvailable == 0;
                 const bool stderrEmpty =
                     !PeekNamedPipe(stderrRead.value, nullptr, 0, nullptr, &stderrAvailable, nullptr) || stderrAvailable == 0;
-                if (stdoutEmpty && stderrEmpty) {
-                    standardOutput.Finish();
-                    standardError.Finish();
+                if ((!stdoutOpen && !stderrOpen) || (stdoutEmpty && stderrEmpty)) {
+                    if (stdoutEmpty && stderrEmpty) {
+                        standardOutput.Finish();
+                        standardError.Finish();
+                    }
                     break;
                 }
             }
@@ -284,10 +287,15 @@ namespace Horo {
         DWORD exitCode = 0;
         GetExitCodeProcess(processHandle.value, &exitCode);
         ExternalProcessResult result;
-        result.reason = timedOut               ? ProcessTerminationReason::TimedOut
-                        : terminationRequested ? ProcessTerminationReason::Cancelled
-                        : forceTerminated      ? ProcessTerminationReason::Signalled
-                                               : ProcessTerminationReason::Exited;
+        if (timedOut) {
+            result.reason = ProcessTerminationReason::TimedOut;
+        } else if (terminationRequested) {
+            result.reason = ProcessTerminationReason::Cancelled;
+        } else if (forceTerminated) {
+            result.reason = ProcessTerminationReason::Signalled;
+        } else {
+            result.reason = ProcessTerminationReason::Exited;
+        }
         result.exitCode = static_cast<int>(exitCode);
         return Result<ExternalProcessResult>::Success(result);
     }

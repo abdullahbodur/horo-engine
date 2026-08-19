@@ -79,20 +79,26 @@ namespace Horo::Extensions {
         }
 
         std::size_t WriteDownload(const char *data, const std::size_t size, const std::size_t count, void *userData) {
-            auto &buffer = *static_cast<DownloadBuffer *>(userData);
+            auto *buffer = static_cast<DownloadBuffer *>(userData);
+            if (buffer == nullptr) {
+                return 0;
+            }
             const std::size_t byteCount = size * count;
-            if (byteCount > buffer.limit - (std::min)(buffer.limit, buffer.bytes.size())) {
-                buffer.exceeded = true;
+            if (byteCount > buffer->limit - (std::min)(buffer->limit, buffer->bytes.size())) {
+                buffer->exceeded = true;
                 return 0;
             }
             const auto *begin = reinterpret_cast<const std::byte *>(data);
-            buffer.bytes.insert(buffer.bytes.end(), begin, begin + byteCount);
+            buffer->bytes.insert(buffer->bytes.end(), begin, begin + byteCount);
             return byteCount;
         }
 
         int ReportTransfer(void *userData, curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
-            const auto &cancellation = *static_cast<const CancellationToken *>(userData);
-            return cancellation.IsCancellationRequested() ? 1 : 0;
+            const auto *cancellation = static_cast<const CancellationToken *>(userData);
+            if (cancellation == nullptr) {
+                return 0;
+            }
+            return cancellation->IsCancellationRequested() ? 1 : 0;
         }
 
         [[nodiscard]] Result<std::vector<std::byte>> Download(const std::string &url, const std::size_t limit,
@@ -100,8 +106,7 @@ namespace Horo::Extensions {
             if (!IsHttpsUrl(url))
                 return Result<std::vector<std::byte>>::Failure(MarketplaceError("Marketplace URLs must use HTTPS."));
 
-            static const bool CurlReady = curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK;
-            if (!CurlReady)
+            if (static const bool CurlReady = curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK; !CurlReady)
                 return Result<std::vector<std::byte>>::Failure(MarketplaceError("Unable to initialise the HTTPS client."));
 
             CURL *curl = curl_easy_init();
@@ -115,6 +120,7 @@ namespace Horo::Extensions {
             curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
             curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
             curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
+            curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_3);
             curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
             curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L);
             curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
@@ -186,11 +192,63 @@ namespace Horo::Extensions {
             return true;
         }
 
+        [[nodiscard]] bool ExtractZipEntries(mz_zip_archive &archive, const mz_uint fileCount, const fs::path &extractionRoot,
+                                             const CancellationToken &cancellation) {
+            std::uint64_t extractedBytes = 0;
+            std::error_code error;
+            for (mz_uint index = 0; index < fileCount; ++index) {
+                if (cancellation.IsCancellationRequested()) {
+                    return false;
+                }
+                mz_zip_archive_file_stat stat{};
+                if (mz_zip_reader_file_stat(&archive, index, &stat) == 0 || !SafeArchivePath(stat.m_filename)) {
+                    return false;
+                }
+                extractedBytes += stat.m_uncomp_size;
+                if (extractedBytes > MaxExtractedBytes) {
+                    return false;
+                }
+                const fs::path target = (extractionRoot / fs::path{stat.m_filename}).lexically_normal();
+                if (mz_zip_reader_is_file_a_directory(&archive, index)) {
+                    fs::create_directories(target, error);
+                    if (error) {
+                        return false;
+                    }
+                } else {
+                    fs::create_directories(target.parent_path(), error);
+                    if (error || mz_zip_reader_extract_to_file(&archive, index, target.string().c_str(), 0) == 0) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        [[nodiscard]] Result<fs::path> ResolvePackageRoot(const fs::path &extractionRoot) {
+            std::error_code error;
+            if (fs::is_regular_file(extractionRoot / "extension.json", error)) {
+                return Result<fs::path>::Success(extractionRoot);
+            }
+            std::vector<fs::path> children;
+            for (const auto &child : fs::directory_iterator(extractionRoot, error)) {
+                if (error) {
+                    break;
+                }
+                if (child.is_directory() && fs::is_regular_file(child.path() / "extension.json", error)) {
+                    children.push_back(child.path());
+                }
+            }
+            if (error || children.size() != 1) {
+                return Result<fs::path>::Failure(MarketplaceError("Extension archive must contain one package manifest."));
+            }
+            return Result<fs::path>::Success(fs::absolute(children.front()).lexically_normal());
+        }
+
         [[nodiscard]] Result<fs::path> ExtractPackage(const std::span<const std::byte> archiveBytes,
                                                       const CancellationToken &cancellation) {
             const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
             const fs::path extractionRoot =
-                fs::absolute(fs::temp_directory_path() / ("horo-extension-marketplace-" + std::to_string(nonce))).lexically_normal();
+                fs::absolute(fs::temp_directory_path() / std::format("horo-extension-marketplace-{}", nonce)).lexically_normal();
             std::error_code error;
             fs::create_directories(extractionRoot, error);
             if (error)
@@ -203,53 +261,19 @@ namespace Horo::Extensions {
             }
 
             const mz_uint fileCount = mz_zip_reader_get_num_files(&archive);
-            std::uint64_t extractedBytes = 0;
-            bool valid = fileCount <= MaxArchiveEntries;
-            for (mz_uint index = 0; valid && index < fileCount; ++index) {
-                if (cancellation.IsCancellationRequested()) {
-                    valid = false;
-                    break;
-                }
-                mz_zip_archive_file_stat stat{};
-                valid = mz_zip_reader_file_stat(&archive, index, &stat) != 0 && SafeArchivePath(stat.m_filename);
-                if (!valid)
-                    break;
-                extractedBytes += stat.m_uncomp_size;
-                if (extractedBytes > MaxExtractedBytes) {
-                    valid = false;
-                    break;
-                }
-                const fs::path target = (extractionRoot / fs::path{stat.m_filename}).lexically_normal();
-                if (mz_zip_reader_is_file_a_directory(&archive, index)) {
-                    fs::create_directories(target, error);
-                    valid = !error;
-                } else {
-                    fs::create_directories(target.parent_path(), error);
-                    valid = !error && mz_zip_reader_extract_to_file(&archive, index, target.string().c_str(), 0) != 0;
-                }
-            }
+            const bool valid = (fileCount <= MaxArchiveEntries) && ExtractZipEntries(archive, fileCount, extractionRoot, cancellation);
             mz_zip_reader_end(&archive);
             if (!valid) {
                 fs::remove_all(extractionRoot, error);
                 return Result<fs::path>::Failure(MarketplaceError("Extension archive failed bounded path or size validation."));
             }
 
-            fs::path packageRoot = extractionRoot;
-            if (!fs::is_regular_file(packageRoot / "extension.json", error)) {
-                std::vector<fs::path> children;
-                for (const auto &child : fs::directory_iterator(extractionRoot, error)) {
-                    if (error)
-                        break;
-                    if (child.is_directory() && fs::is_regular_file(child.path() / "extension.json", error))
-                        children.push_back(child.path());
-                }
-                if (error || children.size() != 1) {
-                    fs::remove_all(extractionRoot, error);
-                    return Result<fs::path>::Failure(MarketplaceError("Extension archive must contain one package manifest."));
-                }
-                packageRoot = fs::absolute(children.front()).lexically_normal();
+            auto packageRootResult = ResolvePackageRoot(extractionRoot);
+            if (packageRootResult.HasError()) {
+                fs::remove_all(extractionRoot, error);
+                return packageRootResult;
             }
-            return Result<fs::path>::Success(packageRoot);
+            return packageRootResult;
         }
     }  // namespace
 
@@ -267,18 +291,21 @@ namespace Horo::Extensions {
     /** @copydoc ExtensionMarketplaceService::~ExtensionMarketplaceService */
     ExtensionMarketplaceService::~ExtensionMarketplaceService() {
         std::optional<JobHandle> job;
+        std::optional<fs::path> cleanup;
         {
             std::lock_guard lock(mutex_);
             if (activeJob_.has_value()) {
                 static_cast<void>(jobs_.RequestCancel(activeJob_->Id()));
                 job = std::move(activeJob_);
             }
+            cleanup = std::move(pendingCleanupRoot_);
+            pendingCleanupRoot_.reset();
         }
         if (job.has_value())
             static_cast<void>(job->Wait());
-        if (pendingCleanupRoot_.has_value()) {
+        if (cleanup.has_value()) {
             std::error_code ignored;
-            fs::remove_all(*pendingCleanupRoot_, ignored);
+            fs::remove_all(*cleanup, ignored);
         }
     }
 
@@ -289,10 +316,7 @@ namespace Horo::Extensions {
 
     /** @brief Reports whether the currently owned job still executes. */
     bool ExtensionMarketplaceService::OperationActiveLocked() const {
-        if (!activeJob_.has_value())
-            return false;
-        const JobState state = jobs_.Query(activeJob_->Id()).state;
-        return state == JobState::Queued || state == JobState::Running;
+        return snapshot_.status == ExtensionMarketplaceStatus::Searching || snapshot_.status == ExtensionMarketplaceStatus::Installing;
     }
 
     /** @brief Publishes a terminal marketplace failure to presentation state. */
@@ -312,8 +336,7 @@ namespace Horo::Extensions {
         snapshot_.message.clear();
         snapshot_.activePackageId.clear();
         const std::string registryUrl = registryUrl_;
-        auto submitted =
-            jobs_.SubmitResult({}, [this, registryUrl, query = std::move(query)](const CancellationToken &cancellation) -> Result<void> {
+        auto submitted = jobs_.SubmitResult({}, [this, registryUrl, query = std::move(query)](const CancellationToken &cancellation) {
             auto downloaded = Download(registryUrl, MaxRegistryBytes, cancellation);
             if (downloaded.HasError()) {
                 FinishWithError(downloaded.ErrorValue().message);
@@ -351,14 +374,13 @@ namespace Horo::Extensions {
         snapshot_.status = ExtensionMarketplaceStatus::Installing;
         snapshot_.activePackageId = entry.packageId;
         snapshot_.message.clear();
-        auto submitted = jobs_.SubmitResult({}, [this, entry](const CancellationToken &cancellation) -> Result<void> {
+        auto submitted = jobs_.SubmitResult({}, [this, entry](const CancellationToken &cancellation) {
             auto downloaded = Download(entry.packageUrl, MaxPackageBytes, cancellation);
             if (downloaded.HasError()) {
                 FinishWithError(downloaded.ErrorValue().message);
                 return Result<void>::Success();
             }
-            const std::string actual = FormatSha256(ComputeSha256(downloaded.Value()));
-            if (actual != entry.sha256) {
+            if (const std::string actual = FormatSha256(ComputeSha256(downloaded.Value())); actual != entry.sha256) {
                 FinishWithError("Downloaded extension failed SHA-256 verification.");
                 return Result<void>::Success();
             }
@@ -367,11 +389,12 @@ namespace Horo::Extensions {
                 FinishWithError(extracted.ErrorValue().message);
                 return Result<void>::Success();
             }
+            const auto extractedPath = extracted.Value();
+            const auto cleanupPath =
+                extractedPath.filename().string().starts_with("horo-extension-marketplace-") ? extractedPath : extractedPath.parent_path();
             std::lock_guard resultLock(mutex_);
-            pendingInstallRoot_ = extracted.Value();
-            pendingCleanupRoot_ = extracted.Value().filename().string().starts_with("horo-extension-marketplace-")
-                                      ? extracted.Value()
-                                      : extracted.Value().parent_path();
+            pendingInstallRoot_ = extractedPath;
+            pendingCleanupRoot_ = cleanupPath;
             return Result<void>::Success();
         });
         if (submitted.HasError()) {
@@ -388,10 +411,11 @@ namespace Horo::Extensions {
         std::optional<fs::path> installRoot;
         std::optional<fs::path> cleanupRoot;
         {
+            using enum JobState;
             std::lock_guard lock(mutex_);
             if (activeJob_.has_value()) {
                 const JobState state = jobs_.Query(activeJob_->Id()).state;
-                if (state == JobState::Succeeded || state == JobState::Failed || state == JobState::Cancelled)
+                if (state == Succeeded || state == Failed || state == Cancelled)
                     activeJob_.reset();
             }
             if (pendingInstallRoot_.has_value()) {

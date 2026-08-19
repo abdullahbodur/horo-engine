@@ -331,18 +331,19 @@ namespace Horo::Editor {
 
     /** @copydoc CreateMockHierarchyModel */
     HierarchyModel CreateMockHierarchyModel() {
+        using enum HierarchyNodeType;
         HierarchyModel model;
-        const HierarchyNodeId room = model.AddNode(std::nullopt, "Room", HierarchyNodeType::Collection);
-        const HierarchyNodeId floor = model.AddNode(room, "floor 000", HierarchyNodeType::Mesh);
-        static_cast<void>(model.AddNode(room, "wall north", HierarchyNodeType::Mesh));
-        static_cast<void>(model.AddNode(room, "wall south", HierarchyNodeType::Mesh));
-        static_cast<void>(model.AddNode(room, "player spawn", HierarchyNodeType::Empty));
+        const HierarchyNodeId room = model.AddNode(std::nullopt, "Room", Collection);
+        const HierarchyNodeId floor = model.AddNode(room, "floor 000", Mesh);
+        static_cast<void>(model.AddNode(room, "wall north", Mesh));
+        static_cast<void>(model.AddNode(room, "wall south", Mesh));
+        static_cast<void>(model.AddNode(room, "player spawn", Empty));
 
-        const HierarchyNodeId lighting = model.AddNode(std::nullopt, "Lighting", HierarchyNodeType::Collection);
-        static_cast<void>(model.AddNode(lighting, "sun directional", HierarchyNodeType::Light));
+        const HierarchyNodeId lighting = model.AddNode(std::nullopt, "Lighting", Collection);
+        static_cast<void>(model.AddNode(lighting, "sun directional", Light));
 
-        const HierarchyNodeId cameras = model.AddNode(std::nullopt, "Cameras", HierarchyNodeType::Collection);
-        static_cast<void>(model.AddNode(cameras, "main camera", HierarchyNodeType::Camera));
+        const HierarchyNodeId cameras = model.AddNode(std::nullopt, "Cameras", Collection);
+        static_cast<void>(model.AddNode(cameras, "main camera", Camera));
         static_cast<void>(model.Select(floor));
         return model;
     }
