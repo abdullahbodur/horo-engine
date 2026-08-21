@@ -244,23 +244,43 @@ namespace Horo::Extensions {
             return Result<fs::path>::Success(fs::absolute(children.front()).lexically_normal());
         }
 
+        [[nodiscard]] bool IsSafeExtractionRoot(const fs::path &root) noexcept {
+            try {
+                const auto base = fs::weakly_canonical(fs::temp_directory_path());
+                const auto cand = fs::weakly_canonical(root);
+                return cand.string().rfind(base.string(), 0) == 0 && !cand.empty() &&
+                       cand.filename().string().rfind("horo-extension-marketplace-", 0) == 0;
+            } catch (...) {
+                return false;
+            }
+        }
+
         [[nodiscard]] Result<fs::path> ExtractPackage(const std::span<const std::byte> archiveBytes,
                                                       const CancellationToken &cancellation) {
             std::random_device rd;
             std::mt19937_64 gen(rd());
             std::uniform_int_distribution<std::uint64_t> dist;
-            const auto nonce = dist(gen);
-            const fs::path extractionRoot =
-                fs::absolute(fs::temp_directory_path() / std::format("horo-extension-marketplace-{:016x}", nonce)).lexically_normal();
+            fs::path extractionRoot;
             std::error_code error;
-            fs::create_directories(extractionRoot, error);
-            if (error)
-                return Result<fs::path>::Failure(MarketplaceError("Unable to create extension extraction staging."));
-            fs::permissions(extractionRoot, fs::perms::owner_all, fs::perm_options::replace, error);
-            if (error) {
-                fs::remove_all(extractionRoot, error);
-                return Result<fs::path>::Failure(MarketplaceError("Unable to secure extension extraction staging."));
+            for (int attempt = 0; attempt < 16; ++attempt) {
+                const auto nonce = dist(gen);
+                extractionRoot =
+                    fs::absolute(fs::temp_directory_path() / std::format("horo-extension-marketplace-{:016x}", nonce)).lexically_normal();
+                if (!IsSafeExtractionRoot(extractionRoot))
+                    continue;
+                if (fs::exists(extractionRoot, error))
+                    continue;
+                if (fs::create_directory(extractionRoot, error) && !error) {
+                    fs::permissions(extractionRoot, fs::perms::owner_all, fs::perm_options::replace, error);
+                    if (!error && IsSafeExtractionRoot(extractionRoot))
+                        break;
+                    fs::remove_all(extractionRoot, error);
+                }
+                if (attempt == 15)
+                    return Result<fs::path>::Failure(MarketplaceError("Unable to create extension extraction staging."));
             }
+            if (!IsSafeExtractionRoot(extractionRoot))
+                return Result<fs::path>::Failure(MarketplaceError("Unable to create extension extraction staging."));
 
             mz_zip_archive archive{};
             if (!mz_zip_reader_init_mem(&archive, archiveBytes.data(), archiveBytes.size(), 0)) {
