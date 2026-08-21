@@ -1,0 +1,59 @@
+name: SonarCloud
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  sonar:
+    name: SonarCloud
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build ccache \
+            libwayland-dev wayland-protocols libxkbcommon-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libxext-dev libxss-dev libxtst-dev libxxf86vm-dev \
+            libgl1-mesa-dev libglu1-mesa-dev
+
+      - name: Configure and build
+        env:
+          FETCHCONTENT_BASE_DIR: ${{ github.workspace }}/.cmake/fetchcontent
+        run: |
+          cmake -S . -B build/sonar -G Ninja \
+            -DBUILD_TESTING=OFF \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          cmake --build build/sonar --parallel
+
+      - name: SonarCloud scan
+        run: |
+          sudo apt-get install -y --no-install-recommends unzip
+          curl -fsSL https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-7.2.0.5079-linux-x64.zip -o /tmp/sonar-scanner.zip
+          unzip -q /tmp/sonar-scanner.zip -d /tmp
+          /tmp/sonar-scanner-7.2.0.5079-linux-x64/bin/sonar-scanner \
+            -Dsonar.token="$SONAR_TOKEN" \
+            -Dsonar.organization=docktail \
+            -Dsonar.projectKey=abdullahbodur_horo-engine \
+            -Dsonar.sourceEncoding=UTF-8 \
+            -Dsonar.cfamily.compile-commands=build/sonar/compile_commands.json \
+            -Dsonar.qualitygate.wait=true \
+            -Dsonar.qualitygate.timeout=300
