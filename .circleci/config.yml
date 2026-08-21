@@ -71,7 +71,6 @@ jobs:
             curl -fsSL https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-7.2.0.5079-linux-x64.zip -o /tmp/sonar-scanner.zip
             unzip -q /tmp/sonar-scanner.zip -d /tmp
             /tmp/sonar-scanner-7.2.0.5079-linux-x64/bin/sonar-scanner \
-              -Dsonar.token="$SONAR_TOKEN" \
               -Dsonar.organization=docktail \
               -Dsonar.projectKey=abdullahbodur_horo-engine \
               -Dsonar.sourceEncoding=UTF-8 \
