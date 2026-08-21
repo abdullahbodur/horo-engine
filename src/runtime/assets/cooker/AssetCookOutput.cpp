@@ -57,6 +57,30 @@ namespace Horo::Assets {
             return json.str();
         }
 
+        [[nodiscard]] bool IsSafeArtifactFile(const std::string_view file) noexcept {
+            if (file.empty() || file.size() > 256)
+                return false;
+            for (const char c : file) {
+                if (c == '/' || c == '\\' || c == ':')
+                    return false;
+            }
+            if (file.find("..") != std::string_view::npos)
+                return false;
+            return true;
+        }
+
+        [[nodiscard]] bool IsSafePathWithin(const std::filesystem::path &base, const std::filesystem::path &candidate) noexcept {
+            try {
+                const auto baseCanon = std::filesystem::weakly_canonical(base);
+                const auto candCanon = std::filesystem::weakly_canonical(candidate);
+                const auto baseStr = baseCanon.string();
+                const auto candStr = candCanon.string();
+                return candStr.rfind(baseStr, 0) == 0;
+            } catch (...) {
+                return false;
+            }
+        }
+
         /**
          * @brief Reads the full contents of a file into a byte vector.
          */
@@ -82,6 +106,10 @@ namespace Horo::Assets {
          * @brief Writes bytes atomically: write to temp, then rename.
          */
         Result<void> WriteAtomic(const std::filesystem::path &path, std::span<const std::uint8_t> bytes) {
+            for (const auto &part : path) {
+                if (part == "..")
+                    return Result<void>::Failure(Error{CookErrors::MalformedArtifact.code});
+            }
             auto tempPath = path;
             tempPath += std::format(".tmp.{}", std::chrono::steady_clock::now().time_since_epoch().count());
 
@@ -211,12 +239,18 @@ namespace Horo::Assets {
         auto genRelPath = std::string("generations/") + HexEncodeSha256(manifestDigest);
         auto genRoot = targetRoot / genRelPath;
 
+        if (!IsSafePathWithin(targetRoot, genRoot))
+            return Result<AssetCookGeneration>::Failure(Error{CookErrors::MalformedArtifact.code});
         // Create generations directory
         std::filesystem::create_directories(genRoot);
 
         // Write each artifact
         for (std::size_t i = 0; i < entries.size(); ++i) {
+            if (!IsSafeArtifactFile(entries[i].artifactFile))
+                return Result<AssetCookGeneration>::Failure(Error{CookErrors::MalformedArtifact.code});
             auto artifactPath = genRoot / entries[i].artifactFile;
+            if (!IsSafePathWithin(genRoot, artifactPath))
+                return Result<AssetCookGeneration>::Failure(Error{CookErrors::MalformedArtifact.code});
             auto writeResult = WriteAtomic(artifactPath, artifactPayloads[i]);
             if (writeResult.HasError())
                 return Result<AssetCookGeneration>::Failure(writeResult.ErrorValue());
