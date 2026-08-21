@@ -2,10 +2,13 @@
 #include "Horo/Platform/PlatformErrors.h"
 
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <algorithm>
 #include <array>
 #include <cwchar>
+#include <functional>
 #include <map>
+#include <span>
 #include <string_view>
 #include <thread>
 #include <utility>
