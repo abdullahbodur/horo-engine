@@ -48,6 +48,8 @@ namespace Horo::Editor {
         void Clear();
 
     private:
+        friend struct EditorSnackbarHostTestAccess;
+
         void OnNotificationEvent(const NotificationEvent &event);
         void DismissAt(std::size_t index);
 

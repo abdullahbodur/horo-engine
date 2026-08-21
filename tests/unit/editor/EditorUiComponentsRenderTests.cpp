@@ -1,4 +1,5 @@
 #include "Horo/Editor/EditorIcons.h"
+#include "Horo/Editor/EditorSnackbarHost.h"
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/EditorUiComponents.h"
 
@@ -18,6 +19,36 @@ namespace {
         gClipboardText = text;
     }
 }  // namespace
+
+namespace Horo::Editor {
+    struct EditorSnackbarHostTestAccess {
+        [[nodiscard]] static const std::deque<ActiveSnackbar> &Queued(const EditorSnackbarHost &host) {
+            return host.activeSnackbars_;
+        }
+    };
+}  // namespace Horo::Editor
+
+TEST_CASE("Snackbar host bounds queued notifications while retaining the newest entry", "[unit][editor][gui][design-system]") {
+    using namespace Horo::Editor;
+
+    EditorDataBus events;
+    EditorSnackbarHost host{events};
+    for (std::uint64_t id = 1; id <= 64; ++id) {
+        events.Publish(NotificationEvent{.id = id, .message = std::to_string(id), .durationSeconds = 0.0f});
+    }
+
+    events.Publish(NotificationEvent{.id = 65, .message = "transient", .durationSeconds = 5.0f});
+    const auto &afterTransient = EditorSnackbarHostTestAccess::Queued(host);
+    REQUIRE(afterTransient.size() == 64);
+    REQUIRE(afterTransient.front().event.id == 2);
+    REQUIRE(afterTransient.back().event.id == 65);
+
+    events.Publish(NotificationEvent{.id = 66, .message = "persistent", .durationSeconds = 0.0f});
+    const auto &afterPersistent = EditorSnackbarHostTestAccess::Queued(host);
+    REQUIRE(afterPersistent.size() == 64);
+    REQUIRE(afterPersistent.front().event.id == 2);
+    REQUIRE(afterPersistent.back().event.id == 66);
+}
 
 TEST_CASE("Editor icon registry resolves canonical and catalog tokens", "[unit][editor][gui][design-system]") {
     using Horo::Editor::Ui::UiIcon;
