@@ -8,6 +8,8 @@
 #include "Horo/Foundation/Sha256.h"
 
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -104,9 +106,10 @@ namespace Horo::Assets {
         }
 
         // Reject filenames invalid on Windows/NTFS (" < > | : ? * and control
-        // characters) in addition to path separators, so artifact names stay
+        // characters), reserved DOS device basenames, and names Windows would
+        // silently strip trailing dots/spaces from — so artifact names stay
         // portable across all supported platforms instead of failing late with
-        // an opaque filesystem error on Windows.
+        // an opaque filesystem error or silent rename on Windows.
         [[nodiscard]] bool IsSafeArtifactFile(const std::string_view file) noexcept {
             if (file.empty() || file.size() > 256)
                 return false;
@@ -120,6 +123,20 @@ namespace Horo::Assets {
             }
             if (file.find("..") != std::string_view::npos)
                 return false;
+            // Windows strips trailing dots/spaces, silently renaming the file.
+            if (file.back() == '.' || file.back() == ' ')
+                return false;
+            // Reserved DOS device basenames are invalid even with an extension.
+            const auto stem = file.substr(0, file.find('.'));
+            static constexpr std::array<std::string_view, 27> reserved{"CON",  "PRN",  "AUX",  "NUL",    "COM0",    "COM1",  "COM2",
+                                                                       "COM3", "COM4", "COM5", "COM6",   "COM7",    "COM8",  "COM9",
+                                                                       "LPT0", "LPT1", "LPT2", "LPT3",   "LPT4",    "LPT5",  "LPT6",
+                                                                       "LPT7", "LPT8", "LPT9", "CONIN$", "CONOUT$", "CLOCK$"};
+            for (const auto device : reserved)
+                if (stem.size() == device.size() && std::equal(stem.begin(), stem.end(), device.begin(), [](const char a, const char b) {
+                    return std::toupper(static_cast<unsigned char>(a)) == b;
+                }))
+                    return false;
             return true;
         }
 
