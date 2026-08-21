@@ -10,6 +10,7 @@
 #include <fstream>
 #include <miniz.h>
 #include <nlohmann/json.hpp>
+#include <random>
 #include <ranges>
 #include <span>
 #include <system_error>
