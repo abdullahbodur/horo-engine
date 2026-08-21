@@ -1,6 +1,7 @@
 #include "ExternalAssetImporter.h"
 
 #include "Horo/Extensions/ExtensionErrors.h"
+#include "Horo/Foundation/Logging/Logger.h"
 
 #include <algorithm>
 #include <cctype>
