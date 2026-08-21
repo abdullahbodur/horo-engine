@@ -108,7 +108,7 @@ TEST_CASE("PublishCookGeneration escapes manifest strings", "[native]") {
     const std::string manifest{std::istreambuf_iterator<char>{manifestStream}, std::istreambuf_iterator<char>{}};
 
     REQUIRE((manifest.find(R"("target":"headless-null")") != std::string::npos));
-    REQUIRE((manifest.find(R"("artifact":"quoted\"artifact.cooked")") != std::string::npos));
+    REQUIRE((manifest.find(R"horo("artifact":"quoted\"artifact.cooked")horo") != std::string::npos));
     REQUIRE((std::filesystem::exists(published.Value().generationRoot / artifactFile)));
 }
 
@@ -197,4 +197,15 @@ TEST_CASE("ResolveCurrentCookGeneration reads published generation", "[native]")
     REQUIRE((gen.target == nullTarget));
     REQUIRE((gen.artifactCount == 1));
     REQUIRE((std::filesystem::exists(gen.generationRoot)));
+}
+
+TEST_CASE("ResolveCurrentCookGeneration rejects a generation path outside the target root", "[native]") {
+    TempDir tmp;
+    std::ofstream current{tmp.path / "current.json", std::ios::binary | std::ios::trunc};
+    current << R"({"target":"headless-null","manifestDigest":"ignored","generationPath":"../outside","artifactCount":"1"})";
+    current.close();
+
+    const auto resolved = ResolveCurrentCookGeneration(tmp.path);
+
+    REQUIRE((resolved.HasError()));
 }

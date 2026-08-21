@@ -1,5 +1,6 @@
 #include "Horo/Foundation/Diagnostics/OperationHistory.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <deque>
 #include <fstream>
@@ -42,6 +43,15 @@ namespace Horo::Diagnostics {
             if (value == "timed_out")
                 return TimedOut;
             return std::nullopt;
+        }
+
+        [[nodiscard]] bool IsSafeConfiguration(const OperationHistoryConfiguration &configuration) noexcept {
+            if (configuration.directory.empty() || !configuration.directory.is_absolute() || configuration.baseName.empty() ||
+                configuration.baseName.size() > 64 || configuration.baseName.find_first_of("/\\.:") != std::string::npos)
+                return false;
+            return std::ranges::none_of(configuration.directory, [](const std::filesystem::path &part) {
+                return part == "..";
+            });
         }
 
         [[nodiscard]] Json FieldValueToJson(const Telemetry::FieldValue &value) {
@@ -177,7 +187,7 @@ namespace Horo::Diagnostics {
         }
 
         void ReopenForAppend() noexcept {
-            file = std::fopen(path.string().c_str(), "ab");
+            file = std::fopen(path.string().c_str(), "ab");  // NOSONAR: path derives from a canonical directory and validated base name.
             std::error_code error;
             currentBytes = std::filesystem::file_size(path, error);
             if (error)
@@ -230,15 +240,18 @@ namespace Horo::Diagnostics {
 
     /** @copydoc OperationHistorySink::Create */
     std::shared_ptr<OperationHistorySink> OperationHistorySink::Create(const OperationHistoryConfiguration &configuration) noexcept {
-        if (configuration.directory.empty() || configuration.directory.is_relative() || configuration.baseName.empty() ||
-            configuration.maxFileBytes == 0 || configuration.maxRecoveredRecords == 0)
+        if (!IsSafeConfiguration(configuration) || configuration.maxFileBytes == 0 || configuration.maxRecoveredRecords == 0)
             return nullptr;
         try {
             std::error_code error;
-            std::filesystem::create_directories(configuration.directory, error);
+            std::filesystem::create_directories(configuration.directory, error);  // NOSONAR
             if (error)
                 return nullptr;
-            auto impl = std::make_unique<Impl>(configuration);
+            OperationHistoryConfiguration resolved = configuration;
+            resolved.directory = std::filesystem::weakly_canonical(configuration.directory, error);
+            if (error || !IsSafeConfiguration(resolved))
+                return nullptr;
+            auto impl = std::make_unique<Impl>(std::move(resolved));
             if (!RepairPartialTrailingRecord(impl->path))
                 return nullptr;
             impl->Recover();

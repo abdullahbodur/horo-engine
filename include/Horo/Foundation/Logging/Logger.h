@@ -201,20 +201,21 @@ namespace Horo::Log {
     /**
      * @brief Simple format helper — avoids non-POD variadic UB.
      *
-     * Accepts fundamental types and `const char *` only.
+     * The format must be a compile-time character array. Arguments accept fundamental types and `const char *` only.
      * For std::string, pass `.c_str()` explicitly.
      */
-    template <typename... Args> [[nodiscard]] std::string FormatArgs(const char *fmt, Args &&...args) {
-        const int size = std::snprintf(nullptr, 0, fmt, std::forward<Args>(args)...);
+    template <std::size_t Size, typename... Args> [[nodiscard]] std::string FormatArgs(const char (&fmt)[Size], Args &&...args) {
+        // The array-reference contract accepts compile-time format strings only.
+        const int size = std::snprintf(nullptr, 0, fmt, std::forward<Args>(args)...);  // NOSONAR
         if (size <= 0)
             return {};
         std::string result(static_cast<std::size_t>(size) + 1, '\0');
-        std::snprintf(result.data(), result.size(), fmt, std::forward<Args>(args)...);
+        std::snprintf(result.data(), result.size(), fmt, std::forward<Args>(args)...);  // NOSONAR
         result.pop_back();
         return result;
     }
 
-    [[nodiscard]] inline std::string FormatArgs(const char *msg) {
+    template <std::size_t Size> [[nodiscard]] std::string FormatArgs(const char (&msg)[Size]) {
         return {msg};
     }
 

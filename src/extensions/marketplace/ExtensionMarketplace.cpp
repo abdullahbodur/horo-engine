@@ -255,6 +255,20 @@ namespace Horo::Extensions {
             return canonicalRoot.filename().string().starts_with("horo-extension-marketplace-");
         }
 
+        [[nodiscard]] bool IsOwnedExtractionRoot(const fs::path &root) noexcept {
+            std::error_code error;
+            const fs::path temporaryBase = fs::weakly_canonical(fs::temp_directory_path(error), error);  // NOSONAR(cpp:S5443)
+            return !error && !temporaryBase.empty() && IsSafeExtractionRoot(temporaryBase, root);
+        }
+
+        bool RemoveOwnedExtractionRoot(const fs::path &root) noexcept {
+            if (!IsOwnedExtractionRoot(root))
+                return false;
+            std::error_code error;
+            fs::remove_all(root, error);  // NOSONAR: root is a canonical, name-validated direct child of the temporary base.
+            return !error;
+        }
+
         [[nodiscard]] std::uint64_t SecureNonce() {
             std::random_device random;
             std::uint64_t nonce{};
@@ -330,6 +344,8 @@ namespace Horo::Extensions {
             fs::path installRoot = std::move(extracted).Value();
             fs::path cleanupRoot =
                 installRoot.filename().string().starts_with("horo-extension-marketplace-") ? installRoot : installRoot.parent_path();
+            if (!IsOwnedExtractionRoot(cleanupRoot))
+                return Result<PreparedMarketplacePackage>::Failure(MarketplaceError("Extension extraction ownership validation failed."));
             return Result<PreparedMarketplacePackage>::Success({std::move(installRoot), std::move(cleanupRoot)});
         }
     }  // namespace
@@ -360,10 +376,8 @@ namespace Horo::Extensions {
         }
         if (job.has_value())
             static_cast<void>(job->Wait());
-        if (cleanup.has_value()) {
-            std::error_code ignored;
-            fs::remove_all(*cleanup, ignored);
-        }
+        if (cleanup.has_value())
+            static_cast<void>(RemoveOwnedExtractionRoot(*cleanup));
     }
 
     /** @copydoc ExtensionMarketplaceService::DefaultRegistryUrl */
@@ -475,10 +489,8 @@ namespace Horo::Extensions {
             return;
 
         Result<std::string> installed = inventory_.InstallFromDirectory(*installRoot);
-        if (cleanupRoot.has_value()) {
-            std::error_code ignored;
-            fs::remove_all(*cleanupRoot, ignored);
-        }
+        if (cleanupRoot.has_value())
+            static_cast<void>(RemoveOwnedExtractionRoot(*cleanupRoot));
         std::lock_guard lock(mutex_);
         if (installed.HasError()) {
             snapshot_.status = ExtensionMarketplaceStatus::Error;

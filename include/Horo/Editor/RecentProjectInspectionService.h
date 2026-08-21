@@ -41,7 +41,7 @@ namespace Horo::Editor {
          * @brief Drains completed updates for the current generation on the owner thread.
          * @return Fresh display projections; stale generation results are omitted.
          */
-        [[nodiscard]] std::vector<RecentProjectInspectionUpdate> DrainUpdates();
+        [[nodiscard]] std::vector<RecentProjectInspectionUpdate> DrainUpdates() const;
         /** @brief Cancels and joins accepted inspection work; idempotent. */
         void Shutdown() noexcept;
 

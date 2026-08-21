@@ -169,9 +169,9 @@ namespace Horo::Editor {
          */
         [[nodiscard]] Result<void> RequestCancel(ProjectOpenOperationId operation);
         /** @brief Reserves a ready session for transactional workspace construction. */
-        [[nodiscard]] Result<ProjectSessionActivationLease> ReserveSession(ProjectSessionCandidateId session);
+        [[nodiscard]] Result<ProjectSessionActivationLease> ReserveSession(ProjectSessionCandidateId session) const;
         /** @brief Explicitly discards a ready, unconsumed session. */
-        [[nodiscard]] Result<void> DiscardSession(ProjectSessionCandidateId session);
+        [[nodiscard]] Result<void> DiscardSession(ProjectSessionCandidateId session) const;
         /** @brief Advances owner-thread state and performs serialized authoritative boundaries. */
         void PumpOwnerThread();
         /** @brief Stops admission and cancels the current operation; idempotent. */

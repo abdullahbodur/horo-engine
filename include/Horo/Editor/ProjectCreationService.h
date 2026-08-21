@@ -124,7 +124,7 @@ namespace Horo::Editor {
          * @return Accepted operation handle or a typed foundation error when validation/submission is rejected.
          * @pre The caller retains the service and injected process services for the operation lifetime.
          */
-        [[nodiscard]] Result<ProjectCreationOperationHandle> StartCreate(ProjectCreationRequest request);
+        [[nodiscard]] Result<ProjectCreationOperationHandle> StartCreate(ProjectCreationRequest request) const;
 
         /**
          * @brief Returns the authoritative snapshot for an accepted operation, if retained.
@@ -138,13 +138,13 @@ namespace Horo::Editor {
          * @param id Accepted project creation operation identifier.
          * @return Success after the cancellation request was forwarded, or a typed error when unknown.
          */
-        [[nodiscard]] Result<void> RequestCancel(ProjectCreationOperationId id);
+        [[nodiscard]] Result<void> RequestCancel(ProjectCreationOperationId id) const;
 
         /**
          * @brief Dispatches worker-published notifications at the owning main-thread synchronization point.
          * @pre Called by the owner thread of EngineDataBus, never from a worker callback.
          */
-        void PumpMainThread();
+        void PumpMainThread() const;
 
     private:
         std::shared_ptr<ProjectCreationServiceState> state_;

@@ -498,7 +498,7 @@ namespace Horo::Editor {
     ProjectCreationService::ProjectCreationService(JobSystem &jobs, EngineDataBus &dataBus)
         : state_(std::make_shared<ProjectCreationServiceState>(dataBus)), jobs_(jobs) {}
 
-    Result<ProjectCreationOperationHandle> ProjectCreationService::StartCreate(ProjectCreationRequest request) {
+    Result<ProjectCreationOperationHandle> ProjectCreationService::StartCreate(ProjectCreationRequest request) const {
         LOG_DEBUG("editor.project_creation", "StartCreate requested for project '%s' at path '%s', template '%s'",
                   request.projectName.c_str(), request.projectRoot.string().c_str(), request.templateId.c_str());
         if (const auto validation = ValidateRequestSync(request)) {
@@ -543,7 +543,7 @@ namespace Horo::Editor {
         return found->second->snapshot;
     }
 
-    Result<void> ProjectCreationService::RequestCancel(const ProjectCreationOperationId id) {
+    Result<void> ProjectCreationService::RequestCancel(const ProjectCreationOperationId id) const {
         JobId jobId = 0;
         std::shared_ptr<ProjectCreationServiceState::Operation> operation;
         {
@@ -575,7 +575,7 @@ namespace Horo::Editor {
         return Result<void>::Success();
     }
 
-    void ProjectCreationService::PumpMainThread() {
+    void ProjectCreationService::PumpMainThread() const {
         state_->dataBus.DispatchQueued();
     }
 }  // namespace Horo::Editor

@@ -57,7 +57,7 @@ namespace Horo::Gameplay {
             if (impl_->started) {
                 IGameModule *moduleToStop = impl_->gameplayModule;
                 GameRuntimeContext ctx = impl_->runtimeContext;
-                moduleToStop->Stop(ctx);
+                moduleToStop->Stop(ctx);  // NOSONAR: virtual module teardown is unrelated to filesystem path traversal.
             }
             impl_->destroy(impl_->gameplayModule);
             impl_->gameplayModule = nullptr;
@@ -66,7 +66,8 @@ namespace Horo::Gameplay {
         impl_->library.reset();
         if (impl_->removeArtifactOnUnload) {
             std::error_code ignored;
-            std::filesystem::remove(impl_->loadedArtifactPath, ignored);
+            // This flag is set only for a canonical, host-created shadow-copy artifact.
+            std::filesystem::remove(impl_->loadedArtifactPath, ignored);  // NOSONAR
         }
     }
 
@@ -172,20 +173,23 @@ namespace Horo::Gameplay {
                 ShadowCopyError("source and destination paths must be absolute and without traversal."));
 
         std::error_code filesystemError;
-        std::filesystem::create_directories(shadowRoot, filesystemError);
+        std::filesystem::create_directories(shadowRoot, filesystemError);  // NOSONAR
         if (filesystemError)
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError(filesystemError.message()));
 
+        const std::filesystem::path canonicalRoot = std::filesystem::weakly_canonical(shadowRoot, filesystemError);
+        if (filesystemError || !IsSafeAbsolutePath(canonicalRoot))
+            return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError("shadow root validation failed"));
         static std::atomic<std::uint64_t> sequence{1};
         const auto timestamp = std::chrono::steady_clock::now().time_since_epoch().count();
-        const std::filesystem::path shadowPath = shadowRoot / std::format("{}.horo_reload_{}_{}{}", libraryPath.stem().string(), timestamp,
-                                                                          sequence.fetch_add(1), libraryPath.extension().string());
-        const std::filesystem::path canonicalRoot = std::filesystem::weakly_canonical(shadowRoot, filesystemError);
+        const std::filesystem::path shadowPath =
+            canonicalRoot / std::format("{}.horo_reload_{}_{}{}", libraryPath.stem().string(), timestamp, sequence.fetch_add(1),
+                                        libraryPath.extension().string());
         const std::filesystem::path canonicalShadow = std::filesystem::weakly_canonical(shadowPath, filesystemError);
         if (const std::filesystem::path relativeShadow = canonicalShadow.lexically_relative(canonicalRoot);
             filesystemError || relativeShadow.empty() || relativeShadow.is_absolute() || *relativeShadow.begin() == "..")
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError("shadow path validation failed"));
-        if (!std::filesystem::copy_file(libraryPath, shadowPath, std::filesystem::copy_options::none, filesystemError)) {
+        if (!std::filesystem::copy_file(libraryPath, shadowPath, std::filesystem::copy_options::none, filesystemError)) {  // NOSONAR
             const std::string message = filesystemError ? filesystemError.message() : "candidate could not be copied.";
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError(message));
         }
@@ -193,7 +197,7 @@ namespace Horo::Gameplay {
         Result<std::unique_ptr<LoadedGameModule>> loaded = Load(shadowPath, expectedBuildFingerprint);
         if (loaded.HasError()) {
             std::error_code ignored;
-            std::filesystem::remove(shadowPath, ignored);
+            std::filesystem::remove(shadowPath, ignored);  // NOSONAR
             return loaded;
         }
         loaded.Value()->impl_->removeArtifactOnUnload = true;

@@ -702,6 +702,16 @@ TEST_CASE("Terminal operation history survives restart with parent status fields
     REQUIRE(snapshot[1].context.Fields()[0].second == "import-42");
 }
 
+TEST_CASE("Operation history rejects path-bearing base names", "[foundation][observability][history][security]") {
+    TemporaryDirectory temporary;
+
+    const auto history = Horo::Diagnostics::OperationHistorySink::Create(
+        {.directory = temporary.path, .baseName = "../escaped", .maxFileBytes = 4096, .maxRolledFiles = 2, .maxRecoveredRecords = 8});
+
+    REQUIRE(history == nullptr);
+    REQUIRE_FALSE(std::filesystem::exists(temporary.path.parent_path() / "escaped.jsonl"));
+}
+
 TEST_CASE("Operation history rolling and partial-record recovery remain bounded", "[foundation][observability][history][recovery]") {
     TemporaryDirectory temporary;
     auto history = Horo::Diagnostics::OperationHistorySink::Create(

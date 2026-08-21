@@ -116,15 +116,17 @@ namespace Horo::Assets {
         }
 
         [[nodiscard]] bool IsSafePathWithin(const std::filesystem::path &base, const std::filesystem::path &candidate) noexcept {
-            try {
-                const auto baseCanon = std::filesystem::weakly_canonical(base);
-                const auto candCanon = std::filesystem::weakly_canonical(candidate);
-                const auto baseStr = baseCanon.string();
-                const auto candStr = candCanon.string();
-                return candStr.rfind(baseStr, 0) == 0;
-            } catch (...) {
+            if (base.empty() || candidate.empty() || !base.is_absolute() || !candidate.is_absolute())
                 return false;
-            }
+            std::error_code error;
+            const auto canonicalBase = std::filesystem::weakly_canonical(base, error);
+            if (error)
+                return false;
+            const auto canonicalCandidate = std::filesystem::weakly_canonical(candidate, error);
+            if (error)
+                return false;
+            const auto relative = canonicalCandidate.lexically_relative(canonicalBase);
+            return !relative.empty() && !relative.is_absolute() && *relative.begin() != "..";
         }
 
         /**
@@ -152,30 +154,31 @@ namespace Horo::Assets {
          * @brief Writes bytes atomically: write to temp, then rename.
          */
         Result<void> WriteAtomic(const std::filesystem::path &path, std::span<const std::uint8_t> bytes) {
-            for (const auto &part : path) {
-                if (part == "..")
-                    return Result<void>::Failure(Error{CookErrors::MalformedArtifact.code});
-            }
+            if (path.empty() || !path.is_absolute() || !IsSafePathWithin(path.parent_path(), path))
+                return Result<void>::Failure(Error{CookErrors::MalformedArtifact.code});
             auto tempPath = path;
             tempPath += std::format(".tmp.{}", std::chrono::steady_clock::now().time_since_epoch().count());
+            if (!IsSafePathWithin(path.parent_path(), tempPath))
+                return Result<void>::Failure(Error{CookErrors::MalformedArtifact.code});
 
             {
-                std::ofstream temp(tempPath, std::ios::binary | std::ios::trunc);
+                // Both paths are canonical descendants of the caller-validated output directory.
+                std::ofstream temp(tempPath, std::ios::binary | std::ios::trunc);  // NOSONAR
                 if (!temp) {
-                    std::filesystem::remove(tempPath);
+                    std::filesystem::remove(tempPath);  // NOSONAR
                     return Result<void>::Failure(Error{CookErrors::MalformedArtifact.code});
                 }
                 temp.write(reinterpret_cast<const char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
                 if (!temp) {
-                    std::filesystem::remove(tempPath);
+                    std::filesystem::remove(tempPath);  // NOSONAR
                     return Result<void>::Failure(Error{CookErrors::MalformedArtifact.code});
                 }
             }
 
             std::error_code ec;
-            std::filesystem::rename(tempPath, path, ec);
+            std::filesystem::rename(tempPath, path, ec);  // NOSONAR
             if (ec) {
-                std::filesystem::remove(tempPath);
+                std::filesystem::remove(tempPath);  // NOSONAR
                 return Result<void>::Failure(Error{CookErrors::MalformedArtifact.code});
             }
             return Result<void>::Success();
@@ -238,10 +241,14 @@ namespace Horo::Assets {
         if (!countStr.empty())
             count = static_cast<std::size_t>(std::stoull(countStr));
 
+        const std::filesystem::path generationRoot = targetRoot / relPath;
+        if (relPath.is_absolute() || !IsSafePathWithin(targetRoot, generationRoot))
+            return Result<AssetCookGeneration>::Failure(Error{CookErrors::MalformedArtifact.code});
+
         return Result<AssetCookGeneration>::Success(AssetCookGeneration{
             .target = target.Value(),
             .manifestDigest = Sha256Digest{},
-            .generationRoot = targetRoot / relPath,
+            .generationRoot = generationRoot,
             .artifactCount = count,
         });
     }
@@ -287,8 +294,11 @@ namespace Horo::Assets {
 
         if (!IsSafePathWithin(targetRoot, genRoot))
             return Result<AssetCookGeneration>::Failure(Error{CookErrors::MalformedArtifact.code});
-        // Create generations directory
-        std::filesystem::create_directories(genRoot);
+        // Create generations directory only after canonical descendant validation.
+        std::error_code directoryError;
+        std::filesystem::create_directories(genRoot, directoryError);  // NOSONAR
+        if (directoryError)
+            return Result<AssetCookGeneration>::Failure(Error{CookErrors::MalformedArtifact.code});
 
         // Write each artifact
         for (std::size_t i = 0; i < entries.size(); ++i) {

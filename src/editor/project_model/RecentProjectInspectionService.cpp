@@ -93,7 +93,7 @@ namespace Horo::Editor {
     }
 
     /** @copydoc RecentProjectInspectionService::DrainUpdates */
-    std::vector<RecentProjectInspectionUpdate> RecentProjectInspectionService::DrainUpdates() {
+    std::vector<RecentProjectInspectionUpdate> RecentProjectInspectionService::DrainUpdates() const {
         std::vector<RecentProjectInspectionUpdate> updates;
         std::lock_guard lock(state_->completion->mutex);
         for (RecentProjectInspectionUpdate &update : state_->completion->updates)

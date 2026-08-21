@@ -58,7 +58,7 @@ namespace Horo::Editor {
          * @param request Project root and diagnostic operation identity.
          * @return Move-only lease, or a typed busy/filesystem failure without waiting.
          */
-        [[nodiscard]] Result<ProjectMutationLease> TryAcquire(const ProjectMutationRequest &request);
+        [[nodiscard]] Result<ProjectMutationLease> TryAcquire(const ProjectMutationRequest &request) const;
 
     private:
         std::shared_ptr<State> state_;

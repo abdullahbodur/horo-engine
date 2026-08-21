@@ -466,7 +466,7 @@ namespace Horo::Editor {
         return Result<void>::Success();
     }
 
-    Result<ProjectSessionActivationLease> ProjectOpenService::ReserveSession(const ProjectSessionCandidateId session) {
+    Result<ProjectSessionActivationLease> ProjectOpenService::ReserveSession(const ProjectSessionCandidateId session) const {
         std::lock_guard lock(state_->sessions->mutex);
         if (state_->sessions->shutdown || state_->sessions->status != ProjectSessionActivationLease::State::Status::Ready ||
             !state_->sessions->candidate.has_value() || state_->sessions->candidate->id != session ||
@@ -476,7 +476,7 @@ namespace Horo::Editor {
         return Result<ProjectSessionActivationLease>::Success(ProjectSessionActivationLease{state_->sessions, session});
     }
 
-    Result<void> ProjectOpenService::DiscardSession(const ProjectSessionCandidateId session) {
+    Result<void> ProjectOpenService::DiscardSession(const ProjectSessionCandidateId session) const {
         std::lock_guard lock(state_->sessions->mutex);
         if (!state_->sessions->candidate.has_value() || state_->sessions->candidate->id != session ||
             state_->sessions->status == ProjectSessionActivationLease::State::Status::Reserved)

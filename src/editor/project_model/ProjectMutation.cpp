@@ -68,7 +68,7 @@ namespace Horo::Editor {
     ProjectMutationCoordinator::~ProjectMutationCoordinator() = default;
 
     /** @copydoc ProjectMutationCoordinator::TryAcquire */
-    Result<ProjectMutationLease> ProjectMutationCoordinator::TryAcquire(const ProjectMutationRequest &request) {
+    Result<ProjectMutationLease> ProjectMutationCoordinator::TryAcquire(const ProjectMutationRequest &request) const {
         std::error_code error;
         const auto root = std::filesystem::weakly_canonical(request.projectRoot, error);
         if (error || !std::filesystem::is_directory(root))

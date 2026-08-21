@@ -958,7 +958,7 @@ namespace Horo::Application {
         Shutdown();
     }
 
-    Result<GameplayBuildSessionId> GameplayBuildService::Start(GameplayBuildRequest request) {
+    Result<GameplayBuildSessionId> GameplayBuildService::Start(GameplayBuildRequest request) const {
         Result<std::string> hash = ComputeInputHash(request);
         if (hash.HasError())
             return Result<GameplayBuildSessionId>::Failure(hash.ErrorValue());
@@ -999,7 +999,7 @@ namespace Horo::Application {
         return session->snapshot;
     }
 
-    bool GameplayBuildService::RequestCancel(const GameplayBuildSessionId id) {
+    bool GameplayBuildService::RequestCancel(const GameplayBuildSessionId id) const {
         std::shared_ptr<State::Session> session;
         {
             std::lock_guard lock(state_->Mutex());
@@ -1024,7 +1024,7 @@ namespace Horo::Application {
                std::filesystem::is_regular_file(request.projectRoot / ".horo/local/gameplay_module.json");
     }
 
-    void GameplayBuildService::Shutdown() noexcept {
+    void GameplayBuildService::Shutdown() const noexcept {
         std::vector<std::shared_ptr<State::Session>> sessions;
         {
             std::lock_guard lock(state_->Mutex());

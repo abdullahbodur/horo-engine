@@ -137,7 +137,7 @@ namespace Horo::Editor {
         return RegisterCatalog(std::move(catalog), error);
     }
 
-    bool LocalizationService::Prepare(const LocaleTag locale, LocalizationError *error) {
+    bool LocalizationService::Prepare(const LocaleTag &locale, LocalizationError *error) {
         if (const auto parsed = LocaleTag::Parse(locale.value); !parsed.has_value() || parsed->value != locale.value) {
             SetError(error, "editor.localization.invalid_locale", "Requested locale is not normalized BCP 47.");
             return false;

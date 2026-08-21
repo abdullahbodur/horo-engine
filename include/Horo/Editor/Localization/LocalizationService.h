@@ -53,7 +53,7 @@ namespace Horo::Editor {
         [[nodiscard]] bool LoadCatalogFile(const std::filesystem::path &path, LocalizationError *error = nullptr);
 
         /** @brief Validates and stages a locale without changing the active snapshot. */
-        [[nodiscard]] bool Prepare(LocaleTag locale, LocalizationError *error = nullptr);
+        [[nodiscard]] bool Prepare(const LocaleTag &locale, LocalizationError *error = nullptr);
 
         /** @brief Activates the staged catalog at the caller-selected frame boundary. */
         [[nodiscard]] bool ActivatePrepared(LocalizationError *error = nullptr);

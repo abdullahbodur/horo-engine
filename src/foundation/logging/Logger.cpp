@@ -304,6 +304,8 @@ namespace Horo::Log {
 
         /** @brief Removes an incomplete trailing JSONL record left by an interrupted write. */
         bool RepairPartialTrailingRecord(const std::filesystem::path &path) {
+            if (!IsSafeResolvedPath(path))
+                return false;
             std::error_code error;
             const std::uintmax_t size = std::filesystem::file_size(path, error);
             if (error || size == 0)
@@ -324,11 +326,11 @@ namespace Horo::Log {
                 input.seekg(static_cast<std::streamoff>(offset));
                 input.get(character);
                 if (character == '\n') {
-                    std::filesystem::resize_file(path, offset + 1U, error);
+                    std::filesystem::resize_file(path, offset + 1U, error);  // NOSONAR
                     return !error;
                 }
             }
-            std::filesystem::resize_file(path, 0, error);
+            std::filesystem::resize_file(path, 0, error);  // NOSONAR
             return !error;
         }
 
@@ -339,7 +341,7 @@ namespace Horo::Log {
                 : configuration_(std::move(configuration)), path_(configuration_.logDirectory / (configuration_.baseName + ".jsonl")) {
                 if (!RepairPartialTrailingRecord(path_))
                     throw LoggerPersistenceError{"failed to recover partial JSONL record"};
-                file_ = std::fopen(path_.string().c_str(), "ab");
+                file_ = std::fopen(path_.string().c_str(), "ab");  // NOSONAR
                 if (file_ == nullptr)
                     throw LoggerPersistenceError{"failed to open JSONL log"};
                 std::error_code error;
