@@ -326,8 +326,8 @@ namespace Horo::Diagnostics {
                 missingOptional.push_back(archivePath);
                 continue;
             }
-            const bool symlink = std::filesystem::is_symlink(entry.sourcePath, error);
-            if (!exists || error || symlink || !std::filesystem::is_regular_file(entry.sourcePath, error))
+            if (const bool symlink = std::filesystem::is_symlink(entry.sourcePath, error);
+                !exists || error || symlink || !std::filesystem::is_regular_file(entry.sourcePath, error))
                 return Failure(ObservabilityErrors::InvalidBundleRequest,
                                "Every diagnostic bundle source must be an existing non-symlink regular file.");
             const std::uintmax_t size = std::filesystem::file_size(entry.sourcePath, error);

@@ -9,14 +9,15 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <format>
 #include <fstream>
 #include <span>
-#include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace Horo::Assets {
@@ -37,24 +38,69 @@ namespace Horo::Assets {
          *        Schema: {"schemaVersion":1,"target":"...","artifacts":[...]}
          *        Sorted deterministically by assetId in the entries array.
          */
+        void AppendJsonString(std::string &output, const std::string_view value) {
+            constexpr std::string_view HexDigits{"0123456789abcdef"};
+            output += '"';
+            for (const unsigned char character : value) {
+                switch (character) {
+                    case '"':
+                        output += R"(\")";
+                        break;
+                    case '\\':
+                        output += R"(\\)";
+                        break;
+                    case '\b':
+                        output += R"(\b)";
+                        break;
+                    case '\f':
+                        output += R"(\f)";
+                        break;
+                    case '\n':
+                        output += R"(\n)";
+                        break;
+                    case '\r':
+                        output += R"(\r)";
+                        break;
+                    case '\t':
+                        output += R"(\t)";
+                        break;
+                    default:
+                        if (character < 0x20U) {
+                            output += R"(\u00)";
+                            const auto byte = static_cast<std::byte>(character);
+                            output += HexDigits[std::to_integer<std::size_t>(byte >> 4U)];
+                            output += HexDigits[std::to_integer<std::size_t>(byte & std::byte{0x0fU})];
+                        } else {
+                            output += static_cast<char>(character);
+                        }
+                }
+            }
+            output += '"';
+        }
+
         std::string BuildManifestJson(std::string_view target, std::span<const AssetCookManifestEntry> entries) {
-            // Manual JSON construction to avoid nlohmann dependency.
-            // Format: compact JSON with no trailing whitespace, fixed ordering.
-            std::ostringstream json;
-            json << R"({"schemaVersion":1,"target":")" << target << R"(","artifacts":[)";
+            // Manual JSON construction keeps the manifest compact and deterministic without adding a runtime dependency.
+            std::string json{R"({"schemaVersion":1,"target":)"};
+            AppendJsonString(json, target);
+            json += R"(,"artifacts":[)";
 
             for (std::size_t i = 0; i < entries.size(); ++i) {
                 if (i > 0)
-                    json << ',';
-                const auto &e = entries[i];
-                json << R"({"assetId":")" << e.assetId.ToString() << R"(",)"
-                     << R"("assetType":")" << e.assetType.Value() << R"(",)"
-                     << R"("artifact":")" << e.artifactFile << R"(",)"
-                     << R"("artifactHash":"sha256:)" << HexEncodeSha256(e.artifactHash) << R"("})";
+                    json += ',';
+                const auto &entry = entries[i];
+                json += R"({"assetId":)";
+                AppendJsonString(json, entry.assetId.ToString());
+                json += R"(,"assetType":)";
+                AppendJsonString(json, entry.assetType.Value());
+                json += R"(,"artifact":)";
+                AppendJsonString(json, entry.artifactFile);
+                json += R"(,"artifactHash":)";
+                AppendJsonString(json, "sha256:" + HexEncodeSha256(entry.artifactHash));
+                json += '}';
             }
 
-            json << "]}";
-            return json.str();
+            json += "]}";
+            return json;
         }
 
         [[nodiscard]] bool IsSafeArtifactFile(const std::string_view file) noexcept {

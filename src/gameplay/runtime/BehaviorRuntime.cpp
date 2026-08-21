@@ -187,7 +187,8 @@ namespace Horo::Gameplay {
                         if (iterator->enabledCallbackActive)
                             iterator->implementation->OnDisable(context);
                         iterator->implementation->OnDestroy(context);
-                    } catch (const std::exception &exception) {
+                    } catch (
+                        const std::exception &exception) {  // NOSONAR(cpp:S1181) User behavior code is an exception containment boundary.
                         LOG_WARN("gameplay.runtime", "Behavior rollback exception: %s", exception.what());
                     } catch (...) {
                         LOG_WARN("gameplay.runtime", "Behavior rollback unknown exception.");

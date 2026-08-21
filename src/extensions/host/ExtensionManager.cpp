@@ -189,7 +189,7 @@ namespace Horo::Extensions {
             if (lifetime->unload != nullptr && moduleApi.moduleContext != nullptr) {
                 try {
                     lifetime->unload(&moduleApi);
-                } catch (const std::exception &exception) {
+                } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) External code is an exception containment boundary.
                     LOG_WARN("extensions", "Exception during rollback unload: %s", exception.what());
                 } catch (...) {
                     LOG_WARN("extensions", "Unknown exception during rollback unload.");
@@ -206,7 +206,7 @@ namespace Horo::Extensions {
             if (lifetime->unload != nullptr) {
                 try {
                     lifetime->unload(&moduleApi);
-                } catch (const std::exception &exception) {
+                } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) External code is an exception containment boundary.
                     LOG_WARN("extensions", "Exception during module unload: %s", exception.what());
                 } catch (...) {
                     LOG_WARN("extensions", "Unknown exception during module unload.");

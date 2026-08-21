@@ -3,6 +3,7 @@
 #include "Horo/Gameplay/GameplayErrors.h"
 #include "Horo/Platform/DynamicLibrary.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstring>
@@ -158,13 +159,9 @@ namespace Horo::Gameplay {
 
     /** @copydoc GameModuleHost::LoadShadowCopy */
     [[nodiscard]] bool IsSafeAbsolutePath(const std::filesystem::path &path) noexcept {
-        if (path.empty() || !path.is_absolute())
-            return false;
-        for (const auto &part : path) {
-            if (part == "..")
-                return false;
-        }
-        return true;
+        return !path.empty() && path.is_absolute() && std::ranges::none_of(path, [](const std::filesystem::path &part) {
+            return part == "..";
+        });
     }
 
     Result<std::unique_ptr<LoadedGameModule>> GameModuleHost::LoadShadowCopy(const std::filesystem::path &libraryPath,
@@ -183,13 +180,11 @@ namespace Horo::Gameplay {
         const auto timestamp = std::chrono::steady_clock::now().time_since_epoch().count();
         const std::filesystem::path shadowPath = shadowRoot / std::format("{}.horo_reload_{}_{}{}", libraryPath.stem().string(), timestamp,
                                                                           sequence.fetch_add(1), libraryPath.extension().string());
-        try {
-            if (std::filesystem::weakly_canonical(shadowPath).string().rfind(std::filesystem::weakly_canonical(shadowRoot).string(), 0) !=
-                0)
-                return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError("shadow path escapes root"));
-        } catch (...) {
+        const std::filesystem::path canonicalRoot = std::filesystem::weakly_canonical(shadowRoot, filesystemError);
+        const std::filesystem::path canonicalShadow = std::filesystem::weakly_canonical(shadowPath, filesystemError);
+        if (const std::filesystem::path relativeShadow = canonicalShadow.lexically_relative(canonicalRoot);
+            filesystemError || relativeShadow.empty() || relativeShadow.is_absolute() || *relativeShadow.begin() == "..")
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError("shadow path validation failed"));
-        }
         if (!std::filesystem::copy_file(libraryPath, shadowPath, std::filesystem::copy_options::none, filesystemError)) {
             const std::string message = filesystemError ? filesystemError.message() : "candidate could not be copied.";
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError(message));

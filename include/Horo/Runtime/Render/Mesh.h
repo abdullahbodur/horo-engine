@@ -33,10 +33,11 @@ namespace Horo::Render {
         [[nodiscard]] bool IsValid() const noexcept {
             if (vertices.empty() || indices.empty() || indices.size() % 3 != 0 || !localBounds.IsValid())
                 return false;
-            const bool verticesValid = std::ranges::all_of(vertices, [](const MeshVertex &vertex) noexcept {
+            if (const bool verticesValid = std::ranges::all_of(vertices,
+                                                               [](const MeshVertex &vertex) noexcept {
                 return Math::IsFinite(vertex.position) && Math::IsFinite(vertex.normal) && Math::IsFinite(vertex.uv);
             });
-            if (!verticesValid)
+                !verticesValid)
                 return false;
             return std::ranges::all_of(indices, [vertexCount = vertices.size()](const std::uint32_t index) noexcept {
                 return index < vertexCount;

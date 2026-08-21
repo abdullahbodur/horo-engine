@@ -119,7 +119,7 @@ namespace Horo::Telemetry {
                                                     std::chrono::steady_clock::now() - startedAt_),
                                                 .fields = {fields.begin(), fields.end()}}};
             static_cast<void>(Runtime::EmitRecord(std::move(record)));
-        } catch (const std::exception &) {
+        } catch (const std::exception &) {  // NOSONAR(cpp:S2486) Telemetry must not alter the authoritative lifecycle result.
             // Lifecycle completion remains authoritative even if diagnostic record construction fails.
         } catch (...) {
             // Lifecycle completion remains authoritative even if diagnostic record construction fails.

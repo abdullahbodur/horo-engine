@@ -61,7 +61,8 @@ struct HoroExtensionCancellation {
 };
 using HoroExtensionCancellation = struct HoroExtensionCancellation;
 
-enum HoroAssetImportSettingKind {
+// Unscoped enumerators are part of the source-compatible C ABI surface.
+enum HoroAssetImportSettingKind {  // NOSONAR(cpp:S3642)
     HORO_ASSET_IMPORT_SETTING_BOOLEAN = 0,
     HORO_ASSET_IMPORT_SETTING_INTEGER = 1,
     HORO_ASSET_IMPORT_SETTING_FLOAT = 2,

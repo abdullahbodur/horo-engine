@@ -1,6 +1,7 @@
 #include "Horo/Extensions/ExtensionAbi.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <memory>
@@ -16,7 +17,7 @@ namespace {
     constexpr char kSettingId[] = "invertPreview";
     constexpr char kSettingLabel[] = "examples.asset_importer_basic.invert_preview";
     constexpr char kSettingDescription[] = "examples.asset_importer_basic.invert_preview.description";
-    constexpr std::uint8_t kPayloadMagic[]{'H', 'R', 'A', 'W', 1U};
+    constexpr std::array<std::uint8_t, 5> kPayloadMagic{'H', 'R', 'A', 'W', 1U};
 
     template <std::size_t Size> constexpr HoroExtensionStringView Text(const char (&value)[Size]) {
         return {value, static_cast<std::uint32_t>(Size - 1)};
@@ -39,15 +40,15 @@ namespace {
             request->cancellation.isCancellationRequested(request->cancellation.context) != 0)
             return HORO_EXTENSION_ERROR_CANCELLED;
 
-        const std::uint64_t outputSize = sizeof(kPayloadMagic) + request->sourceByteCount;
+        const std::uint64_t outputSize = kPayloadMagic.size() + request->sourceByteCount;
         std::uint8_t *output = nullptr;
         if (response->editorPayload.resize(response->editorPayload.context, outputSize, &output) != HORO_EXTENSION_SUCCESS ||
             output == nullptr)
             return HORO_EXTENSION_ERROR_OUTPUT_REJECTED;
 
-        std::memcpy(output, kPayloadMagic, sizeof(kPayloadMagic));
+        std::memcpy(output, kPayloadMagic.data(), kPayloadMagic.size());
         if (request->sourceByteCount != 0)
-            std::memcpy(output + sizeof(kPayloadMagic), request->sourceBytes, request->sourceByteCount);
+            std::memcpy(output + kPayloadMagic.size(), request->sourceBytes, request->sourceByteCount);
         response->assetType = Text(kAssetType);
         ++importer->invocationCount;
         return HORO_EXTENSION_SUCCESS;
@@ -69,8 +70,8 @@ namespace {
             return HORO_EXTENSION_ERROR_OUTPUT_REJECTED;
 
         bool inverted = false;
-        if (request->editorPayloadByteCount > sizeof(kPayloadMagic))
-            inverted = request->editorPayload[sizeof(kPayloadMagic)] == 0U;
+        if (request->editorPayloadByteCount > kPayloadMagic.size())
+            inverted = request->editorPayload[kPayloadMagic.size()] == 0U;
         for (std::uint32_t y = 0; y < request->height; ++y) {
             for (std::uint32_t x = 0; x < request->width; ++x) {
                 const bool bright = ((x / 8U) + (y / 8U)) % 2U == 0U;

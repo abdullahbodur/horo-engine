@@ -6,6 +6,7 @@
 #include "Horo/Foundation/Logging/LogContext.h"
 #include "Horo/Foundation/Logging/StructuredLogStore.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cerrno>
@@ -78,23 +79,15 @@ namespace Horo::Log {
         std::uint64_t ProcessId() noexcept;
 
         [[nodiscard]] bool IsSafeBaseName(const std::string_view name) noexcept {
-            if (name.empty() || name.size() > 64)
-                return false;
-            for (const char c : name) {
-                if (c == '/' || c == '\\' || c == '.' || c == ':')
-                    return false;
-            }
-            return true;
+            return !name.empty() && name.size() <= 64 && std::ranges::none_of(name, [](const char character) {
+                return character == '/' || character == '\\' || character == '.' || character == ':';
+            });
         }
 
         [[nodiscard]] bool IsSafeResolvedPath(const std::filesystem::path &path) noexcept {
-            if (path.empty() || path.is_relative())
-                return false;
-            for (const auto &component : path) {
-                if (component == "..")
-                    return false;
-            }
-            return true;
+            return !path.empty() && path.is_absolute() && std::ranges::none_of(path, [](const std::filesystem::path &component) {
+                return component == "..";
+            });
         }
 
         /** @brief Resolves an absolute log directory and creates it when absent. */

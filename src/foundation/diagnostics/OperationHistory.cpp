@@ -117,9 +117,7 @@ namespace Horo::Diagnostics {
                 }
                 record.context = Log::LogContextSnapshot{std::move(context)};
                 return record;
-            } catch (const std::exception &) {
-                return std::nullopt;
-            } catch (...) {
+            } catch (const Json::exception &) {
                 return std::nullopt;
             }
         }
@@ -197,10 +195,10 @@ namespace Horo::Diagnostics {
                 std::filesystem::remove(path, error);
             } else {
                 std::filesystem::remove(RolledPath(configuration.maxRolledFiles), error);
-                for (auto index = static_cast<std::ptrdiff_t>(configuration.maxRolledFiles); !error && index > 1; --index) {
-                    const auto source = RolledPath(static_cast<std::size_t>(index) - 1U);
+                for (std::size_t index = configuration.maxRolledFiles; !error && index > 1; --index) {
+                    const auto source = RolledPath(index - 1U);
                     if (std::filesystem::exists(source, error))
-                        std::filesystem::rename(source, RolledPath(static_cast<std::size_t>(index)), error);
+                        std::filesystem::rename(source, RolledPath(index), error);
                     else
                         error.clear();
                 }
@@ -222,12 +220,9 @@ namespace Horo::Diagnostics {
         std::FILE *file{};
         std::uintmax_t currentBytes{};
         std::deque<OperationHistoryRecord> records;
-
-    private:
         /// Guards all mutable fields accessed from Export and Snapshot.
         mutable std::mutex mutex;
 
-    public:
         [[nodiscard]] std::mutex &Mutex() const noexcept {
             return mutex;
         }

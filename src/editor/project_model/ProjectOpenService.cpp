@@ -168,6 +168,135 @@ namespace Horo::Editor {
         bool shutdown{};
     };
 
+    namespace {
+        struct CompatibilityResolution {
+            ProjectCompatibilitySnapshot snapshot;
+            bool cancellationDeferred{};
+        };
+
+        template <typename StateType>
+        [[nodiscard]] Result<CompatibilityResolution> ResolveOpenCompatibility(StateType &state,
+                                                                               const std::shared_ptr<BackgroundCompletion> &completion,
+                                                                               const ProjectOpenRequest &request,
+                                                                               const ProjectOpenOperationId id,
+                                                                               const CancellationToken &cancellation) {
+            SetPhase(completion, ProjectOpenPhase::ValidatingCompatibility);
+            ProjectOpenPreflightSnapshot preflight = state.preflight.Inspect(request.projectRoot);
+            ProjectCompatibilitySnapshot compatibility = preflight.compatibility;
+            LOG_DEBUG("editor.project_open", "Compatibility classified operation=%llu status=%d migration_plan=%s.",
+                      static_cast<unsigned long long>(id.value), static_cast<int>(compatibility.status),
+                      preflight.migrationPlan.has_value() ? "yes" : "no");
+            bool cancellationDeferred{};
+            if (compatibility.status == ProjectCompatibilityStatus::CompatibleReleaseLine && compatibility.markerUpdateRequired) {
+                SetPhase(completion, ProjectOpenPhase::UpdatingProjectMetadata);
+                const auto *target = BuiltInReleaseCompatibilityRegistry().Find(CurrentEngineReleaseVersion());
+                if (target == nullptr)
+                    return Result<CompatibilityResolution>::Failure(OpenError(ProjectOpenErrors::MigrationPlanMissing));
+                if (auto updated = UpdatePatchMarker(state.files, state.mutations, request.projectRoot, *target, id); updated.HasError())
+                    return Result<CompatibilityResolution>::Failure(updated.ErrorValue());
+                compatibility = state.preflight.Inspect(request.projectRoot).compatibility;
+            } else if (compatibility.status == ProjectCompatibilityStatus::AutomaticMigrationRequired) {
+                SetPhase(completion, ProjectOpenPhase::PlanningMigration);
+                if (!preflight.migrationPlan.has_value() || !compatibility.sourceBaseline.has_value() ||
+                    !compatibility.metadata.has_value())
+                    return Result<CompatibilityResolution>::Failure(
+                        compatibility.diagnostic.value_or(OpenError(ProjectOpenErrors::MigrationPlanMissing)));
+                const auto *target = BuiltInReleaseCompatibilityRegistry().Find(CurrentEngineReleaseVersion());
+                if (target == nullptr)
+                    return Result<CompatibilityResolution>::Failure(OpenError(ProjectOpenErrors::MigrationPlanMissing));
+                ProjectMigrationPlan plan = std::move(*preflight.migrationPlan);
+                const std::string sourceVersion = FormatHoroVersion(compatibility.metadata->horoVersion.value);
+                const std::string targetVersion = FormatHoroVersion(target->release.value);
+                LOG_INFO("editor.project_open", "Automatic migration selected operation=%llu source=%s target=%s.",
+                         static_cast<unsigned long long>(id.value), sourceVersion.c_str(), targetVersion.c_str());
+                LOG_DEBUG("editor.project_open", "Migration selection aggregate operation=%llu definitions=%zu.",
+                          static_cast<unsigned long long>(id.value), plan.definitions.size());
+                SetPhase(completion, ProjectOpenPhase::Migrating);
+                if (state.jobs.WorkerCount() < 2)
+                    return Result<CompatibilityResolution>::Failure(OpenError(ProjectOpenErrors::WorkerCapacityInsufficient));
+                ProjectMigrationTransactionRequest transaction{.projectRoot = request.projectRoot,
+                                                               .sourceMetadata = *compatibility.metadata,
+                                                               .sourceBaseline = *compatibility.sourceBaseline,
+                                                               .targetDecision = *target,
+                                                               .plan = plan,
+                                                               .engineBuildIdentity = request.engineBuildIdentity,
+                                                               .limits = request.migrationLimits,
+                                                               .cancellation = cancellation};
+                auto migrated = state.transactions.Execute(transaction);
+                if (migrated.HasError())
+                    return Result<CompatibilityResolution>::Failure(migrated.ErrorValue());
+                cancellationDeferred = migrated.Value().cancellationDeferred;
+                compatibility = state.preflight.Inspect(request.projectRoot).compatibility;
+            } else if (compatibility.status != ProjectCompatibilityStatus::Current &&
+                       compatibility.status != ProjectCompatibilityStatus::CompatibleReleaseLine) {
+                return Result<CompatibilityResolution>::Failure(
+                    compatibility.diagnostic.value_or(OpenError(ProjectOpenErrors::CompatibilityBlocked)));
+            }
+
+            if (!compatibility.metadata.has_value())
+                return Result<CompatibilityResolution>::Failure(OpenError(ProjectOpenErrors::CompatibilityBlocked));
+            if (cancellation.IsCancellationRequested() && !cancellationDeferred)
+                return Result<CompatibilityResolution>::Failure(OpenError(ProjectOpenErrors::Cancelled));
+            return Result<CompatibilityResolution>::Success({std::move(compatibility), cancellationDeferred});
+        }
+
+        template <typename StateType>
+        [[nodiscard]] Result<void> RunProjectOpenBackground(StateType &state, const std::shared_ptr<BackgroundCompletion> &completion,
+                                                            const ProjectOpenRequest &request, const ProjectOpenOperationId id,
+                                                            const CancellationToken &cancellation) {
+            const auto fail = [&completion, id](Error error) {
+                LOG_ERROR("editor.project_open", "Project open failed operation=%llu code=%s.", static_cast<unsigned long long>(id.value),
+                          error.code.Value().c_str());
+                std::lock_guard lock(completion->mutex);
+                completion->error = error;
+                return Result<void>::Failure(std::move(error));
+            };
+
+            SetPhase(completion, ProjectOpenPhase::CleaningRecovery);
+            // Cleanup is non-authoritative; a failure remains a warning and must not block open.
+            static_cast<void>(state.transactions.CleanupCommittedMigrations(request.projectRoot));
+            if (state.transactions.InspectPendingRecovery(request.projectRoot).action != MigrationRecoveryAction::None) {
+                SetPhase(completion, ProjectOpenPhase::Recovering);
+                if (auto recovered = state.transactions.Recover(request.projectRoot, cancellation); recovered.HasError())
+                    return fail(recovered.ErrorValue());
+            }
+            if (cancellation.IsCancellationRequested())
+                return fail(OpenError(ProjectOpenErrors::Cancelled));
+
+            auto resolved = ResolveOpenCompatibility(state, completion, request, id, cancellation);
+            if (resolved.HasError())
+                return fail(resolved.ErrorValue());
+            CompatibilityResolution compatibility = std::move(resolved).Value();
+
+            SetPhase(completion, ProjectOpenPhase::ValidatingDefaultScene);
+            auto defaultScene = LoadProjectDefaultScene(request.projectRoot);
+            if (defaultScene.HasError())
+                return fail(OpenError(ProjectOpenErrors::ScenePreflightFailed, defaultScene.ErrorValue().message));
+            if (!defaultScene.Value().has_value() || !defaultScene.Value()->existed)
+                return fail(OpenError(ProjectOpenErrors::ScenePreflightFailed, "The configured project default scene does not exist."));
+            SceneDocument sceneValidation;
+            if (auto validated = sceneValidation.LoadSaved(defaultScene.Value()->objects); validated.HasError())
+                return fail(OpenError(ProjectOpenErrors::ScenePreflightFailed, validated.ErrorValue().message));
+            if (cancellation.IsCancellationRequested() && !compatibility.cancellationDeferred)
+                return fail(OpenError(ProjectOpenErrors::Cancelled));
+
+            SetPhase(completion, ProjectOpenPhase::RebuildingDerivedState);
+            BackgroundResult result{.metadata = *compatibility.snapshot.metadata,
+                                    .cancellationDeferred = compatibility.cancellationDeferred};
+            result.derived.reserve(state.derivedContributors.size());
+            for (IProjectOpenDerivedStateContributor *contributor : state.derivedContributors) {
+                auto prepared = contributor->Prepare(request.projectRoot, cancellation);
+                if (prepared.HasError())
+                    return fail(OpenError(ProjectOpenErrors::DerivedStateFailed,
+                                          std::string(contributor->Id()) + ": " + prepared.ErrorValue().message));
+                result.derived.emplace_back(std::string(contributor->Id()), std::move(prepared).Value());
+            }
+            std::lock_guard lock(completion->mutex);
+            completion->result.emplace(std::move(result));
+            return Result<void>::Success();
+        }
+    }  // namespace
+
     ProjectSessionActivationLease::ProjectSessionActivationLease(std::shared_ptr<State> state, const ProjectSessionCandidateId id) noexcept
         : state_(std::move(state)), id_(id) {}
 
@@ -307,106 +436,7 @@ namespace Horo::Editor {
         auto submitted =
             state_->jobs.SubmitResult(JobDescriptor{.parentCancellation = cancellation},
                                       [state = state_.get(), completion, requestCopy, id](const CancellationToken &jobCancellation) {
-            const auto fail = [&](Error error) {
-                LOG_ERROR("editor.project_open", "Project open failed operation=%llu code=%s.", static_cast<unsigned long long>(id.value),
-                          error.code.Value().c_str());
-                std::lock_guard lock(completion->mutex);
-                completion->error = error;
-                return Result<void>::Failure(std::move(error));
-            };
-            SetPhase(completion, ProjectOpenPhase::CleaningRecovery);
-            // Cleanup is non-authoritative; a failure remains a warning and must not block open.
-            static_cast<void>(state->transactions.CleanupCommittedMigrations(requestCopy.projectRoot));
-            if (state->transactions.InspectPendingRecovery(requestCopy.projectRoot).action != MigrationRecoveryAction::None) {
-                SetPhase(completion, ProjectOpenPhase::Recovering);
-                if (auto recovered = state->transactions.Recover(requestCopy.projectRoot, jobCancellation); recovered.HasError())
-                    return fail(recovered.ErrorValue());
-            }
-            if (jobCancellation.IsCancellationRequested())
-                return fail(OpenError(ProjectOpenErrors::Cancelled));
-
-            SetPhase(completion, ProjectOpenPhase::ValidatingCompatibility);
-            ProjectOpenPreflightSnapshot preflight = state->preflight.Inspect(requestCopy.projectRoot);
-            ProjectCompatibilitySnapshot compatibility = preflight.compatibility;
-            LOG_DEBUG("editor.project_open", "Compatibility classified operation=%llu status=%d migration_plan=%s.",
-                      static_cast<unsigned long long>(id.value), static_cast<int>(compatibility.status),
-                      preflight.migrationPlan.has_value() ? "yes" : "no");
-            std::optional<ProjectMigrationPlan> plan;
-            bool cancellationDeferred{};
-            if (compatibility.status == ProjectCompatibilityStatus::CompatibleReleaseLine && compatibility.markerUpdateRequired) {
-                SetPhase(completion, ProjectOpenPhase::UpdatingProjectMetadata);
-                const auto *target = BuiltInReleaseCompatibilityRegistry().Find(CurrentEngineReleaseVersion());
-                if (target == nullptr)
-                    return fail(OpenError(ProjectOpenErrors::MigrationPlanMissing));
-                if (auto updated = UpdatePatchMarker(state->files, state->mutations, requestCopy.projectRoot, *target, id);
-                    updated.HasError())
-                    return fail(updated.ErrorValue());
-                compatibility = state->preflight.Inspect(requestCopy.projectRoot).compatibility;
-            } else if (compatibility.status == ProjectCompatibilityStatus::AutomaticMigrationRequired) {
-                SetPhase(completion, ProjectOpenPhase::PlanningMigration);
-                if (!preflight.migrationPlan.has_value() || !compatibility.sourceBaseline.has_value() ||
-                    !compatibility.metadata.has_value())
-                    return fail(compatibility.diagnostic.value_or(OpenError(ProjectOpenErrors::MigrationPlanMissing)));
-                const auto *target = BuiltInReleaseCompatibilityRegistry().Find(CurrentEngineReleaseVersion());
-                if (target == nullptr)
-                    return fail(OpenError(ProjectOpenErrors::MigrationPlanMissing));
-                plan.emplace(std::move(*preflight.migrationPlan));
-                const std::string sourceVersion = FormatHoroVersion(compatibility.metadata->horoVersion.value);
-                const std::string targetVersion = FormatHoroVersion(target->release.value);
-                LOG_INFO("editor.project_open", "Automatic migration selected operation=%llu source=%s target=%s.",
-                         static_cast<unsigned long long>(id.value), sourceVersion.c_str(), targetVersion.c_str());
-                LOG_DEBUG("editor.project_open", "Migration selection aggregate operation=%llu definitions=%zu.",
-                          static_cast<unsigned long long>(id.value), plan->definitions.size());
-                SetPhase(completion, ProjectOpenPhase::Migrating);
-                if (state->jobs.WorkerCount() < 2)
-                    return fail(OpenError(ProjectOpenErrors::WorkerCapacityInsufficient));
-                ProjectMigrationTransactionRequest transaction{.projectRoot = requestCopy.projectRoot,
-                                                               .sourceMetadata = *compatibility.metadata,
-                                                               .sourceBaseline = *compatibility.sourceBaseline,
-                                                               .targetDecision = *target,
-                                                               .plan = *plan,
-                                                               .engineBuildIdentity = requestCopy.engineBuildIdentity,
-                                                               .limits = requestCopy.migrationLimits,
-                                                               .cancellation = jobCancellation};
-                auto migrated = state->transactions.Execute(transaction);
-                if (migrated.HasError())
-                    return fail(migrated.ErrorValue());
-                cancellationDeferred = migrated.Value().cancellationDeferred;
-                compatibility = state->preflight.Inspect(requestCopy.projectRoot).compatibility;
-            } else if (compatibility.status != ProjectCompatibilityStatus::Current &&
-                       compatibility.status != ProjectCompatibilityStatus::CompatibleReleaseLine)
-                return fail(compatibility.diagnostic.value_or(OpenError(ProjectOpenErrors::CompatibilityBlocked)));
-
-            if (!compatibility.metadata.has_value())
-                return fail(OpenError(ProjectOpenErrors::CompatibilityBlocked));
-            if (jobCancellation.IsCancellationRequested() && !cancellationDeferred)
-                return fail(OpenError(ProjectOpenErrors::Cancelled));
-
-            SetPhase(completion, ProjectOpenPhase::ValidatingDefaultScene);
-            auto defaultScene = LoadProjectDefaultScene(requestCopy.projectRoot);
-            if (defaultScene.HasError())
-                return fail(OpenError(ProjectOpenErrors::ScenePreflightFailed, defaultScene.ErrorValue().message));
-            if (!defaultScene.Value().has_value() || !defaultScene.Value()->existed)
-                return fail(OpenError(ProjectOpenErrors::ScenePreflightFailed, "The configured project default scene does not exist."));
-            SceneDocument sceneValidation;
-            if (auto validated = sceneValidation.LoadSaved(defaultScene.Value()->objects); validated.HasError())
-                return fail(OpenError(ProjectOpenErrors::ScenePreflightFailed, validated.ErrorValue().message));
-            if (jobCancellation.IsCancellationRequested() && !cancellationDeferred)
-                return fail(OpenError(ProjectOpenErrors::Cancelled));
-
-            SetPhase(completion, ProjectOpenPhase::RebuildingDerivedState);
-            BackgroundResult result{.metadata = *compatibility.metadata, .cancellationDeferred = cancellationDeferred};
-            result.derived.reserve(state->derivedContributors.size());
-            for (IProjectOpenDerivedStateContributor *contributor : state->derivedContributors) {
-                auto prepared = contributor->Prepare(requestCopy.projectRoot, jobCancellation);
-                if (prepared.HasError())
-                    return fail(OpenError(ProjectOpenErrors::DerivedStateFailed,
-                                          std::string(contributor->Id()) + ": " + prepared.ErrorValue().message));
-                result.derived.emplace_back(std::string(contributor->Id()), std::move(prepared).Value());
-            }
-            std::lock_guard lock(completion->mutex);
-            completion->result.emplace(std::move(result));
-            return Result<void>::Success();
+            return RunProjectOpenBackground(*state, completion, requestCopy, id, jobCancellation);
         });
         if (submitted.HasError())
             return Result<ProjectOpenOperationHandle>::Failure(submitted.ErrorValue());

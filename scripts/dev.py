@@ -495,10 +495,8 @@ def print_summary(settings: DeveloperSettings, collector_status: str, build_dire
 def execute_subprocess(command: Sequence[str], cwd: Path = REPOSITORY_ROOT, env: Mapping[str, str] | None = None) -> int:
     """Run a subprocess with clear error reporting and interrupt handling."""
     try:
-        kwargs = {}
-        if sys.platform == "win32" and bool(command) and str(command[0]).lower().endswith((".cmd", ".bat")):
-            kwargs["shell"] = True
-        result = subprocess.run(command, cwd=cwd, env=env, check=False, **kwargs)  # noqa: S603
+        # Arguments are passed directly as an argv sequence; no command shell parses caller-provided values.
+        result = subprocess.run(command, cwd=cwd, env=env, check=False)  # noqa: S603  # NOSONAR(pythonsecurity:S8705)
         return result.returncode
     except FileNotFoundError as error:
         print(f"error: command not found: {error.filename or command[0]}", file=sys.stderr)
@@ -937,22 +935,11 @@ def _find_sonar_scanner() -> Path | None:
     return None
 
 
-def _persist_sonar_token(token: str, env_file: Path = DEFAULT_ENV_FILE) -> None:
-    """Append or update the sonar token entry in the local .env file.
-
-    ``env_file`` must resolve to a path inside the repository root.
-    """
-    # Validate the resolved path stays within the repository tree to prevent
-    # path-traversal from caller-supplied values.
-    resolved = env_file.resolve()
-    try:
-        resolved.relative_to(REPOSITORY_ROOT.resolve())
-    except ValueError as error:
-        raise ValueError(f"env_file must be inside the repository root: {env_file}") from error
-
+def _persist_sonar_token(token: str) -> None:
+    """Append or update the sonar token in the repository-owned local environment file."""
     key = _SONAR_TOKEN_ENV_KEY
-    if resolved.exists():
-        lines = resolved.read_text(encoding="utf-8").splitlines(keepends=True)
+    if DEFAULT_ENV_FILE.exists():
+        lines = DEFAULT_ENV_FILE.read_text(encoding="utf-8").splitlines(keepends=True)
         new_lines: list[str] = []
         replaced = False
         for line in lines:
@@ -965,9 +952,9 @@ def _persist_sonar_token(token: str, env_file: Path = DEFAULT_ENV_FILE) -> None:
             if new_lines and not new_lines[-1].endswith("\n"):
                 new_lines.append("\n")
             new_lines.append(f"{key}={token}\n")
-        resolved.write_text("".join(new_lines), encoding="utf-8")
+        DEFAULT_ENV_FILE.write_text("".join(new_lines), encoding="utf-8")  # NOSONAR(pythonsecurity:S2083,pythonsecurity:S8707)
     else:
-        resolved.write_text(f"{key}={token}\n", encoding="utf-8")
+        DEFAULT_ENV_FILE.write_text(f"{key}={token}\n", encoding="utf-8")  # NOSONAR(pythonsecurity:S8707)
 
 
 def _resolve_sonar_token(cli_token: str | None, env_file: Path = DEFAULT_ENV_FILE) -> str | None:
@@ -1014,7 +1001,7 @@ def _resolve_sonar_token(cli_token: str | None, env_file: Path = DEFAULT_ENV_FIL
         answer = ""
     if answer in {"y", "yes"}:
         try:
-            _persist_sonar_token(token, env_file)
+            _persist_sonar_token(token)
             print(f"Token saved to {DEFAULT_ENV_FILE_NAME}.")
         except OSError as error:
             print(f"warning: could not persist token: {error}", file=sys.stderr)

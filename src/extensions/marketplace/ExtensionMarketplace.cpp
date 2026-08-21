@@ -244,42 +244,50 @@ namespace Horo::Extensions {
             return Result<fs::path>::Success(fs::absolute(children.front()).lexically_normal());
         }
 
-        [[nodiscard]] bool IsSafeExtractionRoot(const fs::path &root) noexcept {
-            try {
-                const auto base = fs::weakly_canonical(fs::temp_directory_path());
-                const auto cand = fs::weakly_canonical(root);
-                return cand.string().rfind(base.string(), 0) == 0 && !cand.empty() &&
-                       cand.filename().string().rfind("horo-extension-marketplace-", 0) == 0;
-            } catch (...) {
+        [[nodiscard]] bool IsSafeExtractionRoot(const fs::path &base, const fs::path &root) noexcept {
+            std::error_code error;
+            const fs::path canonicalBase = fs::weakly_canonical(base, error);
+            if (error)
                 return false;
-            }
+            const fs::path canonicalRoot = fs::weakly_canonical(root, error);
+            if (error || canonicalRoot.empty() || canonicalRoot.parent_path() != canonicalBase)
+                return false;
+            return canonicalRoot.filename().string().starts_with("horo-extension-marketplace-");
+        }
+
+        [[nodiscard]] std::uint64_t SecureNonce() {
+            std::random_device random;
+            std::uint64_t nonce{};
+            for (std::size_t byte = 0; byte < sizeof(nonce); ++byte)
+                nonce = (nonce << 8U) | (static_cast<std::uint64_t>(random()) & 0xffU);
+            return nonce;
         }
 
         [[nodiscard]] Result<fs::path> ExtractPackage(const std::span<const std::byte> archiveBytes,
                                                       const CancellationToken &cancellation) {
-            std::random_device rd;
-            std::mt19937_64 gen(rd());
-            std::uniform_int_distribution<std::uint64_t> dist;
-            fs::path extractionRoot;
             std::error_code error;
+            // The child is created atomically, permission-restricted, name-validated, and never reused.
+            const fs::path temporaryBase = fs::weakly_canonical(fs::temp_directory_path(error), error);  // NOSONAR(cpp:S5443)
+            if (error || temporaryBase.empty())
+                return Result<fs::path>::Failure(MarketplaceError("Unable to resolve extension extraction staging."));
+            fs::path extractionRoot;
             for (int attempt = 0; attempt < 16; ++attempt) {
-                const auto nonce = dist(gen);
-                extractionRoot =
-                    fs::absolute(fs::temp_directory_path() / std::format("horo-extension-marketplace-{:016x}", nonce)).lexically_normal();
-                if (!IsSafeExtractionRoot(extractionRoot))
+                extractionRoot = (temporaryBase / std::format("horo-extension-marketplace-{:016x}", SecureNonce())).lexically_normal();
+                if (!IsSafeExtractionRoot(temporaryBase, extractionRoot))
                     continue;
+                error.clear();
                 if (fs::exists(extractionRoot, error))
                     continue;
                 if (fs::create_directory(extractionRoot, error) && !error) {
                     fs::permissions(extractionRoot, fs::perms::owner_all, fs::perm_options::replace, error);
-                    if (!error && IsSafeExtractionRoot(extractionRoot))
+                    if (!error && IsSafeExtractionRoot(temporaryBase, extractionRoot))
                         break;
                     fs::remove_all(extractionRoot, error);
                 }
                 if (attempt == 15)
                     return Result<fs::path>::Failure(MarketplaceError("Unable to create extension extraction staging."));
             }
-            if (!IsSafeExtractionRoot(extractionRoot))
+            if (!IsSafeExtractionRoot(temporaryBase, extractionRoot))
                 return Result<fs::path>::Failure(MarketplaceError("Unable to create extension extraction staging."));
 
             mz_zip_archive archive{};
@@ -302,6 +310,27 @@ namespace Horo::Extensions {
                 return packageRootResult;
             }
             return packageRootResult;
+        }
+
+        struct PreparedMarketplacePackage {
+            fs::path installRoot;
+            fs::path cleanupRoot;
+        };
+
+        [[nodiscard]] Result<PreparedMarketplacePackage> PrepareMarketplacePackage(const ExtensionMarketplaceEntry &entry,
+                                                                                   const CancellationToken &cancellation) {
+            auto downloaded = Download(entry.packageUrl, MaxPackageBytes, cancellation);
+            if (downloaded.HasError())
+                return Result<PreparedMarketplacePackage>::Failure(downloaded.ErrorValue());
+            if (const std::string actual = FormatSha256(ComputeSha256(downloaded.Value())); actual != entry.sha256)
+                return Result<PreparedMarketplacePackage>::Failure(MarketplaceError("Downloaded extension failed SHA-256 verification."));
+            auto extracted = ExtractPackage(downloaded.Value(), cancellation);
+            if (extracted.HasError())
+                return Result<PreparedMarketplacePackage>::Failure(extracted.ErrorValue());
+            fs::path installRoot = std::move(extracted).Value();
+            fs::path cleanupRoot =
+                installRoot.filename().string().starts_with("horo-extension-marketplace-") ? installRoot : installRoot.parent_path();
+            return Result<PreparedMarketplacePackage>::Success({std::move(installRoot), std::move(cleanupRoot)});
         }
     }  // namespace
 
@@ -403,26 +432,15 @@ namespace Horo::Extensions {
         snapshot_.activePackageId = entry.packageId;
         snapshot_.message.clear();
         auto submitted = jobs_.SubmitResult({}, [this, entry](const CancellationToken &cancellation) {
-            auto downloaded = Download(entry.packageUrl, MaxPackageBytes, cancellation);
-            if (downloaded.HasError()) {
-                FinishWithError(downloaded.ErrorValue().message);
+            auto prepared = PrepareMarketplacePackage(entry, cancellation);
+            if (prepared.HasError()) {
+                FinishWithError(prepared.ErrorValue().message);
                 return Result<void>::Success();
             }
-            if (const std::string actual = FormatSha256(ComputeSha256(downloaded.Value())); actual != entry.sha256) {
-                FinishWithError("Downloaded extension failed SHA-256 verification.");
-                return Result<void>::Success();
-            }
-            auto extracted = ExtractPackage(downloaded.Value(), cancellation);
-            if (extracted.HasError()) {
-                FinishWithError(extracted.ErrorValue().message);
-                return Result<void>::Success();
-            }
-            const auto extractedPath = extracted.Value();
-            const auto cleanupPath =
-                extractedPath.filename().string().starts_with("horo-extension-marketplace-") ? extractedPath : extractedPath.parent_path();
+            PreparedMarketplacePackage package = std::move(prepared).Value();
             std::lock_guard resultLock(mutex_);
-            pendingInstallRoot_ = extractedPath;
-            pendingCleanupRoot_ = cleanupPath;
+            pendingInstallRoot_ = std::move(package.installRoot);
+            pendingCleanupRoot_ = std::move(package.cleanupRoot);
             return Result<void>::Success();
         });
         if (submitted.HasError()) {

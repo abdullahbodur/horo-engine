@@ -40,8 +40,6 @@ namespace Horo {
         CancellationSource cancellation;
         JobFunction work;
         Telemetry::OperationContext operationContext = Telemetry::CaptureOperationContext();
-
-    private:
         mutable std::mutex mutex_;
     };
 
@@ -264,7 +262,7 @@ namespace Horo {
         try {
             RequestCancel();
             static_cast<void>(Join());
-        } catch (...) {
+        } catch (...) {  // NOSONAR(cpp:S2486) A destructor cannot report or propagate cleanup failures.
             // Destructors must swallow any unexpected exceptions per noexcept contract
         }
     }

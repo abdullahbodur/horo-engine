@@ -80,6 +80,16 @@ def test_process_environment_overrides_local_configuration(tmp_path: Path) -> No
     assert settings.endpoint.url == "https://collector.example.com:443"
 
 
+def test_persist_sonar_token_writes_only_configured_local_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    env_file = tmp_path / LOCAL_ENV_FILENAME
+    env_file.write_text("EXISTING=value\nHORO_SONAR_TOKEN=old\n", encoding="utf-8")
+    monkeypatch.setattr(dev, "DEFAULT_ENV_FILE", env_file)
+
+    dev._persist_sonar_token("replacement")
+
+    assert env_file.read_text(encoding="utf-8") == "EXISTING=value\nHORO_SONAR_TOKEN=replacement\n"
+
+
 def test_disabled_export_ignores_and_later_removes_an_inherited_invalid_endpoint(tmp_path: Path) -> None:
     settings = dev.load_settings(
         tmp_path / "missing.env",
@@ -478,7 +488,6 @@ def test_main_help_command_and_empty_arguments(capsys: pytest.CaptureFixture[str
     assert dev.main(["help", "nonexistent"]) == 2
     err = capsys.readouterr().err
     assert "unknown command 'nonexistent'" in err
-
 
 
 

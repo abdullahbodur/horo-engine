@@ -107,7 +107,8 @@ namespace Horo::Extensions {
             return result;
         }
 
-        [[nodiscard]] uint8_t IsCancelled(const void *context) {
+        // The opaque pointer type is fixed by the versioned C ABI callback signature.
+        [[nodiscard]] uint8_t IsCancelled(const void *context) {  // NOSONAR(cpp:S5008)
             if (context == nullptr) {
                 return 0U;
             }
@@ -124,11 +125,8 @@ namespace Horo::Extensions {
                 return HORO_EXTENSION_SUCCESS;
             } catch (const std::bad_alloc &) {
                 return HORO_EXTENSION_ERROR_OUTPUT_REJECTED;
-            } catch (const std::exception &exception) {
-                LOG_WARN("extensions.importer", "ResizeVector failed: %s", exception.what());
-                return HORO_EXTENSION_ERROR_OUTPUT_REJECTED;
-            } catch (...) {
-                LOG_WARN("extensions.importer", "ResizeVector failed with unknown exception.");
+            } catch (const std::length_error &exception) {
+                LOG_WARN("extensions.importer", "ResizeVector rejected an oversized payload: %s", exception.what());
                 return HORO_EXTENSION_ERROR_OUTPUT_REJECTED;
             }
         }
@@ -144,23 +142,8 @@ namespace Horo::Extensions {
             ExternalImporterInstance(const ExternalImporterInstance &) = delete;
             ExternalImporterInstance &operator=(const ExternalImporterInstance &) = delete;
 
-            ExternalImporterInstance(ExternalImporterInstance &&other) noexcept
-                : lifetime(std::move(other.lifetime)), context(std::exchange(other.context, nullptr)),
-                  destroy(std::exchange(other.destroy, nullptr)), importFn(std::exchange(other.importFn, nullptr)),
-                  preview(std::exchange(other.preview, nullptr)) {}
-
-            ExternalImporterInstance &operator=(ExternalImporterInstance &&other) noexcept {
-                if (this != &other) {
-                    if (destroy != nullptr)
-                        destroy(context);
-                    lifetime = std::move(other.lifetime);
-                    context = std::exchange(other.context, nullptr);
-                    destroy = std::exchange(other.destroy, nullptr);
-                    importFn = std::exchange(other.importFn, nullptr);
-                    preview = std::exchange(other.preview, nullptr);
-                }
-                return *this;
-            }
+            ExternalImporterInstance(ExternalImporterInstance &&) = delete;
+            ExternalImporterInstance &operator=(ExternalImporterInstance &&) = delete;
 
             std::shared_ptr<ExtensionModuleLifetime> lifetime;
             void *context{};
@@ -199,7 +182,7 @@ namespace Horo::Extensions {
                 HoroExtensionStatus status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 try {
                     status = instance_->importFn(instance_->context, &request, &response);
-                } catch (const std::exception &exception) {
+                } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) External code is an exception containment boundary.
                     LOG_WARN("extensions.importer", "External importer threw exception: %s", exception.what());
                     status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 } catch (...) {
@@ -254,7 +237,7 @@ namespace Horo::Extensions {
                 HoroExtensionStatus status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 try {
                     status = instance_->preview(instance_->context, &request, &response);
-                } catch (const std::exception &exception) {
+                } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) External code is an exception containment boundary.
                     LOG_WARN("extensions.importer", "External preview threw exception: %s", exception.what());
                     status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 } catch (...) {
