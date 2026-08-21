@@ -4,6 +4,7 @@ jobs:
   sonar:
     machine:
       image: ubuntu-2404:current
+    resource_class: 2xlarge+.gen2
     environment:
       CCACHE_BASEDIR: /home/circleci/project
       CCACHE_COMPRESS: "true"
@@ -71,7 +72,6 @@ jobs:
               -Dsonar.cfamily.compile-commands=build/sonar/compile_commands.json \
               -Dsonar.cfamily.cache.enabled=true \
               -Dsonar.cfamily.cache.path=.sonar/cfamily-cache \
-              -Dsonar.cfamily.threads=4 \
               -Dsonar.qualitygate.wait=true \
               -Dsonar.qualitygate.timeout=300
       - save_cache:
