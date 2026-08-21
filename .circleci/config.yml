@@ -67,6 +67,7 @@ jobs:
       - run:
           name: SonarCloud scan
           command: |
+            mkdir -p "$CIRCLE_WORKING_DIRECTORY/.sonar/cfamily-cache"
             curl -fsSL https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-7.2.0.5079-linux-x64.zip -o /tmp/sonar-scanner.zip
             unzip -q /tmp/sonar-scanner.zip -d /tmp
             /tmp/sonar-scanner-7.2.0.5079-linux-x64/bin/sonar-scanner \
@@ -75,8 +76,8 @@ jobs:
               -Dsonar.projectKey=abdullahbodur_horo-engine \
               -Dsonar.sourceEncoding=UTF-8 \
               -Dsonar.cfamily.compile-commands=build/sonar/compile_commands.json \
-              -Dsonar.cfamily.cache.enabled=true \
-              -Dsonar.cfamily.cache.path=.sonar/cfamily-cache \
+              -Dsonar.cfamily.analysisCache.mode=fs \
+              -Dsonar.cfamily.analysisCache.path="$CIRCLE_WORKING_DIRECTORY/.sonar/cfamily-cache" \
               -Dsonar.qualitygate.wait=true \
               -Dsonar.qualitygate.timeout=300
       - save_cache:
