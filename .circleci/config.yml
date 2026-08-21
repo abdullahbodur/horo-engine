@@ -347,6 +347,7 @@ workflows:
           requires: [format]
       - sonar:
           requires: [format]
+          context: horo-ci-quality
 
   ui-automation:
     when: << pipeline.parameters.run_ui >>
@@ -362,7 +363,10 @@ workflows:
     jobs:
       - release-linux:
           release_tag: << pipeline.parameters.release_tag >>
+          context: horo-ci-release
       - release-macos:
           release_tag: << pipeline.parameters.release_tag >>
+          context: horo-ci-release
       - release-windows:
           release_tag: << pipeline.parameters.release_tag >>
+          context: horo-ci-release
