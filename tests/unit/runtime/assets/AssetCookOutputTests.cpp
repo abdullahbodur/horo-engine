@@ -92,10 +92,17 @@ TEST_CASE("PublishCookGeneration creates current.json and manifest.json", "[nati
     REQUIRE((std::filesystem::exists(tmp.path / "current.json")));
 }
 
-// `"` is invalid in Windows/NTFS filenames. IsSafeArtifactFile must reject such
-// names explicitly (MalformedArtifact) on every platform rather than letting
-// them fail late with an opaque filesystem error on Windows.
-TEST_CASE("PublishCookGeneration rejects Windows-invalid artifact filenames", "[native]") {
+// Filenames that are not portable across supported platforms (Windows/NTFS
+// reserves " < > | : ? * and control characters) must be rejected explicitly
+// with MalformedArtifact on every platform, instead of failing late with an
+// opaque filesystem error on Windows only.
+//
+// Note: this replaces the former "escapes manifest strings" test. That test's
+// intent — exercising AppendJsonString escaping — is unreachable through
+// PublishCookGeneration because all manifest string inputs (target ID, type ID,
+// artifact filename) are canonicalized/validated before they reach the JSON
+// writer. AppendJsonString remains as a defense-in-depth layer.
+TEST_CASE("PublishCookGeneration rejects non-portable artifact filenames", "[native]") {
     TempDir tmp;
     const auto target = Target("headless-null");
     const auto id = Id("00000000-0000-0000-0000-000000000003");
