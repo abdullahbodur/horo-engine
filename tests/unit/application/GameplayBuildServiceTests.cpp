@@ -5,6 +5,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <stdexcept>
 #include <string_view>
 #include <thread>
@@ -59,6 +60,10 @@ HORO_BEHAVIOR(Movement, "game.tests.build_movement")
 
         void BreakSource() const {
             Write(root / "source/gameplay/Movement.cpp", "this is intentionally not valid C++\n");
+            // Force the follow-up build through a clean configure so the test does
+            // not depend on generator-specific timestamp/change detection.
+            std::error_code error;
+            std::filesystem::remove_all(root / ".horo/local/build/gameplay-debug", error);
         }
 
         std::filesystem::path root;
@@ -101,7 +106,9 @@ TEST_CASE("Gameplay build service consumes exported SDK and preserves last succe
     GameplayBuildService service{processes, jobs, files, &output, &operations};
     const GameplayBuildRequest request{
         .projectRoot = project.root,
-        .environment = {.gameplaySdkPackage = HORO_GAMEPLAY_SDK_PACKAGE_DIR},
+        .environment = {.gameplaySdkPackage = HORO_GAMEPLAY_SDK_PACKAGE_DIR,
+                        .cxxCompiler = std::filesystem::path{HORO_GAMEPLAY_CXX_COMPILER},
+                        .generator = HORO_TEST_CMAKE_GENERATOR},
         .timeouts = {.configure = std::chrono::minutes{1}, .build = std::chrono::minutes{2}},
     };
 

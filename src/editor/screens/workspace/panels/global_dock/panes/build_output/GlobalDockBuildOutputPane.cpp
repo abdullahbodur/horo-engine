@@ -32,48 +32,51 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] ImVec4 StatusColor(const BuildOutputStatus status) noexcept {
+            using enum BuildOutputStatus;
             switch (status) {
-                case BuildOutputStatus::Failed:
+                case Failed:
                     return Theme::Err();
-                case BuildOutputStatus::Cached:
+                case Cached:
                     return Theme::Dim();
-                case BuildOutputStatus::Cancelled:
+                case Cancelled:
                     return Theme::Warn();
-                case BuildOutputStatus::Info:
+                case Info:
                     return Theme::Accent();
-                case BuildOutputStatus::Succeeded:
+                case Succeeded:
                     return Theme::Ok();
             }
             return Theme::Text();
         }
 
         [[nodiscard]] const char *TechnicalStatusText(const BuildOutputStatus status) noexcept {
+            using enum BuildOutputStatus;
             switch (status) {
-                case BuildOutputStatus::Info:
+                case Info:
                     return "INFO";
-                case BuildOutputStatus::Succeeded:
+                case Succeeded:
                     return "OK";
-                case BuildOutputStatus::Failed:
+                case Failed:
                     return "FAILED";
-                case BuildOutputStatus::Cached:
+                case Cached:
                     return "CACHED";
-                case BuildOutputStatus::Cancelled:
+                case Cancelled:
                     return "CANCELLED";
             }
             return "INFO";
         }
 
         [[nodiscard]] const char *StatusLocalizationKey(const BuildOutputStatus status) noexcept {
+            using enum BuildOutputStatus;
             switch (status) {
-                case BuildOutputStatus::Info:
+                case Info:
                     return "workspace.global_dock.build_output.row_status.info";
-                case BuildOutputStatus::Succeeded:
+                case Succeeded:
                     return "workspace.global_dock.build_output.row_status.succeeded";
-                case BuildOutputStatus::Failed:
+                case Failed:
                     return "workspace.global_dock.build_output.row_status.failed";
-                case BuildOutputStatus::Cached:
+                case Cached:
                     return "workspace.global_dock.build_output.row_status.cached";
-                case BuildOutputStatus::Cancelled:
+                case Cancelled:
                     return "workspace.global_dock.build_output.row_status.cancelled";
             }
             return "workspace.global_dock.build_output.row_status.info";
@@ -95,21 +98,17 @@ namespace Horo::Editor {
 #else
             gmtime_r(&timeT, &tmValue);
 #endif
-            char buffer[16];
-            std::snprintf(buffer, sizeof(buffer), "%02d:%02d:%02d", tmValue.tm_hour, tmValue.tm_min, tmValue.tm_sec);
-            return std::string(buffer);
+            return std::format("{:02d}:{:02d}:{:02d}", tmValue.tm_hour, tmValue.tm_min, tmValue.tm_sec);
         }
 
         [[nodiscard]] std::string FormatSource(const std::optional<DiagnosticSourceLocation> &source) {
             if (!source.has_value())
                 return {};
-            std::string text = source->absolutePath;
-            if (source->line > 0U) {
-                text += ':' + std::to_string(source->line);
-                if (source->column > 0U)
-                    text += ':' + std::to_string(source->column);
-            }
-            return text;
+            if (source->line == 0U)
+                return source->absolutePath;
+            if (source->column == 0U)
+                return std::format("{}:{}", source->absolutePath, source->line);
+            return std::format("{}:{}:{}", source->absolutePath, source->line, source->column);
         }
     }  // namespace
 
@@ -162,7 +161,7 @@ namespace Horo::Editor {
             int selectedStatus = static_cast<int>(m_statusFilter);
             ImGui::SetNextItemWidth(Ui::ScaledLayoutValue(ActionControlWidth));
             if (Ui::ComboControl("##BuildOutputStatusFilter", &selectedStatus, statusLabels.data(), static_cast<int>(statusLabels.size()),
-                                 fonts, false, 0.0F, Ui::ComponentSize::Small)) {
+                                 fonts, Ui::ComboControlOptions{.componentSize = Ui::ComponentSize::Small})) {
                 m_statusFilter = static_cast<StatusFilter>(selectedStatus);
                 m_filterDirty = true;
             }
@@ -172,8 +171,10 @@ namespace Horo::Editor {
                 {stackedToolbar ? controlOrigin.x : controlOrigin.x + std::max(0.0F, availableWidth - rightControlsWidth),
                  stackedToolbar ? controlOrigin.y + ToolbarHeight() + Ui::ScaledLayoutValue(ControlGap) : controlOrigin.y});
             const std::string &hint = context.localization.Get("editor", "workspace.global_dock.build_output.search");
-            if (Ui::InputTextControl("##BuildOutputSearch", m_search.data(), m_search.size(), fonts, false, searchWidth, hint.c_str(), 0.0F,
-                                     Ui::ComponentSize::Small))
+            if (Ui::InputTextControl("##BuildOutputSearch", m_search.data(), m_search.size(), fonts,
+                                     Ui::InputTextOptions{.width = searchWidth,
+                                                          .hint = hint.c_str(),
+                                                          .componentSize = Ui::ComponentSize::Small}))
                 m_filterDirty = true;
 
             ImGui::SameLine(0.0F, Ui::ScaledLayoutValue(ControlGap));
@@ -214,8 +215,9 @@ namespace Horo::Editor {
         const bool wasAtBottom = ImGui::GetScrollY() >= std::max(0.0F, ImGui::GetScrollMaxY() - 2.0F);
 
         if (m_snapshot.droppedRecordCount > 0U) {
-            const std::string notice = context.localization.Get("editor", "workspace.global_dock.build_output.dropped") + " " +
-                                       std::to_string(m_snapshot.droppedRecordCount);
+            const std::string notice =
+                std::format("{} {}", context.localization.Get("editor", "workspace.global_dock.build_output.dropped"),
+                            m_snapshot.droppedRecordCount);
             Ui::Hint(notice.c_str(), fonts);
         }
 

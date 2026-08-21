@@ -1,10 +1,9 @@
-#include <catch2/catch_test_macros.hpp>
-
 #include "Horo/Assets/AssetImportOperation.h"
 #include "Horo/Assets/AssetImporter.h"
 #include "Horo/Foundation/CancellationToken.h"
 #include "Horo/Foundation/JobSystem.h"
 
+#include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -12,45 +11,37 @@
 #include <string_view>
 #include <vector>
 
-namespace
-{
-using namespace Horo;
-using namespace Horo::Assets;
+namespace {
+    using namespace Horo;
+    using namespace Horo::Assets;
 
-class TestImporter final : public IAssetImporter
-{
-  public:
-    [[nodiscard]] Result<PreparedAssetImport> Import(
-        const AssetImportInput &input,
-        const CancellationToken & /*cancellation*/) const override
-    {
-        PreparedAssetImport result;
-        result.type = AssetTypeId::Parse("core.mesh").Value();
-        result.editorPayload.assign(input.sourceBytes.begin(), input.sourceBytes.end());
-        return Result<PreparedAssetImport>::Success(std::move(result));
-    }
-};
+    class TestImporter final : public IAssetImporter {
+    public:
+        [[nodiscard]] Result<PreparedAssetImport> Import(const AssetImportInput &input,
+                                                         const CancellationToken & /*cancellation*/) const override {
+            PreparedAssetImport result;
+            result.type = AssetTypeId::Parse("core.mesh").Value();
+            result.editorPayload.assign(input.sourceBytes.begin(), input.sourceBytes.end());
+            return Result<PreparedAssetImport>::Success(std::move(result));
+        }
+    };
 
-class SettingsCapturingImporter final : public IAssetImporter
-{
-  public:
-    [[nodiscard]] Result<PreparedAssetImport> Import(
-        const AssetImportInput &input,
-        const CancellationToken & /*cancellation*/) const override
-    {
-        receivedSettings = input.settings;
-        PreparedAssetImport result;
-        result.type = AssetTypeId::Parse("core.mesh").Value();
-        return Result<PreparedAssetImport>::Success(std::move(result));
-    }
+    class SettingsCapturingImporter final : public IAssetImporter {
+    public:
+        [[nodiscard]] Result<PreparedAssetImport> Import(const AssetImportInput &input,
+                                                         const CancellationToken & /*cancellation*/) const override {
+            receivedSettings = input.settings;
+            PreparedAssetImport result;
+            result.type = AssetTypeId::Parse("core.mesh").Value();
+            return Result<PreparedAssetImport>::Success(std::move(result));
+        }
 
-    mutable std::vector<ImportSettingValue> receivedSettings;
-};
+        mutable std::vector<ImportSettingValue> receivedSettings;
+    };
 
-} // namespace
+}  // namespace
 
-TEST_CASE("AssetImportOperation Start enters Selecting phase", "[native]")
-{
+TEST_CASE("AssetImportOperation Start enters Selecting phase", "[native]") {
     JobSystem jobs;
 
     AssetImporterCatalog catalog;
@@ -86,8 +77,7 @@ TEST_CASE("AssetImportOperation Start enters Selecting phase", "[native]")
     REQUIRE((snap.canCancel));
 }
 
-TEST_CASE("AssetImportOperation diagnostics for unsupported extension", "[native]")
-{
+TEST_CASE("AssetImportOperation diagnostics for unsupported extension", "[native]") {
     JobSystem jobs;
 
     AssetImporterCatalog catalog;
@@ -110,8 +100,7 @@ TEST_CASE("AssetImportOperation diagnostics for unsupported extension", "[native
     REQUIRE((item.diagnostics[0].code == "asset.import.no_importer"));
 }
 
-TEST_CASE("AssetImportOperation honours cancellation", "[native]")
-{
+TEST_CASE("AssetImportOperation honours cancellation", "[native]") {
     JobSystem jobs;
 
     AssetImporterCatalog catalog;
@@ -144,8 +133,7 @@ TEST_CASE("AssetImportOperation honours cancellation", "[native]")
     REQUIRE((result.HasError()));
 }
 
-TEST_CASE("AssetImportOperation resolves queued importer settings", "[native]")
-{
+TEST_CASE("AssetImportOperation resolves queued importer settings", "[native]") {
     const auto sourceFile = std::filesystem::temp_directory_path() / "horo_asset_import_settings.obj";
     {
         std::ofstream source{sourceFile};
@@ -164,22 +152,23 @@ TEST_CASE("AssetImportOperation resolves queued importer settings", "[native]")
                      .version = "1.0.0",
                      .fileExtensions = {"obj"},
                      .assetTypes = {AssetTypeId::Parse("core.mesh").Value()},
-                     .settings = {
-                         ImportSettingDescriptor{
-                             .id = "optimize",
-                             .labelKey = "Optimize",
-                             .descriptionKey = "",
-                             .kind = ImportSettingKind::Boolean,
-                             .defaultValue = false,
+                     .settings =
+                         {
+                             ImportSettingDescriptor{
+                                 .id = "optimize",
+                                 .labelKey = "Optimize",
+                                 .descriptionKey = "",
+                                 .kind = ImportSettingKind::Boolean,
+                                 .defaultValue = false,
+                             },
+                             ImportSettingDescriptor{
+                                 .id = "quality",
+                                 .labelKey = "Quality",
+                                 .descriptionKey = "",
+                                 .kind = ImportSettingKind::Integer,
+                                 .defaultValue = std::int64_t{1},
+                             },
                          },
-                         ImportSettingDescriptor{
-                             .id = "quality",
-                             .labelKey = "Quality",
-                             .descriptionKey = "",
-                             .kind = ImportSettingKind::Integer,
-                             .defaultValue = std::int64_t{1},
-                         },
-                     },
                      .strategy = importer,
                  })
                  .HasValue()));
@@ -199,8 +188,7 @@ TEST_CASE("AssetImportOperation resolves queued importer settings", "[native]")
     REQUIRE((start.Value().items[0].settings.at("settings.optimize") == "false"));
     REQUIRE((start.Value().items[0].settings.at("settings.quality") == "1"));
 
-    auto configured = operation.SetItemSettings(
-        0, {{"settings.optimize", "true"}, {"settings.quality", "7"}});
+    auto configured = operation.SetItemSettings(0, {{"settings.optimize", "true"}, {"settings.quality", "7"}});
     REQUIRE((configured.HasValue()));
     REQUIRE((operation.ImportSingleItem(0, cancellation).HasValue()));
     REQUIRE((importer->receivedSettings.size() == 2));

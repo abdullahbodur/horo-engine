@@ -5,8 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace Horo::Editor
-{
+namespace Horo::Editor {
     class RendererAvailabilitySnapshot;
 
     /**
@@ -15,8 +14,7 @@ namespace Horo::Editor
      */
 
     /** @brief Filesystem state of a requested project destination. */
-    enum class ProjectCreationLocationKind
-    {
+    enum class ProjectCreationLocationKind {
         Missing,
         EmptyDirectory,
         OccupiedDirectory,
@@ -25,16 +23,14 @@ namespace Horo::Editor
     };
 
     /** @brief Result of a non-mutating project-destination inspection. */
-    struct ProjectCreationLocation
-    {
+    struct ProjectCreationLocation {
         ProjectCreationLocationKind kind = ProjectCreationLocationKind::Inaccessible;
         std::filesystem::path nearestExistingParent;
         bool parentAppearsWritable = false;
     };
 
     /** @brief Stable code for a project-creation validation diagnostic. */
-    enum class ProjectCreationDiagnosticCode
-    {
+    enum class ProjectCreationDiagnosticCode {
         ProjectNameRequired,
         ProjectNameContainsPathSeparator,
         ProjectPathRequired,
@@ -46,27 +42,23 @@ namespace Horo::Editor
     };
 
     /** @brief Validation diagnostic presented by the project-creation screen. */
-    struct ProjectCreationDiagnostic
-    {
+    struct ProjectCreationDiagnostic {
         ProjectCreationDiagnosticCode code;
         std::string message;
     };
 
     /** @brief Typed validation result for the current project-creation draft. */
-    struct ProjectCreationValidation
-    {
+    struct ProjectCreationValidation {
         std::vector<ProjectCreationDiagnostic> diagnostics;
 
         /** @brief Reports whether no blocking validation diagnostics were produced. */
-        [[nodiscard]] bool IsValid() const noexcept
-        {
+        [[nodiscard]] bool IsValid() const noexcept {
             return diagnostics.empty();
         }
     };
 
     /** @brief Typed, portable draft values collected by the project-creation screen. */
-    struct ProjectCreationDraft
-    {
+    struct ProjectCreationDraft {
         std::string templateId = "3d-starter";
         std::string projectName;
         std::string projectPath;
@@ -86,12 +78,11 @@ namespace Horo::Editor
         bool includeStarterContent = true;
         bool generateCMakeProject = true;
 
-        [[nodiscard]] bool operator==(const ProjectCreationDraft&) const = default;
+        [[nodiscard]] bool operator==(const ProjectCreationDraft &) const = default;
     };
 
     /** @brief Validated input that a future ProjectCreationService may consume. */
-    struct ProjectCreationRequest
-    {
+    struct ProjectCreationRequest {
         std::string templateId;
         std::string projectName;
         std::filesystem::path projectRoot;
@@ -113,8 +104,7 @@ namespace Horo::Editor
     };
 
     /** @brief Leave policy requested by a project-creation draft. */
-    enum class ProjectCreationLeaveIntent
-    {
+    enum class ProjectCreationLeaveIntent {
         Allow,
         RequireDiscardConfirmation,
     };
@@ -124,20 +114,19 @@ namespace Horo::Editor
      * @param path Candidate project root.
      * @return Existing/missing destination state and a conservative parent-write indication.
      */
-    [[nodiscard]] ProjectCreationLocation InspectProjectCreationLocation(const std::filesystem::path& path);
+    [[nodiscard]] ProjectCreationLocation InspectProjectCreationLocation(const std::filesystem::path &path);
 
     /** @brief Headless state and workflow controller for the ProjectCreation route. */
-    class ProjectCreationController
-    {
+    class ProjectCreationController {
     public:
         /**
          * @brief Creates the controller with the active machine renderer as its backend default.
          * @param availability Machine-local renderer availability used for defaulting and validation.
          */
-        explicit ProjectCreationController(const RendererAvailabilitySnapshot& availability);
+        explicit ProjectCreationController(const RendererAvailabilitySnapshot &availability);
 
         /** @brief Returns the current typed draft. */
-        [[nodiscard]] const ProjectCreationDraft& Draft() const noexcept;
+        [[nodiscard]] const ProjectCreationDraft &Draft() const noexcept;
 
         /** @brief Updates the project name draft value. */
         void SetProjectName(std::string projectName);
@@ -149,7 +138,7 @@ namespace Horo::Editor
         void SetTemplateId(std::string templateId);
 
         /** @brief Returns mutable access to the current typed draft. */
-        [[nodiscard]] ProjectCreationDraft& MutableDraft() noexcept;
+        [[nodiscard]] ProjectCreationDraft &MutableDraft() noexcept;
 
         /** @brief Updates the project version draft value. */
         void SetProjectVersion(std::string projectVersion);
@@ -214,6 +203,6 @@ namespace Horo::Editor
     private:
         ProjectCreationDraft initialDraft_;
         ProjectCreationDraft draft_;
-        const RendererAvailabilitySnapshot* rendererAvailability_{nullptr};
+        const RendererAvailabilitySnapshot *rendererAvailability_{nullptr};
     };
-} // namespace Horo::Editor
+}  // namespace Horo::Editor

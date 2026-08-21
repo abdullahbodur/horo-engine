@@ -3,7 +3,7 @@
 struct ImVec2;
 
 namespace Horo::Editor {
-    class EditorGuiContext;
+    struct EditorGuiContext;
     struct AssetBrowserInteractionState;
     struct EditorWorkspaceViewCommandData;
     struct EditorWorkspaceViewModel;

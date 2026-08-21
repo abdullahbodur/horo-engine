@@ -7,69 +7,60 @@
 #include <string>
 #include <string_view>
 
-namespace Horo::Application
-{
+namespace Horo::Application {
     /**
      * @file ProjectVersion.h
      * @brief Canonical Horo release versions and persistent-contract identities.
      */
 
     /** @brief Semantic Horo Engine version used by durable project metadata. */
-    struct HoroVersion
-    {
+    struct HoroVersion {
         std::uint32_t major{};
         std::uint32_t minor{};
         std::uint32_t patch{};
         std::string prerelease;
 
-        [[nodiscard]] bool IsStable() const noexcept
-        {
+        [[nodiscard]] bool IsStable() const noexcept {
             return prerelease.empty();
         }
 
-        [[nodiscard]] bool operator==(const HoroVersion&) const noexcept = default;
+        [[nodiscard]] bool operator==(const HoroVersion &) const noexcept = default;
     };
 
     /** @brief Strong exact engine-release version. */
-    struct EngineReleaseVersion
-    {
+    struct EngineReleaseVersion {
         HoroVersion value;
-        [[nodiscard]] bool operator==(const EngineReleaseVersion&) const noexcept = default;
+        [[nodiscard]] bool operator==(const EngineReleaseVersion &) const noexcept = default;
     };
 
     /** @brief Strong version of the engine release that established a persistent contract. */
-    struct ContractBaselineVersion
-    {
+    struct ContractBaselineVersion {
         HoroVersion value;
-        [[nodiscard]] bool operator==(const ContractBaselineVersion&) const noexcept = default;
+        [[nodiscard]] bool operator==(const ContractBaselineVersion &) const noexcept = default;
     };
 
     /** @brief Canonical SHA-256 identity for a persistent project contract. */
-    struct PersistentContractHash
-    {
+    struct PersistentContractHash {
         std::array<std::uint8_t, 32> bytes{};
-        [[nodiscard]] bool operator==(const PersistentContractHash&) const noexcept = default;
+        [[nodiscard]] bool operator==(const PersistentContractHash &) const noexcept = default;
     };
 
     /** @brief Canonical SHA-256 identity for one release compatibility decision. */
-    struct CompatibilityDecisionHash
-    {
+    struct CompatibilityDecisionHash {
         std::array<std::uint8_t, 32> bytes{};
-        [[nodiscard]] bool operator==(const CompatibilityDecisionHash&) const noexcept = default;
+        [[nodiscard]] bool operator==(const CompatibilityDecisionHash &) const noexcept = default;
     };
 
     /** @brief Canonical SHA-256 hash of migration-controlled file content. */
-    struct MigrationContentHash
-    {
+    struct MigrationContentHash {
         std::array<std::uint8_t, 32> bytes{};
-        [[nodiscard]] bool operator==(const MigrationContentHash&) const noexcept = default;
+        [[nodiscard]] bool operator==(const MigrationContentHash &) const noexcept = default;
     };
 
     /** @brief Hash anchoring the canonical permanent migration-history document. */
-    struct MigrationHistoryHead
-    {
+    struct MigrationHistoryHead {
         MigrationContentHash content;
-        [[nodiscard]] bool operator==(const MigrationHistoryHead&) const noexcept = default;
+        [[nodiscard]] bool operator==(const MigrationHistoryHead &) const noexcept = default;
     };
 
     /**
@@ -84,7 +75,7 @@ namespace Horo::Application
      * @param version Valid Horo version.
      * @return Canonical version text without build metadata.
      */
-    [[nodiscard]] std::string FormatHoroVersion(const HoroVersion& version);
+    [[nodiscard]] std::string FormatHoroVersion(const HoroVersion &version);
 
     /**
      * @brief Compares versions using SemVer precedence.
@@ -92,7 +83,7 @@ namespace Horo::Application
      * @param rhs Right version.
      * @return Strong ordering according to SemVer precedence.
      */
-    [[nodiscard]] std::strong_ordering CompareHoroVersions(const HoroVersion& lhs, const HoroVersion& rhs) noexcept;
+    [[nodiscard]] std::strong_ordering CompareHoroVersions(const HoroVersion &lhs, const HoroVersion &rhs) noexcept;
 
     /**
      * @brief Parses canonical `sha256:` plus 64 lowercase hexadecimal characters.
@@ -106,7 +97,7 @@ namespace Horo::Application
      * @param hash Persistent contract hash.
      * @return Canonical lowercase SHA-256 identity.
      */
-    [[nodiscard]] std::string FormatPersistentContractHash(const PersistentContractHash& hash);
+    [[nodiscard]] std::string FormatPersistentContractHash(const PersistentContractHash &hash);
 
     /**
      * @brief Parses a canonical compatibility-decision SHA-256 identity.
@@ -120,5 +111,5 @@ namespace Horo::Application
      * @param hash Compatibility decision hash.
      * @return Canonical lowercase SHA-256 identity.
      */
-    [[nodiscard]] std::string FormatCompatibilityDecisionHash(const CompatibilityDecisionHash& hash);
-} // namespace Horo::Application
+    [[nodiscard]] std::string FormatCompatibilityDecisionHash(const CompatibilityDecisionHash &hash);
+}  // namespace Horo::Application

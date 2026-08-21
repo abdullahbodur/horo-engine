@@ -1,56 +1,49 @@
-#include <catch2/catch_test_macros.hpp>
-
-#include "Horo/Assets/CookCatalog.h"
-#include "Horo/Assets/AssetCook.h"
-#include "Horo/Foundation/CancellationToken.h"
-#include "Horo/Foundation/Sha256.h"
-#include "Horo/Foundation/Result.h"
 #include "HeadlessMeshCooker.h"
+#include "Horo/Assets/AssetCook.h"
+#include "Horo/Assets/CookCatalog.h"
+#include "Horo/Foundation/CancellationToken.h"
+#include "Horo/Foundation/Result.h"
+#include "Horo/Foundation/Sha256.h"
 
+#include <catch2/catch_test_macros.hpp>
 #include <memory>
 #include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
-namespace
-{
-using namespace Horo;
-using namespace Horo::Assets;
+namespace {
+    using namespace Horo;
+    using namespace Horo::Assets;
 
-AssetId Id(const std::string_view value)
-{
-    auto parsed = AssetId::Parse(value);
-    REQUIRE((parsed.HasValue()));
-    return parsed.Value();
-}
+    AssetId Id(const std::string_view value) {
+        auto parsed = AssetId::Parse(value);
+        REQUIRE((parsed.HasValue()));
+        return parsed.Value();
+    }
 
-AssetTypeId Type(const std::string_view value)
-{
-    auto parsed = AssetTypeId::Parse(value);
-    REQUIRE((parsed.HasValue()));
-    return parsed.Value();
-}
+    AssetTypeId Type(const std::string_view value) {
+        auto parsed = AssetTypeId::Parse(value);
+        REQUIRE((parsed.HasValue()));
+        return parsed.Value();
+    }
 
-AssetCookTargetId Target(const std::string_view value)
-{
-    auto parsed = AssetCookTargetId::Parse(value);
-    REQUIRE((parsed.HasValue()));
-    return parsed.Value();
-}
+    AssetCookTargetId Target(const std::string_view value) {
+        auto parsed = AssetCookTargetId::Parse(value);
+        REQUIRE((parsed.HasValue()));
+        return parsed.Value();
+    }
 
-/**
- * @brief Constructs a fixed-size source payload for testing.
- */
-std::vector<std::uint8_t> SourcePayload(std::size_t byteValue, std::size_t count)
-{
-    return std::vector<std::uint8_t>(count, static_cast<std::uint8_t>(byteValue & 0xFF));
-}
+    /**
+     * @brief Constructs a fixed-size source payload for testing.
+     */
+    std::vector<std::uint8_t> SourcePayload(std::size_t byteValue, std::size_t count) {
+        return std::vector<std::uint8_t>(count, static_cast<std::uint8_t>(byteValue & 0xFF));
+    }
 
-} // namespace
+}  // namespace
 
-TEST_CASE("Headless mesh cooker succeeds with non-empty source for headless-null", "[native]")
-{
+TEST_CASE("Headless mesh cooker succeeds with non-empty source for headless-null", "[native]") {
     auto meshType = Type("core.mesh");
     auto nullTarget = Target("headless-null");
     auto assetId = Id("00000000-0000-0000-0000-000000000001");
@@ -71,12 +64,13 @@ TEST_CASE("Headless mesh cooker succeeds with non-empty source for headless-null
     // The built-in cooker must be available from the catalog.
     CookerCatalog catalog;
     // TODO: register the built-in headless mesh cooker here.
-    REQUIRE((catalog.Register(CookerContribution{
-                                 .contributionId = "horo.asset-cooker.headless-mesh-validation",
-                                 .assetType = meshType,
-                                 .targets = {nullTarget},
-                                 .strategy = CreateHeadlessMeshCooker(),
-                             })
+    REQUIRE((catalog
+                 .Register(CookerContribution{
+                     .contributionId = "horo.asset-cooker.headless-mesh-validation",
+                     .assetType = meshType,
+                     .targets = {nullTarget},
+                     .strategy = CreateHeadlessMeshCooker(),
+                 })
                  .HasValue()));
     auto snapshot = catalog.Publish();
     REQUIRE((snapshot.HasValue()));
@@ -92,8 +86,7 @@ TEST_CASE("Headless mesh cooker succeeds with non-empty source for headless-null
     REQUIRE((!sink.payload.empty()));
 }
 
-TEST_CASE("Headless mesh cooker rejects empty source", "[native]")
-{
+TEST_CASE("Headless mesh cooker rejects empty source", "[native]") {
     auto meshType = Type("core.mesh");
     auto nullTarget = Target("headless-null");
     auto assetId = Id("00000000-0000-0000-0000-000000000002");
@@ -112,12 +105,13 @@ TEST_CASE("Headless mesh cooker rejects empty source", "[native]")
     };
 
     CookerCatalog catalog;
-    REQUIRE((catalog.Register(CookerContribution{
-                                 .contributionId = "horo.asset-cooker.headless-mesh-validation",
-                                 .assetType = meshType,
-                                 .targets = {nullTarget},
-                                 .strategy = CreateHeadlessMeshCooker(),
-                             })
+    REQUIRE((catalog
+                 .Register(CookerContribution{
+                     .contributionId = "horo.asset-cooker.headless-mesh-validation",
+                     .assetType = meshType,
+                     .targets = {nullTarget},
+                     .strategy = CreateHeadlessMeshCooker(),
+                 })
                  .HasValue()));
     auto snapshot = catalog.Publish();
     REQUIRE((snapshot.HasValue()));
@@ -129,8 +123,7 @@ TEST_CASE("Headless mesh cooker rejects empty source", "[native]")
     REQUIRE((result.HasError()));
 }
 
-TEST_CASE("Headless mesh cooker rejects unsupported target", "[native]")
-{
+TEST_CASE("Headless mesh cooker rejects unsupported target", "[native]") {
     auto meshType = Type("core.mesh");
     auto nullTarget = Target("headless-null");
     auto unsupportedTarget = Target("desktop-vulkan");
@@ -150,12 +143,13 @@ TEST_CASE("Headless mesh cooker rejects unsupported target", "[native]")
     };
 
     CookerCatalog catalog;
-    REQUIRE((catalog.Register(CookerContribution{
-                                 .contributionId = "horo.asset-cooker.headless-mesh-validation",
-                                 .assetType = meshType,
-                                 .targets = {nullTarget},
-                                 .strategy = CreateHeadlessMeshCooker(),
-                             })
+    REQUIRE((catalog
+                 .Register(CookerContribution{
+                     .contributionId = "horo.asset-cooker.headless-mesh-validation",
+                     .assetType = meshType,
+                     .targets = {nullTarget},
+                     .strategy = CreateHeadlessMeshCooker(),
+                 })
                  .HasValue()));
     auto snapshot = catalog.Publish();
     REQUIRE((snapshot.HasValue()));
@@ -165,8 +159,7 @@ TEST_CASE("Headless mesh cooker rejects unsupported target", "[native]")
     REQUIRE((strategy == nullptr));
 }
 
-TEST_CASE("Headless mesh cooker honours cancellation", "[native]")
-{
+TEST_CASE("Headless mesh cooker honours cancellation", "[native]") {
     auto meshType = Type("core.mesh");
     auto nullTarget = Target("headless-null");
 
@@ -186,12 +179,13 @@ TEST_CASE("Headless mesh cooker honours cancellation", "[native]")
     };
 
     CookerCatalog catalog;
-    REQUIRE((catalog.Register(CookerContribution{
-                                 .contributionId = "horo.asset-cooker.headless-mesh-validation",
-                                 .assetType = meshType,
-                                 .targets = {nullTarget},
-                                 .strategy = CreateHeadlessMeshCooker(),
-                             })
+    REQUIRE((catalog
+                 .Register(CookerContribution{
+                     .contributionId = "horo.asset-cooker.headless-mesh-validation",
+                     .assetType = meshType,
+                     .targets = {nullTarget},
+                     .strategy = CreateHeadlessMeshCooker(),
+                 })
                  .HasValue()));
     auto snapshot = catalog.Publish();
     REQUIRE((snapshot.HasValue()));
@@ -203,8 +197,7 @@ TEST_CASE("Headless mesh cooker honours cancellation", "[native]")
     REQUIRE((result.HasError()));
 }
 
-TEST_CASE("Headless mesh cooker produces deterministic byte-identical output", "[native]")
-{
+TEST_CASE("Headless mesh cooker produces deterministic byte-identical output", "[native]") {
     auto meshType = Type("core.mesh");
     auto nullTarget = Target("headless-null");
 
@@ -214,12 +207,13 @@ TEST_CASE("Headless mesh cooker produces deterministic byte-identical output", "
     CancellationToken cancellation;
 
     CookerCatalog catalog;
-    REQUIRE((catalog.Register(CookerContribution{
-                                 .contributionId = "horo.asset-cooker.headless-mesh-validation",
-                                 .assetType = meshType,
-                                 .targets = {nullTarget},
-                                 .strategy = CreateHeadlessMeshCooker(),
-                             })
+    REQUIRE((catalog
+                 .Register(CookerContribution{
+                     .contributionId = "horo.asset-cooker.headless-mesh-validation",
+                     .assetType = meshType,
+                     .targets = {nullTarget},
+                     .strategy = CreateHeadlessMeshCooker(),
+                 })
                  .HasValue()));
     auto snapshot = catalog.Publish();
     REQUIRE((snapshot.HasValue()));
@@ -245,8 +239,7 @@ TEST_CASE("Headless mesh cooker produces deterministic byte-identical output", "
     REQUIRE((result1.Value().payload == result2.Value().payload));
 }
 
-TEST_CASE("Headless mesh cooker payload is validation metadata, not source bytes", "[native]")
-{
+TEST_CASE("Headless mesh cooker payload is validation metadata, not source bytes", "[native]") {
     auto meshType = Type("core.mesh");
     auto nullTarget = Target("headless-null");
 
@@ -256,12 +249,13 @@ TEST_CASE("Headless mesh cooker payload is validation metadata, not source bytes
     CancellationToken cancellation;
 
     CookerCatalog catalog;
-    REQUIRE((catalog.Register(CookerContribution{
-                                 .contributionId = "horo.asset-cooker.headless-mesh-validation",
-                                 .assetType = meshType,
-                                 .targets = {nullTarget},
-                                 .strategy = CreateHeadlessMeshCooker(),
-                             })
+    REQUIRE((catalog
+                 .Register(CookerContribution{
+                     .contributionId = "horo.asset-cooker.headless-mesh-validation",
+                     .assetType = meshType,
+                     .targets = {nullTarget},
+                     .strategy = CreateHeadlessMeshCooker(),
+                 })
                  .HasValue()));
     auto snapshot = catalog.Publish();
     REQUIRE((snapshot.HasValue()));

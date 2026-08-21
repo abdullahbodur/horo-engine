@@ -5,24 +5,6 @@
 
 namespace Horo::Editor {
     namespace {
-        [[nodiscard]] HierarchyNodeType ToHierarchyNodeType(const SceneObjectKind kind) noexcept {
-            switch (kind) {
-                case SceneObjectKind::Mesh:
-                    return HierarchyNodeType::Mesh;
-                case SceneObjectKind::Camera:
-                    return HierarchyNodeType::Camera;
-                case SceneObjectKind::Light:
-                    return HierarchyNodeType::Light;
-                case SceneObjectKind::TriggerVolume:
-                    return HierarchyNodeType::TriggerVolume;
-                case SceneObjectKind::AudioSource:
-                    return HierarchyNodeType::AudioSource;
-                case SceneObjectKind::GameObject:
-                    return HierarchyNodeType::Empty;
-            }
-            return HierarchyNodeType::Empty;
-        }
-
         [[nodiscard]] EditorWorkspaceViewCommandData MakeObjectCommand(const EditorWorkspaceViewCommand command, const HierarchyNodeId id) {
             EditorWorkspaceViewCommandData result;
             result.command = command;
@@ -30,6 +12,30 @@ namespace Horo::Editor {
             return result;
         }
     }  // namespace
+
+    /** @copydoc ResolveHierarchyNodeType */
+    HierarchyNodeType ResolveHierarchyNodeType(const SceneObject &object) noexcept {
+        if (object.components.light.has_value()) {
+            switch (object.components.light->kind) {
+                using enum Horo::Runtime::LightKind;
+                case Runtime::LightKind::Directional:
+                    return HierarchyNodeType::DirectionalLight;
+                case Runtime::LightKind::Point:
+                    return HierarchyNodeType::PointLight;
+                case Runtime::LightKind::Spot:
+                    return HierarchyNodeType::SpotLight;
+            }
+        }
+        if (object.components.camera.has_value())
+            return HierarchyNodeType::Camera;
+        if (object.components.audioSource.has_value())
+            return HierarchyNodeType::AudioSource;
+        if (object.kind == SceneObjectKind::Mesh)
+            return HierarchyNodeType::Mesh;
+        if (object.components.triggerVolume.has_value() || object.kind == SceneObjectKind::TriggerVolume)
+            return HierarchyNodeType::TriggerVolume;
+        return HierarchyNodeType::Empty;
+    }
 
     /** @copydoc HierarchyEditSession::Synchronize */
     void HierarchyEditSession::Synchronize(const EditorWorkspaceViewModel &viewModel) {
@@ -41,7 +47,13 @@ namespace Horo::Editor {
                     .id = object.id.value,
                     .parent = object.parent.has_value() ? std::optional<HierarchyNodeId>{object.parent->value} : std::nullopt,
                     .name = object.name,
-                    .type = ToHierarchyNodeType(object.kind),
+                    .type = ResolveHierarchyNodeType(object),
+                    .locallyVisible = object.editorState.visible,
+                    .locallyLocked = object.editorState.locked,
+                    .effectivelyVisible = object.effectivelyVisible,
+                    .effectivelyLocked = object.effectivelyLocked,
+                    .hiddenByParent = object.hiddenByParent,
+                    .lockedByParent = object.lockedByParent,
                 });
             }
             m_model.Replace(m_inputs);
@@ -181,8 +193,39 @@ namespace Horo::Editor {
         return result;
     }
 
-    /** @copydoc HierarchyEditSession::DeleteCommand */
-    EditorWorkspaceViewCommandData HierarchyEditSession::DeleteCommand(const HierarchyNodeId id) {
-        return MakeObjectCommand(EditorWorkspaceViewCommand::DeleteObject, id);
+    /** @copydoc HierarchyEditSession::ToggleVisibilityCommand */
+    EditorWorkspaceViewCommandData HierarchyEditSession::ToggleVisibilityCommand(const HierarchyNode &node) {
+        EditorWorkspaceViewCommandData result;
+        result.command = EditorWorkspaceViewCommand::UpdateObjectEditorState;
+        result.objectPayload = SceneObjectId{node.id};
+        result.editorStatePayload = SceneObjectEditorState{.visible = !node.locallyVisible, .locked = node.locallyLocked};
+        return result;
+    }
+
+    /** @copydoc HierarchyEditSession::ToggleLockCommand */
+    EditorWorkspaceViewCommandData HierarchyEditSession::ToggleLockCommand(const HierarchyNode &node) {
+        EditorWorkspaceViewCommandData result;
+        result.command = EditorWorkspaceViewCommand::UpdateObjectEditorState;
+        result.objectPayload = SceneObjectId{node.id};
+        result.editorStatePayload = SceneObjectEditorState{.visible = node.locallyVisible, .locked = !node.locallyLocked};
+        return result;
+    }
+
+    /** @copydoc HierarchyEditSession::DeleteSelectionCommand */
+    EditorWorkspaceViewCommandData HierarchyEditSession::DeleteSelectionCommand() const {
+        if (m_selectedObjects.empty())
+            return {};
+        EditorWorkspaceViewCommandData result;
+        result.command = EditorWorkspaceViewCommand::DeleteSelectedObjects;
+        result.objectSelection = ObjectSelectionRequest{
+            .objects = m_selectedObjects,
+            .primary = SelectedId().has_value() ? std::optional<SceneObjectId>{SceneObjectId{*SelectedId()}} : std::nullopt,
+        };
+        return result;
+    }
+
+    /** @copydoc HierarchyEditSession::IsDeleteShortcut */
+    bool HierarchyEditSession::IsDeleteShortcut(const Input::Key key, const Input::ModifierState &modifiers) noexcept {
+        return key == Input::Key::Delete || (key == Input::Key::Backspace && (modifiers.shift || modifiers.command));
     }
 }  // namespace Horo::Editor

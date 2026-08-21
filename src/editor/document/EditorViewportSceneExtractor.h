@@ -8,9 +8,11 @@
 #include "Horo/Foundation/Result.h"
 #include "Horo/Runtime/Scene/PrimitiveMesh.h"
 #include "Horo/Runtime/Scene/RuntimeScene.h"
+#include "editor/document/EditorAssetMeshCache.h"
 #include "editor/document/SceneDocument.h"
 #include "editor/renderer/EditorViewportScene.h"
 
+#include <cstdint>
 #include <span>
 #include <vector>
 
@@ -24,6 +26,7 @@ namespace Horo::Editor {
         std::vector<EditorViewportMeshResourceView> meshResources;
         std::vector<EditorViewportInstance> instances;
         std::vector<SceneObjectId> instanceObjects;
+        std::vector<std::uint8_t> instancePickable; /**< Parallel 0/1 editor-picking policy for render instances. */
         std::vector<Render::RenderLight> lights;
         std::vector<SceneObjectId> lightObjects;
 
@@ -36,10 +39,16 @@ namespace Horo::Editor {
         void Replace(EditorViewportSceneSnapshot snapshot);
         void Clear() noexcept;
         [[nodiscard]] EditorViewportSceneView View() const noexcept;
+
         /** @brief Returns the document revision represented by the current handoff snapshot. */
-        [[nodiscard]] DocumentRevision Revision() const noexcept { return m_snapshot.documentRevision; }
+        [[nodiscard]] DocumentRevision Revision() const noexcept {
+            return m_snapshot.documentRevision;
+        }
+
         /** @brief Returns the runtime-scene identity represented by the current handoff snapshot. */
-        [[nodiscard]] Runtime::SceneRuntimeId RuntimeSceneId() const noexcept { return m_snapshot.runtimeSceneId; }
+        [[nodiscard]] Runtime::SceneRuntimeId RuntimeSceneId() const noexcept {
+            return m_snapshot.runtimeSceneId;
+        }
 
     private:
         EditorViewportSceneSnapshot m_snapshot{};
@@ -56,10 +65,10 @@ namespace Horo::Editor {
                                                                                        SceneObjectId object);
 
     /** @brief Extracts supported renderable instances from an immutable runtime scene view. */
-    [[nodiscard]] Result<EditorViewportSceneSnapshot> ExtractEditorViewportScene(Runtime::RuntimeSceneView scene,
-                                                                                 DocumentRevision documentRevision,
-                                                                                 const EditorViewportCamera &camera,
-                                                                                 Runtime::PrimitiveMeshCache &meshCache);
+    [[nodiscard]] Result<EditorViewportSceneSnapshot> ExtractEditorViewportScene(
+        Runtime::RuntimeSceneView scene, DocumentRevision documentRevision, const EditorViewportCamera &camera,
+        Runtime::PrimitiveMeshCache &meshCache, const SceneDocumentSnapshot *document = nullptr,
+        const EditorAssetMeshCache *assetMeshes = nullptr, bool respectEditorVisibility = true);
 
     /** @brief Applies editor-owned transient transform overlays without mutating runtime state. */
     [[nodiscard]] Result<void> ApplyEditorViewportTransformPreview(Runtime::RuntimeSceneView scene,

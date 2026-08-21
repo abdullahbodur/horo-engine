@@ -30,76 +30,80 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] ImVec4 StatusColor(const OperationState state) noexcept {
+            using enum OperationState;
             switch (state) {
-                case OperationState::Failed:
+                case Failed:
                     return Theme::Err();
-                case OperationState::Running:
+                case Running:
                     return Theme::Accent();
-                case OperationState::Waiting:
-                case OperationState::Cancelling:
-                case OperationState::Cancelled:
+                case Waiting:
+                case Cancelling:
+                case Cancelled:
                     return Theme::Warn();
-                case OperationState::Succeeded:
+                case Succeeded:
                     return Theme::Ok();
-                case OperationState::Queued:
+                case Queued:
                     return Theme::Muted();
             }
             return Theme::Text();
         }
 
         [[nodiscard]] const char *TechnicalStatusText(const OperationState state) noexcept {
+            using enum OperationState;
             switch (state) {
-                case OperationState::Queued:
+                case Queued:
                     return "QUEUED";
-                case OperationState::Running:
+                case Running:
                     return "RUNNING";
-                case OperationState::Waiting:
+                case Waiting:
                     return "WAITING";
-                case OperationState::Cancelling:
+                case Cancelling:
                     return "CANCELLING";
-                case OperationState::Succeeded:
+                case Succeeded:
                     return "OK";
-                case OperationState::Failed:
+                case Failed:
                     return "FAILED";
-                case OperationState::Cancelled:
+                case Cancelled:
                     return "CANCELLED";
             }
             return "QUEUED";
         }
 
         [[nodiscard]] const char *StatusLocalizationKey(const OperationState state) noexcept {
+            using enum OperationState;
             switch (state) {
-                case OperationState::Queued:
+                case Queued:
                     return "workspace.global_dock.operations.state.queued";
-                case OperationState::Running:
+                case Running:
                     return "workspace.global_dock.operations.state.running";
-                case OperationState::Waiting:
+                case Waiting:
                     return "workspace.global_dock.operations.state.waiting";
-                case OperationState::Cancelling:
+                case Cancelling:
                     return "workspace.global_dock.operations.state.cancelling";
-                case OperationState::Succeeded:
+                case Succeeded:
                     return "workspace.global_dock.operations.state.succeeded";
-                case OperationState::Failed:
+                case Failed:
                     return "workspace.global_dock.operations.state.failed";
-                case OperationState::Cancelled:
+                case Cancelled:
                     return "workspace.global_dock.operations.state.cancelled";
             }
             return "workspace.global_dock.operations.state.queued";
         }
 
         [[nodiscard]] std::string OperationTitle(const OperationRecord &operation, const EditorGuiContext &context) {
+            using enum OperationKind;
             switch (operation.kind) {
-                case OperationKind::Build:
+                case Build:
                     return context.localization.Get("editor", "workspace.global_dock.operations.kind.build");
-                case OperationKind::Cook:
+                case Cook:
                     return context.localization.Get("editor", "workspace.global_dock.operations.kind.cook");
-                case OperationKind::Import:
+                case Import:
                     return context.localization.Get("editor", "workspace.global_dock.operations.kind.import");
-                case OperationKind::Index:
+                case Index:
                     return context.localization.Get("editor", "workspace.global_dock.operations.kind.index");
-                case OperationKind::Validation:
+                case Validation:
                     return context.localization.Get("editor", "workspace.global_dock.operations.kind.validation");
-                case OperationKind::Other:
+                case Other:
                     return operation.title;
             }
             return operation.title;
@@ -118,9 +122,7 @@ namespace Horo::Editor {
         [[nodiscard]] std::string FormatProgress(const std::optional<float> progress) {
             if (!progress.has_value())
                 return "—";
-            char text[8];
-            std::snprintf(text, sizeof(text), "%d%%", static_cast<int>(std::clamp(*progress, 0.0F, 1.0F) * 100.0F + 0.5F));
-            return text;
+            return std::format("{}%", static_cast<int>(std::clamp(*progress, 0.0F, 1.0F) * 100.0F + 0.5F));
         }
     }  // namespace
 
@@ -167,8 +169,10 @@ namespace Horo::Editor {
                  stackedToolbar ? controlOrigin.y + ToolbarHeight() + Ui::ScaledLayoutValue(ControlGap) : controlOrigin.y});
 
             const std::string &hint = context.localization.Get("editor", "workspace.global_dock.operations.search");
-            if (Ui::InputTextControl("##OperationsSearch", m_search.data(), m_search.size(), fonts, false, searchWidth, hint.c_str(), 0.0F,
-                                     Ui::ComponentSize::Small))
+            if (Ui::InputTextControl("##OperationsSearch", m_search.data(), m_search.size(), fonts,
+                                     Ui::InputTextOptions{.width = searchWidth,
+                                                          .hint = hint.c_str(),
+                                                          .componentSize = Ui::ComponentSize::Small}))
                 m_filterDirty = true;
 
             ImGui::SameLine(0.0F, Ui::ScaledLayoutValue(ControlGap));
@@ -211,8 +215,8 @@ namespace Horo::Editor {
         const bool wasAtBottom = ImGui::GetScrollY() >= std::max(0.0F, ImGui::GetScrollMaxY() - 2.0F);
 
         if (m_snapshot.droppedTerminalCount > 0U) {
-            const std::string notice = context.localization.Get("editor", "workspace.global_dock.operations.dropped") + " " +
-                                       std::to_string(m_snapshot.droppedTerminalCount);
+            const std::string notice = std::format("{} {}", context.localization.Get("editor", "workspace.global_dock.operations.dropped"),
+                                                   m_snapshot.droppedTerminalCount);
             Ui::Hint(notice.c_str(), fonts);
         }
 
@@ -233,11 +237,11 @@ namespace Horo::Editor {
         const std::string &cancelLabel = context.localization.Get("editor", "workspace.global_dock.operations.cancel");
         std::vector<Ui::TableRow> rows;
         rows.reserve(m_filteredIndices.size());
+        using enum OperationState;
         for (const std::size_t operationIndex : m_filteredIndices) {
             const OperationRecord &operation = m_snapshot.operations[operationIndex];
-            const bool canCancel = operation.cancellable && operation.state != OperationState::Cancelling &&
-                                   operation.state != OperationState::Succeeded && operation.state != OperationState::Failed &&
-                                   operation.state != OperationState::Cancelled;
+            const bool canCancel = operation.cancellable && operation.state != Cancelling && operation.state != Succeeded &&
+                                   operation.state != Failed && operation.state != Cancelled;
             rows.push_back(
                 {.cells = {{context.localization.Get("editor", StatusLocalizationKey(operation.state)), StatusColor(operation.state)},
                            {OperationTitle(operation, context), Theme::Text()},

@@ -26,34 +26,57 @@ namespace Horo::Log {
             thread_local MdcStack state;
             return state;
         }
+
+        std::size_t PushContextFrame(std::vector<MdcField> fields) {
+            auto &state = MdcState();
+            const std::size_t index = state.frames.size();
+            state.frames.push_back(std::move(fields));
+            return index;
+        }
+
+        void PopContextFrame(const std::size_t index) {
+            auto &frames = MdcState().frames;
+            if (index >= frames.size())
+                return;
+            assert(index == frames.size() - 1 && "Log context destroyed out of LIFO order");
+            frames.erase(frames.begin() + static_cast<std::ptrdiff_t>(index));
+        }
     }  // namespace
 
+    /** @copydoc LogContextSnapshot::LogContextSnapshot */
+    LogContextSnapshot::LogContextSnapshot(std::vector<MdcField> fields) : fields_(std::move(fields)) {}
+
+    /** @copydoc LogContextSnapshot::Fields */
+    std::span<const MdcField> LogContextSnapshot::Fields() const noexcept {
+        return fields_;
+    }
+
+    /** @copydoc LogContextSnapshot::With */
+    LogContextSnapshot LogContextSnapshot::With(std::string key, std::string value) const {
+        std::vector<MdcField> derived = fields_;
+        const auto existing = std::ranges::find(derived, key, &MdcField::first);
+        if (existing == derived.end())
+            derived.emplace_back(std::move(key), std::move(value));
+        else
+            existing->second = std::move(value);
+        return LogContextSnapshot{std::move(derived)};
+    }
+
     std::size_t LogContext::PushFrame(std::vector<MdcField> fields) {
-        auto &state = MdcState();
-        const std::size_t index = state.frames.size();
-        state.frames.push_back(std::move(fields));
-        return index;
+        return PushContextFrame(std::move(fields));
     }
 
     LogContext::~LogContext() {
-        auto &frames = MdcState().frames;
+        PopContextFrame(m_frameIndex);
+    }
 
-        // Already removed (e.g. this object was moved-from) — nothing to do.
-        if (m_frameIndex >= frames.size())
-            return;
+    /** @copydoc ScopedLogContext::ScopedLogContext */
+    ScopedLogContext::ScopedLogContext(const LogContextSnapshot &snapshot)
+        : frameIndex_(PushContextFrame({snapshot.Fields().begin(), snapshot.Fields().end()})) {}
 
-        // `LogContext` is only correct under strict LIFO (RAII) destruction: the
-        // frame at m_frameIndex must be the topmost one. If some outer context
-        // is destroyed before an inner one, erasing here would shift every
-        // subsequent frame's real position without updating the still-live
-        // LogContext objects that reference them — a silent, hard-to-diagnose
-        // corruption of the MDC stack. Assert loudly in debug builds instead of
-        // eating the bug quietly; in release builds we still fall back to the
-        // erase-by-index behaviour as a best-effort guard rather than crashing.
-        assert(m_frameIndex == frames.size() - 1 && "LogContext destroyed out of LIFO order — MDC frame indices for "
-                                                    "other still-live LogContext objects are now stale");
-
-        frames.erase(frames.begin() + static_cast<std::ptrdiff_t>(m_frameIndex));
+    /** @copydoc ScopedLogContext::~ScopedLogContext */
+    ScopedLogContext::~ScopedLogContext() {
+        PopContextFrame(frameIndex_);
     }
 
     std::vector<MdcField> GetMdcFields() {
@@ -80,5 +103,10 @@ namespace Horo::Log {
 
     void LogContext::ClearAll() {
         MdcState().frames.clear();
+    }
+
+    /** @copydoc CaptureLogContext */
+    LogContextSnapshot CaptureLogContext() {
+        return LogContextSnapshot{GetMdcFields()};
     }
 }  // namespace Horo::Log

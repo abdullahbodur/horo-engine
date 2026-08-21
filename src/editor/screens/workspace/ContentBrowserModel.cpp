@@ -1,6 +1,7 @@
 #include "ContentBrowserModel.h"
 
 #include "Horo/Assets/AssetImportMetadata.h"
+#include "Horo/Assets/MeshEditorPayload.h"
 #include "Horo/Foundation/PathUtils.h"
 
 #include <algorithm>
@@ -36,15 +37,7 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] bool HasPathPrefix(const std::filesystem::path &root, const std::filesystem::path &candidate) {
-            auto rootPart = root.begin();
-            auto candidatePart = candidate.begin();
-            while (rootPart != root.end() && candidatePart != candidate.end()) {
-                if (*rootPart != *candidatePart)
-                    return false;
-                ++rootPart;
-                ++candidatePart;
-            }
-            return rootPart == root.end();
+            return Horo::Foundation::Paths::HasPathPrefix(root, candidate);
         }
 
         [[nodiscard]] std::vector<ContentBrowserBreadcrumb> BuildBreadcrumbs(const std::filesystem::path &root,
@@ -196,14 +189,14 @@ namespace Horo::Editor {
             std::uint32_t positionCount = 0;
             std::uint32_t faceCount = 0;
             if (!input || !ReadLittleEndian32(input, schemaVersion) || !ReadLittleEndian32(input, positionCount) ||
-                !ReadLittleEndian32(input, faceCount) || schemaVersion != 1 || positionCount == 0) {
+                !ReadLittleEndian32(input, faceCount) || schemaVersion != Assets::MeshEditorPayloadSchemaVersion || positionCount == 0) {
                 return {};
             }
             static_cast<void>(faceCount);
 
-            const std::uintmax_t requiredSize =
-                static_cast<std::uintmax_t>(kMeshPositionPayloadOffset) + static_cast<std::uintmax_t>(positionCount) * 3U * sizeof(float);
-            if (requiredSize > payloadSize)
+            if (const std::uintmax_t requiredSize = static_cast<std::uintmax_t>(kMeshPositionPayloadOffset) +
+                                                    static_cast<std::uintmax_t>(positionCount) * 3U * sizeof(float);
+                requiredSize > payloadSize)
                 return {};
 
             const std::size_t sampleCount = std::min<std::size_t>(positionCount, kMaximumMeshPreviewPoints);
@@ -249,14 +242,15 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] Assets::AssetPreviewFallback InferFallback(const std::string_view assetType) {
+            using enum Assets::AssetPreviewFallback;
             if (assetType.find("mesh") != std::string_view::npos)
-                return Assets::AssetPreviewFallback::Mesh;
+                return Mesh;
             if (assetType.find("texture") != std::string_view::npos || assetType.find("image") != std::string_view::npos) {
-                return Assets::AssetPreviewFallback::Image;
+                return Image;
             }
             if (assetType.find("audio") != std::string_view::npos)
-                return Assets::AssetPreviewFallback::Audio;
-            return Assets::AssetPreviewFallback::Generic;
+                return Audio;
+            return Generic;
         }
 
         [[nodiscard]] bool ContainsCaseInsensitive(const std::string_view text, const std::string_view needle) {
@@ -264,22 +258,22 @@ namespace Horo::Editor {
                 return true;
             if (needle.size() > text.size())
                 return false;
-            return std::search(text.begin(), text.end(), needle.begin(), needle.end(), [](const char left, const char right) {
+            return std::ranges::search(text, needle, [](const char left, const char right) {
                 return std::tolower(static_cast<unsigned char>(left)) == std::tolower(static_cast<unsigned char>(right));
-            }) != text.end();
+            }).begin() != text.end();
         }
 
         [[nodiscard]] int CompareCaseInsensitive(const std::string_view left, const std::string_view right) {
-            const auto mismatch = std::mismatch(left.begin(), left.end(), right.begin(), right.end(), [](const char lhs, const char rhs) {
+            const auto [leftMismatch, rightMismatch] = std::ranges::mismatch(left, right, [](const char lhs, const char rhs) {
                 return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs));
             });
-            if (mismatch.first == left.end() || mismatch.second == right.end()) {
+            if (leftMismatch == left.end() || rightMismatch == right.end()) {
                 if (left.size() == right.size())
                     return left.compare(right);
                 return left.size() < right.size() ? -1 : 1;
             }
-            const auto lhs = std::tolower(static_cast<unsigned char>(*mismatch.first));
-            const auto rhs = std::tolower(static_cast<unsigned char>(*mismatch.second));
+            const auto lhs = std::tolower(static_cast<unsigned char>(*leftMismatch));
+            const auto rhs = std::tolower(static_cast<unsigned char>(*rightMismatch));
             return lhs < rhs ? -1 : 1;
         }
     }  // namespace
@@ -293,8 +287,8 @@ namespace Horo::Editor {
         const std::filesystem::path lexicalTarget = std::filesystem::absolute(absoluteTarget, error).lexically_normal();
         if (error)
             return false;
-        const std::filesystem::file_status lexicalStatus = std::filesystem::symlink_status(lexicalTarget, error);
-        if (error || std::filesystem::is_symlink(lexicalStatus))
+        if (const std::filesystem::file_status lexicalStatus = std::filesystem::symlink_status(lexicalTarget, error);
+            error || std::filesystem::is_symlink(lexicalStatus))
             return false;
 
         const std::filesystem::path root = NormalizeAbsolute(absoluteRoot);
@@ -411,12 +405,14 @@ namespace Horo::Editor {
                 entry.previewFallback = InferFallback(entry.assetType);
                 if (importerCatalog != nullptr && !entry.assetType.empty()) {
                     const auto parsedType = Assets::AssetTypeId::Parse(entry.assetType);
-                    const Assets::AssetImporterContribution *contribution =
-                        !entry.importerContributionId.empty()
-                            ? importerCatalog->FindById(entry.importerContributionId)
-                            : (!legacySourceExtension.empty()
-                                   ? importerCatalog->FindContributionByExtension(legacySourceExtension)
-                                   : (parsedType.HasValue() ? importerCatalog->FindPreviewContribution(parsedType.Value()) : nullptr));
+                    const Assets::AssetImporterContribution *contribution = nullptr;
+                    if (!entry.importerContributionId.empty()) {
+                        contribution = importerCatalog->FindById(entry.importerContributionId);
+                    } else if (!legacySourceExtension.empty()) {
+                        contribution = importerCatalog->FindContributionByExtension(legacySourceExtension);
+                    } else if (parsedType.HasValue()) {
+                        contribution = importerCatalog->FindPreviewContribution(parsedType.Value());
+                    }
                     if (contribution != nullptr) {
                         entry.importerContributionId = contribution->contributionId;
                         if (entry.importerModuleId.empty())

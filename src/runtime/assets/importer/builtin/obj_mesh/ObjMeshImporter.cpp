@@ -7,9 +7,11 @@
 #include "../../../AssetErrors.h"
 #include "../fbx_mesh/FbxMeshImporter.h"
 #include "Horo/Assets/AssetRegistry.h"
+#include "Horo/Assets/MeshEditorPayload.h"
 #include "ObjMeshPreviewProvider.h"
 
 #include <algorithm>
+#include <bit>
 #include <cctype>
 #include <cstdint>
 #include <cstring>
@@ -26,14 +28,14 @@ namespace Horo::Assets {
                 out.push_back(static_cast<std::uint8_t>((value >> (i * 8)) & 0xFF));
         }
 
-        void WriteFloat(std::vector<std::uint8_t> &out, float value) {
-            std::uint32_t raw;
-            std::memcpy(&raw, &value, sizeof(raw));
-            WriteLE32(out, raw);
+        void WriteFloat(std::vector<std::uint8_t> &out, const float value) {
+            WriteLE32(out, std::bit_cast<std::uint32_t>(value));
         }
 
         struct Vec3 {
-            float x = 0, y = 0, z = 0;
+            float x = 0.0F;
+            float y = 0.0F;
+            float z = 0.0F;
         };
 
         struct FaceVertex {
@@ -141,8 +143,12 @@ namespace Horo::Assets {
                 PreparedAssetImport result;
                 result.type = AssetTypeId::Parse("core.mesh").Value();
 
-                float minX = obj.positions[0].x, minY = obj.positions[0].y, minZ = obj.positions[0].z;
-                float maxX = minX, maxY = minY, maxZ = minZ;
+                float minX = obj.positions[0].x;
+                float minY = obj.positions[0].y;
+                float minZ = obj.positions[0].z;
+                float maxX = minX;
+                float maxY = minY;
+                float maxZ = minZ;
                 for (const auto &p : obj.positions) {
                     minX = std::min(minX, p.x);
                     maxX = std::max(maxX, p.x);
@@ -153,7 +159,7 @@ namespace Horo::Assets {
                 }
 
                 auto &payload = result.editorPayload;
-                WriteLE32(payload, 2);
+                WriteLE32(payload, MeshEditorPayloadSchemaVersion);
                 WriteLE32(payload, static_cast<std::uint32_t>(obj.positions.size()));
                 WriteLE32(payload, static_cast<std::uint32_t>(obj.faces.size()));
                 WriteFloat(payload, minX);
@@ -163,9 +169,9 @@ namespace Horo::Assets {
                 WriteFloat(payload, maxY);
                 WriteFloat(payload, maxZ);
 
-                std::uint32_t posSize = static_cast<std::uint32_t>(obj.positions.size() * 3 * sizeof(float));
-                std::uint32_t tcSize = static_cast<std::uint32_t>(obj.texcoords.size() * 2 * sizeof(float));
-                std::uint32_t nSize = static_cast<std::uint32_t>(obj.normals.size() * 3 * sizeof(float));
+                const auto posSize = static_cast<std::uint32_t>(obj.positions.size() * 3 * sizeof(float));
+                const auto tcSize = static_cast<std::uint32_t>(obj.texcoords.size() * 2 * sizeof(float));
+                const auto nSize = static_cast<std::uint32_t>(obj.normals.size() * 3 * sizeof(float));
                 WriteLE32(payload, posSize);
                 WriteLE32(payload, tcSize);
                 WriteLE32(payload, nSize);
@@ -202,7 +208,7 @@ namespace Horo::Assets {
                     const auto a = resolvePositionIndex(face[0].positionIndex);
                     const auto b = resolvePositionIndex(face[1].positionIndex);
                     const auto c = resolvePositionIndex(face[2].positionIndex);
-                    if (!a || !b || !c)
+                    if (!a.has_value() || !b.has_value() || !c.has_value())
                         continue;
                     triangleIndices.push_back(*a);
                     triangleIndices.push_back(*b);

@@ -293,7 +293,8 @@ namespace Horo::Editor {
             ImGui::PushID(label);
             ImGui::BeginGroup();
             Ui::FieldLabel(label, ctx.theme.fonts);
-            const bool changed = Ui::InputTextControl(opts.inputId, value, maxSize, ctx.theme.fonts, opts.error, width);
+            const bool changed = Ui::InputTextControl(opts.inputId, value, maxSize, ctx.theme.fonts,
+                                                      Ui::InputTextOptions{.error = opts.error, .width = width});
             if (opts.error && opts.errorText)
                 Ui::ErrorText(opts.errorText, ctx.theme.fonts);
             else if (opts.hint)
@@ -323,22 +324,8 @@ namespace Horo::Editor {
             return changed;
         }
 
-        [[nodiscard]] const RendererBackendAvailability &RendererEntry(const void *context, const int index) {
-            const auto &availability = *static_cast<const RendererAvailabilitySnapshot *>(context);
+        [[nodiscard]] const RendererBackendAvailability &RendererEntry(const RendererAvailabilitySnapshot &availability, const int index) {
             return availability.Entries()[static_cast<std::size_t>(index)];
-        }
-
-        [[nodiscard]] const char *RendererEntryLabel(const void *context, const int index) {
-            return RendererEntry(context, index).displayName.c_str();
-        }
-
-        [[nodiscard]] bool RendererEntryEnabled(const void *context, const int index) {
-            return RendererEntry(context, index).IsSelectable();
-        }
-
-        [[nodiscard]] const char *RendererEntryDisabledTooltip(const void *context, const int index) {
-            const RendererBackendAvailability &entry = RendererEntry(context, index);
-            return entry.diagnostic.empty() ? "Renderer is unavailable." : entry.diagnostic.c_str();
         }
 
         bool DrawRendererBackendField(int &value, const RendererAvailabilitySnapshot &availability, const float width,
@@ -353,10 +340,21 @@ namespace Horo::Editor {
             ImGui::BeginGroup();
             Ui::FieldLabel("RENDER BACKEND", ctx.theme.fonts);
             ImGui::PushItemWidth(width);
-            const Ui::ComboItemSource source{.context = &availability,
-                                             .label = RendererEntryLabel,
-                                             .enabled = RendererEntryEnabled,
-                                             .disabledTooltip = RendererEntryDisabledTooltip};
+            const Ui::ComboItemSource source{
+                .label =
+                    [&availability](const int index) {
+                return RendererEntry(availability, index).displayName.c_str();
+            },
+                .enabled =
+                    [&availability](const int index) {
+                return RendererEntry(availability, index).IsSelectable();
+            },
+                .disabledTooltip =
+                    [&availability](const int index) {
+                const RendererBackendAvailability &entry = RendererEntry(availability, index);
+                return entry.diagnostic.empty() ? "Renderer is unavailable." : entry.diagnostic.c_str();
+            },
+            };
             const bool changed = Ui::ComboControl("##value", &value, static_cast<int>(entries.size()), source, ctx.theme.fonts);
             ImGui::PopItemWidth();
             const RendererBackendAvailability &selected = entries[static_cast<std::size_t>(value)];
@@ -711,8 +709,8 @@ namespace Horo::Editor {
             constexpr float buttonWidth = 38.0F;
             constexpr float gapWidth = 8.0F;
             const float inputWidth = ImGui::GetContentRegionAvail().x - (buttonWidth + gapWidth);
-            (void)Ui::InputTextControl("###project_creation_location", st.projectPath, 512, ctx.theme.fonts, pathErr != nullptr,
-                                       std::max(inputWidth, 1.0F));
+            (void)Ui::InputTextControl("###project_creation_location", st.projectPath, 512, ctx.theme.fonts,
+                                       Ui::InputTextOptions{.error = pathErr != nullptr, .width = std::max(inputWidth, 1.0F)});
             controller.SetProjectPath(st.projectPath);
             ImGui::SameLine(0.0F, gapWidth);
             const std::string selectPrompt = ctx.localization.Get("editor", "project_creation.identity.location.select");

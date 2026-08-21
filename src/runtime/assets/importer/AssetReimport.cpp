@@ -6,6 +6,7 @@
 
 #include "../AssetErrors.h"
 #include "Horo/Foundation/Logging/Logger.h"
+#include "Horo/Foundation/PathUtils.h"
 
 #include <atomic>
 #include <chrono>
@@ -26,21 +27,12 @@ namespace Horo::Assets {
         }
 
         [[nodiscard]] bool HasPathPrefix(const std::filesystem::path &root, const std::filesystem::path &candidate) {
-            auto rootPart = root.begin();
-            auto candidatePart = candidate.begin();
-            while (rootPart != root.end() && candidatePart != candidate.end()) {
-                if (*rootPart != *candidatePart)
-                    return false;
-                ++rootPart;
-                ++candidatePart;
-            }
-            return rootPart == root.end();
+            return Horo::Foundation::Paths::HasPathPrefix(root, candidate);
         }
 
         [[nodiscard]] std::filesystem::path TemporarySibling(const std::filesystem::path &destination, const std::string_view role) {
             const std::uint64_t sequence = ++g_reimportTemporarySequence;
-            return destination.parent_path() /
-                   ("." + destination.filename().string() + ".horo-reimport-" + std::to_string(sequence) + "-" + std::string{role});
+            return destination.parent_path() / std::format(".{}.horo-reimport-{}-{}", destination.filename().string(), sequence, role);
         }
 
         [[nodiscard]] std::span<const std::byte> AsBytes(const std::vector<std::uint8_t> &bytes) {
@@ -50,7 +42,7 @@ namespace Horo::Assets {
             };
         }
 
-        [[nodiscard]] std::span<const std::byte> AsBytes(const std::string &text) {
+        [[nodiscard]] std::span<const std::byte> AsBytes(const std::string_view text) {
             return {
                 reinterpret_cast<const std::byte *>(text.data()),
                 text.size(),
@@ -93,8 +85,8 @@ namespace Horo::Assets {
         }
 
         std::error_code error;
-        const auto targetStatus = std::filesystem::symlink_status(assetPath, error);
-        if (error || std::filesystem::is_symlink(targetStatus) || !std::filesystem::is_regular_file(targetStatus)) {
+        if (const auto targetStatus = std::filesystem::symlink_status(assetPath, error);
+            error || std::filesystem::is_symlink(targetStatus) || !std::filesystem::is_regular_file(targetStatus)) {
             return Result<AssetReimportReport>::Failure(MakeError(AssetErrors::SourceMissing, "Reimport target is missing or unsafe."));
         }
 
@@ -119,7 +111,7 @@ namespace Horo::Assets {
         if (sourceResult.HasError())
             return Result<AssetReimportReport>::Failure(sourceResult.ErrorValue());
         std::vector<std::uint8_t> source = std::move(sourceResult).Value();
-        const std::string sourceHash = HashAssetImportSource(source);
+        std::string sourceHash = HashAssetImportSource(source);
 
         auto settingsResult = ResolveImportSettings(*contribution, metadata.importSettings);
         if (settingsResult.HasError())
@@ -201,8 +193,8 @@ namespace Horo::Assets {
             return Result<AssetReimportReport>::Failure(result.ErrorValue());
         }
 
-        auto rebuilt = RebuildAssetRegistry(*request.registry, projectRoot, AssetRegistryOpenMode::Edit);
-        if (rebuilt.HasError() || rebuilt.Value().status == AssetRegistryBuildStatus::Failed) {
+        if (const auto rebuilt = RebuildAssetRegistry(*request.registry, projectRoot, AssetRegistryOpenMode::Edit);
+            rebuilt.HasError() || rebuilt.Value().status == AssetRegistryBuildStatus::Failed) {
             static_cast<void>(RestorePair(*request.files, payloadBackup, assetPath, metadataBackup, metadataPath));
             static_cast<void>(RebuildAssetRegistry(*request.registry, projectRoot, AssetRegistryOpenMode::Edit));
             cleanup();

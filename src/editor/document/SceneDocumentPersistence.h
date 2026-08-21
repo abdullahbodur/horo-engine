@@ -100,7 +100,7 @@ namespace Horo::Editor {
                                                                   const std::filesystem::path &absoluteScenePath,
                                                                   const SceneDocumentSnapshot &snapshot,
                                                                   const SceneFileFingerprint &expectedFingerprint, bool overwriteConflict,
-                                                                  ProjectMutationCoordinator &mutations, DurableFileSystem &files);
+                                                                  const ProjectMutationCoordinator &mutations, DurableFileSystem &files);
 
     /**
      * @brief Durably writes a scene snapshot to a new user-selected project path.
@@ -113,9 +113,12 @@ namespace Horo::Editor {
      * @return Saved, DestinationExists without mutation, Conflict when the destination
      * changed during the operation, or a typed persistence error.
      */
-    [[nodiscard]] Result<ProjectSceneDestinationSaveResult> SaveProjectSceneToPath(
-        const std::filesystem::path &absoluteProjectRoot, const std::filesystem::path &absoluteScenePath,
-        const SceneDocumentSnapshot &snapshot, bool overwriteExisting, ProjectMutationCoordinator &mutations, DurableFileSystem &files);
+    [[nodiscard]] Result<ProjectSceneDestinationSaveResult> SaveProjectSceneToPath(const std::filesystem::path &absoluteProjectRoot,
+                                                                                   const std::filesystem::path &absoluteScenePath,
+                                                                                   const SceneDocumentSnapshot &snapshot,
+                                                                                   bool overwriteExisting,
+                                                                                   const ProjectMutationCoordinator &mutations,
+                                                                                   DurableFileSystem &files);
 
     /**
      * @brief Captures the bounded byte identity of a canonical scene without parsing or mutation.
@@ -140,7 +143,7 @@ namespace Horo::Editor {
     [[nodiscard]] Result<void> WriteProjectSceneRecovery(const std::filesystem::path &absoluteProjectRoot,
                                                          const std::filesystem::path &absoluteScenePath,
                                                          const SceneDocumentSnapshot &snapshot, DocumentRevision savedRevision,
-                                                         DocumentStateId savedState, ProjectMutationCoordinator &mutations,
+                                                         DocumentStateId savedState, const ProjectMutationCoordinator &mutations,
                                                          DurableFileSystem &files);
 
     /**
@@ -160,5 +163,5 @@ namespace Horo::Editor {
      * @return Success when absent or durably removed.
      */
     [[nodiscard]] Result<void> DiscardProjectSceneRecovery(const std::filesystem::path &absoluteProjectRoot,
-                                                           ProjectMutationCoordinator &mutations, DurableFileSystem &files);
+                                                           const ProjectMutationCoordinator &mutations, DurableFileSystem &files);
 }  // namespace Horo::Editor

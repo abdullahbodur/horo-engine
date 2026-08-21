@@ -9,6 +9,7 @@
 #include "../obj_mesh/ObjMeshPreviewProvider.h"
 #include "FbxMeshParser.h"
 #include "Horo/Assets/AssetRegistry.h"
+#include "Horo/Assets/MeshEditorPayload.h"
 
 #include <algorithm>
 #include <array>
@@ -59,7 +60,7 @@ namespace Horo::Assets {
                     }
                 }
 
-                WriteLE32(payload, 2);
+                WriteLE32(payload, MeshEditorPayloadSchemaVersion);
                 WriteLE32(payload, static_cast<std::uint32_t>(geometry.positions.size()));
                 WriteLE32(payload, static_cast<std::uint32_t>(geometry.triangleIndices.size() / 3U));
                 for (const float component : minimum)

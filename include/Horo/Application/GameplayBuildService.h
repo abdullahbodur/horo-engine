@@ -93,15 +93,15 @@ namespace Horo::Application {
         GameplayBuildService &operator=(const GameplayBuildService &) = delete;
 
         /** @brief Starts, joins, or coalesces a project build. */
-        [[nodiscard]] Result<GameplayBuildSessionId> Start(GameplayBuildRequest request);
+        [[nodiscard]] Result<GameplayBuildSessionId> Start(GameplayBuildRequest request) const;
         /** @brief Returns the latest session snapshot. */
         [[nodiscard]] std::optional<GameplayBuildSnapshot> Query(GameplayBuildSessionId id) const;
         /** @brief Requests cooperative cancellation for an active session. */
-        [[nodiscard]] bool RequestCancel(GameplayBuildSessionId id);
+        [[nodiscard]] bool RequestCancel(GameplayBuildSessionId id) const;
         /** @brief Reports whether the last validated build matches current project inputs. */
         [[nodiscard]] bool IsUpToDate(const GameplayBuildRequest &request) const;
         /** @brief Cancels and joins all service-owned work. */
-        void Shutdown() noexcept;
+        void Shutdown() const noexcept;
 
     private:
         std::shared_ptr<State> state_;

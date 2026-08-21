@@ -1,7 +1,6 @@
 #include "Horo/Platform/PlatformErrors.h"
 
-namespace Horo::PlatformErrors
-{
+namespace Horo::PlatformErrors {
     const ErrorDomainId Domain{"horo.platform"};
 
     const ErrorCodeDescriptor InvalidFormat{
@@ -43,4 +42,4 @@ namespace Horo::PlatformErrors
         .retryable = true,
         .userActionable = false,
     };
-} // namespace Horo::PlatformErrors
+}  // namespace Horo::PlatformErrors

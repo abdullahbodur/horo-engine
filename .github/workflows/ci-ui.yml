@@ -95,6 +95,9 @@ jobs:
             libxcursor-dev \
             libxi-dev \
             libxext-dev \
+            libxss-dev \
+            libxtst-dev \
+            libxxf86vm-dev \
             libgl1-mesa-dev \
             libglu1-mesa-dev
 
@@ -273,7 +276,7 @@ jobs:
             xvfb ffmpeg \
             libwayland-dev libxkbcommon-dev \
             libx11-dev libxrandr-dev libxinerama-dev \
-            libxcursor-dev libxi-dev libxext-dev \
+            libxcursor-dev libxi-dev libxext-dev libxss-dev libxtst-dev libxxf86vm-dev \
             libgl1-mesa-dev libglu1-mesa-dev
 
       - name: Download binary artifact

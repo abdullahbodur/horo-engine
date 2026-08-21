@@ -57,8 +57,8 @@ namespace Horo::Editor {
      * @param depthRange Clip-depth convention required by the consuming backend.
      * @return Empty when no directional light or mesh is present; otherwise a validated shadow view.
      */
-    [[nodiscard]] Result<std::optional<EditorViewportDirectionalShadowView>>
-    BuildEditorViewportDirectionalShadowView(const Render::RenderSceneView &scene, Math::ClipDepthRange depthRange) noexcept;
+    [[nodiscard]] Result<std::optional<EditorViewportDirectionalShadowView>> BuildEditorViewportDirectionalShadowView(
+        const Render::RenderSceneView &scene, Math::ClipDepthRange depthRange) noexcept;
 
     /** @brief Builds the validated view-projection matrix for one editor camera. */
     [[nodiscard]] Result<Math::Mat4> BuildEditorViewportViewProjection(const EditorViewportCamera &camera, float aspect,

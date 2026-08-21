@@ -41,29 +41,29 @@ namespace Horo::Runtime {
 
     /** @brief Allocation-free cumulative timing diagnostics owned by one scheduler. */
     struct FrameSchedulerStatistics {
-        std::uint64_t completedSimulationTick{}; /**< Count of fixed ticks committed successfully. */
-        Duration totalDroppedSimulationTime{}; /**< Whole fixed-step time discarded after catch-up saturation. */
-        std::uint64_t totalDroppedFixedSteps{}; /**< Number of discarded fixed-step intervals. */
-        std::uint64_t catchUpLimitedFrameCount{}; /**< Frames that discarded accumulated simulation time. */
+        std::uint64_t completedSimulationTick{};         /**< Count of fixed ticks committed successfully. */
+        Duration totalDroppedSimulationTime{};           /**< Whole fixed-step time discarded after catch-up saturation. */
+        std::uint64_t totalDroppedFixedSteps{};          /**< Number of discarded fixed-step intervals. */
+        std::uint64_t catchUpLimitedFrameCount{};        /**< Frames that discarded accumulated simulation time. */
         std::uint64_t negativeDeltaNormalizationCount{}; /**< Backward clock samples normalized to zero. */
-        std::uint64_t maximumDeltaClampCount{}; /**< Samples clamped to maximumFrameDelta. */
+        std::uint64_t maximumDeltaClampCount{};          /**< Samples clamped to maximumFrameDelta. */
     };
 
     /** @brief Immutable context visible to one variable-rate runtime phase. */
     struct FrameContext {
-        std::uint64_t frameNumber{}; /**< One-based host frame ordinal. */
-        Duration variableDelta{}; /**< Real delta after negative and maximum normalization. */
-        double interpolationAlpha{}; /**< Fractional accumulator position in the range [0, 1). */
+        std::uint64_t frameNumber{};             /**< One-based host frame ordinal. */
+        Duration variableDelta{};                /**< Real delta after negative and maximum normalization. */
+        double interpolationAlpha{};             /**< Fractional accumulator position in the range [0, 1). */
         std::uint64_t completedSimulationTick{}; /**< Count of fixed ticks committed before this phase. */
-        Duration droppedSimulationTime{}; /**< Whole fixed-step time discarded during this frame. */
-        bool realDeltaWasClamped{false}; /**< Whether maximumFrameDelta changed the real sample. */
-        const CancellationToken &cancellation; /**< Host-owned cooperative cancellation token. */
+        Duration droppedSimulationTime{};        /**< Whole fixed-step time discarded during this frame. */
+        bool realDeltaWasClamped{false};         /**< Whether maximumFrameDelta changed the real sample. */
+        const CancellationToken &cancellation;   /**< Host-owned cooperative cancellation token. */
     };
 
     /** @brief Immutable context for the fixed tick currently being attempted. */
     struct FixedStepContext {
-        std::uint64_t simulationTick{}; /**< One-based tick ordinal; committed only after every participant succeeds. */
-        Duration fixedDelta{}; /**< Validated fixed simulation duration. */
+        std::uint64_t simulationTick{};        /**< One-based tick ordinal; committed only after every participant succeeds. */
+        Duration fixedDelta{};                 /**< Validated fixed simulation duration. */
         const CancellationToken &cancellation; /**< Host-owned cooperative cancellation token. */
     };
 
@@ -94,8 +94,7 @@ namespace Horo::Runtime {
          * @param config Fixed-step and stall policy.
          * @return Owned scheduler or a typed invalid-configuration error.
          */
-        [[nodiscard]] static Result<std::unique_ptr<FrameScheduler> > Create(
-            Clock &clock, FrameSchedulerConfig config = {});
+        [[nodiscard]] static Result<std::unique_ptr<FrameScheduler>> Create(Clock &clock, FrameSchedulerConfig config = {});
 
         /**
          * @brief Executes one running or suspended frame through the supplied lifecycle.
@@ -104,8 +103,7 @@ namespace Horo::Runtime {
          * @param suspended Whether only the suspend-safe pump subset should execute.
          * @return Success, the original participant failure, cancellation, or a typed scheduler failure.
          */
-        [[nodiscard]] Result<void> RunFrame(RuntimeLifecycle &lifecycle, const CancellationToken &cancellation,
-                                            bool suspended);
+        [[nodiscard]] Result<void> RunFrame(RuntimeLifecycle &lifecycle, const CancellationToken &cancellation, bool suspended);
 
         /** @brief Resets the real-time baseline before resuming from suspension. */
         void ResetClock() noexcept;
@@ -123,4 +121,4 @@ namespace Horo::Runtime {
         std::uint64_t frameNumber_{};
         std::uint64_t completedSimulationTick_{};
     };
-} // namespace Horo::Runtime
+}  // namespace Horo::Runtime

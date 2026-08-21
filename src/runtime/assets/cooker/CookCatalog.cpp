@@ -20,7 +20,7 @@ namespace Horo::Assets {
     bool CookerContribution::Handles(const AssetTypeId &type, const AssetCookTargetId &target) const noexcept {
         if (assetType != type)
             return false;
-        return std::find_if(targets.begin(), targets.end(), [&](const AssetCookTargetId &t) {
+        return std::ranges::find_if(targets, [&](const AssetCookTargetId &t) {
             return t == target;
         }) != targets.end();
     }
@@ -91,8 +91,7 @@ namespace Horo::Assets {
                 return a.assetType.Value() < b.assetType.Value();
             // Compare by first target for stable ordering
             const auto aTarget = a.targets.empty() ? "" : a.targets.front().Value();
-            const auto bTarget = b.targets.empty() ? "" : b.targets.front().Value();
-            if (aTarget != bTarget)
+            if (const auto bTarget = b.targets.empty() ? "" : b.targets.front().Value(); aTarget != bTarget)
                 return aTarget < bTarget;
             return a.contributionId < b.contributionId;
         });

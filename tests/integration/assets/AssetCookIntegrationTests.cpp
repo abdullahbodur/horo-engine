@@ -1,5 +1,4 @@
-#include <catch2/catch_test_macros.hpp>
-
+#include "HeadlessMeshCooker.h"
 #include "Horo/Assets/AssetCook.h"
 #include "Horo/Assets/AssetCookOutput.h"
 #include "Horo/Assets/AssetCookService.h"
@@ -8,8 +7,8 @@
 #include "Horo/Assets/CookCatalog.h"
 #include "Horo/Foundation/CancellationToken.h"
 #include "Horo/Foundation/JobSystem.h"
-#include "HeadlessMeshCooker.h"
 
+#include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -19,61 +18,51 @@
 #include <string_view>
 #include <vector>
 
-namespace
-{
-using namespace Horo;
-using namespace Horo::Assets;
+namespace {
+    using namespace Horo;
+    using namespace Horo::Assets;
 
-AssetId Id(const std::string_view value)
-{
-    auto parsed = AssetId::Parse(value);
-    REQUIRE((parsed.HasValue()));
-    return parsed.Value();
-}
-
-AssetTypeId Type(const std::string_view value)
-{
-    auto parsed = AssetTypeId::Parse(value);
-    REQUIRE((parsed.HasValue()));
-    return parsed.Value();
-}
-
-AssetCookTargetId Target(const std::string_view value)
-{
-    auto parsed = AssetCookTargetId::Parse(value);
-    REQUIRE((parsed.HasValue()));
-    return parsed.Value();
-}
-
-struct TempDir
-{
-    std::filesystem::path path;
-
-    TempDir()
-    {
-        auto tmp = std::filesystem::temp_directory_path() / "horo_integration_test";
-        std::filesystem::create_directories(tmp);
-        auto unique = tmp / ("test_" + std::to_string(
-                                            std::chrono::steady_clock::now().time_since_epoch().count()));
-        std::filesystem::create_directories(unique);
-        path = unique;
+    AssetId Id(const std::string_view value) {
+        auto parsed = AssetId::Parse(value);
+        REQUIRE((parsed.HasValue()));
+        return parsed.Value();
     }
 
-    ~TempDir()
-    {
-        std::error_code ec;
-        std::filesystem::remove_all(path, ec);
+    AssetTypeId Type(const std::string_view value) {
+        auto parsed = AssetTypeId::Parse(value);
+        REQUIRE((parsed.HasValue()));
+        return parsed.Value();
     }
-};
 
-/** @brief Fixture project directory path. */
-const auto kFixtureProject =
-    std::filesystem::path{PROJECT_SOURCE_DIR} / "tests" / "fixtures" / "assets" / "headless_mesh";
+    AssetCookTargetId Target(const std::string_view value) {
+        auto parsed = AssetCookTargetId::Parse(value);
+        REQUIRE((parsed.HasValue()));
+        return parsed.Value();
+    }
 
-} // namespace
+    struct TempDir {
+        std::filesystem::path path;
 
-TEST_CASE("End-to-end headless cook pipeline: source to provider", "[native][integration][assets][cooking]")
-{
+        TempDir() {
+            auto tmp = std::filesystem::temp_directory_path() / "horo_integration_test";
+            std::filesystem::create_directories(tmp);
+            auto unique = tmp / ("test_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+            std::filesystem::create_directories(unique);
+            path = unique;
+        }
+
+        ~TempDir() {
+            std::error_code ec;
+            std::filesystem::remove_all(path, ec);
+        }
+    };
+
+    /** @brief Fixture project directory path. */
+    const auto kFixtureProject = std::filesystem::path{PROJECT_SOURCE_DIR} / "tests" / "fixtures" / "assets" / "headless_mesh";
+
+}  // namespace
+
+TEST_CASE("End-to-end headless cook pipeline: source to provider", "[native][integration][assets][cooking]") {
     REQUIRE((std::filesystem::exists(kFixtureProject)));
 
     TempDir cacheDir;
@@ -130,8 +119,7 @@ TEST_CASE("End-to-end headless cook pipeline: source to provider", "[native][int
 
     // 5. Load through FilesystemAssetProvider
     FilesystemAssetProvider provider(gen.generationRoot);
-    for (const auto &record : records)
-    {
+    for (const auto &record : records) {
         auto existsResult = provider.Exists(record.id, cancellation);
         REQUIRE((existsResult.HasValue()));
         REQUIRE((existsResult.Value()));
@@ -151,8 +139,7 @@ TEST_CASE("End-to-end headless cook pipeline: source to provider", "[native][int
     }
 }
 
-TEST_CASE("End-to-end cache hit on second run", "[native][integration][assets][cooking]")
-{
+TEST_CASE("End-to-end cache hit on second run", "[native][integration][assets][cooking]") {
     REQUIRE((std::filesystem::exists(kFixtureProject)));
 
     TempDir cacheDir;

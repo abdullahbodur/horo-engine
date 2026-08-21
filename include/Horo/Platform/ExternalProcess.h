@@ -18,7 +18,10 @@
 
 namespace Horo {
     /** @brief Selects whether a child begins with the parent environment or an empty environment. */
-    enum class ProcessEnvironmentBase : std::uint8_t { InheritWithOverrides, Replace };
+    enum class ProcessEnvironmentBase : std::uint8_t {
+        InheritWithOverrides,
+        Replace
+    };
 
     /** @brief One explicit child-process environment assignment. */
     struct ProcessEnvironmentAssignment {
@@ -34,7 +37,10 @@ namespace Horo {
     };
 
     /** @brief Identifies the source pipe of one streamed line. */
-    enum class ProcessOutputStream : std::uint8_t { StandardOutput, StandardError };
+    enum class ProcessOutputStream : std::uint8_t {
+        StandardOutput,
+        StandardError
+    };
 
     /** @brief One bounded normalized line emitted while the child runs. */
     struct ProcessOutputLine {
@@ -44,7 +50,12 @@ namespace Horo {
     };
 
     /** @brief Reason a child reached its terminal state. */
-    enum class ProcessTerminationReason : std::uint8_t { Exited, Signalled, Cancelled, TimedOut };
+    enum class ProcessTerminationReason : std::uint8_t {
+        Exited,
+        Signalled,
+        Cancelled,
+        TimedOut
+    };
 
     /** @brief Terminal native-process result after every pipe has been drained. */
     struct ExternalProcessResult {

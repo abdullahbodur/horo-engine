@@ -5,7 +5,7 @@ struct ImVec2;
 namespace Horo::Editor {
     class AssetBrowserCardRenderer;
     class AssetBrowserInteractionSession;
-    class EditorGuiContext;
+    struct EditorGuiContext;
     struct EditorWorkspaceViewCommandData;
     struct EditorWorkspaceViewModel;
 

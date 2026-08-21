@@ -2,6 +2,7 @@
 
 #include "Horo/Gameplay/GameplayErrors.h"
 
+#include <algorithm>
 #include <ranges>
 
 namespace Horo::Editor {
@@ -91,6 +92,7 @@ namespace Horo::Editor {
 
     /** @copydoc EditorPlaySessionController::Stop */
     void EditorPlaySessionController::Stop() noexcept {
+        using enum Horo::Editor::EditorPlaySessionState;
         if (state_ != EditorPlaySessionState::Idle)
             state_ = EditorPlaySessionState::Stopping;
         if (behaviors_)

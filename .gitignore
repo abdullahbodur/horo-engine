@@ -36,6 +36,7 @@ __pycache__/
 # Logs and local caches
 *.log
 .cache/
+.env.local
 
 # IDE and editor state
 .vs/
@@ -52,4 +53,9 @@ __pycache__/
 # OS metadata
 .DS_Store
 Thumbs.db
-.horo/
+/.horo/
+/~/.horo/
+!tests/fixtures/**/.horo/
+
+# tools
+tools/sonar-scanner-*/**

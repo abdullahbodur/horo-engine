@@ -4,6 +4,7 @@
 #include "Horo/Editor/EditorUiComponents.h"
 #include "Horo/Editor/Localization/ILocalizationService.h"
 
+#include <format>
 #include <imgui.h>
 #include <mutex>
 #include <string>
@@ -11,24 +12,27 @@
 namespace Horo::Editor {
     namespace {
         [[nodiscard]] Ui::BadgeTone ToneFor(const SceneObjectComparisonKind kind) noexcept {
+            using enum Ui::BadgeTone;
+            using enum SceneObjectComparisonKind;
             switch (kind) {
-                case SceneObjectComparisonKind::AddedOnDisk:
-                    return Ui::BadgeTone::Success;
-                case SceneObjectComparisonKind::RemovedFromDisk:
-                    return Ui::BadgeTone::Error;
-                case SceneObjectComparisonKind::Modified:
-                    return Ui::BadgeTone::Warning;
+                case AddedOnDisk:
+                    return Success;
+                case RemovedFromDisk:
+                    return Error;
+                case Modified:
+                    return Warning;
             }
-            return Ui::BadgeTone::Neutral;
+            return Neutral;
         }
 
         [[nodiscard]] const std::string &KindLabel(const EditorGuiContext &context, const SceneObjectComparisonKind kind) {
+            using enum SceneObjectComparisonKind;
             switch (kind) {
-                case SceneObjectComparisonKind::AddedOnDisk:
+                case AddedOnDisk:
                     return context.localization.Get("editor", "workspace.scene_compare.added");
-                case SceneObjectComparisonKind::RemovedFromDisk:
+                case RemovedFromDisk:
                     return context.localization.Get("editor", "workspace.scene_compare.removed");
-                case SceneObjectComparisonKind::Modified:
+                case Modified:
                     return context.localization.Get("editor", "workspace.scene_compare.modified");
             }
             return context.localization.Get("editor", "workspace.scene_compare.modified");
@@ -36,7 +40,7 @@ namespace Horo::Editor {
 
         [[nodiscard]] std::string DifferenceLabel(const SceneObjectComparison &object, const EditorGuiContext &context) {
             std::string label;
-            const auto append = [&label](const std::string &field) {
+            const auto append = [&label](const std::string_view field) {
                 if (!label.empty())
                     label += ", ";
                 label += field;
@@ -47,7 +51,7 @@ namespace Horo::Editor {
                 append(context.localization.Get("editor", "workspace.scene_compare.field.parent"));
             if (object.fields.transform)
                 append(context.localization.Get("editor", "workspace.scene_compare.field.transform"));
-            if (object.fields.primitive)
+            if (object.fields.primitive || object.fields.asset)
                 append(context.localization.Get("editor", "workspace.scene_compare.field.primitive"));
             if (object.fields.components)
                 append(context.localization.Get("editor", "workspace.scene_compare.field.components"));
@@ -55,7 +59,7 @@ namespace Horo::Editor {
         }
 
         void DrawSummaryBadge(const std::size_t count, const char *label, const Ui::BadgeTone tone, const Theme::Fonts &fonts) {
-            const std::string text = std::to_string(count) + " " + label;
+            const std::string text = std::format("{} {}", count, label != nullptr ? label : "");
             Ui::Badge(
                 {
                     .label = text.c_str(),
@@ -65,15 +69,22 @@ namespace Horo::Editor {
                 fonts);
         }
 
+        [[nodiscard]] std::string ResolveDisplayName(const SceneObjectComparison &object) {
+            if (object.kind == SceneObjectComparisonKind::AddedOnDisk) {
+                return object.diskName;
+            }
+            if (object.kind == SceneObjectComparisonKind::RemovedFromDisk) {
+                return object.documentName;
+            }
+            if (object.documentName == object.diskName) {
+                return object.documentName;
+            }
+            return object.documentName + "  ->  " + object.diskName;
+        }
+
         void DrawComparisonRow(const SceneObjectComparison &object, const EditorGuiContext &context) {
             const std::string &kindLabel = KindLabel(context, object.kind);
-            const std::string displayName =
-                object.kind == SceneObjectComparisonKind::AddedOnDisk
-                    ? object.diskName
-                    : (object.kind == SceneObjectComparisonKind::RemovedFromDisk
-                           ? object.documentName
-                           : (object.documentName == object.diskName ? object.documentName
-                                                                     : object.documentName + "  ->  " + object.diskName));
+            const std::string displayName = ResolveDisplayName(object);
             const std::string differences = DifferenceLabel(object, context);
 
             const std::string rowId = std::to_string(object.id.value);
@@ -158,7 +169,7 @@ namespace Horo::Editor {
                                [request = std::move(request_), completion](const CancellationToken &cancellation) mutable {
             if (cancellation.IsCancellationRequested())
                 return Result<void>::Success();
-            Result<SceneDocumentComparison> compared = LoadSceneDocumentComparison(std::move(request));
+            Result<SceneDocumentComparison> compared = LoadSceneDocumentComparison(request);
             if (cancellation.IsCancellationRequested())
                 return Result<void>::Success();
 
@@ -178,10 +189,10 @@ namespace Horo::Editor {
     /** @copydoc SceneConflictCompareModal::OnUpdate */
     void SceneConflictCompareModal::OnUpdate(float) {
         if (job_.has_value()) {
+            using enum JobState;
             const JobSnapshot snapshot = jobs_.Query(job_->Id());
-            if (snapshot.state == JobState::Succeeded || snapshot.state == JobState::Failed || snapshot.state == JobState::Cancelled) {
-                Result<void> completed = job_->Wait();
-                if (completed.HasError())
+            if (snapshot.state == Succeeded || snapshot.state == Failed || snapshot.state == Cancelled) {
+                if (Result<void> completed = job_->Wait(); completed.HasError())
                     error_ = completed.ErrorValue();
                 job_.reset();
             }

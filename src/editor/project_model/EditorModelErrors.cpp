@@ -62,6 +62,15 @@ namespace Horo::Editor {
             .retryable = false,
             .userActionable = true,
         };
+        const ErrorCodeDescriptor ObjectLocked{
+            .domain = SceneDocumentDomain,
+            .code = ErrorCode{"scene_document.object_locked"},
+            .defaultSeverity = ErrorSeverity::Warning,
+            .summary = "Scene object is locked in the editor.",
+            .remediationHint = "Unlock the object or its locked ancestor in the Hierarchy before editing it.",
+            .retryable = false,
+            .userActionable = true,
+        };
         const ErrorCodeDescriptor InvalidPrimitive{
             .domain = SceneDocumentDomain,
             .code = ErrorCode{"scene_document.invalid_primitive"},

@@ -206,11 +206,6 @@ namespace Horo::Math {
         return Result<Vec3>::Success(Rotate(value));
     }
 
-    Quaternion Quaternion::operator*(const Quaternion &rhs) const noexcept {
-        return {w * rhs.x + x * rhs.w + y * rhs.z - z * rhs.y, w * rhs.y - x * rhs.z + y * rhs.w + z * rhs.x,
-                w * rhs.z + x * rhs.y - y * rhs.x + z * rhs.w, w * rhs.w - x * rhs.x - y * rhs.y - z * rhs.z};
-    }
-
     bool IsFinite(const Quaternion value) noexcept {
         return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z) && std::isfinite(value.w);
     }

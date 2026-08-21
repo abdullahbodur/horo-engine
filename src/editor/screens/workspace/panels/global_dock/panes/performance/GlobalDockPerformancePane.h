@@ -3,7 +3,7 @@
 struct ImVec2;
 
 namespace Horo::Editor {
-    class EditorGuiContext;
+    struct EditorGuiContext;
 
     /** @brief Performance status story hosted by the global dock. */
     class GlobalDockPerformancePane {

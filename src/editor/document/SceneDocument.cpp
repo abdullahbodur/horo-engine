@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <deque>
 #include <format>
 #include <limits>
 #include <string_view>
@@ -21,14 +22,14 @@ namespace Horo::Editor {
 
     /** @copydoc IsValidCameraComponent */
     bool IsValidCameraComponent(const Runtime::CameraComponent &camera) noexcept {
-        const bool projectionValid =
-            camera.projection == Runtime::CameraProjection::Perspective || camera.projection == Runtime::CameraProjection::Orthographic;
-        const bool commonValuesValid = std::isfinite(camera.verticalFieldOfViewRadians) && std::isfinite(camera.orthographicHeight) &&
-                                       std::isfinite(camera.nearPlane) && std::isfinite(camera.farPlane) && camera.nearPlane > 0.0F &&
-                                       camera.farPlane > camera.nearPlane;
-        if (!projectionValid || !commonValuesValid)
+        using enum Runtime::CameraProjection;
+        const bool projectionValid = camera.projection == Perspective || camera.projection == Orthographic;
+        if (const bool commonValuesValid = std::isfinite(camera.verticalFieldOfViewRadians) && std::isfinite(camera.orthographicHeight) &&
+                                           std::isfinite(camera.nearPlane) && std::isfinite(camera.farPlane) && camera.nearPlane > 0.0F &&
+                                           camera.farPlane > camera.nearPlane;
+            !projectionValid || !commonValuesValid)
             return false;
-        if (camera.projection == Runtime::CameraProjection::Perspective) {
+        if (camera.projection == Perspective) {
             return camera.verticalFieldOfViewRadians > 0.0F && camera.verticalFieldOfViewRadians < Math::Pi;
         }
         return camera.orthographicHeight > 0.0F;
@@ -36,18 +37,48 @@ namespace Horo::Editor {
 
     /** @copydoc IsValidLightComponent */
     bool IsValidLightComponent(const Runtime::LightComponent &light) noexcept {
-        const bool kindValid = light.kind == Runtime::LightKind::Directional || light.kind == Runtime::LightKind::Point ||
-                               light.kind == Runtime::LightKind::Spot;
-        return kindValid && Math::IsFinite(light.color) && light.color.x >= 0.0F && light.color.y >= 0.0F &&
-               light.color.z >= 0.0F && std::isfinite(light.intensity) && light.intensity >= 0.0F &&
-               std::isfinite(light.range) && light.range >= 0.0F && std::isfinite(light.innerConeRadians) &&
-               light.innerConeRadians >= 0.0F && std::isfinite(light.outerConeRadians) &&
+        using enum Runtime::LightKind;
+        const bool kindValid = light.kind == Directional || light.kind == Point || light.kind == Spot;
+        return kindValid && Math::IsFinite(light.color) && light.color.x >= 0.0F && light.color.y >= 0.0F && light.color.z >= 0.0F &&
+               std::isfinite(light.intensity) && light.intensity >= 0.0F && std::isfinite(light.range) && light.range >= 0.0F &&
+               std::isfinite(light.innerConeRadians) && light.innerConeRadians >= 0.0F && std::isfinite(light.outerConeRadians) &&
                light.outerConeRadians >= light.innerConeRadians && light.outerConeRadians <= Math::Pi;
     }
 
     /** @copydoc IsValidAudioSourceComponent */
     bool IsValidAudioSourceComponent(const Runtime::AudioSourceComponent &audioSource) noexcept {
         return std::isfinite(audioSource.gain) && audioSource.gain >= 0.0F;
+    }
+
+    /** @copydoc ResolveSceneObjectEditorState */
+    std::optional<ResolvedSceneObjectEditorState> ResolveSceneObjectEditorState(const std::span<const SceneObjectSnapshot> objects,
+                                                                                const SceneObjectId object) noexcept {
+        const auto local = std::ranges::find(objects, object, &SceneObjectSnapshot::id);
+        if (local == objects.end())
+            return std::nullopt;
+
+        ResolvedSceneObjectEditorState resolved{.local = local->editorState,
+                                                .effectivelyVisible = local->editorState.visible,
+                                                .effectivelyLocked = local->editorState.locked};
+        std::optional<SceneObjectId> parent = local->parent;
+        std::size_t remainingDepth = objects.size();
+        while (parent.has_value()) {
+            if (remainingDepth-- == 0)
+                return std::nullopt;
+            const auto ancestor = std::ranges::find(objects, *parent, &SceneObjectSnapshot::id);
+            if (ancestor == objects.end())
+                return std::nullopt;
+            if (!ancestor->editorState.visible) {
+                resolved.effectivelyVisible = false;
+                resolved.hiddenByParent = true;
+            }
+            if (ancestor->editorState.locked) {
+                resolved.effectivelyLocked = true;
+                resolved.lockedByParent = true;
+            }
+            parent = ancestor->parent;
+        }
+        return resolved;
     }
 
     namespace {
@@ -100,6 +131,12 @@ namespace Horo::Editor {
             Runtime::AudioSourceComponent after;
         };
 
+        struct EditorStateChangedDelta {
+            SceneObjectId object;
+            SceneObjectEditorState before;
+            SceneObjectEditorState after;
+        };
+
         struct ComponentAddedDelta {
             SceneObjectId object;
             ComponentType type;
@@ -126,13 +163,14 @@ namespace Horo::Editor {
         };
 
         struct DeletedObjectsDelta {
-            SceneObjectId root;
+            std::vector<SceneObjectId> roots;
             std::vector<IndexedSceneObject> objects;
         };
 
-        using SceneCommandDelta = std::variant<CreatedObjectDelta, RenamedObjectDelta, TransformedObjectDelta, TransformedObjectsDelta,
-                                               CameraChangedDelta, LightChangedDelta, TriggerVolumeChangedDelta, AudioSourceChangedDelta,
-                                               ComponentAddedDelta, ComponentRemovedDelta, BehaviorsChangedDelta, DeletedObjectsDelta>;
+        using SceneCommandDelta =
+            std::variant<CreatedObjectDelta, RenamedObjectDelta, TransformedObjectDelta, TransformedObjectsDelta, CameraChangedDelta,
+                         LightChangedDelta, TriggerVolumeChangedDelta, AudioSourceChangedDelta, EditorStateChangedDelta,
+                         ComponentAddedDelta, ComponentRemovedDelta, BehaviorsChangedDelta, DeletedObjectsDelta>;
 
         struct HistoryRecord {
             DocumentStateId beforeState;
@@ -160,6 +198,15 @@ namespace Horo::Editor {
 
         [[nodiscard]] auto FindObject(const std::vector<SceneObjectSnapshot> &objects, const SceneObjectId id) {
             return std::ranges::find(objects, id, &SceneObjectSnapshot::id);
+        }
+
+        [[nodiscard]] bool IsEffectivelyLocked(const std::vector<SceneObjectSnapshot> &objects, const SceneObjectId object) noexcept {
+            const std::optional<ResolvedSceneObjectEditorState> state = ResolveSceneObjectEditorState(objects, object);
+            return state.has_value() && state->effectivelyLocked;
+        }
+
+        [[nodiscard]] Error LockedObjectError() {
+            return MakeDocumentError(SceneDocumentErrors::ObjectLocked, "Scene object or one of its ancestors is locked in the editor.");
         }
 
         [[nodiscard]] Result<void> ValidateDescriptor(const std::optional<PrimitiveMeshDescriptor> &descriptor) {
@@ -206,48 +253,58 @@ namespace Horo::Editor {
             return Result<void>::Success();
         }
 
-        [[nodiscard]] std::size_t EstimateMemoryBytes(const SceneCommandDelta &delta, const std::size_t affectedObjectCount) noexcept {
-            return affectedObjectCount * sizeof(SceneObjectId) + std::visit([](const auto &typedDelta) -> std::size_t {
-                using Delta = std::decay_t<decltype(typedDelta)>;
-                if constexpr (std::is_same_v<Delta, CreatedObjectDelta>) {
-                    return sizeof(Delta) + typedDelta.object.name.size();
-                } else if constexpr (std::is_same_v<Delta, RenamedObjectDelta>) {
-                    return sizeof(Delta) + typedDelta.before.size() + typedDelta.after.size();
-                } else if constexpr (std::is_same_v<Delta, DeletedObjectsDelta>) {
-                    std::size_t bytes = sizeof(Delta) + typedDelta.objects.size() * sizeof(IndexedSceneObject);
-                    for (const IndexedSceneObject &object : typedDelta.objects) {
-                        bytes += object.object.name.size();
-                    }
-                    return bytes;
-                } else if constexpr (std::is_same_v<Delta, TransformedObjectsDelta>) {
-                    return sizeof(Delta) + typedDelta.objects.size() * sizeof(TransformedObjectDelta);
-                } else if constexpr (std::is_same_v<Delta, BehaviorsChangedDelta>) {
-                    auto bytes = [](const std::vector<Gameplay::BehaviorComponent> &behaviors) {
-                        std::size_t total = behaviors.size() * sizeof(Gameplay::BehaviorComponent);
-                        for (const auto &behavior : behaviors) {
-                            total += behavior.typeId.Value().size();
-                            for (const auto &field : behavior.fields) {
-                                total += field.name.size();
-                                if (const auto *text = std::get_if<std::string>(&field.value))
-                                    total += text->size();
-                            }
-                        }
-                        return total;
-                    };
-                    return sizeof(Delta) + bytes(typedDelta.before) + bytes(typedDelta.after);
-                } else {
-                    return sizeof(Delta);
+        [[nodiscard]] std::size_t EstimateBehaviorMemoryBytes(const std::vector<Gameplay::BehaviorComponent> &behaviors) noexcept {
+            std::size_t total = behaviors.size() * sizeof(Gameplay::BehaviorComponent);
+            for (const Gameplay::BehaviorComponent &behavior : behaviors) {
+                total += behavior.typeId.Value().size();
+                for (const Gameplay::BehaviorField &field : behavior.fields) {
+                    total += field.name.size();
+                    if (const auto *text = std::get_if<std::string>(&field.value))
+                        total += text->size();
                 }
+            }
+            return total;
+        }
+
+        template <typename Delta> [[nodiscard]] std::size_t EstimateTypedDeltaMemoryBytes(const Delta &) noexcept {
+            return sizeof(Delta);
+        }
+
+        [[nodiscard]] std::size_t EstimateTypedDeltaMemoryBytes(const CreatedObjectDelta &delta) noexcept {
+            return sizeof(delta) + delta.object.name.size();
+        }
+
+        [[nodiscard]] std::size_t EstimateTypedDeltaMemoryBytes(const RenamedObjectDelta &delta) noexcept {
+            return sizeof(delta) + delta.before.size() + delta.after.size();
+        }
+
+        [[nodiscard]] std::size_t EstimateTypedDeltaMemoryBytes(const DeletedObjectsDelta &delta) noexcept {
+            std::size_t bytes = sizeof(delta) + delta.objects.size() * sizeof(IndexedSceneObject);
+            for (const IndexedSceneObject &object : delta.objects)
+                bytes += object.object.name.size();
+            return bytes;
+        }
+
+        [[nodiscard]] std::size_t EstimateTypedDeltaMemoryBytes(const TransformedObjectsDelta &delta) noexcept {
+            return sizeof(delta) + delta.objects.size() * sizeof(TransformedObjectDelta);
+        }
+
+        [[nodiscard]] std::size_t EstimateTypedDeltaMemoryBytes(const BehaviorsChangedDelta &delta) noexcept {
+            return sizeof(delta) + EstimateBehaviorMemoryBytes(delta.before) + EstimateBehaviorMemoryBytes(delta.after);
+        }
+
+        [[nodiscard]] std::size_t EstimateMemoryBytes(const SceneCommandDelta &delta, const std::size_t affectedObjectCount) noexcept {
+            return affectedObjectCount * sizeof(SceneObjectId) + std::visit([]<typename Delta>(const Delta &typedDelta) {
+                return EstimateTypedDeltaMemoryBytes(typedDelta);
             }, delta);
         }
 
         [[nodiscard]] SceneObjectId DeltaRootObject(const SceneCommandDelta &delta) noexcept {
-            return std::visit([](const auto &typedDelta) {
-                using Delta = std::decay_t<decltype(typedDelta)>;
+            return std::visit([]<typename Delta>(const Delta &typedDelta) {
                 if constexpr (std::is_same_v<Delta, CreatedObjectDelta>) {
                     return typedDelta.object.id;
                 } else if constexpr (std::is_same_v<Delta, DeletedObjectsDelta>) {
-                    return typedDelta.root;
+                    return typedDelta.roots.empty() ? SceneObjectId{} : typedDelta.roots.front();
                 } else if constexpr (std::is_same_v<Delta, TransformedObjectsDelta>) {
                     return typedDelta.objects.empty() ? SceneObjectId{} : typedDelta.objects.front().object;
                 } else {
@@ -256,112 +313,393 @@ namespace Horo::Editor {
             }, delta);
         }
 
+        void AddComponent(SceneObjectComponentSet &components, const ComponentType type) {
+            using enum ComponentType;
+            switch (type) {
+                case Camera:
+                    components.camera = Runtime::CameraComponent{};
+                    break;
+                case Light:
+                    components.light = Runtime::LightComponent{};
+                    break;
+                case TriggerVolume:
+                    components.triggerVolume = Runtime::TriggerVolumeComponent{};
+                    break;
+                case AudioSource:
+                    components.audioSource = Runtime::AudioSourceComponent{};
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        [[nodiscard]] bool HasComponent(const SceneObjectComponentSet &components, const ComponentType type) noexcept {
+            using enum ComponentType;
+            switch (type) {
+                case Camera:
+                    return components.camera.has_value();
+                case Light:
+                    return components.light.has_value();
+                case TriggerVolume:
+                    return components.triggerVolume.has_value();
+                case AudioSource:
+                    return components.audioSource.has_value();
+                default:
+                    return false;
+            }
+        }
+
+        void RemoveComponent(SceneObjectComponentSet &components, const ComponentType type) {
+            using enum ComponentType;
+            switch (type) {
+                case Camera:
+                    components.camera = std::nullopt;
+                    break;
+                case Light:
+                    components.light = std::nullopt;
+                    break;
+                case TriggerVolume:
+                    components.triggerVolume = std::nullopt;
+                    break;
+                case AudioSource:
+                    components.audioSource = std::nullopt;
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        void RestoreComponent(SceneObjectComponentSet &components, const ComponentRemovedDelta &delta) {
+            using enum ComponentType;
+            switch (delta.type) {
+                case Camera:
+                    components.camera = delta.camera;
+                    break;
+                case Light:
+                    components.light = delta.light;
+                    break;
+                case TriggerVolume:
+                    components.triggerVolume = delta.triggerVolume;
+                    break;
+                case AudioSource:
+                    components.audioSource = delta.audioSource;
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        void ApplyTypedDelta(std::vector<SceneObjectSnapshot> &objects, const CreatedObjectDelta &delta) {
+            const std::size_t index = std::min(delta.index, objects.size());
+            objects.insert(objects.begin() + static_cast<std::ptrdiff_t>(index), delta.object);
+        }
+
+        void ApplyTypedDelta(std::vector<SceneObjectSnapshot> &objects, const RenamedObjectDelta &delta) {
+            FindObject(objects, delta.object)->name = delta.after;
+        }
+
+        void ApplyTypedDelta(std::vector<SceneObjectSnapshot> &objects, const TransformedObjectDelta &delta) {
+            FindObject(objects, delta.object)->localTransform = delta.after;
+        }
+
+        void ApplyTypedDelta(std::vector<SceneObjectSnapshot> &objects, const TransformedObjectsDelta &delta) {
+            for (const TransformedObjectDelta &object : delta.objects)
+                FindObject(objects, object.object)->localTransform = object.after;
+        }
+
+        void ApplyTypedDelta(std::vector<SceneObjectSnapshot> &objects, const CameraChangedDelta &delta) {
+            FindObject(objects, delta.object)->components.camera = delta.after;
+        }
+
+        void ApplyTypedDelta(std::vector<SceneObjectSnapshot> &objects, const LightChangedDelta &delta) {
+            FindObject(objects, delta.object)->components.light = delta.after;
+        }
+
+        void ApplyTypedDelta(std::vector<SceneObjectSnapshot> &objects, const TriggerVolumeChangedDelta &delta) {
+            FindObject(objects, delta.object)->components.triggerVolume = delta.after;
+        }
+
+        void ApplyTypedDelta(std::vector<SceneObjectSnapshot> &objects, const AudioSourceChangedDelta &delta) {
+            if (const auto object = FindObject(objects, delta.object); object != objects.end())
+                object->components.audioSource = delta.after;
+        }
+
+        void ApplyTypedDelta(std::vector<SceneObjectSnapshot> &objects, const EditorStateChangedDelta &delta) {
+            FindObject(objects, delta.object)->editorState = delta.after;
+        }
+
+        void ApplyTypedDelta(std::vector<SceneObjectSnapshot> &objects, const BehaviorsChangedDelta &delta) {
+            FindObject(objects, delta.object)->components.behaviors = delta.after;
+        }
+
+        void ApplyTypedDelta(std::vector<SceneObjectSnapshot> &objects, const ComponentAddedDelta &delta) {
+            if (const auto object = FindObject(objects, delta.object); object != objects.end())
+                AddComponent(object->components, delta.type);
+        }
+
+        void ApplyTypedDelta(std::vector<SceneObjectSnapshot> &objects, const ComponentRemovedDelta &delta) {
+            if (const auto object = FindObject(objects, delta.object); object != objects.end())
+                RemoveComponent(object->components, delta.type);
+        }
+
+        void ApplyTypedDelta(std::vector<SceneObjectSnapshot> &objects, const DeletedObjectsDelta &delta) {
+            std::erase_if(objects, [&delta](const SceneObjectSnapshot &object) {
+                return std::ranges::any_of(delta.objects, [&object](const IndexedSceneObject &removed) {
+                    return removed.object.id == object.id;
+                });
+            });
+        }
+
         void ApplyDelta(std::vector<SceneObjectSnapshot> &objects, const SceneCommandDelta &delta) {
-            std::visit([&objects](const auto &typedDelta) {
-                using Delta = std::decay_t<decltype(typedDelta)>;
-                if constexpr (std::is_same_v<Delta, CreatedObjectDelta>) {
-                    const std::size_t index = std::min(typedDelta.index, objects.size());
-                    objects.insert(objects.begin() + static_cast<std::ptrdiff_t>(index), typedDelta.object);
-                } else if constexpr (std::is_same_v<Delta, RenamedObjectDelta>) {
-                    FindObject(objects, typedDelta.object)->name = typedDelta.after;
-                } else if constexpr (std::is_same_v<Delta, TransformedObjectDelta>) {
-                    FindObject(objects, typedDelta.object)->localTransform = typedDelta.after;
-                } else if constexpr (std::is_same_v<Delta, TransformedObjectsDelta>) {
-                    for (const TransformedObjectDelta &object : typedDelta.objects) {
-                        FindObject(objects, object.object)->localTransform = object.after;
-                    }
-                } else if constexpr (std::is_same_v<Delta, CameraChangedDelta>) {
-                    FindObject(objects, typedDelta.object)->components.camera = typedDelta.after;
-                } else if constexpr (std::is_same_v<Delta, LightChangedDelta>) {
-                    FindObject(objects, typedDelta.object)->components.light = typedDelta.after;
-                } else if constexpr (std::is_same_v<Delta, TriggerVolumeChangedDelta>) {
-                    FindObject(objects, typedDelta.object)->components.triggerVolume = typedDelta.after;
-                } else if constexpr (std::is_same_v<Delta, AudioSourceChangedDelta>) {
-                    if (const auto object = FindObject(objects, typedDelta.object); object != objects.end()) {
-                        object->components.audioSource = typedDelta.after;
-                    }
-                } else if constexpr (std::is_same_v<Delta, BehaviorsChangedDelta>) {
-                    FindObject(objects, typedDelta.object)->components.behaviors = typedDelta.after;
-                } else if constexpr (std::is_same_v<Delta, ComponentAddedDelta>) {
-                    if (const auto object = FindObject(objects, typedDelta.object); object != objects.end()) {
-                        switch (typedDelta.type) {
-                            case ComponentType::Camera: object->components.camera = Runtime::CameraComponent{}; break;
-                            case ComponentType::Light: object->components.light = Runtime::LightComponent{}; break;
-                            case ComponentType::TriggerVolume: object->components.triggerVolume = Runtime::TriggerVolumeComponent{}; break;
-                            case ComponentType::AudioSource: object->components.audioSource = Runtime::AudioSourceComponent{}; break;
-                        }
-                    }
-                } else if constexpr (std::is_same_v<Delta, ComponentRemovedDelta>) {
-                    if (const auto object = FindObject(objects, typedDelta.object); object != objects.end()) {
-                        switch (typedDelta.type) {
-                            case ComponentType::Camera: object->components.camera = std::nullopt; break;
-                            case ComponentType::Light: object->components.light = std::nullopt; break;
-                            case ComponentType::TriggerVolume: object->components.triggerVolume = std::nullopt; break;
-                            case ComponentType::AudioSource: object->components.audioSource = std::nullopt; break;
-                        }
-                    }
-                } else {
-                    std::erase_if(objects, [&typedDelta](const SceneObjectSnapshot &object) {
-                        return std::ranges::find_if(typedDelta.objects, [&object](const IndexedSceneObject &removed) {
-                            return removed.object.id == object.id;
-                        }) != typedDelta.objects.end();
-                    });
-                }
+            std::visit([&objects]<typename Delta>(const Delta &typedDelta) {
+                ApplyTypedDelta(objects, typedDelta);
             }, delta);
         }
 
+        void RevertTypedDelta(std::vector<SceneObjectSnapshot> &objects, const CreatedObjectDelta &delta) {
+            std::erase_if(objects, [&delta](const SceneObjectSnapshot &object) {
+                return object.id == delta.object.id;
+            });
+        }
+
+        void RevertTypedDelta(std::vector<SceneObjectSnapshot> &objects, const RenamedObjectDelta &delta) {
+            FindObject(objects, delta.object)->name = delta.before;
+        }
+
+        void RevertTypedDelta(std::vector<SceneObjectSnapshot> &objects, const TransformedObjectDelta &delta) {
+            FindObject(objects, delta.object)->localTransform = delta.before;
+        }
+
+        void RevertTypedDelta(std::vector<SceneObjectSnapshot> &objects, const TransformedObjectsDelta &delta) {
+            for (const TransformedObjectDelta &object : delta.objects)
+                FindObject(objects, object.object)->localTransform = object.before;
+        }
+
+        void RevertTypedDelta(std::vector<SceneObjectSnapshot> &objects, const CameraChangedDelta &delta) {
+            FindObject(objects, delta.object)->components.camera = delta.before;
+        }
+
+        void RevertTypedDelta(std::vector<SceneObjectSnapshot> &objects, const LightChangedDelta &delta) {
+            FindObject(objects, delta.object)->components.light = delta.before;
+        }
+
+        void RevertTypedDelta(std::vector<SceneObjectSnapshot> &objects, const TriggerVolumeChangedDelta &delta) {
+            FindObject(objects, delta.object)->components.triggerVolume = delta.before;
+        }
+
+        void RevertTypedDelta(std::vector<SceneObjectSnapshot> &objects, const AudioSourceChangedDelta &delta) {
+            if (const auto object = FindObject(objects, delta.object); object != objects.end())
+                object->components.audioSource = delta.before;
+        }
+
+        void RevertTypedDelta(std::vector<SceneObjectSnapshot> &objects, const EditorStateChangedDelta &delta) {
+            FindObject(objects, delta.object)->editorState = delta.before;
+        }
+
+        void RevertTypedDelta(std::vector<SceneObjectSnapshot> &objects, const BehaviorsChangedDelta &delta) {
+            FindObject(objects, delta.object)->components.behaviors = delta.before;
+        }
+
+        void RevertTypedDelta(std::vector<SceneObjectSnapshot> &objects, const ComponentAddedDelta &delta) {
+            if (const auto object = FindObject(objects, delta.object); object != objects.end())
+                RemoveComponent(object->components, delta.type);
+        }
+
+        void RevertTypedDelta(std::vector<SceneObjectSnapshot> &objects, const ComponentRemovedDelta &delta) {
+            if (const auto object = FindObject(objects, delta.object); object != objects.end())
+                RestoreComponent(object->components, delta);
+        }
+
+        void RevertTypedDelta(std::vector<SceneObjectSnapshot> &objects, const DeletedObjectsDelta &delta) {
+            for (const IndexedSceneObject &removed : delta.objects) {
+                const std::size_t index = std::min(removed.index, objects.size());
+                objects.insert(objects.begin() + static_cast<std::ptrdiff_t>(index), removed.object);
+            }
+        }
+
         void RevertDelta(std::vector<SceneObjectSnapshot> &objects, const SceneCommandDelta &delta) {
-            std::visit([&objects](const auto &typedDelta) {
-                using Delta = std::decay_t<decltype(typedDelta)>;
-                if constexpr (std::is_same_v<Delta, CreatedObjectDelta>) {
-                    std::erase_if(objects, [&typedDelta](const SceneObjectSnapshot &object) {
-                        return object.id == typedDelta.object.id;
-                    });
-                } else if constexpr (std::is_same_v<Delta, RenamedObjectDelta>) {
-                    FindObject(objects, typedDelta.object)->name = typedDelta.before;
-                } else if constexpr (std::is_same_v<Delta, TransformedObjectDelta>) {
-                    FindObject(objects, typedDelta.object)->localTransform = typedDelta.before;
-                } else if constexpr (std::is_same_v<Delta, TransformedObjectsDelta>) {
-                    for (const TransformedObjectDelta &object : typedDelta.objects) {
-                        FindObject(objects, object.object)->localTransform = object.before;
-                    }
-                } else if constexpr (std::is_same_v<Delta, CameraChangedDelta>) {
-                    FindObject(objects, typedDelta.object)->components.camera = typedDelta.before;
-                } else if constexpr (std::is_same_v<Delta, LightChangedDelta>) {
-                    FindObject(objects, typedDelta.object)->components.light = typedDelta.before;
-                } else if constexpr (std::is_same_v<Delta, TriggerVolumeChangedDelta>) {
-                    FindObject(objects, typedDelta.object)->components.triggerVolume = typedDelta.before;
-                } else if constexpr (std::is_same_v<Delta, AudioSourceChangedDelta>) {
-                    if (const auto object = FindObject(objects, typedDelta.object); object != objects.end()) {
-                        object->components.audioSource = typedDelta.before;
-                    }
-                } else if constexpr (std::is_same_v<Delta, BehaviorsChangedDelta>) {
-                    FindObject(objects, typedDelta.object)->components.behaviors = typedDelta.before;
-                } else if constexpr (std::is_same_v<Delta, ComponentAddedDelta>) {
-                    if (const auto object = FindObject(objects, typedDelta.object); object != objects.end()) {
-                        switch (typedDelta.type) {
-                            case ComponentType::Camera: object->components.camera = std::nullopt; break;
-                            case ComponentType::Light: object->components.light = std::nullopt; break;
-                            case ComponentType::TriggerVolume: object->components.triggerVolume = std::nullopt; break;
-                            case ComponentType::AudioSource: object->components.audioSource = std::nullopt; break;
-                        }
-                    }
-                } else if constexpr (std::is_same_v<Delta, ComponentRemovedDelta>) {
-                    if (const auto object = FindObject(objects, typedDelta.object); object != objects.end()) {
-                        switch (typedDelta.type) {
-                            case ComponentType::Camera: object->components.camera = typedDelta.camera; break;
-                            case ComponentType::Light: object->components.light = typedDelta.light; break;
-                            case ComponentType::TriggerVolume: object->components.triggerVolume = typedDelta.triggerVolume; break;
-                            case ComponentType::AudioSource: object->components.audioSource = typedDelta.audioSource; break;
-                        }
-                    }
-                } else {
-                    for (const IndexedSceneObject &removed : typedDelta.objects) {
-                        const std::size_t index = std::min(removed.index, objects.size());
-                        objects.insert(objects.begin() + static_cast<std::ptrdiff_t>(index), removed.object);
-                    }
-                }
+            std::visit([&objects]<typename Delta>(const Delta &typedDelta) {
+                RevertTypedDelta(objects, typedDelta);
             }, delta);
+        }
+
+        [[nodiscard]] Result<void> ValidateLoadedBehaviors(const SceneObjectSnapshot &object,
+                                                           std::unordered_set<std::uint64_t> &behaviorIds,
+                                                           std::uint64_t &maximumBehaviorId) {
+            for (const Gameplay::BehaviorComponent &behavior : object.components.behaviors) {
+                if (!behaviorIds.insert(behavior.instanceId.value).second) {
+                    return Result<void>::Failure(MakeDocumentError(SceneDocumentErrors::InvalidBehavior,
+                                                                   "Loaded behavior instance IDs must be unique across the scene."));
+                }
+                maximumBehaviorId = std::max(maximumBehaviorId, behavior.instanceId.value);
+            }
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> ValidateLoadedObject(const SceneObjectSnapshot &object, std::unordered_set<std::uint64_t> &objectIds,
+                                                        std::unordered_set<std::uint64_t> &behaviorIds, std::uint64_t &maximumObjectId,
+                                                        std::uint64_t &maximumBehaviorId) {
+            if (!object.id.IsValid() || !objectIds.insert(object.id.value).second) {
+                return Result<void>::Failure(
+                    MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Loaded scene object IDs must be non-zero and unique."));
+            }
+            if (!IsValidSceneObjectName(object.name)) {
+                return Result<void>::Failure(
+                    MakeDocumentError(SceneDocumentErrors::InvalidName, "Loaded scene object names must contain 1 to 128 bytes."));
+            }
+            if (!IsValid(object.localTransform)) {
+                return Result<void>::Failure(
+                    MakeDocumentError(SceneDocumentErrors::InvalidTransform, "Loaded scene object transforms must be finite."));
+            }
+            if (const Result<void> primitive = ValidateDescriptor(object.primitiveMesh); primitive.HasError())
+                return primitive;
+            if ((object.meshAsset.has_value() && !object.meshAsset->IsValid()) ||
+                (object.meshAsset.has_value() && object.primitiveMesh.has_value())) {
+                return Result<void>::Failure(
+                    MakeDocumentError(SceneDocumentErrors::InvalidPrimitiveMetadata,
+                                      "Loaded scene object mesh references must be valid and mutually exclusive."));
+            }
+            if (const Result<void> components = ValidateComponents(object.components); components.HasError())
+                return components;
+            if (Result<void> behaviors = ValidateLoadedBehaviors(object, behaviorIds, maximumBehaviorId); behaviors.HasError())
+                return behaviors;
+            maximumObjectId = std::max(maximumObjectId, object.id.value);
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> ValidateLoadedObjectHierarchy(const std::vector<SceneObjectSnapshot> &objects,
+                                                                 const std::unordered_set<std::uint64_t> &objectIds,
+                                                                 const SceneObjectSnapshot &object) {
+            if (!object.parent.has_value())
+                return Result<void>::Success();
+            if (*object.parent == object.id || !objectIds.contains(object.parent->value)) {
+                return Result<void>::Failure(
+                    MakeDocumentError(SceneDocumentErrors::ParentNotFound,
+                                      "Loaded scene object parents must reference a different object in the same scene."));
+            }
+            std::unordered_set<std::uint64_t> ancestors;
+            std::optional<SceneObjectId> ancestor = object.parent;
+            while (ancestor.has_value()) {
+                if (!ancestors.insert(ancestor->value).second) {
+                    return Result<void>::Failure(
+                        MakeDocumentError(SceneDocumentErrors::ParentNotFound, "Loaded scene object hierarchy must not contain a cycle."));
+                }
+                const auto parent = FindObject(objects, *ancestor);
+                if (parent == objects.end())
+                    break;
+                ancestor = parent->parent;
+            }
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> ValidateLoadedHierarchy(const std::vector<SceneObjectSnapshot> &objects,
+                                                           const std::unordered_set<std::uint64_t> &objectIds) {
+            for (const SceneObjectSnapshot &object : objects) {
+                if (Result<void> valid = ValidateLoadedObjectHierarchy(objects, objectIds, object); valid.HasError())
+                    return valid;
+            }
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] std::vector<SceneObjectId> SelectExistingObjects(const std::vector<SceneObjectSnapshot> &objects,
+                                                                       const std::span<const SceneObjectId> requested) {
+            std::vector<SceneObjectId> selected;
+            selected.reserve(requested.size());
+            for (const SceneObjectId object : requested) {
+                if (!object.IsValid() || FindObject(objects, object) == objects.end() ||
+                    std::ranges::find(selected, object) != selected.end())
+                    continue;
+                selected.push_back(object);
+            }
+            return selected;
+        }
+
+        [[nodiscard]] std::unordered_set<std::uint64_t> ObjectIdSet(const std::span<const SceneObjectId> objects) {
+            std::unordered_set<std::uint64_t> ids;
+            ids.reserve(objects.size());
+            for (const SceneObjectId object : objects)
+                ids.insert(object.value);
+            return ids;
+        }
+
+        [[nodiscard]] bool HasSelectedAncestor(const std::vector<SceneObjectSnapshot> &objects,
+                                               const std::unordered_set<std::uint64_t> &selectedIds, const SceneObjectId object) {
+            auto current = FindObject(objects, object);
+            std::optional<SceneObjectId> ancestor = current->parent;
+            while (ancestor.has_value()) {
+                if (selectedIds.contains(ancestor->value))
+                    return true;
+                current = FindObject(objects, *ancestor);
+                ancestor = current == objects.end() ? std::nullopt : current->parent;
+            }
+            return false;
+        }
+
+        [[nodiscard]] std::vector<SceneObjectId> DeletionRoots(const std::vector<SceneObjectSnapshot> &objects,
+                                                               const std::span<const SceneObjectId> selected) {
+            const std::unordered_set<std::uint64_t> selectedIds = ObjectIdSet(selected);
+            std::vector<SceneObjectId> roots;
+            roots.reserve(selected.size());
+            for (const SceneObjectId object : selected) {
+                if (!HasSelectedAncestor(objects, selectedIds, object))
+                    roots.push_back(object);
+            }
+            return roots;
+        }
+
+        [[nodiscard]] std::vector<SceneObjectId> CollectRemovedObjects(const std::vector<SceneObjectSnapshot> &objects,
+                                                                       const std::span<const SceneObjectId> roots,
+                                                                       std::unordered_set<std::uint64_t> &removedIds) {
+            std::vector<SceneObjectId> removed{roots.begin(), roots.end()};
+            std::deque<SceneObjectId> pending{roots.begin(), roots.end()};
+            removedIds.reserve(objects.size());
+            for (const SceneObjectId root : roots)
+                removedIds.insert(root.value);
+            while (!pending.empty()) {
+                const SceneObjectId parent = pending.front();
+                pending.pop_front();
+                for (const SceneObjectSnapshot &candidate : objects) {
+                    if (candidate.parent != parent || !removedIds.insert(candidate.id.value).second)
+                        continue;
+                    removed.push_back(candidate.id);
+                    pending.push_back(candidate.id);
+                }
+            }
+            return removed;
+        }
+
+        [[nodiscard]] DeletedObjectsDelta CaptureDeletedObjects(const std::vector<SceneObjectSnapshot> &objects,
+                                                                std::vector<SceneObjectId> roots,
+                                                                const std::unordered_set<std::uint64_t> &removedIds) {
+            DeletedObjectsDelta deleted{.roots = std::move(roots)};
+            deleted.objects.reserve(removedIds.size());
+            std::size_t index = 0;
+            for (const SceneObjectSnapshot &object : objects) {
+                if (removedIds.contains(object.id.value))
+                    deleted.objects.emplace_back(object, index);
+                ++index;
+            }
+            return deleted;
+        }
+
+        [[nodiscard]] std::optional<std::string> UniqueSiblingName(const std::string_view baseName,
+                                                                   const std::optional<SceneObjectId> parent,
+                                                                   const std::span<const SceneObjectSnapshot> objects) {
+            const auto nameAvailable = [parent, objects](const std::string_view candidate) {
+                return std::ranges::none_of(objects, [parent, candidate](const SceneObjectSnapshot &object) {
+                    return object.parent == parent && object.name == candidate;
+                });
+            };
+            if (nameAvailable(baseName))
+                return std::string{baseName};
+            for (std::uint64_t suffix = 2; suffix <= std::numeric_limits<std::uint32_t>::max(); ++suffix) {
+                const std::string suffixText = std::format(" {}", suffix);
+                const std::size_t prefixLength = MaximumSceneObjectNameBytes - suffixText.size();
+                std::string candidate = std::format("{}{}", baseName.substr(0, prefixLength), suffixText);
+                if (nameAvailable(candidate))
+                    return candidate;
+            }
+            return std::nullopt;
         }
     }  // namespace
 
@@ -485,30 +823,9 @@ namespace Horo::Editor {
         std::uint64_t maximumObjectId = 0;
         std::uint64_t maximumBehaviorId = 0;
         for (const SceneObjectSnapshot &object : objects) {
-            if (!object.id.IsValid() || !objectIds.insert(object.id.value).second) {
-                return Result<void>::Failure(
-                    MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Loaded scene object IDs must be non-zero and unique."));
-            }
-            if (!IsValidSceneObjectName(object.name)) {
-                return Result<void>::Failure(
-                    MakeDocumentError(SceneDocumentErrors::InvalidName, "Loaded scene object names must contain 1 to 128 bytes."));
-            }
-            if (!IsValid(object.localTransform)) {
-                return Result<void>::Failure(
-                    MakeDocumentError(SceneDocumentErrors::InvalidTransform, "Loaded scene object transforms must be finite."));
-            }
-            if (const Result<void> primitive = ValidateDescriptor(object.primitiveMesh); primitive.HasError())
-                return primitive;
-            if (const Result<void> components = ValidateComponents(object.components); components.HasError())
-                return components;
-            for (const Gameplay::BehaviorComponent &behavior : object.components.behaviors) {
-                if (!behaviorIds.insert(behavior.instanceId.value).second) {
-                    return Result<void>::Failure(MakeDocumentError(SceneDocumentErrors::InvalidBehavior,
-                                                                   "Loaded behavior instance IDs must be unique across the scene."));
-                }
-                maximumBehaviorId = std::max(maximumBehaviorId, behavior.instanceId.value);
-            }
-            maximumObjectId = std::max(maximumObjectId, object.id.value);
+            if (Result<void> valid = ValidateLoadedObject(object, objectIds, behaviorIds, maximumObjectId, maximumBehaviorId);
+                valid.HasError())
+                return valid;
         }
         if (maximumObjectId == std::numeric_limits<std::uint64_t>::max() ||
             maximumBehaviorId == std::numeric_limits<std::uint64_t>::max()) {
@@ -516,28 +833,8 @@ namespace Horo::Editor {
                                                            "Loaded scene object IDs must leave space for future authored objects."));
         }
 
-        for (const SceneObjectSnapshot &object : objects) {
-            if (!object.parent.has_value())
-                continue;
-            if (*object.parent == object.id || !objectIds.contains(object.parent->value)) {
-                return Result<void>::Failure(
-                    MakeDocumentError(SceneDocumentErrors::ParentNotFound,
-                                      "Loaded scene object parents must reference a different object in the same scene."));
-            }
-
-            std::unordered_set<std::uint64_t> ancestors;
-            std::optional<SceneObjectId> ancestor = object.parent;
-            while (ancestor.has_value()) {
-                if (!ancestors.insert(ancestor->value).second) {
-                    return Result<void>::Failure(
-                        MakeDocumentError(SceneDocumentErrors::ParentNotFound, "Loaded scene object hierarchy must not contain a cycle."));
-                }
-                const auto parent = FindObject(objects, *ancestor);
-                if (parent == objects.end())
-                    break;
-                ancestor = parent->parent;
-            }
-        }
+        if (Result<void> validHierarchy = ValidateLoadedHierarchy(objects, objectIds); validHierarchy.HasError())
+            return validHierarchy;
 
         m_objects = std::move(objects);
         m_revision = {};
@@ -577,6 +874,12 @@ namespace Horo::Editor {
         if (const Result<void> descriptorResult = ValidateDescriptor(command.primitiveMesh); descriptorResult.HasError()) {
             return Result<SceneCommandResult>::Failure(descriptorResult.ErrorValue());
         }
+        if ((command.meshAsset.has_value() && !command.meshAsset->IsValid()) ||
+            (command.meshAsset.has_value() && command.primitiveMesh.has_value())) {
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::InvalidPrimitiveMetadata,
+                                  "Scene object mesh references must be valid and mutually exclusive."));
+        }
         if (const Result<void> componentResult = ValidateComponents(command.components); componentResult.HasError()) {
             return Result<SceneCommandResult>::Failure(componentResult.ErrorValue());
         }
@@ -584,6 +887,8 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::ParentNotFound, "Scene object parent does not exist."));
         }
+        if (command.parent.has_value() && IsEffectivelyLocked(m_document.m_objects, *command.parent))
+            return Result<SceneCommandResult>::Failure(LockedObjectError());
 
         const SceneObjectId id{m_document.m_nextObjectId};
         SceneCommandDelta delta = CreatedObjectDelta{
@@ -592,7 +897,8 @@ namespace Horo::Editor {
                                           .name = command.name,
                                           .localTransform = command.localTransform,
                                           .primitiveMesh = command.primitiveMesh,
-                                          .components = command.components},
+                                          .components = command.components,
+                                          .meshAsset = command.meshAsset},
             .index = m_document.m_objects.size(),
             .kind = DocumentChangeKind::Created,
         };
@@ -623,6 +929,8 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
         }
+        if (IsEffectivelyLocked(m_document.m_objects, command.object))
+            return Result<SceneCommandResult>::Failure(LockedObjectError());
         if (object->name == command.name) {
             return Result<SceneCommandResult>::Success(
                 SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::Renamed, {}, false});
@@ -676,8 +984,10 @@ namespace Horo::Editor {
                 return Result<SceneCommandResult>::Failure(
                     MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Batch transform object does not exist."));
             }
+            if (IsEffectivelyLocked(m_document.m_objects, update.object))
+                return Result<SceneCommandResult>::Failure(LockedObjectError());
             if (object->localTransform != update.localTransform) {
-                changed.push_back(TransformedObjectDelta{object->id, object->localTransform, update.localTransform});
+                changed.emplace_back(object->id, object->localTransform, update.localTransform);
             }
         }
         if (changed.empty()) {
@@ -721,6 +1031,8 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
         }
+        if (IsEffectivelyLocked(m_document.m_objects, command.object))
+            return Result<SceneCommandResult>::Failure(LockedObjectError());
         if (!object->components.camera.has_value()) {
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::InvalidCamera, "Scene object has no camera component."));
@@ -753,6 +1065,8 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
         }
+        if (IsEffectivelyLocked(m_document.m_objects, command.object))
+            return Result<SceneCommandResult>::Failure(LockedObjectError());
         if (!object->components.light.has_value()) {
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::InvalidLight, "Scene object has no light component."));
@@ -781,6 +1095,8 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
         }
+        if (IsEffectivelyLocked(m_document.m_objects, command.object))
+            return Result<SceneCommandResult>::Failure(LockedObjectError());
         if (!object->components.triggerVolume.has_value()) {
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::InvalidTriggerVolume, "Scene object has no trigger volume component."));
@@ -813,6 +1129,8 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
         }
+        if (IsEffectivelyLocked(m_document.m_objects, command.object))
+            return Result<SceneCommandResult>::Failure(LockedObjectError());
         if (!object->components.audioSource.has_value()) {
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::InvalidAudioSource, "Scene object has no audio source component."));
@@ -834,6 +1152,28 @@ namespace Horo::Editor {
                                                                       DocumentChangeKind::ComponentChanged, std::move(affected), true});
     }
 
+    /** @copydoc SceneDocumentCommandExecutor::Execute(const SetSceneObjectEditorStateCommand&) */
+    Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const SetSceneObjectEditorStateCommand &command) {
+        const auto object = FindObject(m_document.m_objects, command.object);
+        if (object == m_document.m_objects.end())
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
+        if (object->editorState == command.editorState)
+            return Result<SceneCommandResult>::Success(
+                {command.object, m_document.m_revision, m_document.m_state, DocumentChangeKind::EditorStateChanged, {}, false});
+
+        SceneCommandDelta delta = EditorStateChangedDelta{object->id, object->editorState, command.editorState};
+        const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
+        const DocumentStateId beforeState = m_document.m_state;
+        ApplyDelta(m_document.m_objects, delta);
+        ++m_document.m_revision.value;
+        m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
+        std::vector affected{object->id};
+        PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), affected, memoryBytes});
+        return Result<SceneCommandResult>::Success(
+            {command.object, m_document.m_revision, m_document.m_state, DocumentChangeKind::EditorStateChanged, std::move(affected), true});
+    }
+
     /** @copydoc SceneDocumentCommandExecutor::Execute(const AddSceneObjectComponentCommand&) */
     Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const AddSceneObjectComponentCommand &command) {
         const auto object = FindObject(m_document.m_objects, command.object);
@@ -841,16 +1181,10 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
         }
-        
-        bool hasComponent = false;
-        switch (command.type) {
-            case ComponentType::Camera: hasComponent = object->components.camera.has_value(); break;
-            case ComponentType::Light: hasComponent = object->components.light.has_value(); break;
-            case ComponentType::TriggerVolume: hasComponent = object->components.triggerVolume.has_value(); break;
-            case ComponentType::AudioSource: hasComponent = object->components.audioSource.has_value(); break;
-        }
+        if (IsEffectivelyLocked(m_document.m_objects, command.object))
+            return Result<SceneCommandResult>::Failure(LockedObjectError());
 
-        if (hasComponent) {
+        if (HasComponent(object->components, command.type)) {
             return Result<SceneCommandResult>::Success(
                 SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
         }
@@ -875,28 +1209,20 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
         }
-        
-        bool hasComponent = false;
-        switch (command.type) {
-            case ComponentType::Camera: hasComponent = object->components.camera.has_value(); break;
-            case ComponentType::Light: hasComponent = object->components.light.has_value(); break;
-            case ComponentType::TriggerVolume: hasComponent = object->components.triggerVolume.has_value(); break;
-            case ComponentType::AudioSource: hasComponent = object->components.audioSource.has_value(); break;
-        }
+        if (IsEffectivelyLocked(m_document.m_objects, command.object))
+            return Result<SceneCommandResult>::Failure(LockedObjectError());
 
-        if (!hasComponent) {
+        if (!HasComponent(object->components, command.type)) {
             return Result<SceneCommandResult>::Success(
                 SceneCommandResult{object->id, m_document.m_revision, m_document.m_state, DocumentChangeKind::ComponentChanged, {}, false});
         }
 
-        SceneCommandDelta delta = ComponentRemovedDelta{
-            object->id,
-            command.type,
-            object->components.camera,
-            object->components.light,
-            object->components.triggerVolume,
-            object->components.audioSource
-        };
+        SceneCommandDelta delta = ComponentRemovedDelta{object->id,
+                                                        command.type,
+                                                        object->components.camera,
+                                                        object->components.light,
+                                                        object->components.triggerVolume,
+                                                        object->components.audioSource};
         const std::size_t memoryBytes = EstimateMemoryBytes(delta, 1);
         const DocumentStateId beforeState = m_document.m_state;
         ApplyDelta(m_document.m_objects, delta);
@@ -915,6 +1241,8 @@ namespace Horo::Editor {
         if (object == m_document.m_objects.end())
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
+        if (IsEffectivelyLocked(m_document.m_objects, command.object))
+            return Result<SceneCommandResult>::Failure(LockedObjectError());
         if (!command.typeId.IsValid() || command.schemaVersion == 0 ||
             (!command.allowMultiple && std::ranges::any_of(object->components.behaviors, [&](const auto &behavior) {
             return behavior.typeId == command.typeId;
@@ -953,6 +1281,8 @@ namespace Horo::Editor {
         if (object == m_document.m_objects.end())
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
+        if (IsEffectivelyLocked(m_document.m_objects, command.object))
+            return Result<SceneCommandResult>::Failure(LockedObjectError());
         const auto behavior =
             std::ranges::find(object->components.behaviors, command.behavior.instanceId, &Gameplay::BehaviorComponent::instanceId);
         if (behavior == object->components.behaviors.end() || behavior->typeId != command.behavior.typeId)
@@ -983,11 +1313,14 @@ namespace Horo::Editor {
         if (object == m_document.m_objects.end())
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
+        if (IsEffectivelyLocked(m_document.m_objects, command.object))
+            return Result<SceneCommandResult>::Failure(LockedObjectError());
         auto after = object->components.behaviors;
-        const auto removed = std::erase_if(after, [&](const Gameplay::BehaviorComponent &behavior) {
-            return behavior.instanceId == command.behavior;
+        if (const auto removed = std::erase_if(after,
+                                               [behaviorId = command.behavior](const Gameplay::BehaviorComponent &behavior) {
+            return behavior.instanceId == behaviorId;
         });
-        if (removed == 0)
+            removed == 0)
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::InvalidBehavior, "Behavior attachment does not exist."));
         SceneCommandDelta delta = BehaviorsChangedDelta{object->id, object->components.behaviors, std::move(after)};
@@ -1013,6 +1346,8 @@ namespace Horo::Editor {
             return Result<SceneCommandResult>::Failure(
                 MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
         }
+        if (IsEffectivelyLocked(m_document.m_objects, command.source))
+            return Result<SceneCommandResult>::Failure(LockedObjectError());
 
         const SceneObjectId id{m_document.m_nextObjectId};
         SceneObjectComponentSet duplicatedComponents = source->components;
@@ -1024,7 +1359,9 @@ namespace Horo::Editor {
                                           .name = command.name,
                                           .localTransform = source->localTransform,
                                           .primitiveMesh = source->primitiveMesh,
-                                          .components = std::move(duplicatedComponents)},
+                                          .components = std::move(duplicatedComponents),
+                                          .meshAsset = source->meshAsset,
+                                          .editorState = source->editorState},
             .index = m_document.m_objects.size(),
             .kind = DocumentChangeKind::Duplicated,
         };
@@ -1042,27 +1379,26 @@ namespace Horo::Editor {
 
     /** @copydoc SceneDocumentCommandExecutor::Execute(const DeleteSceneObjectCommand&) */
     Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const DeleteSceneObjectCommand &command) {
-        if (FindObject(m_document.m_objects, command.object) == m_document.m_objects.end()) {
+        return Execute(DeleteSceneObjectsCommand{{command.object}});
+    }
+
+    /** @copydoc SceneDocumentCommandExecutor::Execute(const DeleteSceneObjectsCommand&) */
+    Result<SceneCommandResult> SceneDocumentCommandExecutor::Execute(const DeleteSceneObjectsCommand &command) {
+        const std::vector<SceneObjectId> selected = SelectExistingObjects(m_document.m_objects, command.objects);
+        if (selected.empty()) {
             return Result<SceneCommandResult>::Failure(
-                MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "Scene object does not exist."));
+                MakeDocumentError(SceneDocumentErrors::ObjectNotFound, "No requested scene object exists in the active document."));
         }
 
-        std::vector removed{command.object};
-        for (std::size_t index = 0; index < removed.size(); ++index) {
-            for (const SceneObjectSnapshot &candidate : m_document.m_objects) {
-                if (candidate.parent == removed[index]) {
-                    removed.push_back(candidate.id);
-                }
-            }
-        }
-        DeletedObjectsDelta deleted{.root = command.object};
-        deleted.objects.reserve(removed.size());
-        for (std::size_t index = 0; index < m_document.m_objects.size(); ++index) {
-            if (std::ranges::find(removed, m_document.m_objects[index].id) != removed.end()) {
-                deleted.objects.push_back(IndexedSceneObject{m_document.m_objects[index], index});
-            }
-        }
-        SceneCommandDelta delta = std::move(deleted);
+        std::vector<SceneObjectId> roots = DeletionRoots(m_document.m_objects, selected);
+        std::unordered_set<std::uint64_t> removedIds;
+        std::vector<SceneObjectId> removed = CollectRemovedObjects(m_document.m_objects, roots, removedIds);
+        if (std::ranges::any_of(removed, [&](const SceneObjectId object) {
+            return IsEffectivelyLocked(m_document.m_objects, object);
+        }))
+            return Result<SceneCommandResult>::Failure(LockedObjectError());
+        const SceneObjectId primary = roots.front();
+        SceneCommandDelta delta = CaptureDeletedObjects(m_document.m_objects, std::move(roots), removedIds);
         if (const Result<void> validHistory = ValidateHistoryDelta(delta, removed.size()); validHistory.HasError()) {
             return Result<SceneCommandResult>::Failure(validHistory.ErrorValue());
         }
@@ -1072,8 +1408,8 @@ namespace Horo::Editor {
         ++m_document.m_revision.value;
         m_document.m_state = DocumentStateId{m_document.m_nextStateId++};
         PushHistory(*m_history.m_impl, HistoryRecord{beforeState, m_document.m_state, std::move(delta), removed, memoryBytes});
-        return Result<SceneCommandResult>::Success(SceneCommandResult{command.object, m_document.m_revision, m_document.m_state,
-                                                                      DocumentChangeKind::Deleted, std::move(removed), true});
+        return Result<SceneCommandResult>::Success(
+            SceneCommandResult{primary, m_document.m_revision, m_document.m_state, DocumentChangeKind::Deleted, std::move(removed), true});
     }
 
     /** @copydoc SceneDocumentCommandExecutor::Undo */
@@ -1133,21 +1469,17 @@ namespace Horo::Editor {
                 MakeDocumentError(SceneDocumentErrors::ParentNotFound, "Scene object parent does not exist."));
         }
 
-        std::string name{descriptor->defaultObjectName};
-        const auto siblingHasName = [&](const std::string_view candidate) {
-            return std::ranges::any_of(m_document.Objects(), [&](const SceneObjectSnapshot &object) {
-                return object.parent == request.parent && object.name == candidate;
-            });
-        };
-        for (std::uint32_t suffix = 2; siblingHasName(name); ++suffix) {
-            name = std::format("{} {}", descriptor->defaultObjectName, suffix);
-        }
+        std::optional<std::string> name = UniqueSiblingName(descriptor->defaultObjectName, request.parent, m_document.Objects());
+        if (!name.has_value())
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::InvalidName, "Unable to allocate a unique primitive object name."));
 
-        CreateSceneObjectCommand command{.name = std::move(name), .parent = request.parent};
+        CreateSceneObjectCommand command{.name = std::move(*name), .parent = request.parent};
         if (descriptor->meshType.has_value()) {
             command.primitiveMesh = PrimitiveMeshDescriptor::Defaults(*descriptor->meshType);
         } else if (descriptor->sceneObjectType.has_value()) {
             switch (*descriptor->sceneObjectType) {
+                using enum Horo::Runtime::SceneObjectPrimitiveType;
                 case Runtime::SceneObjectPrimitiveType::Empty:
                     break;
                 case Runtime::SceneObjectPrimitiveType::Camera:
@@ -1174,5 +1506,31 @@ namespace Horo::Editor {
                 MakeDocumentError(SceneDocumentErrors::InvalidPrimitiveMetadata, "Creatable primitive has no typed authoring descriptor."));
         }
         return m_executor.Execute(command);
+    }
+
+    /** @copydoc InstantiateSceneAssetUseCase::InstantiateSceneAssetUseCase */
+    InstantiateSceneAssetUseCase::InstantiateSceneAssetUseCase(SceneDocument &document, SceneDocumentCommandExecutor &executor) noexcept
+        : document_(document), executor_(executor) {}
+
+    /** @copydoc InstantiateSceneAssetUseCase::Execute */
+    Result<SceneCommandResult> InstantiateSceneAssetUseCase::Execute(const AssetInstantiationRequest &request) {
+        if (!request.asset.IsValid() || !IsValidSceneObjectName(request.baseName)) {
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::InvalidPrimitiveMetadata, "Asset instantiation request is invalid."));
+        }
+        if (request.parent.has_value() && !document_.Contains(*request.parent)) {
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::ParentNotFound, "Asset drop parent no longer exists."));
+        }
+
+        std::optional<std::string> name = UniqueSiblingName(request.baseName, request.parent, document_.Objects());
+        if (!name.has_value())
+            return Result<SceneCommandResult>::Failure(
+                MakeDocumentError(SceneDocumentErrors::InvalidName, "Unable to allocate a unique asset object name."));
+        return executor_.Execute(CreateSceneObjectCommand{.name = std::move(*name),
+                                                          .parent = request.parent,
+                                                          .localTransform = request.localTransform,
+                                                          .components = {},
+                                                          .meshAsset = request.asset});
     }
 }  // namespace Horo::Editor
