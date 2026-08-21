@@ -689,7 +689,7 @@ def _apply_format_chunk(clang_format_bin: str, chunk: list[str], check: bool) ->
 
 def _partially_staged_files(paths: Sequence[Path]) -> list[Path]:
     """Return staged targets whose working-tree contents differ from the index."""
-    relative_paths = [str(path.relative_to(REPOSITORY_ROOT)) for path in paths]
+    relative_paths = [os.path.relpath(path, REPOSITORY_ROOT) for path in paths]
     proc = subprocess.run(
         ["git", "diff", "--name-only", "--diff-filter=ACMR", "--", *relative_paths],
         cwd=REPOSITORY_ROOT,
@@ -727,7 +727,7 @@ def run_format(files: Sequence[str] | None = None, staged: bool = False, check: 
                 file=sys.stderr,
             )
             for path in partially_staged:
-                print(f"  {path.relative_to(REPOSITORY_ROOT)}", file=sys.stderr)
+                print(f"  {os.path.relpath(path, REPOSITORY_ROOT)}", file=sys.stderr)
             return 1
 
     file_paths = [str(f) for f in target_files]
