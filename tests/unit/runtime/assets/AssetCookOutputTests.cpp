@@ -117,6 +117,35 @@ TEST_CASE("PublishCookGeneration rejects non-portable artifact filenames", "[nat
     REQUIRE((!std::filesystem::exists(tmp.path / "current.json")));
 }
 
+TEST_CASE("PublishCookGeneration rejects reserved and trailing-punctuation artifact filenames", "[native]") {
+    TempDir tmp;
+    const auto target = Target("headless-null");
+    const auto payload = MakePayload(16, 0x7F);
+    // Reserved DOS device names (case-insensitive, with or without extension),
+    // trailing dots/spaces that Windows silently strips, and ".." segments.
+    const std::string_view rejectedNames[] = {"CON.cooked",       "con.cooked",       "Con", "NUL.cooked",
+                                              "com1.cooked",      "LPT4.cooked",      "aux", "artifact.cooked.",
+                                              "artifact.cooked ", "ar..tifact.cooked"};
+    for (const auto name : rejectedNames) {
+        const auto id = Id("00000000-0000-0000-0000-000000000005");
+        const std::vector<AssetCookManifestEntry> entries = {
+            {.assetId = id, .assetType = Type("core.mesh"), .artifactFile = std::string(name), .artifactHash = DigestOf(payload)}};
+        const std::vector<std::vector<std::uint8_t>> payloads = {payload};
+
+        INFO("rejected name: " << name);
+        const auto published = PublishCookGeneration(tmp.path, target, entries, payloads);
+        REQUIRE((published.HasError()));
+        REQUIRE((!std::filesystem::exists(tmp.path / "current.json")));
+    }
+
+    // Sanity: a normal portable name is still accepted.
+    const auto id = Id("00000000-0000-0000-0000-000000000006");
+    const std::vector<AssetCookManifestEntry> entries = {
+        {.assetId = id, .assetType = Type("core.mesh"), .artifactFile = "plain-artifact.cooked", .artifactHash = DigestOf(payload)}};
+    const std::vector<std::vector<std::uint8_t>> payloads = {payload};
+    REQUIRE((PublishCookGeneration(tmp.path, target, entries, payloads).HasValue()));
+}
+
 TEST_CASE("PublishCookGeneration rejects duplicate asset IDs", "[native]") {
     TempDir tmp;
     auto nullTarget = Target("headless-null");
