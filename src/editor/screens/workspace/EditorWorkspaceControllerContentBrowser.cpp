@@ -210,10 +210,10 @@ namespace Horo::Editor {
                 std::array<std::uint8_t, 16> bytes{};
                 for (std::uint8_t &byte : bytes)
                     byte = static_cast<std::uint8_t>(random());
-                const auto variant = static_cast<std::byte>(bytes[6]);
-                const auto version = static_cast<std::byte>(bytes[8]);
-                bytes[6] = std::to_integer<std::uint8_t>((variant & std::byte{0x0fU}) | std::byte{0x40U});
-                bytes[8] = std::to_integer<std::uint8_t>((version & std::byte{0x3fU}) | std::byte{0x80U});
+                const auto version = static_cast<std::byte>(bytes[6]);
+                const auto variant = static_cast<std::byte>(bytes[8]);
+                bytes[6] = std::to_integer<std::uint8_t>((version & std::byte{0x0fU}) | std::byte{0x40U});
+                bytes[8] = std::to_integer<std::uint8_t>((variant & std::byte{0x3fU}) | std::byte{0x80U});
                 if (const Assets::AssetId candidate = Assets::AssetId::FromBytes(bytes);
                     candidate.IsValid() && snapshot.Find(candidate) == nullptr)
                     return candidate;
