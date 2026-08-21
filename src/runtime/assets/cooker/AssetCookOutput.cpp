@@ -114,7 +114,8 @@ namespace Horo::Assets {
                 const auto character = static_cast<unsigned char>(c);
                 if (character == '/' || character == '\\' || character == ':')
                     return false;
-                if (character < 0x20 || character == '"' || character == '<' || character == '>' || character == '|' || character == '?')
+                if (character < 0x20 || character == '"' || character == '<' || character == '>' || character == '|' || character == '?' ||
+                    character == '*')
                     return false;
             }
             if (file.find("..") != std::string_view::npos)
