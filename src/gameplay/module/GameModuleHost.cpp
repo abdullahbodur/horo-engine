@@ -51,8 +51,11 @@ namespace Horo::Gameplay {
         if (!impl_)
             return;
         if (impl_->gameplayModule != nullptr) {
-            if (impl_->started)
-                impl_->gameplayModule->Stop(impl_->runtimeContext);
+            if (impl_->started) {
+                IGameModule *moduleToStop = impl_->gameplayModule;
+                GameRuntimeContext ctx = impl_->runtimeContext;
+                moduleToStop->Stop(ctx);
+            }
             impl_->destroy(impl_->gameplayModule);
             impl_->gameplayModule = nullptr;
         }
@@ -152,11 +155,22 @@ namespace Horo::Gameplay {
     }
 
     /** @copydoc GameModuleHost::LoadShadowCopy */
+    [[nodiscard]] bool IsSafeAbsolutePath(const std::filesystem::path &path) noexcept {
+        if (path.empty() || !path.is_absolute())
+            return false;
+        for (const auto &part : path) {
+            if (part == "..")
+                return false;
+        }
+        return true;
+    }
+
     Result<std::unique_ptr<LoadedGameModule>> GameModuleHost::LoadShadowCopy(const std::filesystem::path &libraryPath,
                                                                              const std::filesystem::path &shadowRoot,
                                                                              const std::string_view expectedBuildFingerprint) const {
-        if (!libraryPath.is_absolute() || !shadowRoot.is_absolute())
-            return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError("source and destination paths must be absolute."));
+        if (!IsSafeAbsolutePath(libraryPath) || !IsSafeAbsolutePath(shadowRoot))
+            return Result<std::unique_ptr<LoadedGameModule>>::Failure(
+                ShadowCopyError("source and destination paths must be absolute and without traversal."));
 
         std::error_code filesystemError;
         std::filesystem::create_directories(shadowRoot, filesystemError);
@@ -165,9 +179,15 @@ namespace Horo::Gameplay {
 
         static std::atomic<std::uint64_t> sequence{1};
         const auto timestamp = std::chrono::steady_clock::now().time_since_epoch().count();
-        const std::filesystem::path shadowPath =
-            shadowRoot / std::format("{}.horo_reload_{}_{}{}", libraryPath.stem().string(), timestamp,
-                                     sequence.fetch_add(1, std::memory_order::relaxed), libraryPath.extension().string());
+        const std::filesystem::path shadowPath = shadowRoot / std::format("{}.horo_reload_{}_{}{}", libraryPath.stem().string(), timestamp,
+                                                                          sequence.fetch_add(1), libraryPath.extension().string());
+        try {
+            if (std::filesystem::weakly_canonical(shadowPath).string().rfind(std::filesystem::weakly_canonical(shadowRoot).string(), 0) !=
+                0)
+                return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError("shadow path escapes root"));
+        } catch (...) {
+            return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError("shadow path validation failed"));
+        }
         if (!std::filesystem::copy_file(libraryPath, shadowPath, std::filesystem::copy_options::none, filesystemError)) {
             const std::string message = filesystemError ? filesystemError.message() : "candidate could not be copied.";
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError(message));

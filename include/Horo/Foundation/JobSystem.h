@@ -83,22 +83,22 @@ namespace Horo {
         JobSystem &operator=(JobSystem &&) = delete;
 
         /** @brief Queues work or returns a typed overload error without creating a job record. */
-        [[nodiscard]] Result<JobHandle> Submit(JobDescriptor descriptor, std::function<void(const CancellationToken &)> work);
+        [[nodiscard]] Result<JobHandle> Submit(JobDescriptor descriptor, std::function<void(const CancellationToken &)> work) const;
         /**
          * @brief Queues result-returning work without translating typed failures into exceptions.
          * @param descriptor Submission metadata including optional parent cancellation.
          * @param work Owned callback executed by one worker.
          * @return Move-only accepted-job handle or a typed admission failure.
          */
-        [[nodiscard]] Result<JobHandle> SubmitResult(JobDescriptor descriptor, JobFunction work);
+        [[nodiscard]] Result<JobHandle> SubmitResult(JobDescriptor descriptor, JobFunction work) const;
         /** @brief Requests cooperative cancellation; queued work becomes terminal immediately. */
-        [[nodiscard]] Result<void> RequestCancel(JobId id);
+        [[nodiscard]] Result<void> RequestCancel(JobId id) const;
         /** @brief Returns the latest state for an accepted job. */
         [[nodiscard]] JobSnapshot Query(JobId id) const;
         /** @brief Returns the immutable worker count configured for this scheduler. */
         [[nodiscard]] std::size_t WorkerCount() const noexcept;
         /** @brief Stops submissions, then drains or cooperatively cancels work and joins all workers. */
-        void Shutdown(ShutdownPolicy policy);
+        void Shutdown(ShutdownPolicy policy) const;
 
     private:
         struct State;
@@ -136,14 +136,14 @@ namespace Horo {
          * @param work Owned child callback.
          * @return Accepted child identifier or a typed admission failure.
          */
-        [[nodiscard]] Result<JobId> Spawn(JobDescriptor descriptor, JobFunction work);
+        [[nodiscard]] Result<JobId> Spawn(JobDescriptor descriptor, JobFunction work) const;
         /** @brief Closes admission and requests cooperative cancellation for all accepted children. */
-        void RequestCancel();
+        void RequestCancel() const;
         /**
          * @brief Closes admission and joins every accepted child.
          * @return Success or the first child error in deterministic spawn order. Repeated calls return the same result.
          */
-        [[nodiscard]] Result<void> Join();
+        [[nodiscard]] Result<void> Join() const;
 
     private:
         struct State;
