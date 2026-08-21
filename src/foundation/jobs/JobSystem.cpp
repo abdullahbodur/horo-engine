@@ -1,6 +1,7 @@
 #include "Horo/Foundation/JobSystem.h"
 
 #include "../FoundationErrors.h"
+#include "Horo/Foundation/Telemetry/Operation.h"
 
 #include <condition_variable>
 #include <deque>
@@ -19,7 +20,8 @@ namespace Horo {
         }
 
         [[nodiscard]] bool IsTerminal(const JobState state) noexcept {
-            return state == JobState::Succeeded || state == JobState::Failed || state == JobState::Cancelled;
+            using enum JobState;
+            return state == Succeeded || state == Failed || state == Cancelled;
         }
     }  // namespace
 
@@ -28,19 +30,17 @@ namespace Horo {
             : id(jobId), cancellation(descriptor.parentCancellation), work(std::move(jobWork)) {}
 
         [[nodiscard]] std::mutex &Mutex() const noexcept {
-            return mutex;
+            return mutex_;
         }
 
-    private:
-        mutable std::mutex mutex;
-
-    public:
         JobId id;
         std::condition_variable completed;
         JobState state = JobState::Queued;
         std::optional<Error> error;
         CancellationSource cancellation;
         JobFunction work;
+        Telemetry::OperationContext operationContext = Telemetry::CaptureOperationContext();
+        mutable std::mutex mutex_;
     };
 
     struct JobSystem::State {
@@ -93,6 +93,7 @@ namespace Horo {
                 record->state = JobState::Running;
             }
 
+            const Telemetry::ScopedOperationContext operationContext{record->operationContext};
             try {
                 Result<void> outcome = record->work(record->cancellation.Token());
                 if (outcome.HasError()) {
@@ -122,14 +123,14 @@ namespace Horo {
         Shutdown(ShutdownPolicy::Cancel);
     }
 
-    Result<JobHandle> JobSystem::Submit(JobDescriptor descriptor, std::function<void(const CancellationToken &)> work) {
+    Result<JobHandle> JobSystem::Submit(JobDescriptor descriptor, std::function<void(const CancellationToken &)> work) const {
         return SubmitResult(std::move(descriptor), [work = std::move(work)](const CancellationToken &cancellation) {
             work(cancellation);
             return Result<void>::Success();
         });
     }
 
-    Result<JobHandle> JobSystem::SubmitResult(JobDescriptor descriptor, JobFunction work) {
+    Result<JobHandle> JobSystem::SubmitResult(JobDescriptor descriptor, JobFunction work) const {
         std::lock_guard lock(m_state->mutex);
         if (!m_state->accepting)
             return Result<JobHandle>::Failure(MakeJobError(JobErrors::Shutdown, "Job system is no longer accepting work."));
@@ -143,7 +144,7 @@ namespace Horo {
         return Result<JobHandle>::Success(JobHandle(std::move(record)));
     }
 
-    Result<void> JobSystem::RequestCancel(const JobId id) {
+    Result<void> JobSystem::RequestCancel(const JobId id) const {
         std::shared_ptr<JobRecord> record;
         {
             std::lock_guard lock(m_state->mutex);
@@ -183,7 +184,7 @@ namespace Horo {
         return m_state->config.workerCount;
     }
 
-    void JobSystem::Shutdown(const ShutdownPolicy policy) {
+    void JobSystem::Shutdown(const ShutdownPolicy policy) const {
         std::lock_guard shutdownLock(m_state->shutdownMutex);
         {
             std::lock_guard lock(m_state->mutex);
@@ -258,11 +259,15 @@ namespace Horo {
         : m_state(std::make_shared<State>(jobs, policy, parentCancellation)) {}
 
     TaskGroup::~TaskGroup() {
-        RequestCancel();
-        static_cast<void>(Join());
+        try {
+            RequestCancel();
+            static_cast<void>(Join());
+        } catch (...) {  // NOSONAR(cpp:S2486) A destructor cannot report or propagate cleanup failures.
+            // Destructors must swallow any unexpected exceptions per noexcept contract
+        }
     }
 
-    Result<JobId> TaskGroup::Spawn(JobDescriptor descriptor, JobFunction work) {
+    Result<JobId> TaskGroup::Spawn(JobDescriptor descriptor, JobFunction work) const {
         std::lock_guard lock(m_state->mutex);
         if (!m_state->accepting)
             return Result<JobId>::Failure(MakeJobError(JobErrors::TaskGroupClosed, "Task group admission is closed."));
@@ -289,11 +294,11 @@ namespace Horo {
         return Result<JobId>::Success(childId);
     }
 
-    void TaskGroup::RequestCancel() {
+    void TaskGroup::RequestCancel() const {
         CancelChildren(m_state);
     }
 
-    Result<void> TaskGroup::Join() {
+    Result<void> TaskGroup::Join() const {
         std::lock_guard joinLock(m_state->joinMutex);
         if (m_state->cancellation.Token().IsCancellationRequested())
             CancelChildren(m_state);

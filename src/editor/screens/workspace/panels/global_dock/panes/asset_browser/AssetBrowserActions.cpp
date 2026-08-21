@@ -36,14 +36,16 @@ namespace Horo::Editor {
             interactionSession.OpenCreateFolder();
         }
         if (Ui::ContextMenuItem((localization.Get("editor", "workspace.content_browser.action.create_lua_behavior") +
-                                 "###content_browser_create_lua_behavior").c_str(), nullptr,
-                                context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.create_lua_behavior")) {
+                                 "###content_browser_create_lua_behavior")
+                                    .c_str(),
+                                nullptr, context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.create_lua_behavior")) {
             command.command = EditorWorkspaceViewCommand::CreateLuaBehavior;
             command.stringPayload = directory.absoluteCurrentPath;
         }
         if (Ui::ContextMenuItem((localization.Get("editor", "workspace.content_browser.action.create_native_behavior") +
-                                 "###content_browser_create_native_behavior").c_str(), nullptr,
-                                context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.create_native_behavior")) {
+                                 "###content_browser_create_native_behavior")
+                                    .c_str(),
+                                nullptr, context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.create_native_behavior")) {
             command.command = EditorWorkspaceViewCommand::CreateNativeBehavior;
             command.stringPayload = directory.absoluteCurrentPath;
         }
@@ -67,6 +69,7 @@ namespace Horo::Editor {
 
         const ILocalizationService &localization = context.localization;
         if (entry.kind == ContentBrowserEntryKind::Asset) {
+            using enum Horo::Editor::Ui::ContextMenuItemTone;
             if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.duplicate").c_str(), "Ctrl+D",
                                     context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.duplicate")) {
                 command = AssetBrowserInteractionSession::Duplicate(entry.absolutePath);

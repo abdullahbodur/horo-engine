@@ -79,6 +79,52 @@ namespace {
         REQUIRE((invalid.ErrorValue().code.Value() == "viewport_picking.invalid_query"));
     }
 
+    TEST_CASE("Editor Visibility Removes Instances And Editor Lock Prevents Picking", "[unit][editor]") {
+        Runtime::PrimitiveMeshCache meshCache;
+        SceneDocument document;
+        EditorHistory history;
+        SceneDocumentCommandExecutor commands{document, history};
+        const auto farObject = commands.Execute(CreateSceneObjectCommand{
+            .name = "Far",
+            .primitiveMesh = PrimitiveMeshDescriptor{},
+        });
+        const auto nearObject = commands.Execute(CreateSceneObjectCommand{
+            .name = "Near",
+            .localTransform = Math::Transform{.translation = {0.0F, 0.0F, 2.0F}},
+            .primitiveMesh = PrimitiveMeshDescriptor{},
+        });
+        REQUIRE((farObject.HasValue() && nearObject.HasValue()));
+        const auto runtimeScene = MakeRuntimeScene(document);
+
+        REQUIRE((commands
+                     .Execute(SetSceneObjectEditorStateCommand{nearObject.Value().object,
+                                                               SceneObjectEditorState{.visible = false, .locked = false}})
+                     .HasValue()));
+        SceneDocumentSnapshot editorSnapshot = document.Snapshot();
+        auto extracted = ExtractEditorViewportScene(runtimeScene->View(), document.Revision(), {}, meshCache, &editorSnapshot);
+        REQUIRE((extracted.HasValue()));
+        REQUIRE((extracted.Value().instances.size() == 1));
+        REQUIRE((extracted.Value().instanceObjects == std::vector{farObject.Value().object}));
+
+        REQUIRE((commands
+                     .Execute(SetSceneObjectEditorStateCommand{nearObject.Value().object,
+                                                               SceneObjectEditorState{.visible = true, .locked = true}})
+                     .HasValue()));
+        editorSnapshot = document.Snapshot();
+        extracted = ExtractEditorViewportScene(runtimeScene->View(), document.Revision(), {}, meshCache, &editorSnapshot);
+        REQUIRE((extracted.HasValue()));
+        REQUIRE((extracted.Value().instances.size() == 2));
+        REQUIRE((extracted.Value().instancePickable == std::vector<std::uint8_t>{1U, 0U}));
+
+        const auto picked = PickEditorViewportScene(extracted.Value(), EditorViewportPickQuery{
+                                                                           .normalizedX = 0.5F,
+                                                                           .normalizedY = 0.5F,
+                                                                           .aspect = 1.0F,
+                                                                       });
+        REQUIRE((picked.HasValue()));
+        REQUIRE((picked.Value().object == farObject.Value().object));
+    }
+
     TEST_CASE("Identity Mapping Mismatch Is Rejected", "[unit][editor]") {
         Runtime::PrimitiveMeshCache meshCache;
         auto acquired = meshCache.Acquire(Runtime::PrimitiveMeshDescriptor::Defaults(Runtime::PrimitiveMeshType::Box));

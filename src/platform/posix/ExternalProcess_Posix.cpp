@@ -3,7 +3,6 @@
 #endif
 
 #include "Horo/Platform/ExternalProcess.h"
-
 #include "Horo/Platform/PlatformErrors.h"
 
 #include <algorithm>
@@ -25,8 +24,7 @@ namespace Horo {
     namespace {
         class LineDecoder final {
         public:
-            LineDecoder(const ProcessOutputStream stream, const std::size_t maximum,
-                        const std::function<void(ProcessOutputLine)> &callback)
+            LineDecoder(const ProcessOutputStream stream, const std::size_t maximum, const std::function<void(ProcessOutputLine)> &callback)
                 : stream_(stream), maximum_(std::max<std::size_t>(maximum, 1U)), callback_(&callback) {}
 
             void Append(const char *bytes, const std::size_t count) {
@@ -106,7 +104,7 @@ namespace Horo {
 
     /** @copydoc NativeExternalProcessRunner::Run */
     Result<ExternalProcessResult> NativeExternalProcessRunner::Run(const ExternalProcessRequest &request,
-                                                                    const CancellationToken &cancellation) {
+                                                                   const CancellationToken &cancellation) {
         if (request.executable.empty())
             return Result<ExternalProcessResult>::Failure(MakeError(PlatformErrors::ProcessLaunchFailed, "Executable is empty."));
 
@@ -200,7 +198,7 @@ namespace Horo {
             }
 
             std::array<pollfd, 2> descriptors{{{stdoutPipe[0], static_cast<short>(stdoutOpen ? POLLIN : 0), 0},
-                                                {stderrPipe[0], static_cast<short>(stderrOpen ? POLLIN : 0), 0}}};
+                                               {stderrPipe[0], static_cast<short>(stderrOpen ? POLLIN : 0), 0}}};
             static_cast<void>(poll(descriptors.data(), static_cast<nfds_t>(descriptors.size()), 25));
             if (stdoutOpen && (descriptors[0].revents & (POLLIN | POLLHUP | POLLERR)) != 0)
                 Drain(stdoutPipe[0], stdoutOpen, standardOutput);

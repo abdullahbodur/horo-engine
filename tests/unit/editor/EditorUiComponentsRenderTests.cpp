@@ -1,3 +1,4 @@
+#include "Horo/Editor/EditorIcons.h"
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/EditorUiComponents.h"
 
@@ -17,6 +18,18 @@ namespace {
         gClipboardText = text;
     }
 }  // namespace
+
+TEST_CASE("Editor icon registry resolves canonical and catalog tokens", "[unit][editor][gui][design-system]") {
+    using Horo::Editor::Ui::UiIcon;
+    using Horo::Editor::Ui::UiIconRegistry;
+
+    REQUIRE(UiIconRegistry::Resolve("action.delete") == UiIcon::Delete);
+    REQUIRE(UiIconRegistry::Resolve("primitive.light.directional") == UiIcon::DirectionalLight);
+    REQUIRE(UiIconRegistry::Resolve("primitive.collider.sphere") == UiIcon::Sphere);
+    REQUIRE_FALSE(UiIconRegistry::Resolve("unknown.icon").has_value());
+    REQUIRE(std::string(UiIconRegistry::Token(UiIcon::VisibilityOff)) == "action.visibility_off");
+    REQUIRE(UiIconRegistry::Token(UiIcon::None).empty());
+}
 
 TEST_CASE("Component metrics use theme overrides while global scaling is disabled", "[unit][editor][gui][design-system]") {
     using namespace Horo::Editor;
@@ -84,8 +97,8 @@ TEST_CASE("Small toolbar primitives share height and fixed action width", "[unit
 
     ImGui::NewFrame();
     ImGui::Begin("ToolbarPrimitiveGeometry");
-    static_cast<void>(
-        InputTextControl("##Search", search.data(), search.size(), fonts, false, 180.0F, "Filter...", 0.0F, ComponentSize::Small));
+    static_cast<void>(InputTextControl("##Search", search.data(), search.size(), fonts,
+                                       InputTextOptions{.width = 180.0F, .hint = "Filter...", .componentSize = ComponentSize::Small}));
     inputSize = ImGui::GetItemRectSize();
     ImGui::SameLine();
     static_cast<void>(Button({.label = "Clear",
@@ -97,8 +110,8 @@ TEST_CASE("Small toolbar primitives share height and fixed action width", "[unit
     buttonSize = ImGui::GetItemRectSize();
     ImGui::SameLine();
     ImGui::SetNextItemWidth(104.0F);
-    static_cast<void>(
-        ComboControl("##Status", &status, statuses.data(), static_cast<int>(statuses.size()), fonts, false, 0.0F, ComponentSize::Small));
+    static_cast<void>(ComboControl("##Status", &status, statuses.data(), static_cast<int>(statuses.size()), fonts,
+                                   ComboControlOptions{.componentSize = ComponentSize::Small}));
     comboSize = ImGui::GetItemRectSize();
     ImGui::SameLine();
     static_cast<void>(MultiSelectField("##Columns", "Columns", columns, visible, fonts, 104.0F, ComponentSize::Small));
@@ -286,7 +299,8 @@ TEST_CASE("Editable object title keeps its compact input vertically centered", "
     ImGui::Begin("EditableObjectTitleTest");
     const ImVec2 titleOrigin = ImGui::GetCursorScreenPos();
     std::string value{"Box"};
-    static_cast<void>(DrawEditableObjTitle("object_name", value, 128U, "Mesh", ImVec4{0.2F, 0.7F, 0.4F, 0.15F}, Theme::Ok(), fonts));
+    static_cast<void>(DrawEditableObjTitle("object_name", value, 128U,
+                                           EditableObjectTitleBadge{"Mesh", ImVec4{0.2F, 0.7F, 0.4F, 0.15F}, Theme::Ok()}, fonts));
     const ImVec2 inputMinimum = ImGui::GetItemRectMin();
     const ImVec2 inputMaximum = ImGui::GetItemRectMax();
     ImGui::End();

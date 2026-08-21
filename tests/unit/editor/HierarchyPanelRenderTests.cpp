@@ -51,11 +51,30 @@ TEST_CASE("Hierarchy Panel Render Tests", "[unit][editor]") {
                                    .settings = settings};
     EditorWorkspaceViewModel viewModel;
     viewModel.documentRevision = DocumentRevision{1};
-    viewModel.objects = {
-        SceneObject{.id = SceneObjectId{1}, .name = "Root"},
-        SceneObject{.id = SceneObjectId{2}, .parent = SceneObjectId{1}, .name = "Box", .kind = SceneObjectKind::Mesh},
-    };
-    viewModel.primarySelection = SceneObjectId{2};
+    SceneObject root{.id = SceneObjectId{1}, .name = "Root"};
+    root.editorState.locked = true;
+    root.effectivelyLocked = true;
+    SceneObject mesh{.id = SceneObjectId{2}, .parent = SceneObjectId{1}, .name = "Box", .kind = SceneObjectKind::Mesh};
+    mesh.effectivelyLocked = true;
+    mesh.lockedByParent = true;
+    SceneObject directional{.id = SceneObjectId{3}, .name = "Directional Light"};
+    directional.components.light = Runtime::LightComponent{.kind = Runtime::LightKind::Directional};
+    SceneObject camera{.id = SceneObjectId{4}, .name = "Camera"};
+    camera.components.camera = Runtime::CameraComponent{};
+    SceneObject audio{.id = SceneObjectId{5}, .name = "Audio"};
+    audio.components.audioSource = Runtime::AudioSourceComponent{};
+    audio.editorState.visible = false;
+    audio.effectivelyVisible = false;
+    SceneObject longChild{.id = SceneObjectId{6},
+                          .parent = SceneObjectId{1},
+                          .name = "A very long nested hierarchy object name that must truncate before row actions"};
+    SceneObject spot{.id = SceneObjectId{7}, .name = "Light"};
+    spot.components.light = Runtime::LightComponent{.kind = Runtime::LightKind::Spot};
+    SceneObject duplicateName{.id = SceneObjectId{8}, .parent = SceneObjectId{6}, .name = "Light"};
+    duplicateName.components.light = Runtime::LightComponent{.kind = Runtime::LightKind::Point};
+    viewModel.objects = {root, mesh, directional, camera, audio, longChild, spot, duplicateName};
+    viewModel.primarySelection = SceneObjectId{3};
+    viewModel.selectedObjects = {SceneObjectId{2}, SceneObjectId{3}};
     EditorWorkspaceViewCommandData command;
     HierarchyPanel panel;
 

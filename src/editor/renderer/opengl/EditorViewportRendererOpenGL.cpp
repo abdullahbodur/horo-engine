@@ -212,13 +212,13 @@ namespace Horo::Editor {
         GLint previousCullFaceMode = 0;
         GLint previousActiveTexture = 0;
         GLint previousShadowTexture = 0;
-        GLint previousViewport[4]{};
-        GLfloat previousClearColor[4]{};
+        std::array<GLint, 4> previousViewport{};
+        std::array<GLfloat, 4> previousClearColor{};
         const GLboolean depthTestWasEnabled = glIsEnabled(GL_DEPTH_TEST);
         const GLboolean scissorTestWasEnabled = glIsEnabled(GL_SCISSOR_TEST);
         const GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
         const GLboolean cullFaceWasEnabled = glIsEnabled(GL_CULL_FACE);
-        GLboolean previousColorMask[4]{};
+        std::array<GLboolean, 4> previousColorMask{};
         GLboolean previousDepthMask = GL_TRUE;
         glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previousDrawFramebuffer);
         glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFramebuffer);
@@ -230,9 +230,9 @@ namespace Horo::Editor {
         glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
         glActiveTexture(GL_TEXTURE7);
         glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousShadowTexture);
-        glGetIntegerv(GL_VIEWPORT, previousViewport);
-        glGetFloatv(GL_COLOR_CLEAR_VALUE, previousClearColor);
-        glGetBooleanv(GL_COLOR_WRITEMASK, previousColorMask);
+        glGetIntegerv(GL_VIEWPORT, previousViewport.data());
+        glGetFloatv(GL_COLOR_CLEAR_VALUE, previousClearColor.data());
+        glGetBooleanv(GL_COLOR_WRITEMASK, previousColorMask.data());
         glGetBooleanv(GL_DEPTH_WRITEMASK, &previousDepthMask);
 
         if (shadow.Value().has_value()) {
@@ -321,8 +321,8 @@ namespace Horo::Editor {
             return Result<void>::Success();
 
         LightVisualizerGeometry geometry;
-        if (!BuildLightVisualizerGeometry(
-                LightVisualizerGeometryRequest{.camera = camera, .light = *lightVisualizerOptions_.selectedLight}, geometry)) {
+        if (!BuildLightVisualizerGeometry(LightVisualizerGeometryRequest{.camera = camera, .light = *lightVisualizerOptions_.selectedLight},
+                                          geometry)) {
             return Result<void>::Failure(
                 MakeViewportError(RendererErrors::ViewportInvalidScene, "Failed to build selected Light visualizer geometry."));
         }
@@ -358,6 +358,7 @@ namespace Horo::Editor {
                     .aspect = aspect,
                     .viewportHeightPixels = viewportHeightPixels,
                     .targetMinorSpacingPixels = gridOptions_.targetMinorSpacingPixels,
+                    .targetLineWidthPixels = gridOptions_.targetLineWidthPixels,
                 },
                 geometry)) {
             return Result<void>::Failure(
@@ -375,16 +376,16 @@ namespace Horo::Editor {
         const Math::Mat4 identity = Math::Mat4::Identity();
         glUniformMatrix4fv(modelLocation_, 1, GL_FALSE, identity.values.data());
         glUniform1f(selectionStrengthLocation_, 1.0F);
-        const auto drawBatch = [&](const ViewportGridLineBatch batch) {
+        const auto drawBatch = [&](const ViewportGridLineBatch &batch) {
             if (batch.positions.empty())
                 return;
             glBindBuffer(GL_ARRAY_BUFFER, gridVertexBuffer_);
             glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(batch.positions.size_bytes()), batch.positions.data(), GL_DYNAMIC_DRAW);
             glUniform3f(selectionColorLocation_, batch.color.x, batch.color.y, batch.color.z);
-            glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(batch.positions.size()));
+            const GLenum primitive = batch.topology == ViewportGridPrimitiveTopology::Triangles ? GL_TRIANGLES : GL_LINES;
+            glDrawArrays(primitive, 0, static_cast<GLsizei>(batch.positions.size()));
         };
-        drawBatch(geometry.MinorLines());
-        drawBatch(geometry.MajorLines());
+        drawBatch(geometry.RegularLines());
         drawBatch(geometry.Axes());
         glDepthMask(GL_TRUE);
         return Result<void>::Success();
@@ -563,9 +564,8 @@ void main()
         selectionStrengthLocation_ = glGetUniformLocation(program_, "uSelectionStrength");
         if (mvpLocation_ < 0 || modelLocation_ < 0 || cameraPositionLocation_ < 0 || lightCountLocation_ < 0 ||
             lightPositionKindLocation_ < 0 || lightDirectionRangeLocation_ < 0 || lightColorIntensityLocation_ < 0 ||
-            lightConeLocation_ < 0 || shadowViewProjectionLocation_ < 0 || shadowMapLocation_ < 0 ||
-            shadowEnabledLocation_ < 0 || shadowLightIndexLocation_ < 0 || selectionColorLocation_ < 0 ||
-            selectionStrengthLocation_ < 0) {
+            lightConeLocation_ < 0 || shadowViewProjectionLocation_ < 0 || shadowMapLocation_ < 0 || shadowEnabledLocation_ < 0 ||
+            shadowLightIndexLocation_ < 0 || selectionColorLocation_ < 0 || selectionStrengthLocation_ < 0) {
             return Result<void>::Failure(
                 MakeViewportError(RendererErrors::ViewportShaderContractInvalid, "Viewport shader is missing a required frame uniform."));
         }
@@ -613,12 +613,11 @@ void main() {}
         }
         shadowMvpLocation_ = glGetUniformLocation(shadowProgram_, "uShadowMvp");
         if (shadowMvpLocation_ < 0) {
-            return Result<void>::Failure(MakeViewportError(
-                RendererErrors::ViewportShaderContractInvalid, "Viewport shadow shader is missing its matrix uniform."));
+            return Result<void>::Failure(
+                MakeViewportError(RendererErrors::ViewportShaderContractInvalid, "Viewport shadow shader is missing its matrix uniform."));
         }
 
-        constexpr GLsizei shadowMapResolution =
-            static_cast<GLsizei>(EditorViewportDirectionalShadowMapResolution);
+        constexpr auto shadowMapResolution = static_cast<GLsizei>(EditorViewportDirectionalShadowMapResolution);
         GLint previousDrawFramebuffer = 0;
         GLint previousReadFramebuffer = 0;
         GLint previousTexture = 0;
@@ -628,14 +627,14 @@ void main() {}
         glGenFramebuffers(1, &shadowFramebuffer_);
         glGenTextures(1, &shadowDepthTexture_);
         glBindTexture(GL_TEXTURE_2D, shadowDepthTexture_);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, shadowMapResolution, shadowMapResolution, 0,
-                     GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, shadowMapResolution, shadowMapResolution, 0, GL_DEPTH_COMPONENT, GL_FLOAT,
+                     nullptr);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-        constexpr GLfloat borderColor[]{1.0F, 1.0F, 1.0F, 1.0F};
-        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+        constexpr std::array<GLfloat, 4> borderColor{1.0F, 1.0F, 1.0F, 1.0F};
+        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor.data());
         glBindFramebuffer(GL_FRAMEBUFFER, shadowFramebuffer_);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowDepthTexture_, 0);
         glDrawBuffer(GL_NONE);
@@ -645,16 +644,15 @@ void main() {}
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(previousDrawFramebuffer));
         glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(previousReadFramebuffer));
         if (shadowFramebuffer_ == 0 || shadowDepthTexture_ == 0 || status != GL_FRAMEBUFFER_COMPLETE) {
-            return Result<void>::Failure(MakeViewportError(
-                RendererErrors::ViewportFramebufferIncomplete, "OpenGL directional shadow framebuffer is incomplete."));
+            return Result<void>::Failure(
+                MakeViewportError(RendererErrors::ViewportFramebufferIncomplete, "OpenGL directional shadow framebuffer is incomplete."));
         }
         return Result<void>::Success();
     }
 
-    Result<void> EditorViewportRendererOpenGL::DrawDirectionalShadowMap(
-        const Render::RenderSceneView &scene, const EditorViewportDirectionalShadowView &shadow) {
-        constexpr GLsizei shadowMapResolution =
-            static_cast<GLsizei>(EditorViewportDirectionalShadowMapResolution);
+    Result<void> EditorViewportRendererOpenGL::DrawDirectionalShadowMap(const Render::RenderSceneView &scene,
+                                                                        const EditorViewportDirectionalShadowView &shadow) {
+        constexpr auto shadowMapResolution = static_cast<GLsizei>(EditorViewportDirectionalShadowMapResolution);
         glBindFramebuffer(GL_FRAMEBUFFER, shadowFramebuffer_);
         glViewport(0, 0, shadowMapResolution, shadowMapResolution);
         glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
@@ -668,8 +666,8 @@ void main() {}
         for (const Render::RenderStaticMeshInstance &instance : scene.instances) {
             const auto mesh = meshes_.find(instance.mesh.id.value);
             if (mesh == meshes_.end()) {
-                return Result<void>::Failure(MakeViewportError(
-                    RendererErrors::ViewportStaleMeshResource, "Shadow pass instance references a stale mesh resource."));
+                return Result<void>::Failure(
+                    MakeViewportError(RendererErrors::ViewportStaleMeshResource, "Shadow pass instance references a stale mesh resource."));
             }
             const Math::Mat4 shadowMvp = Math::Multiply(shadow.viewProjection, instance.localToWorld);
             glUniformMatrix4fv(shadowMvpLocation_, 1, GL_FALSE, shadowMvp.values.data());
@@ -680,9 +678,8 @@ void main() {}
         return Result<void>::Success();
     }
 
-    void EditorViewportRendererOpenGL::UploadLighting(
-        const Render::RenderSceneView &scene,
-        const std::optional<EditorViewportDirectionalShadowView> &shadow) const {
+    void EditorViewportRendererOpenGL::UploadLighting(const Render::RenderSceneView &scene,
+                                                      const std::optional<EditorViewportDirectionalShadowView> &shadow) const {
         std::array<float, Render::MaximumForwardLights * 4> positionKind{};
         std::array<float, Render::MaximumForwardLights * 4> directionRange{};
         std::array<float, Render::MaximumForwardLights * 4> colorIntensity{};
@@ -706,8 +703,7 @@ void main() {}
         }
         glUniform3f(cameraPositionLocation_, scene.camera.position.x, scene.camera.position.y, scene.camera.position.z);
         glUniform1i(lightCountLocation_, static_cast<GLint>(scene.lights.size()));
-        const Math::Mat4 shadowViewProjection =
-            shadow.has_value() ? shadow->viewProjection : Math::Mat4::Identity();
+        const Math::Mat4 shadowViewProjection = shadow.has_value() ? shadow->viewProjection : Math::Mat4::Identity();
         glUniformMatrix4fv(shadowViewProjectionLocation_, 1, GL_FALSE, shadowViewProjection.values.data());
         glUniform1i(shadowMapLocation_, 7);
         glUniform1i(shadowEnabledLocation_, shadow.has_value() ? 1 : 0);
@@ -759,7 +755,7 @@ void main() {}
                 return Result<void>::Failure(
                     MakeViewportError(RendererErrors::ViewportGeometryCreationFailed, "Failed to upload a viewport mesh resource."));
             }
-            meshes_.emplace(resource.handle.id.value, mesh);
+            meshes_.try_emplace(resource.handle.id.value, mesh);
         }
         for (auto mesh = meshes_.begin(); mesh != meshes_.end();) {
             const bool present = std::ranges::any_of(resources, [&](const EditorViewportMeshResourceView &resource) {

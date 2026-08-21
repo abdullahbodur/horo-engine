@@ -26,11 +26,13 @@ namespace Horo::Editor {
         bool parent{};
         bool transform{};
         bool primitive{};
+        bool asset{};
         bool components{};
+        bool editorState{};
 
         /** @brief Reports whether at least one authored field differs. */
         [[nodiscard]] constexpr bool Any() const noexcept {
-            return name || parent || transform || primitive || components;
+            return name || parent || transform || primitive || asset || components || editorState;
         }
     };
 
@@ -77,5 +79,5 @@ namespace Horo::Editor {
      * @param request Absolute canonical location and immutable active-document snapshot.
      * @return Typed comparison or a canonical scene load/identity failure.
      */
-    [[nodiscard]] Result<SceneDocumentComparison> LoadSceneDocumentComparison(SceneDocumentComparisonRequest request);
+    [[nodiscard]] Result<SceneDocumentComparison> LoadSceneDocumentComparison(const SceneDocumentComparisonRequest &request);
 }  // namespace Horo::Editor

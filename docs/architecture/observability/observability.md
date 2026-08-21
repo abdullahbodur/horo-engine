@@ -16,6 +16,7 @@ Detailed contracts are split by concern:
 
 - [Logging, Context, And Diagnostics](./observability-logging.md)
 - [Metrics And Profiling](./observability-performance.md)
+- [Developer Instrumentation Guide](./developer-instrumentation.md)
 
 ## Executive Summary
 
@@ -100,6 +101,7 @@ Choose the shortest path for the task:
 | Architecture or product review | This document through [Product Profiles](#product-profiles) |
 | Add a C++ log | [Logging](#logging), then the reference C++ API and level rules |
 | Add a metric | [Metrics](#metrics), then the reference metric descriptor and cardinality rules |
+| Instrument engine, game, or plugin code | [Developer Instrumentation Guide](./developer-instrumentation.md) |
 | Add profiler zones | [Profiling](#profiling), then the reference profiler capture contract |
 | Propagate request/job parameters | [Diagnostic Context](#diagnostic-context) |
 | Build Console or Performance UI | [Ownership And Flow](#ownership-and-flow) |
@@ -244,11 +246,12 @@ logger, metric, profiler, or sink internals directly.
 
 ## External Export And Telemetry Boundary
 
-Automatic telemetry upload is out of scope for this architecture. Local
-observability does not require network access.
+Automatic telemetry upload remains out of scope for this architecture. Local
+observability does not require network access. Horo's optional OpenTelemetry
+adapter is compiled and activated only by a process composition root, and
+runtime export additionally requires explicit approval and an endpoint.
 
-A future exporter, such as OpenTelemetry, must be an explicit application or
-extension contribution and must satisfy:
+Any external exporter, including the OpenTelemetry adapter, must satisfy:
 
 - user or product approval;
 - redaction before export;
@@ -267,7 +270,9 @@ The following observability concerns are intentionally not covered by the core
 architecture:
 
 - **Cross-machine trace correlation** (e.g. OpenTelemetry trace IDs across
-  dedicated server farms or CI build agents). A future exporter may add this.
+  dedicated server farms or CI build agents). The optional exporter preserves
+  Horo correlation identifiers, but defining a distributed tracing topology is
+  owned by the deploying product.
 - **Dedicated multiplayer/networking health metrics** such as packet loss, RTT,
   or desync detection. These belong to the networking subsystem; they may emit
   logs or register metrics through the same descriptors but are not defined

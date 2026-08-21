@@ -33,12 +33,11 @@ namespace Horo::Editor {
     private:
         [[nodiscard]] Result<void> CreateProgram();
         [[nodiscard]] Result<void> CreateShadowResources();
-        [[nodiscard]] Result<void> DrawDirectionalShadowMap(
-            const Render::RenderSceneView &scene, const EditorViewportDirectionalShadowView &shadow);
+        [[nodiscard]] Result<void> DrawDirectionalShadowMap(const Render::RenderSceneView &scene,
+                                                            const EditorViewportDirectionalShadowView &shadow);
         [[nodiscard]] Result<void> DrawGrid(const Render::RenderCameraView &camera, float aspect, float viewportHeightPixels);
         [[nodiscard]] Result<void> DrawLightVisualizer(const Render::RenderCameraView &camera, float aspect);
-        void UploadLighting(const Render::RenderSceneView &scene,
-                            const std::optional<EditorViewportDirectionalShadowView> &shadow) const;
+        void UploadLighting(const Render::RenderSceneView &scene, const std::optional<EditorViewportDirectionalShadowView> &shadow) const;
 
         struct GpuMesh {
             std::uint32_t vertexArray{0};

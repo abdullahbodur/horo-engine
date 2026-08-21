@@ -36,9 +36,11 @@ namespace Horo::Editor {
     private:
         void DrawSelection(const EditorWorkspaceViewModel &viewModel, std::span<const SceneObjectId> selectedObjects,
                            EditorWorkspaceViewCommandData &command, const EditorGuiContext &context);
-        void DrawAddComponent(const SceneObject &object, const EditorWorkspaceViewModel &viewModel,
-                              EditorWorkspaceViewCommandData &command, const EditorGuiContext &context);
-        void DrawMultiSelectionTitle(std::size_t selectedObjectCount, const EditorGuiContext &context);
+        void DrawAddComponent(const SceneObject &object, const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &command,
+                              const EditorGuiContext &context) const;
+
+        void DrawMultiSelectionTitle(std::size_t selectedObjectCount, const EditorGuiContext &context) const;
+
         [[nodiscard]] InspectorNameEdit DrawObjectTitleWidgets(const SceneObject &object, const EditorGuiContext &context);
         [[nodiscard]] InspectorTransformEdit DrawTransformWidgets(const EditorGuiContext &context);
         [[nodiscard]] InspectorCameraEdit DrawCameraWidgets(const EditorGuiContext &context);
@@ -46,15 +48,20 @@ namespace Horo::Editor {
         [[nodiscard]] InspectorTriggerVolumeEdit DrawTriggerVolumeWidgets(const EditorGuiContext &context);
         [[nodiscard]] InspectorAudioSourceEdit DrawAudioSourceWidgets(const EditorGuiContext &context);
         void DrawBehaviors(const SceneObject &object, const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &command,
-                           const EditorGuiContext &context);
+                           const EditorGuiContext &context) const;
+
         void ApplyNameEdit(const InspectorNameEdit &edit, const SceneObject &object, EditorWorkspaceViewCommandData &command);
         void ApplyTransformEdit(const InspectorTransformEdit &edit, EditorWorkspaceViewCommandData &command);
-        void ApplyCameraEdit(const InspectorCameraEdit &edit, const SceneObject &object, EditorWorkspaceViewCommandData &command);
+
+        void ApplyCameraEdit(const InspectorCameraEdit &edit, const SceneObject &object, EditorWorkspaceViewCommandData &command) const;
+
         void ApplyLightEdit(const InspectorLightEdit &edit, const SceneObject &object, EditorWorkspaceViewCommandData &command);
         void ApplyTriggerVolumeEdit(const InspectorTriggerVolumeEdit &edit, const SceneObject &object,
-                                    EditorWorkspaceViewCommandData &command);
+                                    EditorWorkspaceViewCommandData &command) const;
+
         void ApplyAudioSourceEdit(const InspectorAudioSourceEdit &edit, const SceneObject &object,
-                                  EditorWorkspaceViewCommandData &command);
+                                  EditorWorkspaceViewCommandData &command) const;
+
         void DrawEmptyState(EditorWorkspaceViewCommandData &command, const EditorGuiContext &context);
         static void AdoptCommand(EditorWorkspaceViewCommandData &destination, EditorWorkspaceViewCommandData source);
 

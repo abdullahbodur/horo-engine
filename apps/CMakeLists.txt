@@ -1,3 +1,15 @@
+# The terminal/headless composition remains available without GUI or GPU targets.
+add_executable(horo-engine
+    horo-engine/main.cpp
+)
+target_compile_features(horo-engine PRIVATE cxx_std_20)
+target_compile_definitions(horo-engine PRIVATE
+    HORO_ENGINE_VERSION_STRING="${PROJECT_VERSION}"
+    HORO_BUILD_CONFIGURATION="$<CONFIG>"
+    HORO_SOURCE_REVISION="${HORO_SOURCE_REVISION}"
+)
+target_link_libraries(horo-engine PRIVATE HoroEngine::Application)
+
 # The graphical executable is an optional composition root. Foundation and
 # headless hosts must remain buildable when the GUI adapter is intentionally off.
 if(HORO_BUILD_EDITOR_GUI)
@@ -39,6 +51,8 @@ if(HORO_BUILD_EDITOR_GUI)
             GL_SILENCE_DEPRECATION
             HORO_EDITOR_ASSET_ROOT="${PROJECT_SOURCE_DIR}/assets"
             HORO_ENGINE_VERSION_STRING="${PROJECT_VERSION}"
+            HORO_BUILD_CONFIGURATION="$<CONFIG>"
+            HORO_SOURCE_REVISION="${HORO_SOURCE_REVISION}"
             HORO_GAMEPLAY_SDK_PACKAGE_DIR="${HORO_GAMEPLAY_SDK_PACKAGE_DIR}"
             HORO_GAMEPLAY_CXX_COMPILER="${CMAKE_CXX_COMPILER}"
     )
@@ -46,6 +60,7 @@ if(HORO_BUILD_EDITOR_GUI)
     target_link_libraries(HoroEditor
         PRIVATE
             HoroEngine::Gui
+            HoroEngine::EditorServices
             HoroEngine::EditorRenderExtraction
             HoroEngine::RenderFrontend
             HoroEngine::Runtime
@@ -55,8 +70,12 @@ if(HORO_BUILD_EDITOR_GUI)
             HoroEngine::ProjectMigrations
             HoroEngine::InputSdl
             HoroThirdParty::ImGui
-            ${HORO_SDL3_TARGET}
     )
+
+    if(HORO_ENABLE_OPENTELEMETRY)
+        target_compile_definitions(HoroEditor PRIVATE HORO_HAS_OPENTELEMETRY=1)
+        target_link_libraries(HoroEditor PRIVATE HoroEngine::OpenTelemetry)
+    endif()
 
     # Development composition: concrete backends are linked explicitly at the
     # executable boundary until RenderModuleHost owns installed-product loading.

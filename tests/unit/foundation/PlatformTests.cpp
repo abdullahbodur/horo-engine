@@ -115,9 +115,17 @@ namespace {
         std::memcpy(bytes.data(), text.data(), text.size());
         REQUIRE((files.WriteDurable(root / "prepared", bytes).HasValue()));
         REQUIRE((files.AtomicReplace(root / "prepared", root / "published").HasValue()));
-        std::ifstream input(root / "published", std::ios::binary);
-        REQUIRE((std::string(std::istreambuf_iterator<char>(input), {}) == text));
+        {
+            std::ifstream input(root / "published", std::ios::binary);
+            REQUIRE((std::string(std::istreambuf_iterator<char>(input), {}) == text));
+        }
+        REQUIRE((files.CopyDurable(root / "published", root / "copied").HasValue()));
+        {
+            std::ifstream input(root / "copied", std::ios::binary);
+            REQUIRE((std::string(std::istreambuf_iterator<char>(input), {}) == text));
+        }
         REQUIRE((files.AvailableBytes(root).HasValue()));
+        REQUIRE((files.RemoveDurable(root / "copied").HasValue()));
         REQUIRE((files.RemoveDurable(root / "published").HasValue()));
         std::filesystem::remove_all(root, ignored);
     }

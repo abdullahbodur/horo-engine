@@ -1,67 +1,59 @@
-#include <catch2/catch_test_macros.hpp>
-
 #include "Horo/Assets/AssetImporter.h"
 #include "Horo/Assets/AssetRegistry.h"
 #include "Horo/Foundation/CancellationToken.h"
 
+#include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
 
-namespace
-{
-using namespace Horo;
-using namespace Horo::Assets;
+namespace {
+    using namespace Horo;
+    using namespace Horo::Assets;
 
-AssetTypeId Type(const std::string_view value)
-{
-    auto parsed = AssetTypeId::Parse(value);
-    REQUIRE((parsed.HasValue()));
-    return parsed.Value();
-}
-
-class TestImporter final : public IAssetImporter
-{
-  public:
-    explicit TestImporter(std::string tag) : tag_(std::move(tag)) {}
-
-    [[nodiscard]] Result<PreparedAssetImport> Import(
-        const AssetImportInput &input,
-        const CancellationToken & /*cancellation*/) const override
-    {
-        PreparedAssetImport result;
-        result.type = Type("core.mesh");
-        result.editorPayload.assign(input.sourceBytes.begin(), input.sourceBytes.end());
-        result.editorPayload.push_back(static_cast<std::uint8_t>(tag_.front()));
-        return Result<PreparedAssetImport>::Success(std::move(result));
+    AssetTypeId Type(const std::string_view value) {
+        auto parsed = AssetTypeId::Parse(value);
+        REQUIRE((parsed.HasValue()));
+        return parsed.Value();
     }
 
-  private:
-    std::string tag_;
-};
+    class TestImporter final : public IAssetImporter {
+    public:
+        explicit TestImporter(std::string tag) : tag_(std::move(tag)) {}
 
-AssetImporterContribution MakeContribution(std::string id, std::string ext, std::string tag)
-{
-    return AssetImporterContribution{
-        .contributionId = std::move(id),
-        .packageId = "test.pkg",
-        .moduleId = "test.mod",
-        .moduleVersion = "1.0.0",
-        .version = "1.0.0",
-        .fileExtensions = {std::move(ext)},
-        .assetTypes = {Type("core.mesh")},
-        .settings = {},
-        .builtIn = false,
-        .strategy = std::make_shared<const TestImporter>(std::move(tag)),
+        [[nodiscard]] Result<PreparedAssetImport> Import(const AssetImportInput &input,
+                                                         const CancellationToken & /*cancellation*/) const override {
+            PreparedAssetImport result;
+            result.type = Type("core.mesh");
+            result.editorPayload.assign(input.sourceBytes.begin(), input.sourceBytes.end());
+            result.editorPayload.push_back(static_cast<std::uint8_t>(tag_.front()));
+            return Result<PreparedAssetImport>::Success(std::move(result));
+        }
+
+    private:
+        std::string tag_;
     };
-}
 
-} // namespace
+    AssetImporterContribution MakeContribution(std::string id, std::string ext, std::string tag) {
+        return AssetImporterContribution{
+            .contributionId = std::move(id),
+            .packageId = "test.pkg",
+            .moduleId = "test.mod",
+            .moduleVersion = "1.0.0",
+            .version = "1.0.0",
+            .fileExtensions = {std::move(ext)},
+            .assetTypes = {Type("core.mesh")},
+            .settings = {},
+            .builtIn = false,
+            .strategy = std::make_shared<const TestImporter>(std::move(tag)),
+        };
+    }
 
-TEST_CASE("Importer catalog registers and publishes a snapshot", "[native]")
-{
+}  // namespace
+
+TEST_CASE("Importer catalog registers and publishes a snapshot", "[native]") {
     AssetImporterCatalog catalog;
 
     REQUIRE((!catalog.IsSealed()));
@@ -75,8 +67,7 @@ TEST_CASE("Importer catalog registers and publishes a snapshot", "[native]")
     REQUIRE((catalog.IsSealed()));
 }
 
-TEST_CASE("Importer catalog finds importer by extension", "[native]")
-{
+TEST_CASE("Importer catalog finds importer by extension", "[native]") {
     AssetImporterCatalog catalog;
     REQUIRE((catalog.Register(MakeContribution("test.obj", "obj", "A")).HasValue()));
     auto snapshot = catalog.Publish();
@@ -86,8 +77,7 @@ TEST_CASE("Importer catalog finds importer by extension", "[native]")
     REQUIRE((strategy != nullptr));
 }
 
-TEST_CASE("Importer catalog returns nullptr for unknown extension", "[native]")
-{
+TEST_CASE("Importer catalog returns nullptr for unknown extension", "[native]") {
     AssetImporterCatalog catalog;
     REQUIRE((catalog.Register(MakeContribution("test.obj", "obj", "A")).HasValue()));
     auto snapshot = catalog.Publish();
@@ -96,8 +86,7 @@ TEST_CASE("Importer catalog returns nullptr for unknown extension", "[native]")
     REQUIRE((snapshot.Value()->FindByExtension("fbx") == nullptr));
 }
 
-TEST_CASE("Importer catalog rejects duplicate contribution ID", "[native]")
-{
+TEST_CASE("Importer catalog rejects duplicate contribution ID", "[native]") {
     AssetImporterCatalog catalog;
     REQUIRE((catalog.Register(MakeContribution("test.obj", "obj", "A")).HasValue()));
 
@@ -105,16 +94,14 @@ TEST_CASE("Importer catalog rejects duplicate contribution ID", "[native]")
     REQUIRE((result.HasError()));
 }
 
-TEST_CASE("Importer catalog requires independent canonical module and importer versions", "[native]")
-{
+TEST_CASE("Importer catalog requires independent canonical module and importer versions", "[native]") {
     AssetImporterCatalog catalog;
     auto contribution = MakeContribution("test.obj", "obj", "A");
     contribution.moduleVersion = "latest";
     REQUIRE(catalog.Register(std::move(contribution)).HasError());
 }
 
-TEST_CASE("Importer catalog can register multiple extensions", "[native]")
-{
+TEST_CASE("Importer catalog can register multiple extensions", "[native]") {
     AssetImporterCatalog catalog;
     REQUIRE((catalog.Register(MakeContribution("test.mesh", "obj", "A")).HasValue()));
     REQUIRE((catalog.Register(MakeContribution("test.model", "fbx", "B")).HasValue()));
@@ -126,8 +113,7 @@ TEST_CASE("Importer catalog can register multiple extensions", "[native]")
     REQUIRE((snapshot.Value()->FindByExtension("fbx") != nullptr));
 }
 
-TEST_CASE("Importer catalog rejects registration after sealed", "[native]")
-{
+TEST_CASE("Importer catalog rejects registration after sealed", "[native]") {
     AssetImporterCatalog catalog;
     REQUIRE((catalog.Register(MakeContribution("test.obj", "obj", "A")).HasValue()));
     REQUIRE((catalog.Publish().HasValue()));
@@ -136,8 +122,7 @@ TEST_CASE("Importer catalog rejects registration after sealed", "[native]")
     REQUIRE((result.HasError()));
 }
 
-TEST_CASE("Importer catalog finds by contribution ID", "[native]")
-{
+TEST_CASE("Importer catalog finds by contribution ID", "[native]") {
     AssetImporterCatalog catalog;
     REQUIRE((catalog.Register(MakeContribution("test.obj", "obj", "A")).HasValue()));
     auto snapshot = catalog.Publish();
@@ -148,8 +133,7 @@ TEST_CASE("Importer catalog finds by contribution ID", "[native]")
     REQUIRE((contrib->contributionId == "test.obj"));
 }
 
-TEST_CASE("Importer catalog Reset clears unsealed entries", "[native]")
-{
+TEST_CASE("Importer catalog Reset clears unsealed entries", "[native]") {
     AssetImporterCatalog catalog;
     REQUIRE((catalog.Register(MakeContribution("test.obj", "obj", "A")).HasValue()));
     catalog.Reset();
@@ -159,11 +143,10 @@ TEST_CASE("Importer catalog Reset clears unsealed entries", "[native]")
     REQUIRE((snapshot.Value()->FindByExtension("obj") == nullptr));
 }
 
-TEST_CASE("AssetImporterContribution::HandlesExtension", "[native]")
-{
+TEST_CASE("AssetImporterContribution::HandlesExtension", "[native]") {
     auto contrib = MakeContribution("test", "obj", "A");
 
     REQUIRE((contrib.HandlesExtension("obj")));
     REQUIRE((!contrib.HandlesExtension("fbx")));
-    REQUIRE((!contrib.HandlesExtension("OBJ"))); // case-sensitive
+    REQUIRE((!contrib.HandlesExtension("OBJ")));  // case-sensitive
 }

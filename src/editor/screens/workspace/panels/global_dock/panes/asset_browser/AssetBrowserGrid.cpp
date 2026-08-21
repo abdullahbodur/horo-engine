@@ -3,6 +3,7 @@
 #include "Horo/Editor/EditorGuiContext.h"
 #include "Horo/Editor/EditorTheme.h"
 #include "Horo/Editor/Localization/ILocalizationService.h"
+#include "editor/screens/workspace/AssetSceneDrop.h"
 #include "editor/screens/workspace/EditorWorkspaceViewModel.h"
 #include "editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserActions.h"
 #include "editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserCards.h"
@@ -33,22 +34,28 @@ namespace Horo::Editor {
         constexpr float HeaderFontSize = kGlobalDockMinimumFontSize;
         constexpr float CardFontSize = kGlobalDockMinimumFontSize;
         constexpr float PreviewRowHeight = 20.0F;
-        constexpr char ContentBrowserAssetPayload[] = "HORO_CONTENT_BROWSER_ASSET";
 
         [[nodiscard]] ImFont *ResolveFont(ImFont *preferred) {
             return preferred != nullptr ? preferred : ImGui::GetFont();
         }
 
-        [[nodiscard]] std::optional<std::string> AbsoluteAssetPathFromPayload(const ImGuiPayload *payload) {
-            if (payload == nullptr || !payload->IsDataType(ContentBrowserAssetPayload) || payload->Data == nullptr ||
-                payload->DataSize <= 1) {
+        [[nodiscard]] std::optional<AssetSceneDragPayload> AssetReferenceFromPayload(const ImGuiPayload *payload) {
+            if (payload == nullptr || !payload->IsDataType(AssetSceneDragPayloadType) || payload->Data == nullptr ||
+                payload->DataSize != sizeof(AssetSceneDragPayload)) {
                 return std::nullopt;
             }
-            const auto *bytes = static_cast<const char *>(payload->Data);
-            const std::size_t size = static_cast<std::size_t>(payload->DataSize);
-            if (bytes[size - 1] != '\0' || std::strlen(bytes) != size - 1)
+            AssetSceneDragPayload reference;
+            std::memcpy(&reference, payload->Data, sizeof(reference));
+            if (reference.absolutePath.back() != '\0')
                 return std::nullopt;
-            const std::filesystem::path path{bytes};
+            return reference;
+        }
+
+        [[nodiscard]] std::optional<std::string> AbsoluteAssetPathFromPayload(const ImGuiPayload *payload) {
+            const std::optional<AssetSceneDragPayload> reference = AssetReferenceFromPayload(payload);
+            if (!reference.has_value())
+                return std::nullopt;
+            const std::filesystem::path path{reference->absolutePath.data()};
             if (!path.is_absolute())
                 return std::nullopt;
             return path.lexically_normal().string();
@@ -150,7 +157,9 @@ namespace Horo::Editor {
                 command = AssetBrowserInteractionSession::Navigate(entry.absolutePath);
             }
             if (entry.kind == ContentBrowserEntryKind::Asset && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                ImGui::SetDragDropPayload(ContentBrowserAssetPayload, entry.absolutePath.c_str(), entry.absolutePath.size() + 1);
+                const AssetSceneDragPayload payload =
+                    MakeAssetSceneDragPayload(entry.assetId, entry.assetType, entry.absolutePath, entry.registered);
+                ImGui::SetDragDropPayload(AssetSceneDragPayloadType, &payload, sizeof(payload));
                 ImGui::TextUnformatted(entry.displayName.c_str());
                 const bool copy = ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeySuper;
                 ImGui::TextColored(Theme::Dim(), "%s",
@@ -162,7 +171,7 @@ namespace Horo::Editor {
             }
             if (entry.kind == ContentBrowserEntryKind::Directory && ImGui::BeginDragDropTarget()) {
                 const ImGuiPayload *acceptedPayload =
-                    ImGui::AcceptDragDropPayload(ContentBrowserAssetPayload,
+                    ImGui::AcceptDragDropPayload(AssetSceneDragPayloadType,
                                                  ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
                 if (const std::optional<std::string> source = AbsoluteAssetPathFromPayload(acceptedPayload); source.has_value()) {
                     const bool copy = ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeySuper;

@@ -6,7 +6,7 @@
 struct ImVec2;
 
 namespace Horo::Editor {
-    class EditorGuiContext;
+    struct EditorGuiContext;
 
     /** @brief Semantic tone for one global-dock status value. */
     enum class GlobalDockStatusTone {

@@ -60,19 +60,20 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] ImVec4 ConsoleLevelColor(const Log::Level level) noexcept {
+            using enum Log::Level;
             switch (level) {
-                case Log::Level::Critical:
-                case Log::Level::Error:
+                case Critical:
+                case Error:
                     return Theme::Err();
-                case Log::Level::Warn:
+                case Warn:
                     return {0.91F, 0.64F, 0.24F, 1.0F};
-                case Log::Level::Info:
+                case Info:
                     return Theme::Muted();
-                case Log::Level::Debug:
+                case Debug:
                     return {0.35F, 0.72F, 0.95F, 1.0F};
-                case Log::Level::Trace:
+                case Trace:
                     return {0.72F, 0.55F, 0.94F, 1.0F};
-                case Log::Level::Off:
+                case Off:
                     return Theme::Dim();
             }
             return Theme::Muted();
@@ -87,9 +88,9 @@ namespace Horo::Editor {
                 return true;
             if (needle.size() > text.size())
                 return false;
-            return std::search(text.begin(), text.end(), needle.begin(), needle.end(), [](const char left, const char right) {
+            return !std::ranges::search(text, needle, [](const char left, const char right) {
                 return std::tolower(static_cast<unsigned char>(left)) == std::tolower(static_cast<unsigned char>(right));
-            }) != text.end();
+            }).empty();
         }
 
         [[nodiscard]] std::string FormatConsoleTimestamp(const std::chrono::system_clock::time_point timestamp) {
@@ -135,7 +136,6 @@ namespace Horo::Editor {
         const bool snapshotChanged = RefreshSnapshot();
         const auto &fonts = context.theme.fonts;
         ImDrawList *drawList = ImGui::GetWindowDrawList();
-        ImFont *font = fonts.sansCompact ? fonts.sansCompact : ImGui::GetFont();
 
         // ── Toolbar bar ──────────────────────────────────────────
         const float barFullWidth = contentWidth + OuterPaddingX * 2.0F;
@@ -177,13 +177,13 @@ namespace Horo::Editor {
         } else {
             for (std::size_t index = 0; index < filterKeys.size(); ++index) {
                 const std::string &label = context.localization.Get("editor", filterKeys[index]);
-                const Ui::ButtonProps button{
-                    .label = label.c_str(),
-                    .variant = m_levelEnabled[index] ? Ui::ButtonVariant::Primary : Ui::ButtonVariant::Secondary,
-                    .font = fonts.sansCompact,
-                    .componentSize = Ui::ComponentSize::Small,
-                };
-                if (Ui::Button(button)) {
+                if (const Ui::ButtonProps button{
+                        .label = label.c_str(),
+                        .variant = m_levelEnabled[index] ? Ui::ButtonVariant::Primary : Ui::ButtonVariant::Secondary,
+                        .font = fonts.sansCompact,
+                        .componentSize = Ui::ComponentSize::Small,
+                    };
+                    Ui::Button(button)) {
                     m_levelEnabled[index] = !m_levelEnabled[index];
                     m_filterDirty = true;
                 }
@@ -202,8 +202,8 @@ namespace Horo::Editor {
         const float controlsX = stackedToolbar ? barMin.x + ToolbarPadX() : barMax.x - ToolbarPadX() - controlsWidth;
 
         ImGui::SetCursorScreenPos({controlsX, barMin.y + ToolbarPadY() + (stackedToolbar ? ToolbarHeight() + ControlGap() : 0.0F)});
-        if (Ui::InputTextControl("##ConsoleSearch", m_search.data(), m_search.size(), context.theme.fonts, false, resolvedSearchWidth,
-                                 hint.c_str())) {
+        if (Ui::InputTextControl("##ConsoleSearch", m_search.data(), m_search.size(), context.theme.fonts,
+                                 Ui::InputTextOptions{.width = resolvedSearchWidth, .hint = hint.c_str()})) {
             m_filterDirty = true;
         }
 
@@ -242,9 +242,10 @@ namespace Horo::Editor {
             }
             m_textSelectionActive = false;
             const std::string &empty = context.localization.Get("editor", "workspace.global_dock.console.empty");
+            Theme::ScopedTextStyle textStyle(fonts.sans, Theme::FontPx::Sans * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
             ImGui::TextColored(Theme::Dim(), "%s", empty.c_str());
         } else {
-            Theme::ScopedTextStyle textStyle(fonts.sansCompact, 14.0F, Theme::FontPx::SansCompact);
+            Theme::ScopedTextStyle textStyle(fonts.sans, Theme::FontPx::Sans * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
             const float referenceTimestampWidth = ImGui::CalcTextSize("2022-03-15T13:38:15.567+00:00").x;
             const float spaceWidth = ImGui::CalcTextSize(" ").x;
             const float contentColumnX = referenceTimestampWidth + spaceWidth * 3.0F;
@@ -311,7 +312,7 @@ namespace Horo::Editor {
         const std::string_view search{m_search.data()};
         for (std::size_t index = 0; index < m_snapshot.records.size(); ++index) {
             const Log::StructuredLogRecord &record = *m_snapshot.records[index];
-            if (const std::size_t group = static_cast<std::size_t>(GroupForLevel(record.level)); !m_levelEnabled[group])
+            if (const auto group = static_cast<std::size_t>(GroupForLevel(record.level)); !m_levelEnabled[group])
                 continue;
             if (!ContainsCaseInsensitive(record.category, search) && !ContainsCaseInsensitive(record.message, search) &&
                 !ContainsCaseInsensitive(record.context, search)) {

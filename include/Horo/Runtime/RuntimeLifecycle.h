@@ -110,8 +110,8 @@ namespace Horo::Runtime {
         [[nodiscard]] RuntimeLifecycleState State() const noexcept;
 
     private:
-        std::vector<std::unique_ptr<RuntimeLifecycleParticipant> > participants_;
+        std::vector<std::unique_ptr<RuntimeLifecycleParticipant>> participants_;
         std::size_t startedParticipantCount_{};
         RuntimeLifecycleState state_{RuntimeLifecycleState::Created};
     };
-} // namespace Horo::Runtime
+}  // namespace Horo::Runtime

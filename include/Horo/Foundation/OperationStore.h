@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -86,6 +87,22 @@ namespace Horo {
         std::vector<OperationRecord> operations;
     };
 
+    /** @brief Terminal operation consumer used for persistent diagnostic history. */
+    class IOperationHistorySink {
+    public:
+        virtual ~IOperationHistorySink() = default;
+
+        /** @brief Accepts one immutable terminal operation outside the store lock. */
+        virtual void AppendTerminal(const OperationRecord &record) = 0;
+    };
+
+    /** @brief Persists terminal operation summaries through the process asynchronous logger. */
+    class LoggingOperationHistorySink final : public IOperationHistorySink {
+    public:
+        /** @copydoc IOperationHistorySink::AppendTerminal */
+        void AppendTerminal(const OperationRecord &record) override;
+    };
+
     /** @brief Read-only operation capability exposed to presentation surfaces. */
     class IOperationQuery {
     public:
@@ -105,8 +122,14 @@ namespace Horo {
     /** @brief Bounded active/recent operation authority with race-safe cancellation. */
     class OperationStore final : public IOperationQuery, public IOperationControl {
     public:
-        /** @brief Creates a store with independent active and terminal retention limits. */
-        OperationStore(std::size_t activeCapacity, std::size_t recentCapacity);
+        /**
+         * @brief Creates a store with independent active and terminal retention limits.
+         * @param activeCapacity Maximum simultaneously active operations.
+         * @param recentCapacity Maximum in-memory terminal operations.
+         * @param historySink Optional process-owned persistent terminal history sink.
+         */
+        OperationStore(std::size_t activeCapacity, std::size_t recentCapacity,
+                       std::shared_ptr<IOperationHistorySink> historySink = nullptr);
 
         /** @brief Begins an operation, or returns no ID when active admission is full. */
         [[nodiscard]] std::optional<OperationId> Begin(OperationDescriptor descriptor);
@@ -135,5 +158,6 @@ namespace Horo {
         OperationId nextId_{1};
         std::uint64_t revision_{};
         std::uint64_t droppedTerminalCount_{};
+        std::shared_ptr<IOperationHistorySink> historySink_;
     };
 }  // namespace Horo

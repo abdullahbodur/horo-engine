@@ -1,4 +1,5 @@
 #include "editor/screens/workspace/panels/hierarchy/HierarchyEditSession.h"
+#include "editor/screens/workspace/panels/hierarchy/HierarchyRowLayout.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -15,9 +16,9 @@ TEST_CASE("Hierarchy edit session projects scene objects without ImGui", "[unit]
         },
         SceneObject{
             .id = SceneObjectId{2},
+            .parent = SceneObjectId{1},
             .name = "Camera",
             .kind = SceneObjectKind::Camera,
-            .parent = SceneObjectId{1},
         },
     };
     viewModel.primarySelection = SceneObjectId{2};
@@ -74,6 +75,115 @@ TEST_CASE("Hierarchy edit session reduces semantic actions to typed commands", "
     const EditorWorkspaceViewCommandData duplicated = HierarchyEditSession::DuplicateCommand(7);
     REQUIRE((duplicated.command == EditorWorkspaceViewCommand::DuplicateObject));
 
-    const EditorWorkspaceViewCommandData deleted = HierarchyEditSession::DeleteCommand(7);
-    REQUIRE((deleted.command == EditorWorkspaceViewCommand::DeleteObject));
+    const HierarchyNode editableNode{.id = 7, .locallyVisible = true, .locallyLocked = false};
+    const EditorWorkspaceViewCommandData hidden = HierarchyEditSession::ToggleVisibilityCommand(editableNode);
+    REQUIRE((hidden.command == EditorWorkspaceViewCommand::UpdateObjectEditorState));
+    REQUIRE((hidden.objectPayload == SceneObjectId{7}));
+    REQUIRE((hidden.editorStatePayload == SceneObjectEditorState{.visible = false, .locked = false}));
+    const EditorWorkspaceViewCommandData locked = HierarchyEditSession::ToggleLockCommand(editableNode);
+    REQUIRE((locked.command == EditorWorkspaceViewCommand::UpdateObjectEditorState));
+    REQUIRE((locked.objectPayload == SceneObjectId{7}));
+    REQUIRE((locked.editorStatePayload == SceneObjectEditorState{.visible = true, .locked = true}));
+
+    viewModel.selectedObjects = {SceneObjectId{7}, SceneObjectId{8}};
+    viewModel.primarySelection = SceneObjectId{8};
+    session.Synchronize(viewModel);
+    const EditorWorkspaceViewCommandData deleted = session.DeleteSelectionCommand();
+    REQUIRE((deleted.command == EditorWorkspaceViewCommand::DeleteSelectedObjects));
+    REQUIRE((deleted.objectSelection->objects == std::vector({SceneObjectId{7}, SceneObjectId{8}})));
+    REQUIRE((deleted.objectSelection->primary == SceneObjectId{8}));
+
+    viewModel.selectedObjects = {SceneObjectId{9}};
+    viewModel.primarySelection = SceneObjectId{9};
+    session.Synchronize(viewModel);
+    const EditorWorkspaceViewCommandData outsideSelectionDelete = session.DeleteSelectionCommand();
+    REQUIRE((outsideSelectionDelete.objectSelection->objects == std::vector{SceneObjectId{9}}));
+
+    REQUIRE((HierarchyEditSession::IsDeleteShortcut(Horo::Input::Key::Delete, {})));
+    REQUIRE((HierarchyEditSession::IsDeleteShortcut(Horo::Input::Key::Backspace, Horo::Input::ModifierState{.shift = true})));
+    REQUIRE((HierarchyEditSession::IsDeleteShortcut(Horo::Input::Key::Backspace, Horo::Input::ModifierState{.command = true})));
+    REQUIRE((!HierarchyEditSession::IsDeleteShortcut(Horo::Input::Key::Backspace, {})));
+}
+
+TEST_CASE("Hierarchy display type resolution follows component priority and concrete light kind", "[unit][editor]") {
+    using namespace Horo::Editor;
+
+    SceneObject generic{.id = SceneObjectId{1}, .name = "Generic"};
+    REQUIRE((ResolveHierarchyNodeType(generic) == HierarchyNodeType::Empty));
+
+    SceneObject mesh{.id = SceneObjectId{2}, .name = "Mesh", .kind = SceneObjectKind::Mesh};
+    REQUIRE((ResolveHierarchyNodeType(mesh) == HierarchyNodeType::Mesh));
+
+    SceneObject directional{.id = SceneObjectId{3}, .name = "Sun"};
+    directional.components.light = Horo::Runtime::LightComponent{.kind = Horo::Runtime::LightKind::Directional};
+    REQUIRE((ResolveHierarchyNodeType(directional) == HierarchyNodeType::DirectionalLight));
+    directional.components.light->kind = Horo::Runtime::LightKind::Point;
+    REQUIRE((ResolveHierarchyNodeType(directional) == HierarchyNodeType::PointLight));
+    directional.components.light->kind = Horo::Runtime::LightKind::Spot;
+    REQUIRE((ResolveHierarchyNodeType(directional) == HierarchyNodeType::SpotLight));
+
+    SceneObject prioritized{.id = SceneObjectId{4}, .name = "Camera With Light", .kind = SceneObjectKind::Mesh};
+    prioritized.components.camera = Horo::Runtime::CameraComponent{};
+    prioritized.components.light = Horo::Runtime::LightComponent{};
+    prioritized.components.audioSource = Horo::Runtime::AudioSourceComponent{};
+    REQUIRE((ResolveHierarchyNodeType(prioritized) == HierarchyNodeType::DirectionalLight));
+}
+
+TEST_CASE("Hierarchy row layout preserves icon columns and safely shrinks the label", "[unit][editor]") {
+    using namespace Horo::Editor;
+
+    const HierarchyRowLayout regular = CalculateHierarchyRowLayout(280.0F, 0, 1.0F, 36.0F);
+    REQUIRE((regular.IsValid()));
+    REQUIRE((regular.height == 32.0F));
+    REQUIRE((regular.row.minimum == 0.0F));
+    REQUIRE((regular.row.maximum == 280.0F));
+    REQUIRE((regular.chevron.minimum == 2.0F));
+    REQUIRE((regular.chevron.Width() == 12.0F));
+    REQUIRE((regular.typeIcon.minimum == 14.0F));
+    REQUIRE((regular.typeIcon.Width() == 22.0F));
+    REQUIRE((regular.label.maximum <= regular.actions.minimum));
+    REQUIRE((regular.visibilityAction.Width() == 18.0F));
+    REQUIRE((regular.lockAction.Width() == 18.0F));
+    REQUIRE((regular.visibilityAction.maximum == regular.lockAction.minimum));
+
+    const HierarchyRowLayout nested = CalculateHierarchyRowLayout(280.0F, 3, 1.0F, 36.0F);
+    REQUIRE((nested.IsValid()));
+    REQUIRE((nested.chevron.minimum > regular.chevron.minimum));
+    REQUIRE((nested.typeIcon.minimum > regular.typeIcon.minimum));
+
+    const HierarchyRowLayout child = CalculateHierarchyRowLayout(280.0F, 1, 1.0F, 36.0F);
+    const HierarchyRowLayout grandchild = CalculateHierarchyRowLayout(280.0F, 2, 1.0F, 36.0F);
+    REQUIRE((child.typeIcon.minimum - regular.typeIcon.minimum == 12.0F));
+    REQUIRE((grandchild.typeIcon.minimum - child.typeIcon.minimum == 12.0F));
+
+    const HierarchyRowLayout leaf = CalculateHierarchyRowLayout(280.0F, 0, 1.0F, 36.0F);
+    REQUIRE((leaf.IsValid()));
+    REQUIRE((leaf.chevron.Width() == 12.0F));
+    REQUIRE((leaf.typeIcon.minimum == regular.typeIcon.minimum));
+
+    const HierarchyRowLayout narrow = CalculateHierarchyRowLayout(48.0F, 8, 2.0F, 20.0F);
+    REQUIRE((narrow.IsValid()));
+    REQUIRE((narrow.label.Width() == 0.0F));
+    REQUIRE((narrow.typeIcon.maximum <= narrow.label.minimum));
+    REQUIRE((narrow.label.maximum <= narrow.actions.minimum));
+    REQUIRE((narrow.visibilityAction.Width() == narrow.lockAction.Width()));
+    REQUIRE((narrow.visibilityAction.maximum == narrow.lockAction.minimum));
+
+    for (const float scale : {0.75F, 1.0F, 1.5F, 2.0F}) {
+        const HierarchyRowLayout scaled = CalculateHierarchyRowLayout(280.0F * scale, 0, scale, 48.0F * scale);
+        REQUIRE((scaled.IsValid()));
+        REQUIRE((scaled.chevron.minimum == 2.0F * scale));
+        REQUIRE((scaled.chevron.Width() == 12.0F * scale));
+        REQUIRE((scaled.typeIcon.minimum == 14.0F * scale));
+        REQUIRE((scaled.visibilityAction.Width() == 24.0F * scale));
+        REQUIRE((scaled.lockAction.Width() == 24.0F * scale));
+        REQUIRE((scaled.visibilityAction.maximum == scaled.lockAction.minimum));
+    }
+
+    for (const float width : {160.0F, 280.0F, 480.0F}) {
+        const HierarchyRowLayout resized = CalculateHierarchyRowLayout(width, 0, 1.0F, 48.0F);
+        REQUIRE((resized.IsValid()));
+        REQUIRE((resized.typeIcon.minimum == 14.0F));
+        REQUIRE((resized.actions.maximum == width - 6.0F));
+    }
 }

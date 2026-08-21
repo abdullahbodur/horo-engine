@@ -1,13 +1,17 @@
+#include "Horo/Assets/MeshEditorPayload.h"
 #include "editor/document/SceneDocumentPersistence.h"
 #include "editor/screens/workspace/EditorWorkspaceController.h"
+#include "editor/screens/workspace/GameplayBehaviorRequestValidation.h"
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <functional>
 #include <iterator>
+#include <nlohmann/json.hpp>
 #include <span>
 #include <string>
 #include <string_view>
@@ -24,6 +28,37 @@ namespace {
         .defaultSeverity = ErrorSeverity::Error,
         .summary = "Injected Content Browser filesystem failure.",
     };
+
+    void AppendU32(std::vector<std::uint8_t> &bytes, const std::uint32_t value) {
+        for (unsigned shift = 0; shift < 32; shift += 8)
+            bytes.push_back(static_cast<std::uint8_t>(value >> shift & 0xffU));
+    }
+
+    void AppendFloat(std::vector<std::uint8_t> &bytes, const float value) {
+        std::uint32_t raw{};
+        std::memcpy(&raw, &value, sizeof(raw));
+        AppendU32(bytes, raw);
+    }
+
+    void WriteTestMeshPayload(const std::filesystem::path &path) {
+        std::vector<std::uint8_t> bytes;
+        AppendU32(bytes, Assets::MeshEditorPayloadSchemaVersion);
+        AppendU32(bytes, 3);
+        AppendU32(bytes, 1);
+        for (const float value : {-0.5F, 0.0F, -0.5F, 0.5F, 1.0F, 0.5F})
+            AppendFloat(bytes, value);
+        AppendU32(bytes, 36);
+        AppendU32(bytes, 0);
+        AppendU32(bytes, 0);
+        for (const float value : {-0.5F, 0.0F, 0.0F, 0.5F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F})
+            AppendFloat(bytes, value);
+        AppendU32(bytes, 3);
+        AppendU32(bytes, 0);
+        AppendU32(bytes, 1);
+        AppendU32(bytes, 2);
+        std::ofstream output(path, std::ios::binary);
+        output.write(reinterpret_cast<const char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    }
 
     class SyncFailingFilesystem final : public DurableFileSystem {
     public:
@@ -72,8 +107,8 @@ namespace {
     class TestWorkspaceController final {
     public:
         explicit TestWorkspaceController(std::string projectRoot = "test-project", DiagnosticSourceNavigator diagnosticNavigator = {})
-            : controller_(std::move(projectRoot), runtimeScene_, {}, nullptr, nullptr, nullptr, nullptr, nullptr,
-                          std::move(diagnosticNavigator)) {
+            : controller_(projectRoot, runtimeScene_, {},
+                          EditorWorkspaceDependencies{.diagnosticSourceNavigator = std::move(diagnosticNavigator)}) {
             REQUIRE((runtimeScene_.Startup(cancellation_.Token()).HasValue()));
             PumpLifecycleCommit();
         }
@@ -119,6 +154,87 @@ namespace {
         EditorWorkspaceController controller_;
     };
 
+    TEST_CASE("Gameplay behavior creation requests validate Lua and native kinds", "[unit][editor][behavior]") {
+        const std::string destination = std::filesystem::absolute("project/assets/scripts").string();
+        for (const GameplayBehaviorKind kind : {GameplayBehaviorKind::Lua, GameplayBehaviorKind::Native}) {
+            const CreateGameplayBehaviorRequest request{.destination = destination, .baseName = "PlayerBehavior", .kind = kind};
+            REQUIRE((ValidateCreateGameplayBehaviorRequest(request).HasValue()));
+        }
+    }
+
+    TEST_CASE("Gameplay behavior creation requests reject invalid destinations and names", "[unit][editor][behavior]") {
+        for (const std::string destination : {"", "project/assets/scripts", "./project/assets/scripts"}) {
+            const CreateGameplayBehaviorRequest request{.destination = destination,
+                                                        .baseName = "PlayerBehavior",
+                                                        .kind = GameplayBehaviorKind::Lua};
+            const Result<void> result = ValidateCreateGameplayBehaviorRequest(request);
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().code.Value() == "workspace.gameplay_behavior.invalid_request");
+        }
+        for (const std::string name : {"", "dir/name", "dir\\\\name", "behavior.lua", ".", "..", "CON", "COM1", "LPT1", "com1.txt",
+                                       "lpt1.lua", "name ", "name.", "bad<name"}) {
+            const CreateGameplayBehaviorRequest request{.destination = "/project/assets/scripts",
+                                                        .baseName = name,
+                                                        .kind = GameplayBehaviorKind::Lua};
+            const Result<void> result = ValidateCreateGameplayBehaviorRequest(request);
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().code.Value() == "workspace.gameplay_behavior.invalid_request");
+        }
+        const CreateGameplayBehaviorRequest controlCharacterRequest{.destination = "/project/assets/scripts",
+                                                                    .baseName = std::string{"bad\x01name"},
+                                                                    .kind = GameplayBehaviorKind::Lua};
+        const Result<void> controlCharacterResult = ValidateCreateGameplayBehaviorRequest(controlCharacterRequest);
+        REQUIRE(controlCharacterResult.HasError());
+        REQUIRE(controlCharacterResult.ErrorValue().code.Value() == "workspace.gameplay_behavior.invalid_request");
+    }
+
+    TEST_CASE("Gameplay behavior creation command writes requested lua source and refreshes browser", "[unit][editor][behavior]") {
+        const std::filesystem::path projectRoot =
+            std::filesystem::temp_directory_path() /
+            ("horo-workspace-create-lua-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        const std::filesystem::path scriptsDirectory = projectRoot / "assets/scripts";
+        std::filesystem::create_directories(scriptsDirectory);
+
+        NativeDurableFileSystem files;
+        ProjectMutationCoordinator mutations{files};
+        Runtime::RuntimeSceneService runtimeScene;
+        CancellationSource cancellation;
+        REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
+        EditorWorkspaceController controller{projectRoot, runtimeScene, {}, {.mutations = &mutations, .durableFiles = &files}};
+
+        EditorWorkspaceViewCommandData navigate;
+        navigate.command = EditorWorkspaceViewCommand::NavigateContentBrowser;
+        navigate.stringPayload = scriptsDirectory.string();
+        controller.ProcessCommand(navigate);
+
+        EditorWorkspaceViewCommandData command;
+        command.command = EditorWorkspaceViewCommand::CreateLuaBehavior;
+        command.gameplayBehaviorRequest = CreateGameplayBehaviorRequest{
+            .destination = scriptsDirectory.string(),
+            .baseName = "PlayerBehavior",
+            .kind = GameplayBehaviorKind::Lua,
+        };
+        controller.ProcessCommand(command);
+        REQUIRE((controller.ViewModel().contentBrowserOperationError.empty()));
+        REQUIRE((controller.ViewModel().contentBrowser.loadState == ContentBrowserLoadState::Loading ||
+                 controller.ViewModel().contentBrowser.loadState == ContentBrowserLoadState::Ready));
+        REQUIRE((std::filesystem::is_regular_file(scriptsDirectory / "PlayerBehavior.horo_script")));
+        REQUIRE((std::filesystem::is_regular_file(scriptsDirectory / "PlayerBehavior.horo_script.meta")));
+
+        controller.UpdateContentBrowser();
+        controller.UpdateContentBrowser();
+
+        REQUIRE((controller.ViewModel().contentBrowser.loadState == ContentBrowserLoadState::Ready));
+        const auto created = std::ranges::find_if(controller.ViewModel().contentBrowser.entries, [](const ContentBrowserEntry &entry) {
+            return entry.displayName == "PlayerBehavior" && entry.kind == ContentBrowserEntryKind::Asset;
+        });
+        REQUIRE((created != controller.ViewModel().contentBrowser.entries.end()));
+        REQUIRE((created->absolutePath == std::filesystem::weakly_canonical(scriptsDirectory / "PlayerBehavior.horo_script").string()));
+
+        std::error_code cleanupError;
+        std::filesystem::remove_all(projectRoot, cleanupError);
+    }
+
     TEST_CASE("Workspace Save Persists And Reopens The Default Scene", "[unit][editor][persistence]") {
         const std::filesystem::path projectRoot =
             std::filesystem::temp_directory_path() /
@@ -140,7 +256,7 @@ namespace {
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
 
         {
-            EditorWorkspaceController controller{projectRoot.string(), runtimeScene, {}, nullptr, &mutations, &files, nullptr};
+            EditorWorkspaceController controller{projectRoot, runtimeScene, {}, {.mutations = &mutations, .durableFiles = &files}};
             REQUIRE((controller.ViewModel().objects.empty()));
             REQUIRE((!controller.ViewModel().isDirty));
 
@@ -174,7 +290,7 @@ namespace {
         }
 
         {
-            EditorWorkspaceController reopened{projectRoot.string(), runtimeScene, {}, nullptr, &mutations, &files, nullptr};
+            EditorWorkspaceController reopened{projectRoot, runtimeScene, {}, {.mutations = &mutations, .durableFiles = &files}};
             REQUIRE((reopened.ViewModel().objects.size() == 1));
             REQUIRE((reopened.ViewModel().objects.front().name == "Box"));
             REQUIRE((!reopened.ViewModel().isDirty));
@@ -205,7 +321,7 @@ namespace {
         CancellationSource cancellation;
         Runtime::RuntimeSceneService runtimeScene;
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
-        EditorWorkspaceController controller{projectRoot.string(), runtimeScene, {}, nullptr, &mutations, &files, nullptr};
+        EditorWorkspaceController controller{projectRoot, runtimeScene, {}, {.mutations = &mutations, .durableFiles = &files}};
 
         EditorWorkspaceViewCommandData create;
         create.command = EditorWorkspaceViewCommand::CreatePrimitive;
@@ -278,7 +394,7 @@ namespace {
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
 
         {
-            EditorWorkspaceController controller{projectRoot.string(), runtimeScene, {}, nullptr, &mutations, &files, nullptr};
+            EditorWorkspaceController controller{projectRoot, runtimeScene, {}, {.mutations = &mutations, .durableFiles = &files}};
             EditorWorkspaceViewCommandData create;
             create.command = EditorWorkspaceViewCommand::CreatePrimitive;
             create.primitivePayload = Runtime::PrimitiveId{"primitive.mesh.box"};
@@ -288,7 +404,7 @@ namespace {
         }
 
         {
-            EditorWorkspaceController reopened{projectRoot.string(), runtimeScene, {}, nullptr, &mutations, &files, nullptr};
+            EditorWorkspaceController reopened{projectRoot, runtimeScene, {}, {.mutations = &mutations, .durableFiles = &files}};
             REQUIRE((reopened.ViewModel().recoveryAvailable));
             REQUIRE((reopened.ViewModel().objects.empty()));
             REQUIRE((!reopened.ViewModel().isDirty));
@@ -336,7 +452,7 @@ namespace {
         CancellationSource cancellation;
         Runtime::RuntimeSceneService runtimeScene;
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
-        EditorWorkspaceController controller{projectRoot.string(), runtimeScene, {}, nullptr, &mutations, &files, nullptr};
+        EditorWorkspaceController controller{projectRoot, runtimeScene, {}, {.mutations = &mutations, .durableFiles = &files}};
 
         EditorWorkspaceViewCommandData create;
         create.command = EditorWorkspaceViewCommand::CreatePrimitive;
@@ -389,7 +505,7 @@ namespace {
         CancellationSource cancellation;
         Runtime::RuntimeSceneService runtimeScene;
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
-        EditorWorkspaceController controller{projectRoot.string(), runtimeScene, {}, nullptr, &mutations, &files, nullptr};
+        EditorWorkspaceController controller{projectRoot, runtimeScene, {}, {.mutations = &mutations, .durableFiles = &files}};
 
         EditorWorkspaceViewCommandData create;
         create.command = EditorWorkspaceViewCommand::CreatePrimitive;
@@ -466,7 +582,10 @@ namespace {
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
         JobSystem jobs(JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 8});
         {
-            EditorWorkspaceController controller{projectRoot.string(), runtimeScene, {}, nullptr, &mutations, &files, nullptr, &jobs};
+            EditorWorkspaceController controller{projectRoot,
+                                                 runtimeScene,
+                                                 {},
+                                                 {.mutations = &mutations, .durableFiles = &files, .jobs = &jobs}};
             REQUIRE((!controller.ViewModel().isDirty));
             REQUIRE((!controller.ViewModel().sceneExternalConflict));
 
@@ -550,6 +669,86 @@ namespace {
         std::filesystem::remove_all(projectRoot, cleanupError);
     }
 
+    TEST_CASE("Asset drop command creates selects and atomically undoes a registered mesh", "[unit][editor][asset-drop]") {
+        const std::filesystem::path projectRoot =
+            std::filesystem::temp_directory_path() /
+            ("horo-workspace-asset-drop-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        const std::filesystem::path meshesDirectory = projectRoot / "assets/Meshes";
+        std::filesystem::create_directories(meshesDirectory);
+        const std::filesystem::path meshPath = meshesDirectory / "chair.horoasset";
+        WriteTestMeshPayload(meshPath);
+        const std::filesystem::path brokenPath = meshesDirectory / "broken.horoasset";
+        {
+            std::ofstream broken(brokenPath, std::ios::binary);
+            broken << "broken";
+        }
+
+        Assets::AssetRegistry registry;
+        const auto assetId = Assets::AssetId::Parse("00112233-4455-6677-8899-aabbccddeeff");
+        const auto assetType = Assets::AssetTypeId::Parse("core.mesh");
+        const auto sourcePath = ProjectPath::Parse("assets/Meshes/chair.horoasset");
+        const auto metadataPath = ProjectPath::Parse("assets/Meshes/chair.horoasset.horo");
+        const auto brokenId = Assets::AssetId::Parse("11112233-4455-6677-8899-aabbccddeeff");
+        const auto brokenSourcePath = ProjectPath::Parse("assets/Meshes/broken.horoasset");
+        const auto brokenMetadataPath = ProjectPath::Parse("assets/Meshes/broken.horoasset.horo");
+        REQUIRE((assetId.HasValue() && assetType.HasValue() && sourcePath.HasValue() && metadataPath.HasValue() && brokenId.HasValue() &&
+                 brokenSourcePath.HasValue() && brokenMetadataPath.HasValue()));
+        const Assets::AssetRegistryBuildReport published = registry.Publish(
+            {Assets::AssetRecord{assetId.Value(), assetType.Value(), sourcePath.Value(), metadataPath.Value()},
+             Assets::AssetRecord{brokenId.Value(), assetType.Value(), brokenSourcePath.Value(), brokenMetadataPath.Value()}});
+        REQUIRE((published.status == Assets::AssetRegistryBuildStatus::Complete));
+
+        TestWorkspaceController controller{projectRoot.string()};
+        controller.RefreshAssets(registry.Snapshot());
+        std::vector<NotificationEvent> notifications;
+        const auto subscription = controller.DataBus().Subscribe<NotificationEvent>([&](const NotificationEvent &event) {
+            notifications.push_back(event);
+        });
+        static_cast<void>(subscription);
+
+        EditorWorkspaceViewCommandData brokenDrop;
+        brokenDrop.command = EditorWorkspaceViewCommand::InstantiateAsset;
+        brokenDrop.assetSceneDrop = AssetSceneDropRequest{
+            .assetId = brokenId.Value().ToString(),
+            .assetType = assetType.Value().Value(),
+            .target = AssetSceneDropTarget::HierarchyRoot,
+            .documentRevision = controller.ViewModel().documentRevision,
+        };
+        controller.ProcessCommand(brokenDrop);
+        CHECK(controller.ViewModel().objects.size() == 1);
+        REQUIRE((!notifications.empty()));
+        CHECK(notifications.back().severity == NotificationSeverity::Error);
+
+        EditorWorkspaceViewCommandData drop;
+        drop.command = EditorWorkspaceViewCommand::InstantiateAsset;
+        drop.assetSceneDrop = AssetSceneDropRequest{
+            .assetId = assetId.Value().ToString(),
+            .assetType = assetType.Value().Value(),
+            .target = AssetSceneDropTarget::Viewport,
+            .normalizedX = 0.5F,
+            .normalizedY = 0.5F,
+            .aspect = 1.0F,
+            .documentRevision = controller.ViewModel().documentRevision,
+        };
+        controller.ProcessCommand(drop);
+
+        REQUIRE((controller.ViewModel().objects.size() == 2));
+        CHECK(controller.ViewModel().objects.back().name == "chair");
+        CHECK(controller.ViewModel().primarySelection == controller.ViewModel().objects.back().id);
+        CHECK(controller.ViewModel().isDirty);
+        REQUIRE((!notifications.empty()));
+        CHECK(notifications.back().severity == NotificationSeverity::Success);
+
+        controller.ProcessCommand(EditorWorkspaceViewCommandData{.command = EditorWorkspaceViewCommand::UndoScene});
+        CHECK(controller.ViewModel().objects.size() == 1);
+        controller.ProcessCommand(EditorWorkspaceViewCommandData{.command = EditorWorkspaceViewCommand::RedoScene});
+        REQUIRE((controller.ViewModel().objects.size() == 2));
+        CHECK(controller.ViewModel().objects.back().name == "chair");
+
+        std::error_code cleanupError;
+        std::filesystem::remove_all(projectRoot, cleanupError);
+    }
+
     TEST_CASE("Content Browser Refresh Exposes Loading And Reconciles Deleted Navigation Targets", "[unit][editor]") {
         const std::filesystem::path projectRoot =
             std::filesystem::temp_directory_path() /
@@ -615,7 +814,10 @@ namespace {
         Runtime::RuntimeSceneService runtimeScene;
         CancellationSource cancellation;
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
-        EditorWorkspaceController controller{projectRoot.string(), runtimeScene, registry.Snapshot(), &registry, &mutations, &files};
+        EditorWorkspaceController controller{projectRoot,
+                                             runtimeScene,
+                                             registry.Snapshot(),
+                                             {.mutableAssetRegistry = &registry, .mutations = &mutations, .durableFiles = &files}};
 
         EditorWorkspaceViewCommandData navigate;
         navigate.command = EditorWorkspaceViewCommand::NavigateContentBrowser;
@@ -645,12 +847,13 @@ namespace {
         REQUIRE((registry.Snapshot().Records().empty()));
         const std::filesystem::path trashRoot = projectRoot / ".horo/local/trash";
         REQUIRE((std::filesystem::is_directory(trashRoot)));
-        const std::filesystem::path trashEntry = std::filesystem::directory_iterator{trashRoot}->path();
+        const std::filesystem::path trashEntry = std::filesystem::directory_iterator(trashRoot)->path();
         REQUIRE((std::filesystem::is_regular_file(trashEntry / renamed.filename())));
         REQUIRE((std::filesystem::is_regular_file(trashEntry / (renamed.filename().string() + ".horo"))));
-        std::ifstream manifest(trashEntry / "trash.json");
-        const std::string manifestText{std::istreambuf_iterator<char>{manifest}, std::istreambuf_iterator<char>{}};
-        REQUIRE((manifestText.find(renamed.string()) != std::string::npos));
+        std::ifstream manifestStream(trashEntry / "trash.json");
+        const nlohmann::json manifest = nlohmann::json::parse(manifestStream);
+        const std::filesystem::path recordedOriginal = manifest.at("originalAbsolutePath").get<std::string>();
+        REQUIRE((recordedOriginal == std::filesystem::weakly_canonical(renamed)));
 
         std::error_code cleanupError;
         std::filesystem::remove_all(projectRoot, cleanupError);
@@ -687,7 +890,10 @@ namespace {
         Runtime::RuntimeSceneService runtimeScene;
         CancellationSource cancellation;
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
-        EditorWorkspaceController controller{projectRoot.string(), runtimeScene, registry.Snapshot(), &registry, &mutations, &files};
+        EditorWorkspaceController controller{projectRoot,
+                                             runtimeScene,
+                                             registry.Snapshot(),
+                                             {.mutableAssetRegistry = &registry, .mutations = &mutations, .durableFiles = &files}};
 
         EditorWorkspaceViewCommandData navigate;
         navigate.command = EditorWorkspaceViewCommand::NavigateContentBrowser;
@@ -848,7 +1054,10 @@ namespace {
         Runtime::RuntimeSceneService runtimeScene;
         CancellationSource cancellation;
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
-        EditorWorkspaceController controller{projectRoot.string(), runtimeScene, registry.Snapshot(), &registry, &mutations, &files};
+        EditorWorkspaceController controller{projectRoot,
+                                             runtimeScene,
+                                             registry.Snapshot(),
+                                             {.mutableAssetRegistry = &registry, .mutations = &mutations, .durableFiles = &files}};
 
         EditorWorkspaceViewCommandData navigate;
         navigate.command = EditorWorkspaceViewCommand::NavigateContentBrowser;
@@ -908,7 +1117,10 @@ namespace {
         Runtime::RuntimeSceneService runtimeScene;
         CancellationSource cancellation;
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
-        EditorWorkspaceController controller{projectRoot.string(), runtimeScene, registry.Snapshot(), &registry, &mutations, &files};
+        EditorWorkspaceController controller{projectRoot,
+                                             runtimeScene,
+                                             registry.Snapshot(),
+                                             {.mutableAssetRegistry = &registry, .mutations = &mutations, .durableFiles = &files}};
 
         EditorWorkspaceViewCommandData navigate;
         navigate.command = EditorWorkspaceViewCommand::NavigateContentBrowser;
@@ -971,11 +1183,13 @@ namespace {
         createFolder.stringPayload = sourceDirectory.string();
         createFolder.secondaryStringPayload = "CON";
         controller.ProcessCommand(createFolder);
-        REQUIRE_FALSE(std::filesystem::exists(sourceDirectory / "CON"));
+        std::error_code reservedNameError;
+        REQUIRE_FALSE(std::filesystem::exists(sourceDirectory / "CON", reservedNameError));
         REQUIRE((controller.ViewModel().contentBrowserOperationError == "workspace.content_browser.operation.invalid_name"));
         createFolder.secondaryStringPayload = "unsafe.";
         controller.ProcessCommand(createFolder);
-        REQUIRE_FALSE(std::filesystem::exists(sourceDirectory / "unsafe."));
+        std::error_code trailingDotError;
+        REQUIRE_FALSE(std::filesystem::exists(sourceDirectory / "unsafe.", trailingDotError));
 
         std::error_code symlinkError;
         const std::filesystem::path escape = projectRoot / "assets/Escape";
@@ -1047,7 +1261,7 @@ namespace {
         std::filesystem::remove_all(projectRoot, cleanupError);
     }
 
-    TEST_CASE("Content Browser Rename And Delete Roll Back Degraded Registry Publication", "[unit][editor]") {
+    TEST_CASE("Content Browser Delete Succeeds When Registry Rebuild Is Degraded", "[unit][editor]") {
         const std::filesystem::path projectRoot =
             std::filesystem::temp_directory_path() /
             ("horo-workspace-asset-registry-rollback-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
@@ -1077,7 +1291,10 @@ namespace {
         Runtime::RuntimeSceneService runtimeScene;
         CancellationSource cancellation;
         REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
-        EditorWorkspaceController controller{projectRoot.string(), runtimeScene, registry.Snapshot(), &registry, &mutations, &files};
+        EditorWorkspaceController controller{projectRoot,
+                                             runtimeScene,
+                                             registry.Snapshot(),
+                                             {.mutableAssetRegistry = &registry, .mutations = &mutations, .durableFiles = &files}};
 
         EditorWorkspaceViewCommandData navigate;
         navigate.command = EditorWorkspaceViewCommand::NavigateContentBrowser;
@@ -1108,10 +1325,84 @@ namespace {
         remove.command = EditorWorkspaceViewCommand::DeleteContentBrowserEntry;
         remove.stringPayload = source.string();
         controller.ProcessCommand(remove);
-        REQUIRE((std::filesystem::is_regular_file(source)));
-        REQUIRE((std::filesystem::is_regular_file(source.string() + ".horo")));
-        REQUIRE((controller.ViewModel().contentBrowserOperationError == "workspace.content_browser.operation.registry_failed"));
-        REQUIRE((registry.Snapshot().FindByPath("assets/Source/stable.horoasset") != nullptr));
+        REQUIRE_FALSE(std::filesystem::exists(source));
+        REQUIRE_FALSE(std::filesystem::exists(source.string() + ".horo"));
+        REQUIRE((controller.ViewModel().contentBrowserOperationError.empty()));
+        REQUIRE((registry.Snapshot().FindByPath("assets/Source/stable.horoasset") == nullptr));
+        REQUIRE((std::filesystem::is_regular_file(corrupt)));
+        REQUIRE((std::filesystem::is_regular_file(corrupt.string() + ".horo")));
+
+        std::error_code cleanupError;
+        std::filesystem::remove_all(projectRoot, cleanupError);
+    }
+
+    TEST_CASE("Content Browser Delete Removes Non Registry Files During Degraded Rebuild", "[unit][editor]") {
+        const std::filesystem::path projectRoot =
+            std::filesystem::temp_directory_path() /
+            ("horo-workspace-script-delete-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        const std::filesystem::path assetDirectory = projectRoot / "assets/Scripts";
+        std::filesystem::create_directories(assetDirectory);
+        std::filesystem::create_directories(projectRoot / ".horo/local");
+
+        const std::filesystem::path trackedAsset = assetDirectory / "tracked.horoasset";
+        {
+            std::ofstream payload(trackedAsset, std::ios::binary);
+            payload << "asset";
+        }
+        {
+            std::ofstream metadata(trackedAsset.string() + ".horo");
+            metadata << R"({
+  "schemaVersion": 1,
+  "assetId": "50112233-4455-6677-8899-aabbccddeeff",
+  "assetType": "core.mesh"
+})";
+        }
+        const std::filesystem::path corruptAsset = assetDirectory / "corrupt.horoasset";
+        {
+            std::ofstream payload(corruptAsset, std::ios::binary);
+            payload << "asset";
+        }
+        {
+            std::ofstream metadata(corruptAsset.string() + ".horo");
+            metadata << "{ invalid";
+        }
+        const std::filesystem::path script = assetDirectory / "NewBehavior4.horo_script";
+        {
+            std::ofstream payload(script, std::ios::binary);
+            payload << "script";
+        }
+        {
+            std::ofstream metadata(script.string() + ".meta");
+            metadata << "{}";
+        }
+
+        Assets::AssetRegistry registry;
+        const auto initial = Assets::RebuildAssetRegistry(registry, projectRoot, Assets::AssetRegistryOpenMode::Edit);
+        REQUIRE((initial.HasValue()));
+        REQUIRE((initial.Value().status == Assets::AssetRegistryBuildStatus::Degraded));
+        NativeDurableFileSystem files;
+        ProjectMutationCoordinator mutations{files};
+        Runtime::RuntimeSceneService runtimeScene;
+        CancellationSource cancellation;
+        REQUIRE((runtimeScene.Startup(cancellation.Token()).HasValue()));
+        EditorWorkspaceController controller{projectRoot,
+                                             runtimeScene,
+                                             registry.Snapshot(),
+                                             {.mutableAssetRegistry = &registry, .mutations = &mutations, .durableFiles = &files}};
+
+        EditorWorkspaceViewCommandData navigate;
+        navigate.command = EditorWorkspaceViewCommand::NavigateContentBrowser;
+        navigate.stringPayload = assetDirectory.string();
+        controller.ProcessCommand(navigate);
+
+        EditorWorkspaceViewCommandData remove;
+        remove.command = EditorWorkspaceViewCommand::DeleteContentBrowserEntry;
+        remove.stringPayload = script.string();
+        controller.ProcessCommand(remove);
+        REQUIRE_FALSE(std::filesystem::exists(script));
+        REQUIRE_FALSE(std::filesystem::exists(script.string() + ".meta"));
+        REQUIRE((controller.ViewModel().contentBrowserOperationError.empty()));
+        REQUIRE((registry.Snapshot().FindByPath("assets/Scripts/tracked.horoasset") != nullptr));
 
         std::error_code cleanupError;
         std::filesystem::remove_all(projectRoot, cleanupError);
@@ -1484,6 +1775,50 @@ namespace {
         REQUIRE((events.size() == 3 && events.back().kind == DocumentChangeKind::Redone));
     }
 
+    TEST_CASE("Editor Visibility And Lock Commands Project State And Block Locked Edits", "[unit][editor]") {
+        TestWorkspaceController controller;
+        const SceneObject original = controller.ViewModel().objects.front();
+        std::vector<NotificationEvent> notifications;
+        const auto subscription = controller.DataBus().Subscribe<NotificationEvent>([&notifications](const NotificationEvent &event) {
+            notifications.push_back(event);
+        });
+        static_cast<void>(subscription);
+
+        EditorWorkspaceViewCommandData hide;
+        hide.command = EditorWorkspaceViewCommand::UpdateObjectEditorState;
+        hide.objectPayload = original.id;
+        hide.editorStatePayload = SceneObjectEditorState{.visible = false, .locked = false};
+        controller.ProcessCommand(hide);
+        REQUIRE_FALSE((controller.ViewModel().objects.front().editorState.visible));
+        REQUIRE_FALSE((controller.ViewModel().objects.front().effectivelyVisible));
+        REQUIRE((notifications.empty()));
+
+        controller.ProcessCommand(EditorWorkspaceViewCommandData{.command = EditorWorkspaceViewCommand::UndoScene});
+        REQUIRE((controller.ViewModel().objects.front().editorState == SceneObjectEditorState{}));
+
+        EditorWorkspaceViewCommandData lock;
+        lock.command = EditorWorkspaceViewCommand::UpdateObjectEditorState;
+        lock.objectPayload = original.id;
+        lock.editorStatePayload = SceneObjectEditorState{.visible = true, .locked = true};
+        controller.ProcessCommand(lock);
+        REQUIRE((controller.ViewModel().objects.front().effectivelyLocked));
+        REQUIRE((notifications.empty()));
+
+        EditorWorkspaceViewCommandData rename;
+        rename.command = EditorWorkspaceViewCommand::UpdateObjectName;
+        rename.objectPayload = original.id;
+        rename.stringPayload = "Blocked Rename";
+        controller.ProcessCommand(rename);
+        REQUIRE((controller.ViewModel().objects.front().name == original.name));
+        REQUIRE((notifications.size() == 1));
+        REQUIRE((notifications.front().severity == NotificationSeverity::Warning));
+
+        lock.editorStatePayload = SceneObjectEditorState{};
+        controller.ProcessCommand(lock);
+        REQUIRE_FALSE((controller.ViewModel().objects.front().effectivelyLocked));
+        REQUIRE((notifications.size() == 1));
+    }
+
     TEST_CASE("Catalog Creation Selects The Result And Honors The Requested Parent", "[unit][editor]") {
         TestWorkspaceController controller;
         EditorWorkspaceViewCommandData createRoot;
@@ -1539,6 +1874,74 @@ namespace {
         REQUIRE((!controller.ViewModel().primarySelection.has_value()));
         REQUIRE((events.size() == 2));
         static_cast<void>(subscription);
+    }
+
+    TEST_CASE("Batch Delete Uses One Selection Snapshot History Entry And Snackbar", "[unit][editor]") {
+        TestWorkspaceController controller;
+        EditorWorkspaceViewCommandData create;
+        create.command = EditorWorkspaceViewCommand::CreatePrimitive;
+        create.primitivePayload = Runtime::PrimitiveId{"primitive.mesh.box"};
+        controller.ProcessCommand(create);
+        const std::vector<SceneObject> before = controller.ViewModel().objects;
+        REQUIRE((before.size() == 2));
+
+        std::vector<NotificationEvent> notifications;
+        const auto notificationSubscription =
+            controller.DataBus().Subscribe<NotificationEvent>([&notifications](const NotificationEvent &event) {
+            notifications.push_back(event);
+        });
+        static_cast<void>(notificationSubscription);
+
+        EditorWorkspaceViewCommandData select;
+        select.command = EditorWorkspaceViewCommand::SelectObject;
+        select.objectSelection = ObjectSelectionRequest{.objects = {before[0].id, before[1].id}, .primary = before[1].id};
+        controller.ProcessCommand(select);
+
+        const DocumentRevision beforeDeleteRevision = controller.ViewModel().documentRevision;
+        EditorWorkspaceViewCommandData remove;
+        remove.command = EditorWorkspaceViewCommand::DeleteSelectedObjects;
+        remove.objectSelection = ObjectSelectionRequest{
+            .objects = {before[0].id, before[1].id, before[0].id},
+            .primary = before[1].id,
+        };
+        controller.ProcessCommand(remove);
+        REQUIRE((controller.ViewModel().objects.empty()));
+        REQUIRE((controller.ViewModel().selectedObjects.empty()));
+        REQUIRE((!controller.ViewModel().primarySelection.has_value()));
+        REQUIRE((!controller.ViewModel().primarySelectionWorldBounds.has_value()));
+        REQUIRE((controller.ViewModel().documentRevision.value == beforeDeleteRevision.value + 1));
+        REQUIRE((notifications.size() == 1));
+        REQUIRE((notifications.front().severity == NotificationSeverity::Success));
+        REQUIRE((notifications.front().message.find("2") != std::string::npos));
+
+        EditorWorkspaceViewCommandData undo;
+        undo.command = EditorWorkspaceViewCommand::UndoScene;
+        controller.ProcessCommand(undo);
+        REQUIRE((controller.ViewModel().objects.size() == 2));
+        REQUIRE((controller.ViewModel().objects[0].id == before[0].id));
+        REQUIRE((controller.ViewModel().objects[1].id == before[1].id));
+
+        EditorWorkspaceViewCommandData partialRemove;
+        partialRemove.command = EditorWorkspaceViewCommand::DeleteSelectedObjects;
+        partialRemove.objectSelection = ObjectSelectionRequest{
+            .objects = {before[0].id, before[1].id, SceneObjectId{999999}},
+            .primary = before[1].id,
+        };
+        controller.ProcessCommand(partialRemove);
+        REQUIRE((controller.ViewModel().objects.empty()));
+        REQUIRE((notifications.size() == 2));
+        REQUIRE((notifications.back().severity == NotificationSeverity::Warning));
+        REQUIRE((notifications.back().message.find("2") != std::string::npos));
+        REQUIRE((notifications.back().message.find("1") != std::string::npos));
+
+        controller.ProcessCommand(undo);
+        REQUIRE((controller.ViewModel().objects.size() == 2));
+
+        EditorWorkspaceViewCommandData redo;
+        redo.command = EditorWorkspaceViewCommand::RedoScene;
+        controller.ProcessCommand(redo);
+        REQUIRE((controller.ViewModel().objects.empty()));
+        REQUIRE((notifications.size() == 2));
     }
 
     TEST_CASE("Viewport Picking Uses The Authoritative Selection Model", "[unit][editor]") {

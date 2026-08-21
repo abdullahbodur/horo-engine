@@ -1,14 +1,18 @@
 add_library(HoroFoundation STATIC
         foundation/FoundationErrors.cpp
         foundation/diagnostics/ErrorCode.cpp
+        foundation/diagnostics/DiagnosticBundle.cpp
         foundation/hashing/Sha256.cpp
         foundation/math/SceneMath.cpp
         foundation/text/String.cpp
         foundation/logging/Logger.cpp
         foundation/logging/LogContext.cpp
         foundation/logging/StructuredLogStore.cpp
+        foundation/telemetry/Telemetry.cpp
+        foundation/telemetry/Operation.cpp
         foundation/diagnostics/BuildOutputStore.cpp
         foundation/diagnostics/OperationStore.cpp
+        foundation/diagnostics/OperationHistory.cpp
         foundation/data_bus/DataBus.cpp
         foundation/jobs/JobSystem.cpp
         foundation/config/Configuration.cpp
@@ -19,10 +23,32 @@ add_library(HoroFoundation STATIC
 add_library(HoroEngine::Foundation ALIAS HoroFoundation)
 
 target_compile_features(HoroFoundation PUBLIC cxx_std_20)
+target_compile_definitions(HoroFoundation PUBLIC HORO_ENABLE_TELEMETRY=$<BOOL:${HORO_ENABLE_TELEMETRY}>)
 target_include_directories(HoroFoundation
         PUBLIC
         ${PROJECT_SOURCE_DIR}/include
+        PRIVATE
+        $<TARGET_PROPERTY:nlohmann_json::nlohmann_json,INTERFACE_INCLUDE_DIRECTORIES>
 )
+
+if (HORO_ENABLE_OPENTELEMETRY)
+    add_library(HoroOpenTelemetry STATIC
+            foundation/telemetry/OpenTelemetrySink.cpp
+    )
+    add_library(HoroEngine::OpenTelemetry ALIAS HoroOpenTelemetry)
+    target_compile_features(HoroOpenTelemetry PUBLIC cxx_std_20)
+    target_include_directories(HoroOpenTelemetry
+            PUBLIC
+            ${PROJECT_SOURCE_DIR}/include
+    )
+    target_link_libraries(HoroOpenTelemetry
+            PUBLIC
+            HoroEngine::Foundation
+            PRIVATE
+            nlohmann_json::nlohmann_json
+            CURL::libcurl
+    )
+endif ()
 
 add_library(HoroPlatform STATIC
         platform/Platform.cpp
@@ -50,6 +76,7 @@ target_include_directories(HoroPlatform
 target_link_libraries(HoroPlatform PUBLIC HoroEngine::Foundation)
 
 add_library(HoroApplication STATIC
+        application/observability/HostObservability.cpp
         application/project/ProjectErrors.cpp
         application/project/ProjectVersion.cpp
         application/project/ProjectCompatibility.cpp
@@ -348,9 +375,11 @@ target_include_directories(HoroEditorViewportScene
 target_link_libraries(HoroEditorViewportScene PUBLIC HoroEngine::EditorModel)
 
 add_library(HoroEditorRenderExtraction STATIC
+        editor/document/EditorAssetMeshCache.cpp
         editor/document/EditorRenderExtractionErrors.cpp
         editor/document/EditorViewportSceneExtractor.cpp
         editor/document/EditorViewportPicking.cpp
+        editor/screens/workspace/AssetSceneDrop.cpp
 )
 add_library(HoroEngine::EditorRenderExtraction ALIAS HoroEditorRenderExtraction)
 
@@ -403,10 +432,13 @@ add_library(HoroEditorServices STATIC
         editor/gameplay/ProjectGameplayRegistry.cpp
         editor/gameplay/EditorPlaySessionController.cpp
         editor/screens/workspace/ContentBrowserModel.cpp
+        editor/screens/workspace/GameplayBehaviorRequestValidation.cpp
+        editor/modals/gameplay_behavior/GameplayBehaviorFilenameModalState.cpp
         editor/project_model/ProjectCreationService.cpp
         editor/project_model/ProjectMutation.cpp
         editor/project_model/ProjectMigrationTransaction.cpp
         editor/project_model/ProjectOpenService.cpp
+        editor/project_model/ProjectIntegrityValidatorService.cpp
         editor/project_model/RecentProjectInspectionService.cpp
         editor/project_model/ProjectMetadata.cpp
         editor/project_model/RendererAvailability.cpp
@@ -418,12 +450,9 @@ add_library(HoroEditorServices STATIC
         editor/status_bar/EditorStatusBarModel.cpp
         editor/hierarchy/HierarchyModel.cpp
         editor/data_bus/EditorDataBus.cpp
+        editor/NotificationService.cpp
         editor/input/EditorInputActions.cpp
         editor/modals/EditorModalHost.cpp
-        editor/modals/settings/SettingsModalLifecycle.cpp
-        editor/modals/settings/SettingsModalState.cpp
-        editor/modals/asset_import/AssetImportModalLifecycle.cpp
-        editor/modals/asset_import/AssetImportModalDrawStub.cpp
         editor/screens/workspace/WorkspaceLayout.cpp
         editor/screens/workspace/WorkspacePanelHost.cpp
         editor/screens/workspace/WorkspaceLayoutPersistence.cpp
@@ -452,6 +481,7 @@ target_link_libraries(HoroEditorServices
         HoroEngine::GameplayModuleHost
         HoroEngine::GameplayBuild
         HoroEngine::Input
+        HoroEngine::ProjectMigrations
         PRIVATE
         HoroEngine::Assets
         nlohmann_json::nlohmann_json
@@ -500,13 +530,19 @@ if (HORO_BUILD_EDITOR_GUI)
 
     add_library(HoroGui STATIC
             editor/design_system/components/EditorUiComponents.cpp
+            editor/design_system/icons/EditorIcons.cpp
+            editor/design_system/components/EditorSnackbarHost.cpp
             editor/app/EditorTheme.cpp
             editor/menu/EditorMenuPlatform.cpp
             editor/status_bar/EditorStatusBar.cpp
             editor/modals/settings/SettingsModal.cpp
+            editor/modals/settings/SettingsModalLifecycle.cpp
+            editor/modals/settings/SettingsModalState.cpp
             editor/modals/asset_import/AssetImportModal.cpp
+            editor/modals/asset_import/AssetImportModalLifecycle.cpp
             editor/modals/asset_import/AssetImportModalPresentation.cpp
             editor/modals/scene_compare/SceneConflictCompareModal.cpp
+            editor/modals/gameplay_behavior/GameplayBehaviorFilenameModal.cpp
             editor/screens/welcome/WelcomeView.cpp
             editor/screens/welcome/WelcomeScreen.cpp
             editor/screens/project_creation/ProjectCreationView.cpp
@@ -519,9 +555,9 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/screens/workspace/panels/inspector/InspectorPanel.cpp
             editor/screens/workspace/panels/input_mapping/InputMappingPanel.cpp
             editor/screens/workspace/panels/game/GamePanel.cpp
-        editor/screens/workspace/panels/viewport/ViewportPanel.cpp
-        editor/screens/workspace/panels/viewport/visualizers/light/LightMarkerLayer.cpp
-            editor/screens/workspace/panels/viewport/gizmo/TransformGizmoController.cpp
+            editor/screens/workspace/panels/viewport/ViewportPanel.cpp
+            editor/screens/workspace/panels/viewport/visualizers/light/LightMarkerLayer.cpp
+        editor/screens/workspace/panels/viewport/gizmo/TransformGizmoController.cpp
             editor/screens/workspace/panels/viewport/gizmo/TransformGizmoGeometry.cpp
             editor/screens/workspace/panels/viewport/gizmo/TransformGizmoMath.cpp
             editor/screens/workspace/panels/viewport/interaction/ViewportInteractionCapture.cpp
@@ -529,10 +565,11 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/screens/workspace/panels/viewport/navigation/ViewportNavigationController.cpp
             editor/screens/workspace/WorkspacePanelRegistry.cpp
             editor/screens/workspace/DefaultWorkspacePanels.cpp
+            editor/screens/workspace/panels/global_dock/GlobalDockPanel.cpp
+            editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserGrid.cpp
             editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserActions.cpp
             editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserCards.cpp
             editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserDialogs.cpp
-            editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserGrid.cpp
             editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserInteractionSession.cpp
             editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserPane.cpp
             editor/screens/workspace/panels/global_dock/panes/asset_browser/AssetBrowserToolbar.cpp
@@ -546,8 +583,9 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/screens/workspace/panels/global_dock/panes/performance/GlobalDockPerformancePane.cpp
             editor/screens/workspace/panels/global_dock/panes/physics/GlobalDockPhysicsPane.cpp
             editor/screens/workspace/panels/global_dock/panes/shared/GlobalDockStatusPane.cpp
-            editor/screens/workspace/panels/global_dock/GlobalDockPanel.cpp
             editor/screens/workspace/EditorWorkspaceController.cpp
+            editor/screens/workspace/EditorWorkspaceControllerCommands.cpp
+            editor/screens/workspace/EditorWorkspaceControllerContentBrowser.cpp
             editor/screens/workspace/EditorWorkspaceView.cpp
             editor/screens/workspace/EditorWorkspaceScreen.cpp
             editor/screens/NavigationErrors.cpp

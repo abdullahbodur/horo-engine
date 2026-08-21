@@ -5,6 +5,7 @@
  * @brief Editor-private authoritative scene state and narrow command boundary.
  */
 
+#include "Horo/Assets/AssetId.h"
 #include "Horo/Foundation/Result.h"
 #include "Horo/Gameplay/BehaviorTypes.h"
 #include "Horo/Math/SceneMath.h"
@@ -81,6 +82,23 @@ namespace Horo::Editor {
 
     using PrimitiveMeshDescriptor = Runtime::PrimitiveMeshDescriptor;
 
+    /** @brief Persisted editor-only visibility and interaction state for one authored object. */
+    struct SceneObjectEditorState {
+        bool visible{true}; /**< Local editor viewport visibility; runtime activation is unaffected. */
+        bool locked{false}; /**< Local editor mutation lock; selection remains available for unlocking. */
+
+        [[nodiscard]] constexpr bool operator==(const SceneObjectEditorState &) const noexcept = default;
+    };
+
+    /** @brief Local and ancestor-resolved editor state for one object. */
+    struct ResolvedSceneObjectEditorState {
+        SceneObjectEditorState local;  /**< Authored local value retained independently of ancestors. */
+        bool effectivelyVisible{true}; /**< True only when the object and every ancestor are visible. */
+        bool effectivelyLocked{false}; /**< True when the object or at least one ancestor is locked. */
+        bool hiddenByParent{false};    /**< Whether an ancestor contributes effective invisibility. */
+        bool lockedByParent{false};    /**< Whether an ancestor contributes the effective lock. */
+    };
+
     /** @brief Typed authored component values attached to one scene object. */
     struct SceneObjectComponentSet {
         std::optional<Runtime::CameraComponent> camera;
@@ -100,7 +118,18 @@ namespace Horo::Editor {
         Math::Transform localTransform;
         std::optional<PrimitiveMeshDescriptor> primitiveMesh;
         SceneObjectComponentSet components;
+        std::optional<Assets::AssetId> meshAsset; /**< Stable imported core.mesh identity. */
+        SceneObjectEditorState editorState;
     };
+
+    /**
+     * @brief Resolves local and inherited editor visibility/lock state.
+     * @param objects Immutable objects from one coherent scene snapshot.
+     * @param object Stable object identity to resolve.
+     * @return Resolved state, or empty when the object or an ancestor chain is invalid.
+     */
+    [[nodiscard]] std::optional<ResolvedSceneObjectEditorState> ResolveSceneObjectEditorState(std::span<const SceneObjectSnapshot> objects,
+                                                                                              SceneObjectId object) noexcept;
 
     /** @brief Immutable value snapshot of an entire committed scene document. */
     struct SceneDocumentSnapshot {
@@ -131,6 +160,7 @@ namespace Horo::Editor {
         Renamed,
         TransformChanged,
         ComponentChanged,
+        EditorStateChanged,
         Duplicated,
         Deleted,
         Undone,
@@ -145,12 +175,21 @@ namespace Horo::Editor {
         Math::Transform localTransform;
         std::optional<PrimitiveMeshDescriptor> primitiveMesh;
         SceneObjectComponentSet components;
+        std::optional<Assets::AssetId> meshAsset;
     };
 
     /** @brief Catalog-based request shared by editor creation adapters. */
     struct PrimitiveCreationRequest {
         Runtime::PrimitiveId primitive;
         std::optional<SceneObjectId> parent;
+    };
+
+    /** @brief Validated request shared by viewport and hierarchy asset-drop adapters. */
+    struct AssetInstantiationRequest {
+        Assets::AssetId asset;
+        std::string baseName;
+        std::optional<SceneObjectId> parent;
+        Math::Transform localTransform;
     };
 
     /** @brief Typed request to rename an authored scene object. */
@@ -207,6 +246,12 @@ namespace Horo::Editor {
         Runtime::AudioSourceComponent audioSource;
     };
 
+    /** @brief Undoable replacement of one object's local editor-only visibility and lock state. */
+    struct SetSceneObjectEditorStateCommand {
+        SceneObjectId object;
+        SceneObjectEditorState editorState;
+    };
+
     /** @brief Types of optional authored components on a scene object. */
     enum class ComponentType : std::uint8_t {
         Camera,
@@ -258,6 +303,14 @@ namespace Horo::Editor {
     /** @brief Typed request to delete one object and its complete descendant subtree. */
     struct DeleteSceneObjectCommand {
         SceneObjectId object;
+    };
+
+    /**
+     * @brief Typed request to atomically delete multiple object subtrees.
+     * @details Duplicate and missing identities are ignored. Objects whose ancestor is also requested are removed from the root set.
+     */
+    struct DeleteSceneObjectsCommand {
+        std::vector<SceneObjectId> objects;
     };
 
     /** @brief Result metadata returned after a committed scene command. */
@@ -400,6 +453,9 @@ namespace Horo::Editor {
 
         /** @brief Validates and atomically commits an existing audio source component. */
         [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneObjectAudioSourceCommand &command);
+
+        /** @brief Atomically commits local editor visibility/lock state without changing runtime activation. */
+        [[nodiscard]] Result<SceneCommandResult> Execute(const SetSceneObjectEditorStateCommand &command);
         [[nodiscard]] Result<SceneCommandResult> Execute(const AddSceneObjectComponentCommand &command);
         [[nodiscard]] Result<SceneCommandResult> Execute(const RemoveSceneObjectComponentCommand &command);
         /** @brief Validates and atomically attaches one behavior with a generated stable instance ID. */
@@ -414,6 +470,9 @@ namespace Horo::Editor {
 
         /** @brief Validates and atomically deletes an object subtree. */
         [[nodiscard]] Result<SceneCommandResult> Execute(const DeleteSceneObjectCommand &command);
+
+        /** @brief Validates and atomically deletes normalized object subtrees as one history entry. */
+        [[nodiscard]] Result<SceneCommandResult> Execute(const DeleteSceneObjectsCommand &command);
 
         /** @brief Reverts the newest committed semantic history entry. */
         [[nodiscard]] Result<SceneCommandResult> Undo();
@@ -453,5 +512,16 @@ namespace Horo::Editor {
     private:
         SceneDocument &m_document;
         SceneDocumentCommandExecutor &m_executor;
+    };
+
+    /** @brief Central imported-mesh instantiation boundary used by every scene drop target. */
+    class InstantiateSceneAssetUseCase final {
+    public:
+        InstantiateSceneAssetUseCase(SceneDocument &document, SceneDocumentCommandExecutor &executor) noexcept;
+        [[nodiscard]] Result<SceneCommandResult> Execute(const AssetInstantiationRequest &request);
+
+    private:
+        SceneDocument &document_;
+        SceneDocumentCommandExecutor &executor_;
     };
 }  // namespace Horo::Editor

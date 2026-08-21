@@ -1,10 +1,10 @@
-#include <catch2/catch_test_macros.hpp>
-
 #include "Horo/Assets/AssetImporter.h"
+#include "Horo/Assets/MeshEditorPayload.h"
 #include "Horo/Foundation/CancellationToken.h"
 #include "ObjMeshImporter.h"
 
 #include <algorithm>
+#include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -12,59 +12,51 @@
 #include <string_view>
 #include <vector>
 
-namespace
-{
-using namespace Horo;
-using namespace Horo::Assets;
+namespace {
+    using namespace Horo;
+    using namespace Horo::Assets;
 
-AssetTypeId Type(const std::string_view value)
-{
-    auto parsed = AssetTypeId::Parse(value);
-    REQUIRE(parsed.HasValue());
-    return parsed.Value();
-}
+    AssetTypeId Type(const std::string_view value) {
+        auto parsed = AssetTypeId::Parse(value);
+        REQUIRE(parsed.HasValue());
+        return parsed.Value();
+    }
 
-/** @brief Helper: import a string as OBJ and return the editor payload bytes. */
-Result<std::vector<std::uint8_t>> ImportString(const char *objSource)
-{
-    AssetImporterCatalog catalog;
-    auto regResult = RegisterObjMeshImporter(catalog);
-    REQUIRE(regResult.HasValue());
-    auto snapshot = catalog.Publish();
-    REQUIRE(snapshot.HasValue());
+    /** @brief Helper: import a string as OBJ and return the editor payload bytes. */
+    Result<std::vector<std::uint8_t>> ImportString(const char *objSource) {
+        AssetImporterCatalog catalog;
+        auto regResult = RegisterObjMeshImporter(catalog);
+        REQUIRE(regResult.HasValue());
+        auto snapshot = catalog.Publish();
+        REQUIRE(snapshot.HasValue());
 
-    auto *strategy = snapshot.Value()->FindByExtension("obj");
-    REQUIRE(strategy != nullptr);
+        auto *strategy = snapshot.Value()->FindByExtension("obj");
+        REQUIRE(strategy != nullptr);
 
-    std::string_view sv(objSource);
-    AssetImportInput input{
-        .sourceBytes = std::span<const std::uint8_t>(
-            reinterpret_cast<const std::uint8_t *>(sv.data()), sv.size()),
-        .sourceExtension = "obj",
-        .settings = {},
-    };
+        std::string_view sv(objSource);
+        AssetImportInput input{
+            .sourceBytes = std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t *>(sv.data()), sv.size()),
+            .sourceExtension = "obj",
+            .settings = {},
+        };
 
-    CancellationToken cancellation;
-    auto result = strategy->Import(input, cancellation);
-    if (result.HasError())
-        return Result<std::vector<std::uint8_t>>::Failure(result.ErrorValue());
+        CancellationToken cancellation;
+        auto result = strategy->Import(input, cancellation);
+        if (result.HasError())
+            return Result<std::vector<std::uint8_t>>::Failure(result.ErrorValue());
 
-    return Result<std::vector<std::uint8_t>>::Success(result.Value().editorPayload);
-}
+        return Result<std::vector<std::uint8_t>>::Success(result.Value().editorPayload);
+    }
 
-/** @brief Reads a u32 LE from a byte span at offset. */
-std::uint32_t ReadLE32(std::span<const std::uint8_t> bytes, std::size_t offset)
-{
-    return static_cast<std::uint32_t>(bytes[offset]) |
-           (static_cast<std::uint32_t>(bytes[offset + 1]) << 8) |
-           (static_cast<std::uint32_t>(bytes[offset + 2]) << 16) |
-           (static_cast<std::uint32_t>(bytes[offset + 3]) << 24);
-}
+    /** @brief Reads a u32 LE from a byte span at offset. */
+    std::uint32_t ReadLE32(std::span<const std::uint8_t> bytes, std::size_t offset) {
+        return static_cast<std::uint32_t>(bytes[offset]) | (static_cast<std::uint32_t>(bytes[offset + 1]) << 8) |
+               (static_cast<std::uint32_t>(bytes[offset + 2]) << 16) | (static_cast<std::uint32_t>(bytes[offset + 3]) << 24);
+    }
 
-} // namespace
+}  // namespace
 
-TEST_CASE("OBJ importer parses a minimal triangle", "[native]")
-{
+TEST_CASE("OBJ importer parses a minimal triangle", "[native]") {
     const char *obj = R"(
 v 0 0 0
 v 1 0 0
@@ -76,10 +68,10 @@ f 1 2 3
     REQUIRE(result.HasValue());
 
     auto &payload = result.Value();
-    REQUIRE(payload.size() > 28); // header at minimum
+    REQUIRE(payload.size() > 28);  // header at minimum
 
     // Schema version 2 carries preview topology after the vertex streams.
-    REQUIRE(ReadLE32(payload, 0) == 2);
+    REQUIRE(ReadLE32(payload, 0) == MeshEditorPayloadSchemaVersion);
 
     // Vertex count = 3
     REQUIRE(ReadLE32(payload, 4) == 3);
@@ -94,8 +86,7 @@ f 1 2 3
     REQUIRE(ReadLE32(payload, 96) == 2);
 }
 
-TEST_CASE("OBJ importer registers with catalog", "[native]")
-{
+TEST_CASE("OBJ importer registers with catalog", "[native]") {
     AssetImporterCatalog catalog;
 
     auto result = RegisterObjMeshImporter(catalog);
@@ -113,14 +104,12 @@ TEST_CASE("OBJ importer registers with catalog", "[native]")
     REQUIRE(contrib->packageId == "horo.builtin.assets");
 }
 
-TEST_CASE("OBJ importer rejects empty file", "[native]")
-{
+TEST_CASE("OBJ importer rejects empty file", "[native]") {
     auto result = ImportString("");
     REQUIRE(result.HasError());
 }
 
-TEST_CASE("OBJ importer handles normals and texcoords", "[native]")
-{
+TEST_CASE("OBJ importer handles normals and texcoords", "[native]") {
     const char *obj = R"(
 v 0 0 0
 v 1 0 0
@@ -136,14 +125,13 @@ f 1/1/1 2/2/1 3/3/1
     REQUIRE(result.HasValue());
 
     auto &payload = result.Value();
-    REQUIRE(ReadLE32(payload, 0) == 2);
-    REQUIRE(ReadLE32(payload, 4) == 3); // vertices
-    REQUIRE(ReadLE32(payload, 8) == 1); // faces
+    REQUIRE(ReadLE32(payload, 0) == MeshEditorPayloadSchemaVersion);
+    REQUIRE(ReadLE32(payload, 4) == 3);  // vertices
+    REQUIRE(ReadLE32(payload, 8) == 1);  // faces
 }
 
-TEST_CASE("OBJ importer contribution produces a valid RGBA preview", "[native]")
-{
-    const char* obj = R"(
+TEST_CASE("OBJ importer contribution produces a valid RGBA preview", "[native]") {
+    const char *obj = R"(
 v 0 0 0
 v 1 0 0
 v 0 1 0
@@ -156,8 +144,7 @@ f 1 2 3
     REQUIRE((RegisterObjMeshImporter(catalog).HasValue()));
     auto snapshot = catalog.Publish();
     REQUIRE(snapshot.HasValue());
-    const AssetImporterContribution* contribution =
-        snapshot.Value()->FindPreviewContribution(Type("core.mesh"));
+    const AssetImporterContribution *contribution = snapshot.Value()->FindPreviewContribution(Type("core.mesh"));
     REQUIRE(contribution != nullptr);
     REQUIRE(contribution->previewProvider != nullptr);
     auto preview = contribution->previewProvider->GeneratePreview(
@@ -171,14 +158,12 @@ f 1 2 3
         CancellationToken{});
     REQUIRE(preview.HasValue());
     REQUIRE(preview.Value().IsValid());
-    REQUIRE((std::ranges::any_of(preview.Value().pixels, [](const std::uint8_t value)
-    {
+    REQUIRE((std::ranges::any_of(preview.Value().pixels, [](const std::uint8_t value) {
         return value != 0;
     })));
 }
 
-TEST_CASE("OBJ importer produces deterministic output", "[native]")
-{
+TEST_CASE("OBJ importer produces deterministic output", "[native]") {
     const char *obj = R"(
 v 1 2 3
 f 1 1 1
@@ -191,8 +176,7 @@ f 1 1 1
     REQUIRE(result1.Value() == result2.Value());
 }
 
-TEST_CASE("OBJ importer triangulates quads", "[native]")
-{
+TEST_CASE("OBJ importer triangulates quads", "[native]") {
     const char *obj = R"(
 v 0 0 0
 v 1 0 0

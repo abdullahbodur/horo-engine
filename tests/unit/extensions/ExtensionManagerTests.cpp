@@ -1,10 +1,10 @@
-#include "Horo/Extensions/ExtensionManager.h"
-#include "Horo/Extensions/ExtensionInventory.h"
-#include "Horo/Extensions/ExtensionMarketplace.h"
-#include "Horo/Extensions/ExtensionManifest.h"
-#include "Horo/Extensions/ExtensionErrors.h"
 #include "Horo/Assets/AssetImportMetadata.h"
 #include "Horo/Assets/AssetReimport.h"
+#include "Horo/Extensions/ExtensionErrors.h"
+#include "Horo/Extensions/ExtensionInventory.h"
+#include "Horo/Extensions/ExtensionManager.h"
+#include "Horo/Extensions/ExtensionManifest.h"
+#include "Horo/Extensions/ExtensionMarketplace.h"
 #include "Horo/Foundation/Platform.h"
 
 #include <catch2/catch_test_macros.hpp>
@@ -14,12 +14,10 @@
 #include <iterator>
 #include <ranges>
 
-namespace Horo::Extensions::Tests
-{
+namespace Horo::Extensions::Tests {
     namespace fs = std::filesystem;
 
-    TEST_CASE("Marketplace registry parsing filters immutable compatible entries")
-    {
+    TEST_CASE("Marketplace registry parsing filters immutable compatible entries") {
         constexpr std::string_view Registry = R"json({
           "packages": [{
             "id": "com.example.mesh-tools",
@@ -47,8 +45,7 @@ namespace Horo::Extensions::Tests
         CHECK(noMatch.Value().empty());
     }
 
-    TEST_CASE("Marketplace registry rejects mutable or unverifiable artifacts")
-    {
+    TEST_CASE("Marketplace registry rejects mutable or unverifiable artifacts") {
         constexpr std::string_view Registry = R"json({
           "packages": [{
             "id": "com.example.unsafe",
@@ -67,46 +64,37 @@ namespace Horo::Extensions::Tests
         CHECK(parsed.Value().empty());
     }
 
-    class ExistingImporter final : public Assets::IAssetImporter
-    {
+    class ExistingImporter final : public Assets::IAssetImporter {
     public:
-        [[nodiscard]] Result<Assets::PreparedAssetImport> Import(
-            const Assets::AssetImportInput&, const CancellationToken&) const override
-        {
-            return Result<Assets::PreparedAssetImport>::Failure(
-                MakeError(ExtensionErrors::InvocationFailed, "Not invoked by this test."));
+        [[nodiscard]] Result<Assets::PreparedAssetImport> Import(const Assets::AssetImportInput &,
+                                                                 const CancellationToken &) const override {
+            return Result<Assets::PreparedAssetImport>::Failure(MakeError(ExtensionErrors::InvocationFailed, "Not invoked by this test."));
         }
     };
 
-    struct ExtensionManagerTestFixture
-    {
+    struct ExtensionManagerTestFixture {
         fs::path tempDir;
 
-        ExtensionManagerTestFixture()
-        {
+        ExtensionManagerTestFixture() {
             tempDir = fs::temp_directory_path() / "horo_extension_tests" / "plugins";
             fs::create_directories(tempDir);
         }
 
-        ~ExtensionManagerTestFixture()
-        {
+        ~ExtensionManagerTestFixture() {
             std::error_code ec;
             fs::remove_all(tempDir, ec);
         }
     };
 
-    TEST_CASE_METHOD(ExtensionManagerTestFixture, "ExtensionManager Discovery", "[Extensions]")
-    {
+    TEST_CASE_METHOD(ExtensionManagerTestFixture, "ExtensionManager Discovery", "[Extensions]") {
         ExtensionManager manager;
 
-        SECTION("Empty directory returns empty list")
-        {
+        SECTION("Empty directory returns empty list") {
             auto discovered = manager.DiscoverExtensions(tempDir.string());
             REQUIRE(discovered.empty());
         }
 
-        SECTION("Directory with valid manifest finds plugin")
-        {
+        SECTION("Directory with valid manifest finds plugin") {
             fs::path pluginDir = tempDir / "com.example.test_plugin";
             fs::create_directories(pluginDir);
 
@@ -121,16 +109,14 @@ namespace Horo::Extensions::Tests
             manifestFile.close();
 
             auto discovered = manager.DiscoverExtensions(tempDir.string());
-            
+
             REQUIRE(discovered.size() == 1);
             REQUIRE(discovered[0] == pluginDir.string());
         }
     }
 
-    TEST_CASE("ExtensionManifest Parser", "[Extensions]")
-    {
-        SECTION("Valid JSON returns manifest")
-        {
+    TEST_CASE("ExtensionManifest Parser", "[Extensions]") {
+        SECTION("Valid JSON returns manifest") {
             std::string json = R"({
                 "package": {
                     "id": "com.example.test",
@@ -151,7 +137,7 @@ namespace Horo::Extensions::Tests
             auto result = ParseExtensionManifest(json);
             REQUIRE(result.HasValue());
 
-            const auto& manifest = result.Value();
+            const auto &manifest = result.Value();
             REQUIRE(manifest.id == "com.example.test");
             REQUIRE(manifest.version == "1.2.3");
             REQUIRE(manifest.kind == "editor_panel");
@@ -163,8 +149,7 @@ namespace Horo::Extensions::Tests
             REQUIRE(manifest.modules[0].version == "2.0.0");
         }
 
-        SECTION("Module version defaults to package version")
-        {
+        SECTION("Module version defaults to package version") {
             auto result = ParseExtensionManifest(R"({
                 "package": {"id": "com.example.defaulted", "version": "3.2.1"},
                 "modules": [{"id": "com.example.defaulted.importer", "kind": "asset_importer"}]
@@ -173,8 +158,7 @@ namespace Horo::Extensions::Tests
             REQUIRE(result.Value().modules[0].version == "3.2.1");
         }
 
-        SECTION("Canonical top-level package manifest is accepted")
-        {
+        SECTION("Canonical top-level package manifest is accepted") {
             auto result = ParseExtensionManifest(R"({
                 "id": "com.example.top-level",
                 "version": "4.0.0",
@@ -189,8 +173,7 @@ namespace Horo::Extensions::Tests
             REQUIRE(result.Value().modules[0].version == "4.1.0");
         }
 
-        SECTION("Contribution must reference a module in the same package")
-        {
+        SECTION("Contribution must reference a module in the same package") {
             auto result = ParseExtensionManifest(R"({
                 "id": "com.example.contributions",
                 "version": "1.0.0",
@@ -207,8 +190,7 @@ namespace Horo::Extensions::Tests
             REQUIRE(result.HasError());
         }
 
-        SECTION("Invalid module version is rejected")
-        {
+        SECTION("Invalid module version is rejected") {
             auto result = ParseExtensionManifest(R"({
                 "package": {"id": "com.example.invalid", "version": "1.0.0"},
                 "modules": [{"id": "com.example.invalid.importer", "version": "next"}]
@@ -216,8 +198,7 @@ namespace Horo::Extensions::Tests
             REQUIRE(result.HasError());
         }
 
-        SECTION("Missing package returns error")
-        {
+        SECTION("Missing package returns error") {
             std::string json = R"({
                 "some_other_field": "value"
             })";
@@ -227,16 +208,14 @@ namespace Horo::Extensions::Tests
         }
     }
 
-    TEST_CASE_METHOD(ExtensionManagerTestFixture,
-                     "Extension inventory exposes built-ins and persists activation state",
-                     "[Extensions][Inventory]")
-    {
+    TEST_CASE_METHOD(ExtensionManagerTestFixture, "Extension inventory exposes built-ins and persists activation state",
+                     "[Extensions][Inventory]") {
         const fs::path installRoot = fs::absolute(tempDir / "installed");
         ExtensionInventory inventory{installRoot};
         REQUIRE(inventory.Refresh().HasValue());
         REQUIRE(inventory.InstallRoot().is_absolute());
         REQUIRE(inventory.Entries().size() == 1);
-        const ExtensionInventoryEntry& builtIn = inventory.Entries().front();
+        const ExtensionInventoryEntry &builtIn = inventory.Entries().front();
         REQUIRE(builtIn.packageId == "horo.builtin.assets");
         REQUIRE(builtIn.origin == ExtensionOrigin::BuiltIn);
         REQUIRE(builtIn.enabled);
@@ -254,10 +233,8 @@ namespace Horo::Extensions::Tests
     }
 
 #ifdef HORO_BASIC_EXTENSION_DIR
-    TEST_CASE_METHOD(ExtensionManagerTestFixture,
-                     "Extension inventory installs an absolute local package disabled by default",
-                     "[Extensions][Inventory]")
-    {
+    TEST_CASE_METHOD(ExtensionManagerTestFixture, "Extension inventory installs an absolute local package disabled by default",
+                     "[Extensions][Inventory]") {
         const fs::path installRoot = fs::absolute(tempDir / "managed");
         ExtensionInventory inventory{installRoot};
         REQUIRE(inventory.Refresh().HasValue());
@@ -268,8 +245,7 @@ namespace Horo::Extensions::Tests
         REQUIRE(installed.HasValue());
         REQUIRE(installed.Value() == "com.horo.examples.asset-importer-basic");
 
-        const auto entry = std::ranges::find(
-            inventory.Entries(), installed.Value(), &ExtensionInventoryEntry::packageId);
+        const auto entry = std::ranges::find(inventory.Entries(), installed.Value(), &ExtensionInventoryEntry::packageId);
         REQUIRE(entry != inventory.Entries().end());
         REQUIRE(entry->origin == ExtensionOrigin::UserInstalled);
         REQUIRE(entry->absoluteRootPath.is_absolute());
@@ -283,50 +259,44 @@ namespace Horo::Extensions::Tests
         REQUIRE(roots.size() == 1);
         REQUIRE(roots.front().is_absolute());
         inventory.MarkRuntimeActive(installed.Value());
-        REQUIRE_FALSE(std::ranges::find(
-            inventory.Entries(), installed.Value(), &ExtensionInventoryEntry::packageId)->RestartRequired());
+        REQUIRE_FALSE(std::ranges::find(inventory.Entries(), installed.Value(), &ExtensionInventoryEntry::packageId)->RestartRequired());
 
         const fs::path installedManifest = roots.front() / "extension.json";
         std::ifstream manifestInput(installedManifest, std::ios::binary);
-        std::string manifestText{
-            std::istreambuf_iterator<char>{manifestInput},
-            std::istreambuf_iterator<char>{}};
+        std::string manifestText{std::istreambuf_iterator<char>{manifestInput}, std::istreambuf_iterator<char>{}};
         const std::string versionField{"\"version\": \"1.0.0\""};
         const std::size_t packageVersion = manifestText.find(versionField);
         REQUIRE(packageVersion != std::string::npos);
-        const std::size_t moduleVersion =
-            manifestText.find(versionField, packageVersion + versionField.size());
+        const std::size_t moduleVersion = manifestText.find(versionField, packageVersion + versionField.size());
         REQUIRE(moduleVersion != std::string::npos);
         manifestText.replace(moduleVersion, versionField.size(), "\"version\": \"1.1.0\"");
         {
-            std::ofstream manifestOutput(
-                installedManifest, std::ios::binary | std::ios::trunc);
+            std::ofstream manifestOutput(installedManifest, std::ios::binary | std::ios::trunc);
             manifestOutput << manifestText;
         }
         REQUIRE(inventory.Refresh().HasValue());
-        const auto updated = std::ranges::find(
-            inventory.Entries(), installed.Value(), &ExtensionInventoryEntry::packageId);
+        const auto updated = std::ranges::find(inventory.Entries(), installed.Value(), &ExtensionInventoryEntry::packageId);
         REQUIRE(updated != inventory.Entries().end());
         REQUIRE(updated->runtimeActive);
         REQUIRE(updated->RestartRequired());
         REQUIRE(inventory.InstallFromDirectory(source).HasError());
     }
 
-    TEST_CASE("External importer registration conflict leaves the catalog candidate unchanged",
-              "[Extensions][Assets]")
-    {
+    TEST_CASE("External importer registration conflict leaves the catalog candidate unchanged", "[Extensions][Assets]") {
         using namespace Horo::Assets;
         AssetImporterCatalog catalog;
-        REQUIRE(catalog.Register(AssetImporterContribution{
-            .contributionId = "com.horo.examples.asset-importer-basic.raw",
-            .packageId = "existing.package",
-            .moduleId = "existing.module",
-            .moduleVersion = "1.0.0",
-            .version = "1.0.0",
-            .fileExtensions = {"existing"},
-            .assetTypes = {AssetTypeId::Parse("example.raw").Value()},
-            .strategy = std::make_shared<const ExistingImporter>(),
-        }).HasValue());
+        REQUIRE(catalog
+                    .Register(AssetImporterContribution{
+                        .contributionId = "com.horo.examples.asset-importer-basic.raw",
+                        .packageId = "existing.package",
+                        .moduleId = "existing.module",
+                        .moduleVersion = "1.0.0",
+                        .version = "1.0.0",
+                        .fileExtensions = {"existing"},
+                        .assetTypes = {AssetTypeId::Parse("example.raw").Value()},
+                        .strategy = std::make_shared<const ExistingImporter>(),
+                    })
+                    .HasValue());
 
         ExtensionManager manager{&catalog};
         auto loaded = manager.LoadExtension(fs::absolute(HORO_BASIC_EXTENSION_DIR).string());
@@ -335,16 +305,13 @@ namespace Horo::Extensions::Tests
 
         auto published = catalog.Publish();
         REQUIRE(published.HasValue());
-        const auto* retained = published.Value()->FindById(
-            "com.horo.examples.asset-importer-basic.raw");
+        const auto *retained = published.Value()->FindById("com.horo.examples.asset-importer-basic.raw");
         REQUIRE(retained != nullptr);
         REQUIRE(retained->packageId == "existing.package");
     }
 
-    TEST_CASE_METHOD(ExtensionManagerTestFixture,
-                     "External asset importer loads, previews, reimports, and survives manager release",
-                     "[Extensions][Assets]")
-    {
+    TEST_CASE_METHOD(ExtensionManagerTestFixture, "External asset importer loads, previews, reimports, and survives manager release",
+                     "[Extensions][Assets]") {
         using namespace Horo::Assets;
 
         AssetImporterCatalog catalog;
@@ -357,12 +324,10 @@ namespace Horo::Extensions::Tests
         auto published = catalog.Publish();
         REQUIRE(published.HasValue());
         const auto snapshot = published.Value();
-        const auto* contribution =
-            snapshot->FindById("com.horo.examples.asset-importer-basic.raw");
+        const auto *contribution = snapshot->FindById("com.horo.examples.asset-importer-basic.raw");
         REQUIRE(contribution != nullptr);
         REQUIRE(contribution->packageId == "com.horo.examples.asset-importer-basic");
-        REQUIRE(contribution->moduleId ==
-                "com.horo.examples.asset-importer-basic.native");
+        REQUIRE(contribution->moduleId == "com.horo.examples.asset-importer-basic.native");
         REQUIRE(contribution->moduleVersion == "1.0.0");
         REQUIRE(contribution->version == "1.0.0");
         REQUIRE(contribution->settings.size() == 1);
@@ -418,8 +383,7 @@ namespace Horo::Extensions::Tests
         }
         auto oldSource = ReadAssetImportSource(fs::absolute(sourcePath));
         REQUIRE(oldSource.HasValue());
-        const AssetId assetId =
-            AssetId::Parse("11112222-3333-4444-8555-666677778888").Value();
+        const AssetId assetId = AssetId::Parse("11112222-3333-4444-8555-666677778888").Value();
         AssetImportMetadata metadata{
             .assetId = assetId,
             .assetType = AssetTypeId::Parse("example.raw").Value(),
@@ -446,8 +410,7 @@ namespace Horo::Extensions::Tests
         }
 
         AssetRegistry registry;
-        REQUIRE(RebuildAssetRegistry(
-            registry, fs::absolute(projectRoot), AssetRegistryOpenMode::Edit).HasValue());
+        REQUIRE(RebuildAssetRegistry(registry, fs::absolute(projectRoot), AssetRegistryOpenMode::Edit).HasValue());
         NativeDurableFileSystem files;
         auto reimported = ReimportProjectAsset(
             AssetReimportRequest{
@@ -467,4 +430,4 @@ namespace Horo::Extensions::Tests
     }
 #endif
 
-} // namespace Horo::Extensions::Tests
+}  // namespace Horo::Extensions::Tests

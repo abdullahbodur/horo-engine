@@ -1,6 +1,6 @@
 #include "Horo/Gameplay/BehaviorRuntime.h"
 
-
+#include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Gameplay/GameplayErrors.h"
 
 #include <algorithm>
@@ -125,14 +125,14 @@ namespace Horo::Gameplay {
                         return Result<void>::Failure(
                             MakeError(GameplayErrors::BehaviorNotRegistered,
                                       "Scene references unavailable behavior '" + component.typeId.Value() + "'."));
-                    const std::size_t count = ++multiplicity[component.typeId.Value()];
-                    if (count > 1 && !registration->descriptor.allowMultiple)
+                    if (const std::size_t count = ++multiplicity[component.typeId.Value()];
+                        count > 1 && !registration->descriptor.allowMultiple)
                         return Result<void>::Failure(MakeError(GameplayErrors::BehaviorMultiplicityViolation));
                     IBehaviorInstance *implementation = registration->factory.create(registration->factory.userData);
                     if (implementation == nullptr)
                         return Result<void>::Failure(
                             MakeError(GameplayErrors::InvalidBehaviorComponent, "Behavior factory returned no instance."));
-                    instances.push_back({entity->entity, component, registration, implementation});
+                    instances.emplace_back(entity->entity, component, registration, implementation);
                 }
             }
 
@@ -156,7 +156,7 @@ namespace Horo::Gameplay {
                 }
             }
             if (!commands.Empty()) {
-                Result<Runtime::StructuralCommitResult> committed = scene.Commit(std::move(commands));
+                Result<Runtime::StructuralCommitResult> committed = scene.Commit(commands);
                 if (committed.HasError())
                     return Result<void>::Failure(committed.ErrorValue());
             }
@@ -187,7 +187,11 @@ namespace Horo::Gameplay {
                         if (iterator->enabledCallbackActive)
                             iterator->implementation->OnDisable(context);
                         iterator->implementation->OnDestroy(context);
+                    } catch (
+                        const std::exception &exception) {  // NOSONAR(cpp:S1181) User behavior code is an exception containment boundary.
+                        LOG_WARN("gameplay.runtime", "Behavior rollback exception: %s", exception.what());
                     } catch (...) {
+                        LOG_WARN("gameplay.runtime", "Behavior rollback unknown exception.");
                     }
                 }
                 iterator->registration->factory.destroy(iterator->registration->factory.userData, iterator->implementation);
@@ -227,7 +231,7 @@ namespace Horo::Gameplay {
             instance.implementation->OnFixedUpdate(context, delta);
         }
         if (!commands.Empty()) {
-            Result<Runtime::StructuralCommitResult> committed = impl_->scene.Commit(std::move(commands));
+            Result<Runtime::StructuralCommitResult> committed = impl_->scene.Commit(commands);
             if (committed.HasError())
                 return Result<void>::Failure(committed.ErrorValue());
         }
@@ -284,8 +288,10 @@ namespace Horo::Gameplay {
                 if (iterator->enabledCallbackActive)
                     iterator->implementation->OnDisable(context);
                 iterator->implementation->OnDestroy(context);
+            } catch (const std::exception &exception) {
+                LOG_WARN("gameplay.runtime", "Behavior shutdown exception: %s", exception.what());
             } catch (...) {
-                // Teardown must continue so no callable remains when the owning module unloads.
+                LOG_WARN("gameplay.runtime", "Behavior shutdown unknown exception.");
             }
             iterator->registration->factory.destroy(iterator->registration->factory.userData, iterator->implementation);
             iterator->destroyed = true;

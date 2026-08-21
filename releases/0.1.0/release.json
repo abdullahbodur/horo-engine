@@ -11,7 +11,7 @@
       "reader": "journal-v1"
     }
   ],
-  "decisionHash": "sha256:049b8dd2d0f95e814323ae2d7560c66994d41af6666677c214f102ce55068d15",
+  "decisionHash": "sha256:afdb932da996889a25069f1c9bc8ba5d77371d1c3350c09cb0285a2f3bdc8d30",
   "minimumMigratableVersion": "0.0.1",
   "migrationCheckpoints": []
 }

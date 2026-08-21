@@ -76,6 +76,162 @@ namespace Horo::Editor {
             }
             return Result<Render::RenderLight>::Success(light);
         }
+
+        [[nodiscard]] Result<void> ExtractEntityLight(const Runtime::RuntimeSceneView scene, const Runtime::RuntimeEntityView &entity,
+                                                      EditorViewportSceneSnapshot &extracted) {
+            if (!entity.components->light.has_value() || extracted.lights.size() >= Render::MaximumForwardLights)
+                return Result<void>::Success();
+            if (!entity.authoredObject) {
+                return Result<void>::Failure(
+                    ExtractionError(ViewportSceneErrors::InvalidObjectId, "Viewport light has no authored object identity."));
+            }
+            const Result<Math::Mat4> lightWorld = ResolveWorld(scene, entity.entity, {}, scene.SlotCount() + 1);
+            if (lightWorld.HasError())
+                return Result<void>::Failure(lightWorld.ErrorValue());
+            Result<Render::RenderLight> light = ExtractLight(*entity.components->light, lightWorld.Value());
+            if (light.HasError())
+                return Result<void>::Failure(light.ErrorValue());
+            extracted.lights.push_back(light.Value());
+            extracted.lightObjects.push_back(SceneObjectId{entity.authoredObject->value});
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> ExtractPrimitiveMeshInstance(const Runtime::RuntimeSceneView scene,
+                                                                const Runtime::RuntimeEntityView &entity,
+                                                                const std::optional<ResolvedSceneObjectEditorState> &editorState,
+                                                                Runtime::PrimitiveMeshCache &meshCache,
+                                                                EditorViewportSceneSnapshot &extracted) {
+            if (!*entity.primitiveMesh)
+                return Result<void>::Success();
+            if (!entity.authoredObject) {
+                return Result<void>::Failure(ExtractionError(ViewportSceneErrors::InvalidObjectId,
+                                                             "Renderable editor runtime entity has no authored object identity."));
+            }
+
+            Result<Runtime::PrimitiveMeshLease> acquired = meshCache.Acquire(**entity.primitiveMesh);
+            if (acquired.HasError()) {
+                Error error = acquired.ErrorValue();
+                error.message = std::format("Scene object {}: {}", entity.authoredObject->value, error.message);
+                return Result<void>::Failure(std::move(error));
+            }
+            Runtime::PrimitiveMeshLease lease = std::move(acquired).Value();
+            const Render::RenderMeshHandle handle{lease.Id(), 1};
+            if (std::ranges::find(extracted.meshResources, handle, &EditorViewportMeshResourceView::handle) ==
+                extracted.meshResources.end()) {
+                const Render::MeshData &mesh = lease.Data();
+                extracted.meshResources.emplace_back(handle, mesh.vertices, mesh.indices, mesh.localBounds);
+                extracted.meshLeases.push_back(std::move(lease));
+            }
+            const auto resource = std::ranges::find(extracted.meshResources, handle, &EditorViewportMeshResourceView::handle);
+            const Result<Math::Mat4> world = ResolveWorld(scene, entity.entity, {}, scene.SlotCount() + 1);
+            if (world.HasError())
+                return Result<void>::Failure(world.ErrorValue());
+            extracted.instances.push_back(
+                EditorViewportInstance{handle, world.Value(), resource->localBounds, Render::CoreDefaultMaterial, {}});
+            extracted.instanceObjects.push_back(SceneObjectId{entity.authoredObject->value});
+            extracted.instancePickable.push_back(editorState.has_value() && editorState->effectivelyLocked ? 0U : 1U);
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> ExtractDocumentAssetMeshes(const Runtime::RuntimeSceneView scene, const SceneDocumentSnapshot &document,
+                                                              const EditorAssetMeshCache &assetMeshes, const bool respectEditorVisibility,
+                                                              EditorViewportSceneSnapshot &extracted) {
+            for (const SceneObjectSnapshot &object : document.objects) {
+                if (!object.meshAsset.has_value())
+                    continue;
+                const std::optional<ResolvedSceneObjectEditorState> editorState =
+                    ResolveSceneObjectEditorState(document.objects, object.id);
+                if (respectEditorVisibility && editorState.has_value() && !editorState->effectivelyVisible)
+                    continue;
+                const std::optional<EditorAssetMeshView> assetMesh = assetMeshes.Find(*object.meshAsset);
+                if (!assetMesh.has_value() || assetMesh->mesh == nullptr)
+                    continue;
+                const std::optional<Runtime::EntityRef> entity = scene.Find(Runtime::SceneObjectId{object.id.value});
+                if (!entity.has_value()) {
+                    return Result<void>::Failure(
+                        ExtractionError(ViewportSceneErrors::ObjectNotFound, "Imported mesh scene object does not exist."));
+                }
+                if (std::ranges::find(extracted.meshResources, assetMesh->handle, &EditorViewportMeshResourceView::handle) ==
+                    extracted.meshResources.end()) {
+                    extracted.meshResources.emplace_back(assetMesh->handle, assetMesh->mesh->vertices, assetMesh->mesh->indices,
+                                                         assetMesh->mesh->localBounds);
+                }
+                const Result<Math::Mat4> world = ResolveWorld(scene, *entity, {}, scene.SlotCount() + 1);
+                if (world.HasError())
+                    return Result<void>::Failure(world.ErrorValue());
+                extracted.instances.push_back(EditorViewportInstance{assetMesh->handle,
+                                                                     world.Value(),
+                                                                     assetMesh->mesh->localBounds,
+                                                                     Render::CoreDefaultMaterial,
+                                                                     {}});
+                extracted.instanceObjects.push_back(object.id);
+                extracted.instancePickable.push_back(editorState.has_value() && editorState->effectivelyLocked ? 0U : 1U);
+            }
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> ValidateTransformPreviews(const Runtime::RuntimeSceneView scene,
+                                                             const std::span<const SceneObjectTransformPreview> previews) {
+            for (std::size_t index = 0; index < previews.size(); ++index) {
+                if (!scene.Find(Runtime::SceneObjectId{previews[index].object.value})) {
+                    return Result<void>::Failure(
+                        ExtractionError(ViewportSceneErrors::ObjectNotFound, "Preview runtime scene object does not exist."));
+                }
+                if (std::ranges::find(previews.subspan(index + 1), previews[index].object, &SceneObjectTransformPreview::object) !=
+                    previews.subspan(index + 1).end()) {
+                    return Result<void>::Failure(
+                        ExtractionError(ViewportSceneErrors::InvalidObjectId, "Preview object identities must be unique."));
+                }
+            }
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> ApplyPreviewToInstances(const Runtime::RuntimeSceneView scene,
+                                                           const std::span<const SceneObjectTransformPreview> previews,
+                                                           EditorViewportSceneSnapshot &snapshot) {
+            for (std::size_t index = 0; index < snapshot.instanceObjects.size(); ++index) {
+                const std::optional<Runtime::EntityRef> entity = scene.Find(Runtime::SceneObjectId{snapshot.instanceObjects[index].value});
+                if (!entity) {
+                    return Result<void>::Failure(
+                        ExtractionError(ViewportSceneErrors::ObjectNotFound, "Viewport runtime object does not exist."));
+                }
+                const Result<Math::Mat4> world = ResolveWorld(scene, *entity, previews, scene.SlotCount() + 1);
+                if (world.HasError())
+                    return Result<void>::Failure(world.ErrorValue());
+                if (!Math::IsFinite(world.Value())) {
+                    return Result<void>::Failure(ExtractionError(ViewportSceneErrors::InvalidResult, "Preview transform is invalid."));
+                }
+                snapshot.instances[index].localToWorld = world.Value();
+            }
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> ApplyPreviewToLights(const Runtime::RuntimeSceneView scene,
+                                                        const std::span<const SceneObjectTransformPreview> previews,
+                                                        EditorViewportSceneSnapshot &snapshot) {
+            if (snapshot.lights.size() != snapshot.lightObjects.size()) {
+                return Result<void>::Failure(ExtractionError(ViewportSceneErrors::InstanceIdentityMismatch,
+                                                             "Viewport light identities do not match the extracted lights."));
+            }
+            for (std::size_t index = 0; index < snapshot.lightObjects.size(); ++index) {
+                const std::optional<Runtime::EntityRef> entity = scene.Find(Runtime::SceneObjectId{snapshot.lightObjects[index].value});
+                if (!entity) {
+                    return Result<void>::Failure(
+                        ExtractionError(ViewportSceneErrors::ObjectNotFound, "Viewport light object does not exist."));
+                }
+                const Result<Runtime::RuntimeEntityView> value = scene.Get(*entity);
+                if (value.HasError())
+                    return Result<void>::Failure(value.ErrorValue());
+                const Result<Math::Mat4> world = ResolveWorld(scene, *entity, previews, scene.SlotCount() + 1);
+                if (world.HasError())
+                    return Result<void>::Failure(world.ErrorValue());
+                Result<Render::RenderLight> light = ExtractLight(*value.Value().components->light, world.Value());
+                if (light.HasError())
+                    return Result<void>::Failure(light.ErrorValue());
+                snapshot.lights[index] = light.Value();
+            }
+            return Result<void>::Success();
+        }
     }  // namespace
 
     /** @copydoc EditorViewportSceneSnapshot::View */
@@ -121,10 +277,10 @@ namespace Horo::Editor {
     }
 
     /** @copydoc ExtractEditorViewportScene */
-    Result<EditorViewportSceneSnapshot> ExtractEditorViewportScene(const Runtime::RuntimeSceneView scene,
-                                                                   const DocumentRevision documentRevision,
-                                                                   const EditorViewportCamera &camera,
-                                                                   Runtime::PrimitiveMeshCache &meshCache) {
+    Result<EditorViewportSceneSnapshot> ExtractEditorViewportScene(
+        const Runtime::RuntimeSceneView scene, const DocumentRevision documentRevision, const EditorViewportCamera &camera,
+        Runtime::PrimitiveMeshCache &meshCache, const SceneDocumentSnapshot *document, const EditorAssetMeshCache *assetMeshes,
+        const bool respectEditorVisibility) {
         if (!scene.RuntimeId().IsValid())
             return Result<EditorViewportSceneSnapshot>::Failure(
                 ExtractionError(ViewportSceneErrors::InvalidResult, "Runtime scene view is invalid."));
@@ -135,6 +291,7 @@ namespace Horo::Editor {
         EditorViewportSceneSnapshot extracted{.documentRevision = documentRevision, .runtimeSceneId = scene.RuntimeId(), .camera = camera};
         extracted.instances.reserve(scene.SlotCount());
         extracted.instanceObjects.reserve(scene.SlotCount());
+        extracted.instancePickable.reserve(scene.SlotCount());
         extracted.lights.reserve(std::min(scene.SlotCount(), Render::MaximumForwardLights));
         extracted.lightObjects.reserve(std::min(scene.SlotCount(), Render::MaximumForwardLights));
 
@@ -142,48 +299,27 @@ namespace Horo::Editor {
             const std::optional<Runtime::RuntimeEntityView> entity = scene.EntityAt(slot);
             if (!entity)
                 continue;
-            if (entity->components->light.has_value() && extracted.lights.size() < Render::MaximumForwardLights) {
-                if (!entity->authoredObject)
-                    return Result<EditorViewportSceneSnapshot>::Failure(
-                        ExtractionError(ViewportSceneErrors::InvalidObjectId, "Viewport light has no authored object identity."));
-                const Result<Math::Mat4> lightWorld = ResolveWorld(scene, entity->entity, {}, scene.SlotCount() + 1);
-                if (lightWorld.HasError())
-                    return Result<EditorViewportSceneSnapshot>::Failure(lightWorld.ErrorValue());
-                Result<Render::RenderLight> light = ExtractLight(*entity->components->light, lightWorld.Value());
-                if (light.HasError())
-                    return Result<EditorViewportSceneSnapshot>::Failure(light.ErrorValue());
-                extracted.lights.push_back(light.Value());
-                extracted.lightObjects.push_back(SceneObjectId{entity->authoredObject->value});
-            }
-            if (!*entity->primitiveMesh)
+            std::optional<ResolvedSceneObjectEditorState> editorState;
+            if (document != nullptr && entity->authoredObject.has_value())
+                editorState = ResolveSceneObjectEditorState(document->objects, SceneObjectId{entity->authoredObject->value});
+            if (respectEditorVisibility && editorState.has_value() && !editorState->effectivelyVisible)
                 continue;
-            if (!entity->authoredObject)
-                return Result<EditorViewportSceneSnapshot>::Failure(
-                    ExtractionError(ViewportSceneErrors::InvalidObjectId,
-                                    "Renderable editor runtime entity has no authored object identity."));
 
-            Result<Runtime::PrimitiveMeshLease> acquired = meshCache.Acquire(**entity->primitiveMesh);
-            if (acquired.HasError()) {
-                Error error = acquired.ErrorValue();
-                error.message = "Scene object " + std::to_string(entity->authoredObject->value) + ": " + error.message;
-                return Result<EditorViewportSceneSnapshot>::Failure(std::move(error));
-            }
-            Runtime::PrimitiveMeshLease lease = std::move(acquired).Value();
-            const Render::RenderMeshHandle handle{lease.Id(), 1};
-            if (std::ranges::find(extracted.meshResources, handle, &EditorViewportMeshResourceView::handle) ==
-                extracted.meshResources.end()) {
-                const Render::MeshData &mesh = lease.Data();
-                extracted.meshResources.emplace_back(handle, mesh.vertices, mesh.indices, mesh.localBounds);
-                extracted.meshLeases.push_back(std::move(lease));
-            }
-            const auto resource = std::ranges::find(extracted.meshResources, handle, &EditorViewportMeshResourceView::handle);
-            const Result<Math::Mat4> world = ResolveWorld(scene, entity->entity, {}, scene.SlotCount() + 1);
-            if (world.HasError())
-                return Result<EditorViewportSceneSnapshot>::Failure(world.ErrorValue());
-            extracted.instances.push_back(
-                EditorViewportInstance{handle, world.Value(), resource->localBounds, Render::CoreDefaultMaterial, {}});
-            extracted.instanceObjects.push_back(SceneObjectId{entity->authoredObject->value});
+            if (const Result<void> lightResult = ExtractEntityLight(scene, *entity, extracted); lightResult.HasError())
+                return Result<EditorViewportSceneSnapshot>::Failure(lightResult.ErrorValue());
+
+            if (const Result<void> primitiveResult = ExtractPrimitiveMeshInstance(scene, *entity, editorState, meshCache, extracted);
+                primitiveResult.HasError())
+                return Result<EditorViewportSceneSnapshot>::Failure(primitiveResult.ErrorValue());
         }
+
+        if (document != nullptr && assetMeshes != nullptr) {
+            if (const Result<void> assetResult =
+                    ExtractDocumentAssetMeshes(scene, *document, *assetMeshes, respectEditorVisibility, extracted);
+                assetResult.HasError())
+                return Result<EditorViewportSceneSnapshot>::Failure(assetResult.ErrorValue());
+        }
+
         if (!extracted.View().IsValid())
             return Result<EditorViewportSceneSnapshot>::Failure(
                 ExtractionError(ViewportSceneErrors::InvalidResult, "Extracted runtime viewport scene is invalid."));
@@ -194,50 +330,17 @@ namespace Horo::Editor {
     Result<void> ApplyEditorViewportTransformPreview(const Runtime::RuntimeSceneView scene,
                                                      const std::span<const SceneObjectTransformPreview> previews,
                                                      EditorViewportSceneSnapshot &snapshot) {
-        if (snapshot.runtimeSceneId != scene.RuntimeId() || snapshot.instances.size() != snapshot.instanceObjects.size())
+        if (snapshot.runtimeSceneId != scene.RuntimeId() || snapshot.instances.size() != snapshot.instanceObjects.size()) {
             return Result<void>::Failure(ExtractionError(ViewportSceneErrors::InstanceIdentityMismatch,
                                                          "Viewport snapshot does not match the active runtime scene."));
-        for (std::size_t index = 0; index < previews.size(); ++index) {
-            if (!scene.Find(Runtime::SceneObjectId{previews[index].object.value}))
-                return Result<void>::Failure(
-                    ExtractionError(ViewportSceneErrors::ObjectNotFound, "Preview runtime scene object does not exist."));
-            if (std::ranges::find(previews.subspan(index + 1), previews[index].object, &SceneObjectTransformPreview::object) !=
-                previews.subspan(index + 1).end())
-                return Result<void>::Failure(
-                    ExtractionError(ViewportSceneErrors::InvalidObjectId, "Preview object identities must be unique."));
         }
+        if (const Result<void> validation = ValidateTransformPreviews(scene, previews); validation.HasError())
+            return validation;
 
-        for (std::size_t index = 0; index < snapshot.instanceObjects.size(); ++index) {
-            const std::optional<Runtime::EntityRef> entity = scene.Find(Runtime::SceneObjectId{snapshot.instanceObjects[index].value});
-            if (!entity)
-                return Result<void>::Failure(
-                    ExtractionError(ViewportSceneErrors::ObjectNotFound, "Viewport runtime object does not exist."));
-            const Result<Math::Mat4> world = ResolveWorld(scene, *entity, previews, scene.SlotCount() + 1);
-            if (world.HasError() || !Math::IsFinite(world.HasValue() ? world.Value() : Math::Mat4{}))
-                return Result<void>::Failure(world.HasError()
-                                                 ? world.ErrorValue()
-                                                 : ExtractionError(ViewportSceneErrors::InvalidResult, "Preview transform is invalid."));
-            snapshot.instances[index].localToWorld = world.Value();
-        }
-        if (snapshot.lights.size() != snapshot.lightObjects.size())
-            return Result<void>::Failure(ExtractionError(ViewportSceneErrors::InstanceIdentityMismatch,
-                                                         "Viewport light identities do not match the extracted lights."));
-        for (std::size_t index = 0; index < snapshot.lightObjects.size(); ++index) {
-            const std::optional<Runtime::EntityRef> entity = scene.Find(Runtime::SceneObjectId{snapshot.lightObjects[index].value});
-            if (!entity)
-                return Result<void>::Failure(ExtractionError(ViewportSceneErrors::ObjectNotFound, "Viewport light object does not exist."));
-            const Result<Runtime::RuntimeEntityView> value = scene.Get(*entity);
-            if (value.HasError())
-                return Result<void>::Failure(value.ErrorValue());
-            const Result<Math::Mat4> world = ResolveWorld(scene, *entity, previews, scene.SlotCount() + 1);
-            if (world.HasError())
-                return Result<void>::Failure(world.ErrorValue());
-            Result<Render::RenderLight> light = ExtractLight(*value.Value().components->light, world.Value());
-            if (light.HasError())
-                return Result<void>::Failure(light.ErrorValue());
-            snapshot.lights[index] = light.Value();
-        }
-        return Result<void>::Success();
+        if (const Result<void> instanceResult = ApplyPreviewToInstances(scene, previews, snapshot); instanceResult.HasError())
+            return instanceResult;
+
+        return ApplyPreviewToLights(scene, previews, snapshot);
     }
 
     /** @copydoc ApplyEditorViewportLightPreview */

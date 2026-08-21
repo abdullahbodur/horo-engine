@@ -108,6 +108,81 @@ namespace {
         REQUIRE((document.Objects().back().components.camera.has_value()));
     }
 
+    TEST_CASE("Directional Light Kind Survives Duplicate Undo And Redo", "[unit][editor]") {
+        using namespace Horo;
+        using namespace Horo::Editor;
+        using namespace Horo::Runtime;
+        SceneDocument document;
+        EditorHistory history;
+        SceneDocumentCommandExecutor commands{document, history};
+        CreateSceneObjectUseCase create{document, commands};
+
+        const auto created = create.Execute({PrimitiveId{"primitive.object.light_directional"}, std::nullopt});
+        REQUIRE((created.HasValue()));
+        REQUIRE((document.Objects().front().components.light->kind == LightKind::Directional));
+
+        const auto duplicated = commands.Execute(DuplicateSceneObjectCommand{created.Value().object, "Sun Copy"});
+        REQUIRE((duplicated.HasValue()));
+        REQUIRE((document.Objects().back().components.light->kind == LightKind::Directional));
+
+        REQUIRE((commands.Undo().HasValue()));
+        REQUIRE((document.Objects().size() == 1));
+        REQUIRE((commands.Redo().HasValue()));
+        REQUIRE((document.Objects().back().components.light->kind == LightKind::Directional));
+    }
+
+    TEST_CASE("Editor Visibility And Lock Resolve Through Parents And Survive History", "[unit][editor]") {
+        using namespace Horo;
+        using namespace Horo::Editor;
+        SceneDocument document;
+        EditorHistory history;
+        SceneDocumentCommandExecutor commands{document, history};
+        const auto parent = commands.Execute(CreateSceneObjectCommand{.name = "Parent"});
+        REQUIRE((parent.HasValue()));
+        const auto child = commands.Execute(CreateSceneObjectCommand{.name = "Child", .parent = parent.Value().object});
+        REQUIRE((child.HasValue()));
+
+        REQUIRE(
+            (commands
+                 .Execute(SetSceneObjectEditorStateCommand{parent.Value().object, SceneObjectEditorState{.visible = false, .locked = true}})
+                 .HasValue()));
+        const auto inherited = ResolveSceneObjectEditorState(document.Objects(), child.Value().object);
+        REQUIRE((inherited.has_value()));
+        REQUIRE_FALSE((inherited->effectivelyVisible));
+        REQUIRE((inherited->effectivelyLocked));
+        REQUIRE((inherited->hiddenByParent));
+        REQUIRE((inherited->lockedByParent));
+        REQUIRE((inherited->local == SceneObjectEditorState{}));
+
+        REQUIRE((commands.Execute(RenameSceneObjectCommand{child.Value().object, "Blocked"}).HasError()));
+        REQUIRE((commands.Execute(SetSceneObjectTransformCommand{child.Value().object, Math::Transform{}}).HasError()));
+        REQUIRE((commands.Execute(DeleteSceneObjectCommand{parent.Value().object}).HasError()));
+
+        REQUIRE((commands.Undo().HasValue()));
+        const auto restored = ResolveSceneObjectEditorState(document.Objects(), child.Value().object);
+        REQUIRE((restored.has_value() && restored->effectivelyVisible && !restored->effectivelyLocked));
+        REQUIRE((commands.Redo().HasValue()));
+        const auto redone = ResolveSceneObjectEditorState(document.Objects(), parent.Value().object);
+        REQUIRE((redone.has_value() && !redone->local.visible && redone->local.locked));
+    }
+
+    TEST_CASE("Hidden Unlocked Objects Duplicate Their Local Editor State", "[unit][editor]") {
+        using namespace Horo::Editor;
+        SceneDocument document;
+        EditorHistory history;
+        SceneDocumentCommandExecutor commands{document, history};
+        const auto created = commands.Execute(CreateSceneObjectCommand{.name = "Hidden"});
+        REQUIRE((created.HasValue()));
+        REQUIRE((commands
+                     .Execute(SetSceneObjectEditorStateCommand{created.Value().object,
+                                                               SceneObjectEditorState{.visible = false, .locked = false}})
+                     .HasValue()));
+        const auto duplicated = commands.Execute(DuplicateSceneObjectCommand{created.Value().object, "Hidden Copy"});
+        REQUIRE((duplicated.HasValue()));
+        REQUIRE_FALSE((document.Objects().back().editorState.visible));
+        REQUIRE_FALSE((document.Objects().back().editorState.locked));
+    }
+
     TEST_CASE("Camera Component Editing Is Validated And Survives History", "[unit][editor]") {
         using namespace Horo;
         using namespace Horo::Editor;
@@ -488,6 +563,59 @@ namespace {
         REQUIRE((commands.Execute(CreateSceneObjectCommand{.name = "Child", .parent = parent.Value().object}).HasValue()));
         REQUIRE((commands.Execute(DeleteSceneObjectCommand{parent.Value().object}).HasValue()));
         REQUIRE((document.Snapshot().objects.empty()));
+    }
+
+    TEST_CASE("Batch Delete Normalizes Selected Ancestors And Restores Every Subtree Atomically", "[unit][editor]") {
+        using namespace Horo::Editor;
+        SceneDocument document;
+        EditorHistory history;
+        SceneDocumentCommandExecutor commands{document, history};
+        SceneObjectComponentSet parentComponents;
+        parentComponents.camera = Horo::Runtime::CameraComponent{
+            .projection = Horo::Runtime::CameraProjection::Orthographic,
+            .orthographicHeight = 24.0F,
+        };
+        const auto parent = commands.Execute(CreateSceneObjectCommand{
+            .name = "Parent",
+            .localTransform = Horo::Math::Transform{.translation = {1.0F, 2.0F, 3.0F}},
+            .components = parentComponents,
+        });
+        REQUIRE((parent.HasValue()));
+        const auto child = commands.Execute(CreateSceneObjectCommand{
+            .name = "Child",
+            .parent = parent.Value().object,
+            .localTransform = Horo::Math::Transform{.translation = {4.0F, 5.0F, 6.0F}},
+            .primitiveMesh = PrimitiveMeshDescriptor{},
+        });
+        const auto independent = commands.Execute(CreateSceneObjectCommand{.name = "Independent"});
+        const auto survivor = commands.Execute(CreateSceneObjectCommand{.name = "Survivor"});
+        REQUIRE((child.HasValue() && independent.HasValue() && survivor.HasValue()));
+        const SceneDocumentSnapshot before = document.Snapshot();
+        const DocumentRevision revisionBeforeDelete = document.Revision();
+
+        const auto deleted = commands.Execute(DeleteSceneObjectsCommand{
+            {parent.Value().object, child.Value().object, independent.Value().object, parent.Value().object, SceneObjectId{999999}}});
+        REQUIRE((deleted.HasValue()));
+        REQUIRE((deleted.Value().affectedObjects.size() == 3));
+        REQUIRE((document.Revision().value == revisionBeforeDelete.value + 1));
+        REQUIRE((document.Objects().size() == 1));
+        REQUIRE((document.Objects().front().id == survivor.Value().object));
+
+        REQUIRE((commands.Undo().HasValue()));
+        REQUIRE((document.Objects().size() == before.objects.size()));
+        for (std::size_t index = 0; index < before.objects.size(); ++index) {
+            REQUIRE((document.Objects()[index].id == before.objects[index].id));
+            REQUIRE((document.Objects()[index].parent == before.objects[index].parent));
+            REQUIRE((document.Objects()[index].name == before.objects[index].name));
+            REQUIRE((document.Objects()[index].localTransform == before.objects[index].localTransform));
+            REQUIRE((document.Objects()[index].primitiveMesh == before.objects[index].primitiveMesh));
+            REQUIRE((document.Objects()[index].components == before.objects[index].components));
+            REQUIRE((document.Objects()[index].meshAsset == before.objects[index].meshAsset));
+        }
+
+        REQUIRE((commands.Redo().HasValue()));
+        REQUIRE((document.Objects().size() == 1));
+        REQUIRE((document.Objects().front().id == survivor.Value().object));
     }
 
     TEST_CASE("Undo Redo Preserve Monotonic Revision And Saved State Identity", "[unit][editor]") {

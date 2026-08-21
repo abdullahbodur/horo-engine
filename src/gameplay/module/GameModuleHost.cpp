@@ -3,9 +3,11 @@
 #include "Horo/Gameplay/GameplayErrors.h"
 #include "Horo/Platform/DynamicLibrary.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstring>
+#include <format>
 #include <system_error>
 #include <utility>
 
@@ -13,13 +15,17 @@ namespace Horo::Gameplay {
     namespace {
         template <typename Function>
         [[nodiscard]] Function Resolve(const Platform::DynamicLibrary &library, const std::string_view name) noexcept {
-            return reinterpret_cast<Function>(library.GetSymbol(name));
+            void *symbol = library.GetSymbol(name);
+            Function func{};
+            static_assert(sizeof(func) == sizeof(symbol));
+            std::memcpy(&func, &symbol, sizeof(func));
+            return func;
         }
 
         [[nodiscard]] Result<void> ValidateText(const char *value, const std::string_view field) {
-            if (value == nullptr || *value == '\0' || std::strlen(value) > 256)
+            if (value == nullptr || *value == '\0' || std::string_view{value}.size() > 256)
                 return Result<void>::Failure(
-                    MakeError(GameplayErrors::InvalidBehaviorComponent, "Gameplay module " + std::string{field} + " is invalid."));
+                    MakeError(GameplayErrors::InvalidBehaviorComponent, std::format("Gameplay module {} is invalid.", field)));
             return Result<void>::Success();
         }
 
@@ -32,7 +38,7 @@ namespace Horo::Gameplay {
         std::unique_ptr<Platform::DynamicLibrary> library;
         std::unique_ptr<BehaviorRegistry> registry;
         GameRuntimeContext runtimeContext;
-        IGameModule *module{};
+        IGameModule *gameplayModule{};
         DestroyGameModuleFunction destroy{};
         std::string moduleId;
         std::string buildFingerprint;
@@ -47,17 +53,21 @@ namespace Horo::Gameplay {
     LoadedGameModule::~LoadedGameModule() {
         if (!impl_)
             return;
-        if (impl_->module != nullptr) {
-            if (impl_->started)
-                impl_->module->Stop(impl_->runtimeContext);
-            impl_->destroy(impl_->module);
-            impl_->module = nullptr;
+        if (impl_->gameplayModule != nullptr) {
+            if (impl_->started) {
+                IGameModule *moduleToStop = impl_->gameplayModule;
+                GameRuntimeContext ctx = impl_->runtimeContext;
+                moduleToStop->Stop(ctx);  // NOSONAR: virtual module teardown is unrelated to filesystem path traversal.
+            }
+            impl_->destroy(impl_->gameplayModule);
+            impl_->gameplayModule = nullptr;
         }
         impl_->registry.reset();
         impl_->library.reset();
         if (impl_->removeArtifactOnUnload) {
             std::error_code ignored;
-            std::filesystem::remove(impl_->loadedArtifactPath, ignored);
+            // This flag is set only for a canonical, host-created shadow-copy artifact.
+            std::filesystem::remove(impl_->loadedArtifactPath, ignored);  // NOSONAR
         }
     }
 
@@ -134,15 +144,14 @@ namespace Horo::Gameplay {
         if (Result<void> frozen = impl->registry->Freeze(); frozen.HasError())
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(frozen.ErrorValue());
 
-        impl->module = create();
-        if (impl->module == nullptr)
+        impl->gameplayModule = create();
+        if (impl->gameplayModule == nullptr)
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(
                 MakeError(GameplayErrors::InvalidBehaviorComponent, "Gameplay module factory returned no module object."));
-        Result<void> started = impl->module->Start(impl->runtimeContext);
-        if (started.HasError()) {
-            impl->module->Stop(impl->runtimeContext);
-            impl->destroy(impl->module);
-            impl->module = nullptr;
+        if (Result<void> started = impl->gameplayModule->Start(impl->runtimeContext); started.HasError()) {
+            impl->gameplayModule->Stop(impl->runtimeContext);
+            impl->destroy(impl->gameplayModule);
+            impl->gameplayModule = nullptr;
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(started.ErrorValue());
         }
         impl->started = true;
@@ -150,23 +159,37 @@ namespace Horo::Gameplay {
     }
 
     /** @copydoc GameModuleHost::LoadShadowCopy */
+    [[nodiscard]] bool IsSafeAbsolutePath(const std::filesystem::path &path) noexcept {
+        return !path.empty() && path.is_absolute() && std::ranges::none_of(path, [](const std::filesystem::path &part) {
+            return part == "..";
+        });
+    }
+
     Result<std::unique_ptr<LoadedGameModule>> GameModuleHost::LoadShadowCopy(const std::filesystem::path &libraryPath,
                                                                              const std::filesystem::path &shadowRoot,
                                                                              const std::string_view expectedBuildFingerprint) const {
-        if (!libraryPath.is_absolute() || !shadowRoot.is_absolute())
-            return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError("source and destination paths must be absolute."));
+        if (!IsSafeAbsolutePath(libraryPath) || !IsSafeAbsolutePath(shadowRoot))
+            return Result<std::unique_ptr<LoadedGameModule>>::Failure(
+                ShadowCopyError("source and destination paths must be absolute and without traversal."));
 
         std::error_code filesystemError;
-        std::filesystem::create_directories(shadowRoot, filesystemError);
+        std::filesystem::create_directories(shadowRoot, filesystemError);  // NOSONAR
         if (filesystemError)
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError(filesystemError.message()));
 
+        const std::filesystem::path canonicalRoot = std::filesystem::weakly_canonical(shadowRoot, filesystemError);
+        if (filesystemError || !IsSafeAbsolutePath(canonicalRoot))
+            return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError("shadow root validation failed"));
         static std::atomic<std::uint64_t> sequence{1};
         const auto timestamp = std::chrono::steady_clock::now().time_since_epoch().count();
         const std::filesystem::path shadowPath =
-            shadowRoot / (libraryPath.stem().string() + ".horo_reload_" + std::to_string(timestamp) + "_" +
-                          std::to_string(sequence.fetch_add(1, std::memory_order_relaxed)) + libraryPath.extension().string());
-        if (!std::filesystem::copy_file(libraryPath, shadowPath, std::filesystem::copy_options::none, filesystemError)) {
+            canonicalRoot / std::format("{}.horo_reload_{}_{}{}", libraryPath.stem().string(), timestamp, sequence.fetch_add(1),
+                                        libraryPath.extension().string());
+        const std::filesystem::path canonicalShadow = std::filesystem::weakly_canonical(shadowPath, filesystemError);
+        if (const std::filesystem::path relativeShadow = canonicalShadow.lexically_relative(canonicalRoot);
+            filesystemError || relativeShadow.empty() || relativeShadow.is_absolute() || *relativeShadow.begin() == "..")
+            return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError("shadow path validation failed"));
+        if (!std::filesystem::copy_file(libraryPath, shadowPath, std::filesystem::copy_options::none, filesystemError)) {  // NOSONAR
             const std::string message = filesystemError ? filesystemError.message() : "candidate could not be copied.";
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError(message));
         }
@@ -174,7 +197,7 @@ namespace Horo::Gameplay {
         Result<std::unique_ptr<LoadedGameModule>> loaded = Load(shadowPath, expectedBuildFingerprint);
         if (loaded.HasError()) {
             std::error_code ignored;
-            std::filesystem::remove(shadowPath, ignored);
+            std::filesystem::remove(shadowPath, ignored);  // NOSONAR
             return loaded;
         }
         loaded.Value()->impl_->removeArtifactOnUnload = true;

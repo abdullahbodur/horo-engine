@@ -4,6 +4,7 @@
 #include "editor/renderer/grid/EditorViewportGridGeometry.h"
 #include "editor/screens/workspace/panels/viewport/visualizers/light/LightVisualizerGeometry.h"
 
+#include <algorithm>
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cmath>
@@ -210,8 +211,32 @@ namespace {
             nearGrid)));
         REQUIRE((nearGrid.IsValid()));
         REQUIRE((NearlyEqual(nearGrid.minorSpacing, 0.5F)));
-        REQUIRE((NearlyEqual(nearGrid.majorSpacing, 5.0F)));
+        REQUIRE((nearGrid.RegularLines().topology == ViewportGridPrimitiveTopology::Triangles));
+        REQUIRE((NearlyEqual(nearGrid.RegularLines().color.x, 0.158F)));
+        REQUIRE((nearGrid.regularVertexCount % 6 == 0));
         REQUIRE((nearGrid.axisVertexCount == 4));
+        float minimumX = std::numeric_limits<float>::max();
+        float maximumX = std::numeric_limits<float>::lowest();
+        float minimumZ = std::numeric_limits<float>::max();
+        float maximumZ = std::numeric_limits<float>::lowest();
+        const auto includePosition = [&](const Math::Vec3 position) {
+            minimumX = std::min(minimumX, position.x);
+            maximumX = std::max(maximumX, position.x);
+            minimumZ = std::min(minimumZ, position.z);
+            maximumZ = std::max(maximumZ, position.z);
+        };
+        for (const Math::Vec3 position : nearGrid.RegularLines().positions)
+            includePosition(position);
+        for (const Math::Vec3 position : nearGrid.Axes().positions)
+            includePosition(position);
+        const float farHalfHeight = nearCamera.farPlane * std::tan(nearCamera.verticalFovRadians * 0.5F);
+        const float farHalfWidth = farHalfHeight * (16.0F / 9.0F);
+        const float farCornerRadius =
+            std::sqrt(nearCamera.farPlane * nearCamera.farPlane + farHalfWidth * farHalfWidth + farHalfHeight * farHalfHeight);
+        REQUIRE((minimumX <= nearCamera.position.x - farCornerRadius));
+        REQUIRE((maximumX >= nearCamera.position.x + farCornerRadius));
+        REQUIRE((minimumZ <= nearCamera.position.z - farCornerRadius));
+        REQUIRE((maximumZ >= nearCamera.position.z + farCornerRadius));
 
         EditorViewportCamera farCamera = nearCamera;
         farCamera.position = {0.0F, 0.0F, 40.0F};
@@ -226,8 +251,7 @@ namespace {
             farGrid)));
         REQUIRE((farGrid.minorSpacing > nearGrid.minorSpacing));
         REQUIRE((NearlyEqual(farGrid.minorSpacing, 5.0F)));
-        REQUIRE((farGrid.minorVertexCount <= ViewportGridGeometry::MaxVerticesPerBatch));
-        REQUIRE((farGrid.majorVertexCount <= ViewportGridGeometry::MaxVerticesPerBatch));
+        REQUIRE((farGrid.regularVertexCount <= ViewportGridGeometry::MaxRegularVertices));
 
         ViewportGridGeometry ultraWideGrid;
         REQUIRE((BuildViewportGridGeometry(
@@ -238,8 +262,7 @@ namespace {
                 .targetMinorSpacingPixels = 48.0F,
             },
             ultraWideGrid)));
-        REQUIRE((ultraWideGrid.minorVertexCount <= ViewportGridGeometry::MaxVerticesPerBatch));
-        REQUIRE((ultraWideGrid.majorVertexCount <= ViewportGridGeometry::MaxVerticesPerBatch));
+        REQUIRE((ultraWideGrid.regularVertexCount <= ViewportGridGeometry::MaxRegularVertices));
     }
 
     TEST_CASE("Viewport Grid Uses Orthographic Height And Rejects Invalid Requests", "[unit][editor]") {
@@ -260,7 +283,6 @@ namespace {
             },
             grid)));
         REQUIRE((NearlyEqual(grid.minorSpacing, 1.0F)));
-        REQUIRE((NearlyEqual(grid.majorSpacing, 10.0F)));
         REQUIRE((grid.IsValid()));
 
         ViewportGridGeometry invalidGrid;
@@ -272,8 +294,7 @@ namespace {
                 .targetMinorSpacingPixels = 50.0F,
             },
             invalidGrid)));
-        REQUIRE((invalidGrid.minorVertexCount == 0));
-        REQUIRE((invalidGrid.majorVertexCount == 0));
+        REQUIRE((invalidGrid.regularVertexCount == 0));
     }
 
     TEST_CASE("Selected Light Visualizers Produce Bounded Geometry For Every Light Kind", "[unit][editor]") {

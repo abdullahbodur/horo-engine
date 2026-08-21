@@ -1,6 +1,7 @@
 #include "ObjMeshPreviewProvider.h"
 
 #include "../../../AssetErrors.h"
+#include "Horo/Assets/MeshEditorPayload.h"
 
 #include <algorithm>
 #include <bit>
@@ -77,7 +78,7 @@ namespace Horo::Assets {
 
             const float extentX = std::max(maxX - minX, 0.0001F);
             const float extentY = std::max(maxY - minY, 0.0001F);
-            const float padding = std::max(6.0F, std::min(width, height) * 0.08F);
+            const float padding = std::max(6.0F, static_cast<float>(std::min(width, height)) * 0.08F);
             const float scale =
                 std::min((static_cast<float>(width) - padding * 2.0F) / extentX, (static_cast<float>(height) - padding * 2.0F) / extentY);
             const float centerX = static_cast<float>(width) * 0.5F;
@@ -169,7 +170,7 @@ namespace Horo::Assets {
                 if (input.editorPayload.size() < kHeaderBytes || !ReadU32(input.editorPayload, 0, schema) ||
                     !ReadU32(input.editorPayload, 4, vertexCount) || !ReadU32(input.editorPayload, 8, faceCount) ||
                     !ReadU32(input.editorPayload, 36, positionBytes) || !ReadU32(input.editorPayload, 40, texcoordBytes) ||
-                    !ReadU32(input.editorPayload, 44, normalBytes) || (schema != 1 && schema != 2) || vertexCount == 0 ||
+                    !ReadU32(input.editorPayload, 44, normalBytes) || schema != MeshEditorPayloadSchemaVersion || vertexCount == 0 ||
                     vertexCount > kMaximumVertices || positionBytes != static_cast<std::uint64_t>(vertexCount) * 3U * sizeof(float) ||
                     kHeaderBytes + static_cast<std::uint64_t>(positionBytes) + texcoordBytes + normalBytes > input.editorPayload.size()) {
                     return Result<AssetPreviewImage>::Failure(MakeError(AssetErrors::IndexMalformed));
@@ -193,9 +194,6 @@ namespace Horo::Assets {
                     .height = input.height,
                     .pixels = std::vector<std::uint8_t>(static_cast<std::size_t>(input.width) * input.height * 4U, 0),
                 };
-                if (schema != 2)
-                    return Result<AssetPreviewImage>::Failure(MakeError(AssetErrors::IndexMalformed));
-
                 const std::size_t indexHeader = kHeaderBytes + static_cast<std::size_t>(positionBytes) + texcoordBytes + normalBytes;
                 std::uint32_t indexCount = 0;
                 if (!ReadU32(input.editorPayload, indexHeader, indexCount) || indexCount == 0 || indexCount % 3U != 0 ||
@@ -213,7 +211,7 @@ namespace Horo::Assets {
                     if ((triangle & 0x0fffU) == 0U && cancellation.IsCancellationRequested())
                         return Result<AssetPreviewImage>::Failure(MakeError(ImportErrors::ImportCancelled));
 
-                    const std::uint32_t sourceTriangle =
+                    const auto sourceTriangle =
                         static_cast<std::uint32_t>(static_cast<std::uint64_t>(triangle) * triangleCount / rasterizedTriangleCount);
                     const std::uint32_t index = sourceTriangle * 3U;
                     std::uint32_t a = 0;

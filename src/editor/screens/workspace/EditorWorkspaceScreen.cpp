@@ -7,6 +7,7 @@
 #include "Horo/Editor/EditorServiceRegistry.h"
 #include "Horo/Editor/EditorSettingsService.h"
 #include "Horo/Editor/EditorSettingsStore.h"
+#include "Horo/Editor/EditorSnackbarHost.h"
 #include "Horo/Editor/GuiScreenHost.h"
 #include "Horo/Editor/Localization/ILocalizationService.h"
 #include "Horo/Editor/ProjectOpenService.h"
@@ -17,8 +18,10 @@
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Foundation/Logging/StructuredLogStore.h"
 #include "Horo/Foundation/OperationStore.h"
+#include "Horo/Foundation/PathUtils.h"
 #include "editor/document/EditorViewportSceneExtractor.h"
 #include "editor/input/EditorInputActions.h"
+#include "editor/modals/gameplay_behavior/GameplayBehaviorFilenameModal.h"
 #include "editor/modals/scene_compare/SceneConflictCompareModal.h"
 #include "editor/renderer/EditorGuiRenderer.h"
 #include "editor/renderer/EditorViewportRenderer.h"
@@ -26,8 +29,10 @@
 #include "editor/screens/workspace/EditorWorkspaceController.h"
 
 #include <filesystem>
+#include <format>
 #include <imgui.h>
 #include <memory>
+#include <optional>
 #include <portable-file-dialogs.h>
 #include <string>
 #include <string_view>
@@ -35,6 +40,84 @@
 
 namespace Horo::Editor {
     namespace {
+        struct WorkspacePanelServices {
+            IEditorGuiRenderer *guiRenderer{nullptr};
+            IEditorViewportRenderer *viewportRenderer{nullptr};
+            const Log::IStructuredLogQuery *logQuery{nullptr};
+            const IBuildOutputQuery *buildOutputQuery{nullptr};
+            const IOperationQuery *operationQuery{nullptr};
+            IOperationControl *operationControl{nullptr};
+        };
+
+        struct WorkspaceProjectServices {
+            Assets::AssetRegistry *assetRegistry{nullptr};
+            const Assets::AssetImporterCatalogSnapshot *importerCatalog{nullptr};
+            ProjectMutationCoordinator *mutations{nullptr};
+            DurableFileSystem *durableFiles{nullptr};
+        };
+
+        struct WorkspacePublishedRevisions {
+            DocumentRevision scene{};
+            SelectionRevision selection{};
+            ViewportRevision viewport{};
+            std::uint64_t viewportScene{0};
+        };
+
+        [[nodiscard]] std::filesystem::path NormalizeAbsolutePath(const std::filesystem::path &path) {
+            std::error_code error;
+            const std::filesystem::path absolute = std::filesystem::absolute(path, error).lexically_normal();
+            if (error) {
+                return {};
+            }
+            const std::filesystem::path canonical = std::filesystem::weakly_canonical(absolute, error);
+            return error ? absolute : canonical;
+        }
+
+        [[nodiscard]] bool HasPathPrefix(const std::filesystem::path &root, const std::filesystem::path &candidate) {
+            return Horo::Foundation::Paths::HasPathPrefix(root, candidate);
+        }
+
+        [[nodiscard]] std::optional<std::filesystem::path> ResolveGameplayBehaviorDestination(const std::filesystem::path &projectRoot,
+                                                                                              const GameplayBehaviorKind kind,
+                                                                                              const std::string &requestedDirectory) {
+            using enum GameplayBehaviorKind;
+            const std::filesystem::path normalizedProjectRoot = NormalizeAbsolutePath(projectRoot);
+            const std::filesystem::path assetsRoot = normalizedProjectRoot / "assets";
+            const std::filesystem::path scriptsRoot = assetsRoot / "scripts";
+            const std::filesystem::path requested = NormalizeAbsolutePath(requestedDirectory);
+            std::filesystem::path destination;
+            if (kind == Native) {
+                destination = normalizedProjectRoot / "source" / "gameplay";
+            } else if (HasPathPrefix(scriptsRoot, requested)) {
+                destination = requested;
+            } else {
+                destination = scriptsRoot;
+            }
+
+            if ((kind == Native && !HasPathPrefix(normalizedProjectRoot, destination)) ||
+                (kind == Lua && !HasPathPrefix(assetsRoot, destination))) {
+                return std::nullopt;
+            }
+            return destination;
+        }
+
+        [[nodiscard]] std::string SuggestGameplayBehaviorBaseName(const std::filesystem::path &destination,
+                                                                  const GameplayBehaviorKind kind) {
+            using enum GameplayBehaviorKind;
+            const std::string extension = kind == Native ? ".cpp" : ".horo_script";
+            std::error_code error;
+            for (std::size_t suffix = 0; suffix < 1000; ++suffix) {
+                if (const std::string stem = suffix == 0 ? "NewBehavior" : std::format("NewBehavior{}", suffix + 1);
+                    !std::filesystem::exists(destination / (stem + extension), error)) {
+                    return stem;
+                }
+                if (error) {
+                    break;
+                }
+            }
+            return "NewBehavior";
+        }
+
         class EditorWorkspaceScreen final : public GuiScreen {
         public:
             explicit EditorWorkspaceScreen(const EditorServiceRegistry &services)
@@ -44,65 +127,84 @@ namespace Horo::Editor {
                   workspaceInputContext_(
                       inputRouter_.PushContext(Input::InputContextId{"editor.workspace"}, Input::InputContextKind::EditorWorkspace)),
                   view_(context_, registry_, services.Get<std::uintptr_t>(), inputRouter_, workspaceInputContext_),
-                  servicesGuiRenderer_(services.TryGet<IEditorGuiRenderer>()),
-                  viewportRenderer_(services.TryGet<IEditorViewportRenderer>()),
                   viewportSceneState_(services.Get<EditorViewportSceneState>()),
                   runtimeScene_(services.Get<Runtime::RuntimeSceneService>()), settings_(services.Get<EditorSettingsService>()),
-                  assetRegistry_(services.TryGet<Assets::AssetRegistry>()),
-                  importerCatalog_(services.TryGetConst<Assets::AssetImporterCatalogSnapshot>()),
-                  mutations_(services.TryGet<ProjectMutationCoordinator>()), durableFiles_(services.TryGet<DurableFileSystem>()),
-                  logQuery_(services.TryGetConst<Log::IStructuredLogQuery>()), buildOutputQuery_(services.TryGetConst<IBuildOutputQuery>()),
-                  operationQuery_(services.TryGetConst<IOperationQuery>()), operationControl_(services.TryGet<IOperationControl>()),
-                  projectOpenService_(services.Get<ProjectOpenService>()) {}
+                  projectOpenService_(services.Get<ProjectOpenService>()),
+                  panelServices_{
+                      .guiRenderer = services.TryGet<IEditorGuiRenderer>(),
+                      .viewportRenderer = services.TryGet<IEditorViewportRenderer>(),
+                      .logQuery = services.TryGetConst<Log::IStructuredLogQuery>(),
+                      .buildOutputQuery = services.TryGetConst<IBuildOutputQuery>(),
+                      .operationQuery = services.TryGetConst<IOperationQuery>(),
+                      .operationControl = services.TryGet<IOperationControl>(),
+                  },
+                  projectServices_{
+                      .assetRegistry = services.TryGet<Assets::AssetRegistry>(),
+                      .importerCatalog = services.TryGetConst<Assets::AssetImporterCatalogSnapshot>(),
+                      .mutations = services.TryGet<ProjectMutationCoordinator>(),
+                      .durableFiles = services.TryGet<DurableFileSystem>(),
+                  } {}
 
             ScreenId Id() const override {
                 return static_cast<ScreenId>(GuiRouteKind::EditorWorkspace);
             }
 
             Result<void> OnEnter(const GuiRoute &route) override {
-                if (!std::holds_alternative<EditorWorkspaceRouteParameters>(route.parameters))
+                if (!std::holds_alternative<EditorWorkspaceRouteParameters>(route.parameters)) {
                     return Result<void>::Failure(MakeError(NavigationErrors::InvalidRouteParameters));
+                }
                 const auto &params = std::get<EditorWorkspaceRouteParameters>(route.parameters);
                 auto reserved = projectOpenService_.ReserveSession(params.session);
-                if (reserved.HasError())
+                if (reserved.HasError()) {
                     return Result<void>::Failure(reserved.ErrorValue());
+                }
                 ProjectSessionActivationLease activation = std::move(reserved).Value();
                 std::string projectRoot = activation.Candidate().projectRoot.string();
 
                 const Assets::AssetRegistrySnapshot assetSnapshot =
-                    assetRegistry_ ? assetRegistry_->Snapshot() : Assets::AssetRegistrySnapshot{};
+                    projectServices_.assetRegistry ? projectServices_.assetRegistry->Snapshot() : Assets::AssetRegistrySnapshot{};
+                const Application::GameplayBuildEnvironment *gameplayEnvironment =
+                    services_.TryGet<Application::GameplayBuildEnvironment>();
                 controller_ =
-                    std::make_unique<EditorWorkspaceController>(std::move(projectRoot), runtimeScene_, assetSnapshot, assetRegistry_,
-                                                                mutations_, durableFiles_, importerCatalog_, &services_.Get<JobSystem>(),
-                                                                DiagnosticSourceNavigator{},
-                                                                services_.TryGet<Application::GameplayBuildService>(),
-                                                                services_.TryGet<Application::GameplayBuildEnvironment>() != nullptr
-                                                                    ? *services_.TryGet<Application::GameplayBuildEnvironment>()
-                                                                    : Application::GameplayBuildEnvironment{});
+                    std::make_unique<EditorWorkspaceController>(projectRoot, runtimeScene_, assetSnapshot,
+                                                                EditorWorkspaceDependencies{
+                                                                    .mutableAssetRegistry = projectServices_.assetRegistry,
+                                                                    .mutations = projectServices_.mutations,
+                                                                    .durableFiles = projectServices_.durableFiles,
+                                                                    .importerCatalog = projectServices_.importerCatalog,
+                                                                    .jobs = &services_.Get<JobSystem>(),
+                                                                    .gameplayBuilds = services_.TryGet<Application::GameplayBuildService>(),
+                                                                    .gameplayBuildEnvironment =
+                                                                        gameplayEnvironment != nullptr
+                                                                            ? *gameplayEnvironment
+                                                                            : Application::GameplayBuildEnvironment{},
+                                                                    .localization = &context_.localization,
+                                                                });
                 if (controller_->InitializationError().has_value()) {
                     const Error error = *controller_->InitializationError();
                     controller_.reset();
                     return Result<void>::Failure(error);
                 }
+                snackbarHost_ = std::make_unique<EditorSnackbarHost>(controller_->DataBus());
                 host_.SetCurrentProjectRoot(controller_->ViewModel().projectRoot);
                 LoadProjectInputProfile(controller_->ViewModel().projectRoot);
                 viewportSceneState_.Replace(controller_->ViewportScene());
-                publishedSceneRevision_ = controller_->ViewportScene().documentRevision;
-                publishedSelectionRevision_ = controller_->CurrentSelectionRevision();
-                publishedViewportRevision_ = controller_->CurrentViewportRevision();
-                publishedViewportSceneRevision_ = controller_->CurrentViewportSceneRevision();
+                publishedRevisions_.scene = controller_->ViewportScene().documentRevision;
+                publishedRevisions_.selection = controller_->CurrentSelectionRevision();
+                publishedRevisions_.viewport = controller_->CurrentViewportRevision();
+                publishedRevisions_.viewportScene = controller_->CurrentViewportSceneRevision();
                 LOG_INFO("editor.workspace", "EditorWorkspaceScreen entered for '%s'", controller_->ViewModel().projectRoot.c_str());
 
                 PanelContext panelContext{
                     .dataBus = controller_->DataBus(),
-                    .guiRenderer = servicesGuiRenderer_,
-                    .viewportRenderer = viewportRenderer_,
+                    .guiRenderer = panelServices_.guiRenderer,
+                    .viewportRenderer = panelServices_.viewportRenderer,
                     .inputRouter = &inputRouter_,
                     .workspaceInputContext = &workspaceInputContext_,
-                    .logQuery = logQuery_,
-                    .buildOutputQuery = buildOutputQuery_,
-                    .operationQuery = operationQuery_,
-                    .operationControl = operationControl_,
+                    .logQuery = panelServices_.logQuery,
+                    .buildOutputQuery = panelServices_.buildOutputQuery,
+                    .operationQuery = panelServices_.operationQuery,
+                    .operationControl = panelServices_.operationControl,
                 };
                 registry_.AttachAll(panelContext);
                 UpdateStatusItems();
@@ -121,8 +223,9 @@ namespace Horo::Editor {
                     controller_->UpdateAutosave(dt, settings_.Snapshot().settings.autoSaveIntervalMinutes);
                     controller_->UpdateExternalSceneWatch(dt);
                     controller_->UpdateGameplaySources(dt);
-                    if (assetRegistry_ != nullptr)
-                        controller_->RefreshAssets(assetRegistry_->Snapshot());
+                    if (projectServices_.assetRegistry != nullptr) {
+                        controller_->RefreshAssets(projectServices_.assetRegistry->Snapshot());
+                    }
                     controller_->UpdateContentBrowser();
                     controller_->SynchronizeRuntimeScenePreview();
                     controller_->UpdateFps(ImGui::GetIO().Framerate);
@@ -131,8 +234,9 @@ namespace Horo::Editor {
 
             void OnFixedUpdate(const double fixedDeltaSeconds) override {
                 if (!controller_ || (controller_->ViewModel().playState != EditorPlayState::Playing &&
-                                     controller_->ViewModel().playState != EditorPlayState::Paused))
+                                     controller_->ViewModel().playState != EditorPlayState::Paused)) {
                     return;
+                }
                 const Input::ActionValue move = inputRouter_.ReadAction(workspaceInputContext_, Input::ActionId{kGameplayMoveAction});
                 const Gameplay::GameplayInputAction action{Gameplay::GameplayActionId{kGameplayMoveAction},
                                                            move.x,
@@ -149,10 +253,11 @@ namespace Horo::Editor {
                     return;
                 }
 
+                using enum EditorWorkspaceViewCommand;
                 EditorWorkspaceViewCommandData command;
                 view_.Draw(controller_->ViewModel(), command, contentRegion);
 
-                if (command.command == EditorWorkspaceViewCommand::None && !command.menuInvocation.has_value()) {
+                if (command.command == None && !command.menuInvocation.has_value()) {
                     RouteInputAction(command);
                 }
 
@@ -160,17 +265,31 @@ namespace Horo::Editor {
                     host_.DispatchMenuInvocation(*command.menuInvocation);
                 }
 
-                if (command.command != EditorWorkspaceViewCommand::None) {
-                    if (command.command == EditorWorkspaceViewCommand::CompareExternalScene) {
+                if (command.command != None) {
+                    if (command.command == CompareExternalScene) {
                         OpenSceneComparison();
+                    } else if (command.command == CreateLuaBehavior || command.command == CreateNativeBehavior) {
+                        using enum GameplayBehaviorKind;
+                        const GameplayBehaviorKind kind = command.command == CreateNativeBehavior ? Native : Lua;
+                        const std::string requestedDirectory =
+                            command.stringPayload.value_or(controller_->ViewModel().contentBrowser.absoluteCurrentPath);
+                        OpenGameplayBehaviorModal(kind, requestedDirectory);
                     } else {
                         controller_->ProcessCommand(command);
                     }
-                    if (command.command == EditorWorkspaceViewCommand::ReturnToWelcome) {
+                    if (command.command == ReturnToWelcome) {
                         static_cast<void>(host_.Navigate(GuiRoute{GuiRouteKind::Welcome, WelcomeRouteParameters{}}));
                     }
                 }
                 PublishViewportSceneIfChanged();
+
+                if (snackbarHost_) {
+                    const std::optional<SnackbarActionInvokedEvent> action = snackbarHost_->Draw(context_, ImGui::GetIO().DeltaTime);
+                    if (action.has_value() && action->actionId == "open_logs") {
+                        controller_->ProcessCommand(
+                            EditorWorkspaceViewCommandData{.command = ChangeActivePanel, .stringPayload = "horo.global_dock"});
+                    }
+                }
 
                 UpdateStatusItems();
             }
@@ -232,12 +351,14 @@ namespace Horo::Editor {
                                           dialogDefault,
                                           {std::string{context_.localization.Get("editor", "workspace.scene_save.file_type")}, "*.horo"});
                     const std::string selected = dialog.result();
-                    if (selected.empty())
+                    if (selected.empty()) {
                         return true;
+                    }
 
                     std::filesystem::path destination{selected};
-                    if (destination.extension().empty())
+                    if (destination.extension().empty()) {
                         destination += ".horo";
+                    }
                     if (!destination.is_absolute()) {
                         LOG_ERROR("editor.scene_document", "Native scene destination dialog returned a non-absolute path '%s'.",
                                   destination.string().c_str());
@@ -262,10 +383,16 @@ namespace Horo::Editor {
                     (action != EditorMenuAction::SaveScene && action != EditorMenuAction::Undo && action != EditorMenuAction::Redo)) {
                     return false;
                 }
+
+                using enum EditorMenuAction;
                 EditorWorkspaceViewCommandData command;
-                command.command = action == EditorMenuAction::SaveScene ? EditorWorkspaceViewCommand::SaveScene
-                                  : action == EditorMenuAction::Undo    ? EditorWorkspaceViewCommand::UndoScene
-                                                                        : EditorWorkspaceViewCommand::RedoScene;
+                if (action == SaveScene) {
+                    command.command = EditorWorkspaceViewCommand::SaveScene;
+                } else if (action == Undo) {
+                    command.command = EditorWorkspaceViewCommand::UndoScene;
+                } else {
+                    command.command = EditorWorkspaceViewCommand::RedoScene;
+                }
                 controller_->ProcessCommand(command);
                 PublishViewportSceneIfChanged();
                 return true;
@@ -317,23 +444,21 @@ namespace Horo::Editor {
 
             void OnLeave() override {
                 LOG_INFO("editor.workspace", "EditorWorkspaceScreen leaving.");
-                if (controller_)
+                if (controller_) {
                     controller_->FlushAutosave();
+                }
                 static_cast<void>(statusItems_.Update("horo.status.document", EditorStatusItemContent{.available = false}));
                 static_cast<void>(statusItems_.Update("horo.status.selection", EditorStatusItemContent{.available = false}));
                 registry_.DetachAll();
                 if (previousInputProfile_.has_value()) {
-                    const Result<void> restored = inputRouter_.SetProfile(std::move(*previousInputProfile_));
-                    if (restored.HasError())
+                    if (const Result<void> restored = inputRouter_.SetProfile(std::move(*previousInputProfile_)); restored.HasError()) {
                         LOG_ERROR("editor.input", "Unable to restore editor input profile: %s", restored.ErrorValue().message.c_str());
+                    }
                     previousInputProfile_.reset();
                 }
                 workspaceInputContext_.Reset();
                 viewportSceneState_.Clear();
-                publishedSceneRevision_ = {};
-                publishedSelectionRevision_ = {};
-                    publishedViewportRevision_ = {};
-                    publishedViewportSceneRevision_ = 0;
+                publishedRevisions_ = {};
                 controller_.reset();
             }
 
@@ -352,6 +477,41 @@ namespace Horo::Editor {
                 }
             }
 
+            void OpenGameplayBehaviorModal(const GameplayBehaviorKind kind, const std::string &requestedDirectory) {
+                if (!controller_) {
+                    return;
+                }
+                const std::optional<std::filesystem::path> destination =
+                    ResolveGameplayBehaviorDestination(controller_->ViewModel().projectRoot, kind, requestedDirectory);
+                if (!destination.has_value()) {
+                    EditorWorkspaceViewCommandData fallback;
+                    fallback.command = kind == GameplayBehaviorKind::Native ? EditorWorkspaceViewCommand::CreateNativeBehavior
+                                                                            : EditorWorkspaceViewCommand::CreateLuaBehavior;
+                    fallback.stringPayload = requestedDirectory;
+                    controller_->ProcessCommand(fallback);
+                    return;
+                }
+
+                const std::string baseName = SuggestGameplayBehaviorBaseName(*destination, kind);
+                Result<void> opened =
+                    modalHost_.OpenRoot(std::make_unique<GameplayBehaviorFilenameModal>(context_, kind, destination->string(), baseName,
+                                                                                        [this](CreateGameplayBehaviorRequest request) {
+                    if (!controller_) {
+                        return;
+                    }
+                    EditorWorkspaceViewCommandData create;
+                    create.command = request.kind == GameplayBehaviorKind::Native ? EditorWorkspaceViewCommand::CreateNativeBehavior
+                                                                                  : EditorWorkspaceViewCommand::CreateLuaBehavior;
+                    create.gameplayBehaviorRequest = std::move(request);
+                    controller_->ProcessCommand(create);
+                    PublishViewportSceneIfChanged();
+                }));
+                if (opened.HasError()) {
+                    LOG_WARN("editor.asset_actions", "Gameplay behavior filename modal could not open: %s",
+                             opened.ErrorValue().message.c_str());
+                }
+            }
+
             void LoadProjectInputProfile(const std::filesystem::path &projectRoot) {
                 previousInputProfile_ = inputRouter_.Profile();
                 Input::InputBindingProfile merged{.profileId = "project-composed"};
@@ -366,9 +526,9 @@ namespace Horo::Editor {
                     return true;
                 };
                 const auto mergeFile = [&](const std::filesystem::path &path) {
-                    std::error_code error;
-                    if (!std::filesystem::exists(path, error) || error)
+                    if (std::error_code error; !std::filesystem::exists(path, error) || error) {
                         return true;
+                    }
                     const Result<Input::InputBindingProfile> loaded = Input::LoadBindingProfile(path);
                     if (loaded.HasError()) {
                         LOG_ERROR("editor.input", "Keeping last valid input profile; '%s' is invalid: %s", path.string().c_str(),
@@ -380,30 +540,33 @@ namespace Horo::Editor {
 
                 // Defaults are resolved by the action descriptors. Profile layers then
                 // apply from project defaults to user-wide and project-user overrides.
-                if (!mergeFile(projectRoot / ".horo" / "input.json") || !mergeProfile(*previousInputProfile_, "editor-global"))
+                if (!mergeFile(projectRoot / ".horo" / "input.json") || !mergeProfile(*previousInputProfile_, "editor-global")) {
                     return;
-                const Result<Application::ProjectMetadata> metadata = Application::LoadProjectMetadata(projectRoot);
-                if (metadata.HasValue() && !mergeFile(ResolveEditorSettingsHomeDirectory() / ".horo" / "input" / "projects" /
-                                                      (metadata.Value().projectId + ".json")))
+                }
+                if (const Result<Application::ProjectMetadata> metadata = Application::LoadProjectMetadata(projectRoot);
+                    metadata.HasValue() && !mergeFile(ResolveEditorSettingsHomeDirectory() / ".horo" / "input" / "projects" /
+                                                      (metadata.Value().projectId + ".json"))) {
                     return;
+                }
 
                 const Result<void> applied = inputRouter_.SetProfile(std::move(merged));
-                if (applied.HasError())
+                if (applied.HasError()) {
                     LOG_ERROR("editor.input", "Keeping last valid input profile for project '%s': %s", projectRoot.string().c_str(),
                               applied.ErrorValue().message.c_str());
+                }
             }
 
             void RouteInputAction(EditorWorkspaceViewCommandData &command) {
                 const auto pressed = [this](const char *id) {
                     return inputRouter_.ReadAction(workspaceInputContext_, Input::ActionId{id}).pressed;
                 };
-                if (pressed(kActionRedo))
+                if (pressed(kActionRedo)) {
                     command.command = EditorWorkspaceViewCommand::RedoScene;
-                else if (pressed(kActionUndo))
+                } else if (pressed(kActionUndo)) {
                     command.command = EditorWorkspaceViewCommand::UndoScene;
-                else if (pressed(kActionSave))
+                } else if (pressed(kActionSave)) {
                     command.command = EditorWorkspaceViewCommand::SaveScene;
-                else if (pressed(kActionToolSelect)) {
+                } else if (pressed(kActionToolSelect)) {
                     command.command = EditorWorkspaceViewCommand::ChangeTransformTool;
                     command.transformToolPayload = EditorTransformTool::Select;
                 } else if (pressed(kActionToolMove)) {
@@ -434,16 +597,15 @@ namespace Horo::Editor {
                 const SelectionRevision selectionRevision = controller_->CurrentSelectionRevision();
                 const ViewportRevision viewportRevision = controller_->CurrentViewportRevision();
                 const std::uint64_t viewportSceneRevision = controller_->CurrentViewportSceneRevision();
-                if (documentRevision == publishedSceneRevision_ && selectionRevision == publishedSelectionRevision_ &&
-                    viewportRevision == publishedViewportRevision_ &&
-                    viewportSceneRevision == publishedViewportSceneRevision_) {
+                if (documentRevision == publishedRevisions_.scene && selectionRevision == publishedRevisions_.selection &&
+                    viewportRevision == publishedRevisions_.viewport && viewportSceneRevision == publishedRevisions_.viewportScene) {
                     return;
                 }
                 viewportSceneState_.Replace(controller_->ViewportScene());
-                publishedSceneRevision_ = documentRevision;
-                publishedSelectionRevision_ = selectionRevision;
-                publishedViewportRevision_ = viewportRevision;
-                publishedViewportSceneRevision_ = viewportSceneRevision;
+                publishedRevisions_.scene = documentRevision;
+                publishedRevisions_.selection = selectionRevision;
+                publishedRevisions_.viewport = viewportRevision;
+                publishedRevisions_.viewportScene = viewportSceneRevision;
             }
 
             void UpdateStatusItems() {
@@ -478,25 +640,15 @@ namespace Horo::Editor {
             Input::InputRouter &inputRouter_;
             Input::InputContextToken workspaceInputContext_;
             EditorWorkspaceView view_;
-            IEditorGuiRenderer *servicesGuiRenderer_{nullptr};
-            IEditorViewportRenderer *viewportRenderer_{nullptr};
             EditorViewportSceneState &viewportSceneState_;
             Runtime::RuntimeSceneService &runtimeScene_;
             EditorSettingsService &settings_;
-            Assets::AssetRegistry *assetRegistry_{};
-            const Assets::AssetImporterCatalogSnapshot *importerCatalog_{};
-            ProjectMutationCoordinator *mutations_{};
-            DurableFileSystem *durableFiles_{};
-            const Log::IStructuredLogQuery *logQuery_{};
-            const IBuildOutputQuery *buildOutputQuery_{};
-            const IOperationQuery *operationQuery_{};
-            IOperationControl *operationControl_{};
             ProjectOpenService &projectOpenService_;
-            DocumentRevision publishedSceneRevision_{};
-            SelectionRevision publishedSelectionRevision_{};
-            ViewportRevision publishedViewportRevision_{};
-            std::uint64_t publishedViewportSceneRevision_{};
+            WorkspacePanelServices panelServices_{};
+            WorkspaceProjectServices projectServices_{};
+            WorkspacePublishedRevisions publishedRevisions_{};
             std::unique_ptr<EditorWorkspaceController> controller_;
+            std::unique_ptr<EditorSnackbarHost> snackbarHost_;
             std::optional<Input::InputBindingProfile> previousInputProfile_;
         };
     }  // namespace

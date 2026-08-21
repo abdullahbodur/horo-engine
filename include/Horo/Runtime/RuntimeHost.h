@@ -17,8 +17,7 @@ namespace Horo::Runtime {
          * @param config Fixed-step and stall-normalization policy.
          * @return Owned host or a typed invalid-configuration failure.
          */
-        [[nodiscard]] static Result<std::unique_ptr<RuntimeHost> > Create(
-            Clock &clock, FrameSchedulerConfig config = {});
+        [[nodiscard]] static Result<std::unique_ptr<RuntimeHost>> Create(Clock &clock, FrameSchedulerConfig config = {});
 
         ~RuntimeHost();
 
@@ -65,4 +64,4 @@ namespace Horo::Runtime {
         RuntimeLifecycle lifecycle_;
         std::unique_ptr<FrameScheduler> scheduler_;
     };
-} // namespace Horo::Runtime
+}  // namespace Horo::Runtime

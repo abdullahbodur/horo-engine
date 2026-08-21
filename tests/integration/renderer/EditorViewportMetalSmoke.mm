@@ -1,40 +1,33 @@
-#include <catch2/catch_test_macros.hpp>
-
 #include "Horo/Runtime/Render/RenderFrontend.h"
 #include "Horo/Runtime/Scene/PrimitiveMesh.h"
 #include "editor/renderer/metal/EditorViewportRendererMetal.h"
 #include "editor/renderer/metal/SdlMetalPresentationPort.h"
 #include "runtime/renderer/modules/metal/MetalBackendModule.h"
 
-#include <SDL3/SDL.h>
-
 #import <Metal/Metal.h>
-
+#include <SDL3/SDL.h>
 #include <algorithm>
 #include <array>
+#include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
 #include <vector>
 
-namespace
-{
-using namespace Horo;
-using namespace Horo::Editor;
-using namespace Horo::Render;
+namespace {
+    using namespace Horo;
+    using namespace Horo::Editor;
+    using namespace Horo::Render;
 
-void Check(const bool condition)
-{
-    REQUIRE((condition));
-}
-} // namespace
+    void Check(const bool condition) {
+        REQUIRE((condition));
+    }
+}  // namespace
 
-TEST_CASE("Editor Viewport Metal Smoke", "[integration][renderer][gpu]")
-{
+TEST_CASE("Editor Viewport Metal Smoke", "[integration][renderer][gpu]") {
     Check(SDL_Init(SDL_INIT_VIDEO));
-    SDL_Window *window =
-        SDL_CreateWindow("Horo Metal viewport smoke", 256, 256, SDL_WINDOW_METAL | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+    SDL_Window *window = SDL_CreateWindow("Horo Metal viewport smoke", 256, 256, SDL_WINDOW_METAL | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     Check(window != nullptr);
 
     SdlMetalPresentationPort presentationPort{*window};
@@ -47,8 +40,7 @@ TEST_CASE("Editor Viewport Metal Smoke", "[integration][renderer][gpu]")
                                                                      .enableValidation = true,
                                                                      .maxFramesInFlight = 2,
                                                                      .presentMode = PresentMode::Immediate});
-    if (frontendResult.HasError())
-    {
+    if (frontendResult.HasError()) {
         std::fprintf(stderr, "Metal frontend creation failed: %s\n", frontendResult.ErrorValue().message.c_str());
     }
     Check(frontendResult.HasValue());
@@ -64,24 +56,19 @@ TEST_CASE("Editor Viewport Metal Smoke", "[integration][renderer][gpu]")
     std::vector<Runtime::PrimitiveMeshLease> meshLeases;
     std::vector<EditorViewportMeshResourceView> meshResources;
     std::vector<EditorViewportInstance> viewportInstances;
-    for (std::size_t index = 0; index < primitiveTypes.size(); ++index)
-    {
+    for (std::size_t index = 0; index < primitiveTypes.size(); ++index) {
         auto acquiredMesh = meshCache.Acquire(Runtime::PrimitiveMeshDescriptor::Defaults(primitiveTypes[index]));
         Check(acquiredMesh.HasValue());
         Runtime::PrimitiveMeshLease meshLease = std::move(acquiredMesh).Value();
         const Render::MeshData &mesh = meshLease.Data();
         const Render::RenderMeshHandle meshHandle{meshLease.Id(), 1};
         meshResources.push_back({meshHandle, mesh.vertices, mesh.indices, mesh.localBounds});
-        constexpr std::array positions{Math::Vec2{0, 0},       Math::Vec2{-1.0F, 0.7F},  Math::Vec2{0, 0.9F},
-                                       Math::Vec2{1.0F, 0.7F}, Math::Vec2{-1.0F, -0.7F}, Math::Vec2{0, -0.9F},
-                                       Math::Vec2{1.0F, -0.7F}};
-        const float scale = primitiveTypes[index] == Runtime::PrimitiveMeshType::Plane ? 0.08F
-                            : index == 0                                               ? 0.65F
-                                                                                       : 0.45F;
+        constexpr std::array positions{Math::Vec2{0, 0},         Math::Vec2{-1.0F, 0.7F}, Math::Vec2{0, 0.9F},    Math::Vec2{1.0F, 0.7F},
+                                       Math::Vec2{-1.0F, -0.7F}, Math::Vec2{0, -0.9F},    Math::Vec2{1.0F, -0.7F}};
+        const float scale = primitiveTypes[index] == Runtime::PrimitiveMeshType::Plane ? 0.08F : index == 0 ? 0.65F : 0.45F;
         viewportInstances.push_back(
             {meshHandle,
-             Math::Transform{.translation = {positions[index].x, positions[index].y, 0}, .scale = {scale, scale, scale}}
-                 .ToMatrix(),
+             Math::Transform{.translation = {positions[index].x, positions[index].y, 0}, .scale = {scale, scale, scale}}.ToMatrix(),
              mesh.localBounds,
              Render::CoreDefaultMaterial,
              {.tint = {0.12F, 0.72F, 1.0F}, .tintStrength = index == 0 ? 0.65F : 0.0F}});
@@ -95,8 +82,10 @@ TEST_CASE("Editor Viewport Metal Smoke", "[integration][renderer][gpu]")
             .intensity = 2.0F,
         },
     };
-    const EditorViewportSceneView viewportScene{
-        .camera = {}, .meshResources = meshResources, .instances = viewportInstances, .lights = lights};
+    const EditorViewportSceneView viewportScene{.camera = {},
+                                                .meshResources = meshResources,
+                                                .instances = viewportInstances,
+                                                .lights = lights};
     Check(frontend->AttachStaticMeshPassExecutor(viewport).HasValue());
     auto viewportTargetResult = frontend->CreateOffscreenTarget({128, 128});
     Check(viewportTargetResult.HasValue());
@@ -116,8 +105,8 @@ TEST_CASE("Editor Viewport Metal Smoke", "[integration][renderer][gpu]")
                 StaticMeshPassDescriptor{
                     .target = viewportTarget,
                     .extent = {128, 128},
-                    .scene = RenderSceneView{ToRenderCamera(viewportScene.camera), viewportScene.meshResources,
-                                             viewportScene.instances, viewportScene.lights},
+                    .scene = RenderSceneView{ToRenderCamera(viewportScene.camera), viewportScene.meshResources, viewportScene.instances,
+                                             viewportScene.lights},
                 },
         },
         RenderPassDescriptor{
@@ -169,8 +158,7 @@ TEST_CASE("Editor Viewport Metal Smoke", "[integration][renderer][gpu]")
 
     std::uint8_t minimum = 255;
     std::uint8_t maximum = 0;
-    for (std::size_t index = 0; index < rgba.size(); index += 4)
-    {
+    for (std::size_t index = 0; index < rgba.size(); index += 4) {
         minimum = std::min(minimum, std::min(rgba[index], std::min(rgba[index + 1], rgba[index + 2])));
         maximum = std::max(maximum, std::max(rgba[index], std::max(rgba[index + 1], rgba[index + 2])));
     }

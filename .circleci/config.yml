@@ -4,13 +4,33 @@ jobs:
   sonar:
     machine:
       image: ubuntu-2404:current
+    environment:
+      CCACHE_BASEDIR: /home/circleci/project
+      CCACHE_COMPRESS: "true"
+      CCACHE_DIR: /home/circleci/.cache/ccache
+      FETCHCONTENT_BASE_DIR: /home/circleci/project/.cmake/fetchcontent
     steps:
       - checkout:
           method: full
+      - restore_cache:
+          keys:
+            - v1-fetchcontent-{{ arch }}-{{ checksum "CMakeLists.txt" }}
+            - v1-fetchcontent-{{ arch }}-
+      - restore_cache:
+          keys:
+            - v1-ccache-{{ arch }}-{{ .Branch }}
+            - v1-ccache-{{ arch }}-
+      - restore_cache:
+          keys:
+            - v1-sonar-cfamily-{{ arch }}-{{ .Branch }}
+            - v1-sonar-cfamily-{{ arch }}-
       - run:
           name: Install Linux dependencies
           command: |
-            sudo apt-get update
+            if ! sudo apt-get update; then
+              sudo rm -f /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.list
+              sudo apt-get update
+            fi
             sudo apt-get install -y --no-install-recommends \
               ninja-build ccache unzip \
               libwayland-dev wayland-protocols libxkbcommon-dev \
@@ -23,8 +43,20 @@ jobs:
             cmake -S . -B build/sonar -G Ninja -DBUILD_TESTING=OFF \
               -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
               -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+              -DHORO_ENABLE_EDITOR=ON \
+              -DHORO_ENABLE_TELEMETRY=ON \
+              -DHORO_ENABLE_OPENTELEMETRY=ON
             cmake --build build/sonar --parallel
+            ccache --show-stats
+      - save_cache:
+          key: v1-fetchcontent-{{ arch }}-{{ checksum "CMakeLists.txt" }}
+          paths:
+            - .cmake/fetchcontent
+      - save_cache:
+          key: v1-ccache-{{ arch }}-{{ .Branch }}
+          paths:
+            - /home/circleci/.cache/ccache
       - run:
           name: SonarCloud scan
           command: |
@@ -36,8 +68,15 @@ jobs:
               -Dsonar.projectKey=abdullahbodur_horo-engine \
               -Dsonar.sourceEncoding=UTF-8 \
               -Dsonar.cfamily.compile-commands=build/sonar/compile_commands.json \
+              -Dsonar.cfamily.cache.enabled=true \
+              -Dsonar.cfamily.cache.path=.sonar/cfamily-cache \
+              -Dsonar.cfamily.threads=4 \
               -Dsonar.qualitygate.wait=true \
               -Dsonar.qualitygate.timeout=300
+      - save_cache:
+          key: v1-sonar-cfamily-{{ arch }}-{{ .Branch }}
+          paths:
+            - .sonar/cfamily-cache
 
 workflows:
   sonar:

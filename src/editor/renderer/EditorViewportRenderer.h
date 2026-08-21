@@ -41,6 +41,7 @@ namespace Horo::Editor {
     struct EditorViewportGridOptions {
         bool visible{true};
         float targetMinorSpacingPixels{48.0F};
+        float targetLineWidthPixels{1.5F};
     };
 
     /** @brief Selected Light influence visualizer requested by the viewport panel. */

@@ -250,10 +250,8 @@ namespace Horo::Tests {
         state_->modals.Draw();
         state_->surface.RenderViewport(state_->viewportScene.View());
         const CancellationToken token = state_->runtimeCancellation.Token();
-        const Runtime::FrameContext context{++state_->runtimeFrameNumber, Duration::FromMilliseconds(16), 0.0, 0, {}, false,
-                                            token};
-        const Result<void> committed =
-            state_->runtimeScene.OnPhase(Runtime::RuntimePhase::CommitDeferredLifecycleChanges, context);
+        const Runtime::FrameContext context{++state_->runtimeFrameNumber, Duration::FromMilliseconds(16), 0.0, 0, {}, false, token};
+        const Result<void> committed = state_->runtimeScene.OnPhase(Runtime::RuntimePhase::CommitDeferredLifecycleChanges, context);
         if (committed.HasError())
             throw std::runtime_error(committed.ErrorValue().message);
     }

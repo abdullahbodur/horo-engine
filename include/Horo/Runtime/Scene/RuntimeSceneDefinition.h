@@ -17,116 +17,108 @@
 #include <span>
 #include <vector>
 
-namespace Horo::Runtime
-{
-/** @brief Stable logical identity of one authored scene. */
-struct SceneDefinitionId
-{
-    std::uint64_t value{};
-    [[nodiscard]] constexpr bool IsValid() const noexcept
-    {
-        return value != 0;
-    }
-    [[nodiscard]] constexpr auto operator<=>(const SceneDefinitionId &) const noexcept = default;
-};
+namespace Horo::Runtime {
+    /** @brief Stable logical identity of one authored scene. */
+    struct SceneDefinitionId {
+        std::uint64_t value{};
 
-/** @brief Monotonic authored content revision carried through runtime activation. */
-struct SceneDefinitionRevision
-{
-    std::uint64_t value{};
-    [[nodiscard]] constexpr auto operator<=>(const SceneDefinitionRevision &) const noexcept = default;
-};
+        [[nodiscard]] constexpr bool IsValid() const noexcept {
+            return value != 0;
+        }
 
-/** @brief Stable authored object identity, independent from process-local entity handles. */
-struct SceneObjectId
-{
-    std::uint64_t value{};
-    [[nodiscard]] constexpr bool IsValid() const noexcept
-    {
-        return value != 0;
-    }
-    [[nodiscard]] constexpr auto operator<=>(const SceneObjectId &) const noexcept = default;
-};
+        [[nodiscard]] constexpr auto operator<=>(const SceneDefinitionId &) const noexcept = default;
+    };
 
-/** @brief Typed core component payload owned by a definition or runtime scene. */
-struct RuntimeComponentSet
-{
-    std::optional<CameraComponent> camera;
-    std::optional<LightComponent> light;
-    std::optional<TriggerVolumeComponent> triggerVolume;
-    std::optional<AudioSourceComponent> audioSource;
-    std::vector<Gameplay::BehaviorComponent> behaviors;
-    [[nodiscard]] bool operator==(const RuntimeComponentSet &) const noexcept = default;
-};
+    /** @brief Monotonic authored content revision carried through runtime activation. */
+    struct SceneDefinitionRevision {
+        std::uint64_t value{};
+        [[nodiscard]] constexpr auto operator<=>(const SceneDefinitionRevision &) const noexcept = default;
+    };
 
-/** @brief Complete immutable definition of one authored runtime entity. */
-struct RuntimeEntityDefinition
-{
-    SceneObjectId object;
-    std::optional<SceneObjectId> parent;
-    Math::Transform localTransform;
-    std::optional<PrimitiveMeshDescriptor> primitiveMesh;
-    RuntimeComponentSet components;
-};
+    /** @brief Stable authored object identity, independent from process-local entity handles. */
+    struct SceneObjectId {
+        std::uint64_t value{};
 
-/** @brief One required cooked asset and its expected runtime type. */
-struct SceneAssetDependency
-{
-    Assets::AssetId id;               /**< Stable cooked asset identity. */
-    Assets::AssetTypeId expectedType; /**< Type required by scene construction. */
-    [[nodiscard]] auto operator<=>(const SceneAssetDependency &) const noexcept = default;
-};
+        [[nodiscard]] constexpr bool IsValid() const noexcept {
+            return value != 0;
+        }
 
-/** @brief Validated immutable runtime-scene construction input. */
-class RuntimeSceneDefinition final
-{
-  public:
-    /** @brief Returns the stable logical scene identity. */
-    [[nodiscard]] SceneDefinitionId Id() const noexcept;
-    /** @brief Returns the authored content revision represented by this definition. */
-    [[nodiscard]] SceneDefinitionRevision Revision() const noexcept;
-    /** @brief Returns every entity definition in stable authored order. */
-    [[nodiscard]] std::span<const RuntimeEntityDefinition> Entities() const noexcept;
-    /** @brief Returns required assets in canonical AssetId order. */
-    [[nodiscard]] std::span<const SceneAssetDependency> AssetDependencies() const noexcept;
+        [[nodiscard]] constexpr auto operator<=>(const SceneObjectId &) const noexcept = default;
+    };
 
-  private:
-    friend class SceneDefinitionBuilder;
-    RuntimeSceneDefinition(SceneDefinitionId id, SceneDefinitionRevision revision,
-                           std::vector<RuntimeEntityDefinition> entities,
-                           std::vector<SceneAssetDependency> assetDependencies) noexcept;
+    /** @brief Typed core component payload owned by a definition or runtime scene. */
+    struct RuntimeComponentSet {
+        std::optional<CameraComponent> camera;
+        std::optional<LightComponent> light;
+        std::optional<TriggerVolumeComponent> triggerVolume;
+        std::optional<AudioSourceComponent> audioSource;
+        std::vector<Gameplay::BehaviorComponent> behaviors;
+        [[nodiscard]] bool operator==(const RuntimeComponentSet &) const noexcept = default;
+    };
 
-    SceneDefinitionId id_;
-    SceneDefinitionRevision revision_;
-    std::vector<RuntimeEntityDefinition> entities_;
-    std::vector<SceneAssetDependency> assetDependencies_;
-};
+    /** @brief Complete immutable definition of one authored runtime entity. */
+    struct RuntimeEntityDefinition {
+        SceneObjectId object;
+        std::optional<SceneObjectId> parent;
+        Math::Transform localTransform;
+        std::optional<PrimitiveMeshDescriptor> primitiveMesh;
+        RuntimeComponentSet components;
+    };
 
-/** @brief Mutable load-time builder that validates before producing an immutable definition. */
-class SceneDefinitionBuilder final
-{
-  public:
-    /** @brief Creates a builder for one logical scene and authored revision. @param id Non-zero logical scene identity.
-     * @param revision Authored content revision. */
-    SceneDefinitionBuilder(SceneDefinitionId id, SceneDefinitionRevision revision) noexcept;
-    /** @brief Appends one typed entity definition in stable authored order. @param entity Complete authored entity
-     * payload. */
-    void Add(RuntimeEntityDefinition entity);
-    /** @brief Adds one required cooked asset, deduplicating an identical requirement. @param dependency Stable asset
-     * identity and expected type. @return Success, or a typed error for an invalid or conflicting requirement. */
-    [[nodiscard]] Result<void> RequireAsset(SceneAssetDependency dependency);
-    /** @brief Validates identity, hierarchy, numeric values, primitives, and components. @return Immutable definition
-     * or the first typed validation error. */
-    [[nodiscard]] Result<RuntimeSceneDefinition> Build() &&;
+    /** @brief One required cooked asset and its expected runtime type. */
+    struct SceneAssetDependency {
+        Assets::AssetId id;               /**< Stable cooked asset identity. */
+        Assets::AssetTypeId expectedType; /**< Type required by scene construction. */
+        [[nodiscard]] auto operator<=>(const SceneAssetDependency &) const noexcept = default;
+    };
 
-  private:
-    SceneDefinitionId id_;
-    SceneDefinitionRevision revision_;
-    std::vector<RuntimeEntityDefinition> entities_;
-    std::vector<SceneAssetDependency> assetDependencies_;
-};
+    /** @brief Validated immutable runtime-scene construction input. */
+    class RuntimeSceneDefinition final {
+    public:
+        /** @brief Returns the stable logical scene identity. */
+        [[nodiscard]] SceneDefinitionId Id() const noexcept;
+        /** @brief Returns the authored content revision represented by this definition. */
+        [[nodiscard]] SceneDefinitionRevision Revision() const noexcept;
+        /** @brief Returns every entity definition in stable authored order. */
+        [[nodiscard]] std::span<const RuntimeEntityDefinition> Entities() const noexcept;
+        /** @brief Returns required assets in canonical AssetId order. */
+        [[nodiscard]] std::span<const SceneAssetDependency> AssetDependencies() const noexcept;
 
-/** @brief Validates one runtime entity payload independently of hierarchy membership. @param entity Entity payload to
- * validate. @return Success or a typed payload error. */
-[[nodiscard]] Result<void> ValidateRuntimeEntityDefinition(const RuntimeEntityDefinition &entity);
-} // namespace Horo::Runtime
+    private:
+        friend class SceneDefinitionBuilder;
+        RuntimeSceneDefinition(SceneDefinitionId id, SceneDefinitionRevision revision, std::vector<RuntimeEntityDefinition> entities,
+                               std::vector<SceneAssetDependency> assetDependencies) noexcept;
+
+        SceneDefinitionId id_;
+        SceneDefinitionRevision revision_;
+        std::vector<RuntimeEntityDefinition> entities_;
+        std::vector<SceneAssetDependency> assetDependencies_;
+    };
+
+    /** @brief Mutable load-time builder that validates before producing an immutable definition. */
+    class SceneDefinitionBuilder final {
+    public:
+        /** @brief Creates a builder for one logical scene and authored revision. @param id Non-zero logical scene identity.
+         * @param revision Authored content revision. */
+        SceneDefinitionBuilder(SceneDefinitionId id, SceneDefinitionRevision revision) noexcept;
+        /** @brief Appends one typed entity definition in stable authored order. @param entity Complete authored entity
+         * payload. */
+        void Add(RuntimeEntityDefinition entity);
+        /** @brief Adds one required cooked asset, deduplicating an identical requirement. @param dependency Stable asset
+         * identity and expected type. @return Success, or a typed error for an invalid or conflicting requirement. */
+        [[nodiscard]] Result<void> RequireAsset(SceneAssetDependency dependency);
+        /** @brief Validates identity, hierarchy, numeric values, primitives, and components. @return Immutable definition
+         * or the first typed validation error. */
+        [[nodiscard]] Result<RuntimeSceneDefinition> Build() &&;
+
+    private:
+        SceneDefinitionId id_;
+        SceneDefinitionRevision revision_;
+        std::vector<RuntimeEntityDefinition> entities_;
+        std::vector<SceneAssetDependency> assetDependencies_;
+    };
+
+    /** @brief Validates one runtime entity payload independently of hierarchy membership. @param entity Entity payload to
+     * validate. @return Success or a typed payload error. */
+    [[nodiscard]] Result<void> ValidateRuntimeEntityDefinition(const RuntimeEntityDefinition &entity);
+}  // namespace Horo::Runtime

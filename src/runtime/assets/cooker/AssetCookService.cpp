@@ -135,7 +135,7 @@ namespace Horo::Assets {
             operationId = request.operationStore->Begin(OperationDescriptor{.kind = OperationKind::Cook,
                                                                             .title = "Cook assets",
                                                                             .phase = "prepare",
-                                                                            .message = std::to_string(records.size()) + " assets",
+                                                                            .message = std::format("{} assets", records.size()),
                                                                             .progress = 0.0F,
                                                                             .cancellable = static_cast<bool>(request.requestCancel),
                                                                             .requestCancel = request.requestCancel});
@@ -149,22 +149,16 @@ namespace Horo::Assets {
                 .timestampUtc = now,
                 .status = BuildOutputStatus::Info,
                 .phase = "prepare",
-                .message = "Cooking " + std::to_string(records.size()) + " assets",
+                .message = std::format("Cooking {} assets", records.size()),
             });
         }
 
         if (records.empty()) {
             // Empty snapshot: write an empty current.json directly (no manifest/generation dir needed).
             // Build an empty current.json
-            std::ostringstream currentJson;
-            currentJson << "{\"schemaVersion\":1,"
-                        << "\"target\":\"" << request.target.Value() << "\","
-                        << "\"manifestDigest\":\""
-                        << "0000000000000000000000000000000000000000000000000000000000000000"
-                        << "\","
-                        << "\"generationPath\":\"generations/empty\","
-                        << "\"artifactCount\":\"0\"}";
-            auto currentStr = currentJson.str();
+            const std::string currentStr = std::format(
+                R"({{"schemaVersion":1,"target":"{}","manifestDigest":"0000000000000000000000000000000000000000000000000000000000000000","generationPath":"generations/empty","artifactCount":"0"}})",
+                request.target.Value());
             auto currentBytes = std::vector<std::uint8_t>(reinterpret_cast<const std::uint8_t *>(currentStr.data()),
                                                           reinterpret_cast<const std::uint8_t *>(currentStr.data()) + currentStr.size());
 
@@ -221,8 +215,7 @@ namespace Horo::Assets {
 
         for (const auto &record : records) {
             // Find cooker strategy
-            const auto *strategy = catalog_->Find(record.type, request.target);
-            if (!strategy)
+            if (const auto *strategy = catalog_->Find(record.type, request.target); !strategy)
                 return Result<AssetCookReport>::Failure(Error{CookErrors::CookerMissing.code});
 
             // Read source bytes
@@ -230,7 +223,7 @@ namespace Horo::Assets {
             if (sourceResult.HasError())
                 return Result<AssetCookReport>::Failure(sourceResult.ErrorValue());
 
-            auto &sourceBytes = sourceResult.Value();
+            auto sourceBytes = std::move(sourceResult).Value();
             auto sourceDigest = ComputeSha256(std::as_bytes(std::span{sourceBytes}));
 
             // Build cache key (simplified: no metadata/settings digests yet)
@@ -262,7 +255,7 @@ namespace Horo::Assets {
 
             if (cacheResult.Value().has_value()) {
                 slot.cacheHit = true;
-                slot.cookedArtifact = std::move(cacheResult.Value().value());
+                slot.cookedArtifact = std::move(cacheResult).Value().value();
             }
 
             slots.push_back(std::move(slot));
@@ -312,7 +305,7 @@ namespace Horo::Assets {
                 };
 
                 // Capture by copy for the job
-                auto work = [strategy, sourceView, &slot](const CancellationToken &jobCancellation) -> Result<void> {
+                auto work = [strategy, sourceView, &slot](const CancellationToken &jobCancellation) {
                     auto cookResult = strategy->Cook(sourceView, jobCancellation);
                     if (cookResult.HasError())
                         return Result<void>::Failure(cookResult.ErrorValue());
@@ -332,7 +325,7 @@ namespace Horo::Assets {
                     if (encodeResult.HasError())
                         return Result<void>::Failure(encodeResult.ErrorValue());
 
-                    slot.cookedArtifact = std::move(encodeResult.Value());
+                    slot.cookedArtifact = std::move(encodeResult).Value();
                     return Result<void>::Success();
                 };
 
@@ -370,8 +363,7 @@ namespace Horo::Assets {
 
         for (auto &slot : slots) {
             // Store in cache (idempotent)
-            auto storeResult = cache.Store(slot.cacheKey, slot.cookedArtifact, cancellation);
-            if (storeResult.HasError())
+            if (auto storeResult = cache.Store(slot.cacheKey, slot.cookedArtifact, cancellation); storeResult.HasError())
                 return Result<AssetCookReport>::Failure(storeResult.ErrorValue());
 
             auto artifactHash = ComputeSha256(std::as_bytes(std::span{slot.cookedArtifact}));
@@ -397,7 +389,7 @@ namespace Horo::Assets {
 
         std::size_t cookedCount = slots.size() - cacheHits;
 
-        operation.Succeed(std::to_string(cookedCount) + " cooked, " + std::to_string(cacheHits) + " cached");
+        operation.Succeed(std::format("{} cooked, {} cached", cookedCount, cacheHits));
 
         return Result<AssetCookReport>::Success(AssetCookReport{
             .generation = pubResult.Value(),

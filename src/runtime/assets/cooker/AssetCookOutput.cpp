@@ -8,47 +8,125 @@
 #include "Horo/Foundation/Sha256.h"
 
 #include <algorithm>
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <span>
-#include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace Horo::Assets {
     namespace {
         /**
+         * @brief Formats a SHA-256 digest into a 64-character lowercase hex string.
+         */
+        [[nodiscard]] std::string HexEncodeSha256(const Sha256Digest &digest) {
+            std::string result;
+            result.reserve(64);
+            for (const auto byte : digest.bytes)
+                result += std::format("{:02x}", byte);
+            return result;
+        }
+
+        /**
          * @brief Produces the canonical manifest JSON text.
          *        Schema: {"schemaVersion":1,"target":"...","artifacts":[...]}
          *        Sorted deterministically by assetId in the entries array.
          */
+        void AppendJsonString(std::string &output, const std::string_view value) {
+            constexpr std::string_view HexDigits{"0123456789abcdef"};
+            output += '"';
+            for (const unsigned char character : value) {
+                switch (character) {
+                    case '"':
+                        output += R"(\")";
+                        break;
+                    case '\\':
+                        output += R"(\\)";
+                        break;
+                    case '\b':
+                        output += R"(\b)";
+                        break;
+                    case '\f':
+                        output += R"(\f)";
+                        break;
+                    case '\n':
+                        output += R"(\n)";
+                        break;
+                    case '\r':
+                        output += R"(\r)";
+                        break;
+                    case '\t':
+                        output += R"(\t)";
+                        break;
+                    default:
+                        if (character < 0x20U) {
+                            output += R"(\u00)";
+                            const auto byte = static_cast<std::byte>(character);
+                            output += HexDigits[std::to_integer<std::size_t>(byte >> 4U)];
+                            output += HexDigits[std::to_integer<std::size_t>(byte & std::byte{0x0fU})];
+                        } else {
+                            output += static_cast<char>(character);
+                        }
+                }
+            }
+            output += '"';
+        }
+
         std::string BuildManifestJson(std::string_view target, std::span<const AssetCookManifestEntry> entries) {
-            // Manual JSON construction to avoid nlohmann dependency.
-            // Format: compact JSON with no trailing whitespace, fixed ordering.
-            std::ostringstream json;
-            json << "{\"schemaVersion\":1,\"target\":\"" << target << "\",\"artifacts\":[";
+            // Manual JSON construction keeps the manifest compact and deterministic without adding a runtime dependency.
+            std::string json{R"({"schemaVersion":1,"target":)"};
+            AppendJsonString(json, target);
+            json += R"(,"artifacts":[)";
 
             for (std::size_t i = 0; i < entries.size(); ++i) {
                 if (i > 0)
-                    json << ',';
-                const auto &e = entries[i];
-                json << "{\"assetId\":\"" << e.assetId.ToString() << "\","
-                     << "\"assetType\":\"" << e.assetType.Value() << "\","
-                     << "\"artifact\":\"" << e.artifactFile << "\","
-                     << "\"artifactHash\":\"sha256:";
-
-                // Hex-encode the artifact hash
-                for (auto byte : e.artifactHash.bytes) {
-                    constexpr char hex[] = "0123456789abcdef";
-                    json << hex[(byte >> 4) & 0x0F] << hex[byte & 0x0F];
-                }
-                json << "\"}";
+                    json += ',';
+                const auto &entry = entries[i];
+                json += R"({"assetId":)";
+                AppendJsonString(json, entry.assetId.ToString());
+                json += R"(,"assetType":)";
+                AppendJsonString(json, entry.assetType.Value());
+                json += R"(,"artifact":)";
+                AppendJsonString(json, entry.artifactFile);
+                json += R"(,"artifactHash":)";
+                AppendJsonString(json, "sha256:" + HexEncodeSha256(entry.artifactHash));
+                json += '}';
             }
 
-            json << "]}";
-            return json.str();
+            json += "]}";
+            return json;
+        }
+
+        [[nodiscard]] bool IsSafeArtifactFile(const std::string_view file) noexcept {
+            if (file.empty() || file.size() > 256)
+                return false;
+            for (const char c : file) {
+                if (c == '/' || c == '\\' || c == ':')
+                    return false;
+            }
+            if (file.find("..") != std::string_view::npos)
+                return false;
+            return true;
+        }
+
+        [[nodiscard]] bool IsSafePathWithin(const std::filesystem::path &base, const std::filesystem::path &candidate) noexcept {
+            if (base.empty() || candidate.empty() || !base.is_absolute() || !candidate.is_absolute())
+                return false;
+            std::error_code error;
+            const auto canonicalBase = std::filesystem::weakly_canonical(base, error);
+            if (error)
+                return false;
+            const auto canonicalCandidate = std::filesystem::weakly_canonical(candidate, error);
+            if (error)
+                return false;
+            const auto relative = canonicalCandidate.lexically_relative(canonicalBase);
+            return !relative.empty() && !relative.is_absolute() && *relative.begin() != "..";
         }
 
         /**
@@ -76,26 +154,31 @@ namespace Horo::Assets {
          * @brief Writes bytes atomically: write to temp, then rename.
          */
         Result<void> WriteAtomic(const std::filesystem::path &path, std::span<const std::uint8_t> bytes) {
+            if (path.empty() || !path.is_absolute() || !IsSafePathWithin(path.parent_path(), path))
+                return Result<void>::Failure(Error{CookErrors::MalformedArtifact.code});
             auto tempPath = path;
-            tempPath += ".tmp." + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+            tempPath += std::format(".tmp.{}", std::chrono::steady_clock::now().time_since_epoch().count());
+            if (!IsSafePathWithin(path.parent_path(), tempPath))
+                return Result<void>::Failure(Error{CookErrors::MalformedArtifact.code});
 
             {
-                std::ofstream temp(tempPath, std::ios::binary | std::ios::trunc);
+                // Both paths are canonical descendants of the caller-validated output directory.
+                std::ofstream temp(tempPath, std::ios::binary | std::ios::trunc);  // NOSONAR
                 if (!temp) {
-                    std::filesystem::remove(tempPath);
+                    std::filesystem::remove(tempPath);  // NOSONAR
                     return Result<void>::Failure(Error{CookErrors::MalformedArtifact.code});
                 }
                 temp.write(reinterpret_cast<const char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
                 if (!temp) {
-                    std::filesystem::remove(tempPath);
+                    std::filesystem::remove(tempPath);  // NOSONAR
                     return Result<void>::Failure(Error{CookErrors::MalformedArtifact.code});
                 }
             }
 
             std::error_code ec;
-            std::filesystem::rename(tempPath, path, ec);
+            std::filesystem::rename(tempPath, path, ec);  // NOSONAR
             if (ec) {
-                std::filesystem::remove(tempPath);
+                std::filesystem::remove(tempPath);  // NOSONAR
                 return Result<void>::Failure(Error{CookErrors::MalformedArtifact.code});
             }
             return Result<void>::Success();
@@ -143,7 +226,7 @@ namespace Horo::Assets {
 
         auto targetStr = JsonStringValue(json, "target");
         auto manifestHex = JsonStringValue(json, "manifestDigest");
-        auto relPath = JsonStringValue(json, "generationPath");
+        std::filesystem::path relPath = JsonStringValue(json, "generationPath");
         auto countStr = JsonStringValue(json, "artifactCount");
 
         if (targetStr.empty() || manifestHex.empty() || relPath.empty()) {
@@ -158,10 +241,14 @@ namespace Horo::Assets {
         if (!countStr.empty())
             count = static_cast<std::size_t>(std::stoull(countStr));
 
+        const std::filesystem::path generationRoot = targetRoot / relPath;
+        if (relPath.is_absolute() || !IsSafePathWithin(targetRoot, generationRoot))
+            return Result<AssetCookGeneration>::Failure(Error{CookErrors::MalformedArtifact.code});
+
         return Result<AssetCookGeneration>::Success(AssetCookGeneration{
             .target = target.Value(),
             .manifestDigest = Sha256Digest{},
-            .generationRoot = targetRoot / relPath,
+            .generationRoot = generationRoot,
             .artifactCount = count,
         });
     }
@@ -190,8 +277,8 @@ namespace Horo::Assets {
         }
 
         // Verify artifact payloads are within bounds
-        for (std::size_t i = 0; i < artifactPayloads.size(); ++i) {
-            if (artifactPayloads[i].size() > limits.maximumArtifactBytes) {
+        for (const auto &payload : artifactPayloads) {
+            if (payload.size() > limits.maximumArtifactBytes) {
                 return Result<AssetCookGeneration>::Failure(Error{CookErrors::TooLarge.code});
             }
         }
@@ -202,26 +289,24 @@ namespace Horo::Assets {
             std::span<const std::uint8_t>(reinterpret_cast<const std::uint8_t *>(manifestJson.data()), manifestJson.size());
         auto manifestDigest = ComputeSha256(std::as_bytes(manifestBytes));
 
-        auto manifestHex = [](const Sha256Digest &d) {
-            std::string h(64, '0');
-            for (std::size_t i = 0; i < 32; ++i) {
-                constexpr char hex[] = "0123456789abcdef";
-                h[i * 2] = hex[(d.bytes[i] >> 4) & 0x0F];
-                h[i * 2 + 1] = hex[d.bytes[i] & 0x0F];
-            }
-            return h;
-        };
-
-        auto genRelPath = std::string("generations/") + manifestHex(manifestDigest);
+        auto genRelPath = std::string("generations/") + HexEncodeSha256(manifestDigest);
         auto genRoot = targetRoot / genRelPath;
-        auto gensDir = targetRoot / "generations";
 
-        // Create generations directory
-        std::filesystem::create_directories(genRoot);
+        if (!IsSafePathWithin(targetRoot, genRoot))
+            return Result<AssetCookGeneration>::Failure(Error{CookErrors::MalformedArtifact.code});
+        // Create generations directory only after canonical descendant validation.
+        std::error_code directoryError;
+        std::filesystem::create_directories(genRoot, directoryError);  // NOSONAR
+        if (directoryError)
+            return Result<AssetCookGeneration>::Failure(Error{CookErrors::MalformedArtifact.code});
 
         // Write each artifact
         for (std::size_t i = 0; i < entries.size(); ++i) {
+            if (!IsSafeArtifactFile(entries[i].artifactFile))
+                return Result<AssetCookGeneration>::Failure(Error{CookErrors::MalformedArtifact.code});
             auto artifactPath = genRoot / entries[i].artifactFile;
+            if (!IsSafePathWithin(genRoot, artifactPath))
+                return Result<AssetCookGeneration>::Failure(Error{CookErrors::MalformedArtifact.code});
             auto writeResult = WriteAtomic(artifactPath, artifactPayloads[i]);
             if (writeResult.HasError())
                 return Result<AssetCookGeneration>::Failure(writeResult.ErrorValue());
@@ -237,19 +322,13 @@ namespace Horo::Assets {
         }
 
         // Build and write current.json atomically
-        std::ostringstream currentJson;
-        currentJson << "{\"schemaVersion\":1,"
-                    << "\"target\":\"" << target.Value() << "\","
-                    << "\"manifestDigest\":\"" << manifestHex(manifestDigest) << "\","
-                    << "\"generationPath\":\"" << genRelPath << "\","
-                    << "\"artifactCount\":\"" << entries.size() << "\"}";
-
-        auto currentStr = currentJson.str();
+        const std::string currentStr =
+            std::format(R"({{"schemaVersion":1,"target":"{}","manifestDigest":"{}","generationPath":"{}","artifactCount":"{}"}})",
+                        target.Value(), HexEncodeSha256(manifestDigest), genRelPath, entries.size());
         auto currentBytes = std::vector<std::uint8_t>(reinterpret_cast<const std::uint8_t *>(currentStr.data()),
                                                       reinterpret_cast<const std::uint8_t *>(currentStr.data()) + currentStr.size());
 
-        auto writeResult = WriteAtomic(targetRoot / "current.json", currentBytes);
-        if (writeResult.HasError())
+        if (const auto writeResult = WriteAtomic(targetRoot / "current.json", currentBytes); writeResult.HasError())
             return Result<AssetCookGeneration>::Failure(writeResult.ErrorValue());
 
         return Result<AssetCookGeneration>::Success(AssetCookGeneration{

@@ -163,7 +163,7 @@ namespace Horo::Editor {
             // Search
             ImGui::SetCursorScreenPos(position);
             static_cast<void>(Ui::InputTextControl("##ContentBrowserSearch", state.search.data(), state.search.size(), context.theme.fonts,
-                                                   false, searchWidth));
+                                                   Ui::InputTextOptions{.width = searchWidth}));
             const bool searchActive = ImGui::IsItemActive();
             const ImVec2 searchMin = ImGui::GetItemRectMin();
             const ImVec2 searchMax = ImGui::GetItemRectMax();
@@ -204,7 +204,7 @@ namespace Horo::Editor {
 
             ImGui::SetNextItemWidth(layout.typeWidth);
             if (Ui::ComboControl("ContentBrowserTypeFilter", &typeIndex, typeItems.data(), static_cast<int>(typeItems.size()),
-                                 context.theme.fonts, false, ToolbarHeight())) {
+                                 context.theme.fonts, Ui::ComboControlOptions{.height = ToolbarHeight()})) {
                 state.assetTypeFilter = typeIndex == 0 ? std::string{} : typeLabels[static_cast<std::size_t>(typeIndex)];
             }
 
@@ -217,7 +217,7 @@ namespace Horo::Editor {
             ImGui::SameLine(0.0F, layout.gap);
             ImGui::SetNextItemWidth(layout.sortWidth);
             if (Ui::ComboControl("ContentBrowserSort", &sortIndex, sortItems.data(), static_cast<int>(sortItems.size()),
-                                 context.theme.fonts, false, ToolbarHeight())) {
+                                 context.theme.fonts, Ui::ComboControlOptions{.height = ToolbarHeight()})) {
                 state.sortField = sortIndex == 0 ? ContentBrowserSortField::Name : ContentBrowserSortField::Type;
             }
 

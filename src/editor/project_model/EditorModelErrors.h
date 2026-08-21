@@ -9,6 +9,7 @@ namespace Horo::Editor::SceneDocumentErrors {
     extern const ErrorCodeDescriptor InvalidCamera;
     extern const ErrorCodeDescriptor InvalidLight;
     extern const ErrorCodeDescriptor InvalidName;
+    extern const ErrorCodeDescriptor ObjectLocked;
     extern const ErrorCodeDescriptor InvalidPrimitive;
     extern const ErrorCodeDescriptor InvalidPrimitiveMetadata;
     extern const ErrorCodeDescriptor InvalidSavedState;

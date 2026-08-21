@@ -22,6 +22,8 @@ namespace {
 
 TEST_CASE("game module host validates fingerprint and keeps factories alive through behavior shutdown") {
     GameModuleHost host;
+    auto relative = host.Load(std::filesystem::path{HORO_TEST_GAME_MODULE_PATH}.filename(), CurrentGameplayBuildFingerprint());
+    REQUIRE(relative.HasError());
     auto mismatch = host.Load(HORO_TEST_GAME_MODULE_PATH, "wrong-fingerprint");
     REQUIRE(mismatch.HasError());
 
@@ -55,7 +57,7 @@ TEST_CASE("game module host validates an independent shadow artifact and removes
     REQUIRE(loaded.HasValue());
     std::unique_ptr<LoadedGameModule> module = std::move(loaded).Value();
     const std::filesystem::path shadowPath = module->LoadedArtifactPath();
-    REQUIRE(shadowPath.parent_path() == root);
+    REQUIRE(std::filesystem::equivalent(shadowPath.parent_path(), root));
     REQUIRE(shadowPath != std::filesystem::path{HORO_TEST_GAME_MODULE_PATH});
     REQUIRE(std::filesystem::is_regular_file(shadowPath));
 

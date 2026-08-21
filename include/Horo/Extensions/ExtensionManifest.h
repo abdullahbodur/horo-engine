@@ -1,14 +1,13 @@
 #pragma once
 
 #include "Horo/Foundation/Result.h"
+
 #include <string>
 #include <vector>
 
-namespace Horo::Extensions
-{
+namespace Horo::Extensions {
     /** @brief One versioned native or declarative module exported by an extension package. */
-    struct ExtensionModuleManifest
-    {
+    struct ExtensionModuleManifest {
         std::string id;      /**< Stable module identity. */
         std::string version; /**< Canonical semantic module version. */
         std::string kind;    /**< Host-defined module kind. */
@@ -16,16 +15,14 @@ namespace Horo::Extensions
     };
 
     /** @brief One manifest-declared contribution bound to a module in the same package. */
-    struct ExtensionContributionManifest
-    {
-        std::string type;   /**< Typed extension point, for example `asset.importer`. */
-        std::string id;     /**< Stable globally unique contribution identity. */
-        std::string module; /**< Owning module identity from this manifest. */
+    struct ExtensionContributionManifest {
+        std::string type;         /**< Typed extension point, for example `asset.importer`. */
+        std::string id;           /**< Stable globally unique contribution identity. */
+        std::string owningModule; /**< Owning module identity from this manifest. */
     };
 
     /** @brief Represents a parsed extension.json manifest. */
-    struct ExtensionManifest
-    {
+    struct ExtensionManifest {
         std::string id;
         std::string version;
         std::string kind;
@@ -50,6 +47,6 @@ namespace Horo::Extensions
      * @param jsonContent The content of the extension.json file.
      * @return Result containing the parsed manifest, or an error.
      */
-    [[nodiscard]] Result<ExtensionManifest> ParseExtensionManifest(const std::string& jsonContent);
+    [[nodiscard]] Result<ExtensionManifest> ParseExtensionManifest(const std::string &jsonContent);
 
-} // namespace Horo::Extensions
+}  // namespace Horo::Extensions

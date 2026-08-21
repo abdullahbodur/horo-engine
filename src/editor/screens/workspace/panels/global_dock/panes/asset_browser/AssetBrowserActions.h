@@ -4,7 +4,7 @@
 #include <vector>
 
 namespace Horo::Editor {
-    class EditorGuiContext;
+    struct EditorGuiContext;
     class AssetBrowserInteractionSession;
     struct ContentBrowserEntry;
     struct EditorWorkspaceViewCommandData;

@@ -79,7 +79,8 @@ GUI       CLI       MCP       CI
           ReleasePipeline
                   |
    validate -> build -> cook -> package
-          -> verify -> sign -> publish
+          -> pre-sign verify -> sign
+          -> finalize metadata -> final verify -> publish
 ```
 
 `ReleaseService` owns use-case validation, job lifecycle, cancellation,
@@ -134,8 +135,10 @@ Pending
   -> Building
   -> Cooking
   -> Packaging
-  -> Verifying
+  -> PreSignVerifying
   -> Signing
+  -> FinalizingMetadata
+  -> FinalVerifying
   -> Publishing
   -> Succeeded
 ```
@@ -150,10 +153,20 @@ Stage contracts:
 3. `Building` compiles and links project binaries.
 4. `Cooking` converts source assets into runtime-ready target artifacts.
 5. `Packaging` assembles the distribution and creates `assets.horo`.
-6. `Verifying` validates manifest contents, checksums, archive readability, and
-   launch prerequisites.
-7. `Signing` signs supported binaries and distribution metadata.
-8. `Publishing` transfers verified artifacts to a configured destination.
+6. `PreSignVerifying` validates the unsigned staged payload, package layout,
+   archive readability, forbidden-file policy, and signing prerequisites.
+7. `Signing` signs supported binaries and performs required notarization,
+   stapling, timestamping, and platform-package signing. This stage may change
+   artifact bytes.
+8. `FinalizingMetadata` computes the hashes of the signed artifacts and freezes
+   the canonical candidate manifest, checksums, signing records, provenance,
+   and other supply-chain metadata. Release metadata signatures are produced
+   only after their signed content is final.
+9. `FinalVerifying` validates the final manifest and checksums against the exact
+   signed artifacts, verifies platform signatures and notarization results, and
+   runs the configured packaged-artifact smoke checks.
+10. `Publishing` transfers only final-verified immutable candidates to a
+    configured destination.
 
 Stages publish typed progress events and structured diagnostics. A failed stage
 does not silently continue into later stages.
@@ -165,7 +178,8 @@ as a three-pane workspace:
 
 - left sidebar: product profile, target platform/architecture/configuration, and
   security settings
-- top stage track: Validate → Configure → Build → Cook → Package → Verify → Sign → Publish
+- top stage track: Validate → Configure → Build → Cook → Package → Pre-Verify →
+  Sign → Finalize → Final Verify → Publish
 - main area: summary bar and structured per-stage log panel
 
 The modal owns exclusive editor focus while a job is active. Closing the modal
@@ -356,11 +370,13 @@ conflict policy. Existing artifacts are never overwritten implicitly.
 A release succeeds only when:
 
 - all required stages complete
+- the unsigned staged payload passed pre-sign verification
 - the manifest matches the produced files
 - cryptographic hashes verify
 - `assets.horo` can be opened and required runtime entries can be read
 - no forbidden authoring assets are present
-- signing requirements for the selected profile are satisfied
+- signing, notarization, timestamping, and entitlement requirements for the
+  selected profile are satisfied and verified after signing
 - the packaged executable passes the configured smoke test
 
 Packaged artifacts are the objects tested and published. CI does not publish
@@ -380,8 +396,13 @@ Additional required tests cover:
 
 Artifact construction and channel promotion are separate operations.
 
-A release candidate is a verified immutable set of artifacts and metadata. It
-may be promoted to one or more channels only after policy checks pass:
+A release candidate is the immutable set of signed artifacts and finalized
+metadata produced after `FinalizingMetadata`. It becomes eligible for promotion
+only after `FinalVerifying` succeeds. A pre-sign-verified staged payload is not
+yet a release candidate and cannot be published.
+
+A final-verified candidate may be promoted to one or more channels only after
+policy checks pass:
 
 - required targets succeeded
 - required signatures and notarization passed

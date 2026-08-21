@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Horo/Editor/HierarchyModel.h"
+#include "Horo/Runtime/Input.h"
 #include "editor/screens/workspace/EditorWorkspaceViewModel.h"
 
 #include <optional>
@@ -8,6 +9,13 @@
 #include <vector>
 
 namespace Horo::Editor {
+    /**
+     * @brief Resolves the deterministic hierarchy presentation type from authored object components.
+     * @param object Current read-only scene-object projection.
+     * @return Camera, concrete light, audio, mesh, volume, or generic fallback presentation type.
+     */
+    [[nodiscard]] HierarchyNodeType ResolveHierarchyNodeType(const SceneObject &object) noexcept;
+
     /** @brief User gesture used to derive one complete hierarchy selection request. */
     enum class HierarchySelectionGesture : std::uint8_t {
         Replace,
@@ -62,8 +70,17 @@ namespace Horo::Editor {
         /** @brief Creates a validated typed object-rename command. */
         [[nodiscard]] static EditorWorkspaceViewCommandData RenameCommand(HierarchyNodeId id, std::string_view name);
 
-        /** @brief Creates a typed object-deletion command. */
-        [[nodiscard]] static EditorWorkspaceViewCommandData DeleteCommand(HierarchyNodeId id);
+        /** @brief Creates a typed command toggling one object's local editor visibility. */
+        [[nodiscard]] static EditorWorkspaceViewCommandData ToggleVisibilityCommand(const HierarchyNode &node);
+
+        /** @brief Creates a typed command toggling one object's local editor lock. */
+        [[nodiscard]] static EditorWorkspaceViewCommandData ToggleLockCommand(const HierarchyNode &node);
+
+        /** @brief Snapshots the complete current selection into one typed batch-deletion command. */
+        [[nodiscard]] EditorWorkspaceViewCommandData DeleteSelectionCommand() const;
+
+        /** @brief Reports whether a key/modifier pair is a supported hierarchy deletion shortcut. */
+        [[nodiscard]] static bool IsDeleteShortcut(Input::Key key, const Input::ModifierState &modifiers) noexcept;
 
     private:
         HierarchyModel m_model;

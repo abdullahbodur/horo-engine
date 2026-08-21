@@ -21,7 +21,9 @@ namespace Horo::Editor {
                 .parent = document.parent != disk.parent,
                 .transform = document.localTransform != disk.localTransform,
                 .primitive = document.primitiveMesh != disk.primitiveMesh,
+                .asset = document.meshAsset != disk.meshAsset,
                 .components = document.components != disk.components,
+                .editorState = document.editorState != disk.editorState,
             };
         }
     }  // namespace
@@ -75,7 +77,7 @@ namespace Horo::Editor {
     }
 
     /** @copydoc LoadSceneDocumentComparison */
-    Result<SceneDocumentComparison> LoadSceneDocumentComparison(SceneDocumentComparisonRequest request) {
+    Result<SceneDocumentComparison> LoadSceneDocumentComparison(const SceneDocumentComparisonRequest &request) {
         if (!request.absoluteProjectRoot.is_absolute() || !request.absoluteScenePath.is_absolute()) {
             return Result<SceneDocumentComparison>::Failure(MakeError(SceneComparisonUnavailable));
         }

@@ -251,6 +251,43 @@ When reviewing or preparing a PR, focus on:
 
 ## Commits And PRs
 
+### Issue Title Convention
+
+Repository issue titles must start with the ticket identifier in square brackets,
+followed by a space and the human-readable title:
+
+- `[EDT-004B.1] Build Output Data Model & Projection Contract`
+- `[OBS-001] Unified Observability Foundation`
+
+Preserve the existing ticket identifier exactly when renaming an issue. Do not
+use the legacy `TICKET — Title` form for new or updated issues.
+
+### Roadmap Taxonomy
+
+GitHub milestones are whole-product checkpoints, not subsystem phases or a
+serial implementation plan. Apply roadmap metadata as independent dimensions:
+
+- `Area` identifies the owning parallel workstream.
+- `Roadmap State` records whether work is planned, ready, blocked, or future.
+- `Roadmap Horizon` records planning proximity.
+- the milestone records the product checkpoint that requires the outcome.
+- native `blocked by` relationships record the real technical execution order.
+- parent/sub-issue relationships record initiative ownership.
+
+Do not infer dependency order from milestone numbers, issue numbers, board
+position, Area, or Roadmap Horizon. Follow
+[Product Roadmap Model](docs/architecture/delivery/product-roadmap.md) and keep
+subsystem capability stages separate from product milestones.
+
+Use [parent_capability.md](.github/ISSUE_TEMPLATE/parent_capability.md) for
+capability initiatives and [sub_ticket.md](.github/ISSUE_TEMPLATE/sub_ticket.md)
+for their focused child work. Issue bodies must not repeat metadata already
+owned by GitHub fields or native relationships, including classification,
+dependencies, parent links, milestone, roadmap state, priority, or assignees.
+Parent acceptance criteria describe integrated capability behavior; parent
+validation records the evidence required to prove it. Sub-ticket bodies stay
+limited to goal, scope, and acceptance criteria.
+
 Use Conventional Commits with a truthful narrow type and scope.
 
 Preferred examples:
