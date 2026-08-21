@@ -144,6 +144,35 @@ jobs:
       - store_test_results:
           path: build/ci/test-results
 
+  sonar:
+    machine:
+      image: ubuntu-2404:current
+    steps:
+      - checkout:
+          method: full
+      - linux-dependencies
+      - run:
+          name: Build Sonar compilation database
+          command: |
+            cmake -S . -B build/sonar -G Ninja -DBUILD_TESTING=OFF \
+              -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+            cmake --build build/sonar --parallel
+      - run:
+          name: SonarCloud scan
+          command: |
+            sudo apt-get install -y --no-install-recommends unzip
+            curl -fsSL https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-7.2.0.5079-linux-x64.zip -o /tmp/sonar-scanner.zip
+            unzip -q /tmp/sonar-scanner.zip -d /tmp
+            /tmp/sonar-scanner-7.2.0.5079-linux-x64/bin/sonar-scanner \
+              -Dsonar.token="$SONAR_TOKEN" \
+              -Dsonar.organization=docktail \
+              -Dsonar.projectKey=abdullahbodur_horo-engine \
+              -Dsonar.sourceEncoding=UTF-8 \
+              -Dsonar.cfamily.compile-commands=build/sonar/compile_commands.json \
+              -Dsonar.qualitygate.wait=true -Dsonar.qualitygate.timeout=300
+
   ui-linux:
     machine:
       image: ubuntu-2404:current
@@ -315,6 +344,8 @@ workflows:
       - test-macos:
           requires: [format]
       - test-windows:
+          requires: [format]
+      - sonar:
           requires: [format]
 
   ui-automation:
