@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <imgui.h>
+#include <iterator>
 
 namespace Horo::Editor {
     namespace {
@@ -144,10 +145,11 @@ namespace Horo::Editor {
 
         void EnforceQueueLimit(std::deque<ActiveSnackbar> &snackbars) {
             while (snackbars.size() > kMaxQueuedSnackbars) {
-                const auto oldestTransient = std::ranges::find_if(snackbars, [](const ActiveSnackbar &item) {
+                const auto newest = std::prev(snackbars.end());
+                const auto oldestTransient = std::find_if(snackbars.begin(), newest, [](const ActiveSnackbar &item) {
                     return item.event.durationSeconds > 0.0f;
                 });
-                if (oldestTransient != snackbars.end()) {
+                if (oldestTransient != newest) {
                     snackbars.erase(oldestTransient);
                 } else {
                     snackbars.pop_front();

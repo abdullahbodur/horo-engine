@@ -28,7 +28,7 @@ namespace Horo::Editor {
     };
 }  // namespace Horo::Editor
 
-TEST_CASE("Snackbar host bounds queued notifications while preserving persistent entries", "[unit][editor][gui][design-system]") {
+TEST_CASE("Snackbar host bounds queued notifications while retaining the newest entry", "[unit][editor][gui][design-system]") {
     using namespace Horo::Editor;
 
     EditorDataBus events;
@@ -40,8 +40,8 @@ TEST_CASE("Snackbar host bounds queued notifications while preserving persistent
     events.Publish(NotificationEvent{.id = 65, .message = "transient", .durationSeconds = 5.0f});
     const auto &afterTransient = EditorSnackbarHostTestAccess::Queued(host);
     REQUIRE(afterTransient.size() == 64);
-    REQUIRE(afterTransient.front().event.id == 1);
-    REQUIRE(afterTransient.back().event.id == 64);
+    REQUIRE(afterTransient.front().event.id == 2);
+    REQUIRE(afterTransient.back().event.id == 65);
 
     events.Publish(NotificationEvent{.id = 66, .message = "persistent", .durationSeconds = 0.0f});
     const auto &afterPersistent = EditorSnackbarHostTestAccess::Queued(host);
