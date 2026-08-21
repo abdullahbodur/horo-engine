@@ -108,7 +108,7 @@ TEST_CASE("PublishCookGeneration escapes manifest strings", "[native]") {
     const std::string manifest{std::istreambuf_iterator<char>{manifestStream}, std::istreambuf_iterator<char>{}};
 
     REQUIRE((manifest.find(R"("target":"headless-null")") != std::string::npos));
-    REQUIRE((manifest.find(R"horo("artifact":"quoted\"artifact.cooked")horo") != std::string::npos));
+    REQUIRE((manifest.find("\"artifact\":\"quoted\\\"artifact.cooked\"") != std::string::npos));
     REQUIRE((std::filesystem::exists(published.Value().generationRoot / artifactFile)));
 }
 
