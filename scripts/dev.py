@@ -496,7 +496,7 @@ def execute_subprocess(command: Sequence[str], cwd: Path = REPOSITORY_ROOT, env:
     """Run a subprocess with clear error reporting and interrupt handling."""
     try:
         # Arguments are passed directly as an argv sequence; no command shell parses caller-provided values.
-        result = subprocess.run(command, cwd=cwd, env=env, check=False)  # noqa: S603  # NOSONAR(pythonsecurity:S8705)
+        result = subprocess.run(command, cwd=cwd, env=env, check=False)  # noqa: S603, S8705
         return result.returncode
     except FileNotFoundError as error:
         print(f"error: command not found: {error.filename or command[0]}", file=sys.stderr)
@@ -952,9 +952,9 @@ def _persist_sonar_token(token: str) -> None:
             if new_lines and not new_lines[-1].endswith("\n"):
                 new_lines.append("\n")
             new_lines.append(f"{key}={token}\n")
-        DEFAULT_ENV_FILE.write_text("".join(new_lines), encoding="utf-8")  # NOSONAR(pythonsecurity:S2083,pythonsecurity:S8707)
+        DEFAULT_ENV_FILE.write_text("".join(new_lines), encoding="utf-8")  # NOSONAR(S2083, S8707)
     else:
-        DEFAULT_ENV_FILE.write_text(f"{key}={token}\n", encoding="utf-8")  # NOSONAR(pythonsecurity:S8707)
+        DEFAULT_ENV_FILE.write_text(f"{key}={token}\n", encoding="utf-8")  # NOSONAR(S8707)
 
 
 def _resolve_sonar_token(cli_token: str | None, env_file: Path = DEFAULT_ENV_FILE) -> str | None:
