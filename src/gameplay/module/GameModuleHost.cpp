@@ -14,9 +14,11 @@ namespace Horo::Gameplay {
     namespace {
         template <typename Function>
         [[nodiscard]] Function Resolve(const Platform::DynamicLibrary &library, const std::string_view name) noexcept {
-            // void* to function pointer via dlsym/GetProcAddress requires reinterpret_cast per
-            // [expr.reinterpret.cast]/8.
-            return reinterpret_cast<Function>(library.GetSymbol(name));  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+            void *symbol = library.GetSymbol(name);
+            Function func{};
+            static_assert(sizeof(func) == sizeof(symbol));
+            std::memcpy(&func, &symbol, sizeof(func));
+            return func;
         }
 
         [[nodiscard]] Result<void> ValidateText(const char *value, const std::string_view field) {

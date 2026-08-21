@@ -120,7 +120,6 @@ namespace Horo::Extensions {
             curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
             curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
             curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
-            curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_3);
             curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
             curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L);
             curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
@@ -246,13 +245,21 @@ namespace Horo::Extensions {
 
         [[nodiscard]] Result<fs::path> ExtractPackage(const std::span<const std::byte> archiveBytes,
                                                       const CancellationToken &cancellation) {
-            const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
+            std::random_device rd;
+            std::mt19937_64 gen(rd());
+            std::uniform_int_distribution<std::uint64_t> dist;
+            const auto nonce = dist(gen);
             const fs::path extractionRoot =
-                fs::absolute(fs::temp_directory_path() / std::format("horo-extension-marketplace-{}", nonce)).lexically_normal();
+                fs::absolute(fs::temp_directory_path() / std::format("horo-extension-marketplace-{:016x}", nonce)).lexically_normal();
             std::error_code error;
             fs::create_directories(extractionRoot, error);
             if (error)
                 return Result<fs::path>::Failure(MarketplaceError("Unable to create extension extraction staging."));
+            fs::permissions(extractionRoot, fs::perms::owner_all, fs::perm_options::replace, error);
+            if (error) {
+                fs::remove_all(extractionRoot, error);
+                return Result<fs::path>::Failure(MarketplaceError("Unable to secure extension extraction staging."));
+            }
 
             mz_zip_archive archive{};
             if (!mz_zip_reader_init_mem(&archive, archiveBytes.data(), archiveBytes.size(), 0)) {
