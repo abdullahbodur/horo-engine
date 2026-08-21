@@ -5,6 +5,8 @@ jobs:
     machine:
       image: ubuntu-2404:current
     resource_class: large.gen2
+    retention:
+      caches: 3d
     environment:
       CCACHE_BASEDIR: /home/circleci/project
       CCACHE_COMPRESS: "true"
