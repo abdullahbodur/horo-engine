@@ -1479,6 +1479,7 @@ namespace Horo::Editor {
             command.primitiveMesh = PrimitiveMeshDescriptor::Defaults(*descriptor->meshType);
         } else if (descriptor->sceneObjectType.has_value()) {
             switch (*descriptor->sceneObjectType) {
+                using enum Horo::Runtime::SceneObjectPrimitiveType;
                 case Runtime::SceneObjectPrimitiveType::Empty:
                     break;
                 case Runtime::SceneObjectPrimitiveType::Camera:

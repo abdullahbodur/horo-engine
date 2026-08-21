@@ -25,6 +25,7 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] Ui::UiIcon IconFor(const Render::RenderLightKind kind) noexcept {
+            using enum Horo::Editor::Ui::UiIcon;
             switch (kind) {
                 case Render::RenderLightKind::Directional:
                     return Ui::UiIcon::DirectionalLight;

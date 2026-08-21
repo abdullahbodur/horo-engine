@@ -77,6 +77,26 @@ namespace Horo::Log {
 
         std::uint64_t ProcessId() noexcept;
 
+        [[nodiscard]] bool IsSafeBaseName(const std::string_view name) noexcept {
+            if (name.empty() || name.size() > 64)
+                return false;
+            for (const char c : name) {
+                if (c == '/' || c == '\\' || c == '.' || c == ':')
+                    return false;
+            }
+            return true;
+        }
+
+        [[nodiscard]] bool IsSafeResolvedPath(const std::filesystem::path &path) noexcept {
+            if (path.empty() || path.is_relative())
+                return false;
+            for (const auto &component : path) {
+                if (component == "..")
+                    return false;
+            }
+            return true;
+        }
+
         /** @brief Resolves an absolute log directory and creates it when absent. */
         std::filesystem::path ResolveLogDirectory(const std::filesystem::path &input) {
             std::string value = input.string();
@@ -90,16 +110,14 @@ namespace Horo::Log {
             }
 
             const std::filesystem::path path{value};
-            if (path.empty() || path.is_relative())
+            if (!IsSafeResolvedPath(path))
                 return {};
-            for (const auto &component : path) {
-                if (component == "..")
-                    return {};
-            }
-
             std::error_code error;
-            std::filesystem::create_directories(path, error);
-            return error ? std::filesystem::path{} : path;
+            const std::filesystem::path canonical = std::filesystem::weakly_canonical(path, error);
+            if (error || !IsSafeResolvedPath(canonical))
+                return {};
+            std::filesystem::create_directories(canonical, error);
+            return error ? std::filesystem::path{} : canonical;
         }
 
         /** @brief Formats a UTC timestamp as ISO-8601 with milliseconds. */
@@ -158,6 +176,8 @@ namespace Horo::Log {
 
         /** @brief Atomically replaces one small process-session metadata file. */
         bool WriteMarkerAtomically(const std::filesystem::path &path, const std::string_view content) {
+            if (!IsSafeResolvedPath(path) || !IsSafeResolvedPath(path.parent_path()))
+                return false;
             std::filesystem::path temporary = path;
             temporary += std::format(".tmp-{}", ProcessId());
             {
@@ -566,10 +586,12 @@ namespace Horo::Log {
 
     /** @copydoc Logger::Init(const LoggerConfiguration&) */
     bool Logger::Init(const LoggerConfiguration &configuration) {
+        if (!IsSafeBaseName(configuration.baseName))
+            return false;
         LoggerConfiguration resolved = configuration;
         resolved.logDirectory = ResolveLogDirectory(configuration.logDirectory);
-        if (resolved.logDirectory.empty() || resolved.baseName.empty() || resolved.queueCapacity == 0 || resolved.maxFileBytes == 0 ||
-            resolved.shutdownTimeout <= std::chrono::milliseconds::zero() ||
+        if (resolved.logDirectory.empty() || resolved.baseName.empty() || !IsSafeBaseName(resolved.baseName) ||
+            resolved.queueCapacity == 0 || resolved.maxFileBytes == 0 || resolved.shutdownTimeout <= std::chrono::milliseconds::zero() ||
             resolved.sinkFlushInterval <= std::chrono::milliseconds::zero())
             return false;
 

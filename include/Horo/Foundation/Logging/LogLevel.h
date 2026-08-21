@@ -23,6 +23,7 @@ namespace Horo::Log {
     /** @brief Returns a human-readable label for the level. */
     [[nodiscard]] constexpr const char *ToString(Level level) noexcept {
         switch (level) {
+            using enum Horo::Log::Level;
             case Level::Trace:
                 return "trace";
             case Level::Debug:

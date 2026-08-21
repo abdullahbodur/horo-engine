@@ -256,6 +256,7 @@ namespace Horo::Editor {
 
     /** @copydoc HierarchyModel::Rename */
     HierarchyMutationResult HierarchyModel::Rename(const HierarchyNodeId id, const std::string_view name) {
+        using enum Horo::Editor::HierarchyMutationResult;
         HierarchyNode *node = Find(id);
         if (node == nullptr) {
             return HierarchyMutationResult::NotFound;
@@ -283,6 +284,7 @@ namespace Horo::Editor {
 
     /** @copydoc HierarchyModel::Reparent */
     HierarchyMutationResult HierarchyModel::Reparent(const HierarchyNodeId id, const std::optional<HierarchyNodeId> newParent) noexcept {
+        using enum Horo::Editor::HierarchyMutationResult;
         const HierarchyNode *source = Find(id);
         if (source == nullptr) {
             return HierarchyMutationResult::NotFound;

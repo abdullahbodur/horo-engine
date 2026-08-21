@@ -43,7 +43,7 @@ namespace Horo {
             return CancellationToken(m_state);
         }
 
-        void RequestCancellation() noexcept {
+        void RequestCancellation() const noexcept {
             m_state->requested.store(true);
         }
 

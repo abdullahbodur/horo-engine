@@ -69,6 +69,7 @@ namespace Horo::Editor {
 
         const ILocalizationService &localization = context.localization;
         if (entry.kind == ContentBrowserEntryKind::Asset) {
+            using enum Horo::Editor::Ui::ContextMenuItemTone;
             if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.duplicate").c_str(), "Ctrl+D",
                                     context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.duplicate")) {
                 command = AssetBrowserInteractionSession::Duplicate(entry.absolutePath);

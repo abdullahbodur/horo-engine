@@ -213,6 +213,7 @@ namespace Horo::Render {
                     return false;
             }
             switch (loadOperation) {
+                using enum Horo::Render::AttachmentLoadOperation;
                 case AttachmentLoadOperation::Load:
                 case AttachmentLoadOperation::DontCare:
                     return true;

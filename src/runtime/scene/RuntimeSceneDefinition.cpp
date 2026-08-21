@@ -169,6 +169,7 @@ namespace Horo::Runtime {
         };
         std::vector visits(entities_.size(), Visit::Unvisited);
         std::function<bool(std::size_t)> visit = [&](std::size_t index) {
+            using enum Visit;
             if (visits[index] == Visit::Complete)
                 return true;
             if (visits[index] == Visit::Visiting)

@@ -39,6 +39,7 @@ namespace Horo::Editor {
     }
 
     AssetSceneDropPolicyResult EvaluateAssetSceneDrop(const AssetSceneDragPayload &payload) noexcept {
+        using enum Horo::Editor::AssetSceneDropRejection;
         if (!IsTerminated(payload.assetId) || !IsTerminated(payload.assetType) || !IsTerminated(payload.absolutePath)) {
             return {false, AssetSceneDropRejection::InvalidPayload};
         }

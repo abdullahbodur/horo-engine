@@ -6,6 +6,7 @@
 namespace Horo::Editor {
     /** @copydoc RendererBackendAvailability::IsSelectable */
     bool RendererBackendAvailability::IsSelectable() const noexcept {
+        using enum Horo::Editor::RendererAvailabilityState;
         return state == RendererAvailabilityState::Available || state == RendererAvailabilityState::Selected ||
                state == RendererAvailabilityState::Active;
     }

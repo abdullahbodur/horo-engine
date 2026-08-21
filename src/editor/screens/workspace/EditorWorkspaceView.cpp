@@ -1079,6 +1079,7 @@ namespace Horo::Editor {
 
     void EditorWorkspaceView::DrawMiddleAndBottomDocks(const WorkspaceLayoutGeometry &geo, const EditorWorkspaceViewModel &viewModel,
                                                        EditorWorkspaceViewCommandData &outCommand) {
+        using enum Horo::Editor::WorkspaceDockArea;
         float curX = geo.leftActivityW;
 
         // Left Dock

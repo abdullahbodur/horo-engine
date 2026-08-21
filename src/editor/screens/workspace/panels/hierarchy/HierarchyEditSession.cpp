@@ -17,6 +17,7 @@ namespace Horo::Editor {
     HierarchyNodeType ResolveHierarchyNodeType(const SceneObject &object) noexcept {
         if (object.components.light.has_value()) {
             switch (object.components.light->kind) {
+                using enum Horo::Runtime::LightKind;
                 case Runtime::LightKind::Directional:
                     return HierarchyNodeType::DirectionalLight;
                 case Runtime::LightKind::Point:
