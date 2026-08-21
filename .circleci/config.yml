@@ -1,316 +1,46 @@
 version: 2.1
 
-parameters:
-  run_ui:
-    type: boolean
-    default: false
-  run_macos:
-    type: boolean
-    default: false
-  release_tag:
-    type: string
-    default: ""
-
-commands:
-  linux-dependencies:
+jobs:
+  sonar:
+    machine:
+      image: ubuntu-2404:current
     steps:
+      - checkout:
+          method: full
       - run:
           name: Install Linux dependencies
           command: |
             sudo apt-get update
             sudo apt-get install -y --no-install-recommends \
-              ninja-build ccache xvfb ffmpeg \
+              ninja-build ccache unzip \
               libwayland-dev wayland-protocols libxkbcommon-dev \
               libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
               libxext-dev libxss-dev libxtst-dev libxxf86vm-dev \
               libgl1-mesa-dev libglu1-mesa-dev
-
-  linux-cache:
-    steps:
-      - restore_cache:
-          keys:
-            - horo-fetchcontent-linux-{{ checksum "cmake/Dependencies.cmake" }}
-            - horo-fetchcontent-linux-
-
-  save-linux-cache:
-    steps:
-      - save_cache:
-          key: horo-fetchcontent-linux-{{ checksum "cmake/Dependencies.cmake" }}
-          paths:
-            - .cmake/fetchcontent
-
-  configure-linux:
-    steps:
       - run:
-          name: Configure
+          name: Configure and build
           command: |
-            cmake -S . -B build/ci -G Ninja \
-              -DBUILD_TESTING=ON \
-              -DCMAKE_BUILD_TYPE=Debug \
-              -DCMAKE_C_COMPILER=gcc \
-              -DCMAKE_CXX_COMPILER=g++ \
-              -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-
-jobs:
-  format:
-    machine:
-      image: ubuntu-2404:current
-    steps:
-      - checkout
-      - linux-dependencies
+            cmake -S . -B build/sonar -G Ninja -DBUILD_TESTING=OFF \
+              -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+            cmake --build build/sonar --parallel
       - run:
-          name: Toolchain diagnostics
+          name: SonarCloud scan
           command: |
-            cmake --version
-            gcc --version
-            clang-format --version || true
-      - run:
-          name: Verify changed C++ formatting
-          command: |
-            sudo apt-get install -y --no-install-recommends clang-format
-            git fetch --no-tags origin main
-            files=$(git diff --name-only --diff-filter=ACMR origin/main...HEAD | \
-              grep -E '\\.(c|cc|cpp|cxx|h|hh|hpp|mm|m)$' || true)
-            if [ -n "$files" ]; then
-              clang-format --dry-run --Werror $files
-            fi
-      - run:
-          name: Python runner tests
-          command: |
-            if [ -d tests/python ]; then
-              sudo apt-get install -y --no-install-recommends python3-pip
-              python3 -m pip install --break-system-packages pytest
-              python3 -m pytest tests/python/
-            else
-              echo "No Python test suite on this revision."
-            fi
-
-  test-linux:
-    machine:
-      image: ubuntu-2404:current
-    resource_class: medium
-    steps:
-      - checkout
-      - linux-dependencies
-      - linux-cache
-      - configure-linux
-      - run: cmake --build build/ci --parallel
-      - run:
-          name: Run tests
-          command: |
-            mkdir -p build/ci/test-results
-            ctest --test-dir build/ci --output-on-failure \
-              --output-junit build/ci/test-results/ctest.xml
-      - save-linux-cache
-      - store_test_results:
-          path: build/ci/test-results
-      - store_artifacts:
-          path: build/ci/test-results
-
-  test-macos:
-    macos:
-      xcode: 26.6.0
-    resource_class: m4pro.medium
-    steps:
-      - checkout
-      - run: brew install ninja ccache
-      - run:
-          name: Configure and test
-          command: |
-            export FETCHCONTENT_BASE_DIR="$HOME/.cmake/fetchcontent"
-            mkdir -p "$FETCHCONTENT_BASE_DIR" build/ci/test-results
-            cmake -S . -B build/ci -G Ninja -DBUILD_TESTING=ON \
-              -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang \
-              -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-            cmake --build build/ci --parallel
-            ctest --test-dir build/ci --output-on-failure \
-              --output-junit build/ci/test-results/ctest.xml
-      - store_test_results:
-          path: build/ci/test-results
-
-  test-windows:
-    machine:
-      image: windows-server-2022-gui:current
-      shell: powershell.exe -ExecutionPolicy Bypass
-    resource_class: windows.medium
-    steps:
-      - checkout
-      - run:
-          name: Configure and test
-          command: |
-            choco install cmake ninja -y --no-progress
-            $env:Path += ';C:\Program Files\CMake\bin'
-            cmake -S . -B build/ci -G "Visual Studio 17 2022" -A x64 -DBUILD_TESTING=ON
-            cmake --build build/ci --config Debug --parallel
-            New-Item -ItemType Directory -Force build/ci/test-results | Out-Null
-            ctest --test-dir build/ci -C Debug --output-on-failure --output-junit build/ci/test-results/ctest.xml
-      - store_test_results:
-          path: build/ci/test-results
-
-
-  ui-linux:
-    machine:
-      image: ubuntu-2404:current
-    resource_class: medium
-    steps:
-      - checkout
-      - linux-dependencies
-      - run:
-          name: Build and run Linux UI suites
-          command: |
-            cmake --preset debug -DHORO_ENABLE_IMGUI_UI_TESTS=ON
-            cmake --build --preset debug --target HoroEditorUiTest --parallel
-            mkdir -p ui_test_output
-            for suite in launcher-basic properties-workflows mcp-project modals-mcp properties-close; do
-              HORO_UI_TEST_SUITE="$suite" HORO_UI_TEST_CAPTURE=1 HORO_UI_TEST_VIDEO=1 \
-              HORO_UI_TEST_RECORDING=1 HORO_UI_TEST_DELAY_MS=0 \
-              HORO_UI_TEST_OUTPUT_DIR="$PWD/ui_test_output/$suite" \
-              HORO_UI_TEST_FFMPEG_PATH=/usr/bin/ffmpeg LIBGL_ALWAYS_SOFTWARE=1 \
-              GALLIUM_DRIVER=llvmpipe HORO_GLFW_SAMPLES=0 \
-              xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" \
-              build/debug/bin/HoroEditorUiTest --run-ui-tests
-            done
-      - store_artifacts:
-          path: ui_test_output
-
-  ui-macos:
-    macos:
-      xcode: 26.6.0
-    resource_class: m4pro.medium
-    steps:
-      - checkout
-      - run:
-          name: Build and run macOS UI suites
-          command: |
-            brew install ffmpeg ninja
-            cmake --preset debug -DHORO_ENABLE_IMGUI_UI_TESTS=ON
-            cmake --build --preset debug --target HoroEditorUiTest --parallel
-            mkdir -p ui_test_output
-            for suite in launcher-basic properties-workflows mcp-project modals-mcp properties-close; do
-              HORO_UI_TEST_SUITE="$suite" HORO_UI_TEST_CAPTURE=1 HORO_UI_TEST_VIDEO=1 \
-              HORO_UI_TEST_RECORDING=1 HORO_UI_TEST_OUTPUT_DIR="$PWD/ui_test_output/$suite" \
-              HORO_UI_TEST_FFMPEG_PATH="$(which ffmpeg)" HORO_GLFW_SAMPLES=0 \
-              build/debug/bin/HoroEditorUiTest --run-ui-tests
-            done
-      - store_artifacts:
-          path: ui_test_output
-
-  ui-windows:
-    machine:
-      image: windows-server-2022-gui:current
-      shell: powershell.exe -ExecutionPolicy Bypass
-    resource_class: windows.medium
-    steps:
-      - checkout
-      - run: choco install ffmpeg -y --no-progress
-      - run:
-          name: Build and run Windows UI suites
-          command: |
-            cmake --preset debug-msvc -DHORO_ENABLE_IMGUI_UI_TESTS=ON
-            cmake --build build/debug-msvc --config Debug --target HoroEditorUiTest --parallel
-            New-Item -ItemType Directory -Force ui_test_output | Out-Null
-            $ffmpeg = (Get-Command ffmpeg).Source
-            $suites = @('launcher-basic','properties-workflows','mcp-project','modals-mcp','properties-close')
-            foreach ($suite in $suites) {
-              $env:HORO_UI_TEST_SUITE = $suite
-              $env:HORO_UI_TEST_CAPTURE = '1'; $env:HORO_UI_TEST_VIDEO = '1'
-              $env:HORO_UI_TEST_RECORDING = '1'; $env:HORO_UI_TEST_DELAY_MS = '0'
-              $env:HORO_UI_TEST_OUTPUT_DIR = "$PWD\ui_test_output\$suite"
-              $env:HORO_UI_TEST_FFMPEG_PATH = $ffmpeg; $env:HORO_GLFW_SAMPLES = '0'
-              New-Item -ItemType Directory -Force $env:HORO_UI_TEST_OUTPUT_DIR | Out-Null
-              .\build\debug-msvc\bin\Debug\HoroEditorUiTest.exe --run-ui-tests
-              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            }
-      - store_artifacts:
-          path: ui_test_output
-
-  release-linux:
-    parameters:
-      release_tag:
-        type: string
-        default: ""
-    environment:
-      RELEASE_TAG: << parameters.release_tag >>
-    machine:
-      image: ubuntu-2404:current
-    steps:
-      - checkout
-      - linux-dependencies
-      - run:
-          name: Build and package Linux release
-          command: |
-            sudo apt-get install -y --no-install-recommends patchelf
-            cmake --preset release
-            cmake --build --preset release --target HoroEditor horopak --parallel
-            python3 scripts/generate-sbom.py --output build/release/sbom.spdx.json --with-vulkan --with-shader-cooker --validate
-            version="${RELEASE_TAG#v}"
-            scripts/package-linux.sh --build-dir build/release --output-name HoroEngine-linux-x86_64 --version "$version" --install-script --desktop-file
-            tar -xzf HoroEngine-linux-x86_64.tar.gz
-            gh release upload "$RELEASE_TAG" HoroEngine-linux-x86_64.tar.gz build/release/sbom.spdx.json --clobber
-      - store_artifacts:
-          path: HoroEngine-linux-x86_64.tar.gz
-
-  release-macos:
-    parameters:
-      release_tag:
-        type: string
-        default: ""
-    environment:
-      RELEASE_TAG: << parameters.release_tag >>
-    macos:
-      xcode: 26.6.0
-    steps:
-      - checkout
-      - run:
-          name: Build and package macOS release
-          command: |
-            brew install ninja
-            cmake --preset release
-            cmake --build --preset release --target HoroEditor --parallel
-            python3 scripts/generate-sbom.py --output build/release/sbom.spdx.json --with-vulkan --with-shader-cooker --validate
-            mkdir -p HoroEngine-macos-arm64
-            cp build/release/bin/HoroEditor HoroEngine-macos-arm64/
-            cp -r build/release/sdk HoroEngine-macos-arm64/ 2>/dev/null || true
-            cp build/release/sbom.spdx.json HoroEngine-macos-arm64/
-            tar -czf HoroEngine-macos-arm64.tar.gz HoroEngine-macos-arm64
-            gh release upload "$RELEASE_TAG" HoroEngine-macos-arm64.tar.gz --clobber
-      - store_artifacts:
-          path: HoroEngine-macos-arm64.tar.gz
-
-  release-windows:
-    parameters:
-      release_tag:
-        type: string
-        default: ""
-    environment:
-      RELEASE_TAG: << parameters.release_tag >>
-    machine:
-      image: windows-server-2022-gui:current
-      shell: powershell.exe -ExecutionPolicy Bypass
-    resource_class: windows.medium
-    steps:
-      - checkout
-      - run:
-          name: Build and package Windows release
-          command: |
-            cmake --preset release-msvc
-            cmake --build build/release-msvc --config Release --target HoroEditor --parallel
-            python3 scripts/generate-sbom.py --output build/release-msvc/sbom.spdx.json --with-vulkan --with-shader-cooker --validate
-            $dist = 'HoroEngine-windows-x64'
-            New-Item -ItemType Directory -Force $dist | Out-Null
-            Copy-Item 'build\release-msvc\bin\Release\HoroEditor.exe' $dist
-            if (Test-Path 'build\release-msvc\sdk') { Copy-Item -Recurse 'build\release-msvc\sdk' "$dist\sdk" }
-            Copy-Item 'build\release-msvc\sbom.spdx.json' $dist
-            Compress-Archive -Path "$dist\*" -DestinationPath "${dist}.zip"
-            gh release upload $env:RELEASE_TAG HoroEngine-windows-x64.zip --clobber
-      - store_artifacts:
-          path: HoroEngine-windows-x64.zip
+            curl -fsSL https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-7.2.0.5079-linux-x64.zip -o /tmp/sonar-scanner.zip
+            unzip -q /tmp/sonar-scanner.zip -d /tmp
+            /tmp/sonar-scanner-7.2.0.5079-linux-x64/bin/sonar-scanner \
+              -Dsonar.token="$SONAR_TOKEN" \
+              -Dsonar.organization=docktail \
+              -Dsonar.projectKey=abdullahbodur_horo-engine \
+              -Dsonar.sourceEncoding=UTF-8 \
+              -Dsonar.cfamily.compile-commands=build/sonar/compile_commands.json \
+              -Dsonar.qualitygate.wait=true \
+              -Dsonar.qualitygate.timeout=300
 
 workflows:
-  validation:
+  sonar:
     jobs:
-      - format
-      - test-linux:
-          requires: [format]
+      - sonar:
+          context: horo-ci-quality
