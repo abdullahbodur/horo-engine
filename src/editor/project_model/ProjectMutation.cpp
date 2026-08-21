@@ -15,20 +15,21 @@ namespace Horo::Editor {
                                          .userActionable = true};
 
         std::string OwnerName(const ProjectMutationOwner owner) {
+            using enum ProjectMutationOwner;
             switch (owner) {
-                case ProjectMutationOwner::Migration:
+                case Migration:
                     return "migration";
-                case ProjectMutationOwner::Save:
+                case Save:
                     return "save";
-                case ProjectMutationOwner::Autosave:
+                case Autosave:
                     return "autosave";
-                case ProjectMutationOwner::Package:
+                case Package:
                     return "package";
-                case ProjectMutationOwner::Asset:
+                case Asset:
                     return "asset";
-                case ProjectMutationOwner::Cli:
+                case Cli:
                     return "cli";
-                case ProjectMutationOwner::Mcp:
+                case Mcp:
                     return "mcp";
             }
             return "unknown";
