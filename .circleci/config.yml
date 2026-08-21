@@ -15,16 +15,21 @@ jobs:
           method: full
       - restore_cache:
           keys:
-            - v1-fetchcontent-{{ arch }}-{{ checksum "CMakeLists.txt" }}
-            - v1-fetchcontent-{{ arch }}-
+            - v2-fetchcontent-{{ arch }}-{{ checksum "CMakeLists.txt" }}-{{ checksum "cmake/Dependencies.cmake" }}
+            - v2-fetchcontent-{{ arch }}-{{ checksum "CMakeLists.txt" }}-
+            - v2-fetchcontent-{{ arch }}-
       - restore_cache:
           keys:
+            - v2-ccache-{{ arch }}-{{ .Branch }}-{{ .Revision }}
+            - v2-ccache-{{ arch }}-{{ .Branch }}-
+            - v2-ccache-{{ arch }}-
             - v1-ccache-{{ arch }}-{{ .Branch }}
-            - v1-ccache-{{ arch }}-
       - restore_cache:
           keys:
+            - v2-sonar-cfamily-{{ arch }}-{{ .Branch }}-{{ .Revision }}
+            - v2-sonar-cfamily-{{ arch }}-{{ .Branch }}-
+            - v2-sonar-cfamily-{{ arch }}-
             - v1-sonar-cfamily-{{ arch }}-{{ .Branch }}
-            - v1-sonar-cfamily-{{ arch }}-
       - run:
           name: Install Linux dependencies
           command: |
@@ -52,11 +57,11 @@ jobs:
             cmake --build build/sonar --parallel
             ccache --show-stats
       - save_cache:
-          key: v1-fetchcontent-{{ arch }}-{{ checksum "CMakeLists.txt" }}
+          key: v2-fetchcontent-{{ arch }}-{{ checksum "CMakeLists.txt" }}-{{ checksum "cmake/Dependencies.cmake" }}
           paths:
             - .cmake/fetchcontent
       - save_cache:
-          key: v1-ccache-{{ arch }}-{{ .Branch }}
+          key: v2-ccache-{{ arch }}-{{ .Branch }}-{{ .Revision }}
           paths:
             - /home/circleci/.cache/ccache
       - run:
@@ -75,7 +80,7 @@ jobs:
               -Dsonar.qualitygate.wait=true \
               -Dsonar.qualitygate.timeout=300
       - save_cache:
-          key: v1-sonar-cfamily-{{ arch }}-{{ .Branch }}
+          key: v2-sonar-cfamily-{{ arch }}-{{ .Branch }}-{{ .Revision }}
           paths:
             - .sonar/cfamily-cache
 
