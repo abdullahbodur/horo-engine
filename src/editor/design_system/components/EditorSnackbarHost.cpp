@@ -28,6 +28,7 @@ namespace Horo::Editor {
         constexpr float kProgressBottom = 6.0f;
         constexpr float kProgressHeight = 2.0f;
         constexpr std::size_t kMaxVisibleSnackbars = 3;
+        constexpr std::size_t kMaxQueuedSnackbars = 64;
 
         enum class IconKind {
             Cross,
@@ -137,6 +138,19 @@ namespace Horo::Editor {
                     snackbars.erase(snackbars.begin() + static_cast<std::ptrdiff_t>(i));
                 } else {
                     ++i;
+                }
+            }
+        }
+
+        void EnforceQueueLimit(std::deque<ActiveSnackbar> &snackbars) {
+            while (snackbars.size() > kMaxQueuedSnackbars) {
+                const auto oldestTransient = std::ranges::find_if(snackbars, [](const ActiveSnackbar &item) {
+                    return item.event.durationSeconds > 0.0f;
+                });
+                if (oldestTransient != snackbars.end()) {
+                    snackbars.erase(oldestTransient);
+                } else {
+                    snackbars.pop_front();
                 }
             }
         }
@@ -334,7 +348,7 @@ namespace Horo::Editor {
                     it->event.actions = event.actions;
                 }
                 it->event.severity = event.severity;
-                it->event.durationSeconds = event.durationSeconds > 0.0f ? event.durationSeconds : 8.0f;
+                it->event.durationSeconds = event.durationSeconds >= 0.0f ? event.durationSeconds : 8.0f;
                 it->repeatCount++;
                 it->elapsedSeconds = 0.0f;
                 return;
@@ -342,11 +356,12 @@ namespace Horo::Editor {
         }
 
         NotificationEvent copy = event;
-        if (copy.durationSeconds <= 0.0f) {
+        if (copy.durationSeconds < 0.0f) {
             copy.durationSeconds = 8.0f;
         }
 
         activeSnackbars_.push_back(ActiveSnackbar{.event = std::move(copy), .elapsedSeconds = 0.0f, .repeatCount = 1});
+        EnforceQueueLimit(activeSnackbars_);
     }
 
     /** @copydoc EditorSnackbarHost::DismissAt */
