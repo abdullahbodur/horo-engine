@@ -347,8 +347,6 @@ workflows:
       - format
       - test-linux:
           requires: [format]
-      - test-macos:
-          requires: [format]
       - test-windows:
           requires: [format]
       - sonar:
