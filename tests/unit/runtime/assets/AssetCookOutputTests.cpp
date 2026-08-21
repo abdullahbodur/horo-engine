@@ -92,24 +92,22 @@ TEST_CASE("PublishCookGeneration creates current.json and manifest.json", "[nati
     REQUIRE((std::filesystem::exists(tmp.path / "current.json")));
 }
 
-TEST_CASE("PublishCookGeneration escapes manifest strings", "[native]") {
+// `"` is invalid in Windows/NTFS filenames. IsSafeArtifactFile must reject such
+// names explicitly (MalformedArtifact) on every platform rather than letting
+// them fail late with an opaque filesystem error on Windows.
+TEST_CASE("PublishCookGeneration rejects Windows-invalid artifact filenames", "[native]") {
     TempDir tmp;
     const auto target = Target("headless-null");
     const auto id = Id("00000000-0000-0000-0000-000000000003");
     const auto payload = MakePayload(16, 0x7F);
-    const std::string artifactFile = "quoted\"artifact.cooked";
     const std::vector<AssetCookManifestEntry> entries = {
-        {.assetId = id, .assetType = Type("core.mesh"), .artifactFile = artifactFile, .artifactHash = DigestOf(payload)}};
+        {.assetId = id, .assetType = Type("core.mesh"), .artifactFile = "quoted\"artifact.cooked", .artifactHash = DigestOf(payload)}};
     const std::vector<std::vector<std::uint8_t>> payloads = {payload};
 
     const auto published = PublishCookGeneration(tmp.path, target, entries, payloads);
-    REQUIRE((published.HasValue()));
-    std::ifstream manifestStream(published.Value().generationRoot / "manifest.json");
-    const std::string manifest{std::istreambuf_iterator<char>{manifestStream}, std::istreambuf_iterator<char>{}};
-
-    REQUIRE((manifest.find(R"("target":"headless-null")") != std::string::npos));
-    REQUIRE((manifest.find("\"artifact\":\"quoted\\\"artifact.cooked\"") != std::string::npos));
-    REQUIRE((std::filesystem::exists(published.Value().generationRoot / artifactFile)));
+    REQUIRE((published.HasError()));
+    // current.json is written last: a rejected generation must leave no authority behind.
+    REQUIRE((!std::filesystem::exists(tmp.path / "current.json")));
 }
 
 TEST_CASE("PublishCookGeneration rejects duplicate asset IDs", "[native]") {

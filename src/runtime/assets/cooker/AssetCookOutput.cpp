@@ -103,11 +103,18 @@ namespace Horo::Assets {
             return json;
         }
 
+        // Reject filenames invalid on Windows/NTFS (" < > | : ? * and control
+        // characters) in addition to path separators, so artifact names stay
+        // portable across all supported platforms instead of failing late with
+        // an opaque filesystem error on Windows.
         [[nodiscard]] bool IsSafeArtifactFile(const std::string_view file) noexcept {
             if (file.empty() || file.size() > 256)
                 return false;
             for (const char c : file) {
-                if (c == '/' || c == '\\' || c == ':')
+                const auto character = static_cast<unsigned char>(c);
+                if (character == '/' || character == '\\' || character == ':')
+                    return false;
+                if (character < 0x20 || character == '"' || character == '<' || character == '>' || character == '|' || character == '?')
                     return false;
             }
             if (file.find("..") != std::string_view::npos)
