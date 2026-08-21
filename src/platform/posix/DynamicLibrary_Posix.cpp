@@ -40,7 +40,13 @@ namespace Horo::Platform {
         if (!IsSafeLibraryPath(path))
             return Result<std::unique_ptr<DynamicLibrary>>::Failure(
                 MakeError(PlatformErrors::InvalidFormat, "Library path is invalid or contains traversal"));
+        if (path.find("..") != std::string_view::npos || path.empty())
+            return Result<std::unique_ptr<DynamicLibrary>>::Failure(
+                MakeError(PlatformErrors::InvalidFormat, "Library path contains traversal"));
         std::string libPath{path};
+        if (libPath.find("..") != std::string::npos || libPath.empty())
+            return Result<std::unique_ptr<DynamicLibrary>>::Failure(
+                MakeError(PlatformErrors::InvalidFormat, "Library path contains traversal"));
         void *handle = dlopen(libPath.c_str(), RTLD_NOW | RTLD_LOCAL);
         if (!handle) {
             const char *nativeError = dlerror();

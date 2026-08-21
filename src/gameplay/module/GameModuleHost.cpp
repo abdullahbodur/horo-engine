@@ -174,6 +174,8 @@ namespace Horo::Gameplay {
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(
                 ShadowCopyError("source and destination paths must be absolute and without traversal."));
 
+        if (shadowRoot.string().find("..") != std::string::npos || shadowRoot.empty() || !shadowRoot.is_absolute())
+            return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError("shadow root contains traversal"));
         std::error_code filesystemError;
         std::filesystem::create_directories(shadowRoot, filesystemError);
         if (filesystemError)
@@ -190,6 +192,8 @@ namespace Horo::Gameplay {
         } catch (...) {
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError("shadow path validation failed"));
         }
+        if (shadowPath.string().find("..") != std::string::npos || shadowPath.empty())
+            return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError("shadow path contains traversal"));
         if (!std::filesystem::copy_file(libraryPath, shadowPath, std::filesystem::copy_options::none, filesystemError)) {
             const std::string message = filesystemError ? filesystemError.message() : "candidate could not be copied.";
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError(message));
@@ -197,6 +201,8 @@ namespace Horo::Gameplay {
 
         Result<std::unique_ptr<LoadedGameModule>> loaded = Load(shadowPath, expectedBuildFingerprint);
         if (loaded.HasError()) {
+            if (shadowPath.string().find("..") != std::string::npos)
+                return loaded;
             std::error_code ignored;
             std::filesystem::remove(shadowPath, ignored);
             return loaded;
