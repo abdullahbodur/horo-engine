@@ -4,6 +4,9 @@ parameters:
   run_ui:
     type: boolean
     default: false
+  run_macos:
+    type: boolean
+    default: false
   release_tag:
     type: string
     default: ""
@@ -137,6 +140,8 @@ jobs:
       - run:
           name: Configure and test
           command: |
+            choco install cmake ninja -y --no-progress
+            $env:Path += ';C:\Program Files\CMake\bin'
             cmake -S . -B build/ci -G "Visual Studio 17 2022" -A x64 -DBUILD_TESTING=ON
             cmake --build build/ci --config Debug --parallel
             New-Item -ItemType Directory -Force build/ci/test-results | Out-Null
@@ -349,6 +354,11 @@ workflows:
       - sonar:
           requires: [format]
           context: horo-ci-quality
+
+  macos-validation:
+    when: << pipeline.parameters.run_macos >>
+    jobs:
+      - test-macos
 
   ui-automation:
     when: << pipeline.parameters.run_ui >>
