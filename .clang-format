@@ -1,5 +1,4 @@
 BasedOnStyle: Microsoft
-Language: Cpp
 Standard: Latest
 
 # Indentation
@@ -50,7 +49,7 @@ AllowAllParametersOfDeclarationOnNextLine: false
 BinPackArguments: true
 BinPackParameters: true
 
-BreakAfterReturnType: None
+AlwaysBreakAfterReturnType: None
 PenaltyReturnTypeOnItsOwnLine: 1000000
 PenaltyBreakBeforeFirstCallParameter: 1000000
 
@@ -85,6 +84,7 @@ SpacesInAngles: Never
 SpacesInParentheses: false
 SpacesInSquareBrackets: false
 Cpp11BracedListStyle: true
+SpaceBeforeCpp11BracedList: false
 
 # Empty lines
 MaxEmptyLinesToKeep: 1
