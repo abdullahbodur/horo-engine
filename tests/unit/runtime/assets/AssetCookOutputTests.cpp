@@ -123,8 +123,10 @@ TEST_CASE("PublishCookGeneration rejects reserved and trailing-punctuation artif
     const auto payload = MakePayload(16, 0x7F);
     // Reserved DOS device names (case-insensitive, with or without extension),
     // trailing dots/spaces that Windows silently strips, and ".." segments.
-    const std::string_view rejectedNames[] = {"CON.cooked",       "con.cooked",       "Con", "NUL.cooked",
-                                              "com1.cooked",      "LPT4.cooked",      "aux", "artifact.cooked.",
+    const std::string_view rejectedNames[] = {"CON.cooked",       "con.cooked",       "Con",
+                                              "NUL.cooked",       "com0.cooked",      "com1.cooked",
+                                              "LPT0.cooked",      "LPT4.cooked",      "aux",
+                                              "clock$.cooked",    "conin$.txt",       "artifact.cooked.",
                                               "artifact.cooked ", "ar..tifact.cooked"};
     for (const auto name : rejectedNames) {
         const auto id = Id("00000000-0000-0000-0000-000000000005");
