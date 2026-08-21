@@ -421,8 +421,8 @@ namespace Horo::Extensions {
                 },
             .contributions =
                 {
-                    {.type = "asset.importer", .id = "horo.asset-importer.obj-mesh", .module = "horo.builtin.assets.importer.obj"},
-                    {.type = "asset.importer", .id = "horo.asset-importer.fbx-mesh", .module = "horo.builtin.assets.importer.fbx"},
+                    {.type = "asset.importer", .id = "horo.asset-importer.obj-mesh", .owningModule = "horo.builtin.assets.importer.obj"},
+                    {.type = "asset.importer", .id = "horo.asset-importer.fbx-mesh", .owningModule = "horo.builtin.assets.importer.fbx"},
                 },
             .enabled = enabled_.contains("horo.builtin.assets"),
             .locallyTrusted = true,

@@ -16,9 +16,9 @@ namespace Horo::Extensions {
 
     /** @brief One manifest-declared contribution bound to a module in the same package. */
     struct ExtensionContributionManifest {
-        std::string type;   /**< Typed extension point, for example `asset.importer`. */
-        std::string id;     /**< Stable globally unique contribution identity. */
-        std::string module; /**< Owning module identity from this manifest. */
+        std::string type;         /**< Typed extension point, for example `asset.importer`. */
+        std::string id;           /**< Stable globally unique contribution identity. */
+        std::string owningModule; /**< Owning module identity from this manifest. */
     };
 
     /** @brief Represents a parsed extension.json manifest. */

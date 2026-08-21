@@ -159,12 +159,12 @@ namespace Horo::Extensions {
                     ExtensionContributionManifest parsed{
                         .type = contribution["type"].get<std::string>(),
                         .id = contribution["id"].get<std::string>(),
-                        .module = contribution["module"].get<std::string>(),
+                        .owningModule = contribution["module"].get<std::string>(),
                     };
                     if (parsed.type.empty() || parsed.id.empty() ||
                         !std::ranges::any_of(manifest.modules,
                                              [&parsed](const ExtensionModuleManifest &manifestModule) {
-                        return manifestModule.id == parsed.module;
+                        return manifestModule.id == parsed.owningModule;
                     }) ||
                         std::ranges::any_of(manifest.contributions, [&parsed](const ExtensionContributionManifest &existing) {
                         return existing.id == parsed.id;

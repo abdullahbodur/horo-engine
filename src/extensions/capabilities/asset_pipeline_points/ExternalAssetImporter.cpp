@@ -335,7 +335,7 @@ namespace Horo::Extensions {
             if (const bool declared = std::ranges::any_of(session->manifest->contributions,
                                                           [&contribution, session](const ExtensionContributionManifest &candidate) {
                 return candidate.type == "asset.importer" && candidate.id == contribution.contributionId &&
-                       candidate.module == session->extensionModule->id;
+                       candidate.owningModule == session->extensionModule->id;
             });
                 !declared) {
                 throw std::invalid_argument{"undeclared contribution"};
