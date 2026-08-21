@@ -832,7 +832,7 @@ namespace Horo::Editor {
     Result<ProjectSceneSaveResult> SaveProjectScene(const std::filesystem::path &absoluteProjectRoot,
                                                     const std::filesystem::path &absoluteScenePath, const SceneDocumentSnapshot &snapshot,
                                                     const SceneFileFingerprint &expectedFingerprint, const bool overwriteConflict,
-                                                    ProjectMutationCoordinator &mutations, DurableFileSystem &files) {
+                                                    const ProjectMutationCoordinator &mutations, DurableFileSystem &files) {
         if (!absoluteProjectRoot.is_absolute() || !absoluteScenePath.is_absolute() ||
             !IsResolvedContainedBy(absoluteProjectRoot, absoluteScenePath)) {
             return Result<ProjectSceneSaveResult>::Failure(
@@ -894,7 +894,8 @@ namespace Horo::Editor {
     Result<ProjectSceneDestinationSaveResult> SaveProjectSceneToPath(const std::filesystem::path &absoluteProjectRoot,
                                                                      const std::filesystem::path &absoluteScenePath,
                                                                      const SceneDocumentSnapshot &snapshot, const bool overwriteExisting,
-                                                                     ProjectMutationCoordinator &mutations, DurableFileSystem &files) {
+                                                                     const ProjectMutationCoordinator &mutations,
+                                                                     DurableFileSystem &files) {
         if (!absoluteProjectRoot.is_absolute() || !absoluteScenePath.is_absolute() ||
             !IsResolvedContainedBy(absoluteProjectRoot, absoluteScenePath) || absoluteScenePath.extension() != ".horo") {
             return Result<ProjectSceneDestinationSaveResult>::Failure(
@@ -926,7 +927,7 @@ namespace Horo::Editor {
     /** @copydoc WriteProjectSceneRecovery */
     Result<void> WriteProjectSceneRecovery(const std::filesystem::path &absoluteProjectRoot, const std::filesystem::path &absoluteScenePath,
                                            const SceneDocumentSnapshot &snapshot, const DocumentRevision savedRevision,
-                                           const DocumentStateId savedState, ProjectMutationCoordinator &mutations,
+                                           const DocumentStateId savedState, const ProjectMutationCoordinator &mutations,
                                            DurableFileSystem &files) {
         if (!absoluteProjectRoot.is_absolute() || !absoluteScenePath.is_absolute() ||
             !IsContainedBy(absoluteProjectRoot, absoluteScenePath) || !savedState.IsValid()) {
@@ -1044,7 +1045,7 @@ namespace Horo::Editor {
     }
 
     /** @copydoc DiscardProjectSceneRecovery */
-    Result<void> DiscardProjectSceneRecovery(const std::filesystem::path &absoluteProjectRoot, ProjectMutationCoordinator &mutations,
+    Result<void> DiscardProjectSceneRecovery(const std::filesystem::path &absoluteProjectRoot, const ProjectMutationCoordinator &mutations,
                                              DurableFileSystem &files) {
         if (!absoluteProjectRoot.is_absolute()) {
             return Result<void>::Failure(PersistenceError(ScenePathInvalid, "Recovery cleanup requires an absolute project root."));

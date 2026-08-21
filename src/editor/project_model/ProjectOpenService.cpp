@@ -80,7 +80,7 @@ namespace Horo::Editor {
             return input ? contents : std::string{};
         }
 
-        [[nodiscard]] Result<void> UpdatePatchMarker(DurableFileSystem &files, ProjectMutationCoordinator &mutations,
+        [[nodiscard]] Result<void> UpdatePatchMarker(DurableFileSystem &files, const ProjectMutationCoordinator &mutations,
                                                      const std::filesystem::path &projectRoot, const ReleaseCompatibilityDecision &target,
                                                      const ProjectOpenOperationId operation) {
             if (auto lease =
