@@ -3,6 +3,10 @@
 This repository uses `.circleci/config.yml` for the migrated validation and UI
 workflows from `develop`.
 
+Windows and macOS build/test jobs run from `.github/workflows/platform.yml`,
+because those native runners are not part of the project's CircleCI free
+allocation. CircleCI keeps the Linux path as the primary migration target.
+
 1. Connect `abdullahbodur/horo-engine` in CircleCI using the GitHub integration.
 2. Configure a scheduled trigger every six hours with pipeline parameter
    `run_ui: true` to run the UI workflow.

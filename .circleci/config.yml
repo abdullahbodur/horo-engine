@@ -347,8 +347,6 @@ workflows:
       - format
       - test-linux:
           requires: [format]
-      - test-windows:
-          requires: [format]
       - sonar:
           requires: [format]
           context: horo-ci-quality
@@ -362,8 +360,6 @@ workflows:
     when: << pipeline.parameters.run_ui >>
     jobs:
       - ui-linux
-      - ui-macos
-      - ui-windows
 
   release:
     when:
