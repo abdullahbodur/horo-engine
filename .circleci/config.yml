@@ -111,7 +111,7 @@ jobs:
   test-macos:
     macos:
       xcode: 26.6.0
-    resource_class: m2.medium
+    resource_class: m4pro.medium
     steps:
       - checkout
       - run: brew install ninja ccache
@@ -207,7 +207,7 @@ jobs:
   ui-macos:
     macos:
       xcode: 26.6.0
-    resource_class: m2.medium
+    resource_class: m4pro.medium
     steps:
       - checkout
       - run:
