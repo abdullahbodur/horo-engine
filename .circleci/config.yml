@@ -78,7 +78,7 @@ jobs:
             if [ -d tests/python ]; then
               sudo apt-get install -y --no-install-recommends python3-pip
               python3 -m pip install --break-system-packages pytest
-              pytest tests/python/
+              python3 -m pytest tests/python/
             else
               echo "No Python test suite on this revision."
             fi
