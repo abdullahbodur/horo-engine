@@ -41,6 +41,7 @@ jobs:
           name: Configure and build
           command: |
             cmake -S . -B build/sonar -G Ninja -DBUILD_TESTING=OFF \
+              -DFETCHCONTENT_BASE_DIR="$FETCHCONTENT_BASE_DIR" \
               -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
               -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
