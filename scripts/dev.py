@@ -687,6 +687,22 @@ def _apply_format_chunk(clang_format_bin: str, chunk: list[str], check: bool) ->
     return execute_subprocess([clang_format_bin, "-i", *chunk])
 
 
+def _partially_staged_files(paths: Sequence[Path]) -> list[Path]:
+    """Return staged targets whose working-tree contents differ from the index."""
+    relative_paths = [os.path.relpath(path, REPOSITORY_ROOT) for path in paths]
+    proc = subprocess.run(
+        ["git", "diff", "--name-only", "--diff-filter=ACMR", "--", *relative_paths],
+        cwd=REPOSITORY_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        detail = proc.stderr.strip() or "git diff failed"
+        raise RuntimeError(f"Could not inspect unstaged changes: {detail}")
+    return [REPOSITORY_ROOT / line for line in proc.stdout.splitlines() if line]
+
+
 def run_format(files: Sequence[str] | None = None, staged: bool = False, check: bool = False) -> int:
     """Format C++ source files with clang-format, with support for staged commits and dry-run check."""
     clang_format_bin = _find_clang_format()
@@ -698,6 +714,21 @@ def run_format(files: Sequence[str] | None = None, staged: bool = False, check: 
     if not target_files:
         print("No matching C++ files to format.")
         return 0
+
+    if staged and not check:
+        try:
+            partially_staged = _partially_staged_files(target_files)
+        except RuntimeError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
+        if partially_staged:
+            print(
+                "error: refusing to format partially staged files; stage or stash their unstaged changes first:",
+                file=sys.stderr,
+            )
+            for path in partially_staged:
+                print(f"  {os.path.relpath(path, REPOSITORY_ROOT)}", file=sys.stderr)
+            return 1
 
     file_paths = [str(f) for f in target_files]
     chunk_size = 50

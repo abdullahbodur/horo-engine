@@ -425,6 +425,37 @@ def test_main_format_command_invokes_clang_format(monkeypatch: pytest.MonkeyPatc
     assert str(test_cpp) in calls[0]
 
 
+def test_staged_format_refuses_to_stage_unstaged_worktree_changes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "tests@horo.local"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "Horo Tests"], cwd=tmp_path, check=True)
+    source = tmp_path / "Partial.cpp"
+    source.write_text("int value = 0;\n", encoding="utf-8")
+    subprocess.run(["git", "add", "Partial.cpp"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-qm", "initial"], cwd=tmp_path, check=True)
+
+    source.write_text("int value = 1;\n", encoding="utf-8")
+    subprocess.run(["git", "add", "Partial.cpp"], cwd=tmp_path, check=True)
+    staged_contents = subprocess.run(
+        ["git", "show", ":Partial.cpp"], cwd=tmp_path, capture_output=True, text=True, check=True
+    ).stdout
+    source.write_text("int value = 2;\n", encoding="utf-8")
+
+    format_calls: list[list[str]] = []
+    monkeypatch.setattr(dev, "REPOSITORY_ROOT", tmp_path)
+    monkeypatch.setattr(dev, "_find_clang_format", lambda: "/usr/bin/clang-format")
+    monkeypatch.setattr(dev, "_apply_format_chunk", lambda _binary, chunk, _check: format_calls.append(chunk) or 0)
+
+    assert dev.run_format(staged=True) == 1
+    assert format_calls == []
+    assert "refusing to format partially staged files" in capsys.readouterr().err
+    assert subprocess.run(
+        ["git", "show", ":Partial.cpp"], cwd=tmp_path, capture_output=True, text=True, check=True
+    ).stdout == staged_contents
+
+
 def test_doctor_runs_gracefully_with_broken_env_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     broken_env = write_env(tmp_path / LOCAL_ENV_FILENAME, "INVALID-ENV-LINE\n")
     monkeypatch.setattr(dev, "DEFAULT_ENV_FILE", broken_env)
@@ -488,6 +519,5 @@ def test_main_help_command_and_empty_arguments(capsys: pytest.CaptureFixture[str
     assert dev.main(["help", "nonexistent"]) == 2
     err = capsys.readouterr().err
     assert "unknown command 'nonexistent'" in err
-
 
 
