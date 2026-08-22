@@ -566,10 +566,10 @@ namespace Horo::Gameplay {
     }
 
     IBehaviorInstance *LuaBehaviorProgram::CreateInstance(void *userData) {  // NOSONAR(cpp:S5008) Binding contract mandates void*.
-        return new LuaBehaviorInstance{*static_cast<LuaBehaviorProgram *>(userData)};  // NOSONAR(cpp:S5025) Paired factory boundary.
+        return std::make_unique<LuaBehaviorInstance>(*static_cast<LuaBehaviorProgram *>(userData)).release();
     }
 
     void LuaBehaviorProgram::DestroyInstance(void *, IBehaviorInstance *instance) noexcept {  // NOSONAR(cpp:S5008) Same binding contract.
-        delete instance;  // NOSONAR(cpp:S5025) Must run in the Lua gameplay module that allocated the instance.
+        const std::unique_ptr<IBehaviorInstance> owned{instance};
     }
 }  // namespace Horo::Gameplay
