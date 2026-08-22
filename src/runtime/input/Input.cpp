@@ -39,12 +39,13 @@ namespace Horo::Input {
         }
 
         float ApplyDeadzone(float value, const InputBinding &binding) noexcept {
+            using enum DeadzoneKind;
             if (!std::isfinite(value))
                 return 0.0F;
             const float deadzone = std::clamp(binding.deadzone, 0.0F, 0.99F);
-            if (binding.deadzoneKind == DeadzoneKind::Threshold)
+            if (binding.deadzoneKind == Threshold)
                 return std::abs(value) >= deadzone ? value : 0.0F;
-            if (binding.deadzoneKind == DeadzoneKind::Axial || binding.deadzoneKind == DeadzoneKind::Radial) {
+            if (binding.deadzoneKind == Axial || binding.deadzoneKind == Radial) {
                 if (std::abs(value) <= deadzone)
                     return 0.0F;
                 return std::copysign((std::abs(value) - deadzone) / (1.0F - deadzone), value);
@@ -53,31 +54,33 @@ namespace Horo::Input {
         }
 
         bool IsControlSupported(const InputBinding &binding) noexcept {
+            using enum BindingControlKind;
             switch (binding.kind) {
-                case BindingControlKind::Key:
+                case Key:
                     return binding.key > Key::Unknown && binding.key < Key::Count;
-                case BindingControlKind::PointerButton:
+                case PointerButton:
                     return binding.pointerButton < PointerButton::Count;
-                case BindingControlKind::PointerWheelX:
-                case BindingControlKind::PointerWheelY:
+                case PointerWheelX:
+                case PointerWheelY:
                     return true;
-                case BindingControlKind::GamepadButton:
+                case GamepadButton:
                     return binding.gamepadButton < GamepadButton::Count;
-                case BindingControlKind::GamepadAxis:
+                case GamepadAxis:
                     return binding.gamepadAxis < GamepadAxis::Count;
-                case BindingControlKind::RawGamepadButton:
-                case BindingControlKind::RawGamepadAxis:
+                case RawGamepadButton:
+                case RawGamepadAxis:
                     return binding.rawControl < 256;
             }
             return false;
         }
 
         bool IsReservedShortcut(const InputBinding &binding) noexcept {
+            using enum Key;
             if (binding.kind != BindingControlKind::Key)
                 return false;
             const ModifierState mods = binding.requiredModifiers;
-            return (mods.command && !mods.control && !mods.alt && (binding.key == Key::Q || binding.key == Key::W)) ||
-                   (mods.alt && binding.key == Key::F4) || (mods.control && mods.alt && binding.key == Key::Delete);
+            return (mods.command && !mods.control && !mods.alt && (binding.key == Q || binding.key == W)) ||
+                   (mods.alt && binding.key == F4) || (mods.control && mods.alt && binding.key == Delete);
         }
 
         bool SameTransition(const InputBinding &left, const InputBinding &right) noexcept {
@@ -111,61 +114,93 @@ namespace Horo::Input {
             return binding.deadzoneKind == DeadzoneKind::Radial ? std::clamp(rawAxis, -1.0F, 1.0F) : ApplyDeadzone(rawAxis, binding);
         }
 
+        /** @brief Derives pressed/released edges for a digital control driven by an analog axis. */
+        ButtonState DigitalStateFromAxis(const float current, const float previous, const float threshold) noexcept {
+            ButtonState state;
+            state.down = std::abs(current) >= threshold;
+            const bool previousDown = std::abs(previous) >= threshold;
+            state.pressed = state.down && !previousDown;
+            state.released = !state.down && previousDown;
+            return state;
+        }
+
+        /** @brief Resolves the previous-frame value of a gamepad axis, tolerating missing or shrunken snapshots. */
+        float PreviousAxisValue(const RawInputSnapshot *previousSnapshot, const GamepadDeviceId padId, const std::size_t controlIndex,
+                                const InputBinding &binding, const bool raw) noexcept {
+            const GamepadState *previous = previousSnapshot != nullptr ? previousSnapshot->FindGamepad(padId) : nullptr;
+            if (previous == nullptr)
+                return 0.0F;
+            if (raw)
+                return controlIndex < previous->rawAxes.size() ? ResolveGamepadAxis(previous->rawAxes[controlIndex], binding) : 0.0F;
+            return controlIndex < previous->axes.size() ? ResolveGamepadAxis(previous->axes[controlIndex], binding) : 0.0F;
+        }
+
+        BindingEvaluationResult EvaluateBindingOnPad(const InputBinding &binding, const GamepadState &pad,
+                                                     const RawInputSnapshot *previousSnapshot) noexcept {
+            using enum BindingControlKind;
+            switch (binding.kind) {
+                case GamepadButton: {
+                    const ButtonState state = pad.buttons[Index(binding.gamepadButton)];
+                    return {state.down ? 1.0F : 0.0F, state};
+                }
+                case GamepadAxis: {
+                    const float axis = ResolveGamepadAxis(pad.axes[Index(binding.gamepadAxis)], binding);
+                    const float previous = PreviousAxisValue(previousSnapshot, pad.id, Index(binding.gamepadAxis), binding, false);
+                    return {axis, DigitalStateFromAxis(axis, previous, binding.digitalThreshold)};
+                }
+                case RawGamepadButton: {
+                    if (binding.rawControl >= pad.rawButtons.size())
+                        break;
+                    const ButtonState state = pad.rawButtons[binding.rawControl];
+                    return {state.down ? 1.0F : 0.0F, state};
+                }
+                case RawGamepadAxis: {
+                    if (binding.rawControl >= pad.rawAxes.size())
+                        break;
+                    const float axis = ResolveGamepadAxis(pad.rawAxes[binding.rawControl], binding);
+                    const float previous = PreviousAxisValue(previousSnapshot, pad.id, binding.rawControl, binding, true);
+                    return {axis, DigitalStateFromAxis(axis, previous, binding.digitalThreshold)};
+                }
+                default:
+                    break;
+            }
+            return {};
+        }
+
+        /** @brief Stable per-control identifier used to dedupe pressed transitions across actions. */
+        std::uint64_t GamepadControlId(const InputBinding &binding) noexcept {
+            using enum BindingControlKind;
+            switch (binding.kind) {
+                case GamepadButton:
+                    return Index(binding.gamepadButton);
+                case RawGamepadButton:
+                case RawGamepadAxis:
+                    return binding.rawControl;
+                default:
+                    return Index(binding.gamepadAxis);
+            }
+        }
+
         BindingEvaluationResult EvaluateGamepadBinding(const InputBinding &binding, const RawInputSnapshot &snapshot,
                                                        const RawInputSnapshot *previousSnapshot, const InputDeviceAssignments &assignments,
                                                        const std::optional<PlayerId> &player,
                                                        std::unordered_set<std::uint64_t> &consumedGamepadTransitions) {
-            float axis = 0.0F;
-            ButtonState state;
+            BindingEvaluationResult result;
             for (const GamepadState &pad : snapshot.gamepads) {
                 if (player.has_value() && assignments.PlayerFor(pad.id) != player)
                     continue;
-                if (binding.kind == BindingControlKind::GamepadButton) {
-                    state = pad.buttons[Index(binding.gamepadButton)];
-                    axis = state.down ? 1.0F : 0.0F;
-                } else if (binding.kind == BindingControlKind::GamepadAxis) {
-                    axis = ResolveGamepadAxis(pad.axes[Index(binding.gamepadAxis)], binding);
-                    state.down = std::abs(axis) >= binding.digitalThreshold;
-                    const GamepadState *previous = previousSnapshot != nullptr ? previousSnapshot->FindGamepad(pad.id) : nullptr;
-                    float previousAxis = 0.0F;
-                    if (previous != nullptr)
-                        previousAxis = ResolveGamepadAxis(previous->axes[Index(binding.gamepadAxis)], binding);
-                    const bool previousDown = std::abs(previousAxis) >= binding.digitalThreshold;
-                    state.pressed = state.down && !previousDown;
-                    state.released = !state.down && previousDown;
-                } else if (binding.kind == BindingControlKind::RawGamepadButton && binding.rawControl < pad.rawButtons.size()) {
-                    state = pad.rawButtons[binding.rawControl];
-                    axis = state.down ? 1.0F : 0.0F;
-                } else if (binding.kind == BindingControlKind::RawGamepadAxis && binding.rawControl < pad.rawAxes.size()) {
-                    axis = ResolveGamepadAxis(pad.rawAxes[binding.rawControl], binding);
-                    state.down = std::abs(axis) >= binding.digitalThreshold;
-                    const GamepadState *previous = previousSnapshot != nullptr ? previousSnapshot->FindGamepad(pad.id) : nullptr;
-                    float previousAxis = 0.0F;
-                    if (previous != nullptr && binding.rawControl < previous->rawAxes.size())
-                        previousAxis = ResolveGamepadAxis(previous->rawAxes[binding.rawControl], binding);
-                    const bool previousDown = std::abs(previousAxis) >= binding.digitalThreshold;
-                    state.pressed = state.down && !previousDown;
-                    state.released = !state.down && previousDown;
-                }
-
-                if (state.pressed) {
-                    std::uint64_t controlId = 0;
-                    if (binding.kind == BindingControlKind::GamepadButton)
-                        controlId = Index(binding.gamepadButton);
-                    else if (binding.kind == BindingControlKind::RawGamepadButton || binding.kind == BindingControlKind::RawGamepadAxis)
-                        controlId = binding.rawControl;
-                    else
-                        controlId = Index(binding.gamepadAxis);
-
-                    const std::uint64_t control = (static_cast<std::uint64_t>(binding.kind) << 48U) | (controlId << 32U) | pad.id.slot;
+                result = EvaluateBindingOnPad(binding, pad, previousSnapshot);
+                if (result.state.pressed) {
+                    const std::uint64_t control =
+                        (static_cast<std::uint64_t>(binding.kind) << 48U) | (GamepadControlId(binding) << 32U) | pad.id.slot;
                     const std::uint64_t transition = control ^ pad.id.sessionGeneration;
                     if (!consumedGamepadTransitions.insert(transition).second)
-                        state.pressed = false;
+                        result.state.pressed = false;
                 }
-                if (axis != 0.0F || state.pressed || state.released)
+                if (result.axis != 0.0F || result.state.pressed || result.state.released)
                     break;
             }
-            return {axis, state};
+            return result;
         }
     }  // namespace
 
@@ -181,7 +216,7 @@ namespace Horo::Input {
 
     const GamepadState *RawInputSnapshot::FindGamepad(const GamepadDeviceId id) const noexcept {
         const auto found = std::ranges::find(gamepads, id, &GamepadState::id);
-        return found == gamepads.end() ? nullptr : &*found;
+        return found == gamepads.end() ? nullptr : std::to_address(found);
     }
 
     struct RawInputCollector::Impl {
@@ -205,8 +240,10 @@ namespace Horo::Input {
         next = previous;
         next.frame = frame;
         next.text.clear();
-        next.pointer.deltaX = next.pointer.deltaY = 0.0F;
-        next.pointer.wheelX = next.pointer.wheelY = 0.0F;
+        next.pointer.deltaX = 0.0F;
+        next.pointer.deltaY = 0.0F;
+        next.pointer.wheelX = 0.0F;
+        next.pointer.wheelY = 0.0F;
         for (ButtonState &state : next.keyboard)
             Advance(state);
         for (ButtonState &state : next.pointer.buttons)
@@ -353,10 +390,45 @@ namespace Horo::Input {
     }
 
     namespace {
+        /** @brief Transparent hasher so string-like lookups avoid constructing temporary strings. */
+        struct StringViewHash {
+            using is_transparent = void;
+
+            std::size_t operator()(const std::string_view value) const noexcept {
+                return std::hash<std::string_view>{}(value);
+            }
+        };
+
+        void ValidateBinding(BindingValidationReport &report, const ActionId &action, const InputBinding &binding,
+                             std::string_view invalidDeadzoneMessage, std::string_view unsupportedControlMessage,
+                             std::string_view reservedShortcutMessage) {
+            using enum BindingDiagnosticCode;
+            if (!std::isfinite(binding.deadzone) || binding.deadzone < 0.0F || binding.deadzone >= 1.0F)
+                report.diagnostics.emplace_back(InvalidDeadzone, action, std::string(invalidDeadzoneMessage));
+            if (binding.chordSize > binding.chord.size())
+                report.diagnostics.emplace_back(AmbiguousChord, action, "Binding chord exceeds the supported bounded size.");
+            if (!IsControlSupported(binding))
+                report.diagnostics.emplace_back(UnsupportedControl, action, std::string(unsupportedControlMessage));
+            if (IsReservedShortcut(binding))
+                report.diagnostics.emplace_back(ReservedShortcut, action, std::string(reservedShortcutMessage));
+            if (!std::isfinite(binding.scale) || !std::isfinite(binding.digitalThreshold) || binding.digitalThreshold < 0.0F ||
+                binding.digitalThreshold > 1.0F || binding.component > 1)
+                report.diagnostics.emplace_back(UnsupportedControl, action, "Binding scale, threshold, or component is invalid.");
+        }
+
+        template <typename Bindings>
+        void ReportDuplicateTransitions(BindingValidationReport &report, const ActionId &action, const Bindings &bindings,
+                                        const char *message) {
+            for (std::size_t i = 0; i + 1 < bindings.size(); ++i)
+                for (std::size_t j = i + 1; j < bindings.size(); ++j)
+                    if (SameTransition(bindings[i], bindings[j]))
+                        report.diagnostics.emplace_back(BindingDiagnosticCode::DuplicateBinding, action, message);
+        }
+
         void ValidateOverrides(BindingValidationReport &report, const InputBindingProfile &profile,
                                const std::span<const ActionDescriptor> actions) {
             using enum BindingDiagnosticCode;
-            std::unordered_set<std::string, std::hash<std::string_view>, std::equal_to<>> overriddenActions;
+            std::unordered_set<std::string, StringViewHash, std::equal_to<>> overriddenActions;
             for (const BindingOverride &overrideValue : profile.overrides) {
                 if (const auto action = std::ranges::find(actions, overrideValue.action, &ActionDescriptor::id); action == actions.end()) {
                     report.diagnostics.emplace_back(InvalidAction, overrideValue.action, "Binding override references an unknown action.");
@@ -365,28 +437,11 @@ namespace Horo::Input {
                 if (!overriddenActions.insert(overrideValue.action.Value()).second)
                     report.diagnostics.emplace_back(DuplicateBinding, overrideValue.action,
                                                     "The profile contains more than one override for the action.");
-                for (std::size_t i = 0; i < overrideValue.bindings.size(); ++i) {
-                    const InputBinding &binding = overrideValue.bindings[i];
-                    if (!std::isfinite(binding.deadzone) || binding.deadzone < 0.0F || binding.deadzone >= 1.0F)
-                        report.diagnostics.emplace_back(InvalidDeadzone, overrideValue.action, "Binding deadzone must be in [0, 1).");
-                    if (binding.chordSize > binding.chord.size())
-                        report.diagnostics.emplace_back(AmbiguousChord, overrideValue.action,
-                                                        "Binding chord exceeds the supported bounded size.");
-                    if (!IsControlSupported(binding))
-                        report.diagnostics.emplace_back(UnsupportedControl, overrideValue.action,
-                                                        "Binding references an unsupported control.");
-                    if (IsReservedShortcut(binding))
-                        report.diagnostics.emplace_back(ReservedShortcut, overrideValue.action,
-                                                        "Binding is reserved by the operating system.");
-                    if (!std::isfinite(binding.scale) || !std::isfinite(binding.digitalThreshold) || binding.digitalThreshold < 0.0F ||
-                        binding.digitalThreshold > 1.0F || binding.component > 1)
-                        report.diagnostics.emplace_back(UnsupportedControl, overrideValue.action,
-                                                        "Binding scale, threshold, or component is invalid.");
-                    for (std::size_t j = i + 1; j < overrideValue.bindings.size(); ++j)
-                        if (SameTransition(binding, overrideValue.bindings[j]))
-                            report.diagnostics.emplace_back(DuplicateBinding, overrideValue.action,
-                                                            "The action contains a duplicate binding.");
-                }
+                for (const InputBinding &binding : overrideValue.bindings)
+                    ValidateBinding(report, overrideValue.action, binding, "Binding deadzone must be in [0, 1).",
+                                    "Binding references an unsupported control.", "Binding is reserved by the operating system.");
+                ReportDuplicateTransitions(report, overrideValue.action, overrideValue.bindings,
+                                           "The action contains a duplicate binding.");
             }
         }
 
@@ -405,19 +460,13 @@ namespace Horo::Input {
                     overrideValue == profile.overrides.end() ? action.defaultBindings : overrideValue->bindings;
                 if (action.required && bindings.empty())
                     report.diagnostics.emplace_back(RequiredActionUnbound, action.id, "A required action has no binding.");
-                for (std::size_t index = 0; index < bindings.size(); ++index) {
-                    const InputBinding &binding = bindings[index];
-                    if (!IsControlSupported(binding))
-                        report.diagnostics.emplace_back(UnsupportedControl, action.id, "Action references an unsupported control.");
-                    if (IsReservedShortcut(binding))
-                        report.diagnostics.emplace_back(ReservedShortcut, action.id, "Action uses an operating-system-reserved shortcut.");
-                    if (!std::isfinite(binding.deadzone) || binding.deadzone < 0.0F || binding.deadzone >= 1.0F)
-                        report.diagnostics.emplace_back(InvalidDeadzone, action.id, "Action binding deadzone must be in [0, 1).");
-                    for (std::size_t other = index + 1; other < bindings.size(); ++other)
-                        if (SameTransition(binding, bindings[other]))
-                            report.diagnostics.emplace_back(DuplicateBinding, action.id, "Action contains a duplicate binding.");
+                for (const InputBinding &binding : bindings)
+                    ValidateBinding(report, action.id, binding, "Action binding deadzone must be in [0, 1).",
+                                    "Action references an unsupported control.", "Action uses an operating-system-reserved shortcut.");
+                ReportDuplicateTransitions(report, action.id, bindings, "Action contains a duplicate binding.");
+                effective.reserve(bindings.size());
+                for (const InputBinding &binding : bindings)
                     effective.push_back({&action, &binding});
-                }
             }
             for (std::size_t i = 0; i < effective.size(); ++i) {
                 for (std::size_t j = i + 1; j < effective.size(); ++j) {
@@ -460,6 +509,33 @@ namespace Horo::Input {
     }
 
     namespace {
+        InputBinding BindingFromJson(const nlohmann::json &json);
+
+        /** @brief Parses the overrides array of a profile document, enforcing per-entry shape limits. */
+        Result<std::vector<BindingOverride>> ParseOverrides(const nlohmann::json &json) {
+            constexpr std::size_t maximumOverrides = 4096;
+            constexpr std::size_t maximumBindingsPerAction = 64;
+            const auto &overrides = json.at("overrides");
+            if (!overrides.is_array() || overrides.size() > maximumOverrides)
+                return Result<std::vector<BindingOverride>>::Failure(
+                    MakeError(Errors::ProfileMalformed, "Input profile override count is invalid."));
+            std::vector<BindingOverride> parsed;
+            parsed.reserve(overrides.size());
+            for (const auto &entry : overrides) {
+                BindingOverride overrideValue{.action = ActionId{entry.at("action").get<std::string>()}};
+                const auto &bindings = entry.at("bindings");
+                if (!bindings.is_array() || bindings.size() > maximumBindingsPerAction)
+                    return Result<std::vector<BindingOverride>>::Failure(
+                        MakeError(Errors::ProfileMalformed, "Input profile binding count is invalid."));
+                for (const auto &binding : bindings)
+                    overrideValue.bindings.push_back(BindingFromJson(binding));
+                parsed.push_back(std::move(overrideValue));
+            }
+            return Result<std::vector<BindingOverride>>::Success(std::move(parsed));
+        }
+    }  // namespace
+
+    namespace {
         void to_json(nlohmann::json &json, const InputBinding &binding) {
             json = {{"kind", static_cast<int>(binding.kind)},
                     {"key", static_cast<int>(binding.key)},
@@ -491,9 +567,9 @@ namespace Horo::Input {
             binding.pointerButton = static_cast<PointerButton>(json.value("pointerButton", 0));
             binding.gamepadButton = static_cast<GamepadButton>(json.value("gamepadButton", 0));
             binding.gamepadAxis = static_cast<GamepadAxis>(json.value("gamepadAxis", 0));
-            binding.rawControl = json.value("rawControl", 0);
+            binding.rawControl = static_cast<std::uint16_t>(json.value("rawControl", 0));
             binding.scale = json.value("scale", 1.0F);
-            binding.component = json.value("component", 0);
+            binding.component = static_cast<std::uint8_t>(json.value("component", 0));
             binding.deadzoneKind = static_cast<DeadzoneKind>(json.value("deadzoneKind", 0));
             binding.deadzone = json.value("deadzone", 0.0F);
             binding.digitalThreshold = json.value("digitalThreshold", 0.5F);
@@ -511,8 +587,6 @@ namespace Horo::Input {
 
     Result<InputBindingProfile> ParseBindingProfile(const std::string_view value) {
         constexpr std::size_t maximumProfileBytes = 1024U * 1024U;
-        constexpr std::size_t maximumOverrides = 4096;
-        constexpr std::size_t maximumBindingsPerAction = 64;
         if (value.empty() || value.size() > maximumProfileBytes)
             return Result<InputBindingProfile>::Failure(
                 MakeError(Errors::ProfileMalformed, "Input profile size is outside the supported bounds."));
@@ -542,20 +616,10 @@ namespace Horo::Input {
             InputBindingProfile profile;
             profile.schemaVersion = json.at("schemaVersion").get<std::uint32_t>();
             profile.profileId = json.at("profileId").get<std::string>();
-            const auto &overrides = json.at("overrides");
-            if (!overrides.is_array() || overrides.size() > maximumOverrides)
-                return Result<InputBindingProfile>::Failure(
-                    MakeError(Errors::ProfileMalformed, "Input profile override count is invalid."));
-            for (const auto &entry : overrides) {
-                BindingOverride overrideValue{.action = ActionId{entry.at("action").get<std::string>()}};
-                const auto &bindings = entry.at("bindings");
-                if (!bindings.is_array() || bindings.size() > maximumBindingsPerAction)
-                    return Result<InputBindingProfile>::Failure(
-                        MakeError(Errors::ProfileMalformed, "Input profile binding count is invalid."));
-                for (const auto &binding : bindings)
-                    overrideValue.bindings.push_back(BindingFromJson(binding));
-                profile.overrides.push_back(std::move(overrideValue));
-            }
+            if (const Result<std::vector<BindingOverride>> overrides = ParseOverrides(json); overrides.HasError())
+                return Result<InputBindingProfile>::Failure(overrides.ErrorValue());
+            else
+                profile.overrides = std::move(overrides).Value();
             if (profile.schemaVersion != 1 || profile.profileId.empty() || profile.profileId.size() > 256)
                 return Result<InputBindingProfile>::Failure(MakeError(Errors::ProfileInvalidSchema, "Invalid input profile schema."));
             return Result<InputBindingProfile>::Success(std::move(profile));
@@ -594,6 +658,8 @@ namespace Horo::Input {
     }
 
     Result<void> SaveBindingProfileAtomically(const std::filesystem::path &path, const InputBindingProfile &profile) {
+        if (path.empty())
+            return Result<void>::Failure(MakeError(Errors::ProfileWriteFailed, "Input profile path is empty."));
         const Result<std::string> serialized = SerializeBindingProfile(profile);
         if (serialized.HasError())
             return Result<void>::Failure(serialized.ErrorValue());
@@ -678,7 +744,8 @@ namespace Horo::Input {
         impl_->consumedKeys.clear();
         impl_->consumedPointerButtons.clear();
         impl_->consumedGamepadTransitions.clear();
-        impl_->consumedWheelX = impl_->consumedWheelY = false;
+        impl_->consumedWheelX = false;
+        impl_->consumedWheelY = false;
         impl_->assignments.RetainConnected(snapshot.gamepads);
         if (impl_->capture && !snapshot.window.focused)
             CancelCapture(CaptureCancellationReason::FocusLost);

@@ -29,136 +29,140 @@ namespace Horo::Input {
                                                 true};
 
         Key MapKey(const SDL_Scancode key) noexcept {
+            using enum Key;
             if (key >= SDL_SCANCODE_A && key <= SDL_SCANCODE_Z)
                 return static_cast<Key>(static_cast<int>(Key::A) + key - SDL_SCANCODE_A);
             if (key >= SDL_SCANCODE_1 && key <= SDL_SCANCODE_9)
                 return static_cast<Key>(static_cast<int>(Key::Digit1) + key - SDL_SCANCODE_1);
             switch (key) {
                 case SDL_SCANCODE_0:
-                    return Key::Digit0;
+                    return Digit0;
                 case SDL_SCANCODE_ESCAPE:
-                    return Key::Escape;
+                    return Escape;
                 case SDL_SCANCODE_RETURN:
-                    return Key::Enter;
+                    return Enter;
                 case SDL_SCANCODE_TAB:
-                    return Key::Tab;
+                    return Tab;
                 case SDL_SCANCODE_SPACE:
-                    return Key::Space;
+                    return Space;
                 case SDL_SCANCODE_BACKSPACE:
-                    return Key::Backspace;
+                    return Backspace;
                 case SDL_SCANCODE_DELETE:
-                    return Key::Delete;
+                    return Delete;
                 case SDL_SCANCODE_LEFT:
-                    return Key::Left;
+                    return Left;
                 case SDL_SCANCODE_RIGHT:
-                    return Key::Right;
+                    return Right;
                 case SDL_SCANCODE_UP:
-                    return Key::Up;
+                    return Up;
                 case SDL_SCANCODE_DOWN:
-                    return Key::Down;
+                    return Down;
                 case SDL_SCANCODE_HOME:
-                    return Key::Home;
+                    return Home;
                 case SDL_SCANCODE_END:
-                    return Key::End;
+                    return End;
                 case SDL_SCANCODE_PAGEUP:
-                    return Key::PageUp;
+                    return PageUp;
                 case SDL_SCANCODE_PAGEDOWN:
-                    return Key::PageDown;
+                    return PageDown;
                 case SDL_SCANCODE_F1:
-                    return Key::F1;
+                    return F1;
                 case SDL_SCANCODE_F2:
-                    return Key::F2;
+                    return F2;
                 case SDL_SCANCODE_F3:
-                    return Key::F3;
+                    return F3;
                 case SDL_SCANCODE_F4:
-                    return Key::F4;
+                    return F4;
                 case SDL_SCANCODE_F5:
-                    return Key::F5;
+                    return F5;
                 case SDL_SCANCODE_F6:
-                    return Key::F6;
+                    return F6;
                 case SDL_SCANCODE_F7:
-                    return Key::F7;
+                    return F7;
                 case SDL_SCANCODE_F8:
-                    return Key::F8;
+                    return F8;
                 case SDL_SCANCODE_F9:
-                    return Key::F9;
+                    return F9;
                 case SDL_SCANCODE_F10:
-                    return Key::F10;
+                    return F10;
                 case SDL_SCANCODE_F11:
-                    return Key::F11;
+                    return F11;
                 case SDL_SCANCODE_F12:
-                    return Key::F12;
+                    return F12;
                 default:
-                    return Key::Unknown;
+                    return Unknown;
             }
         }
 
         std::optional<PointerButton> MapPointerButton(const std::uint8_t button) noexcept {
+            using enum PointerButton;
             switch (button) {
                 case SDL_BUTTON_LEFT:
-                    return PointerButton::Primary;
+                    return Primary;
                 case SDL_BUTTON_RIGHT:
-                    return PointerButton::Secondary;
+                    return Secondary;
                 case SDL_BUTTON_MIDDLE:
-                    return PointerButton::Middle;
+                    return Middle;
                 case SDL_BUTTON_X1:
-                    return PointerButton::Auxiliary1;
+                    return Auxiliary1;
                 case SDL_BUTTON_X2:
-                    return PointerButton::Auxiliary2;
+                    return Auxiliary2;
                 default:
                     return std::nullopt;
             }
         }
 
         std::optional<GamepadButton> MapGamepadButton(const std::uint8_t button) noexcept {
+            using enum GamepadButton;
             switch (static_cast<SDL_GamepadButton>(button)) {
                 case SDL_GAMEPAD_BUTTON_SOUTH:
-                    return GamepadButton::South;
+                    return South;
                 case SDL_GAMEPAD_BUTTON_EAST:
-                    return GamepadButton::East;
+                    return East;
                 case SDL_GAMEPAD_BUTTON_WEST:
-                    return GamepadButton::West;
+                    return West;
                 case SDL_GAMEPAD_BUTTON_NORTH:
-                    return GamepadButton::North;
+                    return North;
                 case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:
-                    return GamepadButton::LeftShoulder;
+                    return LeftShoulder;
                 case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER:
-                    return GamepadButton::RightShoulder;
+                    return RightShoulder;
                 case SDL_GAMEPAD_BUTTON_LEFT_STICK:
-                    return GamepadButton::LeftStick;
+                    return LeftStick;
                 case SDL_GAMEPAD_BUTTON_RIGHT_STICK:
-                    return GamepadButton::RightStick;
+                    return RightStick;
                 case SDL_GAMEPAD_BUTTON_START:
-                    return GamepadButton::Start;
+                    return Start;
                 case SDL_GAMEPAD_BUTTON_BACK:
-                    return GamepadButton::Select;
+                    return Select;
                 case SDL_GAMEPAD_BUTTON_DPAD_UP:
-                    return GamepadButton::DPadUp;
+                    return DPadUp;
                 case SDL_GAMEPAD_BUTTON_DPAD_DOWN:
-                    return GamepadButton::DPadDown;
+                    return DPadDown;
                 case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
-                    return GamepadButton::DPadLeft;
+                    return DPadLeft;
                 case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
-                    return GamepadButton::DPadRight;
+                    return DPadRight;
                 default:
                     return std::nullopt;
             }
         }
 
         std::optional<GamepadAxis> MapGamepadAxis(const std::uint8_t axis) noexcept {
+            using enum GamepadAxis;
             switch (static_cast<SDL_GamepadAxis>(axis)) {
                 case SDL_GAMEPAD_AXIS_LEFTX:
-                    return GamepadAxis::LeftX;
+                    return LeftX;
                 case SDL_GAMEPAD_AXIS_LEFTY:
-                    return GamepadAxis::LeftY;
+                    return LeftY;
                 case SDL_GAMEPAD_AXIS_RIGHTX:
-                    return GamepadAxis::RightX;
+                    return RightX;
                 case SDL_GAMEPAD_AXIS_RIGHTY:
-                    return GamepadAxis::RightY;
+                    return RightY;
                 case SDL_GAMEPAD_AXIS_LEFT_TRIGGER:
-                    return GamepadAxis::LeftTrigger;
+                    return LeftTrigger;
                 case SDL_GAMEPAD_AXIS_RIGHT_TRIGGER:
-                    return GamepadAxis::RightTrigger;
+                    return RightTrigger;
                 default:
                     return std::nullopt;
             }
@@ -182,6 +186,184 @@ namespace Horo::Input {
         WindowInputState windowState{};
     };
 
+    namespace {
+
+        /** @brief Applies keyboard, text-input, and text-composition events to the collector. */
+        void HandleKeyboardEvent(SdlInputBackend::Impl &impl, const SDL_Event &event) {
+            switch (event.type) {
+                case SDL_EVENT_KEY_DOWN:
+                case SDL_EVENT_KEY_UP:
+                    if (!event.key.repeat)
+                        impl.collector.SetKey(MapKey(event.key.scancode), event.key.down);
+                    impl.collector.SetModifiers(ModifierState{
+                        .control = (event.key.mod & SDL_KMOD_CTRL) != 0,
+                        .shift = (event.key.mod & SDL_KMOD_SHIFT) != 0,
+                        .alt = (event.key.mod & SDL_KMOD_ALT) != 0,
+                        .command = (event.key.mod & SDL_KMOD_GUI) != 0,
+                    });
+                    break;
+                case SDL_EVENT_TEXT_INPUT:
+                    if (event.text.text)
+                        impl.collector.AppendText(event.text.text);
+                    break;
+                case SDL_EVENT_TEXT_EDITING:
+                    impl.collector.SetTextComposition(event.edit.text != nullptr ? event.edit.text : "", event.edit.start,
+                                                      event.edit.length);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        /** @brief Applies pointer motion, buttons, wheel, and device presence events to the collector. */
+        void HandlePointerEvent(SdlInputBackend::Impl &impl, const SDL_Event &event) {
+            switch (event.type) {
+                case SDL_EVENT_MOUSE_MOTION:
+                    impl.collector.SetPointerPosition(event.motion.x, event.motion.y);
+                    break;
+                case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                case SDL_EVENT_MOUSE_BUTTON_UP:
+                    if (const auto button = MapPointerButton(event.button.button))
+                        impl.collector.SetPointerButton(*button, event.button.down);
+                    impl.collector.SetPointerPosition(event.button.x, event.button.y);
+                    break;
+                case SDL_EVENT_MOUSE_WHEEL:
+                    impl.collector.AddPointerWheel(event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -event.wheel.x : event.wheel.x,
+                                                   event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -event.wheel.y : event.wheel.y);
+                    break;
+                case SDL_EVENT_MOUSE_ADDED:
+                    impl.windowState.pointerDeviceAvailable = true;
+                    impl.collector.SetWindowState(impl.windowState);
+                    break;
+                case SDL_EVENT_MOUSE_REMOVED:
+                    // The public snapshot intentionally does not expose SDL mouse IDs. A
+                    // removal conservatively invalidates the active pointer capture; a
+                    // subsequent add event restores pointer availability.
+                    impl.windowState.pointerDeviceAvailable = false;
+                    impl.collector.SetWindowState(impl.windowState);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        /** @brief Applies window focus and hover events to the collector. */
+        void HandleWindowEvent(SdlInputBackend::Impl &impl, const SDL_Event &event) {
+            switch (event.type) {
+                case SDL_EVENT_WINDOW_FOCUS_GAINED:
+                    impl.windowState.focused = true;
+                    impl.collector.SetWindowState(impl.windowState);
+                    break;
+                case SDL_EVENT_WINDOW_FOCUS_LOST:
+                    impl.collector.Neutralize();
+                    impl.windowState.focused = false;
+                    impl.collector.SetWindowState(impl.windowState);
+                    break;
+                case SDL_EVENT_WINDOW_MOUSE_ENTER:
+                    impl.windowState.pointerInside = true;
+                    impl.collector.SetWindowState(impl.windowState);
+                    break;
+                case SDL_EVENT_WINDOW_MOUSE_LEAVE:
+                    impl.windowState.pointerInside = false;
+                    impl.collector.SetWindowState(impl.windowState);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        /** @brief Opens and closes gamepads and forwards their button and axis state. */
+        void HandleGamepadEvent(SdlInputBackend::Impl &impl, const SDL_Event &event) {
+            switch (event.type) {
+                case SDL_EVENT_GAMEPAD_ADDED: {
+                    if (impl.devices.contains(event.gdevice.which))
+                        break;
+                    SDL_Gamepad *gamepad = SDL_OpenGamepad(event.gdevice.which);
+                    if (!gamepad)
+                        break;
+                    const char *name = SDL_GetGamepadName(gamepad);
+                    const GamepadDeviceId id = impl.collector.ConnectGamepad(name ? name : "SDL Gamepad", true);
+                    impl.devices.try_emplace(event.gdevice.which, SdlInputBackend::Impl::Device{id, gamepad, nullptr});
+                    break;
+                }
+                case SDL_EVENT_GAMEPAD_REMOVED: {
+                    const auto found = impl.devices.find(event.gdevice.which);
+                    if (found == impl.devices.end())
+                        break;
+                    (void)impl.collector.DisconnectGamepad(found->second.id);
+                    if (found->second.gamepad)
+                        SDL_CloseGamepad(found->second.gamepad);
+                    impl.devices.erase(found);
+                    break;
+                }
+                case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+                case SDL_EVENT_GAMEPAD_BUTTON_UP:
+                    if (const auto found = impl.devices.find(event.gbutton.which);
+                        found != impl.devices.end() && MapGamepadButton(event.gbutton.button)) {
+                        const auto button = *MapGamepadButton(event.gbutton.button);
+                        (void)impl.collector.SetGamepadButton(found->second.id, button, event.gbutton.down);
+                    }
+                    break;
+                case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+                    if (const auto found = impl.devices.find(event.gaxis.which);
+                        found != impl.devices.end() && MapGamepadAxis(event.gaxis.axis)) {
+                        const auto axis = *MapGamepadAxis(event.gaxis.axis);
+                        const float normalized = event.gaxis.value < 0 ? static_cast<float>(event.gaxis.value) / 32768.0F
+                                                                       : static_cast<float>(event.gaxis.value) / 32767.0F;
+                        (void)impl.collector.SetGamepadAxis(found->second.id, axis, normalized);
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        /** @brief Opens and closes raw joysticks and forwards their raw button and axis state. */
+        void HandleJoystickEvent(SdlInputBackend::Impl &impl, const SDL_Event &event) {
+            switch (event.type) {
+                case SDL_EVENT_JOYSTICK_ADDED: {
+                    if (impl.devices.contains(event.jdevice.which) || SDL_IsGamepad(event.jdevice.which))
+                        break;
+                    SDL_Joystick *joystick = SDL_OpenJoystick(event.jdevice.which);
+                    if (!joystick)
+                        break;
+                    const char *name = SDL_GetJoystickName(joystick);
+                    const auto buttons = static_cast<std::size_t>(std::clamp(SDL_GetNumJoystickButtons(joystick), 0, 256));
+                    const auto axes = static_cast<std::size_t>(std::clamp(SDL_GetNumJoystickAxes(joystick), 0, 256));
+                    const GamepadDeviceId id = impl.collector.ConnectGamepad(name ? name : "SDL Joystick", false, buttons, axes);
+                    impl.devices.try_emplace(event.jdevice.which, SdlInputBackend::Impl::Device{id, nullptr, joystick});
+                    break;
+                }
+                case SDL_EVENT_JOYSTICK_REMOVED: {
+                    const auto found = impl.devices.find(event.jdevice.which);
+                    if (found == impl.devices.end())
+                        break;
+                    (void)impl.collector.DisconnectGamepad(found->second.id);
+                    if (found->second.gamepad)
+                        SDL_CloseGamepad(found->second.gamepad);
+                    else if (found->second.joystick)
+                        SDL_CloseJoystick(found->second.joystick);
+                    impl.devices.erase(found);
+                    break;
+                }
+                case SDL_EVENT_JOYSTICK_BUTTON_DOWN:
+                case SDL_EVENT_JOYSTICK_BUTTON_UP:
+                    if (const auto found = impl.devices.find(event.jbutton.which); found != impl.devices.end() && found->second.joystick)
+                        (void)impl.collector.SetRawGamepadButton(found->second.id, event.jbutton.button, event.jbutton.down);
+                    break;
+                case SDL_EVENT_JOYSTICK_AXIS_MOTION:
+                    if (const auto found = impl.devices.find(event.jaxis.which); found != impl.devices.end() && found->second.joystick) {
+                        const float normalized = event.jaxis.value < 0 ? static_cast<float>(event.jaxis.value) / 32768.0F
+                                                                       : static_cast<float>(event.jaxis.value) / 32767.0F;
+                        (void)impl.collector.SetRawGamepadAxis(found->second.id, event.jaxis.axis, normalized);
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+    }  // namespace
+
     SdlInputBackend::SdlInputBackend() : impl_(std::make_unique<Impl>()) {}
 
     SdlInputBackend::~SdlInputBackend() {
@@ -202,141 +384,36 @@ namespace Horo::Input {
         switch (event.type) {
             case SDL_EVENT_KEY_DOWN:
             case SDL_EVENT_KEY_UP:
-                if (!event.key.repeat)
-                    impl_->collector.SetKey(MapKey(event.key.scancode), event.key.down);
-                impl_->collector.SetModifiers(ModifierState{
-                    .control = (event.key.mod & SDL_KMOD_CTRL) != 0,
-                    .shift = (event.key.mod & SDL_KMOD_SHIFT) != 0,
-                    .alt = (event.key.mod & SDL_KMOD_ALT) != 0,
-                    .command = (event.key.mod & SDL_KMOD_GUI) != 0,
-                });
-                break;
             case SDL_EVENT_TEXT_INPUT:
-                if (event.text.text)
-                    impl_->collector.AppendText(event.text.text);
-                break;
             case SDL_EVENT_TEXT_EDITING:
-                impl_->collector.SetTextComposition(event.edit.text != nullptr ? event.edit.text : "", event.edit.start, event.edit.length);
+                HandleKeyboardEvent(*impl_, event);
                 break;
             case SDL_EVENT_MOUSE_MOTION:
-                impl_->collector.SetPointerPosition(event.motion.x, event.motion.y);
-                break;
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
             case SDL_EVENT_MOUSE_BUTTON_UP:
-                if (const auto button = MapPointerButton(event.button.button))
-                    impl_->collector.SetPointerButton(*button, event.button.down);
-                impl_->collector.SetPointerPosition(event.button.x, event.button.y);
-                break;
             case SDL_EVENT_MOUSE_WHEEL:
-                impl_->collector.AddPointerWheel(event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -event.wheel.x : event.wheel.x,
-                                                 event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -event.wheel.y : event.wheel.y);
-                break;
             case SDL_EVENT_MOUSE_ADDED:
-                impl_->windowState.pointerDeviceAvailable = true;
-                impl_->collector.SetWindowState(impl_->windowState);
-                break;
             case SDL_EVENT_MOUSE_REMOVED:
-                // The public snapshot intentionally does not expose SDL mouse IDs. A
-                // removal conservatively invalidates the active pointer capture; a
-                // subsequent add event restores pointer availability.
-                impl_->windowState.pointerDeviceAvailable = false;
-                impl_->collector.SetWindowState(impl_->windowState);
+                HandlePointerEvent(*impl_, event);
                 break;
             case SDL_EVENT_WINDOW_FOCUS_GAINED:
-                impl_->windowState.focused = true;
-                impl_->collector.SetWindowState(impl_->windowState);
-                break;
             case SDL_EVENT_WINDOW_FOCUS_LOST:
-                impl_->collector.Neutralize();
-                impl_->windowState.focused = false;
-                impl_->collector.SetWindowState(impl_->windowState);
-                break;
             case SDL_EVENT_WINDOW_MOUSE_ENTER:
-                impl_->windowState.pointerInside = true;
-                impl_->collector.SetWindowState(impl_->windowState);
-                break;
             case SDL_EVENT_WINDOW_MOUSE_LEAVE:
-                impl_->windowState.pointerInside = false;
-                impl_->collector.SetWindowState(impl_->windowState);
+                HandleWindowEvent(*impl_, event);
                 break;
-            case SDL_EVENT_GAMEPAD_ADDED: {
-                if (impl_->devices.contains(event.gdevice.which))
-                    break;
-                SDL_Gamepad *gamepad = SDL_OpenGamepad(event.gdevice.which);
-                if (!gamepad)
-                    break;
-                const char *name = SDL_GetGamepadName(gamepad);
-                const GamepadDeviceId id = impl_->collector.ConnectGamepad(name ? name : "SDL Gamepad", true);
-                impl_->devices.emplace(event.gdevice.which, Impl::Device{id, gamepad, nullptr});
-                break;
-            }
-            case SDL_EVENT_GAMEPAD_REMOVED: {
-                const auto found = impl_->devices.find(event.gdevice.which);
-                if (found == impl_->devices.end())
-                    break;
-                (void)impl_->collector.DisconnectGamepad(found->second.id);
-                if (found->second.gamepad)
-                    SDL_CloseGamepad(found->second.gamepad);
-                impl_->devices.erase(found);
-                break;
-            }
+            case SDL_EVENT_GAMEPAD_ADDED:
+            case SDL_EVENT_GAMEPAD_REMOVED:
             case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
-            case SDL_EVENT_GAMEPAD_BUTTON_UP: {
-                const auto found = impl_->devices.find(event.gbutton.which);
-                const auto button = MapGamepadButton(event.gbutton.button);
-                if (found != impl_->devices.end() && button)
-                    (void)impl_->collector.SetGamepadButton(found->second.id, *button, event.gbutton.down);
-                break;
-            }
-            case SDL_EVENT_GAMEPAD_AXIS_MOTION: {
-                const auto found = impl_->devices.find(event.gaxis.which);
-                const auto axis = MapGamepadAxis(event.gaxis.axis);
-                if (found != impl_->devices.end() && axis) {
-                    const float normalized = event.gaxis.value < 0 ? static_cast<float>(event.gaxis.value) / 32768.0F
-                                                                   : static_cast<float>(event.gaxis.value) / 32767.0F;
-                    (void)impl_->collector.SetGamepadAxis(found->second.id, *axis, normalized);
-                }
-                break;
-            }
-            case SDL_EVENT_JOYSTICK_ADDED: {
-                if (impl_->devices.contains(event.jdevice.which) || SDL_IsGamepad(event.jdevice.which))
-                    break;
-                SDL_Joystick *joystick = SDL_OpenJoystick(event.jdevice.which);
-                if (!joystick)
-                    break;
-                const char *name = SDL_GetJoystickName(joystick);
-                const std::size_t buttons = static_cast<std::size_t>(std::clamp(SDL_GetNumJoystickButtons(joystick), 0, 256));
-                const std::size_t axes = static_cast<std::size_t>(std::clamp(SDL_GetNumJoystickAxes(joystick), 0, 256));
-                const GamepadDeviceId id = impl_->collector.ConnectGamepad(name ? name : "SDL Joystick", false, buttons, axes);
-                impl_->devices.emplace(event.jdevice.which, Impl::Device{id, nullptr, joystick});
-                break;
-            }
-            case SDL_EVENT_JOYSTICK_REMOVED: {
-                const auto found = impl_->devices.find(event.jdevice.which);
-                if (found == impl_->devices.end())
-                    break;
-                (void)impl_->collector.DisconnectGamepad(found->second.id);
-                if (found->second.gamepad)
-                    SDL_CloseGamepad(found->second.gamepad);
-                else if (found->second.joystick)
-                    SDL_CloseJoystick(found->second.joystick);
-                impl_->devices.erase(found);
-                break;
-            }
+            case SDL_EVENT_GAMEPAD_BUTTON_UP:
+            case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+            case SDL_EVENT_JOYSTICK_ADDED:
+            case SDL_EVENT_JOYSTICK_REMOVED:
             case SDL_EVENT_JOYSTICK_BUTTON_DOWN:
-            case SDL_EVENT_JOYSTICK_BUTTON_UP: {
-                if (const auto found = impl_->devices.find(event.jbutton.which); found != impl_->devices.end() && found->second.joystick)
-                    (void)impl_->collector.SetRawGamepadButton(found->second.id, event.jbutton.button, event.jbutton.down);
+            case SDL_EVENT_JOYSTICK_BUTTON_UP:
+            case SDL_EVENT_JOYSTICK_AXIS_MOTION:
+                HandleGamepadEvent(*impl_, event);
                 break;
-            }
-            case SDL_EVENT_JOYSTICK_AXIS_MOTION: {
-                if (const auto found = impl_->devices.find(event.jaxis.which); found != impl_->devices.end() && found->second.joystick) {
-                    const float normalized = event.jaxis.value < 0 ? static_cast<float>(event.jaxis.value) / 32768.0F
-                                                                   : static_cast<float>(event.jaxis.value) / 32767.0F;
-                    (void)impl_->collector.SetRawGamepadAxis(found->second.id, event.jaxis.axis, normalized);
-                }
-                break;
-            }
             default:
                 break;
         }
