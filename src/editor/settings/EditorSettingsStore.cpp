@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cmath>
 #include <fstream>
 #include <optional>
 #include <regex>
@@ -394,6 +395,24 @@ namespace Horo::Editor {
         }
 
         void WriteSettings(std::ofstream &out, const EditorSettings &s) {
+            // Numeric fields are re-clamped to their validated bounds here so only
+            // sanitized values ever reach the output stream, even if a caller skips
+            // ValidateEditorSettings.
+            const auto bounded = [](const int value, const int minValue, const int maxValue) {
+                return std::clamp(value, minValue, maxValue);
+            };
+            const auto boundedFloat = [](const float value, const float minValue, const float maxValue) {
+                return std::isfinite(value) ? std::clamp(value, minValue, maxValue) : minValue;
+            };
+            const int uiScalePercent = bounded(s.uiScalePercent, 75, 200);
+            const int codeFontSizePx = bounded(s.codeFontSizePx, 8, 24);
+            const int orbitSensitivity = bounded(s.orbitSensitivity, 10, 300);
+            const int panSensitivity = bounded(s.panSensitivity, 10, 300);
+            const int masterVolume = bounded(s.masterVolume, 0, 100);
+            const int maxPreviewClients = bounded(s.maxPreviewClients, 1, 16);
+            const int simulatedLatencyMs = bounded(s.simulatedLatencyMs, 0, 500);
+            const int packageDownloadThreads = bounded(s.packageDownloadThreads, 1, 32);
+            const float stutterThresholdMs = boundedFloat(s.stutterThresholdMs, 1.0F, 1000.0F);
             const auto boolStr = [](const bool v) {
                 return v ? "true" : "false";
             };
@@ -409,14 +428,14 @@ namespace Horo::Editor {
             out << "  \"appearance\": {\n";
             out << R"(    "themePreset": ")" << ToString(s.themePreset) << "\",\n";
             out << R"(    "accentColorHex": ")" << EscapeJsonString(s.accentColorHex) << "\",\n";
-            out << R"(    "uiScalePercent": )" << s.uiScalePercent << ",\n";
-            out << R"(    "codeFontSizePx": )" << s.codeFontSizePx << ",\n";
+            out << R"(    "uiScalePercent": )" << uiScalePercent << ",\n";
+            out << R"(    "codeFontSizePx": )" << codeFontSizePx << ",\n";
             out << R"(    "uiFontFamily": ")" << EscapeJsonString(s.uiFontFamily) << "\",\n";
             out << R"(    "codeFontFamily": ")" << EscapeJsonString(s.codeFontFamily) << "\"\n";
             out << "  },\n";
             out << "  \"input\": {\n";
-            out << R"(    "orbitSensitivity": )" << s.orbitSensitivity << ",\n";
-            out << R"(    "panSensitivity": )" << s.panSensitivity << ",\n";
+            out << R"(    "orbitSensitivity": )" << orbitSensitivity << ",\n";
+            out << R"(    "panSensitivity": )" << panSensitivity << ",\n";
             out << R"(    "invertOrbitY": )" << boolStr(s.invertOrbitY) << "\n";
             out << "  },\n";
             out << "  \"rendering\": {\n";
@@ -426,14 +445,14 @@ namespace Horo::Editor {
             out << R"(    "textureStreamingBudget": ")" << EscapeJsonString(s.textureStreamingBudget) << "\"\n";
             out << "  },\n";
             out << "  \"audio\": {\n";
-            out << R"(    "masterVolume": )" << s.masterVolume << ",\n";
+            out << R"(    "masterVolume": )" << masterVolume << ",\n";
             out << R"(    "audioOutputDevice": ")" << ToString(s.audioOutputDevice) << "\",\n";
             out << R"(    "audioEnabled": )" << boolStr(s.audioEnabled) << "\n";
             out << "  },\n";
             out << "  \"network\": {\n";
-            out << R"(    "maxPreviewClients": )" << s.maxPreviewClients << ",\n";
-            out << R"(    "simulatedLatencyMs": )" << s.simulatedLatencyMs << ",\n";
-            out << R"(    "packageDownloadThreads": )" << s.packageDownloadThreads << "\n";
+            out << R"(    "maxPreviewClients": )" << maxPreviewClients << ",\n";
+            out << R"(    "simulatedLatencyMs": )" << simulatedLatencyMs << ",\n";
+            out << R"(    "packageDownloadThreads": )" << packageDownloadThreads << "\n";
             out << "  },\n";
             out << "  \"diagnostics\": {\n";
             out << R"(    "consoleLogLevel": ")" << ToString(s.consoleLogLevel) << "\",\n";
@@ -441,7 +460,7 @@ namespace Horo::Editor {
             out << R"(    "autoCaptureOnStutter": )" << boolStr(s.autoCaptureOnStutter) << ",\n";
             out << std::format(R"(    "stutterThresholdMs": {:.1f}
 )",
-                               s.stutterThresholdMs);
+                               stutterThresholdMs);
             out << "  }\n";
             out << "}\n";
         }
@@ -513,9 +532,11 @@ namespace Horo::Editor {
         clampInt(settings.simulatedLatencyMs, 0, 500, "Simulated latency must be between 0 and 500 ms.");
         clampInt(settings.packageDownloadThreads, 1, 32, "Package download threads must be between 1 and 32.");
 
-        if (settings.stutterThresholdMs < 1.0F || settings.stutterThresholdMs > 1000.0F) {
+        if (!std::isfinite(settings.stutterThresholdMs) || settings.stutterThresholdMs < 1.0F || settings.stutterThresholdMs > 1000.0F) {
             markInvalid("Stutter threshold must be between 1 and 1000 ms.");
-            settings.stutterThresholdMs = std::clamp(settings.stutterThresholdMs, 1.0F, 1000.0F);
+            settings.stutterThresholdMs = std::isfinite(settings.stutterThresholdMs)
+                                              ? std::clamp(settings.stutterThresholdMs, 1.0F, 1000.0F)
+                                              : EditorSettings{}.stutterThresholdMs;
         }
 
         if (!IsHexColor(settings.accentColorHex)) {
