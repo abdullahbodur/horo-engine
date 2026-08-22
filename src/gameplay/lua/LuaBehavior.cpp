@@ -298,7 +298,8 @@ namespace Horo::Gameplay {
         }
 
         static int Publish(lua_State *state) {
-            if (Context(state).Publish(GameplayEvent{GameplayEventTypeId{luaL_checkstring(state, 1)}, 1, std::nullopt, {}}).HasError())
+            if (GameplayEvent event{GameplayEventTypeId{luaL_checkstring(state, 1)}, 1, std::nullopt, {}};
+                Context(state).Publish(std::move(event)).HasError())
                 return luaL_error(state, "event publication was rejected");
             return 0;
         }

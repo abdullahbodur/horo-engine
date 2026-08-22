@@ -7,6 +7,7 @@
 
 #include "Horo/Gameplay/BehaviorRegistry.h"
 
+#include <memory>
 #include <type_traits>
 
 namespace Horo::Gameplay {
@@ -20,10 +21,11 @@ namespace Horo::Gameplay {
             BehaviorFactoryBinding{
                 nullptr,
                 [](void *) -> IBehaviorInstance * {
-            return new Behavior{};
+            // The exporting gameplay module must allocate and destroy its own instances.
+            return std::make_unique<Behavior>().release();
         },
                 [](void *, IBehaviorInstance *instance) noexcept {
-            delete static_cast<Behavior *>(instance);
+            const std::unique_ptr<Behavior> owned{static_cast<Behavior *>(instance)};
         },
             },
         };
