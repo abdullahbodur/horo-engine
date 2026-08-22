@@ -44,6 +44,9 @@ namespace Horo::Gameplay {
             } catch (const std::bad_alloc &) {
                 return nullptr;
             }
+            // Adopting the incoming block restores realloc's free-old-block semantics; on
+            // allocation failure above it stays owned by Lua, matching the original contract.
+            std::unique_ptr<std::byte[]> released{static_cast<std::byte *>(pointer)};
             if (pointer != nullptr && oldSize > 0)
                 std::memcpy(resized.get(), pointer, std::min(oldSize, newSize));
             budget.used = retained + newSize;
