@@ -8,6 +8,7 @@
 #include <limits>
 #include <nlohmann/json.hpp>
 #include <sstream>
+#include <type_traits>
 
 extern "C" {
 #include <lauxlib.h>
@@ -34,8 +35,7 @@ namespace Horo::Gameplay {
             const std::size_t retained = accountedOldSize > budget.used ? 0 : budget.used - accountedOldSize;
             if (newSize > budget.maximum || retained > budget.maximum - newSize)
                 return nullptr;
-            void *resized =
-                std::realloc(pointer, newSize);  // NOSONAR(cpp:S5025) Required to preserve Lua realloc semantics and performance.
+            void *resized = std::realloc(pointer, newSize);  // NOSONAR(cpp:S5025) Preserves Lua realloc semantics and performance.
             if (resized != nullptr)
                 budget.used = retained + newSize;
             return resized;
@@ -149,7 +149,7 @@ namespace Horo::Gameplay {
             BehaviorDescriptor descriptor;
         };
 
-        [[nodiscard]] Result<ParsedProgram> ParseProgram(const std::string_view source, const BehaviorTypeId &canonicalTypeId,
+        [[nodiscard]] Result<ParsedProgram> ParseProgram(std::string_view source, const BehaviorTypeId &canonicalTypeId,
                                                          const std::string &sourceName, const LuaBehaviorLimits limits) {
             LuaBudget budget{0, limits.maximumMemoryBytes};
             lua_State *state = lua_newstate(BudgetAllocate, &budget);
@@ -198,6 +198,8 @@ namespace Horo::Gameplay {
 
         LuaBehaviorInstance(const LuaBehaviorInstance &) = delete;
         LuaBehaviorInstance &operator=(const LuaBehaviorInstance &) = delete;
+        LuaBehaviorInstance(LuaBehaviorInstance &&) = delete;
+        LuaBehaviorInstance &operator=(LuaBehaviorInstance &&) = delete;
 
         ~LuaBehaviorInstance() override {
             Close();
@@ -561,11 +563,11 @@ namespace Horo::Gameplay {
         return impl_->revision;
     }
 
-    IBehaviorInstance *LuaBehaviorProgram::CreateInstance(void *userData) {
+    IBehaviorInstance *LuaBehaviorProgram::CreateInstance(void *userData) {  // NOSONAR(cpp:S5008) Binding contract mandates void*.
         return new LuaBehaviorInstance{*static_cast<LuaBehaviorProgram *>(userData)};  // NOSONAR(cpp:S5025) Paired factory boundary.
     }
 
-    void LuaBehaviorProgram::DestroyInstance(void *, IBehaviorInstance *instance) noexcept {
+    void LuaBehaviorProgram::DestroyInstance(void *, IBehaviorInstance *instance) noexcept {  // NOSONAR(cpp:S5008) Same binding contract.
         delete instance;  // NOSONAR(cpp:S5025) Must run in the Lua gameplay module that allocated the instance.
     }
 }  // namespace Horo::Gameplay
