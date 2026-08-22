@@ -3,9 +3,11 @@
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Gameplay/GameplayErrors.h"
 
+#include <cstddef>
 #include <cstdlib>
 #include <fstream>
 #include <limits>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <sstream>
 #include <type_traits>
