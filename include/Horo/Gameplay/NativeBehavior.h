@@ -17,15 +17,9 @@ namespace Horo::Gameplay {
         descriptor.typeId = BehaviorTypeId::Parse(stableTypeId).Value();
         return BehaviorRegistration{
             std::move(descriptor),
-            BehaviorFactoryBinding{
-                nullptr,
-                [](void *) -> IBehaviorInstance * {
-            return new Behavior{};
-        },
-                [](void *, IBehaviorInstance *instance) noexcept {
-            delete static_cast<Behavior *>(instance);
-        },
-            },
+            BehaviorFactoryBinding{[]() -> std::unique_ptr<IBehaviorInstance> {
+            return std::make_unique<Behavior>();
+        }},
         };
     }
 }  // namespace Horo::Gameplay

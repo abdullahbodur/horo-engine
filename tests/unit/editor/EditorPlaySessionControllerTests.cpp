@@ -27,22 +27,6 @@ namespace {
         }
     };
 
-    Gameplay::IBehaviorInstance *CreateBehavior(void *) {
-        return new MovingBehavior{};
-    }
-
-    void DestroyBehavior(void *, Gameplay::IBehaviorInstance *instance) noexcept {
-        delete instance;
-    }
-
-    Gameplay::IBehaviorInstance *CreateFastBehavior(void *) {
-        return new FastMovingBehavior{};
-    }
-
-    void DestroyFastBehavior(void *, Gameplay::IBehaviorInstance *instance) noexcept {
-        delete instance;
-    }
-
     Gameplay::BehaviorTypeId BehaviorType() {
         auto parsed = Gameplay::BehaviorTypeId::Parse("game.tests.play_mover");
         REQUIRE(parsed.HasValue());
@@ -55,7 +39,10 @@ namespace {
         descriptor.typeId = BehaviorType();
         descriptor.displayName = "Play Mover";
         descriptor.phases.push_back({Gameplay::BehaviorPhase::Gameplay, "game.tests.play_mover", {}, {}, {}});
-        REQUIRE(registry.Register({std::move(descriptor), {nullptr, &CreateBehavior, &DestroyBehavior}}).HasValue());
+        REQUIRE(registry
+                    .Register({std::move(descriptor), []() -> std::unique_ptr<Gameplay::IBehaviorInstance> {
+            return std::make_unique<MovingBehavior>();
+        }}).HasValue());
         REQUIRE(registry.Freeze().HasValue());
         return registry;
     }
@@ -66,7 +53,10 @@ namespace {
         descriptor.typeId = BehaviorType();
         descriptor.displayName = "Fast Play Mover";
         descriptor.phases.push_back({Gameplay::BehaviorPhase::Gameplay, "game.tests.play_mover", {}, {}, {}});
-        REQUIRE(registry.Register({std::move(descriptor), {nullptr, &CreateFastBehavior, &DestroyFastBehavior}}).HasValue());
+        REQUIRE(registry
+                    .Register({std::move(descriptor), []() -> std::unique_ptr<Gameplay::IBehaviorInstance> {
+            return std::make_unique<FastMovingBehavior>();
+        }}).HasValue());
         REQUIRE(registry.Freeze().HasValue());
         return registry;
     }

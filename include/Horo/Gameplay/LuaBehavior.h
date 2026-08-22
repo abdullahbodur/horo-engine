@@ -29,7 +29,7 @@ namespace Horo::Gameplay {
          * @param sourceName Diagnostic source name.
          * @param limits Per-instance sandbox budgets.
          */
-        [[nodiscard]] static Result<std::unique_ptr<LuaBehaviorProgram>> Compile(std::string source, BehaviorTypeId canonicalTypeId,
+        [[nodiscard]] static Result<std::unique_ptr<LuaBehaviorProgram>> Compile(std::string source, const BehaviorTypeId &canonicalTypeId,
                                                                                  std::string sourceName, LuaBehaviorLimits limits = {});
         /** @brief Loads `.horo_script` source and JSON metadata sidecar from bounded files. */
         [[nodiscard]] static Result<std::unique_ptr<LuaBehaviorProgram>> LoadFiles(const std::filesystem::path &sourcePath,
@@ -55,9 +55,17 @@ namespace Horo::Gameplay {
     private:
         friend class LuaBehaviorInstance;
         struct Impl;
-        explicit LuaBehaviorProgram(std::unique_ptr<Impl> impl) noexcept;
-        static IBehaviorInstance *CreateInstance(void *userData);
-        static void DestroyInstance(void *userData, IBehaviorInstance *instance) noexcept;
+
+    public:
+        /** @brief Internal construction token keeping direct construction outside the supported surface. */
+        struct ConstructionToken {
+            explicit ConstructionToken() = default;
+        };
+
+        /** @brief Constructs a program around an implementation prepared by Compile or LoadFiles. */
+        LuaBehaviorProgram(ConstructionToken, std::unique_ptr<Impl> impl) noexcept;
+
+    private:
         std::unique_ptr<Impl> impl_;
     };
 }  // namespace Horo::Gameplay

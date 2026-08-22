@@ -26,6 +26,10 @@ namespace {
     public:
         explicit RecordingBehavior(Recorder &recorder) : recorder_(&recorder) {}
 
+        ~RecordingBehavior() override {
+            ++recorder_->destroyed;
+        }
+
         void OnCreate(BehaviorContext &) override {
             recorder_->calls.emplace_back("create");
         }
@@ -79,15 +83,6 @@ namespace {
         bool published_{};
     };
 
-    IBehaviorInstance *Create(void *userData) {
-        return new RecordingBehavior{*static_cast<Recorder *>(userData)};
-    }
-
-    void Destroy(void *userData, IBehaviorInstance *instance) noexcept {
-        ++static_cast<Recorder *>(userData)->destroyed;
-        delete instance;
-    }
-
     BehaviorRegistry Registry(Recorder &recorder, const bool allowMultiple = false) {
         BehaviorRegistry registry;
         BehaviorDescriptor descriptor;
@@ -95,7 +90,10 @@ namespace {
         descriptor.displayName = "Mover";
         descriptor.allowMultiple = allowMultiple;
         descriptor.phases.push_back({BehaviorPhase::Gameplay, "game.tests.mover", {}, {}, {}});
-        REQUIRE(registry.Register({std::move(descriptor), {&recorder, &Create, &Destroy}}).HasValue());
+        REQUIRE(registry
+                    .Register({std::move(descriptor), [&recorder]() -> std::unique_ptr<IBehaviorInstance> {
+            return std::make_unique<RecordingBehavior>(recorder);
+        }}).HasValue());
         REQUIRE(registry.Freeze().HasValue());
         return registry;
     }

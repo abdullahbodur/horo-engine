@@ -7,6 +7,7 @@
 
 #include "Horo/Gameplay/BehaviorTypes.h"
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -150,29 +151,45 @@ namespace Horo::Gameplay {
     public:
         virtual ~IBehaviorInstance() = default;
 
-        virtual void OnCreate(BehaviorContext &) {}
+        virtual void OnCreate(BehaviorContext &) {
+            // Optional hook: instances implement only the lifecycle phases they use.
+        }
 
-        virtual void OnEnable(BehaviorContext &) {}
+        virtual void OnEnable(BehaviorContext &) {
+            // Optional hook: instances implement only the lifecycle phases they use.
+        }
 
-        virtual void OnStart(BehaviorContext &) {}
+        virtual void OnStart(BehaviorContext &) {
+            // Optional hook: instances implement only the lifecycle phases they use.
+        }
 
-        virtual void OnInputAction(BehaviorContext &, const GameplayInputAction &) {}
+        virtual void OnInputAction(BehaviorContext &, const GameplayInputAction &) {
+            // Optional hook: instances implement only the lifecycle phases they use.
+        }
 
-        virtual void OnEvent(BehaviorContext &, const GameplayEvent &) {}
+        virtual void OnEvent(BehaviorContext &, const GameplayEvent &) {
+            // Optional hook: instances implement only the lifecycle phases they use.
+        }
 
-        virtual void OnFixedUpdate(BehaviorContext &, FixedDeltaTime) {}
+        virtual void OnFixedUpdate(BehaviorContext &, FixedDeltaTime) {
+            // Optional hook: instances implement only the lifecycle phases they use.
+        }
 
-        virtual void OnPresentationUpdate(BehaviorContext &, FrameDeltaTime) {}
+        virtual void OnPresentationUpdate(BehaviorContext &, FrameDeltaTime) {
+            // Optional hook: instances implement only the lifecycle phases they use.
+        }
 
-        virtual void OnDisable(BehaviorContext &) {}
+        virtual void OnDisable(BehaviorContext &) {
+            // Optional hook: instances implement only the lifecycle phases they use.
+        }
 
-        virtual void OnDestroy(BehaviorContext &) {}
+        virtual void OnDestroy(BehaviorContext &) {
+            // Optional hook: instances implement only the lifecycle phases they use.
+        }
     };
 
-    /** @brief Exact-SDK-generation factory functions whose allocator remains owned by the module. */
+    /** @brief Module-owned factory producing scene-scoped instances; the runtime owns each instance through RAII. */
     struct BehaviorFactoryBinding {
-        void *userData{};
-        IBehaviorInstance *(*create)(void *userData){};
-        void (*destroy)(void *userData, IBehaviorInstance *instance) noexcept {};
+        std::function<std::unique_ptr<IBehaviorInstance>()> create{};
     };
 }  // namespace Horo::Gameplay
