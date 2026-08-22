@@ -29,7 +29,7 @@ namespace Horo::Gameplay {
          * @param sourceName Diagnostic source name.
          * @param limits Per-instance sandbox budgets.
          */
-        [[nodiscard]] static Result<std::unique_ptr<LuaBehaviorProgram>> Compile(std::string source, const BehaviorTypeId &canonicalTypeId,
+        [[nodiscard]] static Result<std::unique_ptr<LuaBehaviorProgram>> Compile(std::string source, BehaviorTypeId canonicalTypeId,
                                                                                  std::string sourceName, LuaBehaviorLimits limits = {});
         /** @brief Loads `.horo_script` source and JSON metadata sidecar from bounded files. */
         [[nodiscard]] static Result<std::unique_ptr<LuaBehaviorProgram>> LoadFiles(const std::filesystem::path &sourcePath,
@@ -39,13 +39,6 @@ namespace Horo::Gameplay {
         ~LuaBehaviorProgram();
         LuaBehaviorProgram(const LuaBehaviorProgram &) = delete;
         LuaBehaviorProgram &operator=(const LuaBehaviorProgram &) = delete;
-        struct Impl;
-        /**
-         * @brief Takes ownership of an opaque compiled implementation.
-         * @internal `Impl` is only produced by Compile and LoadFiles; it stays incomplete outside
-         * the engine, so external code cannot construct a meaningful instance through this hook.
-         */
-        explicit LuaBehaviorProgram(std::unique_ptr<Impl> impl) noexcept;
         /** @brief Returns the language-neutral descriptor discovered from the script. */
         [[nodiscard]] const BehaviorDescriptor &Descriptor() const noexcept;
         /** @brief Returns a factory binding valid while this program remains alive. */
@@ -61,6 +54,8 @@ namespace Horo::Gameplay {
 
     private:
         friend class LuaBehaviorInstance;
+        struct Impl;
+        explicit LuaBehaviorProgram(std::unique_ptr<Impl> impl) noexcept;
         static IBehaviorInstance *CreateInstance(void *userData);
         static void DestroyInstance(void *userData, IBehaviorInstance *instance) noexcept;
         std::unique_ptr<Impl> impl_;

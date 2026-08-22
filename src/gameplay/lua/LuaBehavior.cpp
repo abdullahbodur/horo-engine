@@ -3,12 +3,9 @@
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Gameplay/GameplayErrors.h"
 
-#include <algorithm>
-#include <cstddef>
-#include <cstring>
+#include <cstdlib>
 #include <fstream>
 #include <limits>
-#include <memory>
 #include <nlohmann/json.hpp>
 #include <sstream>
 #include <type_traits>
@@ -26,31 +23,22 @@ namespace Horo::Gameplay {
             std::size_t maximum{};
         };
 
-        // lua_Alloc contract: every block handed out is later returned through this same function,
-        // so new[]/delete[] symmetry via unique_ptr preserves ownership without the malloc family.
         void *BudgetAllocate(void *userData, void *pointer, const std::size_t oldSize, const std::size_t newSize) {
             auto &budget = *static_cast<LuaBudget *>(userData);
+            // For a fresh Lua allocation oldSize is an object-type tag, not an allocation size.
+            const std::size_t accountedOldSize = pointer != nullptr ? oldSize : 0;
             if (newSize == 0) {
-                budget.used = oldSize > budget.used ? 0 : budget.used - oldSize;
-                std::unique_ptr<std::byte[]> released{static_cast<std::byte *>(pointer)};
+                budget.used = accountedOldSize > budget.used ? 0 : budget.used - accountedOldSize;
+                std::free(pointer);  // NOSONAR(cpp:S5025) Lua's allocator ABI is the C realloc/free contract.
                 return nullptr;
             }
-            const std::size_t retained = oldSize > budget.used ? 0 : budget.used - oldSize;
+            const std::size_t retained = accountedOldSize > budget.used ? 0 : budget.used - accountedOldSize;
             if (newSize > budget.maximum || retained > budget.maximum - newSize)
                 return nullptr;
-            std::unique_ptr<std::byte[]> resized;
-            try {
-                resized = std::make_unique_for_overwrite<std::byte[]>(newSize);
-            } catch (const std::bad_alloc &) {
-                return nullptr;
-            }
-            // Adopting the incoming block restores realloc's free-old-block semantics; on
-            // allocation failure above it stays owned by Lua, matching the original contract.
-            std::unique_ptr<std::byte[]> released{static_cast<std::byte *>(pointer)};
-            if (pointer != nullptr && oldSize > 0)
-                std::memcpy(resized.get(), pointer, std::min(oldSize, newSize));
-            budget.used = retained + newSize;
-            return resized.release();
+            void *resized = std::realloc(pointer, newSize);  // NOSONAR(cpp:S5025) Preserves Lua realloc semantics and performance.
+            if (resized != nullptr)
+                budget.used = retained + newSize;
+            return resized;
         }
 
         void InstructionLimitHook(lua_State *state, lua_Debug *) {
@@ -497,7 +485,7 @@ namespace Horo::Gameplay {
     LuaBehaviorProgram::~LuaBehaviorProgram() = default;
 
     /** @copydoc LuaBehaviorProgram::Compile */
-    Result<std::unique_ptr<LuaBehaviorProgram>> LuaBehaviorProgram::Compile(std::string source, const BehaviorTypeId &canonicalTypeId,
+    Result<std::unique_ptr<LuaBehaviorProgram>> LuaBehaviorProgram::Compile(std::string source, BehaviorTypeId canonicalTypeId,
                                                                             std::string sourceName, const LuaBehaviorLimits limits) {
         if (source.empty() || source.size() > 2U * 1024U * 1024U || !canonicalTypeId.IsValid() || limits.maximumMemoryBytes < 64U * 1024U ||
             limits.maximumInstructionsPerCallback == 0 ||
@@ -511,7 +499,8 @@ namespace Horo::Gameplay {
         impl->source = std::move(source);
         impl->sourceName = std::move(sourceName);
         impl->limits = limits;
-        return Result<std::unique_ptr<LuaBehaviorProgram>>::Success(std::make_unique<LuaBehaviorProgram>(std::move(impl)));
+        return Result<std::unique_ptr<LuaBehaviorProgram>>::Success(std::unique_ptr<LuaBehaviorProgram>{
+            new LuaBehaviorProgram{std::move(impl)}});  // NOSONAR(cpp:S5950) The constructor is intentionally private.
     }
 
     /** @copydoc LuaBehaviorProgram::LoadFiles */
@@ -573,12 +562,11 @@ namespace Horo::Gameplay {
         return impl_->revision;
     }
 
-    IBehaviorInstance *LuaBehaviorProgram::CreateInstance(
-        void *userData) {  // NOSONAR(cpp:S5008) BehaviorFactoryBinding mandates void* userData.
-        return std::make_unique<LuaBehaviorInstance>(*static_cast<LuaBehaviorProgram *>(userData)).release();
+    IBehaviorInstance *LuaBehaviorProgram::CreateInstance(void *userData) {  // NOSONAR(cpp:S5008) Binding contract mandates void*.
+        return new LuaBehaviorInstance{*static_cast<LuaBehaviorProgram *>(userData)};  // NOSONAR(cpp:S5025) Paired factory boundary.
     }
 
     void LuaBehaviorProgram::DestroyInstance(void *, IBehaviorInstance *instance) noexcept {  // NOSONAR(cpp:S5008) Same binding contract.
-        const std::unique_ptr<IBehaviorInstance> owned{instance};
+        delete instance;  // NOSONAR(cpp:S5025) Must run in the Lua gameplay module that allocated the instance.
     }
 }  // namespace Horo::Gameplay
