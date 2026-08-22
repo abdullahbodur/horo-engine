@@ -7,7 +7,6 @@
 
 #include "Horo/Gameplay/BehaviorTypes.h"
 
-#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -188,8 +187,10 @@ namespace Horo::Gameplay {
         }
     };
 
-    /** @brief Module-owned factory producing scene-scoped instances; the runtime owns each instance through RAII. */
+    /** @brief Exact-SDK-generation factory functions whose allocator remains owned by the module. */
     struct BehaviorFactoryBinding {
-        std::function<std::unique_ptr<IBehaviorInstance>()> create{};
+        void *userData{};
+        IBehaviorInstance *(*create)(void *userData){};
+        void (*destroy)(void *userData, IBehaviorInstance *instance) noexcept {};
     };
 }  // namespace Horo::Gameplay

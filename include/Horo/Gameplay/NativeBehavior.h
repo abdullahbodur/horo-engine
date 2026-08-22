@@ -17,9 +17,16 @@ namespace Horo::Gameplay {
         descriptor.typeId = BehaviorTypeId::Parse(stableTypeId).Value();
         return BehaviorRegistration{
             std::move(descriptor),
-            BehaviorFactoryBinding{[]() -> std::unique_ptr<IBehaviorInstance> {
-            return std::make_unique<Behavior>();
-        }},
+            BehaviorFactoryBinding{
+                nullptr,
+                [](void *) -> IBehaviorInstance * {
+            // The exporting gameplay module must allocate and destroy its own instances.
+            return new Behavior{};  // NOSONAR(cpp:S5025) Paired with the module-owned destroy callback below.
+        },
+                [](void *, IBehaviorInstance *instance) noexcept {
+            delete static_cast<Behavior *>(instance);  // NOSONAR(cpp:S5025) Destruction must occur in the allocating module.
+        },
+            },
         };
     }
 }  // namespace Horo::Gameplay

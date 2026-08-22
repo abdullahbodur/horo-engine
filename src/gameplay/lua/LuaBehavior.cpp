@@ -3,10 +3,9 @@
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Gameplay/GameplayErrors.h"
 
-#include <cstring>
+#include <cstdlib>
 #include <fstream>
 #include <limits>
-#include <new>
 #include <nlohmann/json.hpp>
 #include <sstream>
 
@@ -25,22 +24,20 @@ namespace Horo::Gameplay {
 
         void *BudgetAllocate(void *userData, void *pointer, const std::size_t oldSize, const std::size_t newSize) {
             auto &budget = *static_cast<LuaBudget *>(userData);
+            // For a fresh Lua allocation oldSize is an object-type tag, not an allocation size.
+            const std::size_t accountedOldSize = pointer != nullptr ? oldSize : 0;
             if (newSize == 0) {
-                budget.used = oldSize > budget.used ? 0 : budget.used - oldSize;
-                ::operator delete(pointer);
+                budget.used = accountedOldSize > budget.used ? 0 : budget.used - accountedOldSize;
+                std::free(pointer);  // NOSONAR(cpp:S5025) Lua's allocator ABI is the C realloc/free contract.
                 return nullptr;
             }
-            const std::size_t retained = oldSize > budget.used ? 0 : budget.used - oldSize;
+            const std::size_t retained = accountedOldSize > budget.used ? 0 : budget.used - accountedOldSize;
             if (newSize > budget.maximum || retained > budget.maximum - newSize)
                 return nullptr;
-            void *resized = ::operator new(newSize, std::nothrow);
-            if (resized != nullptr) {
-                const std::size_t carried = pointer != nullptr ? std::min(oldSize, newSize) : 0;
-                if (carried > 0)
-                    std::memcpy(resized, pointer, carried);
-                ::operator delete(pointer);
+            void *resized =
+                std::realloc(pointer, newSize);  // NOSONAR(cpp:S5025) Required to preserve Lua realloc semantics and performance.
+            if (resized != nullptr)
                 budget.used = retained + newSize;
-            }
             return resized;
         }
 
@@ -482,12 +479,12 @@ namespace Horo::Gameplay {
         std::uint64_t failedRevision_{};
     };
 
-    LuaBehaviorProgram::LuaBehaviorProgram(ConstructionToken, std::unique_ptr<Impl> impl) noexcept : impl_(std::move(impl)) {}
+    LuaBehaviorProgram::LuaBehaviorProgram(std::unique_ptr<Impl> impl) noexcept : impl_(std::move(impl)) {}
 
     LuaBehaviorProgram::~LuaBehaviorProgram() = default;
 
     /** @copydoc LuaBehaviorProgram::Compile */
-    Result<std::unique_ptr<LuaBehaviorProgram>> LuaBehaviorProgram::Compile(std::string source, const BehaviorTypeId &canonicalTypeId,
+    Result<std::unique_ptr<LuaBehaviorProgram>> LuaBehaviorProgram::Compile(std::string source, BehaviorTypeId canonicalTypeId,
                                                                             std::string sourceName, const LuaBehaviorLimits limits) {
         if (source.empty() || source.size() > 2U * 1024U * 1024U || !canonicalTypeId.IsValid() || limits.maximumMemoryBytes < 64U * 1024U ||
             limits.maximumInstructionsPerCallback == 0 ||
@@ -501,8 +498,8 @@ namespace Horo::Gameplay {
         impl->source = std::move(source);
         impl->sourceName = std::move(sourceName);
         impl->limits = limits;
-        return Result<std::unique_ptr<LuaBehaviorProgram>>::Success(
-            std::make_unique<LuaBehaviorProgram>(ConstructionToken{}, std::move(impl)));
+        return Result<std::unique_ptr<LuaBehaviorProgram>>::Success(std::unique_ptr<LuaBehaviorProgram>{
+            new LuaBehaviorProgram{std::move(impl)}});  // NOSONAR(cpp:S5950) The constructor is intentionally private.
     }
 
     /** @copydoc LuaBehaviorProgram::LoadFiles */
@@ -543,9 +540,7 @@ namespace Horo::Gameplay {
 
     /** @copydoc LuaBehaviorProgram::Registration */
     BehaviorRegistration LuaBehaviorProgram::Registration() noexcept {
-        return {impl_->descriptor, [this]() -> std::unique_ptr<IBehaviorInstance> {
-            return std::make_unique<LuaBehaviorInstance>(*this);
-        }};
+        return {impl_->descriptor, {this, &LuaBehaviorProgram::CreateInstance, &LuaBehaviorProgram::DestroyInstance}};
     }
 
     /** @copydoc LuaBehaviorProgram::ReplaceCompatible */
@@ -564,5 +559,13 @@ namespace Horo::Gameplay {
     /** @copydoc LuaBehaviorProgram::Revision */
     std::uint64_t LuaBehaviorProgram::Revision() const noexcept {
         return impl_->revision;
+    }
+
+    IBehaviorInstance *LuaBehaviorProgram::CreateInstance(void *userData) {
+        return new LuaBehaviorInstance{*static_cast<LuaBehaviorProgram *>(userData)};  // NOSONAR(cpp:S5025) Paired factory boundary.
+    }
+
+    void LuaBehaviorProgram::DestroyInstance(void *, IBehaviorInstance *instance) noexcept {
+        delete instance;  // NOSONAR(cpp:S5025) Must run in the Lua gameplay module that allocated the instance.
     }
 }  // namespace Horo::Gameplay
