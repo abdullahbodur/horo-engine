@@ -4,6 +4,7 @@
 #include "Horo/Foundation/String.h"
 #include "editor/project_model/RendererAvailability.h"
 
+#include <string_view>
 #include <system_error>
 #include <utility>
 
@@ -19,7 +20,7 @@ namespace Horo::Editor {
          * @param value String to inspect.
          * @return True if separator found.
          */
-        [[nodiscard]] bool HasPathSeparator(const std::string &value) {
+        [[nodiscard]] bool HasPathSeparator(const std::string_view value) {
             return value.find('/') != std::string::npos || value.find('\\') != std::string::npos;
         }
 
@@ -29,8 +30,8 @@ namespace Horo::Editor {
          * @return True if owner, group, or other write is permitted.
          */
         [[nodiscard]] bool HasAnyWritePermission(const std::filesystem::perms permissions) {
-            constexpr auto writeBits =
-                std::filesystem::perms::owner_write | std::filesystem::perms::group_write | std::filesystem::perms::others_write;
+            using enum std::filesystem::perms;
+            constexpr auto writeBits = owner_write | group_write | others_write;
             return (permissions & writeBits) != std::filesystem::perms::none;
         }
 
@@ -75,6 +76,7 @@ namespace Horo::Editor {
 
     /** @copydoc InspectProjectCreationLocation */
     ProjectCreationLocation InspectProjectCreationLocation(const std::filesystem::path &path) {
+        using enum ProjectCreationLocationKind;
         if (path.empty()) {
             return {};
         }
@@ -113,7 +115,7 @@ namespace Horo::Editor {
 
     /** @copydoc ProjectCreationController::ProjectCreationController(const RendererAvailabilitySnapshot&) */
     ProjectCreationController::ProjectCreationController(const RendererAvailabilitySnapshot &availability)
-        : initialDraft_{}, draft_{initialDraft_}, rendererAvailability_(&availability) {
+        : draft_{initialDraft_}, rendererAvailability_(&availability) {
         initialDraft_.renderBackend = std::string{availability.DefaultSelectableBackendId()};
         draft_.renderBackend = initialDraft_.renderBackend;
     }
@@ -162,10 +164,8 @@ namespace Horo::Editor {
                 if (draft_.defaultScene.empty()) {
                     draft_.defaultScene = "assets/scenes/main.horo";
                 }
-            } else if (draft_.templateId == "custom") {
-                if (draft_.defaultScene.empty()) {
-                    draft_.defaultScene = "assets/scenes/main.horo";
-                }
+            } else if (draft_.templateId == "custom" && draft_.defaultScene.empty()) {
+                draft_.defaultScene = "assets/scenes/main.horo";
             }
         }
     }
@@ -252,47 +252,44 @@ namespace Horo::Editor {
 
     /** @copydoc ProjectCreationController::Validate */
     ProjectCreationValidation ProjectCreationController::Validate() const {
+        using enum ProjectCreationDiagnosticCode;
+        using enum ProjectCreationLocationKind;
         ProjectCreationValidation validation;
         if (rendererAvailability_ != nullptr) {
             const RendererBackendAvailability *backend = rendererAvailability_->Find(draft_.renderBackend);
             if (backend == nullptr || !backend->IsSelectable()) {
-                validation.diagnostics.push_back({ProjectCreationDiagnosticCode::RendererBackendUnavailable,
-                                                  backend != nullptr && !backend->diagnostic.empty()
-                                                      ? backend->diagnostic
-                                                      : "Selected renderer backend is unavailable on this editor installation."});
+                validation.diagnostics.emplace_back(ProjectCreationDiagnosticCode::RendererBackendUnavailable,
+                                                    backend != nullptr && !backend->diagnostic.empty()
+                                                        ? backend->diagnostic
+                                                        : "Selected renderer backend is unavailable on this editor installation.");
             }
         }
         if (Text::IsBlank(draft_.projectName)) {
-            validation.diagnostics.push_back({ProjectCreationDiagnosticCode::ProjectNameRequired, "Project name is required."});
+            validation.diagnostics.emplace_back(ProjectNameRequired, "Project name is required.");
         } else if (HasPathSeparator(draft_.projectName)) {
-            validation.diagnostics.push_back(
-                {ProjectCreationDiagnosticCode::ProjectNameContainsPathSeparator, "Project name must not contain path separators."});
+            validation.diagnostics.emplace_back(ProjectNameContainsPathSeparator, "Project name must not contain path separators.");
         }
 
         if (Text::IsBlank(draft_.projectPath)) {
-            validation.diagnostics.push_back({ProjectCreationDiagnosticCode::ProjectPathRequired, "Project location is required."});
+            validation.diagnostics.emplace_back(ProjectPathRequired, "Project location is required.");
             return validation;
         }
 
-        const ProjectCreationLocation location = InspectProjectCreationLocation(draft_.projectPath);
-        switch (location.kind) {
-            case ProjectCreationLocationKind::OccupiedDirectory:
-                validation.diagnostics.push_back({ProjectCreationDiagnosticCode::ProjectPathOccupied,
-                                                  "Project directory already contains files; choose an empty folder or import it."});
+        switch (const ProjectCreationLocation location = InspectProjectCreationLocation(draft_.projectPath); location.kind) {
+            case OccupiedDirectory:
+                validation.diagnostics.emplace_back(ProjectPathOccupied,
+                                                    "Project directory already contains files; choose an empty folder or import it.");
                 break;
-            case ProjectCreationLocationKind::ExistingNonDirectory:
-                validation.diagnostics.push_back(
-                    {ProjectCreationDiagnosticCode::ProjectPathNotDirectory, "Project location exists but is not a directory."});
+            case ExistingNonDirectory:
+                validation.diagnostics.emplace_back(ProjectPathNotDirectory, "Project location exists but is not a directory.");
                 break;
-            case ProjectCreationLocationKind::Inaccessible:
-                validation.diagnostics.push_back(
-                    {ProjectCreationDiagnosticCode::ProjectPathInaccessible, "Project location cannot be inspected."});
+            case Inaccessible:
+                validation.diagnostics.emplace_back(ProjectPathInaccessible, "Project location cannot be inspected.");
                 break;
-            case ProjectCreationLocationKind::EmptyDirectory:
-            case ProjectCreationLocationKind::Missing:
+            case EmptyDirectory:
+            case Missing:
                 if (!location.parentAppearsWritable) {
-                    validation.diagnostics.push_back(
-                        {ProjectCreationDiagnosticCode::ProjectParentNotWritable, "Project location's parent does not appear writable."});
+                    validation.diagnostics.emplace_back(ProjectParentNotWritable, "Project location's parent does not appear writable.");
                 }
                 break;
         }
@@ -301,8 +298,7 @@ namespace Horo::Editor {
 
     /** @copydoc ProjectCreationController::BuildCreationRequest */
     std::optional<ProjectCreationRequest> ProjectCreationController::BuildCreationRequest() const {
-        const auto val = Validate();
-        if (!val.IsValid()) {
+        if (const auto val = Validate(); !val.IsValid()) {
             LOG_DEBUG("editor.project_creation", "BuildCreationRequest failed validation (%zu diagnostics)", val.diagnostics.size());
             return std::nullopt;
         }

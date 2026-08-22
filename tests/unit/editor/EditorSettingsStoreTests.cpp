@@ -10,6 +10,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <string>
 
 namespace {
@@ -73,6 +74,24 @@ namespace {
         REQUIRE((!SaveEditorSettingsDocument(&doc, &error)));
         REQUIRE((!error.empty()));
         REQUIRE((doc.settings.accentColorHex == "#04A5FC"));
+    }
+
+    TEST_CASE("Non-finite stutter threshold is rejected before JSON persistence", "[unit][editor]") {
+        using namespace Horo::Editor;
+
+        const std::filesystem::path home = std::filesystem::temp_directory_path() / "horo_editor_settings_store_non_finite";
+        std::filesystem::remove_all(home);
+        SetHomeForTest(home);
+
+        EditorSettingsDocument doc;
+        doc.settings = DefaultEditorSettings();
+        doc.settings.stutterThresholdMs = std::numeric_limits<float>::quiet_NaN();
+
+        std::string error;
+        REQUIRE_FALSE(SaveEditorSettingsDocument(&doc, &error));
+        REQUIRE_FALSE(error.empty());
+        REQUIRE(doc.settings.stutterThresholdMs == DefaultEditorSettings().stutterThresholdMs);
+        REQUIRE_FALSE(std::filesystem::exists(home / ".horo" / "editor_settings.json"));
     }
 
     TEST_CASE("Malformed File Falls Back To Defaults", "[unit][editor]") {

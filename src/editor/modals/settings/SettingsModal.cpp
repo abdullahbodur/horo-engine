@@ -10,7 +10,9 @@
 
 #include <algorithm>
 #include <array>
+#include <format>
 #include <imgui.h>
+#include <memory>
 #include <ranges>
 #include <span>
 #include <vector>
@@ -21,12 +23,10 @@ namespace Horo::Editor {
         using namespace Theme;
 
         // Forward declarations for plugin detail functions
-        void DrawInstalledPlugins(SettingsState &st, const EditorGuiContext &ctx);
         void DrawPluginDetailPanel(SettingsState &st, const EditorGuiContext &ctx, float w, bool embedded = false);
         void DrawMcpDetailContent(SettingsState &st, const EditorGuiContext &ctx, int activeTab);
         void DrawFmodDetailContent(SettingsState &st, const EditorGuiContext &ctx, int activeTab);
         void DrawSteamDetailContent(SettingsState &st, const EditorGuiContext &ctx, int activeTab);
-        void DrawRuntimeDiscovery(SettingsState &st, const EditorGuiContext &ctx);
         void DrawExtensionManager(SettingsState &st, const EditorGuiContext &ctx);
         using namespace Ui;
         using Theme::ScopedTextStyle;
@@ -279,6 +279,7 @@ namespace Horo::Editor {
             const std::string mappingsDescription = ctx.localization.Get("editor", "settings.input.mappings_description");
             SettingGroup(mappingsGroup.c_str(), ctx.theme.fonts);
             SettingRow(mappingsLabel.c_str(), mappingsDescription.c_str(), ctx.theme.fonts, []() {
+                // Intentionally empty: the mappings overview is read-only for now.
             });
         }
 
@@ -403,43 +404,6 @@ namespace Horo::Editor {
             SettingRow(thresholdLabel.c_str(), thresholdDescription.c_str(), ctx.theme.fonts, [&st, &ctx]() {
                 InputFloatControl("##stutter", &st.diagnostics.stutterThresholdMs, ctx.theme.fonts);
             });
-        }
-
-        void DrawPluginsHeader(SettingsState &st, const EditorGuiContext &ctx) {
-            const float availW = ImGui::GetContentRegionAvail().x;
-            constexpr float btnW = 116.0F;
-            constexpr float btnGap = 8.0F;
-            constexpr float actionsW = btnW * 2.0F + btnGap;
-            const float copyW = std::max(260.0F, availW - actionsW - 28.0F);
-            const float startY = ImGui::GetCursorPosY();
-
-            ImGui::BeginGroup();
-            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + copyW);
-            ImGui::PushStyleColor(ImGuiCol_Text, Muted());
-            {
-                ScopedTextStyle ts(ctx.theme.fonts.sans, 12.5F, FontPx::Sans);
-                const std::string pluginDescription = ctx.localization.Get("editor", "settings.plugins.description");
-                ImGui::TextWrapped("%s", pluginDescription.c_str());
-            }
-            ImGui::PopStyleColor();
-            ImGui::PopTextWrapPos();
-            ImGui::EndGroup();
-
-            ImGui::SameLine(0.0F, 0.0F);
-            ImGui::SetCursorPos({ImGui::GetCursorPosX() + 24.0F, startY - 2.0F});
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{12.0F, 6.0F});
-            if (const std::string installAction = ctx.localization.Get("editor", "settings.plugins.action.install");
-                ImGui::Button(installAction.empty() ? "Install..." : installAction.c_str(), {btnW, 32.0F})) {
-                const std::string feedback = ctx.localization.Get("editor", "settings.plugins.feedback.install_not_implemented");
-                st.modalFeedback = feedback.empty() ? "Plugin installation dialog not yet implemented." : feedback;
-            }
-            ImGui::SameLine(0.0F, btnGap);
-            if (const std::string reloadAction = ctx.localization.Get("editor", "settings.plugins.action.reload");
-                ImGui::Button(reloadAction.empty() ? "Reload" : reloadAction.c_str(), {btnW, 32.0F})) {
-                const std::string feedback = ctx.localization.Get("editor", "settings.plugins.feedback.reloaded");
-                st.modalFeedback = feedback.empty() ? "Plugins reloaded successfully." : feedback;
-            }
-            ImGui::PopStyleVar();
         }
 
         void DrawPluginSectionTabs(SettingsState &st, const EditorGuiContext &ctx) {
@@ -1040,8 +1004,8 @@ namespace Horo::Editor {
 
             ImGui::Dummy({0.0F, 10.0F});
 
-            const bool contentChanged = s_lastSelectedPlugin != st.selectedPlugin || s_lastPluginTab != activeTab;
-            if (contentChanged && !embedded)
+            if (const bool contentChanged = s_lastSelectedPlugin != st.selectedPlugin || s_lastPluginTab != activeTab;
+                contentChanged && !embedded)
                 ImGui::SetScrollHereY(0.0F);
 
             DrawPluginDetailContentForSelection(st, ctx, activeTab);
@@ -1263,111 +1227,12 @@ namespace Horo::Editor {
             }
         }
 
-        // ── Installed Plugins (split pane) ────────────────────────────
-        void DrawInstalledPlugins(SettingsState &st, const EditorGuiContext &ctx) {
-            {
-                ScopedTextStyle ts(ctx.theme.fonts.sans, 12.5F, FontPx::Sans);
-                ImGui::PushStyleColor(ImGuiCol_Text, Muted());
-                ImGui::TextWrapped(
-                    "Select a plugin to edit its settings, permissions, diagnostics, and manifest details. The selected plugin "
-                    "appears below in the same workspace so the layout stays simpler and easier to scan.");
-                ImGui::PopStyleColor();
-            }
-            ImGui::Dummy({0.0F, 10.0F});
-
-            DrawPluginList(st, ctx, ImGui::GetContentRegionAvail().x);
-
-            ImGui::Dummy({0.0F, 10.0F});
-            const ImVec2 sep = ImGui::GetCursorScreenPos();
-            ImGui::GetWindowDrawList()->AddLine({sep.x, sep.y}, {sep.x + ImGui::GetContentRegionAvail().x, sep.y}, U32(Border()), 1.0F);
-            ImGui::Dummy({0.0F, 14.0F});
-
-            DrawPluginDetailPanel(st, ctx, ImGui::GetContentRegionAvail().x, true);
-        }
-
-        // ── Runtime & Discovery ───────────────────────────────────────
-        void DrawRuntimeDiscovery(SettingsState &st, const EditorGuiContext &ctx) {
-            SettingGroup("RUNTIME OVERVIEW", ctx.theme.fonts, true);
-
-            static const std::array<DiagnosticMetricSpec, 3> kRuntimeCards = {{
-                {"ISOLATION", "Sandboxed", "processes", Text()},
-                {"DISCOVERY", "Project + editor", "paths", Text()},
-                {"UPDATES", "Signed only", "registries", Ok()},
-            }};
-            DrawDiagnosticMetrics(kRuntimeCards, ctx);
-
-            SettingGroup("DISCOVERY", ctx.theme.fonts);
-            PluginSettingRow("Plugin Discovery Paths",
-                             "Semicolon-separated paths. Project plugins override editor plugins only when trusted.", ctx, [&st, &ctx]() {
-                (void)InputTextControl("##disc-path", st.runtime.discoveryPaths, 128, ctx.theme.fonts);
-            });
-            PluginSettingRow("Load Order Policy", "Defines how editor, project, vendor, and local-development plugins are resolved.", ctx,
-                             [&st, &ctx]() {
-                static constexpr std::array kOrders = {"Project overrides editor if trusted", "Editor plugins first",
-                                                       "Project plugins first", "Locked by project manifest"};
-                (void)ComboControl("##order", &st.runtime.loadOrder, kOrders.data(), 4, ctx.theme.fonts);
-            });
-            PluginSettingRow("Development Plugin Path", "Optional local path used for plugin authorship and hot-reload testing.", ctx,
-                             [&st, &ctx]() {
-                (void)InputTextControl("##dev-path", st.runtime.devPath, 64, ctx.theme.fonts);
-            });
-
-            SettingGroup("SECURITY & ISOLATION", ctx.theme.fonts);
-            PluginSettingRow("Sandbox Plugin Processes", "Run native/plugin processes with limited filesystem and network permissions.",
-                             ctx, [&st, &ctx]() {
-                DrawToggleState("##sandbox", &st.runtime.sandbox, ctx);
-            });
-            PluginSettingRow("Unsigned Plugin Policy",
-                             "Controls what happens when a plugin is not signed by a trusted vendor or local workspace.", ctx,
-                             [&st, &ctx]() {
-                static constexpr std::array kPolicies = {"Block by default", "Allow after warning", "Allow local development only"};
-                (void)ComboControl("##unsigned", &st.runtime.unsignedPolicy, kPolicies.data(), 3, ctx.theme.fonts);
-            });
-            PluginSettingRow("Network Access Policy",
-                             "Default network behavior for plugins unless a plugin-specific permission overrides it.", ctx, [&st, &ctx]() {
-                static constexpr std::array kNets = {"Deny by default", "Localhost only", "Prompt per plugin", "Allow trusted plugins"};
-                (void)ComboControl("##net", &st.runtime.networkPolicy, kNets.data(), 4, ctx.theme.fonts);
-            });
-
-            SettingGroup("UPDATES & COMPATIBILITY", ctx.theme.fonts);
-            PluginSettingRow("Auto-check Plugin Updates", "Checks signed registries only; local plugins are never updated automatically.",
-                             ctx, [&st, &ctx]() {
-                static constexpr std::array kChecks = {"Weekly", "Daily", "Manual Only"};
-                (void)ComboControl("##update", &st.runtime.updateCheck, kChecks.data(), 3, ctx.theme.fonts);
-            });
-            PluginSettingRow("Compatibility Mode", "How strictly plugin API versions are validated when opening a project.", ctx,
-                             [&st, &ctx]() {
-                static constexpr std::array kModes = {"Strict semantic versioning", "Allow compatible minors", "Prompt on mismatch"};
-                (void)ComboControl("##compat", &st.runtime.compatMode, kModes.data(), 3, ctx.theme.fonts);
-            });
-
-            ImGui::Dummy({0.0F, 4.0F});
-            {
-                const float noteW = ImGui::GetContentRegionAvail().x;
-                const ImVec2 p = ImGui::GetCursorScreenPos();
-                constexpr float noteH = 54.0F;
-                auto *dl = ImGui::GetWindowDrawList();
-                dl->AddRectFilled(p, {p.x + noteW, p.y + noteH}, ImColor{Accent().x, Accent().y, Accent().z, 0.06F}, Layout::Radius);
-                dl->AddRect(p, {p.x + noteW, p.y + noteH}, U32(Border()), Layout::Radius);
-
-                ImGui::SetCursorScreenPos({p.x + 12.0F, p.y + 10.0F});
-                ScopedTextStyle ts(ctx.theme.fonts.sans, 11.5F, FontPx::Sans);
-                ImGui::PushStyleColor(ImGuiCol_Text, Muted());
-                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + noteW - 26.0F);
-                ImGui::TextWrapped("Runtime settings are editor-wide defaults. Individual plugin settings live inside each plugin detail "
-                                   "panel and can override these defaults only when the permission model allows it.");
-                ImGui::PopTextWrapPos();
-                ImGui::PopStyleColor();
-                ImGui::SetCursorScreenPos({p.x, p.y + noteH + 4.0F});
-            }
-        }
-
         [[nodiscard]] const Extensions::ExtensionInventoryEntry *FindSelectedExtension(const SettingsState &st) {
             if (st.extensionInventory == nullptr)
                 return nullptr;
             const auto &entries = st.extensionInventory->Entries();
             const auto selected = std::ranges::find(entries, st.selectedExtensionId, &Extensions::ExtensionInventoryEntry::packageId);
-            return selected != entries.end() ? &*selected : nullptr;
+            return selected != entries.end() ? std::to_address(selected) : nullptr;
         }
 
         /** @brief Draws a detail section heading and its inter-section divider. */
@@ -1419,7 +1284,7 @@ namespace Horo::Editor {
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0F);
         }
 
-        void DrawExtensionDetails(SettingsState &st, const EditorGuiContext &ctx) {
+        void DrawExtensionDetails(const SettingsState &st, const EditorGuiContext &ctx) {
             const Extensions::ExtensionInventoryEntry *entry = FindSelectedExtension(st);
             if (entry == nullptr) {
                 ImGui::PushStyleColor(ImGuiCol_Text, Muted());
@@ -1439,9 +1304,9 @@ namespace Horo::Editor {
             if (entry->modules.empty()) {
                 DrawExtensionDetailValue(ctx.localization.Get("editor", "settings.extensions.none").c_str(), ctx);
             }
-            for (const auto &module : entry->modules) {
-                const std::string moduleDescription = module.kind + "  ·  v" + module.version;
-                DrawExtensionDetailRow(module.id.c_str(), moduleDescription.c_str(), ctx);
+            for (const auto &entryModule : entry->modules) {
+                const std::string moduleDescription = entryModule.kind + "  ·  v" + entryModule.version;
+                DrawExtensionDetailRow(entryModule.id.c_str(), moduleDescription.c_str(), ctx);
             }
 
             DrawExtensionDetailSection(ctx.localization.Get("editor", "settings.extensions.contributions").c_str(), ctx, false);
@@ -1460,6 +1325,94 @@ namespace Horo::Editor {
             }
         }
 
+        /** @brief Draws a single card in the installed-extensions list. */
+        void DrawExtensionCard(SettingsState &st, Extensions::ExtensionInventory &inventory, const EditorGuiContext &ctx,
+                               const Extensions::ExtensionInventoryEntry &entry) {
+            ImGui::PushID(entry.packageId.c_str());
+            const float cardWidth = ImGui::GetContentRegionAvail().x;
+            constexpr float cardHeight = 136.0F;
+            const ImVec2 cardMin = ImGui::GetCursorScreenPos();
+            const ImVec2 cardMax{cardMin.x + cardWidth, cardMin.y + cardHeight};
+            const bool selected = st.selectedExtensionId == entry.packageId;
+            const bool restartRequired = entry.RestartRequired();
+            auto *drawList = ImGui::GetWindowDrawList();
+            drawList->AddRectFilled(cardMin, cardMax, U32(selected ? ImVec4{Accent().x, Accent().y, Accent().z, 0.09F} : Bg1()),
+                                    Layout::Radius);
+            drawList->AddRect(cardMin, cardMax, U32(selected ? ImVec4{Accent().x, Accent().y, Accent().z, 0.50F} : Border()),
+                              Layout::Radius);
+            if (selected) {
+                drawList->AddRectFilled(cardMin, {cardMin.x + 3.0F, cardMax.y}, U32(Accent()), Layout::Radius);
+            }
+            ImGui::InvisibleButton("card", {cardWidth, cardHeight});
+            if (ImGui::IsItemClicked()) {
+                st.selectedExtensionId = entry.packageId;
+            }
+
+            const ImVec2 dotCenter{cardMin.x + 18.0F, cardMin.y + 23.0F};
+            drawList->AddCircleFilled(dotCenter, 8.0F,
+                                      U32(entry.runtimeActive ? ImVec4{Ok().x, Ok().y, Ok().z, 0.14F}
+                                                              : ImVec4{Dim().x, Dim().y, Dim().z, 0.12F}));
+            drawList->AddCircleFilled(dotCenter, 4.5F, U32(entry.runtimeActive ? Ok() : Dim()));
+
+            const std::string toggleLabel =
+                ctx.localization.Get("editor", entry.enabled ? "settings.plugins.status.enabled" : "settings.plugins.status.disabled");
+            float toggleLabelWidth = 0.0F;
+            {
+                ScopedTextStyle toggleText(ctx.theme.fonts.sans, 12.5F, FontPx::Sans);
+                toggleLabelWidth = ImGui::CalcTextSize(toggleLabel.c_str()).x;
+            }
+            const float toggleClusterWidth = 36.0F + 8.0F + toggleLabelWidth;
+            ImGui::SetCursorScreenPos({cardMin.x + 34.0F, cardMin.y + 13.0F});
+            {
+                ScopedTextStyle title(ctx.theme.fonts.sansEmphasis, 14.5F, FontPx::SansEmphasis);
+                ImGui::PushClipRect({cardMin.x + 34.0F, cardMin.y}, {cardMax.x - toggleClusterWidth - 28.0F, cardMin.y + 42.0F}, true);
+                ImGui::TextUnformatted(entry.displayName.c_str());
+                ImGui::PopClipRect();
+            }
+
+            ImGui::SetCursorScreenPos({cardMin.x + 16.0F, cardMin.y + 45.0F});
+            ImGui::PushStyleColor(ImGuiCol_Text, Muted());
+            ImGui::PushClipRect({cardMin.x + 16.0F, cardMin.y + 43.0F}, {cardMax.x - 16.0F, cardMax.y - 42.0F}, true);
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardWidth - 32.0F);
+            ImGui::TextWrapped("%s", entry.description.empty() ? entry.packageId.c_str() : entry.description.c_str());
+            ImGui::PopTextWrapPos();
+            ImGui::PopClipRect();
+            ImGui::PopStyleColor();
+
+            ImGui::SetCursorScreenPos({cardMin.x + 16.0F, cardMax.y - 34.0F});
+            ImGui::PushClipRect({cardMin.x + 14.0F, cardMax.y - 38.0F}, {cardMax.x - 14.0F, cardMax.y - 4.0F}, true);
+            const char *originKey = entry.origin == Extensions::ExtensionOrigin::BuiltIn ? "settings.extensions.origin.builtin"
+                                                                                         : "settings.extensions.origin.user";
+            Badge({.label = ("v" + entry.version).c_str(), .tone = BadgeTone::Accent}, ctx.theme.fonts);
+            Badge({.label = ctx.localization.Get("editor", originKey).c_str(), .tone = BadgeTone::Neutral}, ctx.theme.fonts);
+            if (restartRequired)
+                Badge({.label = ctx.localization.Get("editor", "settings.extensions.restart_required").c_str(), .tone = BadgeTone::Warning},
+                      ctx.theme.fonts);
+            ImGui::PopClipRect();
+
+            bool enabled = entry.enabled;
+            ImGui::SetCursorScreenPos({cardMax.x - toggleClusterWidth - 16.0F, cardMin.y + 12.0F});
+            if (ToggleControl("##extension-enabled", &enabled, ctx.theme.fonts, false)) {
+                if (Result<void> changed = inventory.SetEnabled(entry.packageId, enabled); changed.HasError()) {
+                    st.modalFeedback = changed.ErrorValue().message;
+                } else {
+                    st.modalFeedback = ctx.localization.Get("editor", "settings.extensions.feedback.restart");
+                }
+            }
+            ImGui::SameLine(0.0F, 8.0F);
+            {
+                ScopedTextStyle toggleText(ctx.theme.fonts.sans, 12.5F, FontPx::Sans);
+                ImGui::PushStyleColor(ImGuiCol_Text, enabled ? Text() : Muted());
+                ImGui::TextUnformatted(
+                    ctx.localization.Get("editor", enabled ? "settings.plugins.status.enabled" : "settings.plugins.status.disabled")
+                        .c_str());
+                ImGui::PopStyleColor();
+            }
+            ImGui::SetCursorScreenPos({cardMin.x, cardMax.y + 8.0F});
+            ImGui::PopID();
+        }
+
+        /** @brief Draws the installed extensions pane with its detail panel. */
         void DrawExtensionCards(SettingsState &st, const EditorGuiContext &ctx) {
             Extensions::ExtensionInventory &inventory = *st.extensionInventory;
             const auto &entries = inventory.Entries();
@@ -1484,7 +1437,7 @@ namespace Horo::Editor {
                 ImGui::PopStyleColor();
             }
             const std::string totalLabel =
-                std::to_string(entries.size()) + " " + ctx.localization.Get("editor", "settings.extensions.total");
+                std::format("{} {}", entries.size(), ctx.localization.Get("editor", "settings.extensions.total"));
             ImGui::SameLine();
             ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - ImGui::CalcTextSize(totalLabel.c_str()).x);
             ImGui::PushStyleColor(ImGuiCol_Text, Muted());
@@ -1508,89 +1461,7 @@ namespace Horo::Editor {
                     !ContainsCaseInsensitive(entry.packageId.c_str(), st.pluginFilter))
                     continue;
                 drewAny = true;
-                ImGui::PushID(entry.packageId.c_str());
-                const float cardWidth = ImGui::GetContentRegionAvail().x;
-                constexpr float cardHeight = 136.0F;
-                const ImVec2 cardMin = ImGui::GetCursorScreenPos();
-                const ImVec2 cardMax{cardMin.x + cardWidth, cardMin.y + cardHeight};
-                const bool selected = st.selectedExtensionId == entry.packageId;
-                const bool restartRequired = entry.RestartRequired();
-                auto *drawList = ImGui::GetWindowDrawList();
-                drawList->AddRectFilled(cardMin, cardMax, U32(selected ? ImVec4{Accent().x, Accent().y, Accent().z, 0.09F} : Bg1()),
-                                        Layout::Radius);
-                drawList->AddRect(cardMin, cardMax, U32(selected ? ImVec4{Accent().x, Accent().y, Accent().z, 0.50F} : Border()),
-                                  Layout::Radius);
-                if (selected) {
-                    drawList->AddRectFilled(cardMin, {cardMin.x + 3.0F, cardMax.y}, U32(Accent()), Layout::Radius);
-                }
-                ImGui::InvisibleButton("card", {cardWidth, cardHeight});
-                if (ImGui::IsItemClicked()) {
-                    st.selectedExtensionId = entry.packageId;
-                }
-
-                const ImVec2 dotCenter{cardMin.x + 18.0F, cardMin.y + 23.0F};
-                drawList->AddCircleFilled(dotCenter, 8.0F,
-                                          U32(entry.runtimeActive ? ImVec4{Ok().x, Ok().y, Ok().z, 0.14F}
-                                                                  : ImVec4{Dim().x, Dim().y, Dim().z, 0.12F}));
-                drawList->AddCircleFilled(dotCenter, 4.5F, U32(entry.runtimeActive ? Ok() : Dim()));
-
-                const std::string toggleLabel =
-                    ctx.localization.Get("editor", entry.enabled ? "settings.plugins.status.enabled" : "settings.plugins.status.disabled");
-                float toggleLabelWidth = 0.0F;
-                {
-                    ScopedTextStyle toggleText(ctx.theme.fonts.sans, 12.5F, FontPx::Sans);
-                    toggleLabelWidth = ImGui::CalcTextSize(toggleLabel.c_str()).x;
-                }
-                const float toggleClusterWidth = 36.0F + 8.0F + toggleLabelWidth;
-                ImGui::SetCursorScreenPos({cardMin.x + 34.0F, cardMin.y + 13.0F});
-                {
-                    ScopedTextStyle title(ctx.theme.fonts.sansEmphasis, 14.5F, FontPx::SansEmphasis);
-                    ImGui::PushClipRect({cardMin.x + 34.0F, cardMin.y}, {cardMax.x - toggleClusterWidth - 28.0F, cardMin.y + 42.0F}, true);
-                    ImGui::TextUnformatted(entry.displayName.c_str());
-                    ImGui::PopClipRect();
-                }
-
-                ImGui::SetCursorScreenPos({cardMin.x + 16.0F, cardMin.y + 45.0F});
-                ImGui::PushStyleColor(ImGuiCol_Text, Muted());
-                ImGui::PushClipRect({cardMin.x + 16.0F, cardMin.y + 43.0F}, {cardMax.x - 16.0F, cardMax.y - 42.0F}, true);
-                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cardWidth - 32.0F);
-                ImGui::TextWrapped("%s", entry.description.empty() ? entry.packageId.c_str() : entry.description.c_str());
-                ImGui::PopTextWrapPos();
-                ImGui::PopClipRect();
-                ImGui::PopStyleColor();
-
-                ImGui::SetCursorScreenPos({cardMin.x + 16.0F, cardMax.y - 34.0F});
-                ImGui::PushClipRect({cardMin.x + 14.0F, cardMax.y - 38.0F}, {cardMax.x - 14.0F, cardMax.y - 4.0F}, true);
-                const char *originKey = entry.origin == Extensions::ExtensionOrigin::BuiltIn ? "settings.extensions.origin.builtin"
-                                                                                             : "settings.extensions.origin.user";
-                Badge({.label = ("v" + entry.version).c_str(), .tone = BadgeTone::Accent}, ctx.theme.fonts);
-                Badge({.label = ctx.localization.Get("editor", originKey).c_str(), .tone = BadgeTone::Neutral}, ctx.theme.fonts);
-                if (restartRequired)
-                    Badge({.label = ctx.localization.Get("editor", "settings.extensions.restart_required").c_str(),
-                           .tone = BadgeTone::Warning},
-                          ctx.theme.fonts);
-                ImGui::PopClipRect();
-
-                bool enabled = entry.enabled;
-                ImGui::SetCursorScreenPos({cardMax.x - toggleClusterWidth - 16.0F, cardMin.y + 12.0F});
-                if (ToggleControl("##extension-enabled", &enabled, ctx.theme.fonts, false)) {
-                    if (Result<void> changed = inventory.SetEnabled(entry.packageId, enabled); changed.HasError()) {
-                        st.modalFeedback = changed.ErrorValue().message;
-                    } else {
-                        st.modalFeedback = ctx.localization.Get("editor", "settings.extensions.feedback.restart");
-                    }
-                }
-                ImGui::SameLine(0.0F, 8.0F);
-                {
-                    ScopedTextStyle toggleText(ctx.theme.fonts.sans, 12.5F, FontPx::Sans);
-                    ImGui::PushStyleColor(ImGuiCol_Text, enabled ? Text() : Muted());
-                    ImGui::TextUnformatted(
-                        ctx.localization.Get("editor", enabled ? "settings.plugins.status.enabled" : "settings.plugins.status.disabled")
-                            .c_str());
-                    ImGui::PopStyleColor();
-                }
-                ImGui::SetCursorScreenPos({cardMin.x, cardMax.y + 8.0F});
-                ImGui::PopID();
+                DrawExtensionCard(st, inventory, ctx, entry);
             }
             if (!drewAny) {
                 ImGui::PushStyleColor(ImGuiCol_Text, Muted());
@@ -1704,9 +1575,13 @@ namespace Horo::Editor {
                                         marketplace.activePackageId == entry.packageId;
                 ImGui::SetCursorScreenPos({cardMax.x - 116.0F, cardMin.y + 35.0F});
                 ImGui::BeginDisabled(installed || busy);
-                const std::string action = ctx.localization.Get("editor", installed    ? "settings.extensions.marketplace.installed"
-                                                                          : installing ? "settings.extensions.marketplace.installing"
-                                                                                       : "settings.plugins.action.install");
+                const char *actionKey = "settings.plugins.action.install";
+                if (installed) {
+                    actionKey = "settings.extensions.marketplace.installed";
+                } else if (installing) {
+                    actionKey = "settings.extensions.marketplace.installing";
+                }
+                const std::string action = ctx.localization.Get("editor", actionKey);
                 if (ImGui::Button(action.c_str(), {100.0F, 32.0F})) {
                     const Result<void> started = st.extensionMarketplace->Install(entry.packageId);
                     if (started.HasError())
@@ -1809,8 +1684,8 @@ namespace Horo::Editor {
                 st.statusIsError = false;
             }
             ImGui::SameLine(0.0F, gap);
-            const std::string cancelLabel = ctx.localization.Get("editor", "settings.cancel") + "###settings_cancel";
-            if (Button({.label = cancelLabel.c_str(),
+            if (const std::string cancelLabel = ctx.localization.Get("editor", "settings.cancel") + "###settings_cancel";
+                Button({.label = cancelLabel.c_str(),
                         .size = {cancelW, actionH},
                         .variant = ButtonVariant::Secondary,
                         .font = ctx.theme.fonts.sansCompact,
@@ -1820,8 +1695,8 @@ namespace Horo::Editor {
                 requestClose = true;
             }
             ImGui::SameLine(0.0F, gap);
-            const std::string applyLabel = ctx.localization.Get("editor", "settings.apply") + "###settings_apply";
-            if (Button({.label = applyLabel.c_str(),
+            if (const std::string applyLabel = ctx.localization.Get("editor", "settings.apply") + "###settings_apply";
+                Button({.label = applyLabel.c_str(),
                         .size = {applyW, actionH},
                         .variant = ButtonVariant::Primary,
                         .font = ctx.theme.fonts.sansCompact,
