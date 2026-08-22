@@ -305,9 +305,7 @@ namespace Horo::Gameplay {
         }
 
         static int Publish(lua_State *state) {
-            if (Context(state)
-                    .Publish(GameplayEvent{GameplayEventTypeId{luaL_checkstring(state, 1)}, 1, std::nullopt, {}})
-                    .HasError())
+            if (Context(state).Publish(GameplayEvent{GameplayEventTypeId{luaL_checkstring(state, 1)}, 1, std::nullopt, {}}).HasError())
                 return luaL_error(state, "event publication was rejected");
             return 0;
         }
@@ -342,8 +340,7 @@ namespace Horo::Gameplay {
             return 0;
         }
 
-        template <lua_CFunction Callback>
-        static void Function(lua_State *state, BehaviorContext &context, const char *name) {
+        template <lua_CFunction Callback> static void Function(lua_State *state, BehaviorContext &context, const char *name) {
             lua_pushlightuserdata(state, &context);
             lua_pushcclosure(state, Callback, 1);
             lua_setfield(state, -2, name);
@@ -523,8 +520,7 @@ namespace Horo::Gameplay {
             error || sourceSize == 0 || sourceSize > 2U * 1024U * 1024U)
             return Result<std::unique_ptr<LuaBehaviorProgram>>::Failure(
                 MakeError(GameplayErrors::InvalidBehaviorComponent, "Lua behavior source is missing or oversized."));
-        if (const auto sidecarSize = std::filesystem::file_size(sidecarPath, error);
-            error || sidecarSize == 0 || sidecarSize > 64U * 1024U)
+        if (const auto sidecarSize = std::filesystem::file_size(sidecarPath, error); error || sidecarSize == 0 || sidecarSize > 64U * 1024U)
             return Result<std::unique_ptr<LuaBehaviorProgram>>::Failure(
                 MakeError(GameplayErrors::InvalidBehaviorComponent, "Lua behavior sidecar is missing or oversized."));
         std::ifstream sourceInput(sourcePath, std::ios::binary);
@@ -574,7 +570,8 @@ namespace Horo::Gameplay {
         return impl_->revision;
     }
 
-    IBehaviorInstance *LuaBehaviorProgram::CreateInstance(void *userData) {  // NOSONAR(cpp:S5008) BehaviorFactoryBinding mandates void* userData.
+    IBehaviorInstance *LuaBehaviorProgram::CreateInstance(
+        void *userData) {  // NOSONAR(cpp:S5008) BehaviorFactoryBinding mandates void* userData.
         return std::make_unique<LuaBehaviorInstance>(*static_cast<LuaBehaviorProgram *>(userData)).release();
     }
 
