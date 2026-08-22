@@ -95,6 +95,18 @@ TEST_CASE("Lua behavior rejects sidecar identity mismatch and unavailable OS lib
     REQUIRE(LuaBehaviorProgram::Compile(unsafe, Type(), "unsafe.horo_script").HasError());
 }
 
+TEST_CASE("Lua behavior enforces its memory budget while compiling source") {
+    const std::string oversizedAllocation = R"(
+local payload = string.rep("x", 256 * 1024)
+return horo.behavior {
+    type_id = "game.tests.lua_mover",
+    display_name = payload
+}
+)";
+    const LuaBehaviorLimits limits{.maximumMemoryBytes = 64U * 1024U, .maximumInstructionsPerCallback = 100'000};
+    REQUIRE(LuaBehaviorProgram::Compile(oversizedAllocation, Type(), "memory_budget.horo_script", limits).HasError());
+}
+
 TEST_CASE("Lua lifecycle receives typed input callback values") {
     const std::string source = R"(
 return horo.behavior {

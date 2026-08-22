@@ -3,10 +3,14 @@
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Gameplay/GameplayErrors.h"
 
+#include <cstddef>
+#include <cstdlib>
 #include <fstream>
 #include <limits>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <sstream>
+#include <type_traits>
 
 extern "C" {
 #include <lauxlib.h>
@@ -23,15 +27,17 @@ namespace Horo::Gameplay {
 
         void *BudgetAllocate(void *userData, void *pointer, const std::size_t oldSize, const std::size_t newSize) {
             auto &budget = *static_cast<LuaBudget *>(userData);
+            // For a fresh Lua allocation oldSize is an object-type tag, not an allocation size.
+            const std::size_t accountedOldSize = pointer != nullptr ? oldSize : 0;
             if (newSize == 0) {
-                budget.used = oldSize > budget.used ? 0 : budget.used - oldSize;
-                std::free(pointer);
+                budget.used = accountedOldSize > budget.used ? 0 : budget.used - accountedOldSize;
+                std::free(pointer);  // NOSONAR(cpp:S5025) Lua's allocator ABI is the C realloc/free contract.
                 return nullptr;
             }
-            const std::size_t retained = oldSize > budget.used ? 0 : budget.used - oldSize;
+            const std::size_t retained = accountedOldSize > budget.used ? 0 : budget.used - accountedOldSize;
             if (newSize > budget.maximum || retained > budget.maximum - newSize)
                 return nullptr;
-            void *resized = std::realloc(pointer, newSize);
+            void *resized = std::realloc(pointer, newSize);  // NOSONAR(cpp:S5025) Preserves Lua realloc semantics and performance.
             if (resized != nullptr)
                 budget.used = retained + newSize;
             return resized;
@@ -132,7 +138,7 @@ namespace Horo::Gameplay {
                     lua_getfield(state, -1, "default");
                     BehaviorFieldValue defaultValue = ReadDefault(state, -1);
                     lua_pop(state, 1);
-                    descriptor.fields.push_back({std::move(name), std::move(defaultValue)});
+                    descriptor.fields.emplace_back(std::move(name), std::move(defaultValue));
                     lua_pop(state, 1);
                 }
             }
@@ -145,7 +151,7 @@ namespace Horo::Gameplay {
             BehaviorDescriptor descriptor;
         };
 
-        [[nodiscard]] Result<ParsedProgram> ParseProgram(const std::string &source, const BehaviorTypeId &canonicalTypeId,
+        [[nodiscard]] Result<ParsedProgram> ParseProgram(std::string_view source, const BehaviorTypeId &canonicalTypeId,
                                                          const std::string &sourceName, const LuaBehaviorLimits limits) {
             LuaBudget budget{0, limits.maximumMemoryBytes};
             lua_State *state = lua_newstate(BudgetAllocate, &budget);
@@ -153,8 +159,8 @@ namespace Horo::Gameplay {
                 return Result<ParsedProgram>::Failure(MakeError(GameplayErrors::InvalidBehaviorComponent, "Unable to create Lua VM."));
             OpenSandbox(state);
             lua_sethook(state, InstructionLimitHook, LUA_MASKCOUNT, static_cast<int>(limits.maximumInstructionsPerCallback));
-            const int loaded = luaL_loadbufferx(state, source.data(), source.size(), sourceName.c_str(), "t");
-            if (loaded != LUA_OK || lua_pcall(state, 0, 1, 0) != LUA_OK) {
+            if (const int loaded = luaL_loadbufferx(state, source.data(), source.size(), sourceName.c_str(), "t");
+                loaded != LUA_OK || lua_pcall(state, 0, 1, 0) != LUA_OK) {
                 const std::string message = lua_isstring(state, -1) ? lua_tostring(state, -1) : "Lua script compilation failed.";
                 lua_close(state);
                 return Result<ParsedProgram>::Failure(MakeError(GameplayErrors::InvalidBehaviorComponent, message));
@@ -191,6 +197,11 @@ namespace Horo::Gameplay {
     class LuaBehaviorInstance final : public IBehaviorInstance {
     public:
         explicit LuaBehaviorInstance(LuaBehaviorProgram &program) : program_(&program) {}
+
+        LuaBehaviorInstance(const LuaBehaviorInstance &) = delete;
+        LuaBehaviorInstance &operator=(const LuaBehaviorInstance &) = delete;
+        LuaBehaviorInstance(LuaBehaviorInstance &&) = delete;
+        LuaBehaviorInstance &operator=(LuaBehaviorInstance &&) = delete;
 
         ~LuaBehaviorInstance() override {
             Close();
@@ -287,8 +298,7 @@ namespace Horo::Gameplay {
         }
 
         static int Publish(lua_State *state) {
-            GameplayEvent event{GameplayEventTypeId{luaL_checkstring(state, 1)}, 1, std::nullopt, {}};
-            if (Context(state).Publish(std::move(event)).HasError())
+            if (Context(state).Publish(GameplayEvent{GameplayEventTypeId{luaL_checkstring(state, 1)}, 1, std::nullopt, {}}).HasError())
                 return luaL_error(state, "event publication was rejected");
             return 0;
         }
@@ -298,8 +308,7 @@ namespace Horo::Gameplay {
             for (const BehaviorField &field : Context(state).Fields()) {
                 if (field.name != name)
                     continue;
-                std::visit([state](const auto &value) {
-                    using T = std::decay_t<decltype(value)>;
+                std::visit([state]<typename T>(const T &value) {
                     if constexpr (std::is_same_v<T, std::monostate>)
                         lua_pushnil(state);
                     else if constexpr (std::is_same_v<T, bool>)
@@ -324,29 +333,29 @@ namespace Horo::Gameplay {
             return 0;
         }
 
-        static void Function(lua_State *state, BehaviorContext &context, const char *name, lua_CFunction function) {
+        template <lua_CFunction Callback> static void Function(lua_State *state, BehaviorContext &context, const char *name) {
             lua_pushlightuserdata(state, &context);
-            lua_pushcclosure(state, function, 1);
+            lua_pushcclosure(state, Callback, 1);
             lua_setfield(state, -2, name);
         }
 
         static void PushContext(lua_State *state, BehaviorContext &context) {
             lua_newtable(state);
             lua_newtable(state);
-            Function(state, context, "position", Position);
-            Function(state, context, "set_position", SetPosition);
+            Function<Position>(state, context, "position");
+            Function<SetPosition>(state, context, "set_position");
             lua_setfield(state, -2, "transform");
             lua_newtable(state);
-            Function(state, context, "action", Action);
+            Function<Action>(state, context, "action");
             lua_setfield(state, -2, "input");
             lua_newtable(state);
-            Function(state, context, "publish", Publish);
+            Function<Publish>(state, context, "publish");
             lua_setfield(state, -2, "events");
             lua_newtable(state);
-            Function(state, context, "get", Field);
+            Function<Field>(state, context, "get");
             lua_setfield(state, -2, "fields");
             lua_newtable(state);
-            Function(state, context, "info", LogInfo);
+            Function<LogInfo>(state, context, "info");
             lua_setfield(state, -2, "log");
             const GameplayEntityRef entity = context.Entity();
             lua_newtable(state);
@@ -419,8 +428,7 @@ namespace Horo::Gameplay {
             lua_setfield(state, -2, "schema_version");
             lua_newtable(state);
             for (const BehaviorField &field : event.fields) {
-                std::visit([state](const auto &value) {
-                    using T = std::decay_t<decltype(value)>;
+                std::visit([state]<typename T>(const T &value) {
                     if constexpr (std::is_same_v<T, bool>)
                         lua_pushboolean(state, value);
                     else if constexpr (std::is_same_v<T, std::int64_t>)
@@ -450,7 +458,7 @@ namespace Horo::Gameplay {
             }
             PushContext(state, context);
             int argumentCount = 1;
-            if (delta) {
+            if (delta.has_value()) {
                 lua_pushnumber(state, *delta);
                 ++argumentCount;
             } else if (action != nullptr) {
@@ -493,8 +501,8 @@ namespace Horo::Gameplay {
         impl->source = std::move(source);
         impl->sourceName = std::move(sourceName);
         impl->limits = limits;
-        return Result<std::unique_ptr<LuaBehaviorProgram>>::Success(
-            std::unique_ptr<LuaBehaviorProgram>{new LuaBehaviorProgram{std::move(impl)}});
+        return Result<std::unique_ptr<LuaBehaviorProgram>>::Success(std::unique_ptr<LuaBehaviorProgram>{
+            new LuaBehaviorProgram{std::move(impl)}});  // NOSONAR(cpp:S5950) The constructor is intentionally private.
     }
 
     /** @copydoc LuaBehaviorProgram::LoadFiles */
@@ -502,12 +510,11 @@ namespace Horo::Gameplay {
                                                                               const std::filesystem::path &sidecarPath,
                                                                               const LuaBehaviorLimits limits) {
         std::error_code error;
-        const auto sourceSize = std::filesystem::file_size(sourcePath, error);
-        if (error || sourceSize == 0 || sourceSize > 2U * 1024U * 1024U)
+        if (const auto sourceSize = std::filesystem::file_size(sourcePath, error);
+            error || sourceSize == 0 || sourceSize > 2U * 1024U * 1024U)
             return Result<std::unique_ptr<LuaBehaviorProgram>>::Failure(
                 MakeError(GameplayErrors::InvalidBehaviorComponent, "Lua behavior source is missing or oversized."));
-        const auto sidecarSize = std::filesystem::file_size(sidecarPath, error);
-        if (error || sidecarSize == 0 || sidecarSize > 64U * 1024U)
+        if (const auto sidecarSize = std::filesystem::file_size(sidecarPath, error); error || sidecarSize == 0 || sidecarSize > 64U * 1024U)
             return Result<std::unique_ptr<LuaBehaviorProgram>>::Failure(
                 MakeError(GameplayErrors::InvalidBehaviorComponent, "Lua behavior sidecar is missing or oversized."));
         std::ifstream sourceInput(sourcePath, std::ios::binary);
@@ -557,11 +564,11 @@ namespace Horo::Gameplay {
         return impl_->revision;
     }
 
-    IBehaviorInstance *LuaBehaviorProgram::CreateInstance(void *userData) {
-        return new LuaBehaviorInstance{*static_cast<LuaBehaviorProgram *>(userData)};
+    IBehaviorInstance *LuaBehaviorProgram::CreateInstance(void *userData) {  // NOSONAR(cpp:S5008) Binding contract mandates void*.
+        return std::make_unique<LuaBehaviorInstance>(*static_cast<LuaBehaviorProgram *>(userData)).release();
     }
 
-    void LuaBehaviorProgram::DestroyInstance(void *, IBehaviorInstance *instance) noexcept {
-        delete instance;
+    void LuaBehaviorProgram::DestroyInstance(void *, IBehaviorInstance *instance) noexcept {  // NOSONAR(cpp:S5008) Same binding contract.
+        const std::unique_ptr<IBehaviorInstance> owned{instance};
     }
 }  // namespace Horo::Gameplay
