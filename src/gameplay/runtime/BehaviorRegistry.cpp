@@ -15,7 +15,7 @@ namespace Horo::Gameplay {
         [[nodiscard]] Result<void> ValidateDescriptor(const BehaviorRegistration &registration) {
             const BehaviorDescriptor &descriptor = registration.descriptor;
             if (!descriptor.typeId.IsValid() || descriptor.schemaVersion == 0 || descriptor.displayName.empty() ||
-                !registration.factory.create)
+                registration.factory.create == nullptr || registration.factory.destroy == nullptr)
                 return Result<void>::Failure(
                     MakeError(GameplayErrors::InvalidBehaviorComponent, "Behavior descriptor or factory binding is incomplete."));
 

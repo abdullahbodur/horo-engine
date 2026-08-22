@@ -45,10 +45,11 @@ namespace Horo::Gameplay {
             Runtime::EntityRef entity;
             BehaviorComponent component;
             const BehaviorRegistration *registration{};
-            std::unique_ptr<IBehaviorInstance> implementation;
+            IBehaviorInstance *implementation{};
             bool created{};
             bool enabledCallbackActive{};
             bool started{};
+            bool destroyed{};
         };
 
         struct ContextBackend final : Detail::IBehaviorContextBackend {
@@ -127,11 +128,11 @@ namespace Horo::Gameplay {
                     if (const std::size_t count = ++multiplicity[component.typeId.Value()];
                         count > 1 && !registration->descriptor.allowMultiple)
                         return Result<void>::Failure(MakeError(GameplayErrors::BehaviorMultiplicityViolation));
-                    std::unique_ptr<IBehaviorInstance> implementation = registration->factory.create();
+                    IBehaviorInstance *implementation = registration->factory.create(registration->factory.userData);
                     if (implementation == nullptr)
                         return Result<void>::Failure(
                             MakeError(GameplayErrors::InvalidBehaviorComponent, "Behavior factory returned no instance."));
-                    instances.emplace_back(entity->entity, component, registration, std::move(implementation));
+                    instances.emplace_back(entity->entity, component, registration, implementation);
                 }
             }
 
@@ -193,6 +194,7 @@ namespace Horo::Gameplay {
                         LOG_WARN("gameplay.runtime", "Behavior rollback unknown exception.");
                     }
                 }
+                iterator->registration->factory.destroy(iterator->registration->factory.userData, iterator->implementation);
             }
             return Result<std::unique_ptr<BehaviorRuntime>>::Failure(built.ErrorValue());
         }
@@ -291,8 +293,10 @@ namespace Horo::Gameplay {
             } catch (...) {
                 LOG_WARN("gameplay.runtime", "Behavior shutdown unknown exception.");
             }
+            iterator->registration->factory.destroy(iterator->registration->factory.userData, iterator->implementation);
+            iterator->destroyed = true;
         }
-        impl_->instances.clear();  // Destroys each remaining instance through its owning unique_ptr.
+        impl_->instances.clear();
         impl_->events.current.clear();
         impl_->events.next.clear();
     }
