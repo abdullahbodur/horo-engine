@@ -138,6 +138,9 @@ namespace Horo::Editor {
                 return Key(key) && String(out);
             }
 
+            /**
+             * @brief Parses a `"panel"` node body after its id has been consumed.
+             */
             std::optional<LayoutNode> ParsePanelNode(std::string id, std::string &error) {
                 std::string panel;
                 if (!KeyedString("panel", panel) || !ObjectEnd()) {
@@ -148,6 +151,9 @@ namespace Horo::Editor {
                 return LayoutNode(PanelNode{std::move(id), std::move(panel)});
             }
 
+            /**
+             * @brief Parses the remaining `"tabs"` array elements into stack, starting after the opening bracket.
+             */
             std::optional<TabStackNode> ParseTabList(TabStackNode stack, std::string &error) {
                 Skip();
                 if (Take(']'))
@@ -169,6 +175,9 @@ namespace Horo::Editor {
                 }
             }
 
+            /**
+             * @brief Parses a `"stack"` node body after its id has been consumed.
+             */
             std::optional<LayoutNode> ParseStackNode(std::string id, std::string &error) {
                 if (!Key("tabs")) {
                     error = "stack tabs missing";
@@ -259,10 +268,16 @@ namespace Horo::Editor {
 
         void WriteNode(std::ostringstream &out, const LayoutNode &node);
 
+        /**
+         * @brief Serializes a panel node as JSON into out.
+         */
         void WritePanelNode(std::ostringstream &out, const PanelNode &value) {
             out << R"({"type":"panel","id":")" << Escape(value.id) << R"(","panel":")" << Escape(value.panel) << R"("})";
         }
 
+        /**
+         * @brief Serializes a tab stack node as JSON into out.
+         */
         void WriteTabStackNode(std::ostringstream &out, const TabStackNode &value) {
             out << R"({"type":"stack","id":")" << Escape(value.id) << R"(","tabs":[)";
             for (std::size_t i = 0; i < value.tabs.size(); ++i) {
