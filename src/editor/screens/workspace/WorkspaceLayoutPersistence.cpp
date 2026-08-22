@@ -3,6 +3,7 @@
 #include <charconv>
 #include <fstream>
 #include <sstream>
+#include <stdexcept>
 #include <system_error>
 
 namespace Horo::Editor {
@@ -38,7 +39,7 @@ namespace Horo::Editor {
                     error = "invalid workspace document header";
                     return std::nullopt;
                 }
-                const auto root = Node(error);
+                auto root = Node(error);
                 if (!root || !ObjectEnd())
                     return std::nullopt;
                 layout.root = std::move(*root);
@@ -54,7 +55,6 @@ namespace Horo::Editor {
         private:
             std::string_view m_text;
             std::size_t m_pos = 0;
-            WorkspaceLayout m_layout;
 
             void Skip() {
                 while (m_pos < m_text.size() &&
@@ -84,7 +84,8 @@ namespace Horo::Editor {
 
             bool Key(const char *key) {
                 std::string value;
-                return String(value) && Take(':') && value == key;
+                const bool isExpectedKey = String(value) && value == key;
+                return isExpectedKey && Take(':');
             }
 
             bool String(std::string &out) {
@@ -125,9 +126,98 @@ namespace Horo::Editor {
                 try {
                     out = std::stof(std::string(m_text.substr(start, m_pos - start)));
                     return true;
-                } catch (...) {
+                } catch (const std::invalid_argument &) {
+                    return false;
+                } catch (const std::out_of_range &) {
                     return false;
                 }
+            }
+
+            // Parses `"key":"<string>"` into out after the node type dispatch.
+            bool KeyedString(const char *key, std::string &out) {
+                return Key(key) && String(out);
+            }
+
+            /**
+             * @brief Parses a `"panel"` node body after its id has been consumed.
+             */
+            std::optional<LayoutNode> ParsePanelNode(std::string id, std::string &error) {
+                std::string panel;
+                if (!KeyedString("panel", panel) || !ObjectEnd()) {
+                    error = "panel node invalid";
+                    return std::nullopt;
+                }
+                NormalizeLegacyGlobalDockIdentity(panel);
+                return LayoutNode(PanelNode{std::move(id), std::move(panel)});
+            }
+
+            /**
+             * @brief Parses the remaining `"tabs"` array elements into stack, starting after the opening bracket.
+             */
+            std::optional<TabStackNode> ParseTabList(TabStackNode stack, std::string &error) {
+                Skip();
+                if (Take(']'))
+                    return stack;
+                while (true) {
+                    std::string tab;
+                    if (!String(tab)) {
+                        error = "tab invalid";
+                        return std::nullopt;
+                    }
+                    NormalizeLegacyGlobalDockIdentity(tab);
+                    stack.tabs.push_back(std::move(tab));
+                    if (Take(']'))
+                        return stack;
+                    if (!Comma()) {
+                        error = "tab separator missing";
+                        return std::nullopt;
+                    }
+                }
+            }
+
+            /**
+             * @brief Parses a `"stack"` node body after its id has been consumed.
+             */
+            std::optional<LayoutNode> ParseStackNode(std::string id, std::string &error) {
+                if (!Key("tabs")) {
+                    error = "stack tabs missing";
+                    return std::nullopt;
+                }
+                if (!Take('[')) {
+                    error = "stack tabs invalid";
+                    return std::nullopt;
+                }
+                TabStackNode stack{std::move(id)};
+                auto tabs = ParseTabList(std::move(stack), error);
+                if (!tabs)
+                    return std::nullopt;
+                auto &resolvedTabs = *tabs;
+                if (!Comma() || !Key("active") || !String(resolvedTabs.activeTab.emplace()) || !ObjectEnd()) {
+                    error = "stack active tab invalid";
+                    return std::nullopt;
+                }
+                NormalizeLegacyGlobalDockIdentity(*resolvedTabs.activeTab);
+                return LayoutNode(std::move(resolvedTabs));
+            }
+
+            // Parses the axis value onward after Node() consumed the "axis" key.
+            std::optional<LayoutNode> ParseSplitAxisValue(std::string id, std::string &error) {
+                std::string axis;
+                float ratio = 0.5F;
+                if (!String(axis) || !Comma() || !Key("ratio") || !Float(ratio) || !Comma() || !Key("first")) {
+                    error = "split properties invalid";
+                    return std::nullopt;
+                }
+                auto first = Node(error);
+                if (!first || !Comma() || !Key("second"))
+                    return std::nullopt;
+                auto second = Node(error);
+                if (!second || !ObjectEnd())
+                    return std::nullopt;
+                return LayoutNode(SplitNode{std::move(id),
+                                            axis == "vertical" ? WorkspaceSplitAxis::Vertical : WorkspaceSplitAxis::Horizontal, ratio,
+                                            160.0F, 160.0F, std::make_unique<LayoutNode>(std::move(*first)),
+                                            std::make_unique<LayoutNode>(std::move(*second))});
             }
 
             std::optional<LayoutNode> Node(std::string &error) {
@@ -150,74 +240,19 @@ namespace Horo::Editor {
                     return std::nullopt;
                 }
                 NormalizeLegacyGlobalDockIdentity(id);
-                if (type == "panel") {
-                    if (!Key("panel")) {
-                        error = "panel identity missing";
-                        return std::nullopt;
-                    }
-                    std::string panel;
-                    if (!String(panel) || !ObjectEnd()) {
-                        error = "panel node invalid";
-                        return std::nullopt;
-                    }
-                    NormalizeLegacyGlobalDockIdentity(panel);
-                    return LayoutNode(PanelNode{std::move(id), std::move(panel)});
-                }
-                if (type == "stack") {
-                    if (!Key("tabs")) {
-                        error = "stack tabs missing";
-                        return std::nullopt;
-                    }
-                    if (!Take('[')) {
-                        error = "stack tabs invalid";
-                        return std::nullopt;
-                    }
-                    TabStackNode stack{std::move(id)};
-                    Skip();
-                    if (!Take(']')) {
-                        while (true) {
-                            std::string tab;
-                            if (!String(tab)) {
-                                error = "tab invalid";
-                                return std::nullopt;
-                            }
-                            NormalizeLegacyGlobalDockIdentity(tab);
-                            stack.tabs.push_back(std::move(tab));
-                            if (Take(']'))
-                                break;
-                            if (!Comma()) {
-                                error = "tab separator missing";
-                                return std::nullopt;
-                            }
-                        }
-                    }
-                    if (!Comma() || !Key("active") || !String(stack.activeTab.emplace()) || !ObjectEnd()) {
-                        error = "stack active tab invalid";
-                        return std::nullopt;
-                    }
-                    NormalizeLegacyGlobalDockIdentity(*stack.activeTab);
-                    return LayoutNode(std::move(stack));
-                }
-                if (type != "split" || !Key("axis")) {
+                if (type == "panel")
+                    return ParsePanelNode(std::move(id), error);
+                if (type == "stack")
+                    return ParseStackNode(std::move(id), error);
+                if (type != "split") {
                     error = "unknown node type";
                     return std::nullopt;
                 }
-                std::string axis;
-                float ratio = 0.5F;
-                if (!String(axis) || !Comma() || !Key("ratio") || !Float(ratio) || !Comma() || !Key("first")) {
+                if (!Key("axis")) {
                     error = "split properties invalid";
                     return std::nullopt;
                 }
-                const auto first = Node(error);
-                if (!first || !Comma() || !Key("second"))
-                    return std::nullopt;
-                const auto second = Node(error);
-                if (!second || !ObjectEnd())
-                    return std::nullopt;
-                return LayoutNode(SplitNode{std::move(id),
-                                            axis == "vertical" ? WorkspaceSplitAxis::Vertical : WorkspaceSplitAxis::Horizontal, ratio,
-                                            160.0F, 160.0F, std::make_unique<LayoutNode>(std::move(*first)),
-                                            std::make_unique<LayoutNode>(std::move(*second))});
+                return ParseSplitAxisValue(std::move(id), error);
             }
         };
 
@@ -231,28 +266,47 @@ namespace Horo::Editor {
             return out;
         }
 
+        void WriteNode(std::ostringstream &out, const LayoutNode &node);
+
+        /**
+         * @brief Serializes a panel node as JSON into out.
+         */
+        void WritePanelNode(std::ostringstream &out, const PanelNode &value) {
+            out << R"({"type":"panel","id":")" << Escape(value.id) << R"(","panel":")" << Escape(value.panel) << R"("})";
+        }
+
+        /**
+         * @brief Serializes a tab stack node as JSON into out.
+         */
+        void WriteTabStackNode(std::ostringstream &out, const TabStackNode &value) {
+            out << R"({"type":"stack","id":")" << Escape(value.id) << R"(","tabs":[)";
+            for (std::size_t i = 0; i < value.tabs.size(); ++i) {
+                if (i)
+                    out << ',';
+                out << '"' << Escape(value.tabs[i]) << '"';
+            }
+            out << R"(],"active":")" << Escape(value.activeTab.value_or("")) << R"("})";
+        }
+
+        void WriteSplitNode(std::ostringstream &out, const SplitNode &value) {
+            out << R"({"type":"split","id":")" << Escape(value.id) << R"(","axis":")"
+                << (value.axis == WorkspaceSplitAxis::Vertical ? "vertical" : "horizontal") << R"(","ratio":)" << value.ratio
+                << R"(,"first":)";
+            WriteNode(out, *value.first);
+            out << R"(,"second":)";
+            WriteNode(out, *value.second);
+            out << '}';
+        }
+
         void WriteNode(std::ostringstream &out, const LayoutNode &node) {
             std::visit([&](const auto &value) {
                 using T = std::decay_t<decltype(value)>;
                 if constexpr (std::is_same_v<T, PanelNode>)
-                    out << "{\"type\":\"panel\",\"id\":\"" << Escape(value.id) << "\",\"panel\":\"" << Escape(value.panel) << "\"}";
-                else if constexpr (std::is_same_v<T, TabStackNode>) {
-                    out << "{\"type\":\"stack\",\"id\":\"" << Escape(value.id) << "\",\"tabs\":[";
-                    for (std::size_t i = 0; i < value.tabs.size(); ++i) {
-                        if (i)
-                            out << ',';
-                        out << '\"' << Escape(value.tabs[i]) << '\"';
-                    }
-                    out << "],\"active\":\"" << Escape(value.activeTab.value_or("")) << "\"}";
-                } else {
-                    out << "{\"type\":\"split\",\"id\":\"" << Escape(value.id) << "\",\"axis\":\""
-                        << (value.axis == WorkspaceSplitAxis::Vertical ? "vertical" : "horizontal") << "\",\"ratio\":" << value.ratio
-                        << ",\"first\":";
-                    WriteNode(out, *value.first);
-                    out << ",\"second\":";
-                    WriteNode(out, *value.second);
-                    out << '}';
-                }
+                    WritePanelNode(out, value);
+                else if constexpr (std::is_same_v<T, TabStackNode>)
+                    WriteTabStackNode(out, value);
+                else
+                    WriteSplitNode(out, value);
             }, node.value);
         }
     }  // namespace
@@ -282,7 +336,7 @@ namespace Horo::Editor {
                 *error = ec.message();
             return false;
         }
-        const auto temp = path.string() + ".tmp";
+        const std::filesystem::path temp = path.string() + ".tmp";
         std::ofstream out(temp, std::ios::binary | std::ios::trunc);
         out << Serialize(layout);
         out.close();
