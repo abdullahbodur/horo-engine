@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cmath>
 #include <fstream>
 #include <optional>
 #include <regex>
@@ -401,7 +402,7 @@ namespace Horo::Editor {
                 return std::clamp(value, minValue, maxValue);
             };
             const auto boundedFloat = [](const float value, const float minValue, const float maxValue) {
-                return std::clamp(value, minValue, maxValue);
+                return std::isfinite(value) ? std::clamp(value, minValue, maxValue) : minValue;
             };
             const int uiScalePercent = bounded(s.uiScalePercent, 75, 200);
             const int codeFontSizePx = bounded(s.codeFontSizePx, 8, 24);
@@ -531,9 +532,11 @@ namespace Horo::Editor {
         clampInt(settings.simulatedLatencyMs, 0, 500, "Simulated latency must be between 0 and 500 ms.");
         clampInt(settings.packageDownloadThreads, 1, 32, "Package download threads must be between 1 and 32.");
 
-        if (settings.stutterThresholdMs < 1.0F || settings.stutterThresholdMs > 1000.0F) {
+        if (!std::isfinite(settings.stutterThresholdMs) || settings.stutterThresholdMs < 1.0F || settings.stutterThresholdMs > 1000.0F) {
             markInvalid("Stutter threshold must be between 1 and 1000 ms.");
-            settings.stutterThresholdMs = std::clamp(settings.stutterThresholdMs, 1.0F, 1000.0F);
+            settings.stutterThresholdMs = std::isfinite(settings.stutterThresholdMs)
+                                              ? std::clamp(settings.stutterThresholdMs, 1.0F, 1000.0F)
+                                              : EditorSettings{}.stutterThresholdMs;
         }
 
         if (!IsHexColor(settings.accentColorHex)) {
