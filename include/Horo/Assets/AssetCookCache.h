@@ -94,7 +94,7 @@ namespace Horo::Assets {
          *          identical before discarding the temp file.
          */
         [[nodiscard]] Result<void> Store(const AssetCookCacheKey &key, std::span<const std::uint8_t> artifact,
-                                         const CancellationToken &cancellation);
+                                         const CancellationToken &cancellation) const;
 
     private:
         /** @brief Builds the filesystem path for a cache key. */

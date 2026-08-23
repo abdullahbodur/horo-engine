@@ -12,6 +12,7 @@
 #include "Horo/Foundation/JobSystem.h"
 #include "Horo/Foundation/Paths.h"
 #include "Horo/Foundation/Result.h"
+#include "Horo/Foundation/TransparentString.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -48,27 +49,27 @@ namespace Horo::Assets {
 
     /** @brief One item in an import operation. */
     struct AssetImportItem {
-        ProjectPath sourceFile;                                /**< Project-relative source path (display only). */
-        std::filesystem::path absoluteSourcePath;              /**< Absolute path to source file for reading. */
-        std::string importerContributionId;                    /**< Selected importer contribution. */
-        std::string importerVersion;                           /**< Version of the selected importer contribution. */
-        std::string importerPackageId;                         /**< Package that owns the selected importer. */
-        std::string importerModuleId;                          /**< Module that owns the selected importer. */
-        std::string importerModuleVersion;                     /**< Version of the owning module. */
-        std::optional<AssetTypeId> resolvedType;               /**< Resolved asset type after import. */
-        std::optional<PreparedAssetImport> result;             /**< Import result when completed. */
-        std::vector<ImportDiagnostic> diagnostics;             /**< Per-item diagnostics. */
-        std::string sourceExtension;                           /**< Lowercase file extension without dot. */
-        std::string displayName;                               /**< File name for display. */
-        std::string destinationFolder;                         /**< Project-relative destination folder. */
-        std::string targetExtension{".horoasset"};             /**< Target file extension this importer produces (including dot). */
-        bool supportsMetaSidecar{true};                        /**< True if this importer supports creating a meta sidecar. */
-        std::unordered_map<std::string, std::string> settings; /**< Per-item importer settings (key=settingId, value=serialized). */
-        std::string sourceHash;                                /**< Canonical hash captured from the imported source bytes. */
-        std::uintmax_t sourceByteSize{};                       /**< Imported source byte count. */
-        std::int64_t sourceLastWriteTime{};                    /**< Native source write-time tick captured at import. */
-        std::optional<AssetId> preservedAssetId;               /**< Existing identity retained by a reimport transaction. */
-        std::vector<AssetImportReason> importReasons;          /**< Durable reasons for this import transaction. */
+        ProjectPath sourceFile;                       /**< Project-relative source path (display only). */
+        std::filesystem::path absoluteSourcePath;     /**< Absolute path to source file for reading. */
+        std::string importerContributionId;           /**< Selected importer contribution. */
+        std::string importerVersion;                  /**< Version of the selected importer contribution. */
+        std::string importerPackageId;                /**< Package that owns the selected importer. */
+        std::string importerModuleId;                 /**< Module that owns the selected importer. */
+        std::string importerModuleVersion;            /**< Version of the owning module. */
+        std::optional<AssetTypeId> resolvedType;      /**< Resolved asset type after import. */
+        std::optional<PreparedAssetImport> result;    /**< Import result when completed. */
+        std::vector<ImportDiagnostic> diagnostics;    /**< Per-item diagnostics. */
+        std::string sourceExtension;                  /**< Lowercase file extension without dot. */
+        std::string displayName;                      /**< File name for display. */
+        std::string destinationFolder;                /**< Project-relative destination folder. */
+        std::string targetExtension{".horoasset"};    /**< Target file extension this importer produces (including dot). */
+        bool supportsMetaSidecar{true};               /**< True if this importer supports creating a meta sidecar. */
+        TransparentStringMap<std::string> settings;   /**< Per-item importer settings (key=settingId, value=serialized). */
+        std::string sourceHash;                       /**< Canonical hash captured from the imported source bytes. */
+        std::uintmax_t sourceByteSize{};              /**< Imported source byte count. */
+        std::int64_t sourceLastWriteTime{};           /**< Native source write-time tick captured at import. */
+        std::optional<AssetId> preservedAssetId;      /**< Existing identity retained by a reimport transaction. */
+        std::vector<AssetImportReason> importReasons; /**< Durable reasons for this import transaction. */
 
         // Destination tab fields
         int namingConvention{0};            /**< 0=Preserve source name, 1=Lowercase+underscore, 2=AssetId prefix. */
@@ -194,7 +195,7 @@ namespace Horo::Assets {
          * @param settings Settings keyed by importer descriptor ID.
          * @return Updated snapshot, or a typed error when @p index is invalid.
          */
-        [[nodiscard]] Result<AssetImportSnapshot> SetItemSettings(std::size_t index, std::unordered_map<std::string, std::string> settings);
+        [[nodiscard]] Result<AssetImportSnapshot> SetItemSettings(std::size_t index, TransparentStringMap<std::string> settings);
 
         /**
          * @brief Returns the current snapshot for UI polling.
