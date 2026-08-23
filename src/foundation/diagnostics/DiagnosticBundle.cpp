@@ -287,7 +287,8 @@ namespace Horo::Diagnostics {
                 stream.write(entry.name.data(), static_cast<std::streamsize>(entry.name.size()));
             }
             const auto centralDirectoryEndPos = stream.tellp();
-            if (centralDirectoryEndPos < 0)
+            if (centralDirectoryEndPos < 0 ||
+                static_cast<std::uint64_t>(centralDirectoryEndPos) > std::numeric_limits<std::uint32_t>::max())
                 return false;
             const auto centralSize = static_cast<std::uint32_t>(centralDirectoryEndPos) - centralOffset;
             WriteU32(stream, 0x06054b50U);
@@ -298,6 +299,7 @@ namespace Horo::Diagnostics {
             WriteU32(stream, centralSize);
             WriteU32(stream, centralOffset);
             WriteU16(stream, 0);
+            stream.flush();
             return stream.good();
         }
 
