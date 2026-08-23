@@ -5,9 +5,11 @@
 #include "Horo/Editor/Localization/ILocalizationService.h"
 
 #include <algorithm>
+#include <format>
 #include <ranges>
 
 namespace Horo::Editor {
+
     namespace {
         constexpr float kOuterPadding = 10.0F;
         constexpr float kItemGap = 8.0F;
@@ -201,11 +203,11 @@ namespace Horo::Editor {
             }
 
             if (layout_.hiddenCount > 0) {
-                char overflowLabel[16]{};
-                std::snprintf(overflowLabel, sizeof(overflowLabel), "+%zu", layout_.hiddenCount);
+                const std::string overflowLabel = std::format("+{}", layout_.hiddenCount);
                 const ImVec2 overflowPos{leftX, itemY};
                 ImGui::SetCursorScreenPos(overflowPos);
-                ImGui::TextDisabled("%s", overflowLabel);
+                ImGui::TextDisabled("%s", overflowLabel.c_str());
+
                 if (ImGui::IsItemHovered()) {
                     ImGui::BeginTooltip();
                     ImGui::Text("%zu", layout_.hiddenCount);

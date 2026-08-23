@@ -45,24 +45,25 @@ namespace Horo::Editor {
 
     /** @copydoc ThemePresetFromConfigurationValue */
     EditorThemePreset ThemePresetFromConfigurationValue(const std::string_view value) noexcept {
+        using enum EditorThemePreset;
         if (value == "midnight") {
-            return EditorThemePreset::Midnight;
+            return Midnight;
         }
         if (value == "light") {
-            return EditorThemePreset::Light;
+            return Light;
         }
-        return EditorThemePreset::HoroDark;
+        return HoroDark;
     }
 
     /** @copydoc CreateEditorConfigurationService */
     ConfigurationService CreateEditorConfigurationService(const EditorSettings &settings, EngineDataBus *events) {
+        using enum SettingValueType;
         ConfigurationSchema schema;
-        RegisterAppearanceDescriptor(schema, kThemeKey, SettingValueType::String,
-                                     std::string{ToConfigurationThemeValue(settings.themePreset)});
-        RegisterAppearanceDescriptor(schema, kAccentColorKey, SettingValueType::String, settings.accentColorHex);
-        RegisterAppearanceDescriptor(schema, kUiScaleKey, SettingValueType::Integer, static_cast<std::int64_t>(settings.uiScalePercent));
-        RegisterAppearanceDescriptor(schema, kCodeFontSizeKey, SettingValueType::Integer,
-                                     static_cast<std::int64_t>(settings.codeFontSizePx));
+        RegisterAppearanceDescriptor(schema, kThemeKey, String, std::string{ToConfigurationThemeValue(settings.themePreset)});
+        RegisterAppearanceDescriptor(schema, kAccentColorKey, String, settings.accentColorHex);
+        RegisterAppearanceDescriptor(schema, kUiScaleKey, Integer, static_cast<std::int64_t>(settings.uiScalePercent));
+        RegisterAppearanceDescriptor(schema, kCodeFontSizeKey, Integer, static_cast<std::int64_t>(settings.codeFontSizePx));
+
         const Result<void> sealed = schema.Seal();
         assert(sealed.HasValue());
         if (sealed.HasError()) {

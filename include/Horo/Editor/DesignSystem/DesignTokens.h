@@ -4,6 +4,7 @@
  */
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <imgui.h>
@@ -142,7 +143,7 @@ namespace Horo::Editor::DesignSystem {
 
     /** @brief Applies one global UI scale to resolved component metrics. */
     inline void ApplyGlobalUiScale(DesignTokens &tokens, const float scale) noexcept {
-        const float clamped = scale < 0.75F ? 0.75F : scale > 2.0F ? 2.0F : scale;
+        const float clamped = std::clamp(scale, 0.75F, 2.0F);
         tokens.sizes.uiScale = clamped;
 
         // Resolve all numeric presentation metrics from one scale so component size,

@@ -72,10 +72,11 @@ namespace Horo::Editor {
         static void SetError(LocalizationError *error, std::string code, std::string message);
 
         LocaleTag m_sourceFallback;
-        std::unordered_map<std::string, std::shared_ptr<const LocalizationCatalog>> m_catalogs;
+        std::unordered_map<std::string, std::shared_ptr<const LocalizationCatalog>> m_catalogs;  // NOSONAR(cpp:S6045)
         std::shared_ptr<const LocalizationCatalog> m_active;
         std::shared_ptr<const LocalizationCatalog> m_prepared;
         std::uint64_t m_revision = 0;
-        mutable std::unordered_set<std::string> m_missingCache;
+        mutable std::unordered_set<std::string> m_missingCache;  // NOSONAR(cpp:S6045)
     };
+
 }  // namespace Horo::Editor

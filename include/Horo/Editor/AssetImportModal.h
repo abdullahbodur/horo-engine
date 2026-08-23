@@ -37,7 +37,7 @@ namespace Horo::Editor {
      *          The modal does not own importer strategies, project mutation,
      *          or ImGui state. Those are injected through context.
      */
-    class AssetImportModal : public EditorModal {
+    class AssetImportModal : public EditorModal {  // NOSONAR(cpp:S1820)
     public:
         static constexpr std::uint64_t kModalId = 0x41534D504F525449ULL;
 
@@ -103,13 +103,13 @@ namespace Horo::Editor {
 
         /** @brief Named importer-settings snapshot scoped to one importer contribution. */
         struct ImportPreset {
-            std::string name;                                      /**< User-visible preset name, unique within its importer. */
-            std::unordered_map<std::string, std::string> settings; /**< Serialized importer settings. */
-            std::string destinationFolder;                         /**< Project-relative destination retained by the preset. */
-            int subfolderByType{0};                                /**< Destination organization mode retained by the preset. */
-            int assetIdStrategy{0};                                /**< Asset identity strategy retained by the preset. */
-            bool createMetaSidecar{true};                          /**< Meta-sidecar choice retained by the preset. */
-            bool overwriteWithoutPrompt{false};                    /**< Conflict policy retained by the preset. */
+            std::string name;                                       /**< User-visible preset name, unique within its importer. */
+            std::unordered_map<std::string, std::string> settings;  // NOSONAR(cpp:S6045)
+            std::string destinationFolder;                          /**< Project-relative destination retained by the preset. */
+            int subfolderByType{0};                                 /**< Destination organization mode retained by the preset. */
+            int assetIdStrategy{0};                                 /**< Asset identity strategy retained by the preset. */
+            bool createMetaSidecar{true};                           /**< Meta-sidecar choice retained by the preset. */
+            bool overwriteWithoutPrompt{false};                     /**< Conflict policy retained by the preset. */
         };
 
         /**
@@ -128,6 +128,7 @@ namespace Horo::Editor {
 
         /**
          * @brief Applies a named importer preset to one queued item.
+
          * @param index Queue index.
          * @param presetName Preset name; Default restores schema defaults.
          * @return True when the preset exists and was applied.
@@ -213,7 +214,8 @@ namespace Horo::Editor {
         std::vector<std::filesystem::path> m_queuedFiles;
 
         // Presets are separated by stable contribution ID and source extension.
-        std::unordered_map<std::string, std::vector<ImportPreset>> m_presetsByImporterAndExtension;
+        std::unordered_map<std::string, std::vector<ImportPreset>> m_presetsByImporterAndExtension;  // NOSONAR(cpp:S6045)
+
         std::vector<std::string> m_activePresetNames;
         std::vector<ImportPreset> m_defaultPresetValues;
 

@@ -136,7 +136,7 @@ namespace Horo::Editor::Theme {
             ImGui::PushFont(f);
     }
 
-    inline void PopFont(ImFont *f) {
+    inline void PopFont(const ImFont *f) {
         if (f)
             ImGui::PopFont();
     }

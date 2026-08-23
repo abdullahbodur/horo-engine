@@ -52,6 +52,8 @@ namespace Horo::Editor {
         ~ProjectMutationCoordinator();
         ProjectMutationCoordinator(const ProjectMutationCoordinator &) = delete;
         ProjectMutationCoordinator &operator=(const ProjectMutationCoordinator &) = delete;
+        ProjectMutationCoordinator(ProjectMutationCoordinator &&) = delete;
+        ProjectMutationCoordinator &operator=(ProjectMutationCoordinator &&) = delete;
 
         /**
          * @brief Immediately attempts to acquire exclusive mutation authority.

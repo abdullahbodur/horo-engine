@@ -146,7 +146,7 @@ namespace Horo::Editor::Theme {
         [[nodiscard]] bool ParseHexColor(const std::string &hex, ImVec4 &color) {
             if (hex.size() != 7U || hex[0] != '#')
                 return false;
-            const auto hexDigit = [](const char value) -> int {
+            const auto hexDigit = [](const char value) {
                 if (value >= '0' && value <= '9')
                     return value - '0';
                 if (value >= 'a' && value <= 'f')
@@ -155,6 +155,7 @@ namespace Horo::Editor::Theme {
                     return value - 'A' + 10;
                 return -1;
             };
+
             const std::array digits{hexDigit(hex[1]), hexDigit(hex[2]), hexDigit(hex[3]),
                                     hexDigit(hex[4]), hexDigit(hex[5]), hexDigit(hex[6])};
             if (std::ranges::any_of(digits, [](const int value) {
@@ -370,7 +371,7 @@ namespace Horo::Editor::Theme {
     }
 
     bool LoadThemeFromJson(const char *path, ThemeEntry &outEntry) {
-        std::ifstream file(path);
+        std::ifstream file(path);  // NOSONAR(cpp:S2083)
         if (!file.is_open())
             return false;
 
@@ -390,8 +391,8 @@ namespace Horo::Editor::Theme {
             loaded.designTokens = DefaultDesignTokens();
             ReadThemeColors(document, loaded.colors);
             ReadDesignTokenOverrides(document, loaded.designTokens);
-            const auto tokensIt = document.find("tokens");
-            if (loaded.colors.empty() && (tokensIt == document.end() || !tokensIt->is_object()))
+            if (const auto tokensIt = document.find("tokens");
+                loaded.colors.empty() && (tokensIt == document.end() || !tokensIt->is_object()))
                 return false;
             outEntry = std::move(loaded);
             return true;

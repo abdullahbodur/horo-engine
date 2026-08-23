@@ -23,23 +23,24 @@ namespace Horo::Editor {
     }  // namespace
 
     std::vector<Input::ActionDescriptor> BuildEditorInputActions() {
+        using enum Input::Key;
         return {
-            Digital(kActionSave, true, {KeyBinding(Input::Key::S, true), KeyBinding(Input::Key::S, false, false, true)}),
-            Digital(kActionUndo, true, {KeyBinding(Input::Key::Z, true), KeyBinding(Input::Key::Z, false, false, true)}),
-            Digital(kActionRedo, true, {KeyBinding(Input::Key::Z, true, true), KeyBinding(Input::Key::Z, false, true, true)}),
-            Digital(kActionDuplicate, false, {KeyBinding(Input::Key::D, true), KeyBinding(Input::Key::D, false, false, true)}),
-            Digital(kActionDelete, false, {KeyBinding(Input::Key::Delete)}),
-            Digital(kActionToolSelect, true, {KeyBinding(Input::Key::Q)}),
-            Digital(kActionToolMove, true, {KeyBinding(Input::Key::W)}),
-            Digital(kActionToolRotate, true, {KeyBinding(Input::Key::E)}),
-            Digital(kActionToolScale, true, {KeyBinding(Input::Key::R)}),
-            Digital(kActionViewportFocusSelected, false, {KeyBinding(Input::Key::F)}),
+            Digital(kActionSave, true, {KeyBinding(S, true), KeyBinding(S, false, false, true)}),
+            Digital(kActionUndo, true, {KeyBinding(Z, true), KeyBinding(Z, false, false, true)}),
+            Digital(kActionRedo, true, {KeyBinding(Z, true, true), KeyBinding(Z, false, true, true)}),
+            Digital(kActionDuplicate, false, {KeyBinding(D, true), KeyBinding(D, false, false, true)}),
+            Digital(kActionDelete, false, {KeyBinding(Delete)}),
+            Digital(kActionToolSelect, true, {KeyBinding(Q)}),
+            Digital(kActionToolMove, true, {KeyBinding(W)}),
+            Digital(kActionToolRotate, true, {KeyBinding(E)}),
+            Digital(kActionToolScale, true, {KeyBinding(R)}),
+            Digital(kActionViewportFocusSelected, false, {KeyBinding(F)}),
             Input::ActionDescriptor{Input::ActionId{kGameplayMoveAction},
                                     Input::ActionValueType::Axis2D,
                                     Input::InputContextId{kEditorWorkspaceInputContext},
                                     false,
-                                    {AxisKey(Input::Key::Left, 0, -1.0F), AxisKey(Input::Key::Right, 0, 1.0F),
-                                     AxisKey(Input::Key::Down, 1, -1.0F), AxisKey(Input::Key::Up, 1, 1.0F)}},
+                                    {AxisKey(Left, 0, -1.0F), AxisKey(Right, 0, 1.0F), AxisKey(Down, 1, -1.0F), AxisKey(Up, 1, 1.0F)}},
         };
     }
+
 }  // namespace Horo::Editor
