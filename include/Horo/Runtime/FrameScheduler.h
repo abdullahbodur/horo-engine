@@ -111,12 +111,16 @@ namespace Horo::Runtime {
         /** @brief Returns a lock-free value snapshot of cumulative scheduler diagnostics. */
         [[nodiscard]] FrameSchedulerStatistics Statistics() const noexcept;
 
+    private:
         /**
          * @brief Internal construction key so only Create can build a scheduler.
+         * @details Private default constructor with FrameScheduler as friend:
+         *          make_unique inside Create works, external callers cannot
+         *          construct a key and thus cannot bypass Create.
          */
         class ConstructionKey {
-        public:
             ConstructionKey() = default;
+            friend class FrameScheduler;
         };
 
         FrameScheduler(Clock &clock, FrameSchedulerConfig config, ConstructionKey) noexcept;
@@ -136,7 +140,6 @@ namespace Horo::Runtime {
         [[nodiscard]] Result<void> RunFixedSteps(RuntimeLifecycle &lifecycle, const CancellationToken &cancellation,
                                                  Duration &droppedSimulationTime);
 
-    private:
         FrameClock clock_;
         FrameSchedulerConfig config_;
         FrameSchedulerStatistics statistics_;

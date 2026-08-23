@@ -45,7 +45,8 @@ namespace Horo::Runtime {
         if (!IsPositive(config.fixedStep) || !IsPositive(config.maximumFrameDelta) || config.maximumCatchUpSteps == 0) {
             return Result<std::unique_ptr<FrameScheduler>>::Failure(MakeError(RuntimeErrors::InvalidSchedulerConfig));
         }
-        return Result<std::unique_ptr<FrameScheduler>>::Success(std::make_unique<FrameScheduler>(clock, config, ConstructionKey{}));
+        return Result<std::unique_ptr<FrameScheduler>>::Success(
+            std::unique_ptr<FrameScheduler>(new FrameScheduler(clock, config, ConstructionKey{})));
     }
 
     FrameScheduler::FrameScheduler(Clock &clock, const FrameSchedulerConfig config, ConstructionKey) noexcept
