@@ -8,7 +8,9 @@ namespace Horo::Editor {
     }
 
     /** @copydoc InstallNativeEditorMenuBar */
-    void InstallNativeEditorMenuBar(const EditorMenuModel &, const ILocalizationService &) {}
+    void InstallNativeEditorMenuBar(const EditorMenuModel &, const ILocalizationService &) {
+        // Non-Apple platforms use in-window ImGui menu bars rather than OS-level menus.
+    }
 
     /** @copydoc PollNativeEditorMenuAction */
     std::optional<EditorMenuInvocation> PollNativeEditorMenuAction() noexcept {

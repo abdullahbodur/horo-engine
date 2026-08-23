@@ -648,7 +648,8 @@ namespace Horo::Editor::Ui {
         return clicked;
     }
 
-    bool ComboControl(const char *id, int *value, const char *const items[], const int itemCount, const Theme::Fonts &fonts,
+    bool ComboControl(const char *id, int *value, const char *const items[], const int itemCount,
+                      const Theme::Fonts &fonts,  // NOSONAR(cpp:S5945)
                       const ComboControlOptions options) {
         const ComboItemSource source{.label = [items](const int index) {
             return items[index];

@@ -178,9 +178,10 @@ namespace Horo::Editor {
         std::string FriendlyImporterName(std::string_view contributionId) {
             const std::size_t lastDot = contributionId.find_last_of('.');
             std::string name{contributionId.substr(lastDot == std::string_view::npos ? 0 : lastDot + 1)};
-            std::replace(name.begin(), name.end(), '-', ' ');
+            std::ranges::replace(name, '-', ' ');
 
             bool wordStart = true;
+
             for (char &value : name) {
                 if (value == ' ') {
                     wordStart = true;
@@ -321,7 +322,7 @@ namespace Horo::Editor {
                         return row.assetLabel == assetLabel && row.message == cleanedMessage && row.severity == diagnostic.severity;
                     };
 
-                    if (std::find_if(rows.begin(), rows.end(), isDuplicate) == rows.end()) {
+                    if (std::ranges::find_if(rows, isDuplicate) == rows.end()) {
                         rows.push_back({
                             .assetLabel = assetLabel,
                             .message = cleanedMessage,
@@ -961,10 +962,11 @@ namespace Horo::Editor {
             int presetIndex = 0;
             if (hasSelected) {
                 const auto activePreset = modal.ActivePresetName(snap.selectedItemIndex);
-                const auto active = std::find(presetNames.begin(), presetNames.end(), activePreset);
+                const auto active = std::ranges::find(presetNames, activePreset);
                 if (active != presetNames.end())
                     presetIndex = static_cast<int>(std::distance(presetNames.begin(), active));
             }
+
             ImGui::SetNextItemWidth(presetW);
             if (ComboControl("##ImportPreset", &presetIndex, presetLabels.data(), static_cast<int>(presetLabels.size()), fonts,
                              ComboControlOptions{.height = actionH}) &&

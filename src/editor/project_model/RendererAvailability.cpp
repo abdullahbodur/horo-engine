@@ -1,14 +1,14 @@
 #include "editor/project_model/RendererAvailability.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 namespace Horo::Editor {
     /** @copydoc RendererBackendAvailability::IsSelectable */
     bool RendererBackendAvailability::IsSelectable() const noexcept {
-        using enum Horo::Editor::RendererAvailabilityState;
-        return state == RendererAvailabilityState::Available || state == RendererAvailabilityState::Selected ||
-               state == RendererAvailabilityState::Active;
+        using enum RendererAvailabilityState;
+        return state == Available || state == Selected || state == Active;
     }
 
     /** @copydoc RendererAvailabilitySnapshot::RendererAvailabilitySnapshot */
@@ -24,7 +24,7 @@ namespace Horo::Editor {
     /** @copydoc RendererAvailabilitySnapshot::Find */
     const RendererBackendAvailability *RendererAvailabilitySnapshot::Find(const std::string_view backendId) const noexcept {
         const auto found = std::ranges::find(entries_, backendId, &RendererBackendAvailability::backendId);
-        return found == entries_.end() ? nullptr : &*found;
+        return found == entries_.end() ? nullptr : std::to_address(found);
     }
 
     /** @copydoc RendererAvailabilitySnapshot::ActiveBackendId */

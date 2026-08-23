@@ -4,6 +4,7 @@
 #include "editor/EditorServiceErrors.h"
 
 #include <algorithm>
+#include <format>
 #include <ranges>
 #include <utility>
 
@@ -74,10 +75,9 @@ namespace Horo::Editor {
         }
         LOG_INFO("editor.modal_host", "Opening root modal %llu.", modal->Id().Value());
         const ModalId id = modal->Id();
-        m_stack.push_back(
-            Entry{.modal = std::move(modal),
-                  .inputContext = m_inputRouter.PushContext(Input::InputContextId{"editor.modal." + std::to_string(id.Value())},
-                                                            Input::InputContextKind::ModalRoot)});
+        m_stack.push_back(Entry{.modal = std::move(modal),
+                                .inputContext = m_inputRouter.PushContext(Input::InputContextId{std::format("editor.modal.{}", id.Value())},
+                                                                          Input::InputContextKind::ModalRoot)});
         return Result<void>::Success();
     }
 
@@ -94,8 +94,9 @@ namespace Horo::Editor {
         const ModalId id = modal->Id();
         m_pendingChildOpens.push_back(
             Entry{.modal = std::move(modal),
-                  .inputContext = m_inputRouter.PushContext(Input::InputContextId{"editor.modal." + std::to_string(id.Value())},
+                  .inputContext = m_inputRouter.PushContext(Input::InputContextId{std::format("editor.modal.{}", id.Value())},
                                                             Input::InputContextKind::ModalChild)});
+
         return Result<void>::Success();
     }
 

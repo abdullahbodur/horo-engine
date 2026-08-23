@@ -41,7 +41,7 @@ namespace Horo::Editor {
 
         DurableFileSystem &files;
         std::mutex mutex;
-        std::unordered_set<std::string> activeRoots;
+        std::unordered_set<std::string> activeRoots;  // NOSONAR(cpp:S6045)
     };
 
     struct ProjectMutationLease::State {

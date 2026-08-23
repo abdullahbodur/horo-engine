@@ -305,10 +305,11 @@ namespace Horo::Editor::Ui {
 
     /** @copydoc UiIconRegistry::Resolve */
     std::optional<UiIcon> UiIconRegistry::Resolve(const std::string_view token) noexcept {
-        const auto descriptor = std::ranges::find_if(kIconDescriptors, [token](const IconDescriptor &candidate) {
+        if (const auto descriptor = std::ranges::find_if(kIconDescriptors,
+                                                         [token](const IconDescriptor &candidate) {
             return !candidate.token.empty() && candidate.token == token;
         });
-        if (descriptor != kIconDescriptors.end())
+            descriptor != kIconDescriptors.end())
             return static_cast<UiIcon>(std::distance(kIconDescriptors.begin(), descriptor));
 
         const auto alias = std::ranges::find_if(kIconTokenAliases, [token](const IconTokenAlias &candidate) {

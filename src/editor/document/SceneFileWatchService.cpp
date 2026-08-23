@@ -25,8 +25,10 @@ namespace Horo::Editor {
         };
 
         [[nodiscard]] bool IsTerminal(const JobState state) {
-            return state == JobState::Succeeded || state == JobState::Failed || state == JobState::Cancelled;
+            using enum JobState;
+            return state == Succeeded || state == Failed || state == Cancelled;
         }
+
     }  // namespace
 
     struct SceneFileWatchService::State {

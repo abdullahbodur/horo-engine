@@ -681,7 +681,7 @@ namespace Horo::Editor {
         }
 
         // ── Plugin list (left column) ─────────────────────────────────
-        void DrawPluginList(SettingsState &st, const EditorGuiContext &ctx, float /*listW*/) {
+        void DrawPluginList(SettingsState &st, const EditorGuiContext &ctx, float /*listW*/) {  // NOSONAR(cpp:S1144)
             SettingGroup("INSTALLED PLUGINS", ctx.theme.fonts, true);
 
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{10.0F, 7.0F});
@@ -941,7 +941,7 @@ namespace Horo::Editor {
             }
         }
 
-        void DrawPluginDetailPanel(SettingsState &st, const EditorGuiContext &ctx, float w, bool embedded) {
+        void DrawPluginDetailPanel(SettingsState &st, const EditorGuiContext &ctx, float w, bool embedded) {  // NOSONAR(cpp:S1144)
             if (st.selectedPlugin < 0 || st.selectedPlugin > 2) {
                 if (!embedded) {
                     ImGui::PushStyleColor(ImGuiCol_ChildBg, Bg2());
@@ -1581,8 +1581,7 @@ namespace Horo::Editor {
                 } else if (installing) {
                     actionKey = "settings.extensions.marketplace.installing";
                 }
-                const std::string action = ctx.localization.Get("editor", actionKey);
-                if (ImGui::Button(action.c_str(), {100.0F, 32.0F})) {
+                if (const std::string action = ctx.localization.Get("editor", actionKey); ImGui::Button(action.c_str(), {100.0F, 32.0F})) {
                     const Result<void> started = st.extensionMarketplace->Install(entry.packageId);
                     if (started.HasError())
                         st.modalFeedback = started.ErrorValue().message;
@@ -1656,11 +1655,21 @@ namespace Horo::Editor {
             {
                 ScopedTextStyle hint(ctx.theme.fonts.sansCompact, 11.5F, FontPx::SansCompact);
                 const bool hasFeedback = !st.modalFeedback.empty();
-                ImGui::PushStyleColor(ImGuiCol_Text, hasFeedback ? Accent() : (st.statusIsError ? Err() : Dim()));
-                ImGui::TextUnformatted(hasFeedback
-                                           ? st.modalFeedback.c_str()
-                                           : (st.statusMessage.empty() ? "Apply writes user preferences to ~/.horo/editor_settings.json"
-                                                                       : st.statusMessage.c_str()));
+                ImVec4 textColor = Dim();
+                if (hasFeedback) {
+                    textColor = Accent();
+                } else if (st.statusIsError) {
+                    textColor = Err();
+                }
+                ImGui::PushStyleColor(ImGuiCol_Text, textColor);
+
+                const char *message = "Apply writes user preferences to ~/.horo/editor_settings.json";
+                if (hasFeedback) {
+                    message = st.modalFeedback.c_str();
+                } else if (!st.statusMessage.empty()) {
+                    message = st.statusMessage.c_str();
+                }
+                ImGui::TextUnformatted(message);
                 ImGui::PopStyleColor();
             }
 
