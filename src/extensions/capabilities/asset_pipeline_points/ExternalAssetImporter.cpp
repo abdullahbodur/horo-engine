@@ -199,13 +199,15 @@ namespace Horo::Extensions {
                     .assetType = {},
                     .editorPayload = {&prepared.editorPayload, ResizeVector},
                 };
-
-                const HoroExtensionStatus status = SafeInvoke([&] {
-                    return instance_->importFn(instance_->context, &request, &response);
+                if (const HoroExtensionStatus status = SafeInvoke(
+                        [&instance = instance_, &request, &response] {
+                    return instance->importFn(instance->context, &request, &response);
                 }, "importer");
-                if (status != HORO_EXTENSION_SUCCESS)
+
+                    status != HORO_EXTENSION_SUCCESS) {
                     return Result<Assets::PreparedAssetImport>::Failure(
                         MakeError(ExtensionErrors::InvocationFailed, "External asset importer callback failed."));
+                }
 
                 std::string assetType;
                 if (!CopyText(response.assetType, assetType))
@@ -248,8 +250,8 @@ namespace Horo::Extensions {
                     .structSize = sizeof(HoroAssetPreviewResponse),
                     .rgba8Pixels = {&image.pixels, ResizeVector},
                 };
-                const HoroExtensionStatus status = SafeInvoke([&] {
-                    return instance_->preview(instance_->context, &request, &response);
+                const HoroExtensionStatus status = SafeInvoke([&instance = instance_, &request, &response] {
+                    return instance->preview(instance->context, &request, &response);
                 }, "preview");
 
                 image.width = response.width;
@@ -305,8 +307,8 @@ namespace Horo::Extensions {
         }
     }
 
-    // NOSONAR(cpp:S5008) C ABI callback requires void* context.
-    HoroExtensionStatus RegisterExternalAssetImporter(void *hostContext, const HoroAssetImporterDescriptor *descriptor) noexcept {
+    HoroExtensionStatus RegisterExternalAssetImporter(void *hostContext,  // NOSONAR(cpp:S5008)
+                                                      const HoroAssetImporterDescriptor *descriptor) noexcept {
         auto *session = static_cast<AssetImporterRegistrationSession *>(hostContext);
         if (session == nullptr || descriptor == nullptr || session->failed ||
             descriptor->structSize < sizeof(HoroAssetImporterDescriptor) || descriptor->abiVersion != HORO_ASSET_IMPORTER_ABI_VERSION ||

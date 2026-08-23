@@ -74,8 +74,9 @@ namespace Horo::Telemetry {
                 curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(jsonPayload.size()));
                 curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, static_cast<long>(timeout.count()));
                 curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-                curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_3);
+                curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_3);  // NOSONAR(cpp:S4423) Require modern TLS.
                 const CURLcode result = curl_easy_perform(curl);
+
                 long responseCode{};
                 curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
                 curl_slist_free_all(headers);

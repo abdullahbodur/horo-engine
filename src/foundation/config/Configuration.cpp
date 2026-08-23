@@ -69,7 +69,8 @@ namespace Horo {
                     default:
                         if (character < 0x20) {
                             static constexpr char hex[] = "0123456789abcdef";
-                            escaped << "\\u00" << hex[character >> 4] << hex[character & 0x0f];
+                            escaped << "\\u00" << hex[static_cast<std::size_t>(character) >> 4]
+                                    << hex[static_cast<std::size_t>(character) & 0x0f];
                         } else {
                             escaped << static_cast<char>(character);
                         }
@@ -84,14 +85,17 @@ namespace Horo {
             std::size_t idx = 0;
             while (idx < input.size()) {
                 if (input[idx] == '\\' && idx + 1 < input.size()) {
-                    const char next = input[idx + 1];
-                    switch (next) {
+                    switch (input[idx + 1]) {
                         case '"':
                             output.push_back('"');
                             idx += 2;
                             break;
                         case '\\':
                             output.push_back('\\');
+                            idx += 2;
+                            break;
+                        case '/':
+                            output.push_back('/');
                             idx += 2;
                             break;
                         case 'b':
@@ -114,35 +118,56 @@ namespace Horo {
                             output.push_back('\t');
                             idx += 2;
                             break;
+                        case 'u':
+                            if (idx + 5 < input.size()) {
+                                std::string hexStr(input.substr(idx + 2, 4));
+                                try {
+                                    const auto codePoint = static_cast<unsigned int>(std::stoul(hexStr, nullptr, 16));
+                                    if (codePoint < 0x80) {
+                                        output.push_back(static_cast<char>(codePoint));
+                                    } else {
+                                        output.push_back('?');
+                                    }
+                                } catch (...) {
+                                    output.push_back('?');
+                                }
+                                idx += 6;
+                            } else {
+                                output.push_back(input[idx]);
+                                idx++;
+                            }
+                            break;
                         default:
-                            output.push_back(next);
+                            output.push_back(input[idx + 1]);
                             idx += 2;
                             break;
                     }
                 } else {
                     output.push_back(input[idx]);
-                    ++idx;
+                    idx++;
                 }
             }
             return output;
         }
 
         [[nodiscard]] std::string ExtractValuesJson(const std::string &jsonString) {
-            if (const std::size_t valuesPos = jsonString.find("\"values\""); valuesPos != std::string::npos) {
-                if (const std::size_t openBrace = jsonString.find('{', valuesPos); openBrace != std::string::npos) {
-                    int depth = 1;
-                    std::size_t closeBrace = openBrace + 1;
-                    while (closeBrace < jsonString.size() && depth > 0) {
-                        if (jsonString[closeBrace] == '{')
-                            depth++;
-                        else if (jsonString[closeBrace] == '}')
-                            depth--;
-                        closeBrace++;
-                    }
-                    if (depth == 0)
-                        return jsonString.substr(openBrace, closeBrace - openBrace);
-                }
+            const std::size_t valuesPos = jsonString.find("\"values\"");
+            if (valuesPos == std::string::npos)
+                return jsonString;
+            const std::size_t openBrace = jsonString.find('{', valuesPos);
+            if (openBrace == std::string::npos)
+                return jsonString;
+            int depth = 1;
+            std::size_t closeBrace = openBrace + 1;
+            while (closeBrace < jsonString.size() && depth > 0) {
+                if (jsonString[closeBrace] == '{')
+                    depth++;
+                else if (jsonString[closeBrace] == '}')
+                    depth--;
+                closeBrace++;
             }
+            if (depth == 0)
+                return jsonString.substr(openBrace, closeBrace - openBrace);
             return jsonString;
         }
 

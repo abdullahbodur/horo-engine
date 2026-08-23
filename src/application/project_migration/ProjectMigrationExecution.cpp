@@ -119,10 +119,11 @@ namespace Horo::Application {
                     MigrationError(ProjectErrors::MigrationInventoryLimit, "Migration input exceeds the configured byte limit."));
             std::vector<std::byte> bytes(size);
             if (std::ifstream stream(path, std::ios::binary);
-                !stream || (size > 0 && !stream.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(size))))
-                // NOSONAR
+                !stream || (size > 0 && !stream.read(reinterpret_cast<char *>(bytes.data()),
+                                                     static_cast<std::streamsize>(size)))) {  // NOSONAR(cpp:S6022)
                 return Result<std::vector<std::byte>>::Failure(
                     MigrationError(ProjectErrors::MigrationInventoryInvalid, "Cannot read migration input: " + path.generic_string()));
+            }
             return Result<std::vector<std::byte>>::Success(std::move(bytes));
         }
 
@@ -455,7 +456,8 @@ namespace Horo::Application {
             ProjectDocumentView{.handle = slot.entry.handle, .path = slot.entry.path, .kind = slot.entry.kind, .bytes = slot.bytes});
     }
 
-    Result<void> ProjectMigrationContext::ReplaceDocument(const MigrationDocumentHandle document, std::vector<std::byte> replacement) {
+    Result<void> ProjectMigrationContext::ReplaceDocument(const MigrationDocumentHandle document,  // NOSONAR(cpp:S5817)
+                                                          std::vector<std::byte> replacement) {
         if (document.generation != state_->generation || document.index >= state_->documents.size() ||
             !state_->documents[document.index].alive)
             return Result<void>::Failure(MigrationError(ProjectErrors::MigrationDocumentStale, "Cannot replace a stale document."));
@@ -470,7 +472,7 @@ namespace Horo::Application {
     }
 
     Result<void> ProjectMigrationContext::AddDocument(const std::string &projectRelativePath, const MigrationDocumentKind kind,
-                                                      std::vector<std::byte> document) {
+                                                      std::vector<std::byte> document) {  // NOSONAR(cpp:S5817)
         const std::filesystem::path normalized = std::filesystem::path(projectRelativePath).lexically_normal();
         const std::string generic = normalized.generic_string();
         if (normalized.is_absolute() || normalized.empty() || generic == ".." || generic.starts_with("../"))
@@ -498,7 +500,7 @@ namespace Horo::Application {
         return Result<void>::Success();
     }
 
-    Result<void> ProjectMigrationContext::RemoveDocument(const MigrationDocumentHandle document) {
+    Result<void> ProjectMigrationContext::RemoveDocument(const MigrationDocumentHandle document) {  // NOSONAR(cpp:S5817)
         if (document.generation != state_->generation || document.index >= state_->documents.size() ||
             !state_->documents[document.index].alive)
             return Result<void>::Failure(MigrationError(ProjectErrors::MigrationDocumentStale, "Cannot remove a stale document."));

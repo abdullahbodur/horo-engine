@@ -1,13 +1,18 @@
 #include "../project/ProjectErrors.h"
 #include "Horo/Application/ProjectMigration.h"
 #include "Horo/Foundation/Logging/Logger.h"
+#include "Horo/Foundation/TransparentString.h"
 
 #include <algorithm>
+#include <format>
 #include <set>
 #include <unordered_set>
 
 namespace Horo::Application {
     namespace {
+        using Horo::TransparentStringHash;
+        using Horo::TransparentStringSet;
+
         [[nodiscard]] Error MigrationError(const ErrorCodeDescriptor &descriptor, std::string message) {
             return MakeError(descriptor, std::move(message));
         }
@@ -21,14 +26,106 @@ namespace Horo::Application {
         }
 
         [[nodiscard]] std::string EdgeKey(const ProjectMigrationDefinition &definition) {
-            return std::to_string(static_cast<int>(definition.kind)) + ":" + FormatHoroVersion(definition.from.value) + ":" +
-                   FormatHoroVersion(definition.to.value);
+            return std::format("{}:{}:{}", static_cast<int>(definition.kind), FormatHoroVersion(definition.from.value),
+                               FormatHoroVersion(definition.to.value));
         }
 
         [[nodiscard]] bool HasProvider(const ProjectMigrationSupportDescriptor &support, const MigrationProviderId &provider) {
             return std::ranges::any_of(support.availableProviders, [&provider](const MigrationProviderId &available) {
                 return available == provider;
             });
+        }
+
+        [[nodiscard]] Result<std::vector<const ProjectMigrationDefinition *>> CollectDeclaredCheckpoints(
+            const ProjectMigrationSupportDescriptor &support, const std::vector<ProjectMigrationDefinition> &definitions,
+            const ContractBaselineVersion &source) {
+            for (const ProjectMigrationDefinition &definition : definitions) {
+                if (definition.kind != ProjectMigrationDefinitionKind::Checkpoint || !Same(definition.to, support.target))
+                    continue;
+                const bool declared =
+                    std::ranges::any_of(support.checkpoints, [&definition](const MigrationCheckpointDeclaration &declaration) {
+                    return declaration.id == definition.id && Same(declaration.source, definition.from) &&
+                           Same(declaration.target, definition.to);
+                });
+                if (!declared)
+                    return Result<std::vector<const ProjectMigrationDefinition *>>::Failure(
+                        MigrationError(ProjectErrors::MigrationCatalogInvalid,
+                                       "Catalog checkpoint is not declared by the target support descriptor: " + definition.id.value));
+            }
+
+            std::vector<const ProjectMigrationDefinition *> declaredCheckpoints;
+            for (const MigrationCheckpointDeclaration &declaration : support.checkpoints) {
+                if (!Same(declaration.source, source) || !Same(declaration.target, support.target))
+                    continue;
+                for (const ProjectMigrationDefinition &definition : definitions)
+                    if (definition.kind == ProjectMigrationDefinitionKind::Checkpoint && definition.id == declaration.id &&
+                        Same(definition.from, source) && Same(definition.to, support.target))
+                        declaredCheckpoints.push_back(&definition);
+            }
+            if (declaredCheckpoints.size() > 1)
+                return Result<std::vector<const ProjectMigrationDefinition *>>::Failure(
+                    MigrationError(ProjectErrors::MigrationAmbiguous,
+                                   "More than one declared checkpoint matches this exact source and target."));
+            return Result<std::vector<const ProjectMigrationDefinition *>>::Success(std::move(declaredCheckpoints));
+        }
+
+        [[nodiscard]] Result<void> BuildSequentialChain(const ProjectMigrationSupportDescriptor &support,
+                                                        const std::vector<ProjectMigrationDefinition> &definitions,
+                                                        const ContractBaselineVersion &source, PersistentContractHash currentContract,
+                                                        ProjectMigrationPlan &plan) {
+            ContractBaselineVersion current = source;
+            std::unordered_set<std::string, TransparentStringHash, std::equal_to<>> visited;
+            while (!Same(current, support.target)) {
+                if (!visited.emplace(FormatHoroVersion(current.value)).second)
+                    return Result<void>::Failure(
+                        MigrationError(ProjectErrors::MigrationCycle, "Sequential migration chain contains a cycle."));
+                std::vector<const ProjectMigrationDefinition *> candidates;
+                for (const ProjectMigrationDefinition &definition : definitions) {
+                    if (definition.kind == ProjectMigrationDefinitionKind::Sequential && Same(definition.from, current) &&
+                        !Before(support.target, definition.to)) {
+                        candidates.push_back(&definition);
+                    }
+                }
+                if (candidates.empty())
+                    return Result<void>::Failure(MigrationError(ProjectErrors::MigrationPathMissing,
+                                                                "Sequential migration catalog has a gap before the target baseline."));
+                if (candidates.size() != 1)
+                    return Result<void>::Failure(MigrationError(ProjectErrors::MigrationAmbiguous,
+                                                                "Sequential migration catalog offers multiple canonical next hops."));
+                const ProjectMigrationDefinition &next = *candidates.front();
+                if (next.sourceContract != currentContract)
+                    return Result<void>::Failure(MigrationError(ProjectErrors::MigrationContractMismatch,
+                                                                "Sequential migration source contract does not match the preceding hop."));
+                plan.definitions.push_back(next);
+                current = next.to;
+                currentContract = next.targetContract;
+            }
+            if (currentContract != support.targetContract)
+                return Result<void>::Failure(MigrationError(ProjectErrors::MigrationContractMismatch,
+                                                            "Sequential migration target contract does not match the support descriptor."));
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> ValidatePlanProvidersAndComputeWeight(ProjectMigrationPlan &plan,
+                                                                         const ProjectMigrationSupportDescriptor &support) {
+            for (const ProjectMigrationDefinition &definition : plan.definitions) {
+                for (const MigrationProviderId &provider : definition.requiredProviders) {
+                    if (!HasProvider(support, provider))
+                        return Result<void>::Failure(MigrationError(ProjectErrors::MigrationProviderMissing,
+                                                                    "Required migration provider is unavailable: " + provider.value));
+                }
+                for (const ProjectMigrationNode &node : definition.pipeline->Nodes()) {
+                    if (node.documentStage)
+                        plan.estimatedWeight += node.documentStage->Describe().estimatedWeight;
+                    else if (node.stage)
+                        plan.estimatedWeight += node.stage->Describe().estimatedWeight;
+                    else if (node.validator)
+                        plan.estimatedWeight += node.validator->Describe().estimatedWeight;
+                }
+            }
+            if (plan.targetValidator)
+                plan.estimatedWeight += plan.targetValidator->Describe().estimatedWeight;
+            return Result<void>::Success();
         }
     }  // namespace
 
@@ -60,7 +157,7 @@ namespace Horo::Application {
                 MigrationError(ProjectErrors::MigrationPipelineInvalid,
                                "Migration pipeline requires a definition identity and at least one node."));
 
-        std::unordered_set<std::string> stageIds;
+        std::unordered_set<std::string, TransparentStringHash, std::equal_to<>> stageIds;
         bool hasValidator = false;
         for (std::size_t index = 0; index < nodes_.size(); ++index) {
             const ProjectMigrationNode &node = nodes_[index];
@@ -91,25 +188,23 @@ namespace Horo::Application {
                                "Every migration definition requires a terminal validation barrier."));
 
         return Result<std::shared_ptr<const ProjectMigrationPipeline>>::Success(
-            std::shared_ptr<const ProjectMigrationPipeline>(new ProjectMigrationPipeline(std::move(nodes_))));
+            std::shared_ptr<const ProjectMigrationPipeline>(new ProjectMigrationPipeline(std::move(nodes_))));  // NOSONAR(cpp:S5950)
     }
 
     Result<ProjectMigrationRegistry> ProjectMigrationRegistry::Create(const std::span<const ProjectMigrationDefinition> definitions) {
         std::vector<ProjectMigrationDefinition> ordered(definitions.begin(), definitions.end());
         std::ranges::sort(ordered, [](const ProjectMigrationDefinition &left, const ProjectMigrationDefinition &right) {
-            const auto targetOrder = CompareHoroVersions(left.to.value, right.to.value);
-            if (targetOrder != std::strong_ordering::equal)
+            if (const auto targetOrder = CompareHoroVersions(left.to.value, right.to.value); targetOrder != std::strong_ordering::equal)
                 return targetOrder == std::strong_ordering::less;
-            const auto sourceOrder = CompareHoroVersions(left.from.value, right.from.value);
-            if (sourceOrder != std::strong_ordering::equal)
+            if (const auto sourceOrder = CompareHoroVersions(left.from.value, right.from.value); sourceOrder != std::strong_ordering::equal)
                 return sourceOrder == std::strong_ordering::less;
             if (left.kind != right.kind)
                 return left.kind < right.kind;
             return left.id.value < right.id.value;
         });
 
-        std::unordered_set<std::string> identities;
-        std::unordered_set<std::string> edges;
+        std::unordered_set<std::string, TransparentStringHash, std::equal_to<>> identities;
+        std::unordered_set<std::string, TransparentStringHash, std::equal_to<>> edges;
         for (const ProjectMigrationDefinition &definition : ordered) {
             if (definition.id.value.empty() || !definition.pipeline)
                 return Result<ProjectMigrationRegistry>::Failure(
@@ -154,93 +249,28 @@ namespace Horo::Application {
             return Result<ProjectMigrationPlan>::Success(std::move(plan));
         }
 
-        std::vector<const ProjectMigrationDefinition *> declaredCheckpoints;
-        for (const ProjectMigrationDefinition &definition : definitions_) {
-            if (definition.kind != ProjectMigrationDefinitionKind::Checkpoint || !Same(definition.to, support.target))
-                continue;
-            const bool declared =
-                std::ranges::any_of(support.checkpoints, [&definition](const MigrationCheckpointDeclaration &declaration) {
-                return declaration.id == definition.id && Same(declaration.source, definition.from) &&
-                       Same(declaration.target, definition.to);
-            });
-            if (!declared)
-                return Result<ProjectMigrationPlan>::Failure(
-                    MigrationError(ProjectErrors::MigrationCatalogInvalid,
-                                   "Catalog checkpoint is not declared by the target support descriptor: " + definition.id.value));
-        }
-        for (const MigrationCheckpointDeclaration &declaration : support.checkpoints) {
-            if (!Same(declaration.source, source) || !Same(declaration.target, support.target))
-                continue;
-            for (const ProjectMigrationDefinition &definition : definitions_)
-                if (definition.kind == ProjectMigrationDefinitionKind::Checkpoint && definition.id == declaration.id &&
-                    Same(definition.from, source) && Same(definition.to, support.target))
-                    declaredCheckpoints.push_back(&definition);
-        }
-        if (declaredCheckpoints.size() > 1)
-            return Result<ProjectMigrationPlan>::Failure(
-                MigrationError(ProjectErrors::MigrationAmbiguous,
-                               "More than one declared checkpoint matches this exact source and target."));
+        auto checkpointResult = CollectDeclaredCheckpoints(support, definitions_, source);
+        if (checkpointResult.HasError())
+            return Result<ProjectMigrationPlan>::Failure(checkpointResult.ErrorValue());
 
-        PersistentContractHash currentContract = sourceContract;
+        const std::vector<const ProjectMigrationDefinition *> &declaredCheckpoints = checkpointResult.Value();
         if (declaredCheckpoints.size() == 1) {
             const ProjectMigrationDefinition &checkpoint = *declaredCheckpoints.front();
-            if (checkpoint.sourceContract != currentContract || checkpoint.targetContract != support.targetContract)
+            if (checkpoint.sourceContract != sourceContract || checkpoint.targetContract != support.targetContract)
                 return Result<ProjectMigrationPlan>::Failure(
                     MigrationError(ProjectErrors::MigrationContractMismatch,
                                    "Declared checkpoint does not bind the expected source and target contracts."));
             plan.definitions.push_back(checkpoint);
         } else {
-            ContractBaselineVersion current = source;
-            std::unordered_set<std::string> visited;
-            while (!Same(current, support.target)) {
-                if (!visited.emplace(FormatHoroVersion(current.value)).second)
-                    return Result<ProjectMigrationPlan>::Failure(
-                        MigrationError(ProjectErrors::MigrationCycle, "Sequential migration chain contains a cycle."));
-                std::vector<const ProjectMigrationDefinition *> candidates;
-                for (const ProjectMigrationDefinition &definition : definitions_)
-                    if (definition.kind == ProjectMigrationDefinitionKind::Sequential && Same(definition.from, current) &&
-                        !Before(support.target, definition.to))
-                        candidates.push_back(&definition);
-                if (candidates.empty())
-                    return Result<ProjectMigrationPlan>::Failure(
-                        MigrationError(ProjectErrors::MigrationPathMissing,
-                                       "Sequential migration catalog has a gap before the target baseline."));
-                if (candidates.size() != 1)
-                    return Result<ProjectMigrationPlan>::Failure(
-                        MigrationError(ProjectErrors::MigrationAmbiguous,
-                                       "Sequential migration catalog offers multiple canonical next hops."));
-                const ProjectMigrationDefinition &next = *candidates.front();
-                if (next.sourceContract != currentContract)
-                    return Result<ProjectMigrationPlan>::Failure(
-                        MigrationError(ProjectErrors::MigrationContractMismatch,
-                                       "Sequential migration source contract does not match the preceding hop."));
-                plan.definitions.push_back(next);
-                current = next.to;
-                currentContract = next.targetContract;
-            }
-            if (currentContract != support.targetContract)
-                return Result<ProjectMigrationPlan>::Failure(
-                    MigrationError(ProjectErrors::MigrationContractMismatch,
-                                   "Sequential migration target contract does not match the support descriptor."));
+            auto chainResult = BuildSequentialChain(support, definitions_, source, sourceContract, plan);
+            if (chainResult.HasError())
+                return Result<ProjectMigrationPlan>::Failure(chainResult.ErrorValue());
         }
 
-        for (const ProjectMigrationDefinition &definition : plan.definitions) {
-            for (const MigrationProviderId &provider : definition.requiredProviders)
-                if (!HasProvider(support, provider))
-                    return Result<ProjectMigrationPlan>::Failure(
-                        MigrationError(ProjectErrors::MigrationProviderMissing,
-                                       "Required migration provider is unavailable: " + provider.value));
-            for (const ProjectMigrationNode &node : definition.pipeline->Nodes()) {
-                if (node.documentStage)
-                    plan.estimatedWeight += node.documentStage->Describe().estimatedWeight;
-                else if (node.stage)
-                    plan.estimatedWeight += node.stage->Describe().estimatedWeight;
-                else if (node.validator)
-                    plan.estimatedWeight += node.validator->Describe().estimatedWeight;
-            }
-        }
-        if (plan.targetValidator)
-            plan.estimatedWeight += plan.targetValidator->Describe().estimatedWeight;
+        auto weightResult = ValidatePlanProvidersAndComputeWeight(plan, support);
+        if (weightResult.HasError())
+            return Result<ProjectMigrationPlan>::Failure(weightResult.ErrorValue());
+
         for (const ProjectMigrationDefinition &definition : plan.definitions)
             LOG_DEBUG("application.project_migration.plan", "Selected migration definition=%s.", definition.id.value.c_str());
         LOG_INFO("application.project_migration.plan", "Migration plan ready source=%s target=%s.", sourceText.c_str(), targetText.c_str());

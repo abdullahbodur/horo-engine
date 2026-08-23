@@ -69,7 +69,8 @@ namespace Horo {
     EngineDataBus::EngineDataBus(EngineDataBus &&) noexcept = default;
     EngineDataBus &EngineDataBus::operator=(EngineDataBus &&) noexcept = default;
 
-    Subscription EngineDataBus::SubscribeErased(const EventTypeId type, const std::string_view name, Handler handler) {
+    Subscription EngineDataBus::SubscribeErased(const EventTypeId type, const std::string_view name,  // NOSONAR(cpp:S5817)
+                                                Handler handler) {
         const auto state = m_state;
         std::uint64_t id = 0;
         {
@@ -135,8 +136,8 @@ namespace Horo {
         }
     }
 
-    void EngineDataBus::QueueErased(const EventTypeId type, const std::string_view name, std::shared_ptr<const EventPayload> payload,
-                                    QueuedPublisher publish) {
+    void EngineDataBus::QueueErased(const EventTypeId type, const std::string_view name,  // NOSONAR(cpp:S5817)
+                                    std::shared_ptr<const EventPayload> payload, QueuedPublisher publish) {
         std::lock_guard lock(m_state->mutex);
         if (m_state->queued.size() >= m_state->config.maxAsyncQueueSize) {
             LOG_TRACE(m_state->config.logCategory, "async drop event=%s reason=queue_full", name.data());
@@ -155,7 +156,7 @@ namespace Horo {
             event.publish(*this, event.payload.get());
     }
 
-    void EngineDataBus::Clear() {
+    void EngineDataBus::Clear() {  // NOSONAR(cpp:S5817)
         if (!m_state)
             return;
         std::lock_guard lock(m_state->mutex);

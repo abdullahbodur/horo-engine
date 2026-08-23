@@ -78,12 +78,7 @@ def _validate_storage_estimate(estimate: object, manifest_path: Path) -> dict:
     return estimate
 
 
-def validate_entry(directory: Path, kind: str, source_dir: str | None = None) -> dict:
-    target = directory.name if kind == "sequential" else directory.parent.name
-    source_from_path = source_dir
-    manifest_name = "migration.horo.json" if kind == "sequential" else "checkpoint.horo.json"
-    manifest_path = directory / manifest_name
-    manifest = read_manifest(manifest_path)
+def _validate_entry_baselines(manifest: dict, manifest_path: Path, target: str, source_from_path: str | None) -> tuple[str, str]:
     expected = {"id", "fromBaseline", "toBaseline", "sourceContract", "targetContract", "storageEstimate"}
     if not expected.issubset(manifest):
         fail(f"manifest lacks required fields: {manifest_path}")
@@ -102,7 +97,10 @@ def validate_entry(directory: Path, kind: str, source_dir: str | None = None) ->
     for key in ("sourceContract", "targetContract"):
         if not isinstance(manifest[key], str) or HASH.fullmatch(manifest[key]) is None:
             fail(f"manifest {key} is not canonical sha256: {manifest_path}")
-    estimate = _validate_storage_estimate(manifest["storageEstimate"], manifest_path)
+    return source, target
+
+
+def _validate_entry_sources(directory: Path, manifest: dict, manifest_path: Path, manifest_name: str) -> str:
     definition_hash = normalized_source_hash(directory, manifest_name)
     header = (directory / "ProjectMigration.h").read_text(encoding="utf-8")
     if "BuildProjectMigration" not in header:
@@ -110,6 +108,17 @@ def validate_entry(directory: Path, kind: str, source_dir: str | None = None) ->
     declared_hash = manifest.get("definitionHash")
     if declared_hash is not None and declared_hash != definition_hash:
         fail(f"frozen definitionHash differs from normalized sources: {manifest_path}")
+    return definition_hash
+
+
+def validate_entry(directory: Path, kind: str, source_dir: str | None = None) -> dict:
+    target = directory.name if kind == "sequential" else directory.parent.name
+    manifest_name = "migration.horo.json" if kind == "sequential" else "checkpoint.horo.json"
+    manifest_path = directory / manifest_name
+    manifest = read_manifest(manifest_path)
+    source, target = _validate_entry_baselines(manifest, manifest_path, target, source_dir)
+    estimate = _validate_storage_estimate(manifest["storageEstimate"], manifest_path)
+    definition_hash = _validate_entry_sources(directory, manifest, manifest_path, manifest_name)
     return {
         "directory": directory,
         "kind": kind,
@@ -120,6 +129,7 @@ def validate_entry(directory: Path, kind: str, source_dir: str | None = None) ->
         "storageEstimate": estimate,
         "namespace": symbol(target) if kind == "sequential" else f"{symbol(target)}::From{source.replace('.', '_')}",
     }
+
 
 
 def discover(root: Path) -> list[dict]:

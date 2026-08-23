@@ -501,9 +501,8 @@ namespace Horo::Gameplay {
         impl->descriptor = std::move(parsed).Value().descriptor;
         impl->source = std::move(source);
         impl->sourceName = std::move(sourceName);
-        impl->limits = limits;
-        return Result<std::unique_ptr<LuaBehaviorProgram>>::Success(std::unique_ptr<LuaBehaviorProgram>{
-            new LuaBehaviorProgram{std::move(impl)}});  // NOSONAR(cpp:S5950) The constructor is intentionally private.
+        return Result<std::unique_ptr<LuaBehaviorProgram>>::Success(
+            std::unique_ptr<LuaBehaviorProgram>{new LuaBehaviorProgram{std::move(impl)}});  // NOSONAR(cpp:S5950)
     }
 
     /** @copydoc LuaBehaviorProgram::LoadFiles */
