@@ -82,12 +82,22 @@ namespace Horo::Extensions {
             return Result<void>::Success();
         }
 
+        [[nodiscard]] const Json *FindArrayProperty(const Json &json, const std::string_view key, Result<void> &error) {
+            if (const auto it = json.find(key); it != json.end()) {
+                if (!it->is_array()) {
+                    error = Result<void>::Failure(MakeError(ExtensionErrors::InvalidManifest, std::format("'{}' must be an array.", key)));
+                    return nullptr;
+                }
+                return &*it;
+            }
+            return nullptr;
+        }
+
         Result<void> ParseModules(const Json &json, const std::string &defaultVersion, const std::string &defaultId,
                                   const std::string &defaultKind, std::vector<ExtensionModuleManifest> &modules) {
-            if (json.contains("modules")) {
-                if (!json["modules"].is_array())
-                    return Result<void>::Failure(MakeError(ExtensionErrors::InvalidManifest, "'modules' must be an array."));
-                for (const auto &moduleJson : json["modules"]) {
+            Result<void> arrayError = Result<void>::Success();
+            if (const Json *modulesJson = FindArrayProperty(json, "modules", arrayError); modulesJson != nullptr) {
+                for (const auto &moduleJson : *modulesJson) {
                     if (!moduleJson.is_object() || !moduleJson.contains("id") || !moduleJson["id"].is_string())
                         return Result<void>::Failure(
                             MakeError(ExtensionErrors::InvalidManifest, "Every extension module requires a stable 'id'."));
@@ -108,6 +118,8 @@ namespace Horo::Extensions {
                     }
                     modules.push_back(std::move(parsed));
                 }
+            } else if (arrayError.HasError()) {
+                return arrayError;
             }
             if (modules.empty()) {
                 modules.push_back(ExtensionModuleManifest{
@@ -121,10 +133,9 @@ namespace Horo::Extensions {
 
         Result<void> ParseContributions(const Json &json, const std::vector<ExtensionModuleManifest> &modules,
                                         std::vector<ExtensionContributionManifest> &contributions) {
-            if (json.contains("contributions")) {
-                if (!json["contributions"].is_array())
-                    return Result<void>::Failure(MakeError(ExtensionErrors::InvalidManifest, "'contributions' must be an array."));
-                for (const auto &contribution : json["contributions"]) {
+            Result<void> arrayError = Result<void>::Success();
+            if (const Json *contributionsJson = FindArrayProperty(json, "contributions", arrayError); contributionsJson != nullptr) {
+                for (const auto &contribution : *contributionsJson) {
                     if (!contribution.is_object() || !contribution.contains("type") || !contribution["type"].is_string() ||
                         !contribution.contains("id") || !contribution["id"].is_string() || !contribution.contains("module") ||
                         !contribution["module"].is_string()) {
@@ -145,13 +156,17 @@ namespace Horo::Extensions {
                         return existing.id == parsed.id;
                     })) {
                         return Result<void>::Failure(MakeError(ExtensionErrors::InvalidManifest,
-                                                               "Extension contribution identity is invalid, duplicate, or unowned."));
+                                                               "Contributions must declare non-empty types, unique identities, "
+                                                               "and target valid declared package modules."));
                     }
                     contributions.push_back(std::move(parsed));
                 }
+            } else if (arrayError.HasError()) {
+                return arrayError;
             }
             return Result<void>::Success();
         }
+
     }  // namespace
 
     Result<ExtensionManifest> ParseExtensionManifest(const std::string &jsonContent) {
