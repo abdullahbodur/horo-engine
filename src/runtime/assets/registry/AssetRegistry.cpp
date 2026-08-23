@@ -304,8 +304,8 @@ namespace Horo::Assets {
             diagnostics.resize(kMaximumDiagnostics - 1);
         std::ranges::sort(candidate, {}, &AssetRecord::id);
         bool ambiguous = false;
-        std::unordered_set<std::string, std::hash<std::string>, std::equal_to<>> paths;
-        std::unordered_set<std::string, std::hash<std::string>, std::equal_to<>> foldedPaths;
+        TransparentStringSet paths;
+        TransparentStringSet foldedPaths;
         for (std::size_t index = 0; index < candidate.size(); ++index) {
             const AssetRecord &record = candidate[index];
             if (!record.id.IsValid() || record.type.Value().empty()) {
