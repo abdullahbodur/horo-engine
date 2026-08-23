@@ -16,7 +16,7 @@ namespace Horo::Runtime {
                 return callback();
             } catch (const std::exception &exception) {
                 return Result<void>::Failure(MakeError(RuntimeErrors::UnexpectedException, exception.what()));
-            } catch (...) {
+            } catch (...) {  // NOSONAR(cpp:S1181, cpp:S2738)
                 return Result<void>::Failure(MakeError(RuntimeErrors::UnexpectedException));
             }
         }
@@ -42,16 +42,16 @@ namespace Horo::Runtime {
         if (state_ != RuntimeLifecycleState::Created)
             return StateFailure();
         state_ = RuntimeLifecycleState::Initializing;
-        for (auto &participant : participants_) {
+        for (const auto &participant : participants_) {
             if (cancellation.IsCancellationRequested()) {
                 state_ = RuntimeLifecycleState::Failed;
                 Shutdown();
                 return Result<void>::Failure(MakeError(RuntimeErrors::Cancelled));
             }
-            Result<void> result = ContainParticipantException([&] {
+            if (Result<void> result = ContainParticipantException([&participant, &cancellation] {
                 return participant->Startup(cancellation);
             });
-            if (result.HasError()) {
+                result.HasError()) {
                 state_ = RuntimeLifecycleState::Failed;
                 Shutdown();
                 return result;
@@ -68,10 +68,10 @@ namespace Horo::Runtime {
         if (state_ != RuntimeLifecycleState::Running && state_ != RuntimeLifecycleState::Suspended)
             return StateFailure();
         for (std::size_t index = 0; index < startedParticipantCount_; ++index) {
-            Result<void> result = ContainParticipantException([&] {
+            if (Result<void> result = ContainParticipantException([this, index, phase, &context] {
                 return participants_[index]->OnPhase(phase, context);
             });
-            if (result.HasError())
+                result.HasError())
                 return result;
         }
         return Result<void>::Success();
@@ -82,10 +82,10 @@ namespace Horo::Runtime {
         if (state_ != RuntimeLifecycleState::Running)
             return StateFailure();
         for (std::size_t index = 0; index < startedParticipantCount_; ++index) {
-            Result<void> result = ContainParticipantException([&] {
+            if (Result<void> result = ContainParticipantException([this, index, &context] {
                 return participants_[index]->OnFixedUpdate(context);
             });
-            if (result.HasError())
+                result.HasError())
                 return result;
         }
         return Result<void>::Success();
@@ -109,26 +109,28 @@ namespace Horo::Runtime {
 
     /** @copydoc RuntimeLifecycle::MarkFailed */
     void RuntimeLifecycle::MarkFailed() noexcept {
-        if (state_ == RuntimeLifecycleState::Running || state_ == RuntimeLifecycleState::Suspended ||
-            state_ == RuntimeLifecycleState::Ready) {
-            state_ = RuntimeLifecycleState::Failed;
+        using enum RuntimeLifecycleState;
+        if (state_ == Running || state_ == Suspended || state_ == Ready) {
+            state_ = Failed;
         }
     }
 
     /** @copydoc RuntimeLifecycle::Shutdown */
     void RuntimeLifecycle::Shutdown() noexcept {
-        if (state_ == RuntimeLifecycleState::Stopped || state_ == RuntimeLifecycleState::Stopping)
+        using enum RuntimeLifecycleState;
+        if (state_ == Stopped || state_ == Stopping)
             return;
-        state_ = RuntimeLifecycleState::Stopping;
+        state_ = Stopping;
         while (startedParticipantCount_ > 0) {
             --startedParticipantCount_;
             participants_[startedParticipantCount_]->Shutdown();
         }
-        state_ = RuntimeLifecycleState::Stopped;
+        state_ = Stopped;
     }
 
     /** @copydoc RuntimeLifecycle::State */
     RuntimeLifecycleState RuntimeLifecycle::State() const noexcept {
         return state_;
     }
+
 }  // namespace Horo::Runtime

@@ -9,10 +9,11 @@ namespace Horo::Runtime {
         if (scheduler.HasError()) {
             return Result<std::unique_ptr<RuntimeHost>>::Failure(scheduler.ErrorValue());
         }
-        return Result<std::unique_ptr<RuntimeHost>>::Success(std::unique_ptr<RuntimeHost>(new RuntimeHost(std::move(scheduler).Value())));
+        return Result<std::unique_ptr<RuntimeHost>>::Success(
+            std::make_unique<RuntimeHost>(std::move(scheduler).Value(), ConstructionKey{}));
     }
 
-    RuntimeHost::RuntimeHost(std::unique_ptr<FrameScheduler> scheduler) noexcept : scheduler_(std::move(scheduler)) {}
+    RuntimeHost::RuntimeHost(std::unique_ptr<FrameScheduler> scheduler, ConstructionKey) noexcept : scheduler_(std::move(scheduler)) {}
 
     RuntimeHost::~RuntimeHost() {
         Shutdown();
@@ -57,7 +58,7 @@ namespace Horo::Runtime {
     }
 
     /** @copydoc RuntimeHost::RequestShutdown */
-    void RuntimeHost::RequestShutdown() noexcept {
+    void RuntimeHost::RequestShutdown() const noexcept {
         cancellation_.RequestCancellation();
     }
 

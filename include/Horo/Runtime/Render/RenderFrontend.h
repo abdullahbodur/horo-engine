@@ -139,7 +139,7 @@ namespace Horo::Render {
         [[nodiscard]] Result<void> AttachStaticMeshPassExecutor(IStaticMeshPassExecutor &executor);
 
         /** @brief Detaches the matching executor; safe to call repeatedly outside an active frame. */
-        void DetachStaticMeshPassExecutor(IStaticMeshPassExecutor &executor) noexcept;
+        void DetachStaticMeshPassExecutor(const IStaticMeshPassExecutor &executor) noexcept;
 
         /** @brief Creates one logical offscreen target identity with an initial non-zero extent. */
         [[nodiscard]] Result<RenderTargetHandle> CreateOffscreenTarget(FramebufferExtent extent);
@@ -153,7 +153,15 @@ namespace Horo::Render {
     private:
         friend class RenderFrameScope;
 
-        explicit RenderFrontend(std::unique_ptr<IRenderBackend> backend) noexcept;
+        class ConstructionKey {
+            ConstructionKey() = default;
+            friend class RenderFrontend;
+        };
+
+    public:
+        RenderFrontend(std::unique_ptr<IRenderBackend> backend, ConstructionKey) noexcept;
+
+    private:
         [[nodiscard]] bool IsLiveTarget(RenderTargetHandle target, FramebufferExtent extent) const noexcept;
 
         struct TargetRecord {

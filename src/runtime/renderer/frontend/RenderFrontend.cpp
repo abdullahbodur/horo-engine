@@ -84,14 +84,14 @@ namespace Horo::Render {
                     return Result<void>::Failure(staticMeshExecuted.ErrorValue());
                 }
             }
-            const Result<void> executed = backend_->Execute(RenderExecutionPlan{.frame = frame_, .orderedPasses = orderedPasses});
-            if (executed.HasError()) {
+            if (const Result<void> executed = backend_->Execute(RenderExecutionPlan{.frame = frame_, .orderedPasses = orderedPasses});
+                executed.HasError()) {
                 Abort();
                 return Result<void>::Failure(executed.ErrorValue());
             }
             executed_ = true;
             return Result<void>::Success();
-        } catch (...) {
+        } catch (...) {  // NOSONAR(cpp:S2738)
             Abort();
             return Result<void>::Failure(MakeFrontendError(FrontendErrors::FrameException, "Renderer backend frame operation threw."));
         }
@@ -108,14 +108,13 @@ namespace Horo::Render {
         }
 
         try {
-            const Result<void> presented = backend_->Present(frame_);
-            if (presented.HasError()) {
+            if (const Result<void> presented = backend_->Present(frame_); presented.HasError()) {
                 Abort();
                 return Result<void>::Failure(presented.ErrorValue());
             }
             Release();
             return Result<void>::Success();
-        } catch (...) {
+        } catch (...) {  // NOSONAR(cpp:S2738)
             Abort();
             return Result<void>::Failure(MakeFrontendError(FrontendErrors::FrameException, "Renderer backend frame operation threw."));
         }
@@ -158,19 +157,20 @@ namespace Horo::Render {
 
         std::unique_ptr<IRenderBackend> backend = std::move(createdBackend).Value();
         try {
-            const Result<void> initialized = backend->Initialize(config);
-            if (initialized.HasError()) {
+            if (const Result<void> initialized = backend->Initialize(config); initialized.HasError()) {
                 backend->Shutdown();
                 return Result<std::unique_ptr<RenderFrontend>>::Failure(initialized.ErrorValue());
             }
-        } catch (...) {
+        } catch (...) {  // NOSONAR(cpp:S2738)
             backend->Shutdown();
             return Result<std::unique_ptr<RenderFrontend>>::Failure(
                 MakeFrontendError(FrontendErrors::InitializeException, "Renderer backend initialization threw."));
         }
 
-        return Result<std::unique_ptr<RenderFrontend>>::Success(std::unique_ptr<RenderFrontend>{new RenderFrontend(std::move(backend))});
+        return Result<std::unique_ptr<RenderFrontend>>::Success(std::make_unique<RenderFrontend>(std::move(backend), ConstructionKey{}));
     }
+
+    RenderFrontend::RenderFrontend(std::unique_ptr<IRenderBackend> backend, ConstructionKey) noexcept : backend_(std::move(backend)) {}
 
     /** @copydoc RenderFrontend::~RenderFrontend */
     RenderFrontend::~RenderFrontend() {
@@ -206,7 +206,7 @@ namespace Horo::Render {
                     MakeFrontendError(FrontendErrors::InvalidFrameToken, "Renderer backend returned an invalid frame token."));
             }
             return Result<RenderFrameScope>::Success(RenderFrameScope{*this, *backend_, frame});
-        } catch (...) {
+        } catch (...) {  // NOSONAR(cpp:S2738)
             backend_->AbortActiveFrame();
             return Result<RenderFrameScope>::Failure(
                 MakeFrontendError(FrontendErrors::FrameException, "Renderer backend frame operation threw."));
@@ -221,8 +221,7 @@ namespace Horo::Render {
         }
 
         RenderFrameScope frame = std::move(begun).Value();
-        const Result<void> executed = frame.Execute(orderedPasses);
-        if (executed.HasError()) {
+        if (const Result<void> executed = frame.Execute(orderedPasses); executed.HasError()) {
             return Result<void>::Failure(executed.ErrorValue());
         }
         return frame.Present();
@@ -237,7 +236,7 @@ namespace Horo::Render {
 
         try {
             return backend_->Resize(extent);
-        } catch (...) {
+        } catch (...) {  // NOSONAR(cpp:S2738)
             return Result<void>::Failure(MakeFrontendError(FrontendErrors::ResizeException, "Renderer backend resize operation threw."));
         }
     }
@@ -257,7 +256,7 @@ namespace Horo::Render {
     }
 
     /** @copydoc RenderFrontend::DetachStaticMeshPassExecutor */
-    void RenderFrontend::DetachStaticMeshPassExecutor(IStaticMeshPassExecutor &executor) noexcept {
+    void RenderFrontend::DetachStaticMeshPassExecutor(const IStaticMeshPassExecutor &executor) noexcept {
         if (activeFrameScope_ == nullptr && staticMeshPassExecutor_ == &executor) {
             staticMeshPassExecutor_ = nullptr;
         }
@@ -310,6 +309,4 @@ namespace Horo::Render {
         return target.index < targets_.size() && targets_[target.index].live && targets_[target.index].generation == target.generation &&
                targets_[target.index].extent.width == extent.width && targets_[target.index].extent.height == extent.height;
     }
-
-    RenderFrontend::RenderFrontend(std::unique_ptr<IRenderBackend> backend) noexcept : backend_(std::move(backend)) {}
 }  // namespace Horo::Render

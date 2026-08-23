@@ -586,8 +586,7 @@ namespace Horo::Input {
     }  // namespace
 
     Result<InputBindingProfile> ParseBindingProfile(const std::string_view value) {
-        constexpr std::size_t maximumProfileBytes = 1024U * 1024U;
-        if (value.empty() || value.size() > maximumProfileBytes)
+        if (constexpr std::size_t maximumProfileBytes = 1024U * 1024U; value.empty() || value.size() > maximumProfileBytes)
             return Result<InputBindingProfile>::Failure(
                 MakeError(Errors::ProfileMalformed, "Input profile size is outside the supported bounds."));
         try {
@@ -616,7 +615,7 @@ namespace Horo::Input {
             InputBindingProfile profile;
             profile.schemaVersion = json.at("schemaVersion").get<std::uint32_t>();
             profile.profileId = json.at("profileId").get<std::string>();
-            if (const Result<std::vector<BindingOverride>> overrides = ParseOverrides(json); overrides.HasError())
+            if (Result<std::vector<BindingOverride>> overrides = ParseOverrides(json); overrides.HasError())
                 return Result<InputBindingProfile>::Failure(overrides.ErrorValue());
             else
                 profile.overrides = std::move(overrides).Value();
@@ -684,10 +683,10 @@ namespace Horo::Input {
                                                                                        std::to_string(nativeError) + '.'));
         }
 #else
-        std::filesystem::rename(temporary, path, error);
+        std::filesystem::rename(temporary, path, error);  // NOSONAR(cpp:S2083)
         if (error) {
             const std::string message = error.message();
-            std::filesystem::remove(temporary, error);
+            std::filesystem::remove(temporary, error);  // NOSONAR(cpp:S2083)
             return Result<void>::Failure(MakeError(Errors::ProfilePromotionFailed, message));
         }
 #endif
@@ -830,6 +829,61 @@ namespace Horo::Input {
         return Result<void>::Success();
     }
 
+    namespace {
+        template <typename ImplType>
+        [[nodiscard]] std::pair<float, ButtonState> EvaluateControlBinding(const InputBinding &binding, const RawInputSnapshot &snapshot,
+                                                                           const std::optional<PlayerId> player, ImplType &impl) {
+            float axis = 0.0F;
+            ButtonState state;
+            switch (binding.kind) {
+                case BindingControlKind::Key:
+                    state = snapshot.State(binding.key);
+                    if (state.pressed && !impl.consumedKeys.insert(static_cast<std::uint32_t>(binding.key)).second)
+                        state.pressed = false;
+                    axis = state.down ? 1.0F : 0.0F;
+                    break;
+                case BindingControlKind::PointerButton:
+                    state = snapshot.State(binding.pointerButton);
+                    if (state.pressed && !impl.consumedPointerButtons.insert(static_cast<std::uint32_t>(binding.pointerButton)).second)
+                        state.pressed = false;
+                    axis = state.down ? 1.0F : 0.0F;
+                    break;
+                case BindingControlKind::PointerWheelX:
+                    axis = impl.consumedWheelX ? 0.0F : snapshot.pointer.wheelX;
+                    state.pressed = axis != 0.0F;
+                    state.down = state.pressed;
+                    impl.consumedWheelX = impl.consumedWheelX || state.pressed;
+                    break;
+                case BindingControlKind::PointerWheelY:
+                    axis = impl.consumedWheelY ? 0.0F : snapshot.pointer.wheelY;
+                    state.pressed = axis != 0.0F;
+                    state.down = state.pressed;
+                    impl.consumedWheelY = impl.consumedWheelY || state.pressed;
+                    break;
+                default: {
+                    const auto result = EvaluateGamepadBinding(binding, snapshot, impl.previousSnapshot, impl.assignments, player,
+                                                               impl.consumedGamepadTransitions);
+                    axis = result.axis;
+                    state = result.state;
+                    break;
+                }
+            }
+            return {axis, state};
+        }
+
+        void ApplyRadialDeadzone(ActionValue &value, const float radialDeadzone) {
+            const float magnitude = std::sqrt(value.x * value.x + value.y * value.y);
+            if (magnitude <= radialDeadzone || magnitude <= std::numeric_limits<float>::epsilon()) {
+                value.y = 0.0F;
+                value.x = 0.0F;
+            } else {
+                const float remapped = std::min(1.0F, (magnitude - radialDeadzone) / (1.0F - radialDeadzone));
+                value.x = value.x / magnitude * remapped;
+                value.y = value.y / magnitude * remapped;
+            }
+        }
+    }  // namespace
+
     ActionValue InputRouter::ReadAction(const InputContextToken &context, const ActionId &actionId, const std::optional<PlayerId> player) {
         ActionValue value;
         if (!IsContextActive(context))
@@ -855,42 +909,9 @@ namespace Horo::Input {
                 chord = chord && snapshot.State(binding.chord[index]).down;
             if (!chord)
                 continue;
-            float axis = 0.0F;
-            ButtonState state;
-            switch (binding.kind) {
-                case BindingControlKind::Key:
-                    state = snapshot.State(binding.key);
-                    if (state.pressed && !impl_->consumedKeys.insert(static_cast<std::uint32_t>(binding.key)).second)
-                        state.pressed = false;
-                    axis = state.down ? 1.0F : 0.0F;
-                    break;
-                case BindingControlKind::PointerButton:
-                    state = snapshot.State(binding.pointerButton);
-                    if (state.pressed && !impl_->consumedPointerButtons.insert(static_cast<std::uint32_t>(binding.pointerButton)).second)
-                        state.pressed = false;
-                    axis = state.down ? 1.0F : 0.0F;
-                    break;
-                case BindingControlKind::PointerWheelX:
-                    axis = impl_->consumedWheelX ? 0.0F : snapshot.pointer.wheelX;
-                    state.pressed = axis != 0.0F;
-                    state.down = state.pressed;
-                    impl_->consumedWheelX = impl_->consumedWheelX || state.pressed;
-                    break;
-                case BindingControlKind::PointerWheelY:
-                    axis = impl_->consumedWheelY ? 0.0F : snapshot.pointer.wheelY;
-                    state.pressed = axis != 0.0F;
-                    state.down = state.pressed;
-                    impl_->consumedWheelY = impl_->consumedWheelY || state.pressed;
-                    break;
-                default: {
-                    const auto result = EvaluateGamepadBinding(binding, snapshot, impl_->previousSnapshot, impl_->assignments, player,
-                                                               impl_->consumedGamepadTransitions);
-                    axis = result.axis;
-                    state = result.state;
-                    break;
-                }
-            }
-            axis *= binding.scale;
+
+            auto [rawAxis, state] = EvaluateControlBinding(binding, snapshot, player, *impl_);
+            const float axis = rawAxis * binding.scale;
             radial2D = radial2D || (descriptor->valueType == ActionValueType::Axis2D && binding.deadzoneKind == DeadzoneKind::Radial);
             radialDeadzone = std::max(radialDeadzone, binding.deadzone);
             if (descriptor->valueType == ActionValueType::Axis2D) {
@@ -906,17 +927,8 @@ namespace Horo::Input {
         }
         value.x = std::clamp(value.x, -1.0F, 1.0F);
         value.y = std::clamp(value.y, -1.0F, 1.0F);
-        if (radial2D) {
-            const float magnitude = std::sqrt(value.x * value.x + value.y * value.y);
-            if (magnitude <= radialDeadzone || magnitude <= std::numeric_limits<float>::epsilon()) {
-                value.y = 0.0F;
-                value.x = 0.0F;
-            } else {
-                const float remapped = std::min(1.0F, (magnitude - radialDeadzone) / (1.0F - radialDeadzone));
-                value.x = value.x / magnitude * remapped;
-                value.y = value.y / magnitude * remapped;
-            }
-        }
+        if (radial2D)
+            ApplyRadialDeadzone(value, radialDeadzone);
         return value;
     }
 
@@ -1109,27 +1121,40 @@ namespace Horo::Input {
         Disconnect();
     }
 
+    VirtualGamepad::VirtualGamepad(VirtualGamepad &&other) noexcept
+        : collector_(std::exchange(other.collector_, nullptr)), id_(std::exchange(other.id_, {})) {}
+
+    VirtualGamepad &VirtualGamepad::operator=(VirtualGamepad &&other) noexcept {
+        if (this != &other) {
+            Disconnect();
+            collector_ = std::exchange(other.collector_, nullptr);
+            id_ = std::exchange(other.id_, {});
+        }
+        return *this;
+    }
+
     GamepadDeviceId VirtualGamepad::Connect(std::string name) {
         Disconnect();
-        id_ = collector_->ConnectGamepad(std::move(name));
+        if (collector_ != nullptr)
+            id_ = collector_->ConnectGamepad(std::move(name));
         return id_;
     }
 
     void VirtualGamepad::Disconnect() {
-        if (id_.IsValid())
+        if (collector_ != nullptr && id_.IsValid())
             (void)collector_->DisconnectGamepad(id_);
         id_ = {};
     }
 
     bool VirtualGamepad::Press(const GamepadButton button) {
-        return id_.IsValid() && collector_->SetGamepadButton(id_, button, true);
+        return collector_ != nullptr && id_.IsValid() && collector_->SetGamepadButton(id_, button, true);
     }
 
     bool VirtualGamepad::Release(const GamepadButton button) {
-        return id_.IsValid() && collector_->SetGamepadButton(id_, button, false);
+        return collector_ != nullptr && id_.IsValid() && collector_->SetGamepadButton(id_, button, false);
     }
 
     bool VirtualGamepad::SetAxis(const GamepadAxis axis, const float value) {
-        return id_.IsValid() && collector_->SetGamepadAxis(id_, axis, value);
+        return collector_ != nullptr && id_.IsValid() && collector_->SetGamepadAxis(id_, axis, value);
     }
 }  // namespace Horo::Input
