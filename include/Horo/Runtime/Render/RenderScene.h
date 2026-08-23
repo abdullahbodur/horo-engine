@@ -7,6 +7,7 @@
 
 #include "Horo/Runtime/Render/Mesh.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
