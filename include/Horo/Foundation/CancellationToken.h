@@ -33,9 +33,9 @@ namespace Horo {
     /** @brief Owner that can request cancellation for its token and derived children. */
     class CancellationSource {
     public:
-        CancellationSource() : m_state(std::make_shared<CancellationToken::State>()) {}
+        CancellationSource() = default;
 
-        explicit CancellationSource(const CancellationToken &parent) : m_state(std::make_shared<CancellationToken::State>()) {
+        explicit CancellationSource(const CancellationToken &parent) {
             m_state->parent = parent.m_state;
         }
 
@@ -48,6 +48,7 @@ namespace Horo {
         }
 
     private:
-        std::shared_ptr<CancellationToken::State> m_state;
+        std::shared_ptr<CancellationToken::State> m_state{std::make_shared<CancellationToken::State>()};
     };
+
 }  // namespace Horo

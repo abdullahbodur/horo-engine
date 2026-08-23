@@ -68,8 +68,8 @@ namespace Horo::Application {
                                            true};
 
         [[nodiscard]] bool IsTerminal(const GameplayBuildState state) noexcept {
-            using enum GameplayBuildState;
-            return state == Succeeded || state == Failed || state == Cancelled || state == TimedOut;
+            return state == GameplayBuildState::Succeeded || state == GameplayBuildState::Failed ||
+                   state == GameplayBuildState::Cancelled || state == GameplayBuildState::TimedOut;
         }
 
         struct TransparentStringHash {

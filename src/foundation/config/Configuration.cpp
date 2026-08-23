@@ -10,12 +10,13 @@
 namespace Horo {
     namespace {
         [[nodiscard]] std::string_view SettingTypeName(const SettingValueType type) noexcept {
+            using enum SettingValueType;
             switch (type) {
-                case SettingValueType::Boolean:
+                case Boolean:
                     return "boolean";
-                case SettingValueType::Integer:
+                case Integer:
                     return "integer";
-                case SettingValueType::String:
+                case String:
                     return "string";
             }
             return "unknown";
@@ -45,10 +46,10 @@ namespace Horo {
             for (const unsigned char character : value) {
                 switch (character) {
                     case '"':
-                        escaped << "\\\"";
+                        escaped << R"(\")";
                         break;
                     case '\\':
-                        escaped << "\\\\";
+                        escaped << R"(\\)";
                         break;
                     case '\b':
                         escaped << "\\b";
@@ -80,49 +81,98 @@ namespace Horo {
         [[nodiscard]] std::string UnescapeJsonString(const std::string_view input) {
             std::string output;
             output.reserve(input.size());
-            for (std::size_t idx = 0; idx < input.size(); ++idx) {
+            std::size_t idx = 0;
+            while (idx < input.size()) {
                 if (input[idx] == '\\' && idx + 1 < input.size()) {
                     const char next = input[idx + 1];
                     switch (next) {
                         case '"':
                             output.push_back('"');
-                            idx++;
+                            idx += 2;
                             break;
                         case '\\':
                             output.push_back('\\');
-                            idx++;
+                            idx += 2;
                             break;
                         case 'b':
                             output.push_back('\b');
-                            idx++;
+                            idx += 2;
                             break;
                         case 'f':
                             output.push_back('\f');
-                            idx++;
+                            idx += 2;
                             break;
                         case 'n':
                             output.push_back('\n');
-                            idx++;
+                            idx += 2;
                             break;
                         case 'r':
                             output.push_back('\r');
-                            idx++;
+                            idx += 2;
                             break;
                         case 't':
                             output.push_back('\t');
-                            idx++;
+                            idx += 2;
                             break;
                         default:
                             output.push_back(next);
-                            idx++;
+                            idx += 2;
                             break;
                     }
                 } else {
                     output.push_back(input[idx]);
+                    ++idx;
                 }
             }
             return output;
         }
+
+        [[nodiscard]] std::string ExtractValuesJson(const std::string &jsonString) {
+            if (const std::size_t valuesPos = jsonString.find("\"values\""); valuesPos != std::string::npos) {
+                if (const std::size_t openBrace = jsonString.find('{', valuesPos); openBrace != std::string::npos) {
+                    int depth = 1;
+                    std::size_t closeBrace = openBrace + 1;
+                    while (closeBrace < jsonString.size() && depth > 0) {
+                        if (jsonString[closeBrace] == '{')
+                            depth++;
+                        else if (jsonString[closeBrace] == '}')
+                            depth--;
+                        closeBrace++;
+                    }
+                    if (depth == 0)
+                        return jsonString.substr(openBrace, closeBrace - openBrace);
+                }
+            }
+            return jsonString;
+        }
+
+        [[nodiscard]] Result<SettingValue> ParseSettingValue(const SettingValueType type, const std::string &rawValue,
+                                                             const std::smatch &match) {
+            using enum SettingValueType;
+            if (type == Boolean) {
+                if (rawValue == "true")
+                    return Result<SettingValue>::Success(true);
+                if (rawValue == "false")
+                    return Result<SettingValue>::Success(false);
+                return Result<SettingValue>::Failure(MakeError(ConfigurationErrors::JsonParseError));
+            }
+            if (type == Integer) {
+                try {
+                    return Result<SettingValue>::Success(std::stoll(rawValue));
+                } catch (const std::invalid_argument &) {
+                    return Result<SettingValue>::Failure(MakeError(ConfigurationErrors::JsonParseError));
+                } catch (const std::out_of_range &) {
+                    return Result<SettingValue>::Failure(MakeError(ConfigurationErrors::JsonParseError));
+                }
+            }
+            if (type == String) {
+                if (match[3].matched)
+                    return Result<SettingValue>::Success(UnescapeJsonString(match[3].str()));
+                return Result<SettingValue>::Failure(MakeError(ConfigurationErrors::JsonParseError));
+            }
+            return Result<SettingValue>::Failure(MakeError(ConfigurationErrors::JsonParseError));
+        }
+
     }  // namespace
 
     /** @copydoc ConfigurationSnapshot::Revision */
@@ -150,6 +200,7 @@ namespace Horo {
     std::string ConfigurationSnapshot::ToJson() const {
         std::ostringstream json;
         json << "{\n";
+        json << "  \"schemaVersion\": 1,\n";
         json << "  \"revision\": " << m_data->revision << ",\n";
         json << "  \"values\": {\n";
         bool first = true;
@@ -174,9 +225,10 @@ namespace Horo {
 
     /** @copydoc ConfigurationSchema::MatchesType */
     bool ConfigurationSchema::MatchesType(const SettingValueType type, const SettingValue &value) {
-        return (type == SettingValueType::Boolean && std::holds_alternative<bool>(value)) ||
-               (type == SettingValueType::Integer && std::holds_alternative<std::int64_t>(value)) ||
-               (type == SettingValueType::String && std::holds_alternative<std::string>(value));
+        using enum SettingValueType;
+        return (type == Boolean && std::holds_alternative<bool>(value)) ||
+               (type == Integer && std::holds_alternative<std::int64_t>(value)) ||
+               (type == String && std::holds_alternative<std::string>(value));
     }
 
     /** @copydoc ConfigurationSchema::ErrorFor */
@@ -272,27 +324,7 @@ namespace Horo {
     /** @copydoc ConfigurationService::LoadJson */
     Result<void> ConfigurationService::LoadJson(const std::string &jsonString) {
         ConfigurationDraft draft{.baseRevision = Snapshot().Revision()};
-
-        // Locate the values block if nested under "values": { ... }, otherwise use the entire JSON string.
-        std::string targetString = jsonString;
-        const std::size_t valuesPos = jsonString.find("\"values\"");
-        if (valuesPos != std::string::npos) {
-            const std::size_t openBrace = jsonString.find('{', valuesPos);
-            if (openBrace != std::string::npos) {
-                int depth = 1;
-                std::size_t closeBrace = openBrace + 1;
-                while (closeBrace < jsonString.size() && depth > 0) {
-                    if (jsonString[closeBrace] == '{')
-                        depth++;
-                    else if (jsonString[closeBrace] == '}')
-                        depth--;
-                    closeBrace++;
-                }
-                if (depth == 0) {
-                    targetString = jsonString.substr(openBrace, closeBrace - openBrace);
-                }
-            }
-        }
+        const std::string targetString = ExtractValuesJson(jsonString);
 
         // Match key-value pairs: "key": value
         const std::regex kvRegex(R"regex("([^"\\]*(?:\\.[^"\\]*)*)"\s*:\s*(true|false|-?\d+|"([^"\\]*(?:\\.[^"\\]*)*)"))regex");
@@ -307,32 +339,13 @@ namespace Horo {
             const SettingKey settingKey{key};
             const auto descriptorIt = m_schema.m_descriptors.find(settingKey);
             if (descriptorIt == m_schema.m_descriptors.end()) {
-                // Skip or fail on unknown keys: according to our engine validation rules, we skip unknown keys during load
-                // or validate known keys.
                 continue;
             }
 
-            const SettingValueType type = descriptorIt->second.type;
-            if (type == SettingValueType::Boolean) {
-                if (rawValue == "true")
-                    draft.proposedValues[settingKey] = true;
-                else if (rawValue == "false")
-                    draft.proposedValues[settingKey] = false;
-                else
-                    return Result<void>::Failure(ConfigurationSchema::ErrorFor(ConfigurationErrors::JsonParseError));
-            } else if (type == SettingValueType::Integer) {
-                try {
-                    draft.proposedValues[settingKey] = std::stoll(rawValue);
-                } catch (...) {
-                    return Result<void>::Failure(ConfigurationSchema::ErrorFor(ConfigurationErrors::JsonParseError));
-                }
-            } else if (type == SettingValueType::String) {
-                if (match[3].matched) {
-                    draft.proposedValues[settingKey] = UnescapeJsonString(match[3].str());
-                } else {
-                    return Result<void>::Failure(ConfigurationSchema::ErrorFor(ConfigurationErrors::JsonParseError));
-                }
-            }
+            auto parsed = ParseSettingValue(descriptorIt->second.type, rawValue, match);
+            if (parsed.HasError())
+                return Result<void>::Failure(parsed.ErrorValue());
+            draft.proposedValues[settingKey] = std::move(parsed).Value();
         }
 
         return Commit(draft);

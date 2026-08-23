@@ -310,22 +310,17 @@ namespace Horo::Math {
                      0.0F, 0.0F, 1.0F}};
     }
 
-    Result<Mat4> TryInverse(const Mat4 &matrix) noexcept {
-        if (!IsFinite(matrix))
-            return Result<Mat4>::Failure(MakeMathError(Errors::NonFiniteInput, "Matrix must be finite."));
-        std::array<std::array<float, 8>, 4> augmented{};
-        for (int row = 0; row < 4; ++row) {
-            for (int column = 0; column < 4; ++column)
-                augmented[row][column] = matrix.At(row, column);
-            augmented[row][row + 4] = 1.0F;
-        }
-        for (int pivot = 0; pivot < 4; ++pivot) {
+    namespace {
+        using AugmentedMat4 = std::array<std::array<float, 8>, 4>;
+
+        [[nodiscard]] bool EliminatePivot(AugmentedMat4 &augmented, const int pivot) noexcept {
             int best = pivot;
-            for (int row = pivot + 1; row < 4; ++row)
+            for (int row = pivot + 1; row < 4; ++row) {
                 if (std::fabs(augmented[row][pivot]) > std::fabs(augmented[best][pivot]))
                     best = row;
+            }
             if (std::fabs(augmented[best][pivot]) <= DefaultEpsilon)
-                return Result<Mat4>::Failure(MakeMathError(Errors::SingularMatrix, "Matrix is singular."));
+                return false;
             if (best != pivot)
                 std::swap(augmented[best], augmented[pivot]);
             const float divisor = augmented[pivot][pivot];
@@ -338,20 +333,43 @@ namespace Horo::Math {
                 for (int column = 0; column < 8; ++column)
                     augmented[row][column] -= factor * augmented[pivot][column];
             }
+            return true;
+        }
+    }  // namespace
+
+    Result<Mat4> TryInverse(const Mat4 &matrix) noexcept {
+        if (!IsFinite(matrix))
+            return Result<Mat4>::Failure(MakeMathError(Errors::NonFiniteInput, "Matrix must be finite."));
+        AugmentedMat4 augmented{};
+        for (int row = 0; row < 4; ++row) {
+            for (int column = 0; column < 4; ++column)
+                augmented[row][column] = matrix.At(row, column);
+            augmented[row][row + 4] = 1.0F;
+        }
+        for (int pivot = 0; pivot < 4; ++pivot) {
+            if (!EliminatePivot(augmented, pivot))
+                return Result<Mat4>::Failure(MakeMathError(Errors::SingularMatrix, "Matrix is singular."));
         }
         Mat4 inverse{};
-        for (int row = 0; row < 4; ++row)
+        for (int row = 0; row < 4; ++row) {
             for (int column = 0; column < 4; ++column)
                 inverse.values[static_cast<std::size_t>(column * 4 + row)] = augmented[row][column + 4];
+        }
         return Result<Mat4>::Success(inverse);
     }
 
     Result<Mat4> TryInverseAffine(const Mat4 &matrix) noexcept {
         if (!IsAffine(matrix))
             return Result<Mat4>::Failure(MakeMathError(Errors::InvalidAffineMatrix, "Matrix must be finite and affine."));
-        const float a00 = matrix.At(0, 0), a01 = matrix.At(0, 1), a02 = matrix.At(0, 2);
-        const float a10 = matrix.At(1, 0), a11 = matrix.At(1, 1), a12 = matrix.At(1, 2);
-        const float a20 = matrix.At(2, 0), a21 = matrix.At(2, 1), a22 = matrix.At(2, 2);
+        const float a00 = matrix.At(0, 0);
+        const float a01 = matrix.At(0, 1);
+        const float a02 = matrix.At(0, 2);
+        const float a10 = matrix.At(1, 0);
+        const float a11 = matrix.At(1, 1);
+        const float a12 = matrix.At(1, 2);
+        const float a20 = matrix.At(2, 0);
+        const float a21 = matrix.At(2, 1);
+        const float a22 = matrix.At(2, 2);
         const float determinant = a00 * (a11 * a22 - a12 * a21) - a01 * (a10 * a22 - a12 * a20) + a02 * (a10 * a21 - a11 * a20);
         if (!std::isfinite(determinant) || std::fabs(determinant) <= DefaultEpsilon)
             return Result<Mat4>::Failure(MakeMathError(Errors::SingularMatrix, "Affine matrix is singular."));

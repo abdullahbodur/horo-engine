@@ -131,7 +131,7 @@ namespace Horo {
         const std::size_t paddedSize = remaining < 56 ? 64 : 128;
         const std::uint64_t bitLength = static_cast<std::uint64_t>(input.size()) * 8U;
         for (std::size_t index = 0; index < 8; ++index) {
-            const unsigned int shift = static_cast<unsigned int>((7 - index) * 8);
+            const auto shift = static_cast<unsigned int>((7 - index) * 8);
             finalBlocks[paddedSize - 8 + index] = static_cast<std::uint8_t>(bitLength >> shift);
         }
         ProcessBlock(finalBlocks.data(), state);
@@ -141,7 +141,7 @@ namespace Horo {
         Sha256Digest digest;
         for (std::size_t wordIndex = 0; wordIndex < state.size(); ++wordIndex) {
             for (std::size_t byteIndex = 0; byteIndex < 4; ++byteIndex) {
-                const unsigned int shift = static_cast<unsigned int>((3 - byteIndex) * 8);
+                const auto shift = static_cast<unsigned int>((3 - byteIndex) * 8);
                 digest.bytes[wordIndex * 4 + byteIndex] = static_cast<std::uint8_t>(state[wordIndex] >> shift);
             }
         }
@@ -163,8 +163,7 @@ namespace Horo {
     /** @copydoc ParseSha256 */
     Result<Sha256Digest> ParseSha256(const std::string_view text) {
         constexpr std::string_view Prefix = "sha256:";
-        constexpr std::size_t CanonicalLength = 71;
-        if (text.size() != CanonicalLength || !text.starts_with(Prefix))
+        if (constexpr std::size_t CanonicalLength = 71; text.size() != CanonicalLength || !text.starts_with(Prefix))
             return InvalidSha256Text();
 
         Sha256Digest digest;

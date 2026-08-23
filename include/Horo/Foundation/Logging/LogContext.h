@@ -82,7 +82,10 @@ namespace Horo::Log {
          *
          * @tparam KVs  Alternating key, value types convertible to `std::string`.
          */
-        template <typename... KVs> explicit LogContext(KVs &&...kvs) {
+        template <typename... KVs>
+        explicit LogContext(KVs &&...kvs)
+            requires(sizeof...(KVs) > 0)
+        {
             static_assert(sizeof...(KVs) % 2 == 0, "LogContext requires an even number of key/value arguments.");
             std::vector<MdcField> fields;
             fields.reserve(sizeof...(KVs) / 2);

@@ -2,6 +2,7 @@
 
 #include "../FoundationErrors.h"
 #include "Horo/Foundation/Sha256.h"
+#include "Horo/Foundation/TransparentString.h"
 
 #include <algorithm>
 #include <array>
@@ -136,26 +137,35 @@ namespace Horo::Diagnostics {
             }
         }
 
+        [[nodiscard]] std::optional<std::string> RedactJsonlLines(const std::string &text) {
+            std::istringstream lines{text};
+            std::string line;
+            std::string sanitized;
+            while (std::getline(lines, line)) {
+                if (line.empty())
+                    continue;
+                Json record = Json::parse(line, nullptr, false, true);
+                if (record.is_discarded()) {
+                    if (lines.eof() && !text.ends_with('\n'))
+                        break;
+                    return std::nullopt;
+                }
+                RedactJson(record);
+                sanitized += record.dump();
+                sanitized += '\n';
+            }
+            return sanitized;
+        }
+
         [[nodiscard]] std::optional<std::vector<std::byte>> RedactDiagnosticText(const std::filesystem::path &archivePath,
                                                                                  const std::vector<std::byte> &bytes) {
-            const std::string text{reinterpret_cast<const char *>(bytes.data()), bytes.size()};
+            const std::string text(reinterpret_cast<const char *>(bytes.data()), bytes.size());
             std::string sanitized;
             if (archivePath.generic_string().find(".jsonl") != std::string::npos) {
-                std::istringstream lines{text};
-                std::string line;
-                while (std::getline(lines, line)) {
-                    if (line.empty())
-                        continue;
-                    Json record = Json::parse(line, nullptr, false, true);
-                    if (record.is_discarded()) {
-                        if (lines.eof() && !text.ends_with('\n'))
-                            break;
-                        return std::nullopt;
-                    }
-                    RedactJson(record);
-                    sanitized += record.dump();
-                    sanitized += '\n';
-                }
+                auto result = RedactJsonlLines(text);
+                if (!result)
+                    return std::nullopt;
+                sanitized = std::move(*result);
             } else if (archivePath.extension() == ".json") {
                 if (text.empty())
                     return std::vector<std::byte>{};
@@ -221,17 +231,14 @@ namespace Horo::Diagnostics {
         };
 
         /** @brief Writes a dependency-free ZIP32 archive using the stored method. */
-        [[nodiscard]] bool WriteZip(const std::filesystem::path &path, std::vector<ZipEntryView> &entries) {
-            std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+        [[nodiscard]] bool WriteZip(const std::filesystem::path &destination, std::vector<ZipEntryView> &entries) {
+            std::ofstream stream(destination, std::ios::binary | std::ios::trunc);
             if (!stream)
                 return false;
+
             for (ZipEntryView &entry : entries) {
-                const auto offset = stream.tellp();
-                if (offset < 0 || static_cast<std::uint64_t>(offset) > UINT32_MAX || entry.name.size() > UINT16_MAX ||
-                    entry.bytes.size() > UINT32_MAX)
-                    return false;
-                entry.localOffset = static_cast<std::uint32_t>(offset);
                 entry.crc = Crc32(entry.bytes);
+                entry.localOffset = static_cast<std::uint32_t>(stream.tellp());
                 WriteU32(stream, 0x04034b50U);
                 WriteU16(stream, 20);
                 WriteU16(stream, 0);
@@ -246,10 +253,8 @@ namespace Horo::Diagnostics {
                 stream.write(entry.name.data(), static_cast<std::streamsize>(entry.name.size()));
                 stream.write(reinterpret_cast<const char *>(entry.bytes.data()), static_cast<std::streamsize>(entry.bytes.size()));
             }
-            const auto centralOffsetPosition = stream.tellp();
-            if (centralOffsetPosition < 0 || static_cast<std::uint64_t>(centralOffsetPosition) > UINT32_MAX || entries.size() > UINT16_MAX)
-                return false;
-            const auto centralOffset = static_cast<std::uint32_t>(centralOffsetPosition);
+
+            const auto centralOffset = static_cast<std::uint32_t>(stream.tellp());
             for (const ZipEntryView &entry : entries) {
                 WriteU32(stream, 0x02014b50U);
                 WriteU16(stream, 20);
@@ -270,10 +275,9 @@ namespace Horo::Diagnostics {
                 WriteU32(stream, entry.localOffset);
                 stream.write(entry.name.data(), static_cast<std::streamsize>(entry.name.size()));
             }
-            const auto endPosition = stream.tellp();
-            if (endPosition < 0 || static_cast<std::uint64_t>(endPosition) > UINT32_MAX)
-                return false;
-            const auto centralSize = static_cast<std::uint32_t>(endPosition) - centralOffset;
+            const auto centralEnd = static_cast<std::uint32_t>(stream.tellp());
+            const std::uint32_t centralSize = centralEnd - centralOffset;
+
             WriteU32(stream, 0x06054b50U);
             WriteU16(stream, 0);
             WriteU16(stream, 0);
@@ -284,6 +288,43 @@ namespace Horo::Diagnostics {
             WriteU16(stream, 0);
             stream.flush();
             return stream.good();
+        }
+
+        struct PreparedEntry {
+            std::filesystem::path archivePath;
+            std::vector<std::byte> bytes;
+            std::string digest;
+        };
+
+        [[nodiscard]] std::string BuildManifestJson(const std::vector<std::pair<std::string, std::string>> &metadata,
+                                                    const std::vector<std::string> &missingOptional,
+                                                    const std::vector<PreparedEntry> &prepared) {
+            std::string manifest = R"({"schemaVersion":1,"metadata":{)";
+            for (std::size_t index = 0; index < metadata.size(); ++index) {
+                if (index != 0)
+                    manifest += ',';
+                AppendJsonString(manifest, metadata[index].first);
+                manifest += ':';
+                AppendJsonString(manifest, metadata[index].second);
+            }
+            manifest += R"(},"missingOptional":[)";
+            for (std::size_t index = 0; index < missingOptional.size(); ++index) {
+                if (index != 0)
+                    manifest += ',';
+                AppendJsonString(manifest, missingOptional[index]);
+            }
+            manifest += R"(],"files":[)";
+            for (std::size_t index = 0; index < prepared.size(); ++index) {
+                if (index != 0)
+                    manifest += ',';
+                manifest += R"({"path":)";
+                AppendJsonString(manifest, prepared[index].archivePath.generic_string());
+                manifest += std::format(R"(,"bytes":{},"sha256":)", prepared[index].bytes.size());
+                AppendJsonString(manifest, prepared[index].digest);
+                manifest += '}';
+            }
+            manifest += "]}";
+            return manifest;
         }
     }  // namespace
 
@@ -303,16 +344,10 @@ namespace Horo::Diagnostics {
         if (error)
             return Failure(ObservabilityErrors::BundleWriteFailed, "Unable to create the diagnostic bundle directory.");
 
-        struct PreparedEntry {
-            std::filesystem::path archivePath;
-            std::vector<std::byte> bytes;
-            std::string digest;
-        };
-
         std::vector<PreparedEntry> prepared;
         prepared.reserve(request.entries.size());
         std::vector<std::string> missingOptional;
-        std::unordered_set<std::string> archivePaths;
+        TransparentStringSet archivePaths;
         std::uintmax_t totalInputBytes = 0;
         std::uintmax_t totalPreparedBytes = 0;
         for (const DiagnosticBundleEntry &entry : request.entries) {
@@ -350,43 +385,21 @@ namespace Horo::Diagnostics {
                                "Redacted diagnostic bundle input exceeded its configured aggregate byte limit.");
             totalPreparedBytes += bytes.size();
             const std::string digest = FormatSha256(ComputeSha256(bytes));
-            prepared.push_back(PreparedEntry{.archivePath = archivePath, .bytes = std::move(bytes), .digest = digest});
+            prepared.push_back(PreparedEntry{.archivePath = entry.archivePath, .bytes = std::move(bytes), .digest = digest});
         }
 
         std::ranges::sort(prepared, {}, &PreparedEntry::archivePath);
         std::ranges::sort(missingOptional);
 
-        std::string manifest = R"({"schemaVersion":1,"metadata":{)";
-        std::unordered_set<std::string> metadataKeys;
+        TransparentStringSet metadataKeys;
         std::vector<std::pair<std::string, std::string>> metadata = request.metadata;
         std::ranges::sort(metadata, {}, &std::pair<std::string, std::string>::first);
-        for (std::size_t index = 0; index < metadata.size(); ++index) {
-            if (metadata[index].first.empty() || IsSensitiveMetadataKey(metadata[index].first) ||
-                ContainsAbsolutePath(metadata[index].second) || !metadataKeys.insert(metadata[index].first).second)
+        for (const auto &[key, val] : metadata) {
+            if (key.empty() || IsSensitiveMetadataKey(key) || ContainsAbsolutePath(val) || !metadataKeys.insert(key).second)
                 return Failure(ObservabilityErrors::InvalidBundleRequest, "Diagnostic bundle metadata keys must be unique.");
-            if (index != 0)
-                manifest += ',';
-            AppendJsonString(manifest, metadata[index].first);
-            manifest += ':';
-            AppendJsonString(manifest, metadata[index].second);
         }
-        manifest += R"(},"missingOptional":[)";
-        for (std::size_t index = 0; index < missingOptional.size(); ++index) {
-            if (index != 0)
-                manifest += ',';
-            AppendJsonString(manifest, missingOptional[index]);
-        }
-        manifest += R"(],"files":[)";
-        for (std::size_t index = 0; index < prepared.size(); ++index) {
-            if (index != 0)
-                manifest += ',';
-            manifest += R"({"path":)";
-            AppendJsonString(manifest, prepared[index].archivePath.generic_string());
-            manifest += std::format(R"(,"bytes":{},"sha256":)", prepared[index].bytes.size());
-            AppendJsonString(manifest, prepared[index].digest);
-            manifest += '}';
-        }
-        manifest += "]}";
+
+        const std::string manifest = BuildManifestJson(metadata, missingOptional, prepared);
 
         const std::filesystem::path temporaryPath = request.outputPath.string() + ".tmp";
         error.clear();

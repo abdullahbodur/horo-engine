@@ -80,7 +80,9 @@ def test_catalog_discovery_is_deterministic_and_freezes_definition_hash(
     assert sources.index("0.1.0/ProjectMigration.cpp") < sources.index(
         "0.2.0/0.0.1/ProjectMigration.cpp"
     )
-    assert first_hash.startswith("sha256:") and len(first_hash.strip()) == 71
+    assert first_hash.startswith("sha256:")
+    assert len(first_hash.strip()) == 71
+
 
     manifest_path = sequential / "migration.horo.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))

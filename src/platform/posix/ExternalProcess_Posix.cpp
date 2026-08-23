@@ -13,12 +13,13 @@
 #include <fcntl.h>
 #include <map>
 #include <poll.h>
+#include <span>
 #include <spawn.h>
 #include <string_view>
 #include <sys/wait.h>
 #include <unistd.h>
 
-extern char **environ;
+extern char **environ;  // NOSONAR(cpp:S5421) environ is provided by the POSIX runtime.
 
 namespace Horo {
     namespace {
@@ -27,9 +28,8 @@ namespace Horo {
             LineDecoder(const ProcessOutputStream stream, const std::size_t maximum, const std::function<void(ProcessOutputLine)> &callback)
                 : stream_(stream), maximum_(std::max<std::size_t>(maximum, 1U)), callback_(&callback) {}
 
-            void Append(const char *bytes, const std::size_t count) {
-                for (std::size_t index = 0; index < count; ++index) {
-                    const char value = bytes[index];
+            void Append(const std::span<const char> bytes) {
+                for (const char value : bytes) {
                     if (value == '\n')
                         Emit();
                     else if (value != '\r') {
@@ -68,7 +68,7 @@ namespace Horo {
                     const std::string_view text{*entry};
                     const std::size_t separator = text.find('=');
                     if (separator != std::string_view::npos)
-                        values.emplace(std::string{text.substr(0, separator)}, std::string{text.substr(separator + 1)});
+                        values.try_emplace(std::string{text.substr(0, separator)}, std::string{text.substr(separator + 1)});
                 }
             }
             for (const std::string &name : overlay.unset)
@@ -87,18 +87,66 @@ namespace Horo {
             for (;;) {
                 const ssize_t count = read(descriptor, buffer.data(), buffer.size());
                 if (count > 0) {
-                    decoder.Append(buffer.data(), static_cast<std::size_t>(count));
+                    decoder.Append(std::span<const char>{buffer.data(), static_cast<std::size_t>(count)});
                     continue;
                 }
-                if (count == 0) {
-                    open = false;
-                    decoder.Finish();
-                } else if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+                if (count == 0 || (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)) {
                     open = false;
                     decoder.Finish();
                 }
                 return;
             }
+        }
+
+        Result<pid_t> SpawnProcess(const ExternalProcessRequest &request, const std::array<int, 2> &stdoutPipe,
+                                   const std::array<int, 2> &stderrPipe) {
+            posix_spawn_file_actions_t actions;
+            posix_spawn_file_actions_init(&actions);
+            posix_spawn_file_actions_adddup2(&actions, stdoutPipe[1], STDOUT_FILENO);
+            posix_spawn_file_actions_adddup2(&actions, stderrPipe[1], STDERR_FILENO);
+            posix_spawn_file_actions_addclose(&actions, stdoutPipe[0]);
+            posix_spawn_file_actions_addclose(&actions, stderrPipe[0]);
+            posix_spawn_file_actions_addclose(&actions, stdoutPipe[1]);
+            posix_spawn_file_actions_addclose(&actions, stderrPipe[1]);
+#if defined(__APPLE__) || defined(__GLIBC__)
+            if (!request.workingDirectory.empty())
+                posix_spawn_file_actions_addchdir_np(&actions, request.workingDirectory.c_str());
+#else
+            if (!request.workingDirectory.empty()) {
+                posix_spawn_file_actions_destroy(&actions);
+                return Result<pid_t>::Failure(
+                    MakeError(PlatformErrors::ProcessLaunchFailed, "Working directories are unavailable on this POSIX host."));
+            }
+#endif
+
+            posix_spawnattr_t attributes;
+            posix_spawnattr_init(&attributes);
+            posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETPGROUP);
+            posix_spawnattr_setpgroup(&attributes, 0);
+
+            std::vector<std::string> argumentStorage;
+            argumentStorage.reserve(request.arguments.size() + 1U);
+            argumentStorage.push_back(request.executable);
+            argumentStorage.insert(argumentStorage.end(), request.arguments.begin(), request.arguments.end());
+            std::vector<char *> arguments;
+            for (std::string &argument : argumentStorage)
+                arguments.push_back(argument.data());
+            arguments.push_back(nullptr);
+
+            std::vector<std::string> environmentStorage = BuildEnvironment(request.environment);
+            std::vector<char *> environment;
+            for (std::string &entry : environmentStorage)
+                environment.push_back(entry.data());
+            environment.push_back(nullptr);
+
+            pid_t process{};
+            const int spawned =
+                posix_spawnp(&process, request.executable.c_str(), &actions, &attributes, arguments.data(), environment.data());
+            posix_spawnattr_destroy(&attributes);
+            posix_spawn_file_actions_destroy(&actions);
+            if (spawned != 0)
+                return Result<pid_t>::Failure(MakeError(PlatformErrors::ProcessLaunchFailed, std::strerror(spawned)));
+            return Result<pid_t>::Success(process);
         }
     }  // namespace
 
@@ -108,69 +156,25 @@ namespace Horo {
         if (request.executable.empty())
             return Result<ExternalProcessResult>::Failure(MakeError(PlatformErrors::ProcessLaunchFailed, "Executable is empty."));
 
-        int stdoutPipe[2]{-1, -1};
-        int stderrPipe[2]{-1, -1};
-        if (pipe(stdoutPipe) != 0 || pipe(stderrPipe) != 0) {
+        std::array<int, 2> stdoutPipe{-1, -1};
+        std::array<int, 2> stderrPipe{-1, -1};
+        if (pipe(stdoutPipe.data()) != 0 || pipe(stderrPipe.data()) != 0) {
             for (const int descriptor : {stdoutPipe[0], stdoutPipe[1], stderrPipe[0], stderrPipe[1]})
                 if (descriptor >= 0)
                     close(descriptor);
             return Result<ExternalProcessResult>::Failure(MakeError(PlatformErrors::ProcessIoFailed, std::strerror(errno)));
         }
 
-        posix_spawn_file_actions_t actions;
-        posix_spawn_file_actions_init(&actions);
-        posix_spawn_file_actions_adddup2(&actions, stdoutPipe[1], STDOUT_FILENO);
-        posix_spawn_file_actions_adddup2(&actions, stderrPipe[1], STDERR_FILENO);
-        posix_spawn_file_actions_addclose(&actions, stdoutPipe[0]);
-        posix_spawn_file_actions_addclose(&actions, stderrPipe[0]);
-        posix_spawn_file_actions_addclose(&actions, stdoutPipe[1]);
-        posix_spawn_file_actions_addclose(&actions, stderrPipe[1]);
-#if defined(__APPLE__) || defined(__GLIBC__)
-        if (!request.workingDirectory.empty())
-            posix_spawn_file_actions_addchdir_np(&actions, request.workingDirectory.c_str());
-#else
-        if (!request.workingDirectory.empty()) {
-            posix_spawn_file_actions_destroy(&actions);
-            close(stdoutPipe[0]);
-            close(stdoutPipe[1]);
-            close(stderrPipe[0]);
-            close(stderrPipe[1]);
-            return Result<ExternalProcessResult>::Failure(
-                MakeError(PlatformErrors::ProcessLaunchFailed, "Working directories are unavailable on this POSIX host."));
-        }
-#endif
-
-        posix_spawnattr_t attributes;
-        posix_spawnattr_init(&attributes);
-        posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETPGROUP);
-        posix_spawnattr_setpgroup(&attributes, 0);
-
-        std::vector<std::string> argumentStorage;
-        argumentStorage.reserve(request.arguments.size() + 1U);
-        argumentStorage.push_back(request.executable);
-        argumentStorage.insert(argumentStorage.end(), request.arguments.begin(), request.arguments.end());
-        std::vector<char *> arguments;
-        for (std::string &argument : argumentStorage)
-            arguments.push_back(argument.data());
-        arguments.push_back(nullptr);
-
-        std::vector<std::string> environmentStorage = BuildEnvironment(request.environment);
-        std::vector<char *> environment;
-        for (std::string &entry : environmentStorage)
-            environment.push_back(entry.data());
-        environment.push_back(nullptr);
-
-        pid_t process{};
-        const int spawned = posix_spawnp(&process, request.executable.c_str(), &actions, &attributes, arguments.data(), environment.data());
-        posix_spawnattr_destroy(&attributes);
-        posix_spawn_file_actions_destroy(&actions);
+        auto spawnedResult = SpawnProcess(request, stdoutPipe, stderrPipe);
         close(stdoutPipe[1]);
         close(stderrPipe[1]);
-        if (spawned != 0) {
+        if (spawnedResult.HasError()) {
             close(stdoutPipe[0]);
             close(stderrPipe[0]);
-            return Result<ExternalProcessResult>::Failure(MakeError(PlatformErrors::ProcessLaunchFailed, std::strerror(spawned)));
+            return Result<ExternalProcessResult>::Failure(spawnedResult.ErrorValue());
         }
+        const pid_t process = spawnedResult.Value();
+
         static_cast<void>(fcntl(stdoutPipe[0], F_SETFL, fcntl(stdoutPipe[0], F_GETFL) | O_NONBLOCK));
         static_cast<void>(fcntl(stderrPipe[0], F_SETFL, fcntl(stderrPipe[0], F_GETFL) | O_NONBLOCK));
 
@@ -187,8 +191,8 @@ namespace Horo {
 
         while (!childExited || stdoutOpen || stderrOpen) {
             const auto now = std::chrono::steady_clock::now();
-            const bool cancelled = cancellation.IsCancellationRequested();
-            if (!terminationRequested && (cancelled || now - started >= request.timeout)) {
+            if (const bool cancelled = cancellation.IsCancellationRequested();
+                !terminationRequested && (cancelled || now - started >= request.timeout)) {
                 terminationRequested = true;
                 timedOut = !cancelled;
                 terminationStarted = now;
@@ -217,7 +221,14 @@ namespace Horo {
             result.reason = ProcessTerminationReason::Cancelled;
         else if (WIFSIGNALED(status))
             result.reason = ProcessTerminationReason::Signalled;
-        result.exitCode = WIFEXITED(status) ? WEXITSTATUS(status) : (WIFSIGNALED(status) ? 128 + WTERMSIG(status) : -1);
+
+        if (WIFEXITED(status))
+            result.exitCode = WEXITSTATUS(status);
+        else if (WIFSIGNALED(status))
+            result.exitCode = 128 + WTERMSIG(status);
+        else
+            result.exitCode = -1;
+
         return Result<ExternalProcessResult>::Success(result);
     }
 }  // namespace Horo

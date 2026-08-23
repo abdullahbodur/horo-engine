@@ -158,18 +158,19 @@ namespace Horo::Diagnostics {
         }
     }  // namespace
 
+    namespace {
+        class OperationHistoryError : public std::runtime_error {
+        public:
+            using std::runtime_error::runtime_error;
+        };
+    }  // namespace
+
     struct OperationHistorySink::Impl {
         explicit Impl(OperationHistoryConfiguration value)
             : configuration(std::move(value)), path(configuration.directory / (configuration.baseName + ".jsonl")) {}
 
         [[nodiscard]] std::filesystem::path RolledPath(const std::size_t index) const {
             return std::filesystem::path{std::format("{}.{}", path.string(), index)};
-        }
-
-        void AppendRecovered(OperationHistoryRecord record) {
-            records.push_back(std::move(record));
-            while (records.size() > configuration.maxRecoveredRecords)
-                records.pop_front();
         }
 
         void RecoverFile(const std::filesystem::path &candidate) {
@@ -186,7 +187,13 @@ namespace Horo::Diagnostics {
             RecoverFile(path);
         }
 
-        void ReopenForAppend() noexcept {
+        void AppendRecovered(OperationHistoryRecord record) {
+            records.push_back(std::move(record));
+            while (records.size() > configuration.maxRecoveredRecords)
+                records.pop_front();
+        }
+
+        void ReopenForAppend() {
             file = std::fopen(path.string().c_str(), "ab");  // NOSONAR: path derives from a canonical directory and validated base name.
             std::error_code error;
             currentBytes = std::filesystem::file_size(path, error);
@@ -217,11 +224,11 @@ namespace Horo::Diagnostics {
             }
             if (error) {
                 ReopenForAppend();
-                throw std::runtime_error{"failed to roll operation history"};
+                throw OperationHistoryError{"failed to roll operation history"};
             }
             file = std::fopen(path.string().c_str(), "wb");
             if (file == nullptr)
-                throw std::runtime_error{"failed to create operation history segment"};
+                throw OperationHistoryError{"failed to create operation history segment"};
             currentBytes = 0;
         }
 
@@ -230,12 +237,14 @@ namespace Horo::Diagnostics {
         std::FILE *file{};
         std::uintmax_t currentBytes{};
         std::deque<OperationHistoryRecord> records;
-        /// Guards all mutable fields accessed from Export and Snapshot.
-        mutable std::mutex mutex;
 
         [[nodiscard]] std::mutex &Mutex() const noexcept {
-            return mutex;
+            return mutex_;
         }
+
+    private:
+        /// Guards all mutable fields accessed from Export and Snapshot.
+        mutable std::mutex mutex_;
     };
 
     /** @copydoc OperationHistorySink::Create */
@@ -290,14 +299,14 @@ namespace Horo::Diagnostics {
         std::string line = Serialize(history).dump();
         line += '\n';
         if (line.size() > impl_->configuration.maxFileBytes)
-            throw std::runtime_error{"operation history record exceeds file limit"};
+            throw OperationHistoryError{"operation history record exceeds file limit"};
 
         std::lock_guard lock(impl_->Mutex());
         if (impl_->currentBytes != 0 && impl_->currentBytes + line.size() > impl_->configuration.maxFileBytes)
             impl_->Roll();
         const std::size_t written = std::fwrite(line.data(), 1, line.size(), impl_->file);
         if (written != line.size() || std::fflush(impl_->file) != 0)
-            throw std::runtime_error{"failed to persist operation history"};
+            throw OperationHistoryError{"failed to persist operation history"};
         impl_->currentBytes += written;
         impl_->AppendRecovered(std::move(history));
     }
@@ -306,7 +315,7 @@ namespace Horo::Diagnostics {
     void OperationHistorySink::Flush() {
         std::lock_guard lock(impl_->Mutex());
         if (impl_->file != nullptr && std::fflush(impl_->file) != 0)
-            throw std::runtime_error{"failed to flush operation history"};
+            throw OperationHistoryError{"failed to flush operation history"};
     }
 
     /** @copydoc OperationHistorySink::Snapshot */

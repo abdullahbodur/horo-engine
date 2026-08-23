@@ -40,6 +40,8 @@ namespace Horo {
         CancellationSource cancellation;
         JobFunction work;
         Telemetry::OperationContext operationContext = Telemetry::CaptureOperationContext();
+
+    private:
         mutable std::mutex mutex_;
     };
 
@@ -55,6 +57,7 @@ namespace Horo {
         std::deque<std::shared_ptr<JobRecord>> queue;
         std::unordered_map<JobId, std::shared_ptr<JobRecord>> jobs;
         std::vector<std::thread> workers;
+
         std::mutex shutdownMutex;
     };
 
@@ -104,6 +107,12 @@ namespace Horo {
                     SetTerminalState(record, JobState::Cancelled, MakeJobError(JobErrors::Cancelled, "Job cancellation was requested."));
                 else
                     SetTerminalState(record, JobState::Succeeded);
+            } catch (const std::runtime_error &exception) {
+                SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what()));
+            } catch (const std::logic_error &exception) {
+                SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what()));
+            } catch (const std::bad_alloc &exception) {
+                SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what()));
             } catch (const std::exception &exception) {
                 SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what()));
             } catch (...) {

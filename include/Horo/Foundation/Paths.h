@@ -14,9 +14,10 @@ namespace Horo {
         [[nodiscard]] static Result<ProjectPath> Parse(const std::string_view input) {
             std::vector<std::string> segments;
             std::string segment;
-            const auto consume = [&segments](std::string value) -> bool {
+            const auto consume = [&segments](std::string value) {
                 if (value.empty() || value == ".")
                     return true;
+
                 if (value == "..") {
                     if (segments.empty())
                         return false;

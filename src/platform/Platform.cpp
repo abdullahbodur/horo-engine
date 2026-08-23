@@ -36,8 +36,6 @@ namespace Horo {
                                            .retryable = true,
                                            .userActionable = true};
 
-        std::mutex ProcessLockMutex;
-
         struct StringHash {
             using is_transparent = void;
 
@@ -46,7 +44,15 @@ namespace Horo {
             }
         };
 
-        std::unordered_set<std::string, StringHash, std::equal_to<>> ProcessLocks;
+        struct ProcessLockRegistry {
+            std::mutex mutex;
+            std::unordered_set<std::string, StringHash, std::equal_to<>> locks;
+        };
+
+        ProcessLockRegistry &GetProcessLockRegistry() {
+            static ProcessLockRegistry registry;
+            return registry;
+        }
 
         [[nodiscard]] Error FsError(const ErrorCodeDescriptor &code, const std::filesystem::path &path) {
             return MakeError(code, std::string(code.summary) + " Path: " + path.generic_string());
@@ -73,8 +79,27 @@ namespace Horo {
         State() = default;
         State(const State &) = delete;
         State &operator=(const State &) = delete;
-        State(State &&) noexcept = default;
-        State &operator=(State &&) noexcept = default;
+
+        State(State &&other) noexcept : processKey(std::move(other.processKey)) {
+#if defined(_WIN32)
+            handle = std::exchange(other.handle, INVALID_HANDLE_VALUE);
+#else
+            descriptor = std::exchange(other.descriptor, -1);
+#endif
+        }
+
+        State &operator=(State &&other) noexcept {
+            if (this != &other) {
+                Release();
+                processKey = std::move(other.processKey);
+#if defined(_WIN32)
+                handle = std::exchange(other.handle, INVALID_HANDLE_VALUE);
+#else
+                descriptor = std::exchange(other.descriptor, -1);
+#endif
+            }
+            return *this;
+        }
 
         std::string processKey;
 #if defined(_WIN32)
@@ -83,22 +108,32 @@ namespace Horo {
         int descriptor{-1};
 #endif
 
-        ~State() {
+        void Release() noexcept {
 #if defined(_WIN32)
-            if (handle != INVALID_HANDLE_VALUE)
+            if (handle != INVALID_HANDLE_VALUE) {
                 CloseHandle(handle);
+                handle = INVALID_HANDLE_VALUE;
+            }
 #else
             if (descriptor >= 0) {
                 struct flock unlock = {};
-
                 unlock.l_type = F_UNLCK;
                 unlock.l_whence = SEEK_SET;
                 static_cast<void>(fcntl(descriptor, F_SETLK, &unlock));
                 close(descriptor);
+                descriptor = -1;
             }
 #endif
-            std::lock_guard lock(ProcessLockMutex);
-            ProcessLocks.erase(processKey);
+            if (!processKey.empty()) {
+                auto &registry = GetProcessLockRegistry();
+                std::lock_guard lock(registry.mutex);
+                registry.locks.erase(processKey);
+                processKey.clear();
+            }
+        }
+
+        ~State() {
+            Release();
         }
     };
 
@@ -123,11 +158,13 @@ namespace Horo {
             return Result<ExclusiveFileLock>::Failure(FsError(IoFailed, path));
         const std::string key = LockKey(path);
         {
-            std::lock_guard lock(ProcessLockMutex);
-            if (!ProcessLocks.emplace(key).second)
+            auto &registry = GetProcessLockRegistry();
+            std::lock_guard lock(registry.mutex);
+            if (!registry.locks.emplace(key).second)
                 return Result<ExclusiveFileLock>::Failure(FsError(LockBusy, path));
         }
         auto state = std::make_unique<ExclusiveFileLock::State>();
+
         state->processKey = key;
 #if defined(_WIN32)
         state->handle = CreateFileW(path.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);

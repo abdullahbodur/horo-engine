@@ -140,6 +140,47 @@ namespace Horo::Application {
             return Result<void>::Success();
         }
 
+        [[nodiscard]] Result<void> CollectInventoryFiles(const std::filesystem::path &canonicalRoot,
+                                                         std::vector<std::filesystem::path> &files) {
+            std::error_code error;
+            TransparentStringSet portablePaths;
+            std::filesystem::recursive_directory_iterator iterator(canonicalRoot,
+                                                                   std::filesystem::directory_options::skip_permission_denied, error);
+            std::filesystem::recursive_directory_iterator end;
+            while (iterator != end) {
+                if (error)
+                    return Result<void>::Failure(
+                        MigrationError(ProjectErrors::MigrationInventoryInvalid, "Project inventory traversal failed."));
+                if (const auto status = iterator->symlink_status(error); error || std::filesystem::is_symlink(status))
+                    return Result<void>::Failure(MigrationError(ProjectErrors::MigrationInventoryInvalid,
+                                                                "Symlinks are not accepted in authoritative migration inventory."));
+                const std::filesystem::path relative = iterator->path().lexically_relative(canonicalRoot);
+                if (const std::string relativeText = relative.generic_string();
+                    relative.empty() || relativeText == ".." || relativeText.starts_with("../"))
+                    return Result<void>::Failure(
+                        MigrationError(ProjectErrors::MigrationInventoryInvalid, "Migration inventory path escapes the project root."));
+                if (iterator->is_directory(error)) {
+                    if (IsExcluded(relative))
+                        iterator.disable_recursion_pending();
+                    iterator.increment(error);
+                    continue;
+                }
+                if (!iterator->is_regular_file(error) || IsExcluded(relative)) {
+                    iterator.increment(error);
+                    continue;
+                }
+                if (const std::string generic = relative.generic_string(); !portablePaths.emplace(PortablePathKey(generic)).second)
+                    return Result<void>::Failure(MigrationError(ProjectErrors::MigrationInventoryInvalid,
+                                                                "Portable case collision in migration inventory: " + generic));
+                files.push_back(relative);
+                iterator.increment(error);
+            }
+            std::ranges::sort(files, [](const auto &left, const auto &right) {
+                return left.generic_string() < right.generic_string();
+            });
+            return Result<void>::Success();
+        }
+
         [[nodiscard]] Result<std::shared_ptr<ProjectMigrationContext::State>> BuildInventory(const std::filesystem::path &root,
                                                                                              const ProjectMigrationLimits &limits,
                                                                                              const std::filesystem::path &candidateRoot) {
@@ -153,7 +194,7 @@ namespace Horo::Application {
             state->authoritativeRoot = canonicalRoot;
             state->candidateRoot = candidateRoot;
             state->limits = limits;
-            std::filesystem::create_directories(candidateRoot, error);
+            std::filesystem::create_directories(candidateRoot, error);  // NOSONAR(cpp:S2083) candidateRoot is validated by caller.
             if (error)
                 return Result<std::shared_ptr<ProjectMigrationContext::State>>::Failure(
                     MigrationError(ProjectErrors::MigrationInventoryInvalid, "Cannot create migration candidate root."));
@@ -162,43 +203,9 @@ namespace Horo::Application {
                     MigrationError(ProjectErrors::MigrationInventoryLimit, "Migration document limit exceeds handle capacity."));
 
             std::vector<std::filesystem::path> files;
-            TransparentStringSet portablePaths;
-            std::filesystem::recursive_directory_iterator iterator(canonicalRoot,
-                                                                   std::filesystem::directory_options::skip_permission_denied, error);
-            std::filesystem::recursive_directory_iterator end;
-            while (iterator != end) {
-                if (error)
-                    return Result<std::shared_ptr<ProjectMigrationContext::State>>::Failure(
-                        MigrationError(ProjectErrors::MigrationInventoryInvalid, "Project inventory traversal failed."));
-                if (const auto status = iterator->symlink_status(error); error || std::filesystem::is_symlink(status))
-                    return Result<std::shared_ptr<ProjectMigrationContext::State>>::Failure(
-                        MigrationError(ProjectErrors::MigrationInventoryInvalid,
-                                       "Symlinks are not accepted in authoritative migration inventory."));
-                const std::filesystem::path relative = iterator->path().lexically_relative(canonicalRoot);
-                if (const std::string relativeText = relative.generic_string();
-                    relative.empty() || relativeText == ".." || relativeText.starts_with("../"))
-                    return Result<std::shared_ptr<ProjectMigrationContext::State>>::Failure(
-                        MigrationError(ProjectErrors::MigrationInventoryInvalid, "Migration inventory path escapes the project root."));
-                if (iterator->is_directory(error)) {
-                    if (IsExcluded(relative))
-                        iterator.disable_recursion_pending();
-                    iterator.increment(error);
-                    continue;
-                }
-                if (!iterator->is_regular_file(error) || IsExcluded(relative)) {
-                    iterator.increment(error);
-                    continue;
-                }
-                if (const std::string generic = relative.generic_string(); !portablePaths.emplace(PortablePathKey(generic)).second)
-                    return Result<std::shared_ptr<ProjectMigrationContext::State>>::Failure(
-                        MigrationError(ProjectErrors::MigrationInventoryInvalid,
-                                       "Portable case collision in migration inventory: " + generic));
-                files.push_back(relative);
-                iterator.increment(error);
-            }
-            std::ranges::sort(files, [](const auto &left, const auto &right) {
-                return left.generic_string() < right.generic_string();
-            });
+            if (auto collect = CollectInventoryFiles(canonicalRoot, files); collect.HasError())
+                return Result<std::shared_ptr<ProjectMigrationContext::State>>::Failure(collect.ErrorValue());
+
             if (files.size() > limits.maxDocuments)
                 return Result<std::shared_ptr<ProjectMigrationContext::State>>::Failure(
                     MigrationError(ProjectErrors::MigrationInventoryLimit, "Migration document count exceeds the configured limit."));

@@ -25,10 +25,10 @@ namespace Horo {
 
     /** @brief Hashes an explicit, stable event name with FNV-1a. */
     constexpr EventTypeId HashEventTypeName(const std::string_view name) noexcept {
-        EventTypeId hash = 14695981039346656037ull;
+        EventTypeId hash = 14695981039346656037ULL;
         for (const char character : name) {
             hash ^= static_cast<EventTypeId>(static_cast<unsigned char>(character));
-            hash *= 1099511628211ull;
+            hash *= 1099511628211ULL;
         }
         return hash;
     }

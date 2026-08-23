@@ -703,6 +703,23 @@ def _partially_staged_files(paths: Sequence[Path]) -> list[Path]:
     return [REPOSITORY_ROOT / line for line in proc.stdout.splitlines() if line]
 
 
+def _validate_staged_format(target_files: Sequence[Path]) -> bool:
+    try:
+        partially_staged = _partially_staged_files(target_files)
+    except RuntimeError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return False
+    if partially_staged:
+        print(
+            "error: refusing to format partially staged files; stage or stash their unstaged changes first:",
+            file=sys.stderr,
+        )
+        for path in partially_staged:
+            print(f"  {os.path.relpath(path, REPOSITORY_ROOT)}", file=sys.stderr)
+        return False
+    return True
+
+
 def run_format(files: Sequence[str] | None = None, staged: bool = False, check: bool = False) -> int:
     """Format C++ source files with clang-format, with support for staged commits and dry-run check."""
     clang_format_bin = _find_clang_format()
@@ -715,20 +732,8 @@ def run_format(files: Sequence[str] | None = None, staged: bool = False, check: 
         print("No matching C++ files to format.")
         return 0
 
-    if staged and not check:
-        try:
-            partially_staged = _partially_staged_files(target_files)
-        except RuntimeError as error:
-            print(f"error: {error}", file=sys.stderr)
-            return 1
-        if partially_staged:
-            print(
-                "error: refusing to format partially staged files; stage or stash their unstaged changes first:",
-                file=sys.stderr,
-            )
-            for path in partially_staged:
-                print(f"  {os.path.relpath(path, REPOSITORY_ROOT)}", file=sys.stderr)
-            return 1
+    if staged and not check and not _validate_staged_format(target_files):
+        return 1
 
     file_paths = [str(f) for f in target_files]
     chunk_size = 50
@@ -748,6 +753,7 @@ def run_format(files: Sequence[str] | None = None, staged: bool = False, check: 
     else:
         print(f"Successfully formatted {len(target_files)} file(s).")
     return 0
+
 
 
 def _check_tool_version(

@@ -488,7 +488,7 @@ namespace Horo::Gameplay {
     LuaBehaviorProgram::~LuaBehaviorProgram() = default;
 
     /** @copydoc LuaBehaviorProgram::Compile */
-    Result<std::unique_ptr<LuaBehaviorProgram>> LuaBehaviorProgram::Compile(std::string source, BehaviorTypeId canonicalTypeId,
+    Result<std::unique_ptr<LuaBehaviorProgram>> LuaBehaviorProgram::Compile(std::string source, const BehaviorTypeId &canonicalTypeId,
                                                                             std::string sourceName, const LuaBehaviorLimits limits) {
         if (source.empty() || source.size() > 2U * 1024U * 1024U || !canonicalTypeId.IsValid() || limits.maximumMemoryBytes < 64U * 1024U ||
             limits.maximumInstructionsPerCallback == 0 ||
