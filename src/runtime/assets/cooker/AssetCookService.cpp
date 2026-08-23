@@ -274,6 +274,7 @@ namespace Horo::Assets {
                 .cookerContributionId = record.type.Value(),
                 .cookerVersion = "1.0.0",
                 .target = request.target,
+                .artifactFormatVersion = AssetCookArtifact::CurrentFormatVersion,
             });
 
             slots.push_back(CookSlot{
@@ -295,6 +296,17 @@ namespace Horo::Assets {
                 slot.cacheHit = true;
                 slot.cookedArtifact = std::move(*cached);
                 ++cacheHits;
+                if (request.buildOutputStore != nullptr) {
+                    request.buildOutputStore->Append(BuildOutputRecord{
+                        .timestampUtc = std::chrono::system_clock::now(),
+                        .status = BuildOutputStatus::Cached,
+                        .phase = "cook",
+                        .message = slot.record.sourcePath.String(),
+                        .source =
+                            DiagnosticSourceLocation{
+                                .absolutePath = (request.sourceRoot / slot.record.sourcePath.String()).lexically_normal().string()},
+                    });
+                }
             }
         }
 
