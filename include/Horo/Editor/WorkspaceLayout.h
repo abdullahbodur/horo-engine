@@ -83,13 +83,19 @@ namespace Horo::Editor {
 
         LayoutNode() = default;
 
+        /** @brief Constructs a node holding the given concrete node value. */
         LayoutNode(SplitNode node) : value(std::move(node)) {}
 
+        /** @brief Constructs a node holding the given concrete node value. */
         LayoutNode(TabStackNode node) : value(std::move(node)) {}
 
+        /** @brief Constructs a node holding the given concrete node value. */
         LayoutNode(PanelNode node) : value(std::move(node)) {}
 
+        /** @brief Deep-copies the node subtree owned by @p other. */
         LayoutNode(const LayoutNode &other);
+
+        /** @brief Deep-copies the node subtree owned by @p other. */
         LayoutNode &operator=(const LayoutNode &other);
         LayoutNode(LayoutNode &&) noexcept = default;
         LayoutNode &operator=(LayoutNode &&) noexcept = default;
@@ -105,14 +111,43 @@ namespace Horo::Editor {
         WorkspaceLayout(WorkspaceLayout &&) noexcept = default;
         WorkspaceLayout &operator=(WorkspaceLayout &&) noexcept = default;
 
+        /** @brief Returns the mutable node with the given id, or nullptr. */
         [[nodiscard]] LayoutNode *FindNode(std::string_view nodeId) noexcept;
+
+        /** @brief Returns the node with the given id, or nullptr. */
         [[nodiscard]] const LayoutNode *FindNode(std::string_view nodeId) const noexcept;
+
+        /** @brief Returns the mutable tab stack with the given id, or nullptr. */
         [[nodiscard]] TabStackNode *FindTabStack(std::string_view stackId) noexcept;
+
+        /** @brief Returns the tab stack with the given id, or nullptr. */
         [[nodiscard]] const TabStackNode *FindTabStack(std::string_view stackId) const noexcept;
+
+        /** @brief Returns the mutable panel node hosting the given panel, or nullptr. */
         [[nodiscard]] PanelNode *FindPanel(std::string_view panelId) noexcept;
+
+        /** @brief Returns the panel node hosting the given panel, or nullptr. */
         [[nodiscard]] const PanelNode *FindPanel(std::string_view panelId) const noexcept;
+
+        /**
+         * @brief Moves the panel's tab to the requested placement target.
+         * @param panelId Panel whose tab is moved.
+         * @param placement Target tab stack and index.
+         * @return Operation result describing the applied move or the failure reason.
+         */
         [[nodiscard]] WorkspaceLayoutOperationResult MoveTab(std::string_view panelId, const TabPlacement &placement);
+
+        /**
+         * @brief Closes the panel's tab and selects a replacement active tab.
+         * @param panelId Panel whose tab is closed.
+         * @return Operation result describing the close outcome or the failure reason.
+         */
         [[nodiscard]] WorkspaceLayoutOperationResult CloseTab(std::string_view panelId);
+
+        /**
+         * @brief Validates structural invariants of the layout tree.
+         * @return All issues found; empty when the layout is valid.
+         */
         [[nodiscard]] std::vector<WorkspaceLayoutIssue> Validate() const;
     };
 }  // namespace Horo::Editor

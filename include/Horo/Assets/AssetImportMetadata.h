@@ -7,6 +7,7 @@
 
 #include "Horo/Assets/AssetImporter.h"
 #include "Horo/Foundation/Result.h"
+#include "Horo/Foundation/TransparentString.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -42,7 +43,7 @@ namespace Horo::Assets {
         std::string sourceHash;
         std::uintmax_t sourceByteSize{};
         std::int64_t sourceLastWriteTime{};
-        std::unordered_map<std::string, std::string> importSettings;
+        TransparentStringMap<std::string> importSettings;
         std::vector<AssetId> dependencies;
         std::vector<AssetImportReason> lastImportReasons;
         std::string importedAtUtc;
@@ -76,7 +77,7 @@ namespace Horo::Assets {
      * @return Settings in descriptor order, or a typed error for invalid retained values.
      */
     [[nodiscard]] Result<std::vector<ImportSettingValue>> ResolveImportSettings(
-        const AssetImporterContribution &contribution, const std::unordered_map<std::string, std::string> &serializedSettings);
+        const AssetImporterContribution &contribution, const TransparentStringMap<std::string> &serializedSettings);
 
     /**
      * @brief Returns a canonical UTC timestamp suitable for durable import metadata.
