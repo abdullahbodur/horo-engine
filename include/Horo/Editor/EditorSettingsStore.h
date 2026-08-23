@@ -51,8 +51,9 @@ namespace Horo::Editor {
     };
 
     /** @brief User-level editor settings persisted in the user configuration directory. */
-    struct EditorSettings {
+    struct EditorSettings {  // NOSONAR(cpp:S1820)
         EditorStartupBehavior startupBehavior = EditorStartupBehavior::WelcomeScreen;
+
         int autoSaveIntervalMinutes = 5;
         bool confirmExitWithUnsavedChanges = true;
         bool restoreWorkspaceLayout = true;

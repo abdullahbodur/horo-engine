@@ -15,7 +15,7 @@ namespace Horo::Editor {
                 return false;
             }
             return std::ranges::all_of(id, [](const char value) {
-                const unsigned char character = static_cast<unsigned char>(value);
+                const auto character = static_cast<unsigned char>(value);
                 return std::islower(character) || std::isdigit(character) || value == '.' || value == '_' || value == '-';
             });
         }
@@ -67,46 +67,48 @@ namespace Horo::Editor {
 
     /** @copydoc EditorStatusItemRegistry::Register */
     EditorStatusItemResult EditorStatusItemRegistry::Register(EditorStatusItemDescriptor descriptor, EditorStatusItemContent content) {
+        using enum EditorStatusItemError;
         if (!IsCanonicalId(descriptor.id)) {
-            return {EditorStatusItemError::InvalidId};
+            return {InvalidId};
         }
         if (!IsDescriptorBounded(descriptor)) {
-            return {EditorStatusItemError::DescriptorTooLong};
+            return {DescriptorTooLong};
         }
         if (descriptor.visibility == EditorStatusItemVisibility::OnlyWhenPanelActive && descriptor.ownerPanelId.empty()) {
-            return {EditorStatusItemError::MissingOwnerPanel};
+            return {MissingOwnerPanel};
         }
         if (descriptor.interactive && descriptor.actionId.empty()) {
-            return {EditorStatusItemError::MissingAction};
+            return {MissingAction};
         }
         if (!std::isfinite(descriptor.maxWidth) || descriptor.maxWidth < EditorStatusItemLimits::MinWidth ||
             descriptor.maxWidth > EditorStatusItemLimits::MaxWidth) {
-            return {EditorStatusItemError::InvalidWidth};
+            return {InvalidWidth};
         }
         if (!IsContentBounded(content)) {
-            return {EditorStatusItemError::ContentTooLong};
+            return {ContentTooLong};
         }
         if (Find(descriptor.id) != nullptr) {
-            return {EditorStatusItemError::DuplicateId};
+            return {DuplicateId};
         }
         if (items_.size() >= EditorStatusItemLimits::MaxItems) {
-            return {EditorStatusItemError::RegistryFull};
+            return {RegistryFull};
         }
 
-        items_.push_back(std::make_unique<EditorStatusItem>(EditorStatusItem{std::move(descriptor), std::move(content)}));
+        items_.push_back(std::make_unique<EditorStatusItem>(std::move(descriptor), std::move(content)));
         return {};
     }
 
     /** @copydoc EditorStatusItemRegistry::Update */
     EditorStatusItemResult EditorStatusItemRegistry::Update(const std::string_view id, EditorStatusItemContent content) {
+        using enum EditorStatusItemError;
         if (!IsContentBounded(content)) {
-            return {EditorStatusItemError::ContentTooLong};
+            return {ContentTooLong};
         }
         const auto item = std::ranges::find_if(items_, [id](const std::unique_ptr<EditorStatusItem> &candidate) {
             return candidate->descriptor.id == id;
         });
         if (item == items_.end()) {
-            return {EditorStatusItemError::UnknownItem};
+            return {UnknownItem};
         }
         (*item)->content = std::move(content);
         return {};
@@ -114,11 +116,12 @@ namespace Horo::Editor {
 
     /** @copydoc EditorStatusItemRegistry::Unregister */
     EditorStatusItemResult EditorStatusItemRegistry::Unregister(const std::string_view id) {
+        using enum EditorStatusItemError;
         const auto item = std::ranges::find_if(items_, [id](const std::unique_ptr<EditorStatusItem> &candidate) {
             return candidate->descriptor.id == id;
         });
         if (item == items_.end()) {
-            return {EditorStatusItemError::UnknownItem};
+            return {UnknownItem};
         }
         items_.erase(item);
         return {};

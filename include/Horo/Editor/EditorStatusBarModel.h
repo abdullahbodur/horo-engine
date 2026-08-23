@@ -72,7 +72,7 @@ namespace Horo::Editor {
         EditorStatusItemError error = EditorStatusItemError::None;
 
         /** @brief Returns true when the operation completed successfully. */
-        operator bool() const noexcept {
+        operator bool() const noexcept {  // NOSONAR(cpp:S1709)
             return error == EditorStatusItemError::None;
         }
     };

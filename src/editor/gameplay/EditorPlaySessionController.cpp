@@ -107,12 +107,11 @@ namespace Horo::Editor {
     /** @copydoc EditorPlaySessionController::FixedUpdate */
     Result<void> EditorPlaySessionController::FixedUpdate(std::span<const Gameplay::GameplayInputAction> input,
                                                           const Gameplay::FixedDeltaTime delta) {
-        const bool shouldTick = state_ == EditorPlaySessionState::Playing || (state_ == EditorPlaySessionState::Paused && stepPending_);
-        if (!shouldTick)
+        if (const bool shouldTick = state_ == EditorPlaySessionState::Playing || (state_ == EditorPlaySessionState::Paused && stepPending_);
+            !shouldTick)
             return Result<void>::Success();
         stepPending_ = false;
-        Result<void> updated = behaviors_->FixedUpdate(input, delta);
-        if (updated.HasError()) {
+        if (Result<void> updated = behaviors_->FixedUpdate(input, delta); updated.HasError()) {
             Error error = updated.ErrorValue();
             Fail(error);
             return Result<void>::Failure(std::move(error));
@@ -155,8 +154,8 @@ namespace Horo::Editor {
     }
 
     bool EditorPlaySessionController::IsActive() const noexcept {
-        return state_ == EditorPlaySessionState::Starting || state_ == EditorPlaySessionState::Playing ||
-               state_ == EditorPlaySessionState::Paused || state_ == EditorPlaySessionState::Stopping;
+        using enum EditorPlaySessionState;
+        return state_ == Starting || state_ == Playing || state_ == Paused || state_ == Stopping;
     }
 
     Runtime::RuntimeScene *EditorPlaySessionController::Scene() noexcept {

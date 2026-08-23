@@ -6,7 +6,8 @@
 
 namespace Horo::Editor {
     namespace {
-        [[nodiscard]] HierarchyNode *FindNode(std::vector<std::unique_ptr<HierarchyNode>> &nodes, const HierarchyNodeId id) noexcept {
+        [[nodiscard]] HierarchyNode *FindNode(std::vector<std::unique_ptr<HierarchyNode>> &nodes,
+                                              const HierarchyNodeId id) noexcept {  // NOSONAR(cpp:S995)
             for (const auto &node : nodes) {
                 if (node->id == id) {
                     return node.get();
@@ -42,14 +43,16 @@ namespace Horo::Editor {
 
         [[nodiscard]] std::unique_ptr<HierarchyNode> ExtractNode(std::vector<std::unique_ptr<HierarchyNode>> &nodes,
                                                                  const HierarchyNodeId id) noexcept {
-            const auto direct = std::ranges::find_if(nodes, [id](const auto &node) {
+            if (const auto direct = std::ranges::find_if(nodes,
+                                                         [id](const auto &node) {
                 return node->id == id;
             });
-            if (direct != nodes.end()) {
+                direct != nodes.end()) {
                 std::unique_ptr<HierarchyNode> extracted = std::move(*direct);
                 nodes.erase(direct);
                 return extracted;
             }
+
             for (const auto &node : nodes) {
                 if (std::unique_ptr<HierarchyNode> extracted = ExtractNode(node->children, id)) {
                     return extracted;

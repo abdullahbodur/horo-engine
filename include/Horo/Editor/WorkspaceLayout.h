@@ -82,15 +82,16 @@ namespace Horo::Editor {
         std::variant<SplitNode, TabStackNode, PanelNode> value;
 
         LayoutNode() = default;
+        ~LayoutNode() = default;
 
         /** @brief Constructs a node holding the given concrete node value. */
-        LayoutNode(SplitNode node) : value(std::move(node)) {}
+        explicit LayoutNode(SplitNode node) : value(std::move(node)) {}
 
         /** @brief Constructs a node holding the given concrete node value. */
-        LayoutNode(TabStackNode node) : value(std::move(node)) {}
+        explicit LayoutNode(TabStackNode node) : value(std::move(node)) {}
 
         /** @brief Constructs a node holding the given concrete node value. */
-        LayoutNode(PanelNode node) : value(std::move(node)) {}
+        explicit LayoutNode(PanelNode node) : value(std::move(node)) {}
 
         /** @brief Deep-copies the node subtree owned by @p other. */
         LayoutNode(const LayoutNode &other);

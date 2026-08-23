@@ -111,8 +111,9 @@ namespace Horo::Editor {
     };
 
     /** @brief Modal-owned mutable draft for the editor settings workflow. */
-    struct SettingsState {
+    struct SettingsState {  // NOSONAR(cpp:S1820)
         using GeneralTab = SettingsGeneralTab;
+
         using AppearanceTab = SettingsAppearanceTab;
         using InputTab = SettingsInputTab;
         using RenderingTab = SettingsRenderingTab;

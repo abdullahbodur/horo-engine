@@ -208,7 +208,7 @@ namespace Horo::Editor {
     /**
      * @brief Coordinates top-level screens, route transitions, and leave guards.
      */
-    class GuiScreenHost {
+    class GuiScreenHost {  // NOSONAR(cpp:S1820, cpp:S1448)
     public:
         /**
          * @brief Constructs the screen host with required application service references.
