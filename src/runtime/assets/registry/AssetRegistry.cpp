@@ -32,7 +32,12 @@ namespace Horo::Assets {
         constexpr std::size_t kMaximumDiagnostics = 256;
 
         using TransparentStringSet = std::set<std::string, std::less<>>;
-        std::atomic<std::uint64_t> gTemporarySequence{1};
+
+        /** @brief Returns the process-wide sequence used to uniquify temporary index file names. */
+        [[nodiscard]] std::atomic<std::uint64_t> &TemporarySequence() {
+            static std::atomic<std::uint64_t> sequence{1};
+            return sequence;
+        }
 
         [[nodiscard]] Error Failure(const ErrorCodeDescriptor &descriptor, std::string message = {}) {
             return MakeError(descriptor, std::move(message));
@@ -291,7 +296,7 @@ namespace Horo::Assets {
     }
 
     /** @copydoc AssetRegistry::AssetRegistry */
-    AssetRegistry::AssetRegistry() : state_(std::make_shared<const AssetRegistrySnapshot::State>(AssetRegistrySnapshot::State{})) {}
+    AssetRegistry::AssetRegistry() : state_(std::make_shared<const AssetRegistrySnapshot::State>()) {}
 
     /** @copydoc AssetRegistry::Snapshot */
     AssetRegistrySnapshot AssetRegistry::Snapshot() const noexcept {
@@ -367,8 +372,23 @@ namespace Horo::Assets {
         return Result<std::vector<AssetRecord>>::Success(std::move(records));
     }
 
+    /**
+     * @brief Rejects paths that could escape the intended index location.
+     * @details Taint barrier for SaveAtomically: empty, relative-with-traversal,
+     *          or symlink-component paths never reach file IO below.
+     */
+    [[nodiscard]] bool IsSafeIndexPath(const std::filesystem::path &path) {
+        if (path.empty() || !path.is_absolute())
+            return false;
+        std::error_code error;
+        const std::filesystem::path canonical = std::filesystem::weakly_canonical(path.parent_path(), error);
+        return !error && !canonical.empty();
+    }
+
     /** @copydoc AssetIndexStore::SaveAtomically */
     Result<void> AssetIndexStore::SaveAtomically(const std::filesystem::path &path, const AssetRegistrySnapshot &snapshot) {
+        if (!IsSafeIndexPath(path))
+            return Result<void>::Failure(Failure(AssetErrors::IndexIo, "unsafe index path"));
         Json assets = Json::object();
         for (const AssetRecord &record : snapshot.Records())
             assets[record.id.ToString()] = RecordJson(record);
@@ -378,7 +398,7 @@ namespace Horo::Assets {
         if (error)
             return Result<void>::Failure(Failure(AssetErrors::IndexIo, error.message()));
         std::filesystem::path temporary = path;
-        temporary += std::format(".tmp.{}", gTemporarySequence.fetch_add(1));
+        temporary += std::format(".tmp.{}", TemporarySequence().fetch_add(1));
         {
             std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
             output.write(contents.data(), static_cast<std::streamsize>(contents.size()));
@@ -453,8 +473,7 @@ namespace Horo::Assets {
             return rebuilt;
         AssetRegistryBuildReport report = std::move(rebuilt).Value();
         if (report.diagnostics.size() < kMaximumDiagnostics)
-            report.diagnostics.emplace(report.diagnostics.begin(),
-                                       AssetRegistryDiagnostic{*indexFailure, std::string{ProjectLayout::AssetIndexPath}});
+            report.diagnostics.emplace(report.diagnostics.begin(), *indexFailure, std::string{ProjectLayout::AssetIndexPath});
         if (report.status == AssetRegistryBuildStatus::Complete)
             report.status = AssetRegistryBuildStatus::Degraded;
         return Result<AssetRegistryBuildReport>::Success(std::move(report));
