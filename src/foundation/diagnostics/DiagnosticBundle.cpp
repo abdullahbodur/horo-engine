@@ -237,8 +237,13 @@ namespace Horo::Diagnostics {
                 return false;
 
             for (ZipEntryView &entry : entries) {
+                const auto offset = stream.tellp();
+                if (offset < 0 || static_cast<std::uint64_t>(offset) > std::numeric_limits<std::uint32_t>::max() ||
+                    entry.name.size() > std::numeric_limits<std::uint16_t>::max() ||
+                    entry.bytes.size() > std::numeric_limits<std::uint32_t>::max())
+                    return false;
                 entry.crc = Crc32(entry.bytes);
-                entry.localOffset = static_cast<std::uint32_t>(stream.tellp());
+                entry.localOffset = static_cast<std::uint32_t>(offset);
                 WriteU32(stream, 0x04034b50U);
                 WriteU16(stream, 20);
                 WriteU16(stream, 0);
@@ -254,7 +259,11 @@ namespace Horo::Diagnostics {
                 stream.write(reinterpret_cast<const char *>(entry.bytes.data()), static_cast<std::streamsize>(entry.bytes.size()));
             }
 
-            const auto centralOffset = static_cast<std::uint32_t>(stream.tellp());
+            const auto centralOffsetPos = stream.tellp();
+            if (centralOffsetPos < 0 || static_cast<std::uint64_t>(centralOffsetPos) > std::numeric_limits<std::uint32_t>::max() ||
+                entries.size() > std::numeric_limits<std::uint16_t>::max())
+                return false;
+            const auto centralOffset = static_cast<std::uint32_t>(centralOffsetPos);
             for (const ZipEntryView &entry : entries) {
                 WriteU32(stream, 0x02014b50U);
                 WriteU16(stream, 20);
@@ -275,7 +284,10 @@ namespace Horo::Diagnostics {
                 WriteU32(stream, entry.localOffset);
                 stream.write(entry.name.data(), static_cast<std::streamsize>(entry.name.size()));
             }
-            const auto centralEnd = static_cast<std::uint32_t>(stream.tellp());
+            const auto centralEndPos = stream.tellp();
+            if (centralEndPos < 0 || static_cast<std::uint64_t>(centralEndPos) > std::numeric_limits<std::uint32_t>::max())
+                return false;
+            const auto centralEnd = static_cast<std::uint32_t>(centralEndPos);
             const std::uint32_t centralSize = centralEnd - centralOffset;
 
             WriteU32(stream, 0x06054b50U);
