@@ -49,8 +49,7 @@ namespace Horo::Editor {
                 continue;
             }
 
-            const SceneObjectDifferenceFields fields = CompareObjectFields(documentObject, *diskObject->second);
-            if (fields.Any()) {
+            if (const SceneObjectDifferenceFields fields = CompareObjectFields(documentObject, *diskObject->second); fields.Any()) {
                 comparison.objects.push_back({
                     .id = documentObject.id,
                     .kind = SceneObjectComparisonKind::Modified,
@@ -60,6 +59,7 @@ namespace Horo::Editor {
                 });
                 ++comparison.modified;
             }
+
             diskObjects.erase(diskObject);
         }
 

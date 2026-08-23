@@ -46,59 +46,55 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] std::string_view GroupLabelKey(const Runtime::PrimitiveCreationGroup group) noexcept {
+            using enum Runtime::PrimitiveCreationGroup;
             switch (group) {
-                case Runtime::PrimitiveCreationGroup::Objects3D:
+                case Objects3D:
                     return "workspace.create.group.objects_3d";
-                case Runtime::PrimitiveCreationGroup::Cameras:
+                case Cameras:
                     return "workspace.create.group.cameras";
-                case Runtime::PrimitiveCreationGroup::Lights:
+                case Lights:
                     return "workspace.create.group.lights";
-                case Runtime::PrimitiveCreationGroup::Volumes:
+                case Volumes:
                     return "workspace.create.group.volumes";
-                case Runtime::PrimitiveCreationGroup::Audio:
+                case Audio:
                     return "workspace.create.group.audio";
-                case Runtime::PrimitiveCreationGroup::Root:
-                case Runtime::PrimitiveCreationGroup::NotCreatable:
+                case Root:
+                case NotCreatable:
                     return {};
             }
             return {};
         }
 
         [[nodiscard]] std::string_view GroupIconToken(const Runtime::PrimitiveCreationGroup group) noexcept {
+            using enum Runtime::PrimitiveCreationGroup;
             switch (group) {
-                case Runtime::PrimitiveCreationGroup::Objects3D:
+                case Objects3D:
                     return "create.group.objects_3d";
-                case Runtime::PrimitiveCreationGroup::Cameras:
+                case Cameras:
                     return "primitive.camera";
-                case Runtime::PrimitiveCreationGroup::Lights:
+                case Lights:
                     return "create.group.lights";
-                case Runtime::PrimitiveCreationGroup::Volumes:
+                case Volumes:
                     return "primitive.trigger_volume";
-                case Runtime::PrimitiveCreationGroup::Audio:
+                case Audio:
                     return "primitive.audio_source";
-                case Runtime::PrimitiveCreationGroup::Root:
-                case Runtime::PrimitiveCreationGroup::NotCreatable:
+                case Root:
+                case NotCreatable:
                     return {};
             }
             return {};
         }
-    }  // namespace
 
-    /** @copydoc GetPrimitiveCreateMenuItems */
-    const std::vector<EditorMenuItem> &GetPrimitiveCreateMenuItems() {
-        static const std::vector<EditorMenuItem> items = [] {
+        [[nodiscard]] std::vector<EditorMenuItem> BuildPrimitiveCreateMenuItems() {
+            using enum Runtime::PrimitiveCreationGroup;
             std::vector<EditorMenuItem> result;
             for (const Runtime::PrimitiveDescriptor &descriptor : Runtime::PrimitiveCatalog::All()) {
-                if (descriptor.creationGroup == Runtime::PrimitiveCreationGroup::Root) {
+                if (descriptor.creationGroup == Root) {
                     result.push_back(
                         Command(descriptor.id.value, EditorMenuAction::CreatePrimitive, true, {}, {}, descriptor.iconToken, descriptor.id));
                 }
             }
-            constexpr Runtime::PrimitiveCreationGroup kGroups[]{Runtime::PrimitiveCreationGroup::Objects3D,
-                                                                Runtime::PrimitiveCreationGroup::Cameras,
-                                                                Runtime::PrimitiveCreationGroup::Lights,
-                                                                Runtime::PrimitiveCreationGroup::Volumes,
-                                                                Runtime::PrimitiveCreationGroup::Audio};
+            constexpr std::array kGroups{Objects3D, Cameras, Lights, Volumes, Audio};
             for (const Runtime::PrimitiveCreationGroup group : kGroups) {
                 std::vector<EditorMenuItem> children;
                 for (const Runtime::PrimitiveDescriptor &descriptor : Runtime::PrimitiveCatalog::All()) {
@@ -112,7 +108,12 @@ namespace Horo::Editor {
                 }
             }
             return result;
-        }();
+        }
+    }  // namespace
+
+    /** @copydoc GetPrimitiveCreateMenuItems */
+    const std::vector<EditorMenuItem> &GetPrimitiveCreateMenuItems() {
+        static const std::vector<EditorMenuItem> items = BuildPrimitiveCreateMenuItems();
         return items;
     }
 

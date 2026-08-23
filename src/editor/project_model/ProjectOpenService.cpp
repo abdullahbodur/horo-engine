@@ -83,11 +83,12 @@ namespace Horo::Editor {
         [[nodiscard]] Result<void> UpdatePatchMarker(DurableFileSystem &files, const ProjectMutationCoordinator &mutations,
                                                      const std::filesystem::path &projectRoot, const ReleaseCompatibilityDecision &target,
                                                      const ProjectOpenOperationId operation) {
-            auto lease =
-                mutations.TryAcquire({projectRoot, ProjectMutationOwner::Migration, std::format("project-open-{}", operation.value)});
-            if (lease.HasError()) {
+            if (auto lease =
+                    mutations.TryAcquire({projectRoot, ProjectMutationOwner::Migration, std::format("project-open-{}", operation.value)});
+                lease.HasError()) {
                 return Result<void>::Failure(lease.ErrorValue());
             }
+
             const auto metadataPath = projectRoot / ".horo/project.json";
             std::ifstream stream(metadataPath, std::ios::binary);
             if (!stream)

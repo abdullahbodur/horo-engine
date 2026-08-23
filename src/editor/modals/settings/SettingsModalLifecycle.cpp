@@ -46,10 +46,14 @@ namespace Horo::Editor {
 
     void SettingsModal::OnClose(const ModalCloseReason reason) {
         m_draft.dirty = CollectDraftSettings(m_draft) != m_draft.committed;
-        const char *reasonStr = (reason == ModalCloseReason::Completed)   ? "completed"
-                                : (reason == ModalCloseReason::Cancelled) ? "cancelled"
-                                                                          : "app_shutdown";
+        const char *reasonStr = "app_shutdown";
+        if (reason == ModalCloseReason::Completed) {
+            reasonStr = "completed";
+        } else if (reason == ModalCloseReason::Cancelled) {
+            reasonStr = "cancelled";
+        }
         LOG_INFO("editor.settings", "SettingsModal closed (reason=%s, dirty=%s).", reasonStr, m_draft.dirty ? "yes" : "no");
+
         if (m_draft.dirty && !m_revertedPublished && m_events) {
             LOG_DEBUG("editor.settings", "Settings reverted — publishing Reverted event.");
             m_events->Publish(

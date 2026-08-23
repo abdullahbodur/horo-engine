@@ -38,7 +38,12 @@ namespace Horo::Editor {
 
         [[nodiscard]] Result<Render::MeshData> Decode(const std::span<const std::uint8_t> bytes) {
             constexpr std::size_t headerBytes = 48;
-            std::uint32_t schema{}, vertexCount{}, faceCount{}, positionBytes{}, texcoordBytes{}, normalBytes{};
+            std::uint32_t schema{};
+            std::uint32_t vertexCount{};
+            std::uint32_t faceCount{};
+            std::uint32_t positionBytes{};
+            std::uint32_t texcoordBytes{};
+            std::uint32_t normalBytes{};
             if (bytes.size() < headerBytes || !ReadU32(bytes, 0, schema) || !ReadU32(bytes, 4, vertexCount) ||
                 !ReadU32(bytes, 8, faceCount) || !ReadU32(bytes, 36, positionBytes) || !ReadU32(bytes, 40, texcoordBytes) ||
                 !ReadU32(bytes, 44, normalBytes) || schema != Assets::MeshEditorPayloadSchemaVersion || vertexCount == 0 ||
@@ -57,13 +62,14 @@ namespace Horo::Editor {
             mesh.vertices.resize(vertexCount);
             for (std::uint32_t index = 0; index < vertexCount; ++index) {
                 Math::Vec3 position;
-                const std::size_t offset = headerBytes + static_cast<std::size_t>(index) * 12U;
-                if (!ReadFloat(bytes, offset, position.x) || !ReadFloat(bytes, offset + 4U, position.y) ||
+                if (const std::size_t offset = headerBytes + static_cast<std::size_t>(index) * 12U;
+                    !ReadFloat(bytes, offset, position.x) || !ReadFloat(bytes, offset + 4U, position.y) ||
                     !ReadFloat(bytes, offset + 8U, position.z)) {
                     return Result<Render::MeshData>::Failure(MeshError("Imported mesh contains an invalid vertex."));
                 }
                 mesh.vertices[index] = {position, {}, {}};
             }
+
             mesh.indices.resize(indexCount);
             for (std::uint32_t index = 0; index < indexCount; ++index) {
                 if (!ReadU32(bytes, static_cast<std::size_t>(indexHeader) + 4U + static_cast<std::size_t>(index) * 4U,
@@ -121,10 +127,11 @@ namespace Horo::Editor {
             return Result<EditorAssetMeshView>::Success({HandleFor(asset), found->second.get()});
 
         std::error_code error;
-        const auto status = std::filesystem::symlink_status(absolutePath, error);
-        if (error || std::filesystem::is_symlink(status) || !std::filesystem::is_regular_file(status))
+        if (const auto status = std::filesystem::symlink_status(absolutePath, error);
+            error || std::filesystem::is_symlink(status) || !std::filesystem::is_regular_file(status))
             return Result<EditorAssetMeshView>::Failure(MeshError("Imported mesh file is missing or unsafe to load."));
         const std::uintmax_t size = std::filesystem::file_size(absolutePath, error);
+
         if (error || size == 0 || size > MaximumEditorMeshPayloadBytes)
             return Result<EditorAssetMeshView>::Failure(MeshError("Imported mesh file exceeds the editor payload limit."));
         std::ifstream stream(absolutePath, std::ios::binary);

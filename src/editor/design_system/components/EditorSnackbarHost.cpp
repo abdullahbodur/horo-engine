@@ -258,7 +258,7 @@ namespace Horo::Editor {
             }
         }
 
-        [[nodiscard]] CardInteractionResult DrawSnackbarCard(ActiveSnackbar &snackbar, ImDrawList *drawList) {
+        [[nodiscard]] CardInteractionResult DrawSnackbarCard(const ActiveSnackbar &snackbar, ImDrawList *drawList) {
             ImGui::PushID(static_cast<int>(snackbar.event.id));
 
             const SeverityStyle style = GetSeverityStyle(snackbar.event.severity);
@@ -435,12 +435,12 @@ namespace Horo::Editor {
                 const float cardHeight = MeasureCardHeight(activeSnackbars_[idx]);
                 const auto cardResult = DrawSnackbarCard(activeSnackbars_[idx], drawList);
 
-                if (cardResult.status == CardInteractionStatus::Dismissed) {
-                    DismissAt(idx);
-                    break;
-                }
-                if (cardResult.status == CardInteractionStatus::ActionTriggered) {
-                    result = cardResult.actionEvent;
+                if (cardResult.status != CardInteractionStatus::None) {
+                    if (cardResult.status == CardInteractionStatus::Dismissed) {
+                        DismissAt(idx);
+                    } else if (cardResult.status == CardInteractionStatus::ActionTriggered) {
+                        result = cardResult.actionEvent;
+                    }
                     break;
                 }
 

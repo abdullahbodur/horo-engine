@@ -15,10 +15,10 @@ namespace Horo::Editor {
                 std::error_code error;
                 if (!std::filesystem::is_directory(root, error))
                     continue;
-                for (std::filesystem::recursive_directory_iterator
-                         iterator(root, std::filesystem::directory_options::skip_permission_denied, error),
-                     end;
-                     iterator != end && !error; iterator.increment(error)) {
+                for (auto iterator =
+                         std::filesystem::recursive_directory_iterator(root, std::filesystem::directory_options::skip_permission_denied,
+                                                                       error);
+                     iterator != std::filesystem::recursive_directory_iterator{} && !error; iterator.increment(error)) {
                     if (iterator->is_regular_file(error) &&
                         (iterator->path().extension() == ".cpp" || iterator->path().extension() == ".cc" ||
                          iterator->path().extension() == ".cxx") &&

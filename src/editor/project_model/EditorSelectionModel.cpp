@@ -24,7 +24,7 @@ namespace Horo::Editor {
     }
 
     /** @copydoc EditorSelectionModel::SetObjects */
-    Result<void> EditorSelectionModel::SetObjects(std::vector<SceneObjectId> objects, const std::optional<SceneObjectId> primary) {
+    Result<void> EditorSelectionModel::SetObjects(const std::vector<SceneObjectId> &objects, const std::optional<SceneObjectId> primary) {
         std::vector<SceneObjectId> uniqueObjects;
         uniqueObjects.reserve(objects.size());
         for (const SceneObjectId object : objects) {

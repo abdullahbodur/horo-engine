@@ -61,7 +61,7 @@ namespace Horo::Editor {
          * @param primary Primary identity, which must also appear in @p objects.
          * @return Success, or a typed validation error without changing selection.
          */
-        [[nodiscard]] Result<void> SetObjects(std::vector<SceneObjectId> objects, std::optional<SceneObjectId> primary);
+        [[nodiscard]] Result<void> SetObjects(const std::vector<SceneObjectId> &objects, std::optional<SceneObjectId> primary);
 
         /** @brief Removes identities no longer present in the authoritative document. */
         void Reconcile();

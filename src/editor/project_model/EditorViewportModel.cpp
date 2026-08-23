@@ -68,10 +68,11 @@ namespace Horo::Editor {
         Math::Vec3 forward = Math::Normalize(camera.target - camera.position);
         forward = Math::Normalize(RotateAroundAxis(forward, sceneUp, delta.yawRadians));
         Math::Vec3 right = Math::Normalize(Math::Cross(forward, sceneUp));
-        const Math::Vec3 pitchedForward = Math::Normalize(RotateAroundAxis(forward, right, delta.pitchRadians));
-        if (std::fabs(Math::Dot(pitchedForward, sceneUp)) < 0.995F) {
+        if (const Math::Vec3 pitchedForward = Math::Normalize(RotateAroundAxis(forward, right, delta.pitchRadians));
+            std::fabs(Math::Dot(pitchedForward, sceneUp)) < 0.995F) {
             forward = pitchedForward;
         }
+
         right = Math::Normalize(Math::Cross(forward, sceneUp));
         const Math::Vec3 localUp = Math::Normalize(Math::Cross(right, forward));
 

@@ -74,7 +74,7 @@ namespace Horo::Editor {
                     default:
                         if (character < 0x20) {
                             static constexpr char hex[] = "0123456789abcdef";
-                            escaped << R"(\u00)" << hex[character >> 4] << hex[character & 0x0f];
+                            escaped << R"(\u00)" << hex[character >> 4] << hex[character & 0x0f];  // NOSONAR(cpp:S6022)
                         } else {
                             escaped << static_cast<char>(character);
                         }
