@@ -10,7 +10,9 @@
 #include <fstream>
 #include <map>
 #include <nlohmann/json.hpp>
+#include <set>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <utility>
 
@@ -28,6 +30,8 @@ namespace Horo::Assets {
         constexpr std::uintmax_t kMaximumIndexBytes = 16U * 1024U * 1024U;
         constexpr std::uintmax_t kMaximumSidecarBytes = 1U * 1024U * 1024U;
         constexpr std::size_t kMaximumDiagnostics = 256;
+
+        using TransparentStringSet = std::set<std::string, std::less<>>;
         std::atomic<std::uint64_t> gTemporarySequence{1};
 
         [[nodiscard]] Error Failure(const ErrorCodeDescriptor &descriptor, std::string message = {}) {
@@ -38,7 +42,7 @@ namespace Horo::Assets {
                            const std::string_view path, std::string message = {}) {
             if (diagnostics.size() >= kMaximumDiagnostics)
                 return;
-            diagnostics.emplace_back(AssetRegistryDiagnostic{Failure(descriptor, std::move(message)), std::string{path}});
+            diagnostics.emplace_back(Failure(descriptor, std::move(message)), std::string{path});
         }
 
         [[nodiscard]] std::string PortableFold(const std::string_view value) {
@@ -158,35 +162,35 @@ namespace Horo::Assets {
                                                                const std::filesystem::path &projectRoot) {
             ScannedAssets result;
             std::error_code error;
+            const std::filesystem::recursive_directory_iterator end;
             std::filesystem::recursive_directory_iterator iterator{assetRoot, std::filesystem::directory_options::skip_permission_denied,
                                                                    error};
-            for (const std::filesystem::recursive_directory_iterator end; !error && iterator != end; iterator.increment(error)) {
+            if (error)
+                return Result<ScannedAssets>::Failure(Failure(AssetErrors::RootInvalid, error.message()));
+            while (iterator != end) {
                 const std::filesystem::directory_entry &entry = *iterator;
                 const std::filesystem::file_status status = entry.symlink_status(error);
                 if (error)
-                    break;
+                    return Result<ScannedAssets>::Failure(Failure(AssetErrors::RootInvalid, error.message()));
                 const std::filesystem::path relative = entry.path().lexically_relative(projectRoot);
-                if (relative.empty() || relative.generic_string().starts_with("..")) {
-                    AddDiagnostic(result.diagnostics, AssetErrors::RootInvalid, entry.path().generic_string());
-                    continue;
-                }
                 const std::string normalized = relative.generic_string();
-                if (std::filesystem::is_symlink(status)) {
+                if (relative.empty() || normalized.starts_with("..")) {
+                    AddDiagnostic(result.diagnostics, AssetErrors::RootInvalid, entry.path().generic_string());
+                } else if (std::filesystem::is_symlink(status)) {
                     result.ambiguousSymlinks.push_back(normalized);
                     if (entry.is_directory(error))
                         iterator.disable_recursion_pending();
                     error.clear();
-                    continue;
+                } else if (std::filesystem::is_regular_file(status)) {
+                    if (IsSidecarPath(entry.path()))
+                        result.sidecars.try_emplace(normalized.substr(0, normalized.size() - 5), entry.path());
+                    else if (IsSupportedSourceExtension(entry.path().extension().string()))
+                        result.sources.try_emplace(normalized, entry.path());
                 }
-                if (!std::filesystem::is_regular_file(status))
-                    continue;
-                if (IsSidecarPath(entry.path()))
-                    result.sidecars.try_emplace(normalized.substr(0, normalized.size() - 5), entry.path());
-                else if (IsSupportedSourceExtension(entry.path().extension().string()))
-                    result.sources.try_emplace(normalized, entry.path());
+                iterator.increment(error);
+                if (error)
+                    return Result<ScannedAssets>::Failure(Failure(AssetErrors::RootInvalid, error.message()));
             }
-            if (error)
-                return Result<ScannedAssets>::Failure(Failure(AssetErrors::RootInvalid, error.message()));
             return Result<ScannedAssets>::Success(std::move(result));
         }
 
