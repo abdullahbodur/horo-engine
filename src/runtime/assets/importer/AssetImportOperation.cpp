@@ -8,6 +8,7 @@
 #include "Horo/Assets/AssetImportMetadata.h"
 #include "Horo/Foundation/JobSystem.h"
 #include "Horo/Foundation/Logging/Logger.h"
+#include "Horo/Foundation/TransparentString.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -287,8 +288,7 @@ namespace Horo::Assets {
         return Result<AssetImportSnapshot>::Success(snapshot_);
     }
 
-    Result<AssetImportSnapshot> AssetImportOperation::SetItemSettings(const std::size_t index,
-                                                                      std::unordered_map<std::string, std::string> settings) {
+    Result<AssetImportSnapshot> AssetImportOperation::SetItemSettings(const std::size_t index, TransparentStringMap<std::string> settings) {
         if (index >= snapshot_.items.size())
             return Result<AssetImportSnapshot>::Failure(Error{CookErrors::MalformedArtifact.code});
 

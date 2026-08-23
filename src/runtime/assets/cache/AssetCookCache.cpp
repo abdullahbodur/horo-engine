@@ -176,7 +176,7 @@ namespace Horo::Assets {
     }
 
     Result<void> AssetCookCache::Store(const AssetCookCacheKey &key, std::span<const std::uint8_t> artifact,
-                                       const CancellationToken &cancellation) {
+                                       const CancellationToken &cancellation) const {
         if (cancellation.IsCancellationRequested())
             return Result<void>::Failure(Error{CookErrors::Cancelled.code});
 

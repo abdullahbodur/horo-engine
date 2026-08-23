@@ -13,6 +13,7 @@
 #include <limits>
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <stdexcept>
 
 namespace Horo::Assets {
     namespace {
@@ -21,6 +22,7 @@ namespace Horo::Assets {
 
         [[nodiscard]] std::optional<ImportSettingValue> ParseSettingValue(const ImportSettingDescriptor &descriptor,
                                                                           const std::string &serialized) {
+            using enum ImportSettingKind;
             try {
                 switch (descriptor.kind) {
                     case ImportSettingKind::Boolean:
@@ -42,7 +44,9 @@ namespace Horo::Assets {
                         return descriptor.choices[choiceIndex].value;
                     }
                 }
-            } catch (const std::exception &) {
+            } catch (const std::invalid_argument &) {
+                return std::nullopt;
+            } catch (const std::out_of_range &) {
                 return std::nullopt;
             }
             return std::nullopt;
@@ -211,7 +215,7 @@ namespace Horo::Assets {
 
     /** @copydoc ResolveImportSettings */
     Result<std::vector<ImportSettingValue>> ResolveImportSettings(const AssetImporterContribution &contribution,
-                                                                  const std::unordered_map<std::string, std::string> &serializedSettings) {
+                                                                  const TransparentStringMap<std::string> &serializedSettings) {
         std::vector<ImportSettingValue> settings;
         settings.reserve(contribution.settings.size());
         for (const auto &descriptor : contribution.settings) {
