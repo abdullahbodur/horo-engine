@@ -162,25 +162,24 @@ namespace Horo::Assets {
                                                                const std::filesystem::path &projectRoot) {
             ScannedAssets result;
             std::error_code error;
-            const std::filesystem::recursive_directory_iterator end;
-            std::filesystem::recursive_directory_iterator iterator{assetRoot, std::filesystem::directory_options::skip_permission_denied,
-                                                                   error};
+            std::filesystem::recursive_directory_iterator iterator(assetRoot, std::filesystem::directory_options::skip_permission_denied,
+                                                                   error);
             if (error)
                 return Result<ScannedAssets>::Failure(Failure(AssetErrors::RootInvalid, error.message()));
+            const std::filesystem::recursive_directory_iterator end;
+
             while (iterator != end) {
                 const std::filesystem::directory_entry &entry = *iterator;
                 const std::filesystem::file_status status = entry.symlink_status(error);
                 if (error)
                     return Result<ScannedAssets>::Failure(Failure(AssetErrors::RootInvalid, error.message()));
                 const std::filesystem::path relative = entry.path().lexically_relative(projectRoot);
-                const std::string normalized = relative.generic_string();
-                if (relative.empty() || normalized.starts_with("..")) {
+                if (const std::string normalized = relative.generic_string(); relative.empty() || normalized.starts_with("..")) {
                     AddDiagnostic(result.diagnostics, AssetErrors::RootInvalid, entry.path().generic_string());
                 } else if (std::filesystem::is_symlink(status)) {
                     result.ambiguousSymlinks.push_back(normalized);
                     if (entry.is_directory(error))
                         iterator.disable_recursion_pending();
-                    error.clear();
                 } else if (std::filesystem::is_regular_file(status)) {
                     if (IsSidecarPath(entry.path()))
                         result.sidecars.try_emplace(normalized.substr(0, normalized.size() - 5), entry.path());
@@ -192,6 +191,51 @@ namespace Horo::Assets {
                     return Result<ScannedAssets>::Failure(Failure(AssetErrors::RootInvalid, error.message()));
             }
             return Result<ScannedAssets>::Success(std::move(result));
+        }
+
+        [[nodiscard]] std::optional<AssetRecord> ParseAndValidateSidecar(const std::string &sourcePath,
+                                                                         const std::filesystem::path &sidecarNativePath,
+                                                                         std::vector<AssetRegistryDiagnostic> &diagnostics) {
+            const std::string metadataPath = sourcePath + ".horo";
+            Result<std::string> contents = ReadBounded(sidecarNativePath, kMaximumSidecarBytes, AssetErrors::SidecarMalformed);
+            if (contents.HasError()) {
+                AddDiagnostic(diagnostics, AssetErrors::SidecarMalformed, metadataPath, contents.ErrorValue().message);
+                return std::nullopt;
+            }
+            Result<Json> parsed = ParseStrictJson(contents.Value(), AssetErrors::SidecarMalformed);
+            if (parsed.HasError()) {
+                AddDiagnostic(diagnostics, AssetErrors::SidecarMalformed, metadataPath, parsed.ErrorValue().message);
+                return std::nullopt;
+            }
+            Json sidecarJson = std::move(parsed).Value();
+            if (!sidecarJson.is_object() || !sidecarJson.contains("schemaVersion") || !sidecarJson["schemaVersion"].is_number_unsigned()) {
+                AddDiagnostic(diagnostics, AssetErrors::SidecarMalformed, metadataPath);
+                return std::nullopt;
+            }
+            if (sidecarJson["schemaVersion"].get<std::uint64_t>() != 1) {
+                AddDiagnostic(diagnostics, AssetErrors::SchemaUnsupported, metadataPath);
+                return std::nullopt;
+            }
+            if (!sidecarJson.contains("assetId") ||
+                (sidecarJson["assetId"].is_string() && sidecarJson["assetId"].get<std::string>().empty())) {
+                AddDiagnostic(diagnostics, AssetErrors::IdentityMissing, metadataPath);
+                return std::nullopt;
+            }
+            if (!sidecarJson["assetId"].is_string()) {
+                AddDiagnostic(diagnostics, AssetErrors::SidecarMalformed, metadataPath);
+                return std::nullopt;
+            }
+            sidecarJson["sourcePath"] = sourcePath;
+            sidecarJson["metadataPath"] = metadataPath;
+            Result<AssetRecord> record = ParseRecord(sidecarJson);
+            if (record.HasError()) {
+                const ErrorCodeDescriptor &descriptor = record.ErrorValue().code.Value() == "asset.identity.invalid"
+                                                            ? AssetErrors::RegistryIdentityInvalid
+                                                            : AssetErrors::SidecarMalformed;
+                AddDiagnostic(diagnostics, descriptor, metadataPath, record.ErrorValue().message);
+                return std::nullopt;
+            }
+            return std::move(record).Value();
         }
 
         /** @brief Resolves source/sidecar pairs into asset records, appending diagnostics for any failures. */
@@ -206,53 +250,15 @@ namespace Horo::Assets {
                     AddDiagnostic(diagnostics, AssetErrors::SidecarMissing, sourcePath);
                     continue;
                 }
-                const std::string metadataPath = sourcePath + ".horo";
-                Result<std::string> contents = ReadBounded(sidecar->second, kMaximumSidecarBytes, AssetErrors::SidecarMalformed);
-                if (contents.HasError()) {
-                    AddDiagnostic(diagnostics, AssetErrors::SidecarMalformed, metadataPath, contents.ErrorValue().message);
-                    continue;
-                }
-                Result<Json> parsed = ParseStrictJson(contents.Value(), AssetErrors::SidecarMalformed);
-                if (parsed.HasError()) {
-                    AddDiagnostic(diagnostics, AssetErrors::SidecarMalformed, metadataPath, parsed.ErrorValue().message);
-                    continue;
-                }
-                Json sidecarJson = std::move(parsed).Value();
-                if (!sidecarJson.is_object() || !sidecarJson.contains("schemaVersion") ||
-                    !sidecarJson["schemaVersion"].is_number_unsigned()) {
-                    AddDiagnostic(diagnostics, AssetErrors::SidecarMalformed, metadataPath);
-                    continue;
-                }
-                if (sidecarJson["schemaVersion"].get<std::uint64_t>() != 1) {
-                    AddDiagnostic(diagnostics, AssetErrors::SchemaUnsupported, metadataPath);
-                    continue;
-                }
-                if (!sidecarJson.contains("assetId") ||
-                    (sidecarJson["assetId"].is_string() && sidecarJson["assetId"].get<std::string>().empty())) {
-                    AddDiagnostic(diagnostics, AssetErrors::IdentityMissing, metadataPath);
-                    continue;
-                }
-                if (!sidecarJson["assetId"].is_string()) {
-                    AddDiagnostic(diagnostics, AssetErrors::SidecarMalformed, metadataPath);
-                    continue;
-                }
-                sidecarJson["sourcePath"] = sourcePath;
-                sidecarJson["metadataPath"] = metadataPath;
-                Result<AssetRecord> record = ParseRecord(sidecarJson);
-                if (record.HasError()) {
-                    const ErrorCodeDescriptor &descriptor = record.ErrorValue().code.Value() == "asset.identity.invalid"
-                                                                ? AssetErrors::RegistryIdentityInvalid
-                                                                : AssetErrors::SidecarMalformed;
-                    AddDiagnostic(diagnostics, descriptor, metadataPath, record.ErrorValue().message);
-                    continue;
-                }
-                records.push_back(std::move(record).Value());
+                if (auto record = ParseAndValidateSidecar(sourcePath, sidecar->second, diagnostics))
+                    records.push_back(std::move(*record));
             }
-            for (const auto &[sourcePath, sidecar] : scanned.sidecars) {
-                static_cast<void>(sidecar);
-                if (!scanned.sources.contains(sourcePath))
-                    AddDiagnostic(diagnostics, AssetErrors::SourceMissing, sourcePath + ".horo");
+            for (const auto &[sidecarPath, nativePath] : scanned.sidecars) {
+                static_cast<void>(nativePath);
+                if (!scanned.sources.contains(sidecarPath))
+                    AddDiagnostic(diagnostics, AssetErrors::SourceMissing, sidecarPath + ".horo");
             }
+
             return records;
         }
     }  // namespace
@@ -291,7 +297,7 @@ namespace Horo::Assets {
     }
 
     /** @copydoc AssetRegistry::AssetRegistry */
-    AssetRegistry::AssetRegistry() : state_(std::make_shared<const AssetRegistrySnapshot::State>(AssetRegistrySnapshot::State{})) {}
+    AssetRegistry::AssetRegistry() : state_(std::make_shared<const AssetRegistrySnapshot::State>()) {}
 
     /** @copydoc AssetRegistry::Snapshot */
     AssetRegistrySnapshot AssetRegistry::Snapshot() const noexcept {
@@ -354,24 +360,28 @@ namespace Horo::Assets {
             return Result<std::vector<AssetRecord>>::Failure(parsed.ErrorValue());
         const Json &root = parsed.Value();
         if (!root.is_object() || !root.contains("schemaVersion") || !root["schemaVersion"].is_number_unsigned() ||
-            root["schemaVersion"].get<std::uint64_t>() != 1 || !root.contains("assets") || !root["assets"].is_object())
+            root["schemaVersion"].get<std::uint64_t>() != 1 || !root.contains("assets") || !root["assets"].is_array()) {
             return Result<std::vector<AssetRecord>>::Failure(Failure(AssetErrors::IndexMalformed));
+        }
+
         std::vector<AssetRecord> records;
         records.reserve(root["assets"].size());
-        for (const auto &[key, value] : root["assets"].items()) {
-            Result<AssetRecord> record = ParseRecord(value, key);
+        for (const Json &item : root["assets"]) {
+            Result<AssetRecord> record = ParseRecord(item);
             if (record.HasError())
                 return Result<std::vector<AssetRecord>>::Failure(record.ErrorValue());
-            records.emplace_back(std::move(record).Value());
+            records.push_back(std::move(record).Value());
         }
         return Result<std::vector<AssetRecord>>::Success(std::move(records));
     }
 
     /** @copydoc AssetIndexStore::SaveAtomically */
     Result<void> AssetIndexStore::SaveAtomically(const std::filesystem::path &path, const AssetRegistrySnapshot &snapshot) {
-        Json assets = Json::object();
+        std::vector<Json> assets;
+        assets.reserve(snapshot.Records().size());
         for (const AssetRecord &record : snapshot.Records())
-            assets[record.id.ToString()] = RecordJson(record);
+            assets.push_back(RecordJson(record));
+
         const std::string contents = Json{{"schemaVersion", 1}, {"assets", std::move(assets)}}.dump(2) + '\n';
         std::error_code error;
         std::filesystem::create_directories(path.parent_path(), error);
@@ -384,7 +394,7 @@ namespace Horo::Assets {
             output.write(contents.data(), static_cast<std::streamsize>(contents.size()));
             output.flush();
             if (!output) {
-                std::filesystem::remove(temporary, error);
+                std::filesystem::remove(temporary, error);  // NOSONAR(cpp:S2083)
                 return Result<void>::Failure(Failure(AssetErrors::IndexIo));
             }
         }
@@ -394,9 +404,9 @@ namespace Horo::Assets {
             return Result<void>::Failure(Failure(AssetErrors::IndexIo));
         }
 #else
-        std::filesystem::rename(temporary, path, error);
+        std::filesystem::rename(temporary, path, error);  // NOSONAR(cpp:S2083)
         if (error) {
-            std::filesystem::remove(temporary, error);
+            std::filesystem::remove(temporary, error);  // NOSONAR(cpp:S2083)
             return Result<void>::Failure(Failure(AssetErrors::IndexIo, error.message()));
         }
 #endif
@@ -407,8 +417,7 @@ namespace Horo::Assets {
     Result<AssetRegistryBuildReport> RebuildAssetRegistry(AssetRegistry &registry, const std::filesystem::path &projectRoot,
                                                           const AssetRegistryOpenMode mode) {
         const std::filesystem::path assetRoot = projectRoot / "assets";
-        std::error_code error;
-        if (!std::filesystem::is_directory(assetRoot, error) || error)
+        if (std::error_code error; !std::filesystem::is_directory(assetRoot, error) || error)
             return Result<AssetRegistryBuildReport>::Failure(Failure(AssetErrors::RootInvalid));
 
         Result<ScannedAssets> scanned = ScanAssetDirectory(assetRoot, projectRoot);
@@ -453,8 +462,7 @@ namespace Horo::Assets {
             return rebuilt;
         AssetRegistryBuildReport report = std::move(rebuilt).Value();
         if (report.diagnostics.size() < kMaximumDiagnostics)
-            report.diagnostics.emplace(report.diagnostics.begin(),
-                                       AssetRegistryDiagnostic{*indexFailure, std::string{ProjectLayout::AssetIndexPath}});
+            report.diagnostics.emplace(report.diagnostics.begin(), *indexFailure, std::string{ProjectLayout::AssetIndexPath});
         if (report.status == AssetRegistryBuildStatus::Complete)
             report.status = AssetRegistryBuildStatus::Degraded;
         return Result<AssetRegistryBuildReport>::Success(std::move(report));

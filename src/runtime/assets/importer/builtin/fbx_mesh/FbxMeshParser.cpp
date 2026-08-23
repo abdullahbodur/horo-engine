@@ -31,6 +31,53 @@ namespace Horo::Assets {
             };
             return Result<FbxMeshGeometry>::Failure(MakeError(ImportErrors::FbxMalformed, message));
         }
+
+        [[nodiscard]] Result<void> AppendMeshVertices(const ufbx_node *node, const ufbx_mesh *mesh, FbxMeshGeometry &result) {
+            if (result.positions.size() > kMaximumVertices - mesh->vertices.count)
+                return Result<void>::Failure(MakeError(ImportErrors::FbxMalformed));
+
+            result.positions.reserve(result.positions.size() + mesh->vertices.count);
+            for (const ufbx_vec3 localPosition : mesh->vertices) {
+                const ufbx_vec3 worldPosition = ufbx_transform_position(&node->geometry_to_world, localPosition);
+                const std::array<float, 3> position{
+                    static_cast<float>(worldPosition.x),
+                    static_cast<float>(worldPosition.y),
+                    static_cast<float>(worldPosition.z),
+                };
+                if (!std::isfinite(position[0]) || !std::isfinite(position[1]) || !std::isfinite(position[2]))
+                    return Result<void>::Failure(MakeError(ImportErrors::FbxMalformed));
+                result.positions.push_back(position);
+            }
+            return Result<void>::Success();
+        }
+
+        [[nodiscard]] Result<void> AppendMeshTriangles(const ufbx_mesh *mesh, const std::uint32_t baseVertex,
+                                                       std::vector<std::uint32_t> &triangulatedCorners, FbxMeshGeometry &result) {
+            if (mesh->max_face_triangles > std::numeric_limits<std::size_t>::max() / 3U)
+                return Result<void>::Failure(MakeError(ImportErrors::FbxMalformed));
+
+            triangulatedCorners.resize(mesh->max_face_triangles * 3U);
+            for (const ufbx_face face : mesh->faces) {
+                if (face.num_indices < 3)
+                    continue;
+                const std::uint32_t triangleCount =
+                    ufbx_triangulate_face(triangulatedCorners.data(), triangulatedCorners.size(), mesh, face);
+                const std::size_t cornerCount = static_cast<std::size_t>(triangleCount) * 3U;
+                if (result.triangleIndices.size() > kMaximumTriangleIndices - cornerCount)
+                    return Result<void>::Failure(MakeError(ImportErrors::FbxMalformed));
+
+                for (std::size_t corner = 0; corner < cornerCount; ++corner) {
+                    const std::uint32_t polygonCorner = triangulatedCorners[corner];
+                    if (polygonCorner >= mesh->vertex_indices.count)
+                        return Result<void>::Failure(MakeError(ImportErrors::FbxMalformed));
+                    const std::uint32_t logicalVertex = mesh->vertex_indices[polygonCorner];
+                    if (logicalVertex >= mesh->vertices.count)
+                        return Result<void>::Failure(MakeError(ImportErrors::FbxMalformed));
+                    result.triangleIndices.push_back(baseVertex + logicalVertex);
+                }
+            }
+            return Result<void>::Success();
+        }
     }  // namespace
 
     /** @copydoc ParseFbxMesh */
@@ -60,51 +107,18 @@ namespace Horo::Assets {
             const ufbx_mesh *mesh = node != nullptr ? node->mesh : nullptr;
             if (mesh == nullptr || mesh->vertices.count == 0 || mesh->faces.count == 0)
                 continue;
-            if (result.positions.size() > kMaximumVertices - mesh->vertices.count)
-                return Result<FbxMeshGeometry>::Failure(MakeError(ImportErrors::FbxMalformed));
 
-            const std::uint32_t baseVertex = static_cast<std::uint32_t>(result.positions.size());
-            result.positions.reserve(result.positions.size() + mesh->vertices.count);
-            for (const ufbx_vec3 localPosition : mesh->vertices) {
-                const ufbx_vec3 worldPosition = ufbx_transform_position(&node->geometry_to_world, localPosition);
-                const std::array<float, 3> position{
-                    static_cast<float>(worldPosition.x),
-                    static_cast<float>(worldPosition.y),
-                    static_cast<float>(worldPosition.z),
-                };
-                if (!std::isfinite(position[0]) || !std::isfinite(position[1]) || !std::isfinite(position[2])) {
-                    return Result<FbxMeshGeometry>::Failure(MakeError(ImportErrors::FbxMalformed));
-                }
-                result.positions.push_back(position);
-            }
+            const auto baseVertex = static_cast<std::uint32_t>(result.positions.size());
+            if (auto vertResult = AppendMeshVertices(node, mesh, result); vertResult.HasError())
+                return Result<FbxMeshGeometry>::Failure(vertResult.ErrorValue());
 
-            if (mesh->max_face_triangles > std::numeric_limits<std::size_t>::max() / 3U) {
-                return Result<FbxMeshGeometry>::Failure(MakeError(ImportErrors::FbxMalformed));
-            }
-            triangulatedCorners.resize(mesh->max_face_triangles * 3U);
-            for (const ufbx_face face : mesh->faces) {
-                if (face.num_indices < 3)
-                    continue;
-                const std::uint32_t triangleCount =
-                    ufbx_triangulate_face(triangulatedCorners.data(), triangulatedCorners.size(), mesh, face);
-                const std::size_t cornerCount = static_cast<std::size_t>(triangleCount) * 3U;
-                if (result.triangleIndices.size() > kMaximumTriangleIndices - cornerCount) {
-                    return Result<FbxMeshGeometry>::Failure(MakeError(ImportErrors::FbxMalformed));
-                }
-                for (std::size_t corner = 0; corner < cornerCount; ++corner) {
-                    const std::uint32_t polygonCorner = triangulatedCorners[corner];
-                    if (polygonCorner >= mesh->vertex_indices.count)
-                        return Result<FbxMeshGeometry>::Failure(MakeError(ImportErrors::FbxMalformed));
-                    const std::uint32_t logicalVertex = mesh->vertex_indices[polygonCorner];
-                    if (logicalVertex >= mesh->vertices.count)
-                        return Result<FbxMeshGeometry>::Failure(MakeError(ImportErrors::FbxMalformed));
-                    result.triangleIndices.push_back(baseVertex + logicalVertex);
-                }
-            }
+            if (auto triResult = AppendMeshTriangles(mesh, baseVertex, triangulatedCorners, result); triResult.HasError())
+                return Result<FbxMeshGeometry>::Failure(triResult.ErrorValue());
         }
 
         if (result.positions.empty() || result.triangleIndices.empty())
             return Result<FbxMeshGeometry>::Failure(MakeError(ImportErrors::FbxMalformed));
         return Result<FbxMeshGeometry>::Success(std::move(result));
     }
+
 }  // namespace Horo::Assets

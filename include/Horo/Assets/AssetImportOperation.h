@@ -146,7 +146,7 @@ namespace Horo::Assets {
          * @param cancellation Cancellation token for cooperative abort.
          * @return Success or a typed commit failure. The registry is not modified on failure.
          */
-        [[nodiscard]] virtual Result<void> Commit(PreparedAssetImportBatch batch, IAssetIdGenerator &idGenerator,
+        [[nodiscard]] virtual Result<void> Commit(const PreparedAssetImportBatch &batch, IAssetIdGenerator &idGenerator,
                                                   const CancellationToken &cancellation) = 0;
     };
 

@@ -73,18 +73,35 @@ namespace Horo::Assets {
             return fv;
         }
 
+        void TrimLine(std::string &line) {
+            while (!line.empty() && std::isspace(static_cast<unsigned char>(line.front())))
+                line.erase(0, 1);
+            while (!line.empty() && std::isspace(static_cast<unsigned char>(line.back())))
+                line.pop_back();
+        }
+
+        void ParseObjFaceLine(std::istringstream &ls, ObjData &data) {
+            std::vector<FaceVertex> face;
+            std::string faceToken;
+            while (ls >> faceToken)
+                face.push_back(ParseFaceVertex(faceToken));
+            if (face.size() < 3)
+                return;
+            if (face.size() == 3) {
+                data.faces.push_back(std::move(face));
+                return;
+            }
+            for (std::size_t i = 1; i + 1 < face.size(); ++i)
+                data.faces.push_back({face[0], face[i], face[i + 1]});
+        }
+
         Result<ObjData> ParseObj(std::string_view source) {
             ObjData data;
             std::istringstream stream{std::string(source)};
             std::string line;
-            int lineNumber = 0;
 
             while (std::getline(stream, line)) {
-                ++lineNumber;
-                while (!line.empty() && std::isspace(static_cast<unsigned char>(line.front())))
-                    line.erase(0, 1);
-                while (!line.empty() && std::isspace(static_cast<unsigned char>(line.back())))
-                    line.pop_back();
+                TrimLine(line);
                 if (line.empty() || line[0] == '#')
                     continue;
 
@@ -94,31 +111,19 @@ namespace Horo::Assets {
 
                 if (token == "v") {
                     Vec3 v;
-                    if (!(ls >> v.x >> v.y >> v.z))
-                        continue;
-                    data.positions.push_back(v);
+                    if (ls >> v.x >> v.y >> v.z)
+                        data.positions.push_back(v);
                 } else if (token == "vt") {
                     Vec3 vt;
                     vt.z = 0.0f;
-                    ls >> vt.x >> vt.y;
-                    data.texcoords.push_back(vt);
+                    if (ls >> vt.x >> vt.y)
+                        data.texcoords.push_back(vt);
                 } else if (token == "vn") {
                     Vec3 vn;
-                    if (!(ls >> vn.x >> vn.y >> vn.z))
-                        continue;
-                    data.normals.push_back(vn);
+                    if (ls >> vn.x >> vn.y >> vn.z)
+                        data.normals.push_back(vn);
                 } else if (token == "f") {
-                    std::vector<FaceVertex> face;
-                    std::string faceToken;
-                    while (ls >> faceToken)
-                        face.push_back(ParseFaceVertex(faceToken));
-                    if (face.size() < 3)
-                        continue;
-                    if (face.size() > 3) {
-                        for (std::size_t i = 1; i + 1 < face.size(); ++i)
-                            data.faces.push_back({face[0], face[i], face[i + 1]});
-                    } else
-                        data.faces.push_back(std::move(face));
+                    ParseObjFaceLine(ls, data);
                 }
             }
 

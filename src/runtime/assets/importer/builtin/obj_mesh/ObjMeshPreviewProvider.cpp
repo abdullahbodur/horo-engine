@@ -203,9 +203,9 @@ namespace Horo::Assets {
                 }
 
                 const std::vector<ProjectedVertex> projected = ProjectVertices(vertices, input.width, input.height, view_);
-                std::vector<float> depthBuffer(static_cast<std::size_t>(input.width) * input.height,
-                                               std::numeric_limits<float>::infinity());
+                std::vector depthBuffer(static_cast<std::size_t>(input.width) * input.height, std::numeric_limits<float>::infinity());
                 const std::uint32_t triangleCount = indexCount / 3U;
+
                 const std::uint32_t rasterizedTriangleCount = std::min(triangleCount, kMaximumRasterizedTriangles);
                 for (std::uint32_t triangle = 0; triangle < rasterizedTriangleCount; ++triangle) {
                     if ((triangle & 0x0fffU) == 0U && cancellation.IsCancellationRequested())

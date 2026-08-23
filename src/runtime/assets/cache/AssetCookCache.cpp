@@ -175,6 +175,31 @@ namespace Horo::Assets {
         return Result<std::optional<std::vector<std::uint8_t>>>::Success(std::move(bytes));
     }
 
+    [[nodiscard]] Result<void> VerifyExistingArtifact(const std::filesystem::path &targetPath, std::span<const std::uint8_t> artifact) {
+        if (std::filesystem::is_symlink(targetPath))
+            return Result<void>::Failure(Error{CookErrors::MalformedArtifact.code});
+
+        std::error_code ec;
+        const auto existingSize = std::filesystem::file_size(targetPath, ec);
+        if (ec || existingSize != static_cast<std::uint64_t>(artifact.size()))
+            return Result<void>::Failure(Error{CookErrors::DuplicateCooker.code});
+
+        std::ifstream existing(targetPath, std::ios::binary);
+        if (!existing)
+            return Result<void>::Failure(Error{CookErrors::MalformedArtifact.code});
+
+        std::vector<std::uint8_t> existingBytes(existingSize);
+        existing.read(reinterpret_cast<char *>(existingBytes.data()), static_cast<std::streamsize>(existingSize));
+
+        if (!existing || existing.gcount() != static_cast<std::streamsize>(existingSize))
+            return Result<void>::Failure(Error{CookErrors::MalformedArtifact.code});
+
+        if (existingBytes.size() == artifact.size() && std::memcmp(existingBytes.data(), artifact.data(), artifact.size()) == 0) {
+            return Result<void>::Success();
+        }
+        return Result<void>::Failure(Error{CookErrors::DuplicateCooker.code});
+    }
+
     Result<void> AssetCookCache::Store(const AssetCookCacheKey &key, std::span<const std::uint8_t> artifact,
                                        const CancellationToken &cancellation) const {
         if (cancellation.IsCancellationRequested())
@@ -184,45 +209,12 @@ namespace Horo::Assets {
             return Result<void>::Failure(Error{CookErrors::TooLarge.code});
 
         const auto targetPath = PathForKey(key.digest);
+        if (std::filesystem::exists(targetPath))
+            return VerifyExistingArtifact(targetPath, artifact);
 
-        // If the key path already exists and is not a symlink, verify content.
-        if (std::filesystem::exists(targetPath)) {
-            if (std::filesystem::is_symlink(targetPath))
-                return Result<void>::Failure(Error{CookErrors::MalformedArtifact.code});
-
-            // Read existing bytes and compare
-            std::error_code ec;
-            const auto existingSize = std::filesystem::file_size(targetPath, ec);
-            if (ec || existingSize != static_cast<std::uint64_t>(artifact.size())) {
-                // Size mismatch — existing entry is stale/corrupt; this is not a benign collision.
-                // In a full implementation this would be a typed cache-corruption error.
-                // For V1: treat as existing content conflict, return success (entry already there).
-                return Result<void>::Failure(Error{CookErrors::DuplicateCooker.code});
-            }
-
-            std::ifstream existing(targetPath, std::ios::binary);
-            if (!existing)
-                return Result<void>::Failure(Error{CookErrors::MalformedArtifact.code});
-
-            std::vector<std::uint8_t> existingBytes(existingSize);
-            existing.read(reinterpret_cast<char *>(existingBytes.data()), static_cast<std::streamsize>(existingSize));
-
-            if (!existing || existing.gcount() != static_cast<std::streamsize>(existingSize))
-                return Result<void>::Failure(Error{CookErrors::MalformedArtifact.code});
-
-            // Constant-time-ish byte comparison
-            if (existingBytes.size() == artifact.size() && std::memcmp(existingBytes.data(), artifact.data(), artifact.size()) == 0) {
-                return Result<void>::Success();  // Identical content already stored
-            }
-            // Content differs — collision under same key. V1: treat as existing entry wins.
-            return Result<void>::Failure(Error{CookErrors::DuplicateCooker.code});
-        }
-
-        // Write to a unique temporary file in the parent directory.
         std::filesystem::create_directories(targetPath.parent_path());
-
-        auto tempPath = targetPath;
-        tempPath += ".tmp." + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+        const auto tempPath = std::filesystem::path(
+            std::format("{}.tmp.{}", targetPath.string(), std::chrono::steady_clock::now().time_since_epoch().count()));
 
         {
             std::ofstream temp(tempPath, std::ios::binary | std::ios::trunc);
@@ -236,29 +228,12 @@ namespace Horo::Assets {
             }
         }
 
-        // Atomic rename: if another writer won, targetPath will already exist.
         std::error_code renameEc;
         std::filesystem::rename(tempPath, targetPath, renameEc);
-
         if (renameEc) {
-            // Another writer won the race. Verify existing bytes match.
             std::filesystem::remove(tempPath);
-
-            if (std::filesystem::exists(targetPath) && !std::filesystem::is_symlink(targetPath)) {
-                std::error_code sizeEc;
-                const auto existingSize = std::filesystem::file_size(targetPath, sizeEc);
-                if (!sizeEc) {
-                    std::ifstream existing(targetPath, std::ios::binary);
-                    std::vector<std::uint8_t> existingBytes(existingSize);
-                    existing.read(reinterpret_cast<char *>(existingBytes.data()), static_cast<std::streamsize>(existingSize));
-
-                    if (existing && existing.gcount() == static_cast<std::streamsize>(existingSize) &&
-                        existingBytes.size() == artifact.size() &&
-                        std::memcmp(existingBytes.data(), artifact.data(), artifact.size()) == 0) {
-                        return Result<void>::Success();
-                    }
-                }
-            }
+            if (std::filesystem::exists(targetPath) && VerifyExistingArtifact(targetPath, artifact).HasValue())
+                return Result<void>::Success();
             return Result<void>::Failure(Error{CookErrors::MalformedArtifact.code});
         }
 

@@ -54,8 +54,8 @@ namespace Horo::Assets {
         for (std::size_t index = 0; index < bytes_.size(); ++index) {
             if (index == 4 || index == 6 || index == 8 || index == 10)
                 result.push_back('-');
-            result.push_back(kHex[bytes_[index] >> 4]);
-            result.push_back(kHex[bytes_[index] & 0x0f]);
+            result.push_back(kHex[static_cast<std::size_t>(bytes_[index]) >> 4U]);
+            result.push_back(kHex[static_cast<std::size_t>(bytes_[index]) & 0x0fU]);
         }
         return result;
     }
@@ -90,11 +90,11 @@ namespace Horo::Assets {
                 continue;
             }
             const bool lower = character >= 'a' && character <= 'z';
-            const bool digit = character >= '0' && character <= '9';
-            if ((!lower && !digit && character != '_') || (segmentStart && !lower))
+            if (const bool digit = character >= '0' && character <= '9'; (!lower && !digit && character != '_') || (segmentStart && !lower))
                 return Result<AssetTypeId>::Failure(MakeError(AssetErrors::TypeInvalid));
             segmentStart = false;
         }
+
         if (segmentStart || !hasDot)
             return Result<AssetTypeId>::Failure(MakeError(AssetErrors::TypeInvalid));
         return Result<AssetTypeId>::Success(AssetTypeId{std::string{value}});

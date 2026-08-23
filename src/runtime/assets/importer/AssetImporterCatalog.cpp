@@ -14,29 +14,24 @@
 
 namespace Horo::Assets {
     namespace {
-        [[nodiscard]] bool IsCanonicalSemanticVersion(const std::string_view value) {
-            if (value.empty() || value.size() > 64 || value.find('+') != std::string_view::npos)
-                return false;
-            const std::size_t dash = value.find('-');
-            const std::string_view core = value.substr(0, dash);
+        [[nodiscard]] bool ValidateSemanticVersionCore(const std::string_view core) {
             std::size_t componentStart = 0;
             for (int component = 0; component < 3; ++component) {
                 const std::size_t end = component == 2 ? core.size() : core.find('.', componentStart);
                 if (end == std::string_view::npos || end == componentStart)
                     return false;
-                const std::string_view digits = core.substr(componentStart, end - componentStart);
-                if ((digits.size() > 1 && digits.front() == '0') || !std::ranges::all_of(digits, [](const unsigned char character) {
+                if (const std::string_view digits = core.substr(componentStart, end - componentStart);
+                    (digits.size() > 1 && digits.front() == '0') || !std::ranges::all_of(digits, [](const unsigned char character) {
                     return std::isdigit(character) != 0;
                 })) {
                     return false;
                 }
                 componentStart = end + 1;
             }
-            if (componentStart != core.size() + 1)
-                return false;
-            if (dash == std::string_view::npos)
-                return true;
-            const std::string_view prerelease = value.substr(dash + 1);
+            return componentStart == core.size() + 1;
+        }
+
+        [[nodiscard]] bool ValidateSemanticVersionPrerelease(const std::string_view prerelease) {
             if (prerelease.empty())
                 return false;
             std::size_t identifierStart = 0;
@@ -50,16 +45,30 @@ namespace Horo::Assets {
                 })) {
                     return false;
                 }
-                const bool numeric = std::ranges::all_of(identifier, [](const unsigned char character) {
+                if (const bool numeric = std::ranges::all_of(identifier,
+                                                             [](const unsigned char character) {
                     return std::isdigit(character) != 0;
                 });
-                if (numeric && identifier.size() > 1 && identifier.front() == '0')
+                    numeric && identifier.size() > 1 && identifier.front() == '0') {
                     return false;
+                }
                 if (end == std::string_view::npos)
                     return true;
                 identifierStart = end + 1;
             }
             return false;
+        }
+
+        [[nodiscard]] bool IsCanonicalSemanticVersion(const std::string_view value) {
+            if (value.empty() || value.size() > 64 || value.find('+') != std::string_view::npos)
+                return false;
+            const std::size_t dash = value.find('-');
+            const std::string_view core = value.substr(0, dash);
+            if (!ValidateSemanticVersionCore(core))
+                return false;
+            if (dash == std::string_view::npos)
+                return true;
+            return ValidateSemanticVersionPrerelease(value.substr(dash + 1));
         }
     }  // namespace
 
@@ -68,7 +77,7 @@ namespace Horo::Assets {
     // ---------------------------------------------------------------------------
 
     bool AssetImporterContribution::HandlesExtension(std::string_view extension) const noexcept {
-        return std::find(fileExtensions.begin(), fileExtensions.end(), extension) != fileExtensions.end();
+        return std::ranges::find(fileExtensions, extension) != fileExtensions.end();
     }
 
     // ---------------------------------------------------------------------------
@@ -102,7 +111,7 @@ namespace Horo::Assets {
     /** @copydoc AssetImporterCatalogSnapshot::FindPreviewContribution */
     const AssetImporterContribution *AssetImporterCatalogSnapshot::FindPreviewContribution(const AssetTypeId &assetType) const noexcept {
         for (const auto &entry : entries_) {
-            if (std::find(entry.assetTypes.begin(), entry.assetTypes.end(), assetType) != entry.assetTypes.end())
+            if (std::ranges::find(entry.assetTypes, assetType) != entry.assetTypes.end())
                 return &entry;
         }
         return nullptr;
@@ -164,11 +173,9 @@ namespace Horo::Assets {
             return Result<std::shared_ptr<const AssetImporterCatalogSnapshot>>::Failure(Error{CookErrors::CatalogSealed.code});
 
         // Sort entries by first extension, then contribution ID
-        std::sort(state_->entries.begin(), state_->entries.end(),
-                  [](const AssetImporterContribution &a, const AssetImporterContribution &b) {
+        std::ranges::sort(state_->entries, [](const AssetImporterContribution &a, const AssetImporterContribution &b) {
             const auto aExt = a.fileExtensions.empty() ? "" : a.fileExtensions.front();
-            const auto bExt = b.fileExtensions.empty() ? "" : b.fileExtensions.front();
-            if (aExt != bExt)
+            if (const auto bExt = b.fileExtensions.empty() ? "" : b.fileExtensions.front(); aExt != bExt)
                 return aExt < bExt;
             return a.contributionId < b.contributionId;
         });

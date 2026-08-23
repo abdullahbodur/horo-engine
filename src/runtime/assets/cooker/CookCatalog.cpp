@@ -86,7 +86,7 @@ namespace Horo::Assets {
         }
 
         // Sort entries deterministically: by asset type, then target, then contribution ID
-        std::sort(state_->entries.begin(), state_->entries.end(), [](const CookerContribution &a, const CookerContribution &b) {
+        std::ranges::sort(state_->entries, [](const CookerContribution &a, const CookerContribution &b) {
             if (a.assetType.Value() != b.assetType.Value())
                 return a.assetType.Value() < b.assetType.Value();
             // Compare by first target for stable ordering
