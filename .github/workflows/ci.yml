@@ -31,7 +31,9 @@ jobs:
           python-version: '3.12'
 
       - name: Setup Tooling
-        run: pip install --no-cache-dir --only-binary :all: pytest==8.3.4 clang-format==19.1.7
+        run: "pip install --no-cache-dir --only-binary=:all: pytest==8.3.4 clang-format==19.1.7"
+
+
 
 
       - name: Diagnostics Check
