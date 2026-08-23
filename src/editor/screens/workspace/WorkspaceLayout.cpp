@@ -1,15 +1,28 @@
 #include "Horo/Editor/WorkspaceLayout.h"
 
 #include <algorithm>
+#include <functional>
+#include <string>
+#include <string_view>
 #include <type_traits>
 #include <unordered_set>
 #include <utility>
 
 namespace Horo::Editor {
     namespace {
+        /// Transparent hasher so id lookups avoid constructing std::string keys.
+        struct StringHash {
+            using is_transparent = void;
+
+            std::size_t operator()(const std::string_view sv) const noexcept {
+                return std::hash<std::string_view>{}(sv);
+            }
+        };
+
+        using TransparentStringSet = std::unordered_set<std::string, StringHash, std::equal_to<>>;
+
         LayoutNode CloneNode(const LayoutNode &node) {
-            return std::visit([](const auto &value) -> LayoutNode {
-                using Value = std::decay_t<decltype(value)>;
+            return std::visit([]<typename Value>(const Value &value) {
                 if constexpr (std::is_same_v<Value, SplitNode>) {
                     SplitNode copy;
                     copy.id = value.id;
@@ -30,22 +43,23 @@ namespace Horo::Editor {
             }, node.value);
         }
 
-        LayoutNode *FindNode(LayoutNode &node, const std::string_view nodeId) {
-            const bool matches = std::visit([nodeId](const auto &value) {
+        template <typename NodeT, typename VariantT> NodeT *FindNodeIn(VariantT &node, const std::string_view nodeId) {
+            if (const bool matches = std::visit(
+                    [nodeId](const auto &value) {
                 return value.id == nodeId;
             }, node.value);
-            if (matches) {
+                matches) {
                 return &node;
             }
 
             if (const auto *split = std::get_if<SplitNode>(&node.value)) {
                 if (split->first) {
-                    if (auto *found = FindNode(*split->first, nodeId)) {
+                    if (auto *found = FindNodeIn<NodeT>(*split->first, nodeId)) {
                         return found;
                     }
                 }
                 if (split->second) {
-                    if (auto *found = FindNode(*split->second, nodeId)) {
+                    if (auto *found = FindNodeIn<NodeT>(*split->second, nodeId)) {
                         return found;
                     }
                 }
@@ -53,23 +67,27 @@ namespace Horo::Editor {
             return nullptr;
         }
 
-        const LayoutNode *FindNode(const LayoutNode &node, const std::string_view nodeId) {
-            return FindNode(const_cast<LayoutNode &>(node), nodeId);
+        LayoutNode *FindNode(LayoutNode &node, const std::string_view nodeId) {
+            return FindNodeIn<LayoutNode>(node, nodeId);
         }
 
-        TabStackNode *FindTabStack(LayoutNode &node, const std::string_view stackId) {
+        const LayoutNode *FindNode(const LayoutNode &node, const std::string_view nodeId) {
+            return FindNodeIn<const LayoutNode>(node, nodeId);
+        }
+
+        template <typename NodeT, typename VariantT> NodeT *FindTabStackIn(VariantT &node, const std::string_view stackId) {
             if (auto *stack = std::get_if<TabStackNode>(&node.value); stack != nullptr && stack->id == stackId) {
                 return stack;
             }
 
             if (const auto *split = std::get_if<SplitNode>(&node.value)) {
                 if (split->first) {
-                    if (auto *found = FindTabStack(*split->first, stackId)) {
+                    if (auto *found = FindTabStackIn<NodeT>(*split->first, stackId)) {
                         return found;
                     }
                 }
                 if (split->second) {
-                    if (auto *found = FindTabStack(*split->second, stackId)) {
+                    if (auto *found = FindTabStackIn<NodeT>(*split->second, stackId)) {
                         return found;
                     }
                 }
@@ -77,11 +95,16 @@ namespace Horo::Editor {
             return nullptr;
         }
 
-        const TabStackNode *FindTabStack(const LayoutNode &node, const std::string_view stackId) {
-            return FindTabStack(const_cast<LayoutNode &>(node), stackId);
+        TabStackNode *FindTabStack(LayoutNode &node, const std::string_view stackId) {
+            return FindTabStackIn<TabStackNode>(node, stackId);
         }
 
-        TabStackNode *FindTabContaining(LayoutNode &node, const std::string_view panelId, std::size_t &index) {
+        const TabStackNode *FindTabStack(const LayoutNode &node, const std::string_view stackId) {
+            return FindTabStackIn<const TabStackNode>(node, stackId);
+        }
+
+        template <typename NodeT, typename VariantT>
+        NodeT *FindTabContainingIn(VariantT &node, const std::string_view panelId, std::size_t &index) {
             if (auto *stack = std::get_if<TabStackNode>(&node.value)) {
                 if (const auto it = std::ranges::find(stack->tabs, panelId); it != stack->tabs.end()) {
                     index = static_cast<std::size_t>(std::distance(stack->tabs.begin(), it));
@@ -91,17 +114,21 @@ namespace Horo::Editor {
 
             if (const auto *split = std::get_if<SplitNode>(&node.value)) {
                 if (split->first) {
-                    if (auto *found = FindTabContaining(*split->first, panelId, index)) {
+                    if (auto *found = FindTabContainingIn<NodeT>(*split->first, panelId, index)) {
                         return found;
                     }
                 }
                 if (split->second) {
-                    if (auto *found = FindTabContaining(*split->second, panelId, index)) {
+                    if (auto *found = FindTabContainingIn<NodeT>(*split->second, panelId, index)) {
                         return found;
                     }
                 }
             }
             return nullptr;
+        }
+
+        TabStackNode *FindTabContaining(LayoutNode &node, const std::string_view panelId, std::size_t &index) {
+            return FindTabContainingIn<TabStackNode>(node, panelId, index);
         }
 
         void SelectReplacementTab(TabStackNode &stack, const std::size_t removedIndex, const std::string_view removedPanel) {
@@ -118,19 +145,19 @@ namespace Horo::Editor {
             stack.activeTab = stack.tabs[replacementIndex];
         }
 
-        PanelNode *FindPanel(LayoutNode &node, const std::string_view panelId) {
+        template <typename NodeT, typename VariantT> NodeT *FindPanelIn(VariantT &node, const std::string_view panelId) {
             if (auto *panel = std::get_if<PanelNode>(&node.value); panel != nullptr && panel->panel == panelId) {
                 return panel;
             }
 
             if (const auto *split = std::get_if<SplitNode>(&node.value)) {
                 if (split->first) {
-                    if (auto *found = FindPanel(*split->first, panelId)) {
+                    if (auto *found = FindPanelIn<NodeT>(*split->first, panelId)) {
                         return found;
                     }
                 }
                 if (split->second) {
-                    if (auto *found = FindPanel(*split->second, panelId)) {
+                    if (auto *found = FindPanelIn<NodeT>(*split->second, panelId)) {
                         return found;
                     }
                 }
@@ -138,53 +165,85 @@ namespace Horo::Editor {
             return nullptr;
         }
 
-        const PanelNode *FindPanel(const LayoutNode &node, const std::string_view panelId) {
-            return FindPanel(const_cast<LayoutNode &>(node), panelId);
+        PanelNode *FindPanel(LayoutNode &node, const std::string_view panelId) {
+            return FindPanelIn<PanelNode>(node, panelId);
         }
 
-        void ValidateNode(const LayoutNode &node, std::vector<WorkspaceLayoutIssue> &issues, std::unordered_set<std::string> &nodeIds,
-                          std::unordered_set<std::string> &panelIds) {
-            std::visit([&](const auto &value) {
-                if (value.id.empty()) {
-                    issues.push_back({WorkspaceLayoutIssueCode::EmptyNodeId, {}, {}});
-                } else if (!nodeIds.insert(value.id).second) {
-                    issues.push_back({WorkspaceLayoutIssueCode::DuplicateNodeId, value.id, {}});
-                }
+        const PanelNode *FindPanel(const LayoutNode &node, const std::string_view panelId) {
+            return FindPanelIn<const PanelNode>(node, panelId);
+        }
 
-                using Value = std::decay_t<decltype(value)>;
+        void ValidateNode(const LayoutNode &node, std::vector<WorkspaceLayoutIssue> &issues, TransparentStringSet &nodeIds,
+                          TransparentStringSet &panelIds);
+
+        void ValidateNodeId(const std::string_view id, std::vector<WorkspaceLayoutIssue> &issues, TransparentStringSet &nodeIds) {
+            using enum WorkspaceLayoutIssueCode;
+
+            if (id.empty()) {
+                issues.push_back({EmptyNodeId, {}, {}});
+            } else if (!nodeIds.insert(std::string{id}).second) {
+                issues.push_back({DuplicateNodeId, std::string{id}, {}});
+            }
+        }
+
+        void ValidatePanelId(const std::string_view nodeId, const std::string_view panel, std::vector<WorkspaceLayoutIssue> &issues,
+                             TransparentStringSet &panelIds) {
+            using enum WorkspaceLayoutIssueCode;
+
+            if (panel.empty()) {
+                issues.push_back({EmptyPanelId, std::string{nodeId}, {}});
+            } else if (!panelIds.insert(std::string{panel}).second) {
+                issues.push_back({DuplicatePanelId, std::string{nodeId}, std::string{panel}});
+            }
+        }
+
+        void ValidateTabStack(const TabStackNode &stack, std::vector<WorkspaceLayoutIssue> &issues, TransparentStringSet &panelIds) {
+            using enum WorkspaceLayoutIssueCode;
+
+            if (stack.activeTab.has_value() && std::ranges::find(stack.tabs, *stack.activeTab) == stack.tabs.end()) {
+                issues.push_back({ActiveTabMissing, stack.id, *stack.activeTab});
+            }
+            for (const auto &tab : stack.tabs) {
+                if (tab.empty() || !panelIds.insert(tab).second) {
+                    issues.push_back({DuplicatePanelId, stack.id, tab});
+                }
+            }
+        }
+
+        void ValidateSplit(const SplitNode &split, std::vector<WorkspaceLayoutIssue> &issues, TransparentStringSet &nodeIds,
+                           TransparentStringSet &panelIds) {
+            using enum WorkspaceLayoutIssueCode;
+
+            if (split.first == nullptr || split.second == nullptr || split.ratio <= 0.0F || split.ratio >= 1.0F) {
+                issues.push_back({InvalidSplit, split.id, {}});
+            }
+            if (split.first) {
+                ValidateNode(*split.first, issues, nodeIds, panelIds);
+            }
+            if (split.second) {
+                ValidateNode(*split.second, issues, nodeIds, panelIds);
+            }
+        }
+
+        void ValidateNode(const LayoutNode &node, std::vector<WorkspaceLayoutIssue> &issues, TransparentStringSet &nodeIds,
+                          TransparentStringSet &panelIds) {
+            std::visit([&]<typename Value>(const Value &value) {
+                ValidateNodeId(value.id, issues, nodeIds);
                 if constexpr (std::is_same_v<Value, PanelNode>) {
-                    if (value.panel.empty()) {
-                        issues.push_back({WorkspaceLayoutIssueCode::EmptyPanelId, value.id, {}});
-                    } else if (!panelIds.insert(value.panel).second) {
-                        issues.push_back({WorkspaceLayoutIssueCode::DuplicatePanelId, value.id, value.panel});
-                    }
+                    ValidatePanelId(value.id, value.panel, issues, panelIds);
                 } else if constexpr (std::is_same_v<Value, TabStackNode>) {
-                    if (value.activeTab.has_value() &&
-                        std::find(value.tabs.begin(), value.tabs.end(), *value.activeTab) == value.tabs.end()) {
-                        issues.push_back({WorkspaceLayoutIssueCode::ActiveTabMissing, value.id, *value.activeTab});
-                    }
-                    for (const auto &tab : value.tabs) {
-                        if (tab.empty() || !panelIds.insert(tab).second) {
-                            issues.push_back({WorkspaceLayoutIssueCode::DuplicatePanelId, value.id, tab});
-                        }
-                    }
+                    ValidateTabStack(value, issues, panelIds);
                 } else if constexpr (std::is_same_v<Value, SplitNode>) {
-                    if (value.first == nullptr || value.second == nullptr || value.ratio <= 0.0F || value.ratio >= 1.0F) {
-                        issues.push_back({WorkspaceLayoutIssueCode::InvalidSplit, value.id, {}});
-                    }
-                    if (value.first) {
-                        ValidateNode(*value.first, issues, nodeIds, panelIds);
-                    }
-                    if (value.second) {
-                        ValidateNode(*value.second, issues, nodeIds, panelIds);
-                    }
+                    ValidateSplit(value, issues, nodeIds, panelIds);
                 }
             }, node.value);
         }
     }  // namespace
 
+    /** @copydoc Horo::Editor::LayoutNode::LayoutNode(const LayoutNode &) */
     LayoutNode::LayoutNode(const LayoutNode &other) : value(std::move(CloneNode(other).value)) {}
 
+    /** @copydoc Horo::Editor::LayoutNode::operator=(const LayoutNode &) */
     LayoutNode &LayoutNode::operator=(const LayoutNode &other) {
         if (this != &other) {
             value = CloneNode(other).value;
@@ -192,30 +251,37 @@ namespace Horo::Editor {
         return *this;
     }
 
+    /** @copydoc WorkspaceLayout::FindNode */
     LayoutNode *WorkspaceLayout::FindNode(const std::string_view nodeId) noexcept {
         return Editor::FindNode(root, nodeId);
     }
 
+    /** @copydoc WorkspaceLayout::FindNode */
     const LayoutNode *WorkspaceLayout::FindNode(const std::string_view nodeId) const noexcept {
         return Editor::FindNode(root, nodeId);
     }
 
+    /** @copydoc WorkspaceLayout::FindTabStack */
     TabStackNode *WorkspaceLayout::FindTabStack(const std::string_view stackId) noexcept {
         return Editor::FindTabStack(root, stackId);
     }
 
+    /** @copydoc WorkspaceLayout::FindTabStack */
     const TabStackNode *WorkspaceLayout::FindTabStack(const std::string_view stackId) const noexcept {
         return Editor::FindTabStack(root, stackId);
     }
 
+    /** @copydoc WorkspaceLayout::FindPanel */
     PanelNode *WorkspaceLayout::FindPanel(const std::string_view panelId) noexcept {
         return Editor::FindPanel(root, panelId);
     }
 
+    /** @copydoc WorkspaceLayout::FindPanel */
     const PanelNode *WorkspaceLayout::FindPanel(const std::string_view panelId) const noexcept {
         return Editor::FindPanel(root, panelId);
     }
 
+    /** @copydoc WorkspaceLayout::MoveTab */
     WorkspaceLayoutOperationResult WorkspaceLayout::MoveTab(const std::string_view panelId, const TabPlacement &placement) {
         std::size_t sourceIndex = 0;
         TabStackNode *source = FindTabContaining(root, panelId, sourceIndex);
@@ -255,6 +321,7 @@ namespace Horo::Editor {
         return {};
     }
 
+    /** @copydoc WorkspaceLayout::CloseTab */
     WorkspaceLayoutOperationResult WorkspaceLayout::CloseTab(const std::string_view panelId) {
         std::size_t sourceIndex = 0;
         TabStackNode *source = FindTabContaining(root, panelId, sourceIndex);
@@ -267,10 +334,11 @@ namespace Horo::Editor {
         return {};
     }
 
+    /** @copydoc WorkspaceLayout::Validate */
     std::vector<WorkspaceLayoutIssue> WorkspaceLayout::Validate() const {
         std::vector<WorkspaceLayoutIssue> issues;
-        std::unordered_set<std::string> nodeIds;
-        std::unordered_set<std::string> panelIds;
+        TransparentStringSet nodeIds;
+        TransparentStringSet panelIds;
         ValidateNode(root, issues, nodeIds, panelIds);
         return issues;
     }

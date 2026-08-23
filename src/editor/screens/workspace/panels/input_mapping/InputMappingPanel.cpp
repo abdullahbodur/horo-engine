@@ -31,18 +31,21 @@ namespace Horo::Editor {
         }
 
         const char *ValueTypeLocalizationKey(const Input::ActionValueType type) noexcept {
+            using enum Input::ActionValueType;
+
             switch (type) {
-                case Input::ActionValueType::Digital:
+                case Digital:
                     return "workspace.input_mapping.type.digital";
-                case Input::ActionValueType::Axis1D:
+                case Axis1D:
                     return "workspace.input_mapping.type.axis_1d";
-                case Input::ActionValueType::Axis2D:
+                case Axis2D:
                     return "workspace.input_mapping.type.axis_2d";
             }
             return "workspace.input_mapping.type.unknown";
         }
 
         const char *KeyName(const Input::Key key) noexcept {
+            using enum Input::Key;
             static constexpr std::array letters{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
                                                 "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"};
             if (key >= Input::Key::A && key <= Input::Key::Z)
