@@ -41,24 +41,9 @@ namespace Horo::Assets {
                 return Result<void>::Failure(MakeError(AssetErrors::IndexIo, std::format("Unable to write {}.", path.string())));
             return Result<void>::Success();
         }
-    }  // namespace
 
-    Result<void> ProjectAssetImportCommitter::Commit(PreparedAssetImportBatch batch, IAssetIdGenerator &idGenerator,
-                                                     const CancellationToken &cancellation) {
-        for (const auto &item : batch.items) {
-            if (cancellation.IsCancellationRequested())
-                return Result<void>::Failure(MakeError(ImportErrors::ImportCancelled));
-
-            if (!item.result.has_value())
-                continue;
-
+        Result<void> CommitSingleItem(const AssetImportItem &item, const std::filesystem::path &outputDir, IAssetIdGenerator &idGenerator) {
             const auto &prepared = item.result.value();
-            const std::filesystem::path outputDir = Foundation::Paths::Resolve(batch.projectRoot, batch.destinationFolder);
-
-            const auto ensureResult = Foundation::Paths::EnsureDirectory(outputDir);
-            if (ensureResult.HasError())
-                return Result<void>::Failure(ensureResult.ErrorValue());
-
             const std::string assetFileName = item.displayName + item.targetExtension;
             const std::filesystem::path outputPath = outputDir / assetFileName;
 
@@ -95,6 +80,25 @@ namespace Horo::Assets {
                     return written;
                 LOG_INFO("editor.asset_import", "Committed identity sidecar → %s", sidecarPath.string().c_str());
             }
+            return Result<void>::Success();
+        }
+    }  // namespace
+
+    Result<void> ProjectAssetImportCommitter::Commit(const PreparedAssetImportBatch &batch, IAssetIdGenerator &idGenerator,
+                                                     const CancellationToken &cancellation) {
+        for (const auto &item : batch.items) {
+            if (cancellation.IsCancellationRequested())
+                return Result<void>::Failure(MakeError(ImportErrors::ImportCancelled));
+
+            if (!item.result.has_value())
+                continue;
+
+            const std::filesystem::path outputDir = Foundation::Paths::Resolve(batch.projectRoot, batch.destinationFolder);
+            if (const auto ensureResult = Foundation::Paths::EnsureDirectory(outputDir); ensureResult.HasError())
+                return Result<void>::Failure(ensureResult.ErrorValue());
+
+            if (auto itemResult = CommitSingleItem(item, outputDir, idGenerator); itemResult.HasError())
+                return itemResult;
         }
 
         if (registry_ != nullptr) {

@@ -53,36 +53,75 @@ namespace Horo::Assets {
         }
 
         [[nodiscard]] std::optional<AssetImportReason> ParseReason(const std::string_view value) {
+            using enum AssetImportReason;
             if (value == "initial_import")
-                return AssetImportReason::InitialImport;
+                return InitialImport;
             if (value == "manual_reimport")
-                return AssetImportReason::ManualReimport;
+                return ManualReimport;
             if (value == "source_changed")
-                return AssetImportReason::SourceChanged;
+                return SourceChanged;
             if (value == "importer_changed")
-                return AssetImportReason::ImporterChanged;
+                return ImporterChanged;
             if (value == "module_changed")
-                return AssetImportReason::ModuleChanged;
+                return ModuleChanged;
             return std::nullopt;
         }
 
         [[nodiscard]] Error MetadataError(std::string message) {
             return MakeError(AssetErrors::SidecarMalformed, std::move(message));
         }
+
+        [[nodiscard]] Result<void> PopulateMetadataJsonFields(const nlohmann::json &json, AssetImportMetadata &metadata) {
+            if (const auto sourceByteSize = json.find("sourceByteSize");
+                sourceByteSize != json.end() && sourceByteSize->is_number_unsigned()) {
+                metadata.sourceByteSize = sourceByteSize->get<std::uintmax_t>();
+            }
+            if (const auto sourceLastWriteTime = json.find("sourceLastWriteTime");
+                sourceLastWriteTime != json.end() && sourceLastWriteTime->is_number_integer()) {
+                metadata.sourceLastWriteTime = sourceLastWriteTime->get<std::int64_t>();
+            }
+
+            if (const auto settings = json.find("importSettings"); settings != json.end() && settings->is_object()) {
+                for (auto member = settings->begin(); member != settings->end(); ++member) {
+                    if (member.value().is_string())
+                        metadata.importSettings.try_emplace(member.key(), member.value().get<std::string>());
+                }
+            }
+            if (const auto dependencies = json.find("dependencies"); dependencies != json.end() && dependencies->is_array()) {
+                for (const auto &value : *dependencies) {
+                    if (!value.is_string())
+                        return Result<void>::Failure(MetadataError("Asset import dependency identity is invalid."));
+                    auto dependency = AssetId::Parse(value.get_ref<const std::string &>());
+                    if (dependency.HasError())
+                        return Result<void>::Failure(MetadataError("Asset import dependency identity is invalid."));
+                    metadata.dependencies.push_back(dependency.Value());
+                }
+            }
+            if (const auto reasons = json.find("lastImportReasons"); reasons != json.end() && reasons->is_array()) {
+                for (const auto &value : *reasons) {
+                    if (!value.is_string())
+                        continue;
+                    if (const auto parsed = ParseReason(value.get_ref<const std::string &>()))
+                        metadata.lastImportReasons.push_back(*parsed);
+                }
+            }
+            return Result<void>::Success();
+        }
     }  // namespace
 
     /** @copydoc AssetImportReasonName */
     std::string_view AssetImportReasonName(const AssetImportReason reason) noexcept {
+        using enum AssetImportReason;
         switch (reason) {
-            case AssetImportReason::InitialImport:
+            case InitialImport:
                 return "initial_import";
-            case AssetImportReason::ManualReimport:
+            case ManualReimport:
                 return "manual_reimport";
-            case AssetImportReason::SourceChanged:
+            case SourceChanged:
                 return "source_changed";
-            case AssetImportReason::ImporterChanged:
+            case ImporterChanged:
                 return "importer_changed";
-            case AssetImportReason::ModuleChanged:
+            case ModuleChanged:
                 return "module_changed";
         }
         return "manual_reimport";
@@ -114,8 +153,8 @@ namespace Horo::Assets {
             const auto found = json.find(key);
             return found != json.end() && found->is_string() ? found->get_ref<const std::string &>() : std::string{};
         };
-        const auto schema = json.find("schemaVersion");
-        if (schema == json.end() || !schema->is_number_unsigned() || schema->get<std::uint32_t>() != AssetImportMetadata::kSchemaVersion) {
+        if (const auto schema = json.find("schemaVersion");
+            schema == json.end() || !schema->is_number_unsigned() || schema->get<std::uint32_t>() != AssetImportMetadata::kSchemaVersion) {
             return Result<AssetImportMetadata>::Failure(MetadataError("Asset import metadata schema is missing or unsupported."));
         }
 
@@ -137,38 +176,10 @@ namespace Horo::Assets {
             .sourceHash = stringValue("sourceHash"),
             .importedAtUtc = stringValue("importedAtUtc"),
         };
-        if (const auto sourceByteSize = json.find("sourceByteSize"); sourceByteSize != json.end() && sourceByteSize->is_number_unsigned()) {
-            metadata.sourceByteSize = sourceByteSize->get<std::uintmax_t>();
-        }
-        if (const auto sourceLastWriteTime = json.find("sourceLastWriteTime");
-            sourceLastWriteTime != json.end() && sourceLastWriteTime->is_number_integer()) {
-            metadata.sourceLastWriteTime = sourceLastWriteTime->get<std::int64_t>();
-        }
 
-        if (const auto settings = json.find("importSettings"); settings != json.end() && settings->is_object()) {
-            for (auto member = settings->begin(); member != settings->end(); ++member) {
-                if (member.value().is_string())
-                    metadata.importSettings.emplace(member.key(), member.value().get<std::string>());
-            }
-        }
-        if (const auto dependencies = json.find("dependencies"); dependencies != json.end() && dependencies->is_array()) {
-            for (const auto &value : *dependencies) {
-                if (!value.is_string())
-                    return Result<AssetImportMetadata>::Failure(MetadataError("Asset import dependency identity is invalid."));
-                auto dependency = AssetId::Parse(value.get_ref<const std::string &>());
-                if (dependency.HasError())
-                    return Result<AssetImportMetadata>::Failure(MetadataError("Asset import dependency identity is invalid."));
-                metadata.dependencies.push_back(dependency.Value());
-            }
-        }
-        if (const auto reasons = json.find("lastImportReasons"); reasons != json.end() && reasons->is_array()) {
-            for (const auto &value : *reasons) {
-                if (!value.is_string())
-                    continue;
-                if (const auto parsed = ParseReason(value.get_ref<const std::string &>()))
-                    metadata.lastImportReasons.push_back(*parsed);
-            }
-        }
+        if (auto fieldsResult = PopulateMetadataJsonFields(json, metadata); fieldsResult.HasError())
+            return Result<AssetImportMetadata>::Failure(fieldsResult.ErrorValue());
+
         return Result<AssetImportMetadata>::Success(std::move(metadata));
     }
 

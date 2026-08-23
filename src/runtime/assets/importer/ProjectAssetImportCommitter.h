@@ -24,7 +24,7 @@ namespace Horo::Assets {
     public:
         explicit ProjectAssetImportCommitter(AssetRegistry *registry = nullptr) noexcept : registry_(registry) {}
 
-        [[nodiscard]] Result<void> Commit(PreparedAssetImportBatch batch, IAssetIdGenerator &idGenerator,
+        [[nodiscard]] Result<void> Commit(const PreparedAssetImportBatch &batch, IAssetIdGenerator &idGenerator,
                                           const CancellationToken &cancellation) override;
 
     private:

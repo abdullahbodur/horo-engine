@@ -14,7 +14,7 @@
 
 namespace Horo::Assets {
     namespace {
-        std::atomic_uint64_t g_reimportTemporarySequence{0};
+        std::atomic_uint64_t g_reimportTemporarySequence{0};  // NOSONAR(cpp:S5421)
 
         [[nodiscard]] std::filesystem::path NormalizeAbsolute(const std::filesystem::path &path) {
             std::error_code error;
@@ -67,6 +67,75 @@ namespace Horo::Assets {
             std::error_code error;
             const auto value = std::filesystem::last_write_time(path, error);
             return error ? 0 : static_cast<std::int64_t>(value.time_since_epoch().count());
+        }
+
+        [[nodiscard]] std::vector<AssetImportReason> ComputeReimportReasons(const AssetImportMetadata &metadata,
+                                                                            const AssetImporterContribution &contribution,
+                                                                            const std::string_view sourceHash) {
+            std::vector<AssetImportReason> reasons;
+            if (!metadata.sourceHash.empty() && metadata.sourceHash != sourceHash)
+                reasons.push_back(AssetImportReason::SourceChanged);
+            if (metadata.importerVersion != contribution.version)
+                reasons.push_back(AssetImportReason::ImporterChanged);
+            if (metadata.importerModuleId != contribution.moduleId || metadata.importerModuleVersion != contribution.moduleVersion)
+                reasons.push_back(AssetImportReason::ModuleChanged);
+            if (reasons.empty())
+                reasons.push_back(AssetImportReason::ManualReimport);
+            return reasons;
+        }
+
+        [[nodiscard]] Result<void> CommitReimportedFiles(DurableFileSystem &files, AssetRegistry &registry,
+                                                         const std::filesystem::path &projectRoot, const std::filesystem::path &assetPath,
+                                                         const std::filesystem::path &metadataPath, const PreparedAssetImport &prepared,
+                                                         const std::string_view serializedMeta) {
+            const std::filesystem::path payloadStaging = TemporarySibling(assetPath, "payload.new");
+            const std::filesystem::path metadataStaging = TemporarySibling(metadataPath, "metadata.new");
+            const std::filesystem::path payloadBackup = TemporarySibling(assetPath, "payload.backup");
+            const std::filesystem::path metadataBackup = TemporarySibling(metadataPath, "metadata.backup");
+            const auto cleanup = [&] {
+                BestEffortRemove(files, payloadStaging);
+                BestEffortRemove(files, metadataStaging);
+                BestEffortRemove(files, payloadBackup);
+                BestEffortRemove(files, metadataBackup);
+            };
+
+            if (auto result = files.WriteDurable(payloadStaging, AsBytes(prepared.editorPayload)); result.HasError()) {
+                cleanup();
+                return result;
+            }
+            if (auto result = files.WriteDurable(metadataStaging, AsBytes(serializedMeta)); result.HasError()) {
+                cleanup();
+                return result;
+            }
+            if (auto result = files.CopyDurable(assetPath, payloadBackup); result.HasError()) {
+                cleanup();
+                return result;
+            }
+            if (auto result = files.CopyDurable(metadataPath, metadataBackup); result.HasError()) {
+                cleanup();
+                return result;
+            }
+
+            if (auto result = files.AtomicReplace(payloadStaging, assetPath); result.HasError()) {
+                cleanup();
+                return result;
+            }
+            if (auto result = files.AtomicReplace(metadataStaging, metadataPath); result.HasError()) {
+                static_cast<void>(RestorePair(files, payloadBackup, assetPath, metadataBackup, metadataPath));
+                cleanup();
+                return result;
+            }
+
+            if (const auto rebuilt = RebuildAssetRegistry(registry, projectRoot, AssetRegistryOpenMode::Edit);
+                rebuilt.HasError() || rebuilt.Value().status == AssetRegistryBuildStatus::Failed) {
+                static_cast<void>(RestorePair(files, payloadBackup, assetPath, metadataBackup, metadataPath));
+                static_cast<void>(RebuildAssetRegistry(registry, projectRoot, AssetRegistryOpenMode::Edit));
+                cleanup();
+                return Result<void>::Failure(rebuilt.HasError() ? rebuilt.ErrorValue() : MakeError(AssetErrors::IndexMalformed));
+            }
+
+            cleanup();
+            return Result<void>::Success();
         }
     }  // namespace
 
@@ -127,17 +196,7 @@ namespace Horo::Assets {
         if (cancellation.IsCancellationRequested())
             return Result<AssetReimportReport>::Failure(MakeError(ImportErrors::ImportCancelled));
 
-        std::vector<AssetImportReason> reasons;
-        if (!metadata.sourceHash.empty() && metadata.sourceHash != sourceHash)
-            reasons.push_back(AssetImportReason::SourceChanged);
-        if (metadata.importerVersion != contribution->version)
-            reasons.push_back(AssetImportReason::ImporterChanged);
-        if (metadata.importerModuleId != contribution->moduleId || metadata.importerModuleVersion != contribution->moduleVersion) {
-            reasons.push_back(AssetImportReason::ModuleChanged);
-        }
-        if (reasons.empty())
-            reasons.push_back(AssetImportReason::ManualReimport);
-
+        std::vector<AssetImportReason> reasons = ComputeReimportReasons(metadata, *contribution, sourceHash);
         PreparedAssetImport prepared = std::move(imported).Value();
         metadata.assetType = prepared.type;
         metadata.importerVersion = contribution->version;
@@ -155,53 +214,12 @@ namespace Horo::Assets {
         if (serialized.HasError())
             return Result<AssetReimportReport>::Failure(serialized.ErrorValue());
 
-        const std::filesystem::path payloadStaging = TemporarySibling(assetPath, "payload.new");
-        const std::filesystem::path metadataStaging = TemporarySibling(metadataPath, "metadata.new");
-        const std::filesystem::path payloadBackup = TemporarySibling(assetPath, "payload.backup");
-        const std::filesystem::path metadataBackup = TemporarySibling(metadataPath, "metadata.backup");
-        const auto cleanup = [&] {
-            BestEffortRemove(*request.files, payloadStaging);
-            BestEffortRemove(*request.files, metadataStaging);
-            BestEffortRemove(*request.files, payloadBackup);
-            BestEffortRemove(*request.files, metadataBackup);
-        };
-
-        if (auto result = request.files->WriteDurable(payloadStaging, AsBytes(prepared.editorPayload)); result.HasError()) {
-            cleanup();
-            return Result<AssetReimportReport>::Failure(result.ErrorValue());
-        }
-        if (auto result = request.files->WriteDurable(metadataStaging, AsBytes(serialized.Value())); result.HasError()) {
-            cleanup();
-            return Result<AssetReimportReport>::Failure(result.ErrorValue());
-        }
-        if (auto result = request.files->CopyDurable(assetPath, payloadBackup); result.HasError()) {
-            cleanup();
-            return Result<AssetReimportReport>::Failure(result.ErrorValue());
-        }
-        if (auto result = request.files->CopyDurable(metadataPath, metadataBackup); result.HasError()) {
-            cleanup();
-            return Result<AssetReimportReport>::Failure(result.ErrorValue());
+        if (auto commitResult = CommitReimportedFiles(*request.files, *request.registry, projectRoot, assetPath, metadataPath, prepared,
+                                                      serialized.Value());
+            commitResult.HasError()) {
+            return Result<AssetReimportReport>::Failure(commitResult.ErrorValue());
         }
 
-        if (auto result = request.files->AtomicReplace(payloadStaging, assetPath); result.HasError()) {
-            cleanup();
-            return Result<AssetReimportReport>::Failure(result.ErrorValue());
-        }
-        if (auto result = request.files->AtomicReplace(metadataStaging, metadataPath); result.HasError()) {
-            static_cast<void>(RestorePair(*request.files, payloadBackup, assetPath, metadataBackup, metadataPath));
-            cleanup();
-            return Result<AssetReimportReport>::Failure(result.ErrorValue());
-        }
-
-        if (const auto rebuilt = RebuildAssetRegistry(*request.registry, projectRoot, AssetRegistryOpenMode::Edit);
-            rebuilt.HasError() || rebuilt.Value().status == AssetRegistryBuildStatus::Failed) {
-            static_cast<void>(RestorePair(*request.files, payloadBackup, assetPath, metadataBackup, metadataPath));
-            static_cast<void>(RebuildAssetRegistry(*request.registry, projectRoot, AssetRegistryOpenMode::Edit));
-            cleanup();
-            return Result<AssetReimportReport>::Failure(rebuilt.HasError() ? rebuilt.ErrorValue() : MakeError(AssetErrors::IndexMalformed));
-        }
-
-        cleanup();
         LOG_INFO("editor.asset_reimport", "Reimported asset id=%s importer=%s@%s module=%s@%s source=%s",
                  metadata.assetId.ToString().c_str(), contribution->contributionId.c_str(), contribution->version.c_str(),
                  contribution->moduleId.c_str(), contribution->moduleVersion.c_str(), metadata.absoluteSourcePath.string().c_str());

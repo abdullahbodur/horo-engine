@@ -88,13 +88,7 @@ namespace Horo::Assets {
 
     struct MemoryAssetProvider::State {
         std::unordered_map<AssetId, std::vector<std::uint8_t>, AssetIdHash> assets;
-
-        [[nodiscard]] std::mutex &Mutex() const noexcept {
-            return mutex_;
-        }
-
-    private:
-        mutable std::mutex mutex_;
+        mutable std::mutex mutex;
     };
 
     MemoryAssetProvider::MemoryAssetProvider() : state_(std::make_unique<State>()) {}
@@ -103,13 +97,13 @@ namespace Horo::Assets {
 
     /** @copydoc MemoryAssetProvider::Insert */
     void MemoryAssetProvider::Insert(const AssetId id, std::vector<std::uint8_t> bytes) {
-        std::scoped_lock lock{state_->Mutex()};
+        std::scoped_lock lock{state_->mutex};
         state_->assets.insert_or_assign(id, std::move(bytes));
     }
 
     /** @copydoc MemoryAssetProvider::Remove */
     void MemoryAssetProvider::Remove(const AssetId id) {
-        std::scoped_lock lock{state_->Mutex()};
+        std::scoped_lock lock{state_->mutex};
         state_->assets.erase(id);
     }
 
@@ -117,7 +111,7 @@ namespace Horo::Assets {
     Result<bool> MemoryAssetProvider::Exists(const AssetId id, const CancellationToken &cancellation) const {
         if (cancellation.IsCancellationRequested())
             return Failure<bool>(AssetErrors::LoadCancelled);
-        std::scoped_lock lock{state_->Mutex()};
+        std::scoped_lock lock{state_->mutex};
         return Result<bool>::Success(state_->assets.contains(id));
     }
 
@@ -125,7 +119,7 @@ namespace Horo::Assets {
     Result<std::vector<std::uint8_t>> MemoryAssetProvider::Load(const AssetId id, const CancellationToken &cancellation) const {
         if (cancellation.IsCancellationRequested())
             return Failure<std::vector<std::uint8_t>>(AssetErrors::LoadCancelled);
-        std::scoped_lock lock{state_->Mutex()};
+        std::scoped_lock lock{state_->mutex};
         const auto found = state_->assets.find(id);
         if (found == state_->assets.end())
             return Failure<std::vector<std::uint8_t>>(AssetErrors::ProviderNotFound);
@@ -170,10 +164,10 @@ namespace Horo::Assets {
     }
 
     /** @copydoc AssetLoadHandle::RequestCancel */
-    Result<void> AssetLoadHandle::RequestCancel() {
+    Result<void> AssetLoadHandle::RequestCancel() {  // NOSONAR(cpp:S5817)
         if (!request_ || !request_->job)
             return Result<void>::Failure(MakeError(AssetErrors::LoadShutdown));
-        JobSystem *jobs = request_->control ? request_->control->jobs.load() : nullptr;
+        const JobSystem *jobs = request_->control ? request_->control->jobs.load() : nullptr;
         if (!jobs)
             return Result<void>::Failure(MakeError(AssetErrors::LoadShutdown));
         if (AssetLoadState expected = AssetLoadState::Queued;
@@ -189,16 +183,17 @@ namespace Horo::Assets {
 
     /** @copydoc AssetLoadHandle::Wait */
     Result<void> AssetLoadHandle::Wait() const {
+        using enum AssetLoadState;
         if (!request_ || !request_->job)
             return Result<void>::Failure(MakeError(AssetErrors::LoadShutdown));
         const Result<void> waited = request_->job->Wait();
-        if (waited.HasError() && request_->state.load() == AssetLoadState::Queued)
-            request_->state.store(AssetLoadState::Cancelled);
-        return waited.HasError() && request_->state.load() != AssetLoadState::Cancelled ? waited : Result<void>::Success();
+        if (waited.HasError() && request_->state.load() == Queued)
+            request_->state.store(Cancelled);
+        return waited.HasError() && request_->state.load() != Cancelled ? waited : Result<void>::Success();
     }
 
     /** @copydoc AssetLoadHandle::TakeResult */
-    Result<AssetLoadResult> AssetLoadHandle::TakeResult() {
+    Result<AssetLoadResult> AssetLoadHandle::TakeResult() {  // NOSONAR(cpp:S5817)
         if (!request_)
             return Failure<AssetLoadResult>(AssetErrors::LoadShutdown);
         if (!IsTerminal(request_->state.load()))
@@ -214,14 +209,14 @@ namespace Horo::Assets {
 
     struct AssetLoadService::State {
         State(JobSystem &jobSystem, const IAssetProvider &assetProvider, const std::size_t limit)
-            : jobs(jobSystem), provider(assetProvider), maximumOutstanding(limit), control(std::make_shared<AssetLoadControl>()) {
+            : jobs(jobSystem), provider(assetProvider), maximumOutstanding(limit) {
             control->jobs.store(&jobs);
         }
 
         JobSystem &jobs;
         const IAssetProvider &provider;
         std::size_t maximumOutstanding;
-        std::shared_ptr<AssetLoadControl> control;
+        std::shared_ptr<AssetLoadControl> control{std::make_shared<AssetLoadControl>()};
         std::mutex mutex;
         std::vector<std::shared_ptr<AssetLoadHandle::Request>> requests;
         bool accepting{true};
@@ -263,10 +258,11 @@ namespace Horo::Assets {
             try {
                 Result<std::vector<std::uint8_t>> loaded = provider->Load(request->id, cancellation);
                 request->Complete(loaded, cancellation);
-            } catch (const std::exception &) {
+            } catch (const std::exception &) {  // NOSONAR(cpp:S1181)
                 request->Fail(AssetErrors::ProviderReadFailed);
             }
         });
+
         if (submitted.HasError()) {
             const ErrorCodeDescriptor &descriptor =
                 submitted.ErrorValue().code.Value() == "job.queue_full" ? AssetErrors::LoadQueueFull : AssetErrors::LoadShutdown;

@@ -22,7 +22,7 @@ namespace Horo::Assets {
             auto ext = path.extension().string();
             if (!ext.empty() && ext.front() == '.')
                 ext.erase(0, 1);
-            std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+            std::ranges::transform(ext, ext.begin(), [](unsigned char c) {
                 return static_cast<char>(std::tolower(c));
             });
             return ext;
@@ -45,22 +45,23 @@ namespace Horo::Assets {
         }
 
         std::string SerializeDefaultSetting(const ImportSettingDescriptor &descriptor) {
+            using enum ImportSettingKind;
             switch (descriptor.kind) {
-                case ImportSettingKind::Boolean:
+                case Boolean:
                     return std::holds_alternative<bool>(descriptor.defaultValue) && std::get<bool>(descriptor.defaultValue) ? "true"
                                                                                                                             : "false";
-                case ImportSettingKind::Integer:
+                case Integer:
                     return std::holds_alternative<std::int64_t>(descriptor.defaultValue)
                                ? std::to_string(std::get<std::int64_t>(descriptor.defaultValue))
                                : "0";
-                case ImportSettingKind::Float:
+                case Float:
                     return std::holds_alternative<double>(descriptor.defaultValue)
                                ? std::to_string(std::get<double>(descriptor.defaultValue))
                                : "0.000000";
-                case ImportSettingKind::Text:
+                case Text:
                     return std::holds_alternative<std::string>(descriptor.defaultValue) ? std::get<std::string>(descriptor.defaultValue)
                                                                                         : std::string{};
-                case ImportSettingKind::Choice:
+                case Choice:
                     if (std::holds_alternative<std::size_t>(descriptor.defaultValue))
                         return std::to_string(std::get<std::size_t>(descriptor.defaultValue));
                     for (std::size_t index = 0; index < descriptor.choices.size(); ++index) {
@@ -76,7 +77,7 @@ namespace Horo::Assets {
             if (contribution == nullptr)
                 return;
             for (const auto &descriptor : contribution->settings) {
-                item.settings.emplace("settings." + descriptor.id, SerializeDefaultSetting(descriptor));
+                item.settings.try_emplace("settings." + descriptor.id, SerializeDefaultSetting(descriptor));
             }
         }
     }  // namespace
@@ -92,7 +93,7 @@ namespace Horo::Assets {
             return Result<AssetImportSnapshot>::Failure(Error{CookErrors::MalformedArtifact.code});
 
         snapshot_ = AssetImportSnapshot{
-            .operationId = "import-" + std::to_string(++revision_),
+            .operationId = std::format("import-{}", ++revision_),
             .revision = revision_,
             .phase = AssetImportPhase::Selecting,
             .canCancel = true,
@@ -270,10 +271,9 @@ namespace Horo::Assets {
             .settings = std::move(resolved).Value(),
         };
 
-        auto result = contribution->strategy->Import(input, cancellation);
-        if (result.HasValue()) {
+        if (auto result = contribution->strategy->Import(input, cancellation); result.HasValue()) {
             item.resolvedType = result.Value().type;
-            item.result = std::move(result.Value());
+            item.result = std::move(result).Value();
         } else {
             const auto &err = result.ErrorValue();
             item.diagnostics.push_back(ImportDiagnostic{

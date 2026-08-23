@@ -25,7 +25,6 @@ namespace Horo::Assets {
         //   32 bytes source SHA-256
         // ---------------------------------------------------------------------------
         constexpr std::uint32_t kPayloadSchemaVersion = 1;
-        constexpr std::size_t kPayloadSchemaHeaderSize = 4 + 8 + 32;  // u32 + u64 + 32 bytes
 
         /**
          * @brief Writes a little-endian u32 into the output buffer.

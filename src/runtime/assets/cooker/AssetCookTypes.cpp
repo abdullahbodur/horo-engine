@@ -37,19 +37,17 @@ namespace Horo::Assets {
             std::size_t segmentStart = 0;
             for (std::size_t i = 0; i <= text.size(); ++i) {
                 const bool atEnd = i == text.size();
-                if (atEnd || text[i] == '-') {
-                    const std::size_t len = i - segmentStart;
-                    if (len == 0)
+                if (!atEnd && text[i] != '-')
+                    continue;
+                if (const std::size_t len = i - segmentStart; len == 0 || !IsLowerAlpha(text[segmentStart]))
+                    return false;
+                for (std::size_t j = segmentStart + 1; j < i; ++j) {
+                    if (!IsSegmentChar(text[j]) || text[j] == '-')
                         return false;
-                    if (!IsLowerAlpha(text[segmentStart]))
-                        return false;
-                    for (std::size_t j = segmentStart + 1; j < i; ++j)
-                        if (!IsSegmentChar(text[j]) || text[j] == '-')
-                            return false;
-                    segmentStart = i + 1;
-                    if (!atEnd)
-                        hasSeparator = true;
                 }
+                segmentStart = i + 1;
+                if (!atEnd)
+                    hasSeparator = true;
             }
             return hasSeparator;
         }
@@ -158,8 +156,7 @@ namespace Horo::Assets {
             if (bytes[i] != static_cast<std::uint8_t>(Magic[i]))
                 return MakeMalformedError();
 
-        const auto version = ReadU32LE(bytes, 8);
-        if (version != CurrentFormatVersion)
+        if (const auto version = ReadU32LE(bytes, 8); version != CurrentFormatVersion)
             return Result<AssetCookArtifact>::Failure(MakeError(UnsupportedFormat, "Cooked artifact format version is unsupported."));
 
         const auto targetLen = ReadU16LE(bytes, 12);
@@ -197,8 +194,8 @@ namespace Horo::Assets {
         if (payloadSize > 0)
             std::memcpy(artifact.payload.data(), bytes.data() + headerEnd, payloadSize);
 
-        const auto computedDigest = ComputeSha256(std::as_bytes(std::span<const std::uint8_t>(artifact.payload)));
-        if (computedDigest != artifact.payloadDigest)
+        if (const auto computedDigest = ComputeSha256(std::as_bytes(std::span<const std::uint8_t>(artifact.payload)));
+            computedDigest != artifact.payloadDigest)
             return Result<AssetCookArtifact>::Failure(MakeError(HashMismatch, "Cooked artifact payload digest does not match."));
 
         return Result<AssetCookArtifact>::Success(std::move(artifact));
