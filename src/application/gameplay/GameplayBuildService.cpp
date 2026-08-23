@@ -899,13 +899,14 @@ namespace Horo::Application {
         }
 
         [[nodiscard]] GameplayBuildState TerminalStateFor(const Result<void> &result) {
+            using enum GameplayBuildState;
             if (result.HasValue())
-                return GameplayBuildState::Succeeded;
+                return Succeeded;
             if (result.ErrorValue().code.Value() == TimedOutDescriptor.code.Value())
-                return GameplayBuildState::TimedOut;
+                return TimedOut;
             if (result.ErrorValue().code.Value() == CancelledDescriptor.code.Value())
-                return GameplayBuildState::Cancelled;
-            return GameplayBuildState::Failed;
+                return Cancelled;
+            return Failed;
         }
 
         void RemoveActiveProject(const std::shared_ptr<GameplayBuildService::State> &state, const std::string_view projectKey,

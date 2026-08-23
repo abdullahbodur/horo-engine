@@ -238,12 +238,12 @@ namespace Horo::Diagnostics {
         std::uintmax_t currentBytes{};
         std::deque<OperationHistoryRecord> records;
 
-        [[nodiscard]] std::mutex &Mutex() const noexcept {
+        [[nodiscard]] std::mutex &Mutex() noexcept {
             return mutex_;
         }
 
         /// Guards all mutable fields accessed from Export and Snapshot.
-        mutable std::mutex mutex_;
+        std::mutex mutex_;
     };
 
     /** @copydoc OperationHistorySink::Create */

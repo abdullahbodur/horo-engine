@@ -186,19 +186,19 @@ namespace Horo::Extensions {
                 HoroExtensionStatus status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 try {
                     status = instance_->importFn(instance_->context, &request, &response);
-                } catch (const std::runtime_error &exception) {
+                } catch (const std::runtime_error &exception) {  // NOSONAR(cpp:S1181)
                     LOG_WARN("extensions.importer", "External importer threw runtime error: %s", exception.what());
                     status = HORO_EXTENSION_ERROR_INIT_FAILED;
-                } catch (const std::logic_error &exception) {
+                } catch (const std::logic_error &exception) {  // NOSONAR(cpp:S1181)
                     LOG_WARN("extensions.importer", "External importer threw logic error: %s", exception.what());
                     status = HORO_EXTENSION_ERROR_INIT_FAILED;
-                } catch (const std::bad_alloc &exception) {
+                } catch (const std::bad_alloc &exception) {  // NOSONAR(cpp:S1181)
                     LOG_WARN("extensions.importer", "External importer threw bad alloc: %s", exception.what());
                     status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) External code is an exception containment boundary.
                     LOG_WARN("extensions.importer", "External importer threw exception: %s", exception.what());
                     status = HORO_EXTENSION_ERROR_INIT_FAILED;
-                } catch (...) {
+                } catch (...) {  // NOSONAR(cpp:S1181)
                     LOG_WARN("extensions.importer", "External importer threw unknown exception.");
                     status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 }
@@ -250,13 +250,13 @@ namespace Horo::Extensions {
                 HoroExtensionStatus status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 try {
                     status = instance_->preview(instance_->context, &request, &response);
-                } catch (const std::runtime_error &exception) {
+                } catch (const std::runtime_error &exception) {  // NOSONAR(cpp:S1181)
                     LOG_WARN("extensions.importer", "External preview threw runtime error: %s", exception.what());
                     status = HORO_EXTENSION_ERROR_INIT_FAILED;
-                } catch (const std::logic_error &exception) {
+                } catch (const std::logic_error &exception) {  // NOSONAR(cpp:S1181)
                     LOG_WARN("extensions.importer", "External preview threw logic error: %s", exception.what());
                     status = HORO_EXTENSION_ERROR_INIT_FAILED;
-                } catch (const std::bad_alloc &exception) {
+                } catch (const std::bad_alloc &exception) {  // NOSONAR(cpp:S1181)
                     LOG_WARN("extensions.importer", "External preview threw bad alloc: %s", exception.what());
                     status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) External code is an exception containment boundary.
@@ -266,6 +266,7 @@ namespace Horo::Extensions {
                     LOG_WARN("extensions.importer", "External preview threw unknown exception.");
                     status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 }
+
                 image.width = response.width;
                 image.height = response.height;
                 if (status != HORO_EXTENSION_SUCCESS || !image.IsValid())

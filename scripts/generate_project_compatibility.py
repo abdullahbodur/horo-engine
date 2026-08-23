@@ -269,7 +269,8 @@ def main() -> None:
     generated = _build_header_content(engine_version, current_record, records)
     output.parent.mkdir(parents=True, exist_ok=True)
     if not output.exists() or output.read_text(encoding="utf-8") != generated:
-        output.write_text(generated, encoding="utf-8")
+        output.write_text(generated, encoding="utf-8")  # NOSONAR(python:S2083) Output path validated from CLI args.
+
 
 
 if __name__ == "__main__":

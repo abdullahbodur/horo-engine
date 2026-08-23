@@ -93,8 +93,8 @@ namespace Horo::Extensions {
             return Result<fs::path>::Success(libraryPath);
         }
 
-        // NOSONAR(cpp:S5205) C ABI function pointer from dynamic library.
-        void SafeUnload(HoroExtensionUnloadFunc unload, HoroExtensionModuleApi &moduleApi, const char *context) {
+        void SafeUnload(HoroExtensionUnloadFunc unload, HoroExtensionModuleApi &moduleApi,  // NOSONAR(cpp:S5205)
+                        const char *context) {
             if (unload != nullptr && moduleApi.moduleContext != nullptr) {
                 try {
                     unload(&moduleApi);
