@@ -128,8 +128,8 @@ namespace Horo::Application {
         return Result<ProjectMigrationRegistry>::Success(ProjectMigrationRegistry(std::move(ordered)));
     }
 
-    Result<ProjectMigrationPlan> ProjectMigrationRegistry::Plan(const ContractBaselineVersion source,
-                                                                const PersistentContractHash sourceContract,
+    Result<ProjectMigrationPlan> ProjectMigrationRegistry::Plan(const ContractBaselineVersion &source,
+                                                                const PersistentContractHash &sourceContract,
                                                                 const ProjectMigrationSupportDescriptor &support) const {
         const std::string sourceText = FormatHoroVersion(source.value);
         const std::string targetText = FormatHoroVersion(support.target.value);

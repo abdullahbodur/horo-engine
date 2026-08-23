@@ -274,7 +274,8 @@ namespace Horo::Application {
     class ProjectMigrationRegistry {
     public:
         [[nodiscard]] static Result<ProjectMigrationRegistry> Create(std::span<const ProjectMigrationDefinition> definitions);
-        [[nodiscard]] Result<ProjectMigrationPlan> Plan(ContractBaselineVersion source, PersistentContractHash sourceContract,
+
+        [[nodiscard]] Result<ProjectMigrationPlan> Plan(const ContractBaselineVersion &source, const PersistentContractHash &sourceContract,
                                                         const ProjectMigrationSupportDescriptor &support) const;
 
         [[nodiscard]] std::span<const ProjectMigrationDefinition> Definitions() const noexcept {

@@ -73,6 +73,45 @@ namespace Horo::Extensions {
             }
             return true;
         }
+
+        [[nodiscard]] Result<fs::path> ResolveModuleLibraryPath(const ExtensionManifest &manifest,
+                                                                const ExtensionModuleManifest &manifestModule) {
+            const fs::path libraryPath = NativeLibraryPath(manifest, manifestModule);
+            fs::path moduleEntry = manifestModule.entry.empty() ? fs::path{manifest.id} : fs::path{manifestModule.entry};
+            if (!moduleEntry.has_extension()) {
+#if defined(_WIN32)
+                moduleEntry += ".dll";
+#elif defined(__APPLE__)
+                moduleEntry += ".dylib";
+#else
+                moduleEntry += ".so";
+#endif
+            }
+            if (!HasSafeModuleEntry(manifest.rootPath, moduleEntry) || !IsContainedLibraryPath(manifest.rootPath, libraryPath))
+                return Result<fs::path>::Failure(
+                    MakeError(ExtensionErrors::InvalidManifest, "Native module entry must resolve inside its absolute package root."));
+            return Result<fs::path>::Success(libraryPath);
+        }
+
+        void SafeUnload(HoroExtensionUnloadFunc unload, HoroExtensionModuleApi &moduleApi,  // NOSONAR(cpp:S5205)
+                        const char *context) {
+            if (unload != nullptr && moduleApi.moduleContext != nullptr) {
+                try {
+                    unload(&moduleApi);
+                } catch (const std::runtime_error &exception) {  // NOSONAR(cpp:S1181)
+                    LOG_WARN("extensions", "Runtime error during %s unload: %s", context, exception.what());
+                } catch (const std::logic_error &exception) {  // NOSONAR(cpp:S1181)
+                    LOG_WARN("extensions", "Logic error during %s unload: %s", context, exception.what());
+                } catch (const std::bad_alloc &exception) {  // NOSONAR(cpp:S1181)
+                    LOG_WARN("extensions", "Bad alloc during %s unload: %s", context, exception.what());
+                } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) External code is an exception containment boundary.
+                    LOG_WARN("extensions", "Exception during %s unload: %s", context, exception.what());
+                } catch (...) {  // NOSONAR(cpp:S1181)
+                    LOG_WARN("extensions", "Unknown exception during %s unload.", context);
+                }
+            }
+        }
+
     }  // namespace
 
     /** @copydoc ExtensionManager::ExtensionManager */
@@ -82,16 +121,17 @@ namespace Horo::Extensions {
         UnloadAll();
     }
 
-    std::vector<std::string> ExtensionManager::DiscoverExtensions(const std::string &directoryPath) {
+    std::vector<std::string> ExtensionManager::DiscoverExtensions(const std::string &directoryPath) const {
         std::vector<std::string> discovered;
         std::error_code ec;
 
-        if (!fs::exists(directoryPath, ec) || !fs::is_directory(directoryPath, ec)) {
+        const fs::path dir{directoryPath};
+        if (!fs::exists(dir, ec) || !fs::is_directory(dir, ec)) {
             LOG_WARN("extensions", "Discovery path does not exist or is not a directory: %s", directoryPath.c_str());
             return discovered;
         }
 
-        for (const auto &entry : fs::directory_iterator(directoryPath, ec)) {
+        for (const auto &entry : fs::directory_iterator(dir, ec)) {
             if (entry.is_directory()) {
                 const fs::path manifestPath = entry.path() / "extension.json";
                 if (fs::exists(manifestPath, ec))
@@ -130,33 +170,22 @@ namespace Horo::Extensions {
         const ExtensionModuleManifest &manifestModule = manifest.modules.front();
         const std::string declaredModuleId = manifestModule.id;
         const std::string declaredModuleVersion = manifestModule.version;
-        const fs::path libraryPath = NativeLibraryPath(manifest, manifestModule);
-        fs::path moduleEntry = manifestModule.entry.empty() ? fs::path{manifest.id} : fs::path{manifestModule.entry};
-        if (!moduleEntry.has_extension()) {
-#if defined(_WIN32)
-            moduleEntry += ".dll";
-#elif defined(__APPLE__)
-            moduleEntry += ".dylib";
-#else
-            moduleEntry += ".so";
-#endif
-        }
-        if (!HasSafeModuleEntry(manifest.rootPath, moduleEntry) || !IsContainedLibraryPath(manifest.rootPath, libraryPath))
-            return Result<std::string>::Failure(
-                MakeError(ExtensionErrors::InvalidManifest, "Native module entry must resolve inside its absolute package root."));
+        auto libraryPathResult = ResolveModuleLibraryPath(manifest, manifestModule);
+        if (libraryPathResult.HasError())
+            return Result<std::string>::Failure(libraryPathResult.ErrorValue());
 
-        auto loadResult = Platform::LoadDynamicLibrary(libraryPath.string());
+        auto loadResult = Platform::LoadDynamicLibrary(libraryPathResult.Value().string());
         if (loadResult.HasError())
             return Result<std::string>::Failure(loadResult.ErrorValue());
         std::shared_ptr<Platform::DynamicLibrary> library{std::move(loadResult).Value()};
 
-        const auto loadFunc = reinterpret_cast<HoroExtensionLoadFunc>(library->GetSymbol("horo_extension_load"));
+        const auto loadFunc = reinterpret_cast<HoroExtensionLoadFunc>(library->GetSymbol("horo_extension_load"));  // NOSONAR(cpp:S3630)
         if (loadFunc == nullptr)
             return Result<std::string>::Failure(MakeError(ExtensionErrors::MissingEntryPoint, "Symbol horo_extension_load not found"));
 
         auto lifetime = std::make_shared<ExtensionModuleLifetime>();
         lifetime->library = library;
-        lifetime->unload = reinterpret_cast<HoroExtensionUnloadFunc>(library->GetSymbol("horo_extension_unload"));
+        lifetime->unload = reinterpret_cast<HoroExtensionUnloadFunc>(library->GetSymbol("horo_extension_unload"));  // NOSONAR(cpp:S3630)
 
         AssetImporterRegistrationSession registration{
             .manifest = &manifest,
@@ -178,23 +207,25 @@ namespace Horo::Extensions {
         HoroExtensionStatus status = HORO_EXTENSION_ERROR_INIT_FAILED;
         try {
             status = loadFunc(&hostApi, &moduleApi);
-        } catch (const std::exception &exception) {
+        } catch (const std::runtime_error &exception) {  // NOSONAR(cpp:S1181)
+            LOG_ERROR("extensions", "Extension %s threw runtime error during load: %s", manifest.id.c_str(), exception.what());
+            status = HORO_EXTENSION_ERROR_INIT_FAILED;
+        } catch (const std::logic_error &exception) {  // NOSONAR(cpp:S1181)
+            LOG_ERROR("extensions", "Extension %s threw logic error during load: %s", manifest.id.c_str(), exception.what());
+            status = HORO_EXTENSION_ERROR_INIT_FAILED;
+        } catch (const std::bad_alloc &exception) {  // NOSONAR(cpp:S1181)
+            LOG_ERROR("extensions", "Extension %s threw bad alloc during load: %s", manifest.id.c_str(), exception.what());
+            status = HORO_EXTENSION_ERROR_INIT_FAILED;
+        } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181)
             LOG_ERROR("extensions", "Extension %s threw during load: %s", manifest.id.c_str(), exception.what());
             status = HORO_EXTENSION_ERROR_INIT_FAILED;
-        } catch (...) {
+        } catch (...) {  // NOSONAR(cpp:S1181)
             LOG_ERROR("extensions", "Extension %s threw unknown exception during load.", manifest.id.c_str());
             status = HORO_EXTENSION_ERROR_INIT_FAILED;
         }
+
         if (status != HORO_EXTENSION_SUCCESS || registration.failed) {
-            if (lifetime->unload != nullptr && moduleApi.moduleContext != nullptr) {
-                try {
-                    lifetime->unload(&moduleApi);
-                } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) External code is an exception containment boundary.
-                    LOG_WARN("extensions", "Exception during rollback unload: %s", exception.what());
-                } catch (...) {
-                    LOG_WARN("extensions", "Unknown exception during rollback unload.");
-                }
-            }
+            SafeUnload(lifetime->unload, moduleApi, "rollback");
             if (registration.failed)
                 return Result<std::string>::Failure(std::move(registration.error));
             return Result<std::string>::Failure(MakeError(ExtensionErrors::LoadFailed, "Extension load function returned an error."));
@@ -203,21 +234,14 @@ namespace Horo::Extensions {
         if (!IsValidBoundedText(moduleApi.moduleId) || !IsValidBoundedText(moduleApi.moduleVersion) ||
             (!View(moduleApi.moduleId).empty() && View(moduleApi.moduleId) != declaredModuleId) ||
             (!View(moduleApi.moduleVersion).empty() && View(moduleApi.moduleVersion) != declaredModuleVersion)) {
-            if (lifetime->unload != nullptr) {
-                try {
-                    lifetime->unload(&moduleApi);
-                } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) External code is an exception containment boundary.
-                    LOG_WARN("extensions", "Exception during module unload: %s", exception.what());
-                } catch (...) {
-                    LOG_WARN("extensions", "Unknown exception during module unload.");
-                }
-            }
+            SafeUnload(lifetime->unload, moduleApi, "validation failure");
             return Result<std::string>::Failure(
                 MakeError(ExtensionErrors::InvalidManifest, "Loaded module identity/version does not match extension.json."));
         }
 
         lifetime->moduleApi = moduleApi;
         lifetime->loaded = true;
+
         if (!registration.contributions.empty()) {
             if (m_importerCatalog == nullptr)
                 return Result<std::string>::Failure(

@@ -10,6 +10,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace Horo {
 
@@ -34,4 +35,7 @@ namespace Horo {
     /** @brief String-keyed map that supports heterogeneous lookup without temporary key allocations. */
     template <typename Value>
     using TransparentStringMap = std::unordered_map<std::string, Value, TransparentStringHash, TransparentStringEqual>;
+
+    /** @brief String set that supports heterogeneous lookup without temporary key allocations. */
+    using TransparentStringSet = std::unordered_set<std::string, TransparentStringHash, TransparentStringEqual>;
 }  // namespace Horo

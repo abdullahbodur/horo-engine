@@ -9,7 +9,10 @@
 
 namespace Horo::Telemetry {
     namespace {
-        std::atomic<OperationId> g_nextOperationId{1};
+        OperationId NextOperationId() noexcept {
+            static std::atomic<OperationId> nextId{1};
+            return nextId.fetch_add(1, std::memory_order::seq_cst);
+        }
 
         struct ActiveOperation {
             OperationId id{};
@@ -67,7 +70,7 @@ namespace Horo::Telemetry {
     /** @copydoc OperationSpan::OperationSpan */
     OperationSpan::OperationSpan(const std::string_view subsystem, const std::string_view name) : subsystem_(subsystem), name_(name) {
         const OperationContext inherited = CaptureOperationContext();
-        context_.operationId = g_nextOperationId.fetch_add(1, std::memory_order::seq_cst);
+        context_.operationId = NextOperationId();
         context_.parentOperationId = inherited.operationId;
         context_.diagnosticContext = inherited.diagnosticContext.With("operation.id", std::to_string(context_.operationId));
         if (context_.parentOperationId != 0)
@@ -119,7 +122,8 @@ namespace Horo::Telemetry {
                                                     std::chrono::steady_clock::now() - startedAt_),
                                                 .fields = {fields.begin(), fields.end()}}};
             static_cast<void>(Runtime::EmitRecord(std::move(record)));
-        } catch (const std::exception &) {  // NOSONAR(cpp:S2486) Telemetry must not alter the authoritative lifecycle result.
+        } catch (const std::exception &exception) {  // NOSONAR(cpp:S2486) Telemetry must not alter the authoritative lifecycle result.
+            static_cast<void>(exception);
             // Lifecycle completion remains authoritative even if diagnostic record construction fails.
         } catch (...) {
             // Lifecycle completion remains authoritative even if diagnostic record construction fails.

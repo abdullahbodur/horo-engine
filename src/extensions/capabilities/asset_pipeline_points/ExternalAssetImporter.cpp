@@ -115,7 +115,8 @@ namespace Horo::Extensions {
             return static_cast<const CancellationToken *>(context)->IsCancellationRequested() ? 1U : 0U;
         }
 
-        [[nodiscard]] HoroExtensionStatus ResizeVector(void *context, const std::uint64_t byteCount, std::uint8_t **outBytes) {
+        [[nodiscard]] HoroExtensionStatus ResizeVector(void *context, const std::uint64_t byteCount,
+                                                       std::uint8_t **outBytes) {  // NOSONAR(cpp:S5008)
             if (context == nullptr || outBytes == nullptr || byteCount > kMaxPayloadBytes)
                 return HORO_EXTENSION_ERROR_OUTPUT_REJECTED;
             try {
@@ -127,6 +128,9 @@ namespace Horo::Extensions {
                 return HORO_EXTENSION_ERROR_OUTPUT_REJECTED;
             } catch (const std::length_error &exception) {
                 LOG_WARN("extensions.importer", "ResizeVector rejected an oversized payload: %s", exception.what());
+                return HORO_EXTENSION_ERROR_OUTPUT_REJECTED;
+            } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) C ABI exception barrier.
+                LOG_WARN("extensions.importer", "ResizeVector failed: %s", exception.what());
                 return HORO_EXTENSION_ERROR_OUTPUT_REJECTED;
             }
         }
@@ -151,6 +155,23 @@ namespace Horo::Extensions {
             HoroAssetImportFunc importFn{};
             HoroAssetPreviewFunc preview{};
         };
+
+        template <typename Invoker> [[nodiscard]] HoroExtensionStatus SafeInvoke(Invoker &&invoker, const char *operation) {
+            try {
+                return invoker();
+            } catch (const std::runtime_error &exception) {  // NOSONAR(cpp:S1181)
+                LOG_WARN("extensions.importer", "External %s threw runtime error: %s", operation, exception.what());
+            } catch (const std::logic_error &exception) {  // NOSONAR(cpp:S1181)
+                LOG_WARN("extensions.importer", "External %s threw logic error: %s", operation, exception.what());
+            } catch (const std::bad_alloc &exception) {  // NOSONAR(cpp:S1181)
+                LOG_WARN("extensions.importer", "External %s threw bad alloc: %s", operation, exception.what());
+            } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) External code is an exception containment boundary.
+                LOG_WARN("extensions.importer", "External %s threw exception: %s", operation, exception.what());
+            } catch (...) {  // NOSONAR(cpp:S1181)
+                LOG_WARN("extensions.importer", "External %s threw unknown exception.", operation);
+            }
+            return HORO_EXTENSION_ERROR_INIT_FAILED;
+        }
 
         class ExternalAssetImporter final : public Assets::IAssetImporter {
         public:
@@ -179,16 +200,9 @@ namespace Horo::Extensions {
                     .editorPayload = {&prepared.editorPayload, ResizeVector},
                 };
 
-                HoroExtensionStatus status = HORO_EXTENSION_ERROR_INIT_FAILED;
-                try {
-                    status = instance_->importFn(instance_->context, &request, &response);
-                } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) External code is an exception containment boundary.
-                    LOG_WARN("extensions.importer", "External importer threw exception: %s", exception.what());
-                    status = HORO_EXTENSION_ERROR_INIT_FAILED;
-                } catch (...) {
-                    LOG_WARN("extensions.importer", "External importer threw unknown exception.");
-                    status = HORO_EXTENSION_ERROR_INIT_FAILED;
-                }
+                const HoroExtensionStatus status = SafeInvoke([&] {
+                    return instance_->importFn(instance_->context, &request, &response);
+                }, "importer");
                 if (status != HORO_EXTENSION_SUCCESS)
                     return Result<Assets::PreparedAssetImport>::Failure(
                         MakeError(ExtensionErrors::InvocationFailed, "External asset importer callback failed."));
@@ -234,16 +248,10 @@ namespace Horo::Extensions {
                     .structSize = sizeof(HoroAssetPreviewResponse),
                     .rgba8Pixels = {&image.pixels, ResizeVector},
                 };
-                HoroExtensionStatus status = HORO_EXTENSION_ERROR_INIT_FAILED;
-                try {
-                    status = instance_->preview(instance_->context, &request, &response);
-                } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) External code is an exception containment boundary.
-                    LOG_WARN("extensions.importer", "External preview threw exception: %s", exception.what());
-                    status = HORO_EXTENSION_ERROR_INIT_FAILED;
-                } catch (...) {
-                    LOG_WARN("extensions.importer", "External preview threw unknown exception.");
-                    status = HORO_EXTENSION_ERROR_INIT_FAILED;
-                }
+                const HoroExtensionStatus status = SafeInvoke([&] {
+                    return instance_->preview(instance_->context, &request, &response);
+                }, "preview");
+
                 image.width = response.width;
                 image.height = response.height;
                 if (status != HORO_EXTENSION_SUCCESS || !image.IsValid())
@@ -283,14 +291,21 @@ namespace Horo::Extensions {
         if (loaded && unload != nullptr) {
             try {
                 unload(&moduleApi);
-            } catch (const std::exception &exception) {
+            } catch (const std::runtime_error &exception) {
+                LOG_WARN("extensions.importer", "Runtime error during module unload: %s", exception.what());
+            } catch (const std::logic_error &exception) {
+                LOG_WARN("extensions.importer", "Logic error during module unload: %s", exception.what());
+            } catch (const std::bad_alloc &exception) {
+                LOG_WARN("extensions.importer", "Bad alloc during module unload: %s", exception.what());
+            } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181)
                 LOG_WARN("extensions.importer", "Exception during module unload: %s", exception.what());
-            } catch (...) {
+            } catch (...) {  // NOSONAR(cpp:S1181)
                 LOG_WARN("extensions.importer", "Unknown exception during module unload.");
             }
         }
     }
 
+    // NOSONAR(cpp:S5008) C ABI callback requires void* context.
     HoroExtensionStatus RegisterExternalAssetImporter(void *hostContext, const HoroAssetImporterDescriptor *descriptor) noexcept {
         auto *session = static_cast<AssetImporterRegistrationSession *>(hostContext);
         if (session == nullptr || descriptor == nullptr || session->failed ||

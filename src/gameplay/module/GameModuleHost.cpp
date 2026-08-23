@@ -37,8 +37,9 @@ namespace Horo::Gameplay {
     struct LoadedGameModule::Impl {
         std::unique_ptr<Platform::DynamicLibrary> library;
         std::unique_ptr<BehaviorRegistry> registry;
-        GameRuntimeContext runtimeContext;
+        [[no_unique_address]] GameRuntimeContext runtimeContext;
         IGameModule *gameplayModule{};
+
         DestroyGameModuleFunction destroy{};
         std::string moduleId;
         std::string buildFingerprint;

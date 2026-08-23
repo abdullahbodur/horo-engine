@@ -75,21 +75,17 @@ namespace Horo {
         {
             std::lock_guard lock(state->mutex);
             id = state->nextId++;
-            state->handlers[type].push_back({id, std::move(handler)});
+            state->handlers[type].emplace_back(id, std::move(handler));
         }
         LOG_TRACE(state->config.logCategory, "subscribe event=%s handler=%llu", name.data(), static_cast<unsigned long long>(id));
         return Subscription(
             [weak = std::weak_ptr<State>(state), type, id, category = state->config.logCategory, eventName = std::string(name)] {
             if (const auto locked = weak.lock()) {
                 std::lock_guard lock(locked->mutex);
-                auto it = locked->handlers.find(type);
-                if (it != locked->handlers.end()) {
-                    auto &records = it->second;
-                    records.erase(std::ranges::remove_if(records,
-                                                         [id](const State::Record &record) {
+                if (const auto it = locked->handlers.find(type); it != locked->handlers.end()) {
+                    std::erase_if(it->second, [id](const State::Record &record) {
                         return record.id == id;
-                    }).begin(),
-                                  records.end());
+                    });
                 }
                 LOG_TRACE(category, "unsubscribe event=%s handler=%llu", eventName.c_str(), static_cast<unsigned long long>(id));
             }
@@ -99,7 +95,7 @@ namespace Horo {
     void EngineDataBus::PublishErased(const EventTypeId type, const std::string_view name, const EventPayload *raw,
                                       DeferredPublisher retry) {
         const auto state = m_state;
-        if (std::find(state->activeTypes.begin(), state->activeTypes.end(), type) != state->activeTypes.end()) {
+        if (std::ranges::find(state->activeTypes, type) != state->activeTypes.end()) {
             state->deferred.push_back(std::move(retry));
             return;
         }
@@ -116,9 +112,15 @@ namespace Horo {
         for (const auto &handler : snapshot) {
             try {
                 handler(raw);
-            } catch (const std::exception &exception) {
+            } catch (const std::runtime_error &exception) {  // NOSONAR(cpp:S1181)
                 LOG_ERROR(state->config.logCategory, "handler failed event=%s error=%s", name.data(), exception.what());
-            } catch (...) {
+            } catch (const std::logic_error &exception) {  // NOSONAR(cpp:S1181)
+                LOG_ERROR(state->config.logCategory, "handler failed event=%s error=%s", name.data(), exception.what());
+            } catch (const std::bad_alloc &exception) {  // NOSONAR(cpp:S1181)
+                LOG_ERROR(state->config.logCategory, "handler failed event=%s error=%s", name.data(), exception.what());
+            } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181)
+                LOG_ERROR(state->config.logCategory, "handler failed event=%s error=%s", name.data(), exception.what());
+            } catch (...) {  // NOSONAR(cpp:S1181)
                 LOG_ERROR(state->config.logCategory, "handler failed event=%s error=unknown", name.data());
             }
         }
@@ -128,7 +130,7 @@ namespace Horo {
         if (state->activeTypes.empty()) {
             auto deferred = std::move(state->deferred);
             state->deferred.clear();
-            for (auto &publish : deferred)
+            for (const auto &publish : deferred)
                 publish(*this);
         }
     }
@@ -140,7 +142,7 @@ namespace Horo {
             LOG_TRACE(m_state->config.logCategory, "async drop event=%s reason=queue_full", name.data());
             return;
         }
-        m_state->queued.push_back({type, std::string(name), std::move(payload), std::move(publish)});
+        m_state->queued.emplace_back(type, std::string(name), std::move(payload), std::move(publish));
     }
 
     void EngineDataBus::DispatchQueued() {
@@ -149,7 +151,7 @@ namespace Horo {
             std::lock_guard lock(m_state->mutex);
             queued.swap(m_state->queued);
         }
-        for (auto &event : queued)
+        for (const auto &event : queued)
             event.publish(*this, event.payload.get());
     }
 
@@ -160,4 +162,5 @@ namespace Horo {
         m_state->handlers.clear();
         m_state->queued.clear();
     }
+
 }  // namespace Horo

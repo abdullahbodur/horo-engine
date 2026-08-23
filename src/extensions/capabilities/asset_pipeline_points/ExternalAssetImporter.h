@@ -15,8 +15,20 @@ namespace Horo::Extensions {
         ~ExtensionModuleLifetime();
         ExtensionModuleLifetime(const ExtensionModuleLifetime &) = delete;
         ExtensionModuleLifetime &operator=(const ExtensionModuleLifetime &) = delete;
-        ExtensionModuleLifetime(ExtensionModuleLifetime &&) noexcept = default;
-        ExtensionModuleLifetime &operator=(ExtensionModuleLifetime &&) noexcept = default;
+
+        ExtensionModuleLifetime(ExtensionModuleLifetime &&other) noexcept
+            : library(std::move(other.library)), moduleApi(std::exchange(other.moduleApi, {})),
+              unload(std::exchange(other.unload, nullptr)), loaded(std::exchange(other.loaded, false)) {}
+
+        ExtensionModuleLifetime &operator=(ExtensionModuleLifetime &&other) noexcept {
+            if (this != &other) {
+                library = std::move(other.library);
+                moduleApi = std::exchange(other.moduleApi, {});
+                unload = std::exchange(other.unload, nullptr);
+                loaded = std::exchange(other.loaded, false);
+            }
+            return *this;
+        }
 
         std::shared_ptr<Platform::DynamicLibrary> library;
         HoroExtensionModuleApi moduleApi{};

@@ -40,7 +40,7 @@ namespace Horo::Extensions {
          * @param directoryPath Path to the extensions directory (e.g. ~/.horo/plugins).
          * @return A list of discovered manifest paths.
          */
-        std::vector<std::string> DiscoverExtensions(const std::string &directoryPath);
+        [[nodiscard]] std::vector<std::string> DiscoverExtensions(const std::string &directoryPath) const;
 
         /**
          * @brief Loads an extension from the given directory path.

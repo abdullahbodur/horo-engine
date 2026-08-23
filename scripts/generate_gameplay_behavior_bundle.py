@@ -10,7 +10,7 @@ import sys
 
 
 ANNOTATION = re.compile(
-    r"\bHORO_BEHAVIOR\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*,\s*\"([^\"]+)\"\s*\)"
+    r"\bHORO_BEHAVIOR\s*\(\s*([A-Za-z_]\w*)\s*,\s*\"([^\"]+)\"\s*\)"
 )
 TYPE_ID = re.compile(r"game\.[a-z0-9_]+(?:\.[a-z0-9_]+)+\Z")
 
@@ -28,8 +28,12 @@ def main() -> int:
     args = parse()
     annotations: list[tuple[str, str, pathlib.Path]] = []
     for source in args.sources:
-        text = source.read_text(encoding="utf-8")
-        annotations.extend((symbol, type_id, source) for symbol, type_id in ANNOTATION.findall(text))
+        resolved_source = source.resolve()
+        if not resolved_source.is_file():
+            raise ValueError(f"source path does not exist or is not a regular file: {resolved_source}")
+        text = resolved_source.read_text(encoding="utf-8")
+        annotations.extend((symbol, type_id, resolved_source) for symbol, type_id in ANNOTATION.findall(text))
+
 
     seen_symbols: set[str] = set()
     seen_ids: set[str] = set()

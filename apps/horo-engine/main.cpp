@@ -16,17 +16,25 @@ namespace {
 
     [[nodiscard]] Options ParseOptions(const std::span<char *> arguments) {
         Options options;
-        for (std::size_t index = 1; index < arguments.size(); ++index) {
+        std::size_t index = 1;
+        while (index < arguments.size()) {
             const std::string_view argument{arguments[index]};
-            if (argument == "--help" || argument == "-h")
+            if (argument == "--help" || argument == "-h") {
                 options.help = true;
-            else if (argument == "--emit-observability-smoke")
+                ++index;
+            } else if (argument == "--emit-observability-smoke") {
                 options.emitSmoke = true;
-            else if (argument == "--diagnostic-bundle" && index + 1 < arguments.size())
-                options.diagnosticBundle = arguments[++index];
+                ++index;
+            } else if (argument == "--diagnostic-bundle" && index + 1 < arguments.size()) {
+                options.diagnosticBundle = arguments[index + 1];
+                index += 2;
+            } else {
+                ++index;
+            }
         }
         return options;
     }
+
 }  // namespace
 
 int main(const int argc, char **argv) {

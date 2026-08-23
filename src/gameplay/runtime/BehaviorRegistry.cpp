@@ -81,6 +81,7 @@ namespace Horo::Gameplay {
         const auto found = std::ranges::find(impl_->registrations, typeId, [](const BehaviorRegistration &registration) {
             return registration.descriptor.typeId;
         });
-        return found == impl_->registrations.end() ? nullptr : &*found;
+        return found == impl_->registrations.end() ? nullptr : std::to_address(found);
     }
+
 }  // namespace Horo::Gameplay

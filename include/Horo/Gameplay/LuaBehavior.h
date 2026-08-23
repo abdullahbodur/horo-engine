@@ -29,8 +29,9 @@ namespace Horo::Gameplay {
          * @param sourceName Diagnostic source name.
          * @param limits Per-instance sandbox budgets.
          */
-        [[nodiscard]] static Result<std::unique_ptr<LuaBehaviorProgram>> Compile(std::string source, BehaviorTypeId canonicalTypeId,
+        [[nodiscard]] static Result<std::unique_ptr<LuaBehaviorProgram>> Compile(std::string source, const BehaviorTypeId &canonicalTypeId,
                                                                                  std::string sourceName, LuaBehaviorLimits limits = {});
+
         /** @brief Loads `.horo_script` source and JSON metadata sidecar from bounded files. */
         [[nodiscard]] static Result<std::unique_ptr<LuaBehaviorProgram>> LoadFiles(const std::filesystem::path &sourcePath,
                                                                                    const std::filesystem::path &sidecarPath,

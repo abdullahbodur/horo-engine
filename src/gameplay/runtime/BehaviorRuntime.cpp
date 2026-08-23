@@ -105,6 +105,28 @@ namespace Horo::Gameplay {
         Impl(Runtime::RuntimeScene &scene, const BehaviorRegistry &registry, const BehaviorRuntimeLimits limits)
             : scene(scene), registry(registry), limits(limits), events(limits.maximumQueuedEvents) {}
 
+        [[nodiscard]] Result<void> InstantiateEntityBehaviors(const Runtime::RuntimeEntityView &entity,
+                                                              std::unordered_map<std::string_view, std::size_t> &multiplicity) {
+            for (const BehaviorComponent &component : entity.components->behaviors) {
+                if (instances.size() >= limits.maximumInstances)
+                    return Result<void>::Failure(
+                        MakeError(GameplayErrors::InvalidBehaviorComponent, "Scene behavior instance budget was exceeded."));
+                const BehaviorRegistration *registration = registry.Find(component.typeId);
+                if (registration == nullptr)
+                    return Result<void>::Failure(MakeError(GameplayErrors::BehaviorNotRegistered,
+                                                           "Scene references unavailable behavior '" + component.typeId.Value() + "'."));
+                if (const std::size_t count = ++multiplicity[component.typeId.Value()];
+                    count > 1 && !registration->descriptor.allowMultiple)
+                    return Result<void>::Failure(MakeError(GameplayErrors::BehaviorMultiplicityViolation));
+                IBehaviorInstance *implementation = registration->factory.create(registration->factory.userData);
+                if (implementation == nullptr)
+                    return Result<void>::Failure(
+                        MakeError(GameplayErrors::InvalidBehaviorComponent, "Behavior factory returned no instance."));
+                instances.emplace_back(entity.entity, component, registration, implementation);
+            }
+            return Result<void>::Success();
+        }
+
         [[nodiscard]] Result<void> BuildInstances() {
             if (!registry.IsFrozen())
                 return Result<void>::Failure(
@@ -116,24 +138,8 @@ namespace Horo::Gameplay {
                 if (!entity)
                     continue;
                 std::unordered_map<std::string_view, std::size_t> multiplicity;
-                for (const BehaviorComponent &component : entity->components->behaviors) {
-                    if (instances.size() >= limits.maximumInstances)
-                        return Result<void>::Failure(
-                            MakeError(GameplayErrors::InvalidBehaviorComponent, "Scene behavior instance budget was exceeded."));
-                    const BehaviorRegistration *registration = registry.Find(component.typeId);
-                    if (registration == nullptr)
-                        return Result<void>::Failure(
-                            MakeError(GameplayErrors::BehaviorNotRegistered,
-                                      "Scene references unavailable behavior '" + component.typeId.Value() + "'."));
-                    if (const std::size_t count = ++multiplicity[component.typeId.Value()];
-                        count > 1 && !registration->descriptor.allowMultiple)
-                        return Result<void>::Failure(MakeError(GameplayErrors::BehaviorMultiplicityViolation));
-                    IBehaviorInstance *implementation = registration->factory.create(registration->factory.userData);
-                    if (implementation == nullptr)
-                        return Result<void>::Failure(
-                            MakeError(GameplayErrors::InvalidBehaviorComponent, "Behavior factory returned no instance."));
-                    instances.emplace_back(entity->entity, component, registration, implementation);
-                }
+                if (auto res = InstantiateEntityBehaviors(*entity, multiplicity); res.HasError())
+                    return res;
             }
 
             std::ranges::sort(instances, [](const Instance &left, const Instance &right) {
@@ -163,6 +169,24 @@ namespace Horo::Gameplay {
             return Result<void>::Success();
         }
 
+        void RollbackInstance(Instance &instance) {
+            if (instance.created) {
+                Runtime::SceneCommandBuffer commands;
+                ContextBackend backend{*this, instance, {}, commands, false};
+                BehaviorContext context{backend};
+                try {
+                    if (instance.enabledCallbackActive)
+                        instance.implementation->OnDisable(context);
+                    instance.implementation->OnDestroy(context);
+                } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) User behavior code is an exception containment boundary.
+                    LOG_WARN("gameplay.runtime", "Behavior rollback exception: %s", exception.what());
+                } catch (...) {  // NOSONAR(cpp:S1181)
+                    LOG_WARN("gameplay.runtime", "Behavior rollback unknown exception.");
+                }
+            }
+            instance.registration->factory.destroy(instance.registration->factory.userData, instance.implementation);
+        }
+
         Runtime::RuntimeScene &scene;
         const BehaviorRegistry &registry;
         BehaviorRuntimeLimits limits;
@@ -179,26 +203,12 @@ namespace Horo::Gameplay {
         auto impl = std::make_unique<Impl>(scene, registry, limits);
         if (Result<void> built = impl->BuildInstances(); built.HasError()) {
             for (auto iterator = impl->instances.rbegin(); iterator != impl->instances.rend(); ++iterator) {
-                if (iterator->created) {
-                    Runtime::SceneCommandBuffer commands;
-                    Impl::ContextBackend backend{*impl, *iterator, {}, commands, false};
-                    BehaviorContext context{backend};
-                    try {
-                        if (iterator->enabledCallbackActive)
-                            iterator->implementation->OnDisable(context);
-                        iterator->implementation->OnDestroy(context);
-                    } catch (
-                        const std::exception &exception) {  // NOSONAR(cpp:S1181) User behavior code is an exception containment boundary.
-                        LOG_WARN("gameplay.runtime", "Behavior rollback exception: %s", exception.what());
-                    } catch (...) {
-                        LOG_WARN("gameplay.runtime", "Behavior rollback unknown exception.");
-                    }
-                }
-                iterator->registration->factory.destroy(iterator->registration->factory.userData, iterator->implementation);
+                impl->RollbackInstance(*iterator);
             }
             return Result<std::unique_ptr<BehaviorRuntime>>::Failure(built.ErrorValue());
         }
-        return Result<std::unique_ptr<BehaviorRuntime>>::Success(std::unique_ptr<BehaviorRuntime>{new BehaviorRuntime{std::move(impl)}});
+        return Result<std::unique_ptr<BehaviorRuntime>>::Success(
+            std::unique_ptr<BehaviorRuntime>{new BehaviorRuntime{std::move(impl)}});  // NOSONAR(cpp:S5950) Private constructor
     }
 
     BehaviorRuntime::~BehaviorRuntime() {

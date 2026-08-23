@@ -11,7 +11,7 @@ namespace Horo::Platform {
     namespace {
         class PosixDynamicLibrary final : public DynamicLibrary {
         public:
-            explicit PosixDynamicLibrary(void *handle) : m_handle(handle) {}
+            explicit PosixDynamicLibrary(void *handle) : m_handle(handle) {}  // NOSONAR(cpp:S5008)
 
             ~PosixDynamicLibrary() override {
                 if (m_handle) {
@@ -19,14 +19,19 @@ namespace Horo::Platform {
                 }
             }
 
-            [[nodiscard]] void *GetSymbol(std::string_view name) const noexcept override {
+            PosixDynamicLibrary(const PosixDynamicLibrary &) = delete;
+            PosixDynamicLibrary &operator=(const PosixDynamicLibrary &) = delete;
+            PosixDynamicLibrary(PosixDynamicLibrary &&) = delete;
+            PosixDynamicLibrary &operator=(PosixDynamicLibrary &&) = delete;
+
+            [[nodiscard]] void *GetSymbol(std::string_view name) const noexcept override {  // NOSONAR(cpp:S5008)
                 // dlsym requires null-terminated string
                 std::string symbolName{name};
                 return dlsym(m_handle, symbolName.c_str());
             }
 
         private:
-            void *m_handle = nullptr;
+            void *m_handle = nullptr;  // NOSONAR(cpp:S5008)
         };
     }  // namespace
 

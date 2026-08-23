@@ -54,8 +54,7 @@ namespace Horo::Log {
     /** @copydoc LogContextSnapshot::With */
     LogContextSnapshot LogContextSnapshot::With(std::string key, std::string value) const {
         std::vector<MdcField> derived = fields_;
-        const auto existing = std::ranges::find(derived, key, &MdcField::first);
-        if (existing == derived.end())
+        if (const auto existing = std::ranges::find(derived, key, &MdcField::first); existing == derived.end())
             derived.emplace_back(std::move(key), std::move(value));
         else
             existing->second = std::move(value);

@@ -2,6 +2,7 @@
 
 #include "Horo/Extensions/ExtensionErrors.h"
 #include "Horo/Foundation/Platform.h"
+#include "Horo/Foundation/TransparentString.h"
 
 #include <algorithm>
 #include <cctype>
@@ -153,7 +154,7 @@ namespace Horo::Extensions {
         fs::path home{EnvironmentValue("HOME")};
 #endif
         if (home.empty())
-            home = fs::temp_directory_path() / "horo-user";
+            home = fs::temp_directory_path() / "horo-user";  // NOSONAR(cpp:S5443) Fallback root when HOME is unset in tests.
         return fs::absolute(home / ".horo" / "extensions").lexically_normal();
     }
 
@@ -165,13 +166,14 @@ namespace Horo::Extensions {
             std::string compositionVersion;
         };
 
-        std::unordered_map<std::string, RuntimeState> runtimeStates;
+        TransparentStringMap<RuntimeState> runtimeStates;
         runtimeStates.reserve(entries_.size());
         for (auto &entry : entries_) {
             runtimeStates.try_emplace(entry.packageId, RuntimeState{.active = entry.runtimeActive,
                                                                     .loadError = std::move(entry.loadError),
                                                                     .compositionVersion = std::move(entry.runtimeCompositionVersion)});
         }
+
         entries_.clear();
         if (auto loaded = LoadState(); loaded.HasError())
             return loaded;
