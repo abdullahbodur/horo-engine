@@ -40,8 +40,6 @@ namespace Horo {
         CancellationSource cancellation;
         JobFunction work;
         Telemetry::OperationContext operationContext = Telemetry::CaptureOperationContext();
-
-    private:
         mutable std::mutex mutex_;
     };
 
@@ -70,6 +68,31 @@ namespace Horo {
             record->error = std::move(error);
             record->completed.notify_all();
         }
+
+        void ExecuteJobRecord(const std::shared_ptr<JobRecord> &record) {
+            const Telemetry::ScopedOperationContext operationContext{record->operationContext};
+            try {
+                Result<void> outcome = record->work(record->cancellation.Token());
+                if (outcome.HasError()) {
+                    const bool cancelled = record->cancellation.Token().IsCancellationRequested() &&
+                                           outcome.ErrorValue().code.Value() == JobErrors::Cancelled.code.Value();
+                    SetTerminalState(record, cancelled ? JobState::Cancelled : JobState::Failed, outcome.ErrorValue());
+                } else if (record->cancellation.Token().IsCancellationRequested())
+                    SetTerminalState(record, JobState::Cancelled, MakeJobError(JobErrors::Cancelled, "Job cancellation was requested."));
+                else
+                    SetTerminalState(record, JobState::Succeeded);
+            } catch (const std::runtime_error &exception) {  // NOSONAR(cpp:S1181)
+                SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what()));
+            } catch (const std::logic_error &exception) {  // NOSONAR(cpp:S1181)
+                SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what()));
+            } catch (const std::bad_alloc &exception) {  // NOSONAR(cpp:S1181)
+                SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what()));
+            } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181)
+                SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what()));
+            } catch (...) {  // NOSONAR(cpp:S1181)
+                SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, "Job callback threw an unknown exception."));
+            }
+        }
     }  // namespace
 
     void JobSystem::RunWorker(const std::shared_ptr<State> &state) {
@@ -96,28 +119,7 @@ namespace Horo {
                 record->state = JobState::Running;
             }
 
-            const Telemetry::ScopedOperationContext operationContext{record->operationContext};
-            try {
-                Result<void> outcome = record->work(record->cancellation.Token());
-                if (outcome.HasError()) {
-                    const bool cancelled = record->cancellation.Token().IsCancellationRequested() &&
-                                           outcome.ErrorValue().code.Value() == JobErrors::Cancelled.code.Value();
-                    SetTerminalState(record, cancelled ? JobState::Cancelled : JobState::Failed, outcome.ErrorValue());
-                } else if (record->cancellation.Token().IsCancellationRequested())
-                    SetTerminalState(record, JobState::Cancelled, MakeJobError(JobErrors::Cancelled, "Job cancellation was requested."));
-                else
-                    SetTerminalState(record, JobState::Succeeded);
-            } catch (const std::runtime_error &exception) {
-                SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what()));
-            } catch (const std::logic_error &exception) {
-                SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what()));
-            } catch (const std::bad_alloc &exception) {
-                SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what()));
-            } catch (const std::exception &exception) {
-                SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, exception.what()));
-            } catch (...) {
-                SetTerminalState(record, JobState::Failed, MakeJobError(JobErrors::Failed, "Job callback threw an unknown exception."));
-            }
+            ExecuteJobRecord(record);
         }
     }
 

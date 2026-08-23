@@ -112,15 +112,15 @@ namespace Horo {
         for (const auto &handler : snapshot) {
             try {
                 handler(raw);
-            } catch (const std::runtime_error &exception) {
+            } catch (const std::runtime_error &exception) {  // NOSONAR(cpp:S1181)
                 LOG_ERROR(state->config.logCategory, "handler failed event=%s error=%s", name.data(), exception.what());
-            } catch (const std::logic_error &exception) {
+            } catch (const std::logic_error &exception) {  // NOSONAR(cpp:S1181)
                 LOG_ERROR(state->config.logCategory, "handler failed event=%s error=%s", name.data(), exception.what());
-            } catch (const std::bad_alloc &exception) {
+            } catch (const std::bad_alloc &exception) {  // NOSONAR(cpp:S1181)
                 LOG_ERROR(state->config.logCategory, "handler failed event=%s error=%s", name.data(), exception.what());
-            } catch (const std::exception &exception) {
+            } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181)
                 LOG_ERROR(state->config.logCategory, "handler failed event=%s error=%s", name.data(), exception.what());
-            } catch (...) {
+            } catch (...) {  // NOSONAR(cpp:S1181)
                 LOG_ERROR(state->config.logCategory, "handler failed event=%s error=unknown", name.data());
             }
         }

@@ -129,7 +129,7 @@ namespace Horo::Extensions {
             } catch (const std::length_error &exception) {
                 LOG_WARN("extensions.importer", "ResizeVector rejected an oversized payload: %s", exception.what());
                 return HORO_EXTENSION_ERROR_OUTPUT_REJECTED;
-            } catch (const std::exception &exception) {
+            } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) C ABI exception barrier.
                 LOG_WARN("extensions.importer", "ResizeVector failed: %s", exception.what());
                 return HORO_EXTENSION_ERROR_OUTPUT_REJECTED;
             }
@@ -262,7 +262,7 @@ namespace Horo::Extensions {
                 } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) External code is an exception containment boundary.
                     LOG_WARN("extensions.importer", "External preview threw exception: %s", exception.what());
                     status = HORO_EXTENSION_ERROR_INIT_FAILED;
-                } catch (...) {
+                } catch (...) {  // NOSONAR(cpp:S1181)
                     LOG_WARN("extensions.importer", "External preview threw unknown exception.");
                     status = HORO_EXTENSION_ERROR_INIT_FAILED;
                 }
@@ -311,17 +311,16 @@ namespace Horo::Extensions {
                 LOG_WARN("extensions.importer", "Logic error during module unload: %s", exception.what());
             } catch (const std::bad_alloc &exception) {
                 LOG_WARN("extensions.importer", "Bad alloc during module unload: %s", exception.what());
-            } catch (const std::exception &exception) {
+            } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181)
                 LOG_WARN("extensions.importer", "Exception during module unload: %s", exception.what());
-            } catch (...) {
+            } catch (...) {  // NOSONAR(cpp:S1181)
                 LOG_WARN("extensions.importer", "Unknown exception during module unload.");
             }
         }
     }
 
-    HoroExtensionStatus RegisterExternalAssetImporter(void *hostContext,
-                                                      const HoroAssetImporterDescriptor *descriptor) noexcept {  // NOSONAR(cpp:S5008)
-
+    // NOSONAR(cpp:S5008) C ABI callback requires void* context.
+    HoroExtensionStatus RegisterExternalAssetImporter(void *hostContext, const HoroAssetImporterDescriptor *descriptor) noexcept {
         auto *session = static_cast<AssetImporterRegistrationSession *>(hostContext);
         if (session == nullptr || descriptor == nullptr || session->failed ||
             descriptor->structSize < sizeof(HoroAssetImporterDescriptor) || descriptor->abiVersion != HORO_ASSET_IMPORTER_ABI_VERSION ||

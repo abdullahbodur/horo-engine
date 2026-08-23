@@ -242,7 +242,6 @@ namespace Horo::Diagnostics {
             return mutex_;
         }
 
-    private:
         /// Guards all mutable fields accessed from Export and Snapshot.
         mutable std::mutex mutex_;
     };

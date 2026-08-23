@@ -68,7 +68,7 @@ namespace Horo {
                     const std::string_view text{*entry};
                     const std::size_t separator = text.find('=');
                     if (separator != std::string_view::npos)
-                        values.try_emplace(std::string{text.substr(0, separator)}, std::string{text.substr(separator + 1)});
+                        values.try_emplace(std::string{text.substr(0, separator)}, text.substr(separator + 1));
                 }
             }
             for (const std::string &name : overlay.unset)

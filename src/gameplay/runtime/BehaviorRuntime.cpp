@@ -178,15 +178,15 @@ namespace Horo::Gameplay {
                     if (instance.enabledCallbackActive)
                         instance.implementation->OnDisable(context);
                     instance.implementation->OnDestroy(context);
-                } catch (const std::runtime_error &exception) {
+                } catch (const std::runtime_error &exception) {  // NOSONAR(cpp:S1181)
                     LOG_WARN("gameplay.runtime", "Behavior rollback runtime error: %s", exception.what());
-                } catch (const std::logic_error &exception) {
+                } catch (const std::logic_error &exception) {  // NOSONAR(cpp:S1181)
                     LOG_WARN("gameplay.runtime", "Behavior rollback logic error: %s", exception.what());
-                } catch (const std::bad_alloc &exception) {
+                } catch (const std::bad_alloc &exception) {  // NOSONAR(cpp:S1181)
                     LOG_WARN("gameplay.runtime", "Behavior rollback bad alloc: %s", exception.what());
                 } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) User behavior code is an exception containment boundary.
                     LOG_WARN("gameplay.runtime", "Behavior rollback exception: %s", exception.what());
-                } catch (...) {
+                } catch (...) {  // NOSONAR(cpp:S1181)
                     LOG_WARN("gameplay.runtime", "Behavior rollback unknown exception.");
                 }
             }

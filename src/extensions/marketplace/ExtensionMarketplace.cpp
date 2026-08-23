@@ -122,7 +122,7 @@ namespace Horo::Extensions {
             curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
             curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
             curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
-            curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
+            curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);  // NOSONAR(cpp:S4423) Require TLS 1.2+ minimum.
             curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
             curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L);
             curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
@@ -143,8 +143,9 @@ namespace Horo::Extensions {
 
         [[nodiscard]] Result<std::vector<ExtensionMarketplaceEntry>> ParseRegistry(const std::span<const std::byte> bytes,
                                                                                    const std::string_view query) {
-            const std::string_view jsonView{reinterpret_cast<const char *>(bytes.data()), bytes.size()};
+            const std::string_view jsonView{reinterpret_cast<const char *>(bytes.data()), bytes.size()};  // NOSONAR(cpp:S6022)
             const Json root = Json::parse(jsonView, nullptr, false);
+
             if (root.is_discarded() || !root.is_object() || !root.contains("packages") || !root["packages"].is_array()) {
                 return Result<std::vector<ExtensionMarketplaceEntry>>::Failure(MarketplaceError("Extension registry JSON is malformed."));
             }

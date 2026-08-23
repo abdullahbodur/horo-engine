@@ -106,22 +106,7 @@ def _collect_records(releases_root: Path, engine_version: str, current_parsed: t
     return records
 
 
-def _validate_record_invariants(record: dict, baseline: dict, records: list[dict], index: int, engine_version: str, definitions_hash: str) -> None:
-    if baseline["baseline"] != baseline["release"] or baseline["contract"] != record["contract"]:
-        fail(f"release {record['release']} does not match baseline contract {record['baseline']}")
-    for prior in records[:index]:
-        if not record["parsed"][3] and not prior["parsed"][3] and record["parsed"][:2] == prior["parsed"][:2]:
-            if (prior["baseline"] != record["baseline"] or
-                    prior["contract"] != record["contract"] or
-                    prior["definitions"] != record["definitions"]):
-                fail(f"patch release {record['release']} changes the frozen release-line contract")
-    decision = {
-        "contractBaseline": record["baseline"],
-        "migrationDefinitions": record["definitions"],
-        "persistentContract": record["contract"],
-        "release": record["release"],
-    }
-    record["decisionHash"] = canonical_hash(decision)
+def _validate_frozen_manifest(record: dict, engine_version: str, definitions_hash: str) -> None:
     frozen_contract = record["manifest"].get("persistentContract")
     frozen_recovery_contract = record["manifest"].get("migrationRecoveryContract")
     supported_recovery_contracts = record["manifest"].get("supportedMigrationRecoveryContracts")
@@ -145,13 +130,26 @@ def _validate_record_invariants(record: dict, baseline: dict, records: list[dict
         fail(f"release {record['release']} decisionHash differs from generated release decision")
 
 
-def _validate_current_version(current_record: dict, records: list[dict], engine_version: str, migration_catalog: list[dict]) -> None:
-    current_index = records.index(current_record)
-    minimum_migratable = current_record["manifest"].get("minimumMigratableVersion")
-    if minimum_migratable is not None:
-        minimum_parsed = parse_version(minimum_migratable)
-        if compare_version(minimum_parsed, current_record["parsed"]) > 0:
-            fail(f"release {engine_version} minimumMigratableVersion is newer than the release")
+def _validate_record_invariants(record: dict, baseline: dict, records: list[dict], index: int, engine_version: str, definitions_hash: str) -> None:
+    if baseline["baseline"] != baseline["release"] or baseline["contract"] != record["contract"]:
+        fail(f"release {record['release']} does not match baseline contract {record['baseline']}")
+    for prior in records[:index]:
+        if not record["parsed"][3] and not prior["parsed"][3] and record["parsed"][:2] == prior["parsed"][:2]:
+            if (prior["baseline"] != record["baseline"] or
+                    prior["contract"] != record["contract"] or
+                    prior["definitions"] != record["definitions"]):
+                fail(f"patch release {record['release']} changes the frozen release-line contract")
+    decision = {
+        "contractBaseline": record["baseline"],
+        "migrationDefinitions": record["definitions"],
+        "persistentContract": record["contract"],
+        "release": record["release"],
+    }
+    record["decisionHash"] = canonical_hash(decision)
+    _validate_frozen_manifest(record, engine_version, definitions_hash)
+
+
+def _validate_checkpoints(current_record: dict, engine_version: str, migration_catalog: list[dict]) -> None:
     frozen_checkpoints = current_record["manifest"].get("migrationCheckpoints")
     if frozen_checkpoints is not None:
         if not isinstance(frozen_checkpoints, list) or not all(isinstance(value, str) for value in frozen_checkpoints):
@@ -162,6 +160,16 @@ def _validate_current_version(current_record: dict, records: list[dict], engine_
             entry.get("target") == engine_version and isinstance(entry.get("id"), str))
         if sorted(frozen_checkpoints) != generated_checkpoints:
             fail(f"release {engine_version} checkpoint declarations differ from the generated catalog")
+
+
+def _validate_current_version(current_record: dict, records: list[dict], engine_version: str, migration_catalog: list[dict]) -> None:
+    current_index = records.index(current_record)
+    minimum_migratable = current_record["manifest"].get("minimumMigratableVersion")
+    if minimum_migratable is not None:
+        minimum_parsed = parse_version(minimum_migratable)
+        if compare_version(minimum_parsed, current_record["parsed"]) > 0:
+            fail(f"release {engine_version} minimumMigratableVersion is newer than the release")
+    _validate_checkpoints(current_record, engine_version, migration_catalog)
     if current_index > 0 and current_record["baseline"] == engine_version:
         previous = records[current_index - 1]
         if previous["contract"] != current_record["contract"]:
@@ -169,6 +177,7 @@ def _validate_current_version(current_record: dict, records: list[dict], engine_
                         if isinstance(entry, dict) and entry.get("target") == engine_version]
             if not incoming:
                 fail(f"release {engine_version} changes the persistent contract without an incoming migration definition")
+
 
 
 def _build_header_content(engine_version: str, current: dict, records: list[dict]) -> str:

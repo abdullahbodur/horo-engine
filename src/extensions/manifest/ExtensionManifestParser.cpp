@@ -24,11 +24,13 @@ namespace Horo::Extensions {
                 })) {
                     return false;
                 }
-                const bool numeric = std::ranges::all_of(identifier, [](const unsigned char character) {
+                if (const bool numeric = std::ranges::all_of(identifier,
+                                                             [](const unsigned char character) {
                     return std::isdigit(character) != 0;
                 });
-                if (numeric && identifier.size() > 1 && identifier.front() == '0')
+                    numeric && identifier.size() > 1 && identifier.front() == '0')
                     return false;
+
                 if (end == std::string_view::npos)
                     return true;
                 identifierStart = end + 1;
@@ -201,8 +203,9 @@ namespace Horo::Extensions {
         } catch (const Json::parse_error &e) {
             LOG_ERROR("ExtensionManifestParser", "JSON parse error: %s", e.what());
             return Result<ExtensionManifest>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Malformed JSON syntax"));
-        } catch (const std::exception &e) {
+        } catch (const std::exception &e) {  // NOSONAR(cpp:S1181) JSON value access and schema error boundary.
             LOG_ERROR("ExtensionManifestParser", "Failed to parse manifest: %s", e.what());
+
             return Result<ExtensionManifest>::Failure(MakeError(ExtensionErrors::InvalidManifest, e.what()));
         }
     }

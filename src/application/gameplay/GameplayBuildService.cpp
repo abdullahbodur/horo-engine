@@ -52,24 +52,24 @@ namespace Horo::Application {
                                                    "Rebuild the module with the active Horo gameplay SDK.",
                                                    true,
                                                    true};
-        const ErrorCodeDescriptor Cancelled{Domain,
-                                            ErrorCode{"cancelled"},
-                                            ErrorSeverity::Info,
-                                            "Gameplay build was cancelled.",
-                                            "Start the build again when ready.",
-                                            true,
-                                            false};
-        const ErrorCodeDescriptor TimedOut{Domain,
-                                           ErrorCode{"timed_out"},
-                                           ErrorSeverity::Error,
-                                           "Gameplay build timed out.",
-                                           "Inspect the toolchain and retry the build.",
-                                           true,
-                                           true};
+        const ErrorCodeDescriptor CancelledDescriptor{Domain,
+                                                      ErrorCode{"cancelled"},
+                                                      ErrorSeverity::Info,
+                                                      "Gameplay build was cancelled.",
+                                                      "Start the build again when ready.",
+                                                      true,
+                                                      false};
+        const ErrorCodeDescriptor TimedOutDescriptor{Domain,
+                                                     ErrorCode{"timed_out"},
+                                                     ErrorSeverity::Error,
+                                                     "Gameplay build timed out.",
+                                                     "Inspect the toolchain and retry the build.",
+                                                     true,
+                                                     true};
 
         [[nodiscard]] bool IsTerminal(const GameplayBuildState state) noexcept {
-            return state == GameplayBuildState::Succeeded || state == GameplayBuildState::Failed ||
-                   state == GameplayBuildState::Cancelled || state == GameplayBuildState::TimedOut;
+            using enum GameplayBuildState;
+            return state == Succeeded || state == Failed || state == Cancelled || state == TimedOut;
         }
 
         struct TransparentStringHash {
@@ -499,9 +499,10 @@ namespace Horo::Application {
             if (executed.HasError())
                 return Result<void>::Failure(executed.ErrorValue());
             if (executed.Value().reason == ProcessTerminationReason::TimedOut)
-                return Result<void>::Failure(MakeError(TimedOut));
+                return Result<void>::Failure(MakeError(TimedOutDescriptor));
             if (executed.Value().reason == ProcessTerminationReason::Cancelled)
-                return Result<void>::Failure(MakeError(Cancelled));
+                return Result<void>::Failure(MakeError(CancelledDescriptor));
+
             if (executed.Value().reason != ProcessTerminationReason::Exited || executed.Value().exitCode != 0)
                 return Result<void>::Failure(
                     MakeError(BuildFailed, std::format("{} exited with code {}.", phase, executed.Value().exitCode)));
@@ -696,7 +697,7 @@ namespace Horo::Application {
             }
             for (;;) {
                 if (session->cancellation.Token().IsCancellationRequested())
-                    return Result<ExclusiveFileLock>::Failure(MakeError(Cancelled));
+                    return Result<ExclusiveFileLock>::Failure(MakeError(CancelledDescriptor));
                 const std::string owner =
                     std::format("pid={};started={};session={}", CurrentProcessId(), ProcessStartedAtSeconds(), session->snapshot.id);
                 if (auto acquired = state.files->TryAcquireExclusive(lockPath, owner); acquired.HasValue()) {
@@ -716,7 +717,7 @@ namespace Horo::Application {
                 }
                 if (std::chrono::steady_clock::now() - waitStarted >= session->request.timeouts.externalWait)
                     return Result<ExclusiveFileLock>::Failure(
-                        MakeError(TimedOut, "Timed out waiting for the project gameplay build lock."));
+                        MakeError(TimedOutDescriptor, "Timed out waiting for the project gameplay build lock."));
                 std::this_thread::sleep_for(std::chrono::milliseconds{50});
             }
         }
@@ -840,7 +841,7 @@ namespace Horo::Application {
                                                                 const std::string_view projectKey) {
             std::lock_guard lock(state->Mutex());
             if (state->shutdown)
-                return Result<SessionPreparation>::Failure(MakeError(Cancelled, "Gameplay build service is shut down."));
+                return Result<SessionPreparation>::Failure(MakeError(CancelledDescriptor, "Gameplay build service is shut down."));
             if (const auto active = state->activeProjects.find(projectKey); active != state->activeProjects.end()) {
                 std::shared_ptr<GameplayBuildService::State::Session> session = state->sessions.at(active->second);
                 std::lock_guard sessionLock(session->Mutex());
@@ -900,9 +901,9 @@ namespace Horo::Application {
         [[nodiscard]] GameplayBuildState TerminalStateFor(const Result<void> &result) {
             if (result.HasValue())
                 return GameplayBuildState::Succeeded;
-            if (result.ErrorValue().code.Value() == TimedOut.code.Value())
+            if (result.ErrorValue().code.Value() == TimedOutDescriptor.code.Value())
                 return GameplayBuildState::TimedOut;
-            if (result.ErrorValue().code.Value() == Cancelled.code.Value())
+            if (result.ErrorValue().code.Value() == CancelledDescriptor.code.Value())
                 return GameplayBuildState::Cancelled;
             return GameplayBuildState::Failed;
         }

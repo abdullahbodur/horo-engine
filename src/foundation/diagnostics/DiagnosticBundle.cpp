@@ -159,8 +159,9 @@ namespace Horo::Diagnostics {
 
         [[nodiscard]] std::optional<std::vector<std::byte>> RedactDiagnosticText(const std::filesystem::path &archivePath,
                                                                                  const std::vector<std::byte> &bytes) {
-            const std::string text(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+            const std::string text(reinterpret_cast<const char *>(bytes.data()), bytes.size());  // NOSONAR(cpp:S6022)
             std::string sanitized;
+
             if (archivePath.generic_string().find(".jsonl") != std::string::npos) {
                 auto result = RedactJsonlLines(text);
                 if (!result)

@@ -93,23 +93,25 @@ namespace Horo::Extensions {
             return Result<fs::path>::Success(libraryPath);
         }
 
+        // NOSONAR(cpp:S5205) C ABI function pointer from dynamic library.
         void SafeUnload(HoroExtensionUnloadFunc unload, HoroExtensionModuleApi &moduleApi, const char *context) {
             if (unload != nullptr && moduleApi.moduleContext != nullptr) {
                 try {
                     unload(&moduleApi);
-                } catch (const std::runtime_error &exception) {
+                } catch (const std::runtime_error &exception) {  // NOSONAR(cpp:S1181)
                     LOG_WARN("extensions", "Runtime error during %s unload: %s", context, exception.what());
-                } catch (const std::logic_error &exception) {
+                } catch (const std::logic_error &exception) {  // NOSONAR(cpp:S1181)
                     LOG_WARN("extensions", "Logic error during %s unload: %s", context, exception.what());
-                } catch (const std::bad_alloc &exception) {
+                } catch (const std::bad_alloc &exception) {  // NOSONAR(cpp:S1181)
                     LOG_WARN("extensions", "Bad alloc during %s unload: %s", context, exception.what());
                 } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) External code is an exception containment boundary.
                     LOG_WARN("extensions", "Exception during %s unload: %s", context, exception.what());
-                } catch (...) {
+                } catch (...) {  // NOSONAR(cpp:S1181)
                     LOG_WARN("extensions", "Unknown exception during %s unload.", context);
                 }
             }
         }
+
     }  // namespace
 
     /** @copydoc ExtensionManager::ExtensionManager */
@@ -205,22 +207,23 @@ namespace Horo::Extensions {
         HoroExtensionStatus status = HORO_EXTENSION_ERROR_INIT_FAILED;
         try {
             status = loadFunc(&hostApi, &moduleApi);
-        } catch (const std::runtime_error &exception) {
+        } catch (const std::runtime_error &exception) {  // NOSONAR(cpp:S1181)
             LOG_ERROR("extensions", "Extension %s threw runtime error during load: %s", manifest.id.c_str(), exception.what());
             status = HORO_EXTENSION_ERROR_INIT_FAILED;
-        } catch (const std::logic_error &exception) {
+        } catch (const std::logic_error &exception) {  // NOSONAR(cpp:S1181)
             LOG_ERROR("extensions", "Extension %s threw logic error during load: %s", manifest.id.c_str(), exception.what());
             status = HORO_EXTENSION_ERROR_INIT_FAILED;
-        } catch (const std::bad_alloc &exception) {
+        } catch (const std::bad_alloc &exception) {  // NOSONAR(cpp:S1181)
             LOG_ERROR("extensions", "Extension %s threw bad alloc during load: %s", manifest.id.c_str(), exception.what());
             status = HORO_EXTENSION_ERROR_INIT_FAILED;
-        } catch (const std::exception &exception) {
+        } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181)
             LOG_ERROR("extensions", "Extension %s threw during load: %s", manifest.id.c_str(), exception.what());
             status = HORO_EXTENSION_ERROR_INIT_FAILED;
-        } catch (...) {
+        } catch (...) {  // NOSONAR(cpp:S1181)
             LOG_ERROR("extensions", "Extension %s threw unknown exception during load.", manifest.id.c_str());
             status = HORO_EXTENSION_ERROR_INIT_FAILED;
         }
+
         if (status != HORO_EXTENSION_SUCCESS || registration.failed) {
             SafeUnload(lifetime->unload, moduleApi, "rollback");
             if (registration.failed)

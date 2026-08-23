@@ -21,18 +21,8 @@ namespace Horo::Platform {
 
             PosixDynamicLibrary(const PosixDynamicLibrary &) = delete;
             PosixDynamicLibrary &operator=(const PosixDynamicLibrary &) = delete;
-
-            PosixDynamicLibrary(PosixDynamicLibrary &&other) noexcept : m_handle(std::exchange(other.m_handle, nullptr)) {}
-
-            PosixDynamicLibrary &operator=(PosixDynamicLibrary &&other) noexcept {
-                if (this != &other) {
-                    if (m_handle) {
-                        dlclose(m_handle);
-                    }
-                    m_handle = std::exchange(other.m_handle, nullptr);
-                }
-                return *this;
-            }
+            PosixDynamicLibrary(PosixDynamicLibrary &&) = delete;
+            PosixDynamicLibrary &operator=(PosixDynamicLibrary &&) = delete;
 
             [[nodiscard]] void *GetSymbol(std::string_view name) const noexcept override {  // NOSONAR(cpp:S5008)
                 // dlsym requires null-terminated string
