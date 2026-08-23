@@ -192,14 +192,14 @@ namespace Horo::Diagnostics {
             std::ifstream stream(path, std::ios::binary);
             if (!stream)
                 return {};
-            stream.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+            stream.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));  // NOSONAR(cpp:S6022)
             if (static_cast<std::uintmax_t>(stream.gcount()) != size)
                 return {};
             return bytes;
         }
 
-        [[nodiscard]] Result<DiagnosticBundleSummary> Failure(const ErrorCodeDescriptor &error, const std::string_view detail) {
-            return Result<DiagnosticBundleSummary>::Failure(MakeError(error, std::string{detail}));
+        [[nodiscard]] Error MakeBundleError(const ErrorCodeDescriptor &error, const std::string_view detail) {
+            return MakeError(error, std::string{detail});
         }
 
         /** @brief Computes the ZIP CRC-32 checksum for one stored entry. */
@@ -257,7 +257,8 @@ namespace Horo::Diagnostics {
                 WriteU16(stream, static_cast<std::uint16_t>(entry.name.size()));
                 WriteU16(stream, 0);
                 stream.write(entry.name.data(), static_cast<std::streamsize>(entry.name.size()));
-                stream.write(reinterpret_cast<const char *>(entry.bytes.data()), static_cast<std::streamsize>(entry.bytes.size()));
+                stream.write(reinterpret_cast<const char *>(entry.bytes.data()),  // NOSONAR(cpp:S6022)
+                             static_cast<std::streamsize>(entry.bytes.size()));
             }
 
             const auto centralOffsetPos = stream.tellp();
@@ -285,12 +286,10 @@ namespace Horo::Diagnostics {
                 WriteU32(stream, entry.localOffset);
                 stream.write(entry.name.data(), static_cast<std::streamsize>(entry.name.size()));
             }
-            const auto centralEndPos = stream.tellp();
-            if (centralEndPos < 0 || static_cast<std::uint64_t>(centralEndPos) > std::numeric_limits<std::uint32_t>::max())
+            const auto centralDirectoryEndPos = stream.tellp();
+            if (centralDirectoryEndPos < 0)
                 return false;
-            const auto centralEnd = static_cast<std::uint32_t>(centralEndPos);
-            const std::uint32_t centralSize = centralEnd - centralOffset;
-
+            const auto centralSize = static_cast<std::uint32_t>(centralDirectoryEndPos) - centralOffset;
             WriteU32(stream, 0x06054b50U);
             WriteU16(stream, 0);
             WriteU16(stream, 0);
@@ -299,7 +298,6 @@ namespace Horo::Diagnostics {
             WriteU32(stream, centralSize);
             WriteU32(stream, centralOffset);
             WriteU16(stream, 0);
-            stream.flush();
             return stream.good();
         }
 
@@ -308,6 +306,75 @@ namespace Horo::Diagnostics {
             std::vector<std::byte> bytes;
             std::string digest;
         };
+
+        struct PreparedBundleData {
+            std::vector<PreparedEntry> prepared;
+            std::vector<std::string> missingOptional;
+            std::uintmax_t totalInputBytes = 0;
+        };
+
+        [[nodiscard]] Result<PreparedBundleData> CollectAndPrepareEntries(const DiagnosticBundleRequest &request) {
+            PreparedBundleData data;
+            data.prepared.reserve(request.entries.size());
+            TransparentStringSet archivePaths;
+            std::uintmax_t totalPreparedBytes = 0;
+            std::error_code error;
+
+            for (const DiagnosticBundleEntry &entry : request.entries) {
+                error.clear();
+                const std::string archivePath = entry.archivePath.generic_string();
+                if (!IsAllowlistedArchivePath(entry.archivePath) || !archivePaths.insert(archivePath).second)
+                    return Result<PreparedBundleData>::Failure(
+                        MakeBundleError(ObservabilityErrors::InvalidBundleRequest,
+                                        "Every diagnostic bundle entry must be a regular file with a unique safe relative archive path."));
+                const bool exists = std::filesystem::exists(entry.sourcePath, error);
+                if ((!exists || error) && entry.optional) {
+                    data.missingOptional.push_back(archivePath);
+                    continue;
+                }
+                if (const bool symlink = std::filesystem::is_symlink(entry.sourcePath, error);
+                    !exists || error || symlink || !std::filesystem::is_regular_file(entry.sourcePath, error))
+                    return Result<PreparedBundleData>::Failure(
+                        MakeBundleError(ObservabilityErrors::InvalidBundleRequest,
+                                        "Every diagnostic bundle source must be an existing non-symlink regular file."));
+                const std::uintmax_t size = std::filesystem::file_size(entry.sourcePath, error);
+                if (error || size > request.maxInputBytes - std::min(request.maxInputBytes, data.totalInputBytes))
+                    return Result<PreparedBundleData>::Failure(
+                        MakeBundleError(ObservabilityErrors::BundleSizeExceeded,
+                                        "Diagnostic bundle input exceeded its configured aggregate byte limit."));
+                data.totalInputBytes += size;
+                std::vector<std::byte> bytes = ReadFile(entry.sourcePath, size);
+                if (bytes.size() != size)
+                    return Result<PreparedBundleData>::Failure(
+                        MakeBundleError(ObservabilityErrors::BundleReadFailed, "Unable to read an allowlisted diagnostic file."));
+                if (entry.redactSensitiveText) {
+                    auto redacted = RedactDiagnosticText(entry.archivePath, bytes);
+                    if (!redacted.has_value())
+                        return Result<PreparedBundleData>::Failure(
+                            MakeBundleError(ObservabilityErrors::BundleReadFailed,
+                                            "A redacted diagnostic input must contain valid JSON or complete JSONL records."));
+                    bytes = std::move(*redacted);
+                }
+                if (bytes.size() > request.maxInputBytes - std::min(request.maxInputBytes, totalPreparedBytes))
+                    return Result<PreparedBundleData>::Failure(
+                        MakeBundleError(ObservabilityErrors::BundleSizeExceeded,
+                                        "Redacted diagnostic bundle input exceeded its configured aggregate byte limit."));
+                totalPreparedBytes += bytes.size();
+                const std::string digest = FormatSha256(ComputeSha256(bytes));
+                data.prepared.push_back(PreparedEntry{.archivePath = entry.archivePath, .bytes = std::move(bytes), .digest = digest});
+            }
+            return Result<PreparedBundleData>::Success(std::move(data));
+        }
+
+        [[nodiscard]] Result<void> ValidateMetadata(const std::vector<std::pair<std::string, std::string>> &metadata) {
+            TransparentStringSet metadataKeys;
+            for (const auto &[key, val] : metadata) {
+                if (key.empty() || IsSensitiveMetadataKey(key) || ContainsAbsolutePath(val) || !metadataKeys.insert(key).second)
+                    return Result<void>::Failure(
+                        MakeBundleError(ObservabilityErrors::InvalidBundleRequest, "Diagnostic bundle metadata keys must be unique."));
+            }
+            return Result<void>::Success();
+        }
 
         [[nodiscard]] std::string BuildManifestJson(const std::vector<std::pair<std::string, std::string>> &metadata,
                                                     const std::vector<std::string> &missingOptional,
@@ -346,78 +413,42 @@ namespace Horo::Diagnostics {
         if (request.outputPath.empty() || request.outputPath.is_relative() || request.maxInputBytes == 0 || request.maxEntries == 0 ||
             request.maxMetadataEntries == 0 || request.entries.size() > request.maxEntries ||
             request.metadata.size() > request.maxMetadataEntries)
-            return Failure(ObservabilityErrors::InvalidBundleRequest,
-                           "Diagnostic bundle output must be absolute and the byte limit must be non-zero.");
+            return Result<DiagnosticBundleSummary>::Failure(
+                MakeBundleError(ObservabilityErrors::InvalidBundleRequest,
+                                "Diagnostic bundle output must be absolute and the byte limit must be non-zero."));
 
         std::error_code error;
         if (std::filesystem::exists(request.outputPath, error) || error)
-            return Failure(ObservabilityErrors::InvalidBundleRequest, "Diagnostic bundle output already exists or cannot be inspected.");
+            return Result<DiagnosticBundleSummary>::Failure(
+                MakeBundleError(ObservabilityErrors::InvalidBundleRequest,
+                                "Diagnostic bundle output already exists or cannot be inspected."));
 
         std::filesystem::create_directories(request.outputPath.parent_path(), error);
         if (error)
-            return Failure(ObservabilityErrors::BundleWriteFailed, "Unable to create the diagnostic bundle directory.");
+            return Result<DiagnosticBundleSummary>::Failure(
+                MakeBundleError(ObservabilityErrors::BundleWriteFailed, "Unable to create the diagnostic bundle directory."));
 
-        std::vector<PreparedEntry> prepared;
-        prepared.reserve(request.entries.size());
-        std::vector<std::string> missingOptional;
-        TransparentStringSet archivePaths;
-        std::uintmax_t totalInputBytes = 0;
-        std::uintmax_t totalPreparedBytes = 0;
-        for (const DiagnosticBundleEntry &entry : request.entries) {
-            error.clear();
-            const std::string archivePath = entry.archivePath.generic_string();
-            if (!IsAllowlistedArchivePath(entry.archivePath) || !archivePaths.insert(archivePath).second)
-                return Failure(ObservabilityErrors::InvalidBundleRequest,
-                               "Every diagnostic bundle entry must be a regular file with a unique safe relative archive path.");
-            const bool exists = std::filesystem::exists(entry.sourcePath, error);
-            if ((!exists || error) && entry.optional) {
-                missingOptional.push_back(archivePath);
-                continue;
-            }
-            if (const bool symlink = std::filesystem::is_symlink(entry.sourcePath, error);
-                !exists || error || symlink || !std::filesystem::is_regular_file(entry.sourcePath, error))
-                return Failure(ObservabilityErrors::InvalidBundleRequest,
-                               "Every diagnostic bundle source must be an existing non-symlink regular file.");
-            const std::uintmax_t size = std::filesystem::file_size(entry.sourcePath, error);
-            if (error || size > request.maxInputBytes - std::min(request.maxInputBytes, totalInputBytes))
-                return Failure(ObservabilityErrors::BundleSizeExceeded,
-                               "Diagnostic bundle input exceeded its configured aggregate byte limit.");
-            totalInputBytes += size;
-            std::vector<std::byte> bytes = ReadFile(entry.sourcePath, size);
-            if (bytes.size() != size)
-                return Failure(ObservabilityErrors::BundleReadFailed, "Unable to read an allowlisted diagnostic file.");
-            if (entry.redactSensitiveText) {
-                auto redacted = RedactDiagnosticText(entry.archivePath, bytes);
-                if (!redacted.has_value())
-                    return Failure(ObservabilityErrors::BundleReadFailed,
-                                   "A redacted diagnostic input must contain valid JSON or complete JSONL records.");
-                bytes = std::move(*redacted);
-            }
-            if (bytes.size() > request.maxInputBytes - std::min(request.maxInputBytes, totalPreparedBytes))
-                return Failure(ObservabilityErrors::BundleSizeExceeded,
-                               "Redacted diagnostic bundle input exceeded its configured aggregate byte limit.");
-            totalPreparedBytes += bytes.size();
-            const std::string digest = FormatSha256(ComputeSha256(bytes));
-            prepared.push_back(PreparedEntry{.archivePath = entry.archivePath, .bytes = std::move(bytes), .digest = digest});
-        }
+        auto entryResult = CollectAndPrepareEntries(request);
+        if (entryResult.HasError())
+            return Result<DiagnosticBundleSummary>::Failure(entryResult.ErrorValue());
 
+        auto [prepared, missingOptional, totalInputBytes] = std::move(entryResult).Value();
         std::ranges::sort(prepared, {}, &PreparedEntry::archivePath);
         std::ranges::sort(missingOptional);
 
-        TransparentStringSet metadataKeys;
         std::vector<std::pair<std::string, std::string>> metadata = request.metadata;
         std::ranges::sort(metadata, {}, &std::pair<std::string, std::string>::first);
-        for (const auto &[key, val] : metadata) {
-            if (key.empty() || IsSensitiveMetadataKey(key) || ContainsAbsolutePath(val) || !metadataKeys.insert(key).second)
-                return Failure(ObservabilityErrors::InvalidBundleRequest, "Diagnostic bundle metadata keys must be unique.");
-        }
+        auto metaResult = ValidateMetadata(metadata);
+        if (metaResult.HasError())
+            return Result<DiagnosticBundleSummary>::Failure(metaResult.ErrorValue());
 
         const std::string manifest = BuildManifestJson(metadata, missingOptional, prepared);
 
         const std::filesystem::path temporaryPath = request.outputPath.string() + ".tmp";
         error.clear();
         if (std::filesystem::exists(temporaryPath, error) || error)
-            return Failure(ObservabilityErrors::BundleWriteFailed, "Diagnostic bundle temporary output already exists.");
+            return Result<DiagnosticBundleSummary>::Failure(
+                MakeBundleError(ObservabilityErrors::BundleWriteFailed, "Diagnostic bundle temporary output already exists."));
         std::vector<std::byte> manifestBytes(manifest.size());
         std::ranges::transform(manifest, manifestBytes.begin(), [](const char character) {
             return static_cast<std::byte>(character);
@@ -430,13 +461,15 @@ namespace Horo::Diagnostics {
         }
         if (!WriteZip(temporaryPath, zipEntries)) {
             std::filesystem::remove(temporaryPath, error);
-            return Failure(ObservabilityErrors::BundleWriteFailed, "Unable to create the diagnostic ZIP archive.");
+            return Result<DiagnosticBundleSummary>::Failure(
+                MakeBundleError(ObservabilityErrors::BundleWriteFailed, "Unable to create the diagnostic ZIP archive."));
         }
 
         std::filesystem::rename(temporaryPath, request.outputPath, error);
         if (error) {
             std::filesystem::remove(temporaryPath, error);
-            return Failure(ObservabilityErrors::BundleWriteFailed, "Unable to commit the diagnostic bundle atomically.");
+            return Result<DiagnosticBundleSummary>::Failure(
+                MakeBundleError(ObservabilityErrors::BundleWriteFailed, "Unable to commit the diagnostic bundle atomically."));
         }
         return Result<DiagnosticBundleSummary>::Success({.outputPath = request.outputPath,
                                                          .fileCount = prepared.size(),

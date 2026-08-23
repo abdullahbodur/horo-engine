@@ -305,10 +305,11 @@ namespace Horo {
     }
 
     /** @copydoc PlatformServices::PlatformServices */
-    PlatformServices::PlatformServices(FileSystem &files, Clock &clock, ProcessService &processes, UserDirectories &directories,
-                                       const PlatformCapabilities capabilities, CredentialStore *credentials, NativeDialogs *dialogs,
-                                       CrashService *crash) noexcept
+    PlatformServices::PlatformServices(FileSystem &files, Clock &clock, ProcessService &processes,  // NOSONAR(cpp:S107)
+                                       UserDirectories &directories, const PlatformCapabilities capabilities, CredentialStore *credentials,
+                                       NativeDialogs *dialogs, CrashService *crash) noexcept
         : files(files), clock(clock), processes(processes), directories(directories), capabilities(capabilities), credentials(credentials),
+
           dialogs(dialogs), crash(crash) {
         this->capabilities.hasCredentialStore = credentials != nullptr;
         this->capabilities.hasNativeDialogs = dialogs != nullptr;

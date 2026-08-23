@@ -148,6 +148,41 @@ namespace Horo {
                 return Result<pid_t>::Failure(MakeError(PlatformErrors::ProcessLaunchFailed, std::strerror(spawned)));
             return Result<pid_t>::Success(process);
         }
+
+        void UpdateProcessTermination(const pid_t process, const ExternalProcessRequest &request, const CancellationToken &cancellation,
+                                      const std::chrono::steady_clock::time_point &started,
+                                      std::chrono::steady_clock::time_point &terminationStarted, bool &terminationRequested, bool &timedOut,
+                                      const bool childExited) {
+            const auto now = std::chrono::steady_clock::now();
+            if (const bool cancelled = cancellation.IsCancellationRequested();
+                !terminationRequested && (cancelled || now - started >= request.timeout)) {
+                terminationRequested = true;
+                timedOut = !cancelled;
+                terminationStarted = now;
+                static_cast<void>(kill(-process, SIGTERM));
+            } else if (terminationRequested && !childExited && now - terminationStarted >= request.gracefulTermination) {
+                static_cast<void>(kill(-process, SIGKILL));
+            }
+        }
+
+        [[nodiscard]] ExternalProcessResult BuildExternalProcessResult(const int status, const bool timedOut,
+                                                                       const bool terminationRequested) {
+            ExternalProcessResult result;
+            if (timedOut)
+                result.reason = ProcessTerminationReason::TimedOut;
+            else if (terminationRequested)
+                result.reason = ProcessTerminationReason::Cancelled;
+            else if (WIFSIGNALED(status))
+                result.reason = ProcessTerminationReason::Signalled;
+
+            if (WIFEXITED(status))
+                result.exitCode = WEXITSTATUS(status);
+            else if (WIFSIGNALED(status))
+                result.exitCode = 128 + WTERMSIG(status);
+            else
+                result.exitCode = -1;
+            return result;
+        }
     }  // namespace
 
     /** @copydoc NativeExternalProcessRunner::Run */
@@ -190,16 +225,8 @@ namespace Horo {
         auto terminationStarted = started;
 
         while (!childExited || stdoutOpen || stderrOpen) {
-            const auto now = std::chrono::steady_clock::now();
-            if (const bool cancelled = cancellation.IsCancellationRequested();
-                !terminationRequested && (cancelled || now - started >= request.timeout)) {
-                terminationRequested = true;
-                timedOut = !cancelled;
-                terminationStarted = now;
-                static_cast<void>(kill(-process, SIGTERM));
-            } else if (terminationRequested && !childExited && now - terminationStarted >= request.gracefulTermination) {
-                static_cast<void>(kill(-process, SIGKILL));
-            }
+            UpdateProcessTermination(process, request, cancellation, started, terminationStarted, terminationRequested, timedOut,
+                                     childExited);
 
             std::array<pollfd, 2> descriptors{{{stdoutPipe[0], static_cast<short>(stdoutOpen ? POLLIN : 0), 0},
                                                {stderrPipe[0], static_cast<short>(stderrOpen ? POLLIN : 0), 0}}};
@@ -214,21 +241,6 @@ namespace Horo {
         close(stdoutPipe[0]);
         close(stderrPipe[0]);
 
-        ExternalProcessResult result;
-        if (timedOut)
-            result.reason = ProcessTerminationReason::TimedOut;
-        else if (terminationRequested)
-            result.reason = ProcessTerminationReason::Cancelled;
-        else if (WIFSIGNALED(status))
-            result.reason = ProcessTerminationReason::Signalled;
-
-        if (WIFEXITED(status))
-            result.exitCode = WEXITSTATUS(status);
-        else if (WIFSIGNALED(status))
-            result.exitCode = 128 + WTERMSIG(status);
-        else
-            result.exitCode = -1;
-
-        return Result<ExternalProcessResult>::Success(result);
+        return Result<ExternalProcessResult>::Success(BuildExternalProcessResult(status, timedOut, terminationRequested));
     }
 }  // namespace Horo

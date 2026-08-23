@@ -156,7 +156,8 @@ namespace Horo::Gameplay {
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(started.ErrorValue());
         }
         impl->started = true;
-        return Result<std::unique_ptr<LoadedGameModule>>::Success(std::unique_ptr<LoadedGameModule>{new LoadedGameModule{std::move(impl)}});
+        return Result<std::unique_ptr<LoadedGameModule>>::Success(
+            std::unique_ptr<LoadedGameModule>{new LoadedGameModule{std::move(impl)}});  // NOSONAR(cpp:S5950)
     }
 
     /** @copydoc GameModuleHost::LoadShadowCopy */

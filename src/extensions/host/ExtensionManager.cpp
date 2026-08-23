@@ -112,6 +112,34 @@ namespace Horo::Extensions {
             }
         }
 
+        template <typename LoadedMap>
+        [[nodiscard]] Result<ExtensionManifest> ReadAndValidateManifest(const fs::path &requestedRoot, const LoadedMap &loaded) {
+            if (!requestedRoot.is_absolute())
+                return Result<ExtensionManifest>::Failure(
+                    MakeError(ExtensionErrors::InvalidManifest, "Extension package path must be absolute."));
+
+            const fs::path manifestPath = requestedRoot / "extension.json";
+            std::ifstream fileStream(manifestPath);
+            if (!fileStream.is_open())
+                return Result<ExtensionManifest>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Could not open extension.json"));
+
+            std::stringstream buffer;
+            buffer << fileStream.rdbuf();
+            auto parseResult = ParseExtensionManifest(buffer.str());
+            if (parseResult.HasError())
+                return Result<ExtensionManifest>::Failure(parseResult.ErrorValue());
+
+            ExtensionManifest manifest = std::move(parseResult).Value();
+            manifest.rootPath = fs::weakly_canonical(requestedRoot).string();
+            if (loaded.contains(manifest.id))
+                return Result<ExtensionManifest>::Failure(
+                    MakeError(ExtensionErrors::LoadFailed, "An extension with this package ID is already loaded."));
+            if (manifest.modules.size() != 1)
+                return Result<ExtensionManifest>::Failure(
+                    MakeError(ExtensionErrors::InvalidManifest, "The current native loader requires exactly one module per package."));
+            return Result<ExtensionManifest>::Success(std::move(manifest));
+        }
+
     }  // namespace
 
     /** @copydoc ExtensionManager::ExtensionManager */
@@ -143,30 +171,11 @@ namespace Horo::Extensions {
     }
 
     Result<std::string> ExtensionManager::LoadExtension(const std::string &extensionDir) {
-        const fs::path requestedRoot{extensionDir};
-        if (!requestedRoot.is_absolute())
-            return Result<std::string>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Extension package path must be absolute."));
+        auto manifestResult = ReadAndValidateManifest(fs::path{extensionDir}, m_loadedExtensions);
+        if (manifestResult.HasError())
+            return Result<std::string>::Failure(manifestResult.ErrorValue());
 
-        const fs::path manifestPath = requestedRoot / "extension.json";
-        std::ifstream fileStream(manifestPath);
-        if (!fileStream.is_open())
-            return Result<std::string>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Could not open extension.json"));
-
-        std::stringstream buffer;
-        buffer << fileStream.rdbuf();
-        auto parseResult = ParseExtensionManifest(buffer.str());
-        if (parseResult.HasError())
-            return Result<std::string>::Failure(parseResult.ErrorValue());
-
-        ExtensionManifest manifest = std::move(parseResult).Value();
-        manifest.rootPath = fs::weakly_canonical(requestedRoot).string();
-        if (m_loadedExtensions.contains(manifest.id))
-            return Result<std::string>::Failure(
-                MakeError(ExtensionErrors::LoadFailed, "An extension with this package ID is already loaded."));
-        if (manifest.modules.size() != 1)
-            return Result<std::string>::Failure(
-                MakeError(ExtensionErrors::InvalidManifest, "The current native loader requires exactly one module per package."));
-
+        ExtensionManifest manifest = std::move(manifestResult).Value();
         const ExtensionModuleManifest &manifestModule = manifest.modules.front();
         const std::string declaredModuleId = manifestModule.id;
         const std::string declaredModuleVersion = manifestModule.version;

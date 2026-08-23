@@ -154,8 +154,8 @@ namespace Horo {
         std::string text = "sha256:";
         text.reserve(71);
         for (const std::uint8_t byte : digest.bytes) {
-            text.push_back(HexDigits[byte >> 4U]);
-            text.push_back(HexDigits[byte & 0x0fU]);
+            text.push_back(HexDigits[static_cast<std::size_t>(byte) >> 4U]);
+            text.push_back(HexDigits[static_cast<std::size_t>(byte) & 0x0fU]);
         }
         return text;
     }

@@ -63,22 +63,26 @@ namespace Horo::Extensions {
             return IsPrereleaseValid(value.substr(dash + 1));
         }
 
-        Result<void> ParseCompatibility(const Json &json, ExtensionManifest &manifest) {
-            if (json.contains("compatibility") && json["compatibility"].is_object()) {
-                const auto &compatibility = json["compatibility"];
-                if (compatibility.contains("engineMin") && compatibility["engineMin"].is_string())
-                    manifest.engineMin = compatibility["engineMin"].get<std::string>();
-                if (compatibility.contains("engineMax") && compatibility["engineMax"].is_string())
-                    manifest.engineMax = compatibility["engineMax"].get<std::string>();
-                if (compatibility.contains("sdkAbi") && compatibility["sdkAbi"].is_string())
-                    manifest.sdkAbi = compatibility["sdkAbi"].get<std::string>();
-                if (compatibility.contains("platforms") && compatibility["platforms"].is_array()) {
-                    for (const auto &platform : compatibility["platforms"]) {
-                        if (platform.is_string())
-                            manifest.platforms.push_back(platform.get<std::string>());
-                    }
-                }
+        void AppendPlatforms(const Json &compatibility, std::vector<std::string> &platforms) {
+            if (!compatibility.contains("platforms") || !compatibility["platforms"].is_array())
+                return;
+            for (const auto &platform : compatibility["platforms"]) {
+                if (platform.is_string())
+                    platforms.push_back(platform.get<std::string>());
             }
+        }
+
+        Result<void> ParseCompatibility(const Json &json, ExtensionManifest &manifest) {
+            if (!json.contains("compatibility") || !json["compatibility"].is_object())
+                return Result<void>::Success();
+            const auto &compatibility = json["compatibility"];
+            if (compatibility.contains("engineMin") && compatibility["engineMin"].is_string())
+                manifest.engineMin = compatibility["engineMin"].get<std::string>();
+            if (compatibility.contains("engineMax") && compatibility["engineMax"].is_string())
+                manifest.engineMax = compatibility["engineMax"].get<std::string>();
+            if (compatibility.contains("sdkAbi") && compatibility["sdkAbi"].is_string())
+                manifest.sdkAbi = compatibility["sdkAbi"].get<std::string>();
+            AppendPlatforms(compatibility, manifest.platforms);
             return Result<void>::Success();
         }
 
@@ -88,7 +92,7 @@ namespace Horo::Extensions {
                     error = Result<void>::Failure(MakeError(ExtensionErrors::InvalidManifest, std::format("'{}' must be an array.", key)));
                     return nullptr;
                 }
-                return &*it;
+                return std::to_address(it);
             }
             return nullptr;
         }

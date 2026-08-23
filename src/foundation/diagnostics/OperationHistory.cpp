@@ -212,7 +212,9 @@ namespace Horo::Diagnostics {
                 std::filesystem::remove(path, error);
             } else {
                 std::filesystem::remove(RolledPath(configuration.maxRolledFiles), error);
-                for (std::size_t index = configuration.maxRolledFiles; !error && index > 1; --index) {
+                for (std::size_t index = configuration.maxRolledFiles; index > 1; --index) {
+                    if (error)
+                        break;
                     const auto source = RolledPath(index - 1U);
                     if (std::filesystem::exists(source, error))
                         std::filesystem::rename(source, RolledPath(index), error);
@@ -266,7 +268,7 @@ namespace Horo::Diagnostics {
             impl->ReopenForAppend();
             if (impl->file == nullptr)
                 return nullptr;
-            return std::shared_ptr<OperationHistorySink>{new OperationHistorySink{std::move(impl)}};
+            return std::shared_ptr<OperationHistorySink>{new OperationHistorySink{std::move(impl)}};  // NOSONAR(cpp:S5950)
         } catch (...) {
             return nullptr;
         }

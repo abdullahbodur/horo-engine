@@ -125,9 +125,10 @@ namespace Horo::Telemetry {
         } catch (const std::exception &exception) {  // NOSONAR(cpp:S2486) Telemetry must not alter the authoritative lifecycle result.
             static_cast<void>(exception);
             // Lifecycle completion remains authoritative even if diagnostic record construction fails.
-        } catch (...) {
+        } catch (...) {  // NOSONAR(cpp:S2486)
             // Lifecycle completion remains authoritative even if diagnostic record construction fails.
         }
         return true;
     }
+
 }  // namespace Horo::Telemetry

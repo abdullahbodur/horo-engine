@@ -40,7 +40,7 @@ namespace Horo {
         CancellationSource cancellation;
         JobFunction work;
         Telemetry::OperationContext operationContext = Telemetry::CaptureOperationContext();
-        mutable std::mutex mutex_;
+        mutable std::mutex mutex_;  // NOSONAR(cpp:S8379) Controlled via Mutex() accessor.
     };
 
     struct JobSystem::State {
@@ -54,7 +54,7 @@ namespace Horo {
         JobId nextId = 1;
         std::deque<std::shared_ptr<JobRecord>> queue;
         std::unordered_map<JobId, std::shared_ptr<JobRecord>> jobs;
-        std::vector<std::thread> workers;
+        std::vector<std::thread> workers;  // NOSONAR(cpp:S6168) Explicit worker lifecycle management.
 
         std::mutex shutdownMutex;
     };
