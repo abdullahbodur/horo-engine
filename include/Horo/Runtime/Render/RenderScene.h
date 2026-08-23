@@ -7,6 +7,7 @@
 
 #include "Horo/Runtime/Render/Mesh.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -92,8 +93,8 @@ namespace Horo::Render {
         float farPlane{100.0F};
 
         [[nodiscard]] bool IsValid() const noexcept {
-            const bool common = std::isfinite(nearPlane) && std::isfinite(farPlane) && nearPlane > 0.0F && farPlane > nearPlane;
-            if (!common)
+            if (const bool common = std::isfinite(nearPlane) && std::isfinite(farPlane) && nearPlane > 0.0F && farPlane > nearPlane;
+                !common)
                 return false;
             using enum RenderProjectionKind;
             if (kind == Perspective)
@@ -126,13 +127,14 @@ namespace Horo::Render {
         [[nodiscard]] bool IsValid() const noexcept {
             if (!handle.IsValid() || vertices.empty() || indices.empty() || indices.size() % 3 != 0 || !localBounds.IsValid())
                 return false;
-            for (const MeshVertex &vertex : vertices)
-                if (!Math::IsFinite(vertex.position) || !Math::IsFinite(vertex.normal) || !Math::IsFinite(vertex.uv))
-                    return false;
-            for (const std::uint32_t index : indices)
-                if (index >= vertices.size())
-                    return false;
-            return true;
+            const bool validVertices = std::ranges::all_of(vertices, [](const MeshVertex &vertex) {
+                return Math::IsFinite(vertex.position) && Math::IsFinite(vertex.normal) && Math::IsFinite(vertex.uv);
+            });
+            if (!validVertices)
+                return false;
+            return std::ranges::all_of(indices, [this](const std::uint32_t index) {
+                return index < vertices.size();
+            });
         }
     };
 
@@ -169,16 +171,9 @@ namespace Horo::Render {
         [[nodiscard]] bool IsValid() const noexcept {
             if (!camera.IsValid() || lights.size() > MaximumForwardLights)
                 return false;
-            for (const RenderMeshResourceView &resource : meshResources)
-                if (!resource.IsValid())
-                    return false;
-            for (const RenderStaticMeshInstance &instance : instances)
-                if (!instance.IsValid())
-                    return false;
-            for (const RenderLight &light : lights)
-                if (!light.IsValid())
-                    return false;
-            return true;
+            return std::ranges::all_of(meshResources, &RenderMeshResourceView::IsValid) &&
+                   std::ranges::all_of(instances, &RenderStaticMeshInstance::IsValid) && std::ranges::all_of(lights, &RenderLight::IsValid);
         }
     };
+
 }  // namespace Horo::Render

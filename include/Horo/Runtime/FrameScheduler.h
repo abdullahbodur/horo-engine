@@ -123,14 +123,17 @@ namespace Horo::Runtime {
             friend class FrameScheduler;
         };
 
+    public:
         FrameScheduler(Clock &clock, FrameSchedulerConfig config, ConstructionKey) noexcept;
 
+    private:
         /** @brief Normalizes one raw clock sample into the accumulator domain. */
+
         void NormalizeSampleDelta(Duration rawDelta, Duration &variableDelta, bool &clamped);
 
         /** @brief Dispatches one phase with cooperative cancellation guards. */
         [[nodiscard]] Result<void> DispatchPhaseChecked(RuntimeLifecycle &lifecycle, const CancellationToken &cancellation,
-                                                        const FrameContext &context, RuntimePhase phase);
+                                                        const FrameContext &context, RuntimePhase phase) const;
 
         /** @brief Runs the suspend-safe pump phases; returns Success after EndFrame when suspended. */
         [[nodiscard]] Result<void> DispatchPumpPhases(RuntimeLifecycle &lifecycle, const CancellationToken &cancellation,

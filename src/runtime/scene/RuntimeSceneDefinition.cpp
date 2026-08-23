@@ -19,8 +19,7 @@ namespace Horo::Runtime {
         [[nodiscard]] bool ValidPrimitive(const PrimitiveMeshDescriptor &primitive) noexcept {
             if (primitive.version.value != 1 || primitive.parameters.index() != static_cast<std::size_t>(primitive.type))
                 return false;
-            return std::visit([](const auto &value) {
-                using T = std::decay_t<decltype(value)>;
+            return std::visit([]<typename T>(const T &value) {
                 if constexpr (std::is_same_v<T, BoxMeshParameters>)
                     return Math::IsFinite(value.size) && value.size.x > 0 && value.size.y > 0 && value.size.z > 0;
                 else if constexpr (std::is_same_v<T, SphereMeshParameters>)
@@ -143,8 +142,7 @@ namespace Horo::Runtime {
         std::unordered_map<std::uint64_t, std::size_t> indices;
         indices.reserve(entities_.size());
         for (std::size_t index = 0; index < entities_.size(); ++index) {
-            const Result<void> valid = ValidateRuntimeEntityDefinition(entities_[index]);
-            if (valid.HasError())
+            if (const Result<void> valid = ValidateRuntimeEntityDefinition(entities_[index]); valid.HasError())
                 return Result<RuntimeSceneDefinition>::Failure(valid.ErrorValue());
             if (!indices.emplace(entities_[index].object.value, index).second)
                 return Result<RuntimeSceneDefinition>::Failure(
@@ -175,11 +173,12 @@ namespace Horo::Runtime {
             if (visits[index] == Visit::Visiting)
                 return false;
             visits[index] = Visit::Visiting;
-            if (parents[index] && !visit(*parents[index]))
+            if (parents[index].has_value() && !visit(*parents[index]))
                 return false;
             visits[index] = Visit::Complete;
             return true;
         };
+
         for (std::size_t index = 0; index < entities_.size(); ++index)
             if (!visit(index))
                 return Result<RuntimeSceneDefinition>::Failure(

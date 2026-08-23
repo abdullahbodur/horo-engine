@@ -45,8 +45,7 @@ namespace Horo::Runtime {
         if (!IsPositive(config.fixedStep) || !IsPositive(config.maximumFrameDelta) || config.maximumCatchUpSteps == 0) {
             return Result<std::unique_ptr<FrameScheduler>>::Failure(MakeError(RuntimeErrors::InvalidSchedulerConfig));
         }
-        return Result<std::unique_ptr<FrameScheduler>>::Success(
-            std::unique_ptr<FrameScheduler>(new FrameScheduler(clock, config, ConstructionKey{})));
+        return Result<std::unique_ptr<FrameScheduler>>::Success(std::make_unique<FrameScheduler>(clock, config, ConstructionKey{}));
     }
 
     FrameScheduler::FrameScheduler(Clock &clock, const FrameSchedulerConfig config, ConstructionKey) noexcept
@@ -66,7 +65,7 @@ namespace Horo::Runtime {
 
     /** @copydoc FrameScheduler::DispatchPhaseChecked */
     Result<void> FrameScheduler::DispatchPhaseChecked(RuntimeLifecycle &lifecycle, const CancellationToken &cancellation,
-                                                      const FrameContext &context, const RuntimePhase phase) {
+                                                      const FrameContext &context, const RuntimePhase phase) const {
         if (cancellation.IsCancellationRequested())
             return CancelledResult();
         if (Result<void> result = lifecycle.DispatchPhase(phase, context); result.HasError())
@@ -79,22 +78,20 @@ namespace Horo::Runtime {
     /** @copydoc FrameScheduler::DispatchPumpPhases */
     Result<void> FrameScheduler::DispatchPumpPhases(RuntimeLifecycle &lifecycle, const CancellationToken &cancellation,
                                                     const FrameContext &context, const bool suspended) {
-        if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, context, RuntimePhase::BeginFrame); result.HasError())
+        using enum RuntimePhase;
+        if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, context, BeginFrame); result.HasError())
             return result;
-        if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, context, RuntimePhase::PollPlatformEvents);
-            result.HasError())
+        if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, context, PollPlatformEvents); result.HasError())
             return result;
         if (!suspended) {
-            if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, context, RuntimePhase::BuildInputSnapshot);
-                result.HasError())
+            if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, context, BuildInputSnapshot); result.HasError())
                 return result;
         }
-        if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, context, RuntimePhase::ApplyQueuedOwnerThreadCommands);
-            result.HasError())
+        if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, context, ApplyQueuedOwnerThreadCommands); result.HasError())
             return result;
 
         if (suspended) {
-            if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, context, RuntimePhase::EndFrame); result.HasError())
+            if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, context, EndFrame); result.HasError())
                 return result;
             clock_.Reset();
             return Result<void>::Success();

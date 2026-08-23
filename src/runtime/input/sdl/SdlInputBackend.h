@@ -16,10 +16,13 @@ namespace Horo::Input {
 
         void BeginFrame(FrameNumber frame);
         void ProcessEvent(const SDL_Event &event);
+        void PollEvents();
         [[nodiscard]] const RawInputSnapshot &Commit();
         [[nodiscard]] RawInputCollector &Collector() noexcept;
+        [[nodiscard]] IGamepadHaptics *Haptics() noexcept;
 
         [[nodiscard]] Result<void> PlayRumble(GamepadDeviceId id, RumbleEffect effect) override;
+
         [[nodiscard]] Result<void> Stop(GamepadDeviceId id) override;
 
     private:

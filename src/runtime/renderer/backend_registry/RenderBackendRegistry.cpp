@@ -24,10 +24,11 @@ namespace Horo::Render {
                 MakeRegistryError(RegistryErrors::InvalidDescriptor, "Renderer backend descriptor requires an ID, name, and provider."));
         }
 
-        const auto duplicate = std::ranges::find_if(descriptors_, [&](const RenderBackendDescriptor &registered) {
+        if (const auto duplicate = std::ranges::find_if(descriptors_,
+                                                        [&](const RenderBackendDescriptor &registered) {
             return registered.id == descriptor.id;
         });
-        if (duplicate != descriptors_.end()) {
+            duplicate != descriptors_.end()) {
             return Result<void>::Failure(
                 MakeRegistryError(RegistryErrors::DuplicateBackend, "Renderer backend ID is already registered: " + descriptor.id.Value()));
         }
@@ -60,11 +61,12 @@ namespace Horo::Render {
         Result<std::unique_ptr<IRenderBackend>> backend = [&descriptor]() {
             try {
                 return descriptor->provider->Create();
-            } catch (...) {
+            } catch (...) {  // NOSONAR(cpp:S2738)
                 return Result<std::unique_ptr<IRenderBackend>>::Failure(
                     MakeRegistryError(RegistryErrors::ProviderException, "The renderer backend provider threw an exception."));
             }
         }();
+
         if (backend.HasError()) {
             return backend;
         }

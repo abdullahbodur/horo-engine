@@ -137,12 +137,13 @@ namespace Horo::Render {
                     return Result<FrameToken>::Failure(
                         MakeOpenGLError(OpenGLBackendErrors::FrameAlreadyActive, "A renderer frame is already active."));
                 }
-                constexpr auto maxViewportExtent = static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max());
-                if (descriptor.frameNumber == 0 || !descriptor.outputExtent.IsValid() ||
+                if (constexpr auto maxViewportExtent = static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max());
+                    descriptor.frameNumber == 0 || !descriptor.outputExtent.IsValid() ||
                     descriptor.outputExtent.width > maxViewportExtent || descriptor.outputExtent.height > maxViewportExtent) {
                     return Result<FrameToken>::Failure(
                         MakeOpenGLError(OpenGLBackendErrors::InvalidFrameDescriptor, "Frame number and output extent must be valid."));
                 }
+
                 if (nextFrameToken_ == std::numeric_limits<std::uint64_t>::max()) {
                     return Result<FrameToken>::Failure(
                         MakeOpenGLError(OpenGLBackendErrors::FrameTokenExhausted, "Frame token space is exhausted."));

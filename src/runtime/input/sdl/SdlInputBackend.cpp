@@ -286,7 +286,7 @@ namespace Horo::Input {
                     break;
                 const char *name = SDL_GetGamepadName(gamepad);
                 const GamepadDeviceId id = collector.ConnectGamepad(name ? name : "SDL Gamepad", true);
-                devices.try_emplace(event.gdevice.which, Device{id, gamepad, nullptr});
+                devices.try_emplace(event.gdevice.which, id, gamepad, nullptr);
                 break;
             }
             case SDL_EVENT_GAMEPAD_REMOVED: {
@@ -331,7 +331,7 @@ namespace Horo::Input {
                 const auto buttons = static_cast<std::size_t>(std::clamp(SDL_GetNumJoystickButtons(joystick), 0, 256));
                 const auto axes = static_cast<std::size_t>(std::clamp(SDL_GetNumJoystickAxes(joystick), 0, 256));
                 const GamepadDeviceId id = collector.ConnectGamepad(name ? name : "SDL Joystick", false, buttons, axes);
-                devices.try_emplace(event.jdevice.which, Device{id, nullptr, joystick});
+                devices.try_emplace(event.jdevice.which, id, nullptr, joystick);
                 break;
             }
             case SDL_EVENT_JOYSTICK_REMOVED: {
@@ -420,12 +420,24 @@ namespace Horo::Input {
         }
     }
 
+    /** @copydoc SdlInputBackend::PollEvents */
+    void SdlInputBackend::PollEvents() {
+        SDL_Event event;
+        while (SDL_PollEvent(&event))
+            ProcessEvent(event);
+    }
+
     const RawInputSnapshot &SdlInputBackend::Commit() {
         return impl_->collector.Commit();
     }
 
     RawInputCollector &SdlInputBackend::Collector() noexcept {
         return impl_->collector;
+    }
+
+    /** @copydoc SdlInputBackend::Haptics */
+    IGamepadHaptics *SdlInputBackend::Haptics() noexcept {
+        return this;
     }
 
     Result<void> SdlInputBackend::PlayRumble(const GamepadDeviceId id, const RumbleEffect effect) {
@@ -436,11 +448,12 @@ namespace Horo::Input {
             return Result<void>::Failure(SdlError(HapticsStaleDevice, "Gamepad is unavailable."));
         if (!found->second.gamepad)
             return Result<void>::Failure(SdlError(HapticsUnsupported, "Gamepad haptics are unsupported."));
-        const auto amplitude = [](const float value) {
+        const auto toAmplitude = [](const float value) {
             return static_cast<std::uint16_t>(std::clamp(value, 0.0F, 1.0F) * 65535.0F);
         };
-        if (!SDL_RumbleGamepad(found->second.gamepad, amplitude(effect.lowFrequency), amplitude(effect.highFrequency),
-                               effect.durationMilliseconds))
+        if (const bool rumbleOk = SDL_RumbleGamepad(found->second.gamepad, toAmplitude(effect.lowFrequency),
+                                                    toAmplitude(effect.highFrequency), effect.durationMilliseconds);
+            !rumbleOk)
             return Result<void>::Failure(SdlError(HapticsFailed, "Unable to start gamepad rumble."));
         return Result<void>::Success();
     }

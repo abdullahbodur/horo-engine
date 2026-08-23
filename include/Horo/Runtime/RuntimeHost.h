@@ -46,7 +46,7 @@ namespace Horo::Runtime {
         [[nodiscard]] Result<void> Resume();
 
         /** @brief Cooperatively requests shutdown; safe from a participant callback. */
-        void RequestShutdown() noexcept;
+        void RequestShutdown() const noexcept;
 
         /** @brief Cancels and tears the lifecycle down once. */
         void Shutdown() noexcept;
@@ -58,8 +58,15 @@ namespace Horo::Runtime {
         [[nodiscard]] FrameSchedulerStatistics Statistics() const noexcept;
 
     private:
-        explicit RuntimeHost(std::unique_ptr<FrameScheduler> scheduler) noexcept;
+        class ConstructionKey {
+            ConstructionKey() = default;
+            friend class RuntimeHost;
+        };
 
+    public:
+        RuntimeHost(std::unique_ptr<FrameScheduler> scheduler, ConstructionKey) noexcept;
+
+    private:
         CancellationSource cancellation_;
         RuntimeLifecycle lifecycle_;
         std::unique_ptr<FrameScheduler> scheduler_;

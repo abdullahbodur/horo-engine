@@ -16,6 +16,12 @@ namespace Horo::Render {
         /** @brief Headless backend that validates renderer lifecycle without acquiring GPU resources. */
         class NullRenderBackend final : public IRenderBackend {
         public:
+            NullRenderBackend() = default;
+            NullRenderBackend(const NullRenderBackend &) = delete;
+            NullRenderBackend &operator=(const NullRenderBackend &) = delete;
+            NullRenderBackend(NullRenderBackend &&) = delete;
+            NullRenderBackend &operator=(NullRenderBackend &&) = delete;
+
             ~NullRenderBackend() override {
                 Shutdown();
             }
@@ -83,6 +89,7 @@ namespace Horo::Render {
                         MakeBackendError(NullBackendErrors::FrameTokenMismatch, "Execution plan does not match the active frame."));
                 }
 
+                using enum RenderPassKind;
                 for (std::size_t index = 0; index < plan.orderedPasses.size(); ++index) {
                     const RenderPassDescriptor &pass = plan.orderedPasses[index];
                     if (!pass.id.IsValid()) {
@@ -90,10 +97,10 @@ namespace Horo::Render {
                                                                       "Execution plan contains an invalid render pass ID."));
                     }
                     switch (pass.kind) {
-                        case RenderPassKind::Graphics:
-                        case RenderPassKind::Copy:
+                        case Graphics:
+                        case Copy:
                             break;
-                        case RenderPassKind::Compute:
+                        case Compute:
                             if (!capabilities_.supportsCompute) {
                                 return Result<void>::Failure(MakeBackendError(NullBackendErrors::UnsupportedPassKind,
                                                                               "Execution plan requires unsupported compute work."));
@@ -104,7 +111,7 @@ namespace Horo::Render {
                                                                           "Execution plan contains an invalid render pass kind."));
                     }
                     if (pass.primaryOutput.has_value()) {
-                        if (pass.kind != RenderPassKind::Graphics) {
+                        if (pass.kind != Graphics) {
                             return Result<void>::Failure(MakeBackendError(NullBackendErrors::InvalidExecutionPlan,
                                                                           "Only graphics passes may bind the primary output attachment."));
                         }

@@ -154,6 +154,8 @@ namespace Horo::Runtime {
         const RuntimeComponentSet *components{};
     };
 
+    class RuntimeScene;
+
     /** @brief Borrowed immutable view of one runtime scene; invalidated by structural commit or transition. */
     class RuntimeSceneView final {
     public:
@@ -185,8 +187,8 @@ namespace Horo::Runtime {
 
     private:
         friend class RuntimeScene;
-        explicit RuntimeSceneView(const class RuntimeScene &scene) noexcept;
-        const class RuntimeScene *scene_{};
+        explicit RuntimeSceneView(const RuntimeScene &scene) noexcept;
+        const RuntimeScene *scene_{};
         std::uint64_t structuralRevision_{};
     };
 
