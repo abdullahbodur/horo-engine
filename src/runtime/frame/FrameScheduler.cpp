@@ -3,6 +3,8 @@
 #include "../lifecycle/RuntimeErrors.h"
 #include "Horo/Runtime/RuntimeLifecycle.h"
 
+#include <memory>
+
 namespace Horo::Runtime {
     namespace {
         constexpr Duration kZero{};
@@ -43,65 +45,67 @@ namespace Horo::Runtime {
         if (!IsPositive(config.fixedStep) || !IsPositive(config.maximumFrameDelta) || config.maximumCatchUpSteps == 0) {
             return Result<std::unique_ptr<FrameScheduler>>::Failure(MakeError(RuntimeErrors::InvalidSchedulerConfig));
         }
-        return Result<std::unique_ptr<FrameScheduler>>::Success(std::unique_ptr<FrameScheduler>(new FrameScheduler(clock, config)));
+        return Result<std::unique_ptr<FrameScheduler>>::Success(
+            std::unique_ptr<FrameScheduler>(new FrameScheduler(clock, config, ConstructionKey{})));
     }
 
-    FrameScheduler::FrameScheduler(Clock &clock, const FrameSchedulerConfig config) noexcept : clock_(clock), config_(config) {}
+    FrameScheduler::FrameScheduler(Clock &clock, const FrameSchedulerConfig config, ConstructionKey) noexcept
+        : clock_(clock), config_(config) {}
 
-    /** @copydoc FrameScheduler::RunFrame */
-    Result<void> FrameScheduler::RunFrame(RuntimeLifecycle &lifecycle, const CancellationToken &cancellation, const bool suspended) {
-        ++frameNumber_;
-        Duration rawDelta = suspended ? Duration{} : clock_.Sample();
-        Duration variableDelta = rawDelta;
-        bool clamped = false;
-        if (variableDelta < kZero) {
+    /** @copydoc FrameScheduler::NormalizeSampleDelta */
+    void FrameScheduler::NormalizeSampleDelta(const Duration rawDelta, Duration &variableDelta, bool &clamped) {
+        if (rawDelta < kZero) {
             variableDelta = {};
             ++statistics_.negativeDeltaNormalizationCount;
-        } else if (variableDelta > config_.maximumFrameDelta) {
+        } else if (rawDelta > config_.maximumFrameDelta) {
             variableDelta = config_.maximumFrameDelta;
             clamped = true;
             ++statistics_.maximumDeltaClampCount;
         }
+    }
 
-        FrameContext frameContext{.frameNumber = frameNumber_,
-                                  .variableDelta = variableDelta,
-                                  .interpolationAlpha = 0.0,
-                                  .completedSimulationTick = completedSimulationTick_,
-                                  .droppedSimulationTime = {},
-                                  .realDeltaWasClamped = clamped,
-                                  .cancellation = cancellation};
-
-        const auto dispatch = [&](const RuntimePhase phase) -> Result<void> {
-            if (cancellation.IsCancellationRequested())
-                return CancelledResult();
-            Result<void> result = lifecycle.DispatchPhase(phase, frameContext);
-            if (result.HasError())
-                return result;
-            if (cancellation.IsCancellationRequested())
-                return CancelledResult();
-            return Result<void>::Success();
-        };
-
-        if (Result<void> result = dispatch(RuntimePhase::BeginFrame); result.HasError())
+    /** @copydoc FrameScheduler::DispatchPhaseChecked */
+    Result<void> FrameScheduler::DispatchPhaseChecked(RuntimeLifecycle &lifecycle, const CancellationToken &cancellation,
+                                                      const FrameContext &context, const RuntimePhase phase) {
+        if (cancellation.IsCancellationRequested())
+            return CancelledResult();
+        if (Result<void> result = lifecycle.DispatchPhase(phase, context); result.HasError())
             return result;
-        if (Result<void> result = dispatch(RuntimePhase::PollPlatformEvents); result.HasError())
+        if (cancellation.IsCancellationRequested())
+            return CancelledResult();
+        return Result<void>::Success();
+    }
+
+    /** @copydoc FrameScheduler::DispatchPumpPhases */
+    Result<void> FrameScheduler::DispatchPumpPhases(RuntimeLifecycle &lifecycle, const CancellationToken &cancellation,
+                                                    const FrameContext &context, const bool suspended) {
+        if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, context, RuntimePhase::BeginFrame); result.HasError())
+            return result;
+        if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, context, RuntimePhase::PollPlatformEvents);
+            result.HasError())
             return result;
         if (!suspended) {
-            if (Result<void> result = dispatch(RuntimePhase::BuildInputSnapshot); result.HasError())
+            if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, context, RuntimePhase::BuildInputSnapshot);
+                result.HasError())
                 return result;
         }
-        if (Result<void> result = dispatch(RuntimePhase::ApplyQueuedOwnerThreadCommands); result.HasError())
+        if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, context, RuntimePhase::ApplyQueuedOwnerThreadCommands);
+            result.HasError())
             return result;
 
         if (suspended) {
-            frameContext.variableDelta = {};
-            if (Result<void> result = dispatch(RuntimePhase::EndFrame); result.HasError())
+            if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, context, RuntimePhase::EndFrame); result.HasError())
                 return result;
             clock_.Reset();
             return Result<void>::Success();
         }
+        return Result<void>::Success();
+    }
 
-        accumulator_ += variableDelta;
+    /** @copydoc FrameScheduler::RunFixedSteps */
+    Result<void> FrameScheduler::RunFixedSteps(RuntimeLifecycle &lifecycle, const CancellationToken &cancellation,
+                                               Duration &droppedSimulationTime) {
+        droppedSimulationTime = {};
         std::uint32_t executedSteps = 0;
         while (accumulator_ >= config_.fixedStep && executedSteps < config_.maximumCatchUpSteps) {
             if (cancellation.IsCancellationRequested())
@@ -109,8 +113,7 @@ namespace Horo::Runtime {
             const FixedStepContext fixedContext{.simulationTick = completedSimulationTick_ + 1,
                                                 .fixedDelta = config_.fixedStep,
                                                 .cancellation = cancellation};
-            Result<void> result = lifecycle.DispatchFixedUpdate(fixedContext);
-            if (result.HasError())
+            if (Result<void> result = lifecycle.DispatchFixedUpdate(fixedContext); result.HasError())
                 return result;
             if (cancellation.IsCancellationRequested())
                 return CancelledResult();
@@ -121,38 +124,65 @@ namespace Horo::Runtime {
         }
 
         if (accumulator_ >= config_.fixedStep) {
-            const std::uint64_t droppedSteps = static_cast<std::uint64_t>(accumulator_.ToNanoseconds() / config_.fixedStep.ToNanoseconds());
-            const Duration dropped = Duration::FromNanoseconds(static_cast<std::int64_t>(droppedSteps) * config_.fixedStep.ToNanoseconds());
+            const auto droppedSteps = static_cast<std::uint64_t>(accumulator_.ToNanoseconds() / config_.fixedStep.ToNanoseconds());
+            const auto dropped = Duration::FromNanoseconds(static_cast<std::int64_t>(droppedSteps) * config_.fixedStep.ToNanoseconds());
             accumulator_ -= dropped;
-            frameContext.droppedSimulationTime = dropped;
             statistics_.totalDroppedSimulationTime += dropped;
             statistics_.totalDroppedFixedSteps += droppedSteps;
             ++statistics_.catchUpLimitedFrameCount;
+            droppedSimulationTime = dropped;
         }
+        return Result<void>::Success();
+    }
 
+    /** @copydoc FrameScheduler::RunFrame */
+    Result<void> FrameScheduler::RunFrame(RuntimeLifecycle &lifecycle, const CancellationToken &cancellation, const bool suspended) {
+        ++frameNumber_;
+        const Duration rawDelta = suspended ? Duration{} : clock_.Sample();
+        Duration variableDelta = rawDelta;
+        bool clamped = false;
+        NormalizeSampleDelta(rawDelta, variableDelta, clamped);
+
+        FrameContext frameContext{.frameNumber = frameNumber_,
+                                  .variableDelta = variableDelta,
+                                  .interpolationAlpha = 0.0,
+                                  .completedSimulationTick = completedSimulationTick_,
+                                  .droppedSimulationTime = {},
+                                  .realDeltaWasClamped = clamped,
+                                  .cancellation = cancellation};
+
+        if (Result<void> result = DispatchPumpPhases(lifecycle, cancellation, frameContext, suspended); result.HasError())
+            return result;
+        if (suspended)
+            return Result<void>::Success();
+
+        accumulator_ += variableDelta;
+        Duration droppedSimulationTime{};
+        if (Result<void> result = RunFixedSteps(lifecycle, cancellation, droppedSimulationTime); result.HasError())
+            return result;
+        frameContext.droppedSimulationTime = droppedSimulationTime;
         frameContext.completedSimulationTick = completedSimulationTick_;
         frameContext.interpolationAlpha =
             static_cast<double>(accumulator_.ToNanoseconds()) / static_cast<double>(config_.fixedStep.ToNanoseconds());
 
-        if (Result<void> result = dispatch(RuntimePhase::VariableUpdate); result.HasError())
+        if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, frameContext, RuntimePhase::VariableUpdate);
+            result.HasError())
             return result;
-        if (Result<void> result = dispatch(RuntimePhase::RenderExtraction); result.HasError())
+        if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, frameContext, RuntimePhase::RenderExtraction);
+            result.HasError())
             return result;
-        const bool extractionComplete = true;
-        if (Result<void> result = dispatch(RuntimePhase::RenderExecution); result.HasError())
+        if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, frameContext, RuntimePhase::RenderExecution);
+            result.HasError())
             return result;
-        const bool executionComplete = true;
-        if (Result<void> result = dispatch(RuntimePhase::RenderGui); result.HasError())
+        if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, frameContext, RuntimePhase::RenderGui); result.HasError())
             return result;
-        const bool guiComplete = true;
-        if (!extractionComplete || !executionComplete || !guiComplete) {
-            return Result<void>::Failure(MakeError(RuntimeErrors::PresentationPrerequisitesMissing));
-        }
-        if (Result<void> result = dispatch(RuntimePhase::Presentation); result.HasError())
+        if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, frameContext, RuntimePhase::Presentation);
+            result.HasError())
             return result;
-        if (Result<void> result = dispatch(RuntimePhase::CommitDeferredLifecycleChanges); result.HasError())
+        if (Result<void> result = DispatchPhaseChecked(lifecycle, cancellation, frameContext, RuntimePhase::CommitDeferredLifecycleChanges);
+            result.HasError())
             return result;
-        return dispatch(RuntimePhase::EndFrame);
+        return DispatchPhaseChecked(lifecycle, cancellation, frameContext, RuntimePhase::EndFrame);
     }
 
     /** @copydoc FrameScheduler::ResetClock */

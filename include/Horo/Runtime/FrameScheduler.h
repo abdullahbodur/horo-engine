@@ -112,7 +112,33 @@ namespace Horo::Runtime {
         [[nodiscard]] FrameSchedulerStatistics Statistics() const noexcept;
 
     private:
-        FrameScheduler(Clock &clock, FrameSchedulerConfig config) noexcept;
+        /**
+         * @brief Internal construction key so only Create can build a scheduler.
+         * @details Private default constructor with FrameScheduler as friend:
+         *          make_unique inside Create works, external callers cannot
+         *          construct a key and thus cannot bypass Create.
+         */
+        class ConstructionKey {
+            ConstructionKey() = default;
+            friend class FrameScheduler;
+        };
+
+        FrameScheduler(Clock &clock, FrameSchedulerConfig config, ConstructionKey) noexcept;
+
+        /** @brief Normalizes one raw clock sample into the accumulator domain. */
+        void NormalizeSampleDelta(Duration rawDelta, Duration &variableDelta, bool &clamped);
+
+        /** @brief Dispatches one phase with cooperative cancellation guards. */
+        [[nodiscard]] Result<void> DispatchPhaseChecked(RuntimeLifecycle &lifecycle, const CancellationToken &cancellation,
+                                                        const FrameContext &context, RuntimePhase phase);
+
+        /** @brief Runs the suspend-safe pump phases; returns Success after EndFrame when suspended. */
+        [[nodiscard]] Result<void> DispatchPumpPhases(RuntimeLifecycle &lifecycle, const CancellationToken &cancellation,
+                                                      const FrameContext &context, bool suspended);
+
+        /** @brief Executes fixed ticks within catch-up limits and drops saturated simulation time. */
+        [[nodiscard]] Result<void> RunFixedSteps(RuntimeLifecycle &lifecycle, const CancellationToken &cancellation,
+                                                 Duration &droppedSimulationTime);
 
         FrameClock clock_;
         FrameSchedulerConfig config_;
