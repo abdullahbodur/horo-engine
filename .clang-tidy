@@ -1,0 +1,27 @@
+---
+Checks: >
+  -*,
+  clang-analyzer-core.*,
+  clang-analyzer-cplusplus.*,
+  clang-analyzer-deadcode.*,
+  clang-analyzer-security.*,
+  clang-analyzer-unix.*,
+  bugprone-dangling-handle,
+  bugprone-infinite-loop,
+  bugprone-sizeof-expression,
+  bugprone-suspicious-memory-comparison,
+  bugprone-unchecked-optional-access,
+  bugprone-use-after-move,
+  concurrency-*,
+  cppcoreguidelines-special-member-functions,
+  cppcoreguidelines-virtual-class-destructor,
+  performance-*,
+  portability-*
+WarningsAsErrors: ''
+HeaderFilterRegex: '(^|.*[/\\])(include[/\\]Horo|src|apps)[/\\]'
+FormatStyle: file
+CheckOptions:
+  bugprone-unchecked-optional-access.IgnoreSmartPointerDereference: 'true'
+  bugprone-unchecked-optional-access.IgnoreValueCalls: 'false'
+  cppcoreguidelines-special-member-functions.AllowSoleDefaultDtor: 'true'
+...
