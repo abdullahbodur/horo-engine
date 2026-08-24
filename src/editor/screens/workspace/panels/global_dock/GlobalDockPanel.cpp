@@ -44,8 +44,8 @@ namespace Horo::Editor {
         const auto &tabOrder = DefaultGlobalDockTabs();
         const auto active = std::ranges::find(tabOrder, activeTab_);
         const int activeIndex = active == tabOrder.end() ? 0 : static_cast<int>(active - tabOrder.begin());
-        const int selectedIndex = Ui::DrawDockTabs(tabNames, activeIndex, context.theme.fonts);
-        if (selectedIndex >= 0 && selectedIndex < static_cast<int>(tabOrder.size())) {
+        if (const int selectedIndex = Ui::DrawDockTabs(tabNames, activeIndex, context.theme.fonts);
+            selectedIndex >= 0 && selectedIndex < static_cast<int>(tabOrder.size())) {
             activeTab_ = tabOrder[static_cast<std::size_t>(selectedIndex)];
         }
 
@@ -54,35 +54,36 @@ namespace Horo::Editor {
         const ImVec2 contentOrigin = ImGui::GetCursorScreenPos();
         const float contentWidth = std::max(1.0F, size.x - OuterPaddingX * 2.0F);
 
+        using enum GlobalDockTab;
         switch (activeTab_) {
-            case GlobalDockTab::Assets:
+            case Assets:
                 assetsPane_.Draw(contentOrigin, contentWidth, viewModel, command, context);
                 break;
-            case GlobalDockTab::Console:
+            case Console:
                 consolePane_.Draw(contentOrigin, contentWidth, context);
                 break;
-            case GlobalDockTab::BuildOutput:
+            case BuildOutput:
                 buildOutputPane_.Draw(contentOrigin, contentWidth, command, context);
                 break;
-            case GlobalDockTab::Operations:
+            case Operations:
                 operationsPane_.Draw(contentOrigin, contentWidth, context);
                 break;
-            case GlobalDockTab::Mcp:
+            case Mcp:
                 mcpPane_.Draw(contentOrigin, contentWidth, context);
                 break;
-            case GlobalDockTab::Performance:
+            case Performance:
                 performancePane_.Draw(contentOrigin, contentWidth, context);
                 break;
-            case GlobalDockTab::Physics:
+            case Physics:
                 physicsPane_.Draw(contentOrigin, contentWidth, context);
                 break;
-            case GlobalDockTab::Audio:
+            case Audio:
                 audioPane_.Draw(contentOrigin, contentWidth, context);
                 break;
-            case GlobalDockTab::Network:
+            case Network:
                 networkPane_.Draw(contentOrigin, contentWidth, context);
                 break;
-            case GlobalDockTab::Localization:
+            case Localization:
                 localizationPane_.Draw(contentOrigin, contentWidth, context);
                 break;
         }

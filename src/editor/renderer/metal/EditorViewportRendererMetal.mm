@@ -386,10 +386,10 @@ fragment float4 viewport_grid_fragment(GridVertexOut input [[stage_in]],
     }
 
     /** @copydoc EditorViewportRendererMetal::RequestGrid */
-    void EditorViewportRendererMetal::RequestGrid(EditorViewportGridOptions options) noexcept {
-        if (!std::isfinite(options.targetMinorSpacingPixels) || options.targetMinorSpacingPixels <= 0.0F)
-            options.targetMinorSpacingPixels = 48.0F;
+    void EditorViewportRendererMetal::RequestGrid(const EditorViewportGridOptions &options) noexcept {
         impl_->gridOptions = options;
+        if (!std::isfinite(impl_->gridOptions.targetMinorSpacingPixels) || impl_->gridOptions.targetMinorSpacingPixels <= 0.0F)
+            impl_->gridOptions.targetMinorSpacingPixels = 48.0F;
     }
 
     /** @copydoc EditorViewportRendererMetal::RequestLightVisualizer */

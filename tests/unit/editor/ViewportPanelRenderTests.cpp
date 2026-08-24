@@ -35,7 +35,7 @@ namespace {
             requestedExtent = extent;
         }
 
-        void RequestGrid(const Horo::Editor::EditorViewportGridOptions options) noexcept override {
+        void RequestGrid(const Horo::Editor::EditorViewportGridOptions &options) noexcept override {
             gridOptions = options;
         }
 

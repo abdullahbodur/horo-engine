@@ -191,7 +191,15 @@ namespace Horo::Editor {
                              viewModel.contentBrowserClipboard.absoluteSourcePath == entry.absolutePath;
             const std::optional<std::string> draggedAssetPath = AbsoluteAssetPathFromPayload(ImGui::GetDragDropPayload());
             const bool dragging = draggedAssetPath.has_value() && *draggedAssetPath == entry.absolutePath;
-            cardRenderer.Draw(drawList, font, CardFontSize, entry, cardMin, metrics.cardWidth, cardHovered, selected, cut || dragging);
+            cardRenderer.Draw({.drawList = drawList,
+                               .font = font,
+                               .fontSize = CardFontSize,
+                               .cardMin = cardMin,
+                               .cardWidth = metrics.cardWidth,
+                               .hovered = cardHovered,
+                               .selected = selected,
+                               .dimmed = cut || dragging},
+                              entry);
             if (entry.kind == ContentBrowserEntryKind::Directory && cardHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
                 command = AssetBrowserInteractionSession::Navigate(entry.absolutePath);
             }

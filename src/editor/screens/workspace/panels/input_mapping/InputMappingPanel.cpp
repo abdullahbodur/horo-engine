@@ -78,44 +78,57 @@ namespace Horo::Editor {
                 statusMessage = applied.ErrorValue().message;
         }
 
-        template <typename ApplyFn> bool PollGamepadBinding(const Input::RawInputSnapshot &snapshot, const ApplyFn &apply) {
-            for (const Input::GamepadState &gamepad : snapshot.gamepads) {
-                for (std::size_t index = 0; index < gamepad.buttons.size(); ++index) {
-                    if (gamepad.buttons[index].pressed) {
-                        apply(Input::InputBinding{.kind = Input::BindingControlKind::GamepadButton,
-                                                  .gamepadButton = static_cast<Input::GamepadButton>(index)});
-                        return true;
-                    }
+        template <typename ApplyFn> bool PollGamepadButtons(const Input::GamepadState &gamepad, const ApplyFn &apply) {
+            for (std::size_t index = 0; index < gamepad.buttons.size(); ++index)
+                if (gamepad.buttons[index].pressed) {
+                    apply(Input::InputBinding{.kind = Input::BindingControlKind::GamepadButton,
+                                              .gamepadButton = static_cast<Input::GamepadButton>(index)});
+                    return true;
                 }
-                for (std::size_t index = 0; index < gamepad.rawButtons.size(); ++index) {
-                    if (gamepad.rawButtons[index].pressed) {
-                        apply(Input::InputBinding{.kind = Input::BindingControlKind::RawGamepadButton,
-                                                  .rawControl = static_cast<std::uint16_t>(index)});
-                        return true;
-                    }
-                }
-                for (std::size_t index = 0; index < gamepad.axes.size(); ++index) {
-                    if (std::fabs(gamepad.axes[index]) >= 0.75F) {
-                        apply(Input::InputBinding{.kind = Input::BindingControlKind::GamepadAxis,
-                                                  .gamepadAxis = static_cast<Input::GamepadAxis>(index),
-                                                  .scale = gamepad.axes[index] < 0.0F ? -1.0F : 1.0F,
-                                                  .deadzoneKind = Input::DeadzoneKind::Axial,
-                                                  .deadzone = 0.15F});
-                        return true;
-                    }
-                }
-                for (std::size_t index = 0; index < gamepad.rawAxes.size(); ++index) {
-                    if (std::fabs(gamepad.rawAxes[index]) >= 0.75F) {
-                        apply(Input::InputBinding{.kind = Input::BindingControlKind::RawGamepadAxis,
-                                                  .rawControl = static_cast<std::uint16_t>(index),
-                                                  .scale = gamepad.rawAxes[index] < 0.0F ? -1.0F : 1.0F,
-                                                  .deadzoneKind = Input::DeadzoneKind::Axial,
-                                                  .deadzone = 0.15F});
-                        return true;
-                    }
-                }
-            }
             return false;
+        }
+
+        template <typename ApplyFn> bool PollRawGamepadButtons(const Input::GamepadState &gamepad, const ApplyFn &apply) {
+            for (std::size_t index = 0; index < gamepad.rawButtons.size(); ++index)
+                if (gamepad.rawButtons[index].pressed) {
+                    apply(Input::InputBinding{.kind = Input::BindingControlKind::RawGamepadButton,
+                                              .rawControl = static_cast<std::uint16_t>(index)});
+                    return true;
+                }
+            return false;
+        }
+
+        template <typename ApplyFn> bool PollGamepadAxes(const Input::GamepadState &gamepad, const ApplyFn &apply) {
+            for (std::size_t index = 0; index < gamepad.axes.size(); ++index)
+                if (std::fabs(gamepad.axes[index]) >= 0.75F) {
+                    apply(Input::InputBinding{.kind = Input::BindingControlKind::GamepadAxis,
+                                              .gamepadAxis = static_cast<Input::GamepadAxis>(index),
+                                              .scale = gamepad.axes[index] < 0.0F ? -1.0F : 1.0F,
+                                              .deadzoneKind = Input::DeadzoneKind::Axial,
+                                              .deadzone = 0.15F});
+                    return true;
+                }
+            return false;
+        }
+
+        template <typename ApplyFn> bool PollRawGamepadAxes(const Input::GamepadState &gamepad, const ApplyFn &apply) {
+            for (std::size_t index = 0; index < gamepad.rawAxes.size(); ++index)
+                if (std::fabs(gamepad.rawAxes[index]) >= 0.75F) {
+                    apply(Input::InputBinding{.kind = Input::BindingControlKind::RawGamepadAxis,
+                                              .rawControl = static_cast<std::uint16_t>(index),
+                                              .scale = gamepad.rawAxes[index] < 0.0F ? -1.0F : 1.0F,
+                                              .deadzoneKind = Input::DeadzoneKind::Axial,
+                                              .deadzone = 0.15F});
+                    return true;
+                }
+            return false;
+        }
+
+        template <typename ApplyFn> bool PollGamepadBinding(const Input::RawInputSnapshot &snapshot, const ApplyFn &apply) {
+            return std::ranges::any_of(snapshot.gamepads, [&](const Input::GamepadState &gamepad) {
+                return PollGamepadButtons(gamepad, apply) || PollRawGamepadButtons(gamepad, apply) || PollGamepadAxes(gamepad, apply) ||
+                       PollRawGamepadAxes(gamepad, apply);
+            });
         }
     }  // namespace
 
@@ -335,7 +348,7 @@ namespace Horo::Editor {
         if (!listeningAction_.has_value() || router_ == nullptr)
             return;
         const Input::RawInputSnapshot &snapshot = router_->Snapshot();
-        const auto apply = [&](const Input::InputBinding &binding) {
+        const auto apply = [this, &context](const Input::InputBinding &binding) {
             Input::InputBindingProfile profile = router_->Profile();
             if (const auto existing = std::ranges::find(profile.overrides, *listeningAction_, &Input::BindingOverride::action);
                 existing == profile.overrides.end())

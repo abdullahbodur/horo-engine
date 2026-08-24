@@ -227,14 +227,13 @@ namespace Horo::Editor {
         if (uploaded.HasError())
             return 0;
         const std::uintptr_t textureId = std::move(uploaded).Value();
-        m_previewTextures.emplace(entry.absolutePath, std::pair{fingerprint, textureId});
+        m_previewTextures.try_emplace(entry.absolutePath, fingerprint, textureId);
         return textureId;
     }
 
     /** @copydoc AssetBrowserCardRenderer::Draw */
-    void AssetBrowserCardRenderer::Draw(ImDrawList *drawList, ImFont *font, const float fontSize, const ContentBrowserEntry &entry,
-                                        const ImVec2 &cardMin, const float cardWidth, const bool hovered, const bool selected,
-                                        const bool dimmed) {
+    void AssetBrowserCardRenderer::Draw(const AssetBrowserCardDrawContext &drawContext, const ContentBrowserEntry &entry) {
+        const auto &[drawList, font, fontSize, cardMin, cardWidth, hovered, selected, dimmed] = drawContext;
         const AssetCardPresentation asset = PresentEntry(entry);
         const ImVec2 cardMax{cardMin.x + cardWidth, cardMin.y + cardWidth + CardFooterHeight};
         const ImVec2 thumbMax{cardMax.x, cardMin.y + cardWidth};
@@ -242,8 +241,7 @@ namespace Horo::Editor {
         drawList->AddRectFilled(cardMin, thumbMax, asset.gradientStart, CardRadius, ImDrawFlags_RoundCornersTop);
         drawList->AddRectFilledMultiColor({cardMin.x + 1.0F, cardMin.y + 1.0F}, {thumbMax.x - 1.0F, thumbMax.y}, asset.gradientStart,
                                           asset.gradientMid, asset.gradientMid, asset.gradientEnd);
-        const std::uintptr_t previewTexture = ResolvePreview(entry);
-        if (previewTexture != 0)
+        if (const std::uintptr_t previewTexture = ResolvePreview(entry); previewTexture != 0)
             drawList->AddImage(previewTexture, {cardMin.x + 3.0F, cardMin.y + 3.0F}, {thumbMax.x - 3.0F, thumbMax.y - 3.0F});
         else if (entry.assetType == "core.mesh" && !entry.meshPreviewPoints.empty())
             DrawMeshPreview(drawList, entry, cardMin, thumbMax);
@@ -257,10 +255,8 @@ namespace Horo::Editor {
                               CardRadius, ImDrawFlags_RoundCornersAll, 1.0F);
         }
         drawList->AddLine({cardMin.x, thumbMax.y}, thumbMax, Theme::U32(Theme::Border()), 1.0F);
-        drawList->AddRect(cardMin, cardMax,
-                          Theme::U32(selected  ? Theme::Accent()
-                                     : hovered ? Theme::BorderStrong()
-                                               : Theme::Border()),
+        const ImVec4 outlineColor = selected ? Theme::Accent() : (hovered ? Theme::BorderStrong() : Theme::Border());
+        drawList->AddRect(cardMin, cardMax, Theme::U32(outlineColor),
                           CardRadius, ImDrawFlags_RoundCornersAll, selected ? 1.5F : 1.0F);
         const std::string name{asset.name};
         const ImVec2 textSize = font->CalcTextSizeA(fontSize, cardWidth - 8.0F, 0.0F, name.c_str());

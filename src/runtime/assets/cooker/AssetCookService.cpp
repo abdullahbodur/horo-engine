@@ -294,7 +294,7 @@ namespace Horo::Assets {
                 if (cacheResult.HasError())
                     return Result<std::size_t>::Failure(cacheResult.ErrorValue());
 
-                if (auto &cached = cacheResult.Value(); cached.has_value()) {
+                if (auto cached = std::move(cacheResult).Value(); cached.has_value()) {
                     slot.cacheHit = true;
                     slot.cookedArtifact = std::move(*cached);
                     ++cacheHits;

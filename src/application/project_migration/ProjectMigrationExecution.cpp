@@ -455,7 +455,7 @@ namespace Horo::Application {
             ProjectDocumentView{.handle = slot.entry.handle, .path = slot.entry.path, .kind = slot.entry.kind, .bytes = slot.bytes});
     }
 
-    Result<void> ProjectMigrationContext::ReplaceDocument(MigrationDocumentHandle document, std::vector<std::byte> replacement) {
+    Result<void> ProjectMigrationContext::ReplaceDocument(MigrationDocumentHandle document, std::vector<std::byte> replacement) const {
         if (document.generation != state_->generation || document.index >= state_->documents.size() ||
             !state_->documents[document.index].alive)
             return Result<void>::Failure(MigrationError(ProjectErrors::MigrationDocumentStale, "Cannot replace a stale document."));
@@ -470,7 +470,7 @@ namespace Horo::Application {
     }
 
     Result<void> ProjectMigrationContext::AddDocument(const std::string &projectRelativePath, MigrationDocumentKind kind,
-                                                      std::vector<std::byte> document) {
+                                                      std::vector<std::byte> document) const {
         const std::filesystem::path normalized = std::filesystem::path(projectRelativePath).lexically_normal();
         const std::string generic = normalized.generic_string();
         if (normalized.is_absolute() || normalized.empty() || generic == ".." || generic.starts_with("../"))
@@ -498,7 +498,7 @@ namespace Horo::Application {
         return Result<void>::Success();
     }
 
-    Result<void> ProjectMigrationContext::RemoveDocument(MigrationDocumentHandle document) {
+    Result<void> ProjectMigrationContext::RemoveDocument(MigrationDocumentHandle document) const {
         if (document.generation != state_->generation || document.index >= state_->documents.size() ||
             !state_->documents[document.index].alive)
             return Result<void>::Failure(MigrationError(ProjectErrors::MigrationDocumentStale, "Cannot remove a stale document."));

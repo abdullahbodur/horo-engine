@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -14,6 +16,17 @@ namespace Horo::Editor {
     class IEditorGuiRenderer;
     struct ContentBrowserDirectory;
     struct ContentBrowserEntry;
+
+    struct AssetBrowserCardDrawContext {
+        ImDrawList *drawList;
+        ImFont *font;
+        float fontSize;
+        const ImVec2 &cardMin;
+        float cardWidth;
+        bool hovered;
+        bool selected;
+        bool dimmed;
+    };
 
     /** @brief Owns preview textures and renders Asset Browser cards. */
     class AssetBrowserCardRenderer {
@@ -32,13 +45,19 @@ namespace Horo::Editor {
         void RetainVisible(const ContentBrowserDirectory &directory, const std::vector<std::size_t> &visibleEntries);
 
         /** @brief Draws one folder or asset card, resolving its preview texture when available. */
-        void Draw(ImDrawList *drawList, ImFont *font, float fontSize, const ContentBrowserEntry &entry, const ImVec2 &cardMin,
-                  float cardWidth, bool hovered, bool selected, bool dimmed);
+        void Draw(const AssetBrowserCardDrawContext &drawContext, const ContentBrowserEntry &entry);
 
     private:
         [[nodiscard]] std::uintptr_t ResolvePreview(const ContentBrowserEntry &entry);
 
         IEditorGuiRenderer *m_renderer{nullptr};
-        std::unordered_map<std::string, std::pair<std::uint64_t, std::uintptr_t>> m_previewTextures;
+        struct TransparentStringHash {
+            using is_transparent = void;
+            [[nodiscard]] std::size_t operator()(const std::string_view value) const noexcept {
+                return std::hash<std::string_view>{}(value);
+            }
+        };
+
+        std::unordered_map<std::string, std::pair<std::uint64_t, std::uintptr_t>, TransparentStringHash, std::equal_to<>> m_previewTextures;
     };
 }  // namespace Horo::Editor

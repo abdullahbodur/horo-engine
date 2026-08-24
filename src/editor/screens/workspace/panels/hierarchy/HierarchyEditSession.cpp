@@ -127,8 +127,7 @@ namespace Horo::Editor {
         const SceneObjectId clicked{id};
         if (gesture == HierarchySelectionGesture::Toggle) {
             selected = m_selectedObjects;
-            const auto existing = std::ranges::find(selected, clicked);
-            if (existing == selected.end()) {
+            if (const auto existing = std::ranges::find(selected, clicked); existing == selected.end()) {
                 selected.push_back(clicked);
             } else {
                 selected.erase(existing);

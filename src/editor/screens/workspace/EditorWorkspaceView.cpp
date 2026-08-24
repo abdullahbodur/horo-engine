@@ -100,7 +100,7 @@ namespace Horo::Editor {
         [[nodiscard]] WorkspaceSplitterInteractionResult UpdateSplitters(const EditorWorkspaceView::WorkspaceLayoutGeometry &geo,
                                                                          WorkspaceSplitterInteraction &splitterInteraction,
                                                                          Input::InputRouter &inputRouter,
-                                                                         Input::InputContextToken &workspaceInputContext) {
+                                                                         const Input::InputContextToken &workspaceInputContext) {
             std::array<WorkspaceSplitterRegion, 3> splitterRegions{};
             std::size_t splitterRegionCount = 0;
             const auto addSplitterRegion = [&splitterRegions, &splitterRegionCount](const WorkspaceSplitterId id,

@@ -25,13 +25,13 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] Ui::UiIcon IconFor(const Render::RenderLightKind kind) noexcept {
-            using enum Horo::Editor::Ui::UiIcon;
+            using enum Render::RenderLightKind;
             switch (kind) {
-                case Render::RenderLightKind::Directional:
+                case Directional:
                     return Ui::UiIcon::DirectionalLight;
-                case Render::RenderLightKind::Point:
+                case Point:
                     return Ui::UiIcon::PointLight;
-                case Render::RenderLightKind::Spot:
+                case Spot:
                     return Ui::UiIcon::SpotLight;
             }
             return Ui::UiIcon::PointLight;
@@ -44,11 +44,10 @@ namespace Horo::Editor {
         }
     }  // namespace
 
-    std::optional<SceneObjectId> DrawViewportLightMarkers(ImDrawList &drawList, const ImVec2 origin, const float width, const float height,
-                                                          const EditorViewportCamera &camera,
+    std::optional<SceneObjectId> DrawViewportLightMarkers(const ViewportLightMarkerContext &context,
                                                           const std::span<const ViewportLightPresentation> lights,
-                                                          const std::optional<SceneObjectId> primarySelection, const bool acceptInput,
-                                                          const Math::ClipDepthRange depthRange) {
+                                                          const std::optional<SceneObjectId> primarySelection) {
+        const auto &[drawList, origin, width, height, camera, depthRange, acceptInput] = context;
         constexpr float markerSize = 22.0F;
         constexpr float hitRadius = 14.0F;
         const ImVec2 pointer = ImGui::GetMousePos();

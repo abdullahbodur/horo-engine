@@ -11,6 +11,26 @@
 #include <ranges>
 
 namespace Horo::Editor {
+    namespace {
+        void DrawAssetEntrySpecificActions(const ContentBrowserEntry &entry, EditorWorkspaceViewCommandData &command,
+                                           const EditorGuiContext &context) {
+            if (entry.kind != ContentBrowserEntryKind::Asset)
+                return;
+            const ILocalizationService &localization = context.localization;
+            if (std::filesystem::path{entry.absolutePath}.extension() == ".horo_script" &&
+                Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.open_external_ide").c_str(), nullptr,
+                                    context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.open")) {
+                command.command = EditorWorkspaceViewCommand::OpenDiagnosticSource;
+                command.diagnosticSource = DiagnosticSourceRequest{entry.absolutePath, 0, 0};
+            }
+            ImGui::BeginDisabled(!entry.canReimport);
+            if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.reimport").c_str(), nullptr,
+                                    context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.refresh"))
+                command = AssetBrowserInteractionSession::Reimport(entry.absolutePath);
+            ImGui::EndDisabled();
+        }
+    }  // namespace
+
     /** @copydoc DrawAssetBrowserBackgroundActions */
     void DrawAssetBrowserBackgroundActions(const EditorWorkspaceViewModel &viewModel, AssetBrowserInteractionSession &interactionSession,
                                            EditorWorkspaceViewCommandData &command, const EditorGuiContext &context) {
@@ -109,20 +129,7 @@ namespace Horo::Editor {
                                 context.theme.fonts)) {
             interactionSession.OpenInfo(entry);
         }
-        if (entry.kind == ContentBrowserEntryKind::Asset) {
-            if (std::filesystem::path{entry.absolutePath}.extension() == ".horo_script" &&
-                Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.open_external_ide").c_str(), nullptr,
-                                    context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.open")) {
-                command.command = EditorWorkspaceViewCommand::OpenDiagnosticSource;
-                command.diagnosticSource = DiagnosticSourceRequest{entry.absolutePath, 0, 0};
-            }
-            ImGui::BeginDisabled(!entry.canReimport);
-            if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.reimport").c_str(), nullptr,
-                                    context.theme.fonts, Ui::ContextMenuItemTone::Normal, "action.refresh")) {
-                command = AssetBrowserInteractionSession::Reimport(entry.absolutePath);
-            }
-            ImGui::EndDisabled();
-        }
+        DrawAssetEntrySpecificActions(entry, command, context);
         if (Ui::ContextMenuItem(localization.Get("editor", "workspace.content_browser.action.reveal").c_str(), nullptr,
                                 context.theme.fonts)) {
             command = AssetBrowserInteractionSession::Reveal(entry.absolutePath);
@@ -146,7 +153,7 @@ namespace Horo::Editor {
         if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) || io.WantTextInput || ImGui::IsAnyItemActive())
             return;
 
-        AssetBrowserInteractionState &state = interactionSession.State();
+        const AssetBrowserInteractionState &state = interactionSession.State();
         const ContentBrowserDirectory &directory = viewModel.contentBrowser;
         const auto selected = std::ranges::find(visibleEntries, state.selectedAbsolutePath, [&directory](const std::size_t entryIndex) {
             return directory.entries[entryIndex].absolutePath;

@@ -4,12 +4,15 @@
 
 namespace Horo::Editor {
     namespace {
-        std::atomic<std::uint64_t> g_notificationIdCounter{1};
+        [[nodiscard]] std::uint64_t NextNotificationId() noexcept {
+            static std::atomic<std::uint64_t> counter{1};
+            return counter.fetch_add(1);
+        }
     }
 
     void NotificationService::Publish(std::string_view source, NotificationSeverity severity, std::string message, std::string title,
                                       std::string deduplicationKey, float durationSeconds, std::vector<NotificationAction> actions) const {
-        Publish(NotificationEvent{.id = g_notificationIdCounter.fetch_add(1, std::memory_order_relaxed),
+        Publish(NotificationEvent{.id = NextNotificationId(),
                                   .source = std::string(source),
                                   .severity = severity,
                                   .title = std::move(title),
@@ -25,7 +28,7 @@ namespace Horo::Editor {
             return;
 
         if (event.id == 0)
-            event.id = g_notificationIdCounter.fetch_add(1, std::memory_order_relaxed);
+            event.id = NextNotificationId();
 
         if (!event.deduplicationKey.empty() && event.deduplicationKey.find("::") == std::string::npos) {
             event.deduplicationKey = event.source + "::" + event.deduplicationKey;

@@ -190,54 +190,41 @@ namespace Horo::Editor {
 
             [[nodiscard]] std::string PhaseText(const ProjectOpenPhase phase) const {
                 using enum ProjectOpenPhase;
-                const char *key = "project_loading.status.processing";
-                switch (phase) {
+                const char *key = [&] {
+                    switch (phase) {
                     case Inspecting:
-                        key = "project_loading.status.inspecting";
-                        break;
+                        return "project_loading.status.inspecting";
                     case CleaningRecovery:
-                        key = "project_loading.status.cleaning";
-                        break;
+                        return "project_loading.status.cleaning";
                     case Recovering:
-                        key = "project_loading.status.recovering";
-                        break;
+                        return "project_loading.status.recovering";
                     case ValidatingCompatibility:
-                        key = "project_loading.status.validating";
-                        break;
+                        return "project_loading.status.validating";
                     case PlanningMigration:
-                        key = "project_loading.status.planning";
-                        break;
+                        return "project_loading.status.planning";
                     case Migrating:
-                        key = "project_loading.status.migrating";
-                        break;
+                        return "project_loading.status.migrating";
                     case UpdatingProjectMetadata:
-                        key = "project_loading.status.updating";
-                        break;
+                        return "project_loading.status.updating";
                     case ValidatingDefaultScene:
-                        key = "project_loading.status.loading_scene";
-                        break;
+                        return "project_loading.status.loading_scene";
                     case RebuildingDerivedState:
-                        key = "project_loading.status.rebuilding";
-                        break;
+                        return "project_loading.status.rebuilding";
                     case RendererPreflight:
-                        key = "project_loading.status.renderer";
-                        break;
+                        return "project_loading.status.renderer";
                     case PreparingWorkspace:
-                        key = "project_loading.status.workspace";
-                        break;
+                        return "project_loading.status.workspace";
                     case ReadyToActivate:
-                        key = "project_loading.status.ready";
-                        break;
+                        return "project_loading.status.ready";
                     case RequiresRendererRestart:
-                        key = "project_loading.status.renderer_restart";
-                        break;
+                        return "project_loading.status.renderer_restart";
                     case Failed:
-                        key = "project_loading.status.failed";
-                        break;
+                        return "project_loading.status.failed";
                     case Cancelled:
-                        key = "project_loading.status.cancelling";
-                        break;
-                }
+                        return "project_loading.status.cancelling";
+                    }
+                    return "project_loading.status.processing";
+                }();
                 return context_.localization.Get("editor", key);
             }
 

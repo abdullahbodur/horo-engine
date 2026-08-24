@@ -648,7 +648,7 @@ namespace Horo::Editor::Ui {
         return clicked;
     }
 
-    bool ComboControl(const char *id, int *value, const char *const items[],  // NOSONAR(cpp:S5945) C-style array compatibility
+    bool ComboControl(const char *id, int *value, const char *const *items,
                       const int itemCount, const Theme::Fonts &fonts, const ComboControlOptions options) {
         const ComboItemSource source{.label = [items](const int index) {
             return items[index];

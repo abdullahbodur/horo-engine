@@ -431,17 +431,21 @@ namespace Horo::Editor {
             ImDrawList *drawList = ImGui::GetWindowDrawList();
 
             using enum CardInteractionStatus;
+            bool interactionHandled = false;
             for (std::size_t idx = 0; idx < visibleCount; ++idx) {
                 const ImVec2 pMin = ImGui::GetCursorScreenPos();
                 const float cardHeight = MeasureCardHeight(activeSnackbars_[idx]);
 
                 if (const auto cardResult = DrawSnackbarCard(activeSnackbars_[idx], drawList); cardResult.status == Dismissed) {
                     DismissAt(idx);
-                    break;
+                    interactionHandled = true;
                 } else if (cardResult.status == ActionTriggered) {
                     result = cardResult.actionEvent;
-                    break;
+                    interactionHandled = true;
                 }
+
+                if (interactionHandled)
+                    break;
 
                 const float nextCardY = pMin.y + cardHeight + (idx + 1 < visibleCount ? kCardGap : 0.0f);
                 ImGui::SetCursorScreenPos(ImVec2(pMin.x, nextCardY));

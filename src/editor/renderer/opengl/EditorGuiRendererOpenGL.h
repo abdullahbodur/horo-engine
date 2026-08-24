@@ -12,6 +12,10 @@ namespace Horo::Editor {
         /** @brief Borrows the SDL window and initialized OpenGL context. */
         EditorGuiRendererOpenGL(SDL_Window &window, SDL_GLContext context) noexcept;
         ~EditorGuiRendererOpenGL() override;
+        EditorGuiRendererOpenGL(const EditorGuiRendererOpenGL &) = delete;
+        EditorGuiRendererOpenGL &operator=(const EditorGuiRendererOpenGL &) = delete;
+        EditorGuiRendererOpenGL(EditorGuiRendererOpenGL &&) = delete;
+        EditorGuiRendererOpenGL &operator=(EditorGuiRendererOpenGL &&) = delete;
 
         [[nodiscard]] Result<void> Initialize() override;
         [[nodiscard]] Result<void> BeginFrame() override;
