@@ -81,15 +81,15 @@ namespace Horo::Editor {
 
     private:
         GlobalDockTab activeTab_{GlobalDockTab::Assets};
-        AssetBrowserPane assetsPane_;
-        GlobalDockConsolePane consolePane_;
-        GlobalDockBuildOutputPane buildOutputPane_;
-        GlobalDockOperationsPane operationsPane_;
-        GlobalDockMcpPane mcpPane_;
-        GlobalDockPerformancePane performancePane_;
-        GlobalDockPhysicsPane physicsPane_;
-        GlobalDockAudioPane audioPane_;
-        GlobalDockNetworkPane networkPane_;
-        GlobalDockLocalizationPane localizationPane_;
+        [[no_unique_address]] AssetBrowserPane assetsPane_;
+        [[no_unique_address]] GlobalDockConsolePane consolePane_;
+        [[no_unique_address]] GlobalDockBuildOutputPane buildOutputPane_;
+        [[no_unique_address]] GlobalDockOperationsPane operationsPane_;
+        [[no_unique_address]] GlobalDockMcpPane mcpPane_;
+        [[no_unique_address]] GlobalDockPerformancePane performancePane_;
+        [[no_unique_address]] GlobalDockPhysicsPane physicsPane_;
+        [[no_unique_address]] GlobalDockAudioPane audioPane_;
+        [[no_unique_address]] GlobalDockNetworkPane networkPane_;
+        [[no_unique_address]] GlobalDockLocalizationPane localizationPane_;
     };
 }  // namespace Horo::Editor

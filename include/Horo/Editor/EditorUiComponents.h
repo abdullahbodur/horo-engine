@@ -326,7 +326,7 @@ namespace Horo::Editor::Ui {
     };
 
     /** @brief Renders a styled dropdown with optional error styling. Returns true if the selection changed. */
-    [[nodiscard]] bool ComboControl(const char *id, int *value, const char *const items[], int itemCount, const Theme::Fonts &fonts,
+    [[nodiscard]] bool ComboControl(const char *id, int *value, const char *const *items, int itemCount, const Theme::Fonts &fonts,
                                     ComboControlOptions options = {});
 
     /**

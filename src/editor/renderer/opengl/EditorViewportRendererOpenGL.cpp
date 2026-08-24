@@ -7,6 +7,7 @@
 #include <SDL3/SDL_video.h>
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <glad/gl.h>
 #include <string>
@@ -133,10 +134,10 @@ namespace Horo::Editor {
     }
 
     /** @copydoc EditorViewportRendererOpenGL::RequestGrid */
-    void EditorViewportRendererOpenGL::RequestGrid(EditorViewportGridOptions options) noexcept {
-        if (!std::isfinite(options.targetMinorSpacingPixels) || options.targetMinorSpacingPixels <= 0.0F)
-            options.targetMinorSpacingPixels = 48.0F;
+    void EditorViewportRendererOpenGL::RequestGrid(const EditorViewportGridOptions &options) noexcept {
         gridOptions_ = options;
+        if (!std::isfinite(gridOptions_.targetMinorSpacingPixels) || gridOptions_.targetMinorSpacingPixels <= 0.0F)
+            gridOptions_.targetMinorSpacingPixels = 48.0F;
     }
 
     /** @copydoc EditorViewportRendererOpenGL::RequestLightVisualizer */
@@ -733,12 +734,10 @@ void main() {}
             glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(sizeof(Render::MeshVertex)), nullptr);
             glEnableVertexAttribArray(1);
             glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(sizeof(Render::MeshVertex)),
-                                  reinterpret_cast<const void *>(
-                                      static_cast<std::uintptr_t>(offsetof(Render::MeshVertex, normal))));  // NOSONAR(cpp:S3630)
+                                  std::bit_cast<const void *>(static_cast<std::uintptr_t>(offsetof(Render::MeshVertex, normal))));
             glEnableVertexAttribArray(2);
             glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(sizeof(Render::MeshVertex)),
-                                  reinterpret_cast<const void *>(
-                                      static_cast<std::uintptr_t>(offsetof(Render::MeshVertex, uv))));  // NOSONAR(cpp:S3630)
+                                  std::bit_cast<const void *>(static_cast<std::uintptr_t>(offsetof(Render::MeshVertex, uv))));
             if (mesh.vertexArray == 0 || mesh.vertexBuffer == 0 || mesh.indexBuffer == 0) {
                 DestroyMesh(mesh);
                 glBindVertexArray(static_cast<GLuint>(previousVertexArray));

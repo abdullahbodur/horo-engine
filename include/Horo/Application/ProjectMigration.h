@@ -303,10 +303,10 @@ namespace Horo::Application {
 
         [[nodiscard]] std::vector<MigrationDocumentEntry> ListDocuments(const MigrationDocumentQuery &query) const;
         [[nodiscard]] Result<ProjectDocumentView> ReadDocument(MigrationDocumentHandle document) const;
-        [[nodiscard]] Result<void> ReplaceDocument(MigrationDocumentHandle document, std::vector<std::byte> replacement);
+        [[nodiscard]] Result<void> ReplaceDocument(MigrationDocumentHandle document, std::vector<std::byte> replacement) const;
         [[nodiscard]] Result<void> AddDocument(const std::string &projectRelativePath, MigrationDocumentKind kind,
-                                               std::vector<std::byte> document);
-        [[nodiscard]] Result<void> RemoveDocument(MigrationDocumentHandle document);
+                                               std::vector<std::byte> document) const;
+        [[nodiscard]] Result<void> RemoveDocument(MigrationDocumentHandle document) const;
 
     private:
         friend class ProjectMigrationExecutor;

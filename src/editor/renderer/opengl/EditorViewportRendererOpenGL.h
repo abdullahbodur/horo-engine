@@ -22,7 +22,7 @@ namespace Horo::Editor {
         void Shutdown() noexcept;
 
         void RequestExtent(EditorViewportExtent extent) noexcept override;
-        void RequestGrid(EditorViewportGridOptions options) noexcept override;
+        void RequestGrid(const EditorViewportGridOptions &options) noexcept override;
         void RequestLightVisualizer(EditorViewportLightVisualizerOptions options) noexcept override;
         [[nodiscard]] EditorViewportExtent RequestedExtent() const noexcept override;
         [[nodiscard]] Math::ClipDepthRange ClipDepthRange() const noexcept override;

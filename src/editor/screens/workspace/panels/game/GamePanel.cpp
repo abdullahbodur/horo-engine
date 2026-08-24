@@ -50,9 +50,9 @@ namespace Horo::Editor {
             viewportRenderer_->RequestGrid({.visible = false});
             viewportRenderer_->RequestLightVisualizer({});
         }
-        const EditorViewportTextureView texture =
-            viewportRenderer_ != nullptr ? viewportRenderer_->TextureView() : EditorViewportTextureView{};
-        if (viewportRenderer_ != nullptr && viewportRenderer_->IsReady() && texture.IsValid() &&
+        if (const EditorViewportTextureView texture =
+                viewportRenderer_ != nullptr ? viewportRenderer_->TextureView() : EditorViewportTextureView{};
+            viewportRenderer_ != nullptr && viewportRenderer_->IsReady() && texture.IsValid() &&
             (viewModel.playState == EditorPlayState::Playing || viewModel.playState == EditorPlayState::Paused)) {
             ImGui::GetWindowDrawList()->AddImage(static_cast<ImTextureID>(texture.textureId), origin,
                                                  ImVec2(origin.x + width, origin.y + height), ImVec2(texture.u0, texture.v0),

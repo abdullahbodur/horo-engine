@@ -237,7 +237,8 @@ namespace Horo::Editor {
         }
         if (evaluated.HasError())
             return Result<TransformGizmoMathOutcome>::Failure(evaluated.ErrorValue());
-        return ValidateOutcome(std::move(evaluated.Value().first), evaluated.Value().second);
+        auto [transform, delta] = std::move(evaluated).Value();
+        return ValidateOutcome(std::move(transform), delta);
     }
 
     /** @copydoc ResolveTransformGizmoWorldAxes */

@@ -7,13 +7,21 @@
 #include <span>
 
 namespace Horo::Editor {
+    struct ViewportLightMarkerContext {
+        ImDrawList &drawList;
+        ImVec2 origin;
+        float width;
+        float height;
+        const EditorViewportCamera &camera;
+        Math::ClipDepthRange depthRange;
+        bool acceptInput;
+    };
+
     /**
      * @brief Draws constant-size viewport Light markers and resolves one clicked object.
      * @return Stable Light object identity when a visible marker was clicked.
      */
-    [[nodiscard]] std::optional<SceneObjectId> DrawViewportLightMarkers(ImDrawList &drawList, ImVec2 origin, float width, float height,
-                                                                        const EditorViewportCamera &camera,
+    [[nodiscard]] std::optional<SceneObjectId> DrawViewportLightMarkers(const ViewportLightMarkerContext &context,
                                                                         std::span<const ViewportLightPresentation> lights,
-                                                                        std::optional<SceneObjectId> primarySelection, bool acceptInput,
-                                                                        Math::ClipDepthRange depthRange);
+                                                                        std::optional<SceneObjectId> primarySelection);
 }  // namespace Horo::Editor

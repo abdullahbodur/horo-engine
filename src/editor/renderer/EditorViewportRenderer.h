@@ -64,7 +64,7 @@ namespace Horo::Editor {
         virtual void RequestExtent(EditorViewportExtent extent) noexcept = 0;
 
         /** @brief Records the panel's world-grid presentation options for the current frame. */
-        virtual void RequestGrid(EditorViewportGridOptions options) noexcept = 0;
+        virtual void RequestGrid(const EditorViewportGridOptions &options) noexcept = 0;
 
         /** @brief Records the selected Light visualizer requested for the next viewport pass. */
         virtual void RequestLightVisualizer(EditorViewportLightVisualizerOptions options) noexcept = 0;
