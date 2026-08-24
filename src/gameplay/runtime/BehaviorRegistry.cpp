@@ -6,11 +6,6 @@
 #include <unordered_set>
 
 namespace Horo::Gameplay {
-    struct BehaviorRegistry::Impl {
-        std::vector<BehaviorRegistration> registrations;
-        bool frozen{};
-    };
-
     namespace {
         [[nodiscard]] Result<void> ValidateDescriptor(const BehaviorRegistration &registration) {
             const BehaviorDescriptor &descriptor = registration.descriptor;
@@ -37,51 +32,45 @@ namespace Horo::Gameplay {
         }
     }  // namespace
 
-    BehaviorRegistry::BehaviorRegistry() : impl_(std::make_unique<Impl>()) {}
-
-    BehaviorRegistry::~BehaviorRegistry() = default;
-    BehaviorRegistry::BehaviorRegistry(BehaviorRegistry &&) noexcept = default;
-    BehaviorRegistry &BehaviorRegistry::operator=(BehaviorRegistry &&) noexcept = default;
-
     /** @copydoc BehaviorRegistry::Register */
     Result<void> BehaviorRegistry::Register(BehaviorRegistration registration) {
-        if (impl_->frozen)
+        if (frozen_)
             return Result<void>::Failure(MakeError(GameplayErrors::RegistryFrozen));
         if (const Result<void> valid = ValidateDescriptor(registration); valid.HasError())
             return valid;
         if (Find(registration.descriptor.typeId) != nullptr)
             return Result<void>::Failure(MakeError(GameplayErrors::DuplicateBehaviorType));
-        impl_->registrations.push_back(std::move(registration));
+        registrations_.push_back(std::move(registration));
         return Result<void>::Success();
     }
 
     /** @copydoc BehaviorRegistry::Freeze */
     Result<void> BehaviorRegistry::Freeze() {
-        if (impl_->frozen)
+        if (frozen_)
             return Result<void>::Success();
-        std::ranges::sort(impl_->registrations, {}, [](const BehaviorRegistration &registration) {
+        std::ranges::sort(registrations_, {}, [](const BehaviorRegistration &registration) {
             return registration.descriptor.typeId.Value();
         });
-        impl_->frozen = true;
+        frozen_ = true;
         return Result<void>::Success();
     }
 
     /** @copydoc BehaviorRegistry::IsFrozen */
     bool BehaviorRegistry::IsFrozen() const noexcept {
-        return impl_->frozen;
+        return frozen_;
     }
 
     /** @copydoc BehaviorRegistry::Registrations */
     std::span<const BehaviorRegistration> BehaviorRegistry::Registrations() const noexcept {
-        return impl_->registrations;
+        return registrations_;
     }
 
     /** @copydoc BehaviorRegistry::Find */
     const BehaviorRegistration *BehaviorRegistry::Find(const BehaviorTypeId &typeId) const noexcept {
-        const auto found = std::ranges::find(impl_->registrations, typeId, [](const BehaviorRegistration &registration) {
+        const auto found = std::ranges::find(registrations_, typeId, [](const BehaviorRegistration &registration) {
             return registration.descriptor.typeId;
         });
-        return found == impl_->registrations.end() ? nullptr : std::to_address(found);
+        return found == registrations_.end() ? nullptr : std::to_address(found);
     }
 
 }  // namespace Horo::Gameplay

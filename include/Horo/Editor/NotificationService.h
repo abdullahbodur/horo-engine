@@ -2,6 +2,7 @@
 
 #include "Horo/Editor/EditorDataBus.h"
 
+#include <atomic>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -63,5 +64,6 @@ namespace Horo::Editor {
 
     private:
         EditorDataBus *events_;
+        mutable std::atomic<std::uint64_t> nextId_{1};
     };
 }  // namespace Horo::Editor

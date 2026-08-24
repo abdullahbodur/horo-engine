@@ -155,23 +155,23 @@ namespace Horo::Editor {
             }
         }
 
-        [[nodiscard]] std::uint32_t ReadLittleEndian32(const std::array<std::byte, 4> &bytes) {
-            return static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[0])) |
-                   (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[1])) << 8U) |
-                   (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[2])) << 16U) |
-                   (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(bytes[3])) << 24U);
+        [[nodiscard]] std::uint32_t ReadLittleEndian32(const std::span<const char, 4> bytes) {
+            return (static_cast<std::uint32_t>(static_cast<unsigned char>(bytes[0]))) |
+                   (static_cast<std::uint32_t>(static_cast<unsigned char>(bytes[1])) << 8U) |
+                   (static_cast<std::uint32_t>(static_cast<unsigned char>(bytes[2])) << 16U) |
+                   (static_cast<std::uint32_t>(static_cast<unsigned char>(bytes[3])) << 24U);
         }
 
         [[nodiscard]] bool ReadLittleEndian32(std::ifstream &input, std::uint32_t &output) {
-            std::array<std::byte, 4> bytes{};
-            input.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));  // NOSONAR(cpp:S6022)
+            std::array<char, 4> bytes{};
+            input.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
             if (!input)
                 return false;
             output = ReadLittleEndian32(bytes);
             return true;
         }
 
-        [[nodiscard]] float ReadLittleEndianFloat(const std::array<std::byte, 4> &bytes) {
+        [[nodiscard]] float ReadLittleEndianFloat(const std::span<const char, 4> bytes) {
             const std::uint32_t raw = ReadLittleEndian32(bytes);
             return std::bit_cast<float>(raw);
         }
@@ -209,17 +209,13 @@ namespace Horo::Editor {
                         : static_cast<std::uint32_t>((static_cast<std::uint64_t>(sample) * positionCount) / sampleCount);
                 input.seekg(kMeshPositionPayloadOffset +
                             static_cast<std::streamoff>(positionIndex) * 3 * static_cast<std::streamoff>(sizeof(float)));
-                std::array<std::byte, 12> bytes{};
-                input.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));  // NOSONAR(cpp:S6022)
+                std::array<char, 12> bytes{};
+                input.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
                 if (!input)
                     return {};
-                std::array<std::byte, 4> component{};
-                std::memcpy(component.data(), bytes.data(), component.size());
-                const float x = ReadLittleEndianFloat(component);
-                std::memcpy(component.data(), bytes.data() + 4, component.size());
-                const float y = ReadLittleEndianFloat(component);
-                std::memcpy(component.data(), bytes.data() + 8, component.size());
-                const float z = ReadLittleEndianFloat(component);
+                const float x = ReadLittleEndianFloat(std::span<const char, 4>{bytes.data(), 4});
+                const float y = ReadLittleEndianFloat(std::span<const char, 4>{bytes.data() + 4, 4});
+                const float z = ReadLittleEndianFloat(std::span<const char, 4>{bytes.data() + 8, 4});
                 if (std::isfinite(x) && std::isfinite(y) && std::isfinite(z))
                     points.push_back({x, y, z});
             }

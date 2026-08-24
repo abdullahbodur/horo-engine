@@ -355,14 +355,14 @@ namespace Horo::Application {
     };
 
     /** @brief Move-only unpublished filesystem candidate; destruction removes its disposable state. */
-    class PreparedProjectMigration {  // NOSONAR(cpp:S3624) Pimpl type with custom destructor and move operations
+    class PreparedProjectMigration {  // NOSONAR(cpp:S3624) Pimpl pattern: destructor defined in .cpp to complete State
     public:
         struct State;
-        ~PreparedProjectMigration();
-        PreparedProjectMigration(PreparedProjectMigration &&) noexcept;
-        PreparedProjectMigration &operator=(PreparedProjectMigration &&) noexcept;
         PreparedProjectMigration(const PreparedProjectMigration &) = delete;
         PreparedProjectMigration &operator=(const PreparedProjectMigration &) = delete;
+        PreparedProjectMigration(PreparedProjectMigration &&) noexcept;
+        PreparedProjectMigration &operator=(PreparedProjectMigration &&) noexcept;
+        ~PreparedProjectMigration();
 
         [[nodiscard]] const std::filesystem::path &CandidateRoot() const noexcept;
         [[nodiscard]] std::span<const PreparedMigrationChange> Changes() const noexcept;

@@ -47,40 +47,40 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] std::string EscapeJson(const std::string_view value) {
-            std::ostringstream escaped;
+            std::string escaped;
+            escaped.reserve(value.size() + 16);
             for (const unsigned char character : value) {
                 switch (character) {
                     case '"':
-                        escaped << R"(\")";
+                        escaped.append(R"(\")");
                         break;
                     case '\\':
-                        escaped << R"(\\)";
+                        escaped.append(R"(\\)");
                         break;
                     case '\b':
-                        escaped << R"(\b)";
+                        escaped.append(R"(\b)");
                         break;
                     case '\f':
-                        escaped << R"(\f)";
+                        escaped.append(R"(\f)");
                         break;
                     case '\n':
-                        escaped << R"(\n)";
+                        escaped.append(R"(\n)");
                         break;
                     case '\r':
-                        escaped << R"(\r)";
+                        escaped.append(R"(\r)");
                         break;
                     case '\t':
-                        escaped << R"(\t)";
+                        escaped.append(R"(\t)");
                         break;
                     default:
                         if (character < 0x20) {
-                            static constexpr char hex[] = "0123456789abcdef";
-                            escaped << R"(\u00)" << hex[character >> 4] << hex[character & 0x0f];  // NOSONAR(cpp:S6022)
+                            std::format_to(std::back_inserter(escaped), "\\u00{:02x}", character);
                         } else {
-                            escaped << static_cast<char>(character);
+                            escaped.push_back(static_cast<char>(character));
                         }
                 }
             }
-            return escaped.str();
+            return escaped;
         }
 
         [[nodiscard]] std::string MakeProjectId(const ProjectCreationOperationId operationId) {

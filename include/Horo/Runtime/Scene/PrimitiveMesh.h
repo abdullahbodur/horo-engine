@@ -64,16 +64,16 @@ namespace Horo::Runtime {
     };
 
     /** @brief Thread-safe bounded cache keyed by the complete versioned primitive descriptor. */
-    class PrimitiveMeshCache final {  // NOSONAR(cpp:S3624) Pimpl type with custom destructor and move operations
+    class PrimitiveMeshCache final {  // NOSONAR(cpp:S3624) Pimpl pattern: destructor defined in .cpp to complete Impl
     public:
         /** @brief Creates a cache with explicit bounded budgets. @param limits Maximum resident item and CPU-byte counts.
          */
         explicit PrimitiveMeshCache(PrimitiveMeshCacheLimits limits = {});
-        ~PrimitiveMeshCache();
-        PrimitiveMeshCache(PrimitiveMeshCache &&) noexcept;
-        PrimitiveMeshCache &operator=(PrimitiveMeshCache &&) noexcept;
         PrimitiveMeshCache(const PrimitiveMeshCache &) = delete;
         PrimitiveMeshCache &operator=(const PrimitiveMeshCache &) = delete;
+        PrimitiveMeshCache(PrimitiveMeshCache &&) noexcept;
+        PrimitiveMeshCache &operator=(PrimitiveMeshCache &&) noexcept;
+        ~PrimitiveMeshCache();
 
         /** @brief Acquires or generates a mesh and pins it against eviction for the lease lifetime. */
         [[nodiscard]] Result<PrimitiveMeshLease> Acquire(const PrimitiveMeshDescriptor &descriptor);

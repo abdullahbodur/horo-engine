@@ -7,8 +7,9 @@
 
 #include "Horo/Gameplay/Behavior.h"
 
-#include <memory>
+#include <cstdint>
 #include <span>
+#include <vector>
 
 namespace Horo::Gameplay {
     /** @brief One validated descriptor and its implementation factory. */
@@ -18,14 +19,9 @@ namespace Horo::Gameplay {
     };
 
     /** @brief Host-owned registry frozen before any runtime scene activates. */
-    class BehaviorRegistry final {  // NOSONAR(cpp:S3624) Pimpl type with custom destructor and move operations
+    class BehaviorRegistry final {
     public:
-        BehaviorRegistry();
-        ~BehaviorRegistry();
-        BehaviorRegistry(const BehaviorRegistry &) = delete;
-        BehaviorRegistry &operator=(const BehaviorRegistry &) = delete;
-        BehaviorRegistry(BehaviorRegistry &&) noexcept;
-        BehaviorRegistry &operator=(BehaviorRegistry &&) noexcept;
+        BehaviorRegistry() = default;
 
         /** @brief Adds one descriptor before freeze, rejecting invalid or duplicate identities. */
         [[nodiscard]] Result<void> Register(BehaviorRegistration registration);
@@ -39,7 +35,7 @@ namespace Horo::Gameplay {
         [[nodiscard]] const BehaviorRegistration *Find(const BehaviorTypeId &typeId) const noexcept;
 
     private:
-        struct Impl;
-        std::unique_ptr<Impl> impl_;
+        std::vector<BehaviorRegistration> registrations_;
+        bool frozen_{false};
     };
 }  // namespace Horo::Gameplay

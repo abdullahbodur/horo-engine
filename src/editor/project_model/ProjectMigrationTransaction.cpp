@@ -218,8 +218,7 @@ namespace Horo::Editor {
                         keys.pop_back();
                     return true;
                 };
-                const auto *first = reinterpret_cast<const char *>(bytes.data());  // NOSONAR(cpp:S6022)
-                json result = json::parse(first, first + bytes.size(), callback);
+                json result = json::parse(bytes.begin(), bytes.end(), callback);
 
                 if (const std::string canonical = result.dump() + "\n";
                     duplicate || canonical.size() != bytes.size() || std::memcmp(canonical.data(), bytes.data(), bytes.size()) != 0 ||
@@ -235,11 +234,12 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] std::string Hex(const MigrationContentHash &hash) {
-            std::ostringstream out;
-            out << "sha256:" << std::hex << std::setfill('0');
-            for (const auto value : hash.bytes)
-                out << std::setw(2) << unsigned(value);
-            return out.str();
+            std::string out = "sha256:";
+            out.reserve(7 + hash.bytes.size() * 2);
+            for (const auto value : hash.bytes) {
+                std::format_to(std::back_inserter(out), "{:02x}", static_cast<unsigned char>(value));
+            }
+            return out;
         }
 
         [[nodiscard]] std::string Hex(const MigrationDefinitionHash &hash) {
