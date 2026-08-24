@@ -78,16 +78,13 @@ jobs:
 
       - name: Run Clang-Tidy
         run: |
-          set +e
           run-clang-tidy-18 \
             -p build/codacy-clang-tidy \
+            -j "$(nproc)" \
             -quiet \
-            '(^|.*/)(src|apps)/.*\.(cpp|cc|cxx)$' \
+            '(^|.*/)(src|apps)/.*\.(c|cc|cpp|cxx)$' \
             > clang-tidy-output.txt 2>&1
-          status=$?
-          set -e
 
-          echo "Clang-Tidy exit code: $status"
           test -f clang-tidy-output.txt
           sed -n '1,200p' clang-tidy-output.txt
 
