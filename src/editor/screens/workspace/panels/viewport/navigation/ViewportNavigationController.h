@@ -43,6 +43,9 @@ namespace Horo::Editor {
         void TryBeginNavigation(const ViewportNavigationUpdateContext &context, ViewportInteractionCapture &capture);
         void EndReleasedNavigation(const Input::RawInputSnapshot &input, ViewportInteractionCapture &capture);
         [[nodiscard]] EditorViewportNavigationDelta BuildNavigationDelta(const ViewportNavigationUpdateContext &context) const;
+        void ApplyPointerNavigation(const ViewportNavigationUpdateContext &context, float orbitSensitivity, float panSensitivity,
+                                    EditorViewportNavigationDelta &navigation) const;
+        void ApplyFlyNavigation(const ViewportNavigationUpdateContext &context, EditorViewportNavigationDelta &navigation) const;
         void EmitNavigationCommand(const ViewportNavigationUpdateContext &context, const EditorViewportNavigationDelta &navigation,
                                    const ViewportInteractionCapture &capture) const;
 

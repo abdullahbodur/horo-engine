@@ -22,17 +22,17 @@ namespace Horo::Editor {
         if (router == nullptr || capture_.WorkspaceContext() == nullptr)
             return;
         const Input::RawInputSnapshot &input = router->Snapshot();
-        const TransformGizmoDrawContext gizmoContext{
-            .origin = context.origin,
-            .width = context.width,
-            .height = context.height,
-            .hovered = context.hovered,
-            .input = input,
-            .viewModel = context.viewModel,
-            .command = context.command,
-            .depthRange = context.depthRange,
-        };
-        if (gizmo_.Draw(context.drawList, gizmoContext, capture_))
+        if (const TransformGizmoDrawContext gizmoContext{
+                .origin = context.origin,
+                .width = context.width,
+                .height = context.height,
+                .hovered = context.hovered,
+                .input = input,
+                .viewModel = context.viewModel,
+                .command = context.command,
+                .depthRange = context.depthRange,
+            };
+            gizmo_.Draw(context.drawList, gizmoContext, capture_))
             return;
         navigation_.Update(
             ViewportNavigationUpdateContext{
