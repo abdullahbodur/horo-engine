@@ -222,6 +222,15 @@ namespace Horo::Editor {
         }
     };
 
+    struct HierarchyPanel::RowActionIcon {
+        Ui::UiIcon icon{Ui::UiIcon::Visibility};
+        ImVec2 minimum{};
+        ImVec2 maximum{};
+        bool hovered{false};
+        bool active{false};
+        bool inherited{false};
+    };
+
     void HierarchyPanel::OnAttach(PanelContext &context) {
         inputRouter_ = context.inputRouter;
         workspaceInputContext_ = context.workspaceInputContext;
@@ -419,6 +428,19 @@ namespace Horo::Editor {
             ImGui::SetTooltip("%s", context.localization.Get("editor", icon.tooltipKey).c_str());
     }
 
+    void HierarchyPanel::DrawRowActionIcon(const RowFrame &frame, const float iconSize, const RowActionIcon &action) {
+        if (iconSize <= 0.0F)
+            return;
+        ImVec4 color = action.hovered || action.active ? Theme::Text() : Theme::Muted();
+        if (action.active && !action.hovered)
+            color.w *= 0.82F;
+        if (action.inherited)
+            color.w *= 0.55F;
+        const ImVec2 position{action.minimum.x + ((action.maximum.x - action.minimum.x) - iconSize) * 0.5F,
+                              action.minimum.y + ((action.maximum.y - action.minimum.y) - iconSize) * 0.5F};
+        Ui::DrawEditorIcon(&frame.drawList, action.icon, position, {iconSize, iconSize}, Theme::U32(color));
+    }
+
     void HierarchyPanel::DrawRowActions(const RowFrame &frame, const RowControls &controls) {
         if (frame.geometry.layout.visibilityAction.Width() <= 0.0F)
             return;
@@ -426,24 +448,24 @@ namespace Horo::Editor {
             std::max(0.0F, std::min({15.0F * frame.uiScale, frame.geometry.layout.visibilityAction.Width() - 4.0F * frame.uiScale,
                                      frame.geometry.layout.lockAction.Width() - 4.0F * frame.uiScale,
                                      frame.geometry.layout.height - 4.0F * frame.uiScale}));
-        const auto drawAction = [&](const Ui::UiIcon actionIcon, const ImVec2 minimum, const ImVec2 maximum, const bool actionHovered,
-                                    const bool active, const bool inherited) {
-            if (actionIconSize <= 0.0F)
-                return;
-            ImVec4 color = actionHovered || active ? Theme::Text() : Theme::Muted();
-            if (active && !actionHovered)
-                color.w *= 0.82F;
-            if (inherited)
-                color.w *= 0.55F;
-            const ImVec2 position{minimum.x + ((maximum.x - minimum.x) - actionIconSize) * 0.5F,
-                                  minimum.y + ((maximum.y - minimum.y) - actionIconSize) * 0.5F};
-            Ui::DrawEditorIcon(&frame.drawList, actionIcon, position, {actionIconSize, actionIconSize}, Theme::U32(color));
-        };
-        drawAction(frame.node.effectivelyVisible ? Ui::UiIcon::Visibility : Ui::UiIcon::VisibilityOff, frame.geometry.visibilityMin,
-                   frame.geometry.visibilityMax, controls.visibilityHovered, !frame.node.effectivelyVisible,
-                   frame.node.hiddenByParent && frame.node.locallyVisible);
-        drawAction(Ui::UiIcon::Lock, frame.geometry.lockMin, frame.geometry.lockMax, controls.lockHovered, frame.node.effectivelyLocked,
-                   frame.node.lockedByParent && !frame.node.locallyLocked);
+        DrawRowActionIcon(frame, actionIconSize,
+                          {
+                              .icon = frame.node.effectivelyVisible ? Ui::UiIcon::Visibility : Ui::UiIcon::VisibilityOff,
+                              .minimum = frame.geometry.visibilityMin,
+                              .maximum = frame.geometry.visibilityMax,
+                              .hovered = controls.visibilityHovered,
+                              .active = !frame.node.effectivelyVisible,
+                              .inherited = frame.node.hiddenByParent && frame.node.locallyVisible,
+                          });
+        DrawRowActionIcon(frame, actionIconSize,
+                          {
+                              .icon = Ui::UiIcon::Lock,
+                              .minimum = frame.geometry.lockMin,
+                              .maximum = frame.geometry.lockMax,
+                              .hovered = controls.lockHovered,
+                              .active = frame.node.effectivelyLocked,
+                              .inherited = frame.node.lockedByParent && !frame.node.locallyLocked,
+                          });
     }
 
     void HierarchyPanel::DrawRowPresentation(const RowFrame &frame, const RowControls &controls, const EditorGuiContext &context) {

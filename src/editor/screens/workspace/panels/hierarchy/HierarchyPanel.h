@@ -40,6 +40,7 @@ namespace Horo::Editor {
         struct PanelInteractionState;
         struct RowFrame;
         struct RowControls;
+        struct RowActionIcon;
 
         void BeginRename(HierarchyNodeId id);
         [[nodiscard]] PanelInteractionState DrawSearch(float panelWidth, float uiScale, const EditorGuiContext &context);
@@ -55,6 +56,7 @@ namespace Horo::Editor {
         static void DrawRowBackground(const RowFrame &frame, bool hovered);
         static void DrawRowTree(const RowFrame &frame, const RowControls &controls, float centerY);
         static void DrawRowTypeIcon(const RowFrame &frame, const EditorGuiContext &context, float centerY);
+        static void DrawRowActionIcon(const RowFrame &frame, float iconSize, const RowActionIcon &action);
         static void DrawRowActions(const RowFrame &frame, const RowControls &controls);
         void ApplyRowInteraction(const RowFrame &frame, const RowControls &controls, bool workspaceEligible,
                                  EditorWorkspaceViewCommandData &command);
