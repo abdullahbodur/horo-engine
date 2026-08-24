@@ -220,9 +220,9 @@ namespace Horo::Editor {
 
         void DrawInfoPopup(AssetBrowserInteractionState &state, const EditorGuiContext &context) {
             constexpr const char *popupId = "##ContentBrowserInfo";
-            if (state.openInfo) {
+            if (state.openAssetInfo) {
                 ImGui::OpenPopup(popupId);
-                state.openInfo = false;
+                state.openAssetInfo = false;
             }
             const ImGuiViewport *viewport = ImGui::GetMainViewport();
             const float popupWidth = std::max(160.0F, std::min(560.0F, viewport->WorkSize.x - 32.0F));
@@ -232,7 +232,8 @@ namespace Horo::Editor {
             if (ImGui::BeginPopupModal(popupId, nullptr,
                                        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar |
                                            ImGuiWindowFlags_NoSavedSettings)) {
-                DrawModalHeading(context.localization.Get("editor", "workspace.content_browser.info.title"), context);
+                if (DrawClosableModalHeading(context.localization.Get("editor", "workspace.content_browser.info.title"), context))
+                    ImGui::CloseCurrentPopup();
                 if (state.popupEntry.has_value()) {
                     const auto &entry = *state.popupEntry;
                     DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.name").c_str(),

@@ -3,6 +3,7 @@
 #include "../FoundationErrors.h"
 #include "Horo/Foundation/Telemetry/Operation.h"
 
+#include <algorithm>
 #include <condition_variable>
 #include <deque>
 #include <exception>

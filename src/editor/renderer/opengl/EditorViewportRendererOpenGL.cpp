@@ -128,11 +128,14 @@ namespace Horo::Editor {
 
     /** @copydoc EditorViewportRendererOpenGL::RequestExtent */
     void EditorViewportRendererOpenGL::RequestExtent(const EditorViewportExtent extent) noexcept {
-        requestedExtent_ = extent;
+        requestedExtent_.width = std::min(extent.width, maxViewportDimension);
+        requestedExtent_.height = std::min(extent.height, maxViewportDimension);
     }
 
     /** @copydoc EditorViewportRendererOpenGL::RequestGrid */
-    void EditorViewportRendererOpenGL::RequestGrid(const EditorViewportGridOptions options) noexcept {
+    void EditorViewportRendererOpenGL::RequestGrid(EditorViewportGridOptions options) noexcept {
+        if (!std::isfinite(options.targetMinorSpacingPixels) || options.targetMinorSpacingPixels <= 0.0F)
+            options.targetMinorSpacingPixels = 48.0F;
         gridOptions_ = options;
     }
 

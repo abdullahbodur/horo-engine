@@ -83,6 +83,19 @@ namespace Horo::Editor {
             return level == Log::Level::Critical ? "CRITICAL" : Log::ToString(level);
         }
 
+        [[nodiscard]] std::string FormatConsoleTimestamp(const std::chrono::system_clock::time_point timestamp) {
+            const std::time_t value = std::chrono::system_clock::to_time_t(timestamp);
+            const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(timestamp.time_since_epoch()) % 1000;
+            std::tm utc{};
+#if defined(_WIN32)
+            gmtime_s(&utc, &value);
+#else
+            gmtime_r(&value, &utc);
+#endif
+            return std::format("{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}.{:03d}+00:00", utc.tm_year + 1900, utc.tm_mon + 1, utc.tm_mday,
+                               utc.tm_hour, utc.tm_min, utc.tm_sec, milliseconds.count());
+        }
+
         void AppendFormattedConsoleRecord(std::string &selectableText, std::vector<Ui::SelectableTextLineLayout> &lineLayouts,
                                           const Log::StructuredLogRecord &record, const float referenceTimestampWidth,
                                           const float spaceWidth) {
@@ -118,19 +131,6 @@ namespace Horo::Editor {
             return !std::ranges::search(text, needle, [](const char left, const char right) {
                 return std::tolower(static_cast<unsigned char>(left)) == std::tolower(static_cast<unsigned char>(right));
             }).empty();
-        }
-
-        [[nodiscard]] std::string FormatConsoleTimestamp(const std::chrono::system_clock::time_point timestamp) {
-            const std::time_t value = std::chrono::system_clock::to_time_t(timestamp);
-            const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(timestamp.time_since_epoch()) % 1000;
-            std::tm utc{};
-#if defined(_WIN32)
-            gmtime_s(&utc, &value);
-#else
-            gmtime_r(&value, &utc);
-#endif
-            return std::format("{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}.{:03d}+00:00", utc.tm_year + 1900, utc.tm_mon + 1, utc.tm_mday,
-                               utc.tm_hour, utc.tm_min, utc.tm_sec, milliseconds.count());
         }
     }  // namespace
 
