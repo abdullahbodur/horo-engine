@@ -71,22 +71,16 @@ namespace Horo::Assets {
             return MakeError(AssetErrors::SidecarMalformed, std::move(message));
         }
 
-        [[nodiscard]] Result<void> PopulateMetadataJsonFields(const nlohmann::json &json, AssetImportMetadata &metadata) {
-            if (const auto sourceByteSize = json.find("sourceByteSize");
-                sourceByteSize != json.end() && sourceByteSize->is_number_unsigned()) {
-                metadata.sourceByteSize = sourceByteSize->get<std::uintmax_t>();
-            }
-            if (const auto sourceLastWriteTime = json.find("sourceLastWriteTime");
-                sourceLastWriteTime != json.end() && sourceLastWriteTime->is_number_integer()) {
-                metadata.sourceLastWriteTime = sourceLastWriteTime->get<std::int64_t>();
-            }
-
+        void PopulateSettings(const nlohmann::json &json, AssetImportMetadata &metadata) {
             if (const auto settings = json.find("importSettings"); settings != json.end() && settings->is_object()) {
                 for (auto member = settings->begin(); member != settings->end(); ++member) {
                     if (member.value().is_string())
                         metadata.importSettings.try_emplace(member.key(), member.value().get<std::string>());
                 }
             }
+        }
+
+        [[nodiscard]] Result<void> PopulateDependencies(const nlohmann::json &json, AssetImportMetadata &metadata) {
             if (const auto dependencies = json.find("dependencies"); dependencies != json.end() && dependencies->is_array()) {
                 for (const auto &value : *dependencies) {
                     if (!value.is_string())
@@ -97,6 +91,10 @@ namespace Horo::Assets {
                     metadata.dependencies.push_back(dependency.Value());
                 }
             }
+            return Result<void>::Success();
+        }
+
+        void PopulateReasons(const nlohmann::json &json, AssetImportMetadata &metadata) {
             if (const auto reasons = json.find("lastImportReasons"); reasons != json.end() && reasons->is_array()) {
                 for (const auto &value : *reasons) {
                     if (!value.is_string())
@@ -105,6 +103,22 @@ namespace Horo::Assets {
                         metadata.lastImportReasons.push_back(*parsed);
                 }
             }
+        }
+
+        [[nodiscard]] Result<void> PopulateMetadataJsonFields(const nlohmann::json &json, AssetImportMetadata &metadata) {
+            if (const auto sourceByteSize = json.find("sourceByteSize");
+                sourceByteSize != json.end() && sourceByteSize->is_number_unsigned()) {
+                metadata.sourceByteSize = sourceByteSize->get<std::uintmax_t>();
+            }
+            if (const auto sourceLastWriteTime = json.find("sourceLastWriteTime");
+                sourceLastWriteTime != json.end() && sourceLastWriteTime->is_number_integer()) {
+                metadata.sourceLastWriteTime = sourceLastWriteTime->get<std::int64_t>();
+            }
+
+            PopulateSettings(json, metadata);
+            if (auto depResult = PopulateDependencies(json, metadata); depResult.HasError())
+                return depResult;
+            PopulateReasons(json, metadata);
             return Result<void>::Success();
         }
     }  // namespace

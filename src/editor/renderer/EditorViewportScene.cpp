@@ -8,27 +8,37 @@
 #include <cassert>
 #include <cmath>
 #include <limits>
+#include <span>
 
 namespace Horo::Editor {
+    namespace {
+        [[nodiscard]] bool ValidateMeshResource(const EditorViewportMeshResourceView &resource,
+                                                const std::span<const EditorViewportMeshResourceView> allResources,
+                                                const std::size_t index) noexcept {
+            if (!resource.IsValid())
+                return false;
+            for (std::size_t other = index + 1; other < allResources.size(); ++other)
+                if (allResources[other].handle == resource.handle)
+                    return false;
+            if (!std::ranges::all_of(resource.vertices, [](const Render::MeshVertex &vertex) {
+                return Math::IsFinite(vertex.position) && Math::IsFinite(vertex.normal) && Math::IsFinite(vertex.uv);
+            })) {
+                return false;
+            }
+            return std::ranges::all_of(resource.indices, [&](const std::uint32_t vertexIndex) {
+                return vertexIndex < resource.vertices.size();
+            });
+        }
+    }  // namespace
+
     /** @copydoc EditorViewportSceneView::IsValid */
     bool EditorViewportSceneView::IsValid() const noexcept {
         if (!camera.IsValid()) {
             return false;
         }
         for (std::size_t index = 0; index < meshResources.size(); ++index) {
-            const EditorViewportMeshResourceView &resource = meshResources[index];
-            if (!resource.IsValid()) {
+            if (!ValidateMeshResource(meshResources[index], meshResources, index))
                 return false;
-            }
-            for (std::size_t other = index + 1; other < meshResources.size(); ++other)
-                if (meshResources[other].handle == resource.handle)
-                    return false;
-            for (const Render::MeshVertex &vertex : resource.vertices)
-                if (!Math::IsFinite(vertex.position) || !Math::IsFinite(vertex.normal) || !Math::IsFinite(vertex.uv))
-                    return false;
-            for (const std::uint32_t vertexIndex : resource.indices)
-                if (vertexIndex >= resource.vertices.size())
-                    return false;
         }
         for (const EditorViewportInstance &instance : instances) {
             if (!instance.IsValid())
@@ -38,10 +48,7 @@ namespace Horo::Editor {
         }
         if (lights.size() > Render::MaximumForwardLights)
             return false;
-        for (const Render::RenderLight &light : lights)
-            if (!light.IsValid())
-                return false;
-        return true;
+        return std::ranges::all_of(lights, &Render::RenderLight::IsValid);
     }
 
     /** @copydoc EditorViewportDirectionalShadowView::IsValid */

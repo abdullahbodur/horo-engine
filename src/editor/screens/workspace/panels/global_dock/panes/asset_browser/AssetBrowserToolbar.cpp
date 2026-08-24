@@ -151,8 +151,8 @@ namespace Horo::Editor {
             return NavigationWidth() + (breadcrumbWidth > 0.0F ? BreadcrumbGap() + breadcrumbWidth : 0.0F);
         }
 
-        void DrawQueryControls(const ImVec2 position, const float availableWidth, const float rightEdgeX, const ToolbarLayout &layout,
-                               const ContentBrowserDirectory &directory, AssetBrowserInteractionState &state,
+        void DrawQueryControls(const ImVec2 position, [[maybe_unused]] const float availableWidth, const float rightEdgeX,
+                               const ToolbarLayout &layout, const ContentBrowserDirectory &directory, AssetBrowserInteractionState &state,
                                const EditorGuiContext &context) {
             // Right-aligned layout: search on left, type/sort/A-Z pinned to right edge
             const float fixedWidth = layout.FixedWidth();

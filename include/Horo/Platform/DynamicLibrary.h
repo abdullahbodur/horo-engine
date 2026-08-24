@@ -18,7 +18,7 @@ namespace Horo::Platform {
          * @param name The name of the symbol to retrieve.
          * @return A pointer to the symbol, or nullptr if it could not be found.
          */
-        [[nodiscard]] virtual void *GetSymbol(std::string_view name) const noexcept = 0;
+        [[nodiscard]] virtual void *GetSymbol(std::string_view name) const noexcept = 0;  // NOSONAR(cpp:S5008)
     };
 
     /**

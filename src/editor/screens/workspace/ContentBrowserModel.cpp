@@ -164,7 +164,7 @@ namespace Horo::Editor {
 
         [[nodiscard]] bool ReadLittleEndian32(std::ifstream &input, std::uint32_t &output) {
             std::array<std::byte, 4> bytes{};
-            input.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+            input.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));  // NOSONAR(cpp:S6022)
             if (!input)
                 return false;
             output = ReadLittleEndian32(bytes);
@@ -210,7 +210,7 @@ namespace Horo::Editor {
                 input.seekg(kMeshPositionPayloadOffset +
                             static_cast<std::streamoff>(positionIndex) * 3 * static_cast<std::streamoff>(sizeof(float)));
                 std::array<std::byte, 12> bytes{};
-                input.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+                input.read(reinterpret_cast<char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));  // NOSONAR(cpp:S6022)
                 if (!input)
                     return {};
                 std::array<std::byte, 4> component{};
@@ -275,6 +275,123 @@ namespace Horo::Editor {
             const auto lhs = std::tolower(static_cast<unsigned char>(*leftMismatch));
             const auto rhs = std::tolower(static_cast<unsigned char>(*rightMismatch));
             return lhs < rhs ? -1 : 1;
+        }
+
+        void PopulateAssetEntryMetadata(ContentBrowserEntry &entry, const Assets::AssetRecord &record,
+
+                                        const std::filesystem::path &projectRoot) {
+            entry.assetId = record.id.ToString();
+            entry.assetType = record.type.Value();
+            entry.registered = true;
+            entry.absoluteMetadataPath = NormalizeAbsolute(Foundation::Paths::Resolve(projectRoot, record.metadataPath)).string();
+            auto metadata = Assets::ReadAssetImportMetadata(entry.absoluteMetadataPath);
+            if (!metadata.HasValue()) {
+                entry.importerContributionId = ReadMetadataString(entry.absoluteMetadataPath, "importerContributionId");
+                return;
+            }
+            const Assets::AssetImportMetadata &provenance = metadata.Value();
+            entry.importerContributionId = provenance.importerContributionId;
+            entry.importerVersion = provenance.importerVersion;
+            entry.importerModuleId = provenance.importerModuleId;
+            entry.importerModuleVersion = provenance.importerModuleVersion;
+            entry.absoluteImportSourcePath = provenance.absoluteSourcePath.string();
+            entry.sourceHash = provenance.sourceHash;
+            entry.lastImportReasons = provenance.lastImportReasons;
+            entry.dependencyCount = provenance.dependencies.size();
+
+            std::error_code sourceError;
+            const auto sourceStatus = std::filesystem::symlink_status(provenance.absoluteSourcePath, sourceError);
+            if (!sourceError && !std::filesystem::is_symlink(sourceStatus) && std::filesystem::is_regular_file(sourceStatus)) {
+                const std::uintmax_t sourceSize = std::filesystem::file_size(provenance.absoluteSourcePath, sourceError);
+                const auto sourceWriteTime = std::filesystem::last_write_time(provenance.absoluteSourcePath, sourceError);
+                entry.sourceChanged =
+                    !sourceError &&
+                    ((provenance.sourceByteSize != 0 && sourceSize != provenance.sourceByteSize) ||
+                     (provenance.sourceLastWriteTime != 0 && sourceWriteTime.time_since_epoch().count() != provenance.sourceLastWriteTime));
+            }
+        }
+
+        void PopulateAssetImporterContribution(ContentBrowserEntry &entry, const Assets::AssetImporterCatalogSnapshot *importerCatalog,
+                                               const std::string &legacySourceExtension, const std::filesystem::path &absoluteEntry) {
+            if (importerCatalog == nullptr || entry.assetType.empty())
+                return;
+
+            const auto parsedType = Assets::AssetTypeId::Parse(entry.assetType);
+            const Assets::AssetImporterContribution *contribution = nullptr;
+            if (!entry.importerContributionId.empty()) {
+                contribution = importerCatalog->FindById(entry.importerContributionId);
+            } else if (!legacySourceExtension.empty()) {
+                contribution = importerCatalog->FindContributionByExtension(legacySourceExtension);
+            } else if (parsedType.HasValue()) {
+                contribution = importerCatalog->FindPreviewContribution(parsedType.Value());
+            }
+            if (contribution == nullptr)
+                return;
+
+            entry.importerContributionId = contribution->contributionId;
+            if (entry.importerModuleId.empty())
+                entry.importerModuleId = contribution->moduleId;
+            if (entry.importerModuleVersion.empty())
+                entry.importerModuleVersion = contribution->moduleVersion;
+            if (entry.importerVersion.empty())
+                entry.importerVersion = contribution->version;
+            entry.activeImporterVersion = contribution->version;
+            entry.activeImporterModuleId = contribution->moduleId;
+            entry.activeImporterModuleVersion = contribution->moduleVersion;
+            entry.importerChanged = entry.importerVersion != contribution->version;
+            entry.moduleChanged =
+                entry.importerModuleId != contribution->moduleId || entry.importerModuleVersion != contribution->moduleVersion;
+            std::error_code sourceError;
+            const auto sourceStatus = std::filesystem::symlink_status(entry.absoluteImportSourcePath, sourceError);
+            entry.canReimport = !entry.absoluteImportSourcePath.empty() &&
+                                std::filesystem::path{entry.absoluteImportSourcePath}.is_absolute() && !sourceError &&
+                                !std::filesystem::is_symlink(sourceStatus) && std::filesystem::is_regular_file(sourceStatus);
+            entry.previewFallback = contribution->previewFallback == Assets::AssetPreviewFallback::Automatic
+                                        ? entry.previewFallback
+                                        : contribution->previewFallback;
+            if (contribution->previewProvider != nullptr && parsedType.HasValue()) {
+                const std::vector<std::uint8_t> payload = ReadBoundedPayload(absoluteEntry);
+                if (!payload.empty()) {
+                    auto generated = contribution->previewProvider->GeneratePreview(
+                        Assets::AssetPreviewInput{
+                            .editorPayload = payload,
+                            .absoluteAssetPath = entry.absolutePath,
+                            .assetType = parsedType.Value(),
+                            .width = 128,
+                            .height = 128,
+                        },
+                        CancellationToken{});
+                    if (generated.HasValue() && generated.Value().IsValid())
+                        entry.previewImage = std::move(generated).Value();
+                }
+            }
+        }
+
+        [[nodiscard]] ContentBrowserEntry CreateAssetFileEntry(
+            const std::filesystem::directory_entry &diskEntry, const std::filesystem::path &absoluteEntry,
+            const std::filesystem::path &projectRoot, const std::map<std::filesystem::path, const Assets::AssetRecord *> &registeredAssets,
+            const Assets::AssetImporterCatalogSnapshot *importerCatalog) {
+            ContentBrowserEntry entry{
+                .kind = ContentBrowserEntryKind::Asset,
+                .absolutePath = absoluteEntry.string(),
+                .displayName = AssetDisplayName(absoluteEntry),
+            };
+            std::string legacySourceExtension;
+            std::error_code sizeError;
+            entry.byteSize = diskEntry.file_size(sizeError);
+            if (const auto registered = registeredAssets.find(absoluteEntry); registered != registeredAssets.end()) {
+                PopulateAssetEntryMetadata(entry, *registered->second, projectRoot);
+            } else if (const auto legacy = ReadLegacyMetadata(absoluteEntry)) {
+                entry.assetType = legacy->assetType;
+                entry.absoluteMetadataPath = legacy->absoluteMetadataPath.string();
+                legacySourceExtension = legacy->sourceExtension;
+            }
+
+            entry.previewFallback = InferFallback(entry.assetType);
+            PopulateAssetImporterContribution(entry, importerCatalog, legacySourceExtension, absoluteEntry);
+            if (!entry.previewImage.IsValid() && entry.assetType == "core.mesh" && importerCatalog == nullptr)
+                entry.meshPreviewPoints = ReadMeshPreview(absoluteEntry);
+            return entry;
         }
     }  // namespace
 
@@ -357,108 +474,11 @@ namespace Horo::Editor {
                     continue;
                 }
 
-                ContentBrowserEntry entry{
-                    .kind = ContentBrowserEntryKind::Asset,
-                    .absolutePath = absoluteEntry.string(),
-                    .displayName = AssetDisplayName(absoluteEntry),
-                };
-                std::string legacySourceExtension;
-                std::error_code sizeError;
-                entry.byteSize = diskEntry.file_size(sizeError);
-                if (const auto registered = registeredAssets.find(absoluteEntry); registered != registeredAssets.end()) {
-                    const Assets::AssetRecord &record = *registered->second;
-                    entry.assetId = record.id.ToString();
-                    entry.assetType = record.type.Value();
-                    entry.registered = true;
-                    entry.absoluteMetadataPath = NormalizeAbsolute(Foundation::Paths::Resolve(projectRoot, record.metadataPath)).string();
-                    auto metadata = Assets::ReadAssetImportMetadata(entry.absoluteMetadataPath);
-                    if (metadata.HasValue()) {
-                        const Assets::AssetImportMetadata &provenance = metadata.Value();
-                        entry.importerContributionId = provenance.importerContributionId;
-                        entry.importerVersion = provenance.importerVersion;
-                        entry.importerModuleId = provenance.importerModuleId;
-                        entry.importerModuleVersion = provenance.importerModuleVersion;
-                        entry.absoluteImportSourcePath = provenance.absoluteSourcePath.string();
-                        entry.sourceHash = provenance.sourceHash;
-                        entry.lastImportReasons = provenance.lastImportReasons;
-                        entry.dependencyCount = provenance.dependencies.size();
-
-                        std::error_code sourceError;
-                        const auto sourceStatus = std::filesystem::symlink_status(provenance.absoluteSourcePath, sourceError);
-                        if (!sourceError && !std::filesystem::is_symlink(sourceStatus) && std::filesystem::is_regular_file(sourceStatus)) {
-                            const std::uintmax_t sourceSize = std::filesystem::file_size(provenance.absoluteSourcePath, sourceError);
-                            const auto sourceWriteTime = std::filesystem::last_write_time(provenance.absoluteSourcePath, sourceError);
-                            entry.sourceChanged =
-                                !sourceError && ((provenance.sourceByteSize != 0 && sourceSize != provenance.sourceByteSize) ||
-                                                 (provenance.sourceLastWriteTime != 0 &&
-                                                  sourceWriteTime.time_since_epoch().count() != provenance.sourceLastWriteTime));
-                        }
-                    } else {
-                        entry.importerContributionId = ReadMetadataString(entry.absoluteMetadataPath, "importerContributionId");
-                    }
-                } else if (const auto legacy = ReadLegacyMetadata(absoluteEntry)) {
-                    entry.assetType = legacy->assetType;
-                    entry.absoluteMetadataPath = legacy->absoluteMetadataPath.string();
-                    legacySourceExtension = legacy->sourceExtension;
-                }
-
-                entry.previewFallback = InferFallback(entry.assetType);
-                if (importerCatalog != nullptr && !entry.assetType.empty()) {
-                    const auto parsedType = Assets::AssetTypeId::Parse(entry.assetType);
-                    const Assets::AssetImporterContribution *contribution = nullptr;
-                    if (!entry.importerContributionId.empty()) {
-                        contribution = importerCatalog->FindById(entry.importerContributionId);
-                    } else if (!legacySourceExtension.empty()) {
-                        contribution = importerCatalog->FindContributionByExtension(legacySourceExtension);
-                    } else if (parsedType.HasValue()) {
-                        contribution = importerCatalog->FindPreviewContribution(parsedType.Value());
-                    }
-                    if (contribution != nullptr) {
-                        entry.importerContributionId = contribution->contributionId;
-                        if (entry.importerModuleId.empty())
-                            entry.importerModuleId = contribution->moduleId;
-                        if (entry.importerModuleVersion.empty())
-                            entry.importerModuleVersion = contribution->moduleVersion;
-                        if (entry.importerVersion.empty())
-                            entry.importerVersion = contribution->version;
-                        entry.activeImporterVersion = contribution->version;
-                        entry.activeImporterModuleId = contribution->moduleId;
-                        entry.activeImporterModuleVersion = contribution->moduleVersion;
-                        entry.importerChanged = entry.importerVersion != contribution->version;
-                        entry.moduleChanged =
-                            entry.importerModuleId != contribution->moduleId || entry.importerModuleVersion != contribution->moduleVersion;
-                        std::error_code sourceError;
-                        const auto sourceStatus = std::filesystem::symlink_status(entry.absoluteImportSourcePath, sourceError);
-                        entry.canReimport = !entry.absoluteImportSourcePath.empty() &&
-                                            std::filesystem::path{entry.absoluteImportSourcePath}.is_absolute() && !sourceError &&
-                                            !std::filesystem::is_symlink(sourceStatus) && std::filesystem::is_regular_file(sourceStatus);
-                        entry.previewFallback = contribution->previewFallback == Assets::AssetPreviewFallback::Automatic
-                                                    ? entry.previewFallback
-                                                    : contribution->previewFallback;
-                        if (contribution->previewProvider != nullptr) {
-                            const std::vector<std::uint8_t> payload = ReadBoundedPayload(absoluteEntry);
-                            if (!payload.empty()) {
-                                auto generated = contribution->previewProvider->GeneratePreview(
-                                    Assets::AssetPreviewInput{
-                                        .editorPayload = payload,
-                                        .absoluteAssetPath = entry.absolutePath,
-                                        .assetType = parsedType.Value(),
-                                        .width = 128,
-                                        .height = 128,
-                                    },
-                                    CancellationToken{});
-                                if (generated.HasValue() && generated.Value().IsValid())
-                                    entry.previewImage = std::move(generated).Value();
-                            }
-                        }
-                    }
-                }
-                if (!entry.previewImage.IsValid() && entry.assetType == "core.mesh" && importerCatalog == nullptr)
-                    entry.meshPreviewPoints = ReadMeshPreview(absoluteEntry);
-                directory.entries.push_back(std::move(entry));
+                directory.entries.push_back(CreateAssetFileEntry(diskEntry, absoluteEntry, projectRoot, registeredAssets, importerCatalog));
             }
             iterator.increment(error);
         }
+
         directory.readable = !error;
         directory.loadState = error ? ContentBrowserLoadState::Error : ContentBrowserLoadState::Ready;
         std::ranges::sort(directory.entries, [](const ContentBrowserEntry &left, const ContentBrowserEntry &right) {

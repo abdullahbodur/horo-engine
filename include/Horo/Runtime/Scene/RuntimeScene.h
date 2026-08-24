@@ -21,6 +21,8 @@ namespace Horo::Assets {
 }
 
 namespace Horo::Runtime {
+    class RuntimeScene;
+
     /** @brief Unique identity of one activated runtime-scene instance. */
     struct SceneRuntimeId {
         std::uint64_t value{};
@@ -153,8 +155,6 @@ namespace Horo::Runtime {
         const std::optional<PrimitiveMeshDescriptor> *primitiveMesh{};
         const RuntimeComponentSet *components{};
     };
-
-    class RuntimeScene;
 
     /** @brief Borrowed immutable view of one runtime scene; invalidated by structural commit or transition. */
     class RuntimeSceneView final {

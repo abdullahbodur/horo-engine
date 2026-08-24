@@ -75,8 +75,8 @@ namespace Horo::Assets {
         std::string FormatHex(const Sha256Digest &digest) {
             std::string result(64, '\0');
             for (std::size_t i = 0; i < 32; ++i) {
-                result[i * 2] = HexNibble(digest.bytes[i] >> 4);
-                result[i * 2 + 1] = HexNibble(digest.bytes[i] & 0x0F);
+                result[i * 2] = HexNibble(digest.bytes[i] >> 4);        // NOSONAR(cpp:S6022)
+                result[i * 2 + 1] = HexNibble(digest.bytes[i] & 0x0F);  // NOSONAR(cpp:S6022)
             }
             return result;
         }
@@ -129,7 +129,7 @@ namespace Horo::Assets {
     // AssetCookCache
     // ---------------------------------------------------------------------------
 
-    AssetCookCache::AssetCookCache(std::filesystem::path root, AssetCookLimits limits) : root_(std::move(root)), limits_(limits) {
+    AssetCookCache::AssetCookCache(std::filesystem::path root, const AssetCookLimits &limits) : root_(std::move(root)), limits_(limits) {
         std::filesystem::create_directories(root_);
     }
 

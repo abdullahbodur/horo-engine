@@ -32,7 +32,11 @@ namespace Horo::Assets {
         constexpr std::size_t kMaximumDiagnostics = 256;
 
         using TransparentStringSet = std::set<std::string, std::less<>>;
-        std::atomic<std::uint64_t> gTemporarySequence{1};
+
+        [[nodiscard]] std::uint64_t NextTemporarySequence() noexcept {
+            static std::atomic<std::uint64_t> sequence{1};
+            return sequence.fetch_add(1);
+        }
 
         [[nodiscard]] Error Failure(const ErrorCodeDescriptor &descriptor, std::string message = {}) {
             return MakeError(descriptor, std::move(message));
@@ -388,7 +392,8 @@ namespace Horo::Assets {
         if (error)
             return Result<void>::Failure(Failure(AssetErrors::IndexIo, error.message()));
         std::filesystem::path temporary = path;
-        temporary += std::format(".tmp.{}", gTemporarySequence.fetch_add(1));
+        temporary += std::format(".tmp.{}", NextTemporarySequence());
+
         {
             std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
             output.write(contents.data(), static_cast<std::streamsize>(contents.size()));

@@ -882,6 +882,44 @@ namespace Horo::Input {
                 value.y = value.y / magnitude * remapped;
             }
         }
+
+        [[nodiscard]] bool IsBindingActive(const InputBinding &binding, const RawInputSnapshot &snapshot) {
+            if (!ModifiersMatch(snapshot.modifiers, binding.requiredModifiers))
+                return false;
+            for (std::size_t index = 0; index < binding.chordSize; ++index)
+                if (!snapshot.State(binding.chord[index]).down)
+                    return false;
+            return true;
+        }
+
+        struct BindingAccumulationTarget {
+            ActionValue &value;
+            bool &radial2D;
+            float &radialDeadzone;
+        };
+
+        template <typename ImplType>
+        void AccumulateBinding(const InputBinding &binding, const ActionDescriptor &descriptor, const RawInputSnapshot &snapshot,
+                               const std::optional<PlayerId> player, ImplType &impl, BindingAccumulationTarget &target) {
+            if (!IsBindingActive(binding, snapshot))
+                return;
+
+            auto [rawAxis, state] = EvaluateControlBinding(binding, snapshot, player, impl);
+            const float axis = rawAxis * binding.scale;
+            target.radial2D =
+                target.radial2D || (descriptor.valueType == ActionValueType::Axis2D && binding.deadzoneKind == DeadzoneKind::Radial);
+            target.radialDeadzone = std::max(target.radialDeadzone, binding.deadzone);
+            if (descriptor.valueType == ActionValueType::Axis2D) {
+                if (binding.component == 0)
+                    target.value.x += axis;
+                else
+                    target.value.y += axis;
+            } else
+                target.value.x += axis;
+            target.value.down = target.value.down || state.down;
+            target.value.pressed = target.value.pressed || state.pressed;
+            target.value.released = target.value.released || state.released;
+        }
     }  // namespace
 
     ActionValue InputRouter::ReadAction(const InputContextToken &context, const ActionId &actionId, const std::optional<PlayerId> player) {
@@ -901,30 +939,9 @@ namespace Horo::Input {
         const RawInputSnapshot &snapshot = Snapshot();
         bool radial2D = false;
         float radialDeadzone = 0.0F;
-        for (const InputBinding &binding : *bindings) {
-            if (!ModifiersMatch(snapshot.modifiers, binding.requiredModifiers))
-                continue;
-            bool chord = true;
-            for (std::size_t index = 0; index < binding.chordSize; ++index)
-                chord = chord && snapshot.State(binding.chord[index]).down;
-            if (!chord)
-                continue;
-
-            auto [rawAxis, state] = EvaluateControlBinding(binding, snapshot, player, *impl_);
-            const float axis = rawAxis * binding.scale;
-            radial2D = radial2D || (descriptor->valueType == ActionValueType::Axis2D && binding.deadzoneKind == DeadzoneKind::Radial);
-            radialDeadzone = std::max(radialDeadzone, binding.deadzone);
-            if (descriptor->valueType == ActionValueType::Axis2D) {
-                if (binding.component == 0)
-                    value.x += axis;
-                else
-                    value.y += axis;
-            } else
-                value.x += axis;
-            value.down = value.down || state.down;
-            value.pressed = value.pressed || state.pressed;
-            value.released = value.released || state.released;
-        }
+        BindingAccumulationTarget target{.value = value, .radial2D = radial2D, .radialDeadzone = radialDeadzone};
+        for (const InputBinding &binding : *bindings)
+            AccumulateBinding(binding, *descriptor, snapshot, player, *impl_, target);
         value.x = std::clamp(value.x, -1.0F, 1.0F);
         value.y = std::clamp(value.y, -1.0F, 1.0F);
         if (radial2D)

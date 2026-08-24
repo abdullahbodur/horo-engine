@@ -20,8 +20,8 @@ namespace Horo::Editor {
             return Result<void>::Failure(MakeSdlRenderError(RendererErrors::SdlContextExists, "An OpenGL context is already retained"));
         }
 
-        const int contextFlags = descriptor.enableDebugContext ? SDL_GL_CONTEXT_DEBUG_FLAG : 0;
-        if (!SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, contextFlags) ||
+        if (const int contextFlags = descriptor.enableDebugContext ? SDL_GL_CONTEXT_DEBUG_FLAG : 0;
+            !SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, contextFlags) ||
             !SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE) ||
             !SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, descriptor.majorVersion) ||
             !SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, descriptor.minorVersion)) {

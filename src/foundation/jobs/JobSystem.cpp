@@ -54,7 +54,7 @@ namespace Horo {
         JobId nextId = 1;
         std::deque<std::shared_ptr<JobRecord>> queue;
         std::unordered_map<JobId, std::shared_ptr<JobRecord>> jobs;
-        std::vector<std::thread> workers;  // NOSONAR(cpp:S6168) Explicit worker lifecycle management.
+        std::vector<std::thread> workers;  // NOSONAR(cpp:S6168) std::jthread not supported by AppleClang libc++ without experimental flags
 
         std::mutex shutdownMutex;
     };
@@ -214,9 +214,12 @@ namespace Horo {
             }
         }
         m_state->workAvailable.notify_all();
-        for (auto &worker : m_state->workers)
-            if (worker.joinable())
+        std::ranges::for_each(m_state->workers, [](std::thread &worker) {  // NOSONAR(cpp:S6168) std::jthread not supported by AppleClang
+                                                                           // libc++ without experimental flags
+            if (worker.joinable()) {
                 worker.join();
+            }
+        });
     }
 
     Result<void> JobHandle::Wait() const {

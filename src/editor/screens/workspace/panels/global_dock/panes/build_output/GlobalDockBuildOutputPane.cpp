@@ -158,7 +158,7 @@ namespace Horo::Editor {
             };
             const std::array<const char *, 4> statusLabels{statusText[0].c_str(), statusText[1].c_str(), statusText[2].c_str(),
                                                            statusText[3].c_str()};
-            int selectedStatus = static_cast<int>(m_statusFilter);
+            auto selectedStatus = static_cast<int>(m_statusFilter);
             ImGui::SetNextItemWidth(Ui::ScaledLayoutValue(ActionControlWidth));
             if (Ui::ComboControl("##BuildOutputStatusFilter", &selectedStatus, statusLabels.data(), static_cast<int>(statusLabels.size()),
                                  fonts, Ui::ComboControlOptions{.componentSize = Ui::ComponentSize::Small})) {
@@ -178,8 +178,8 @@ namespace Horo::Editor {
                 m_filterDirty = true;
 
             ImGui::SameLine(0.0F, Ui::ScaledLayoutValue(ControlGap));
-            const std::string &clearLabel = context.localization.Get("editor", "workspace.global_dock.build_output.clear");
-            if (Ui::Button({.label = clearLabel.c_str(),
+            if (const std::string &clearLabel = context.localization.Get("editor", "workspace.global_dock.build_output.clear");
+                Ui::Button({.label = clearLabel.c_str(),
                             .size = {ActionControlWidth, 0.0F},
                             .variant = Ui::ButtonVariant::Secondary,
                             .font = fonts.sansCompact,
@@ -241,10 +241,10 @@ namespace Horo::Editor {
                            {record.message, Theme::Text()},
                            {FormatSource(record.source), record.source.has_value() ? Theme::Accent() : Theme::Muted()}}});
         }
-        const Ui::TableInteraction interaction =
-            Ui::DrawTable({.id = "##BuildOutputTable", .componentSize = Ui::ComponentSize::Small, .selectableCells = true}, columns, rows,
-                          fonts);
-        if (interaction.activatedRow.has_value() && interaction.activatedColumn == 3U) {
+        if (const Ui::TableInteraction interaction =
+                Ui::DrawTable({.id = "##BuildOutputTable", .componentSize = Ui::ComponentSize::Small, .selectableCells = true}, columns,
+                              rows, fonts);
+            interaction.activatedRow.has_value() && interaction.activatedColumn == 3U) {
             const BuildOutputRecord &record = m_snapshot.records[m_filteredIndices[*interaction.activatedRow]];
             if (record.source.has_value()) {
                 command.command = EditorWorkspaceViewCommand::OpenDiagnosticSource;

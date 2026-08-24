@@ -38,7 +38,9 @@ namespace Horo::Editor {
     private:
         void RequestViewportExtent(float width, float height) const noexcept;
         static void DrawViewportSurface(ImDrawList &drawList, const ImVec2 &origin, float width, float height, float centerX, float horizon,
-                                        float ground, const EditorViewportTextureView &textureView, bool hasRenderedViewport);
+                                        float ground, const EditorViewportTextureView &textureView,
+                                        bool hasRenderedViewport);  // NOSONAR(cpp:S107)
+
         static void DrawProjectionControl(const ImVec2 &origin, const EditorWorkspaceViewModel &viewModel,
                                           EditorWorkspaceViewCommandData &command, const EditorGuiContext &context);
         static void DrawObjectCount(const ImVec2 &origin, const EditorWorkspaceViewModel &viewModel, const EditorGuiContext &context);

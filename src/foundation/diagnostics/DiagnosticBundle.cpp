@@ -440,8 +440,7 @@ namespace Horo::Diagnostics {
 
         std::vector<std::pair<std::string, std::string>> metadata = request.metadata;
         std::ranges::sort(metadata, {}, &std::pair<std::string, std::string>::first);
-        auto metaResult = ValidateMetadata(metadata);
-        if (metaResult.HasError())
+        if (const auto metaResult = ValidateMetadata(metadata); metaResult.HasError())
             return Result<DiagnosticBundleSummary>::Failure(metaResult.ErrorValue());
 
         const std::string manifest = BuildManifestJson(metadata, missingOptional, prepared);

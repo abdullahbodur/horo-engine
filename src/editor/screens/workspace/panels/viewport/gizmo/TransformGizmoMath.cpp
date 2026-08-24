@@ -10,7 +10,8 @@ namespace Horo::Editor {
         const ErrorDomainId TransformGizmoDomain{"horo.editor.transform_gizmo"};
 
         [[nodiscard]] bool IsTransformTool(const EditorTransformTool tool) noexcept {
-            return tool == EditorTransformTool::Move || tool == EditorTransformTool::Rotate || tool == EditorTransformTool::Scale;
+            using enum EditorTransformTool;
+            return tool == Move || tool == Rotate || tool == Scale;
         }
 
         [[nodiscard]] bool IsAxisValid(const EditorTransformTool tool, const int axis) noexcept {
@@ -18,7 +19,11 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] constexpr Math::Vec3 LocalAxis(const int axis) noexcept {
-            return axis == 0 ? Math::Vec3{1.0F, 0.0F, 0.0F} : (axis == 1 ? Math::Vec3{0.0F, 1.0F, 0.0F} : Math::Vec3{0.0F, 0.0F, 1.0F});
+            if (axis == 0)
+                return Math::Vec3{1.0F, 0.0F, 0.0F};
+            if (axis == 1)
+                return Math::Vec3{0.0F, 1.0F, 0.0F};
+            return Math::Vec3{0.0F, 0.0F, 1.0F};
         }
 
         void SetTranslation(Math::Mat4 &matrix, const Math::Vec3 translation) noexcept {
@@ -64,13 +69,74 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] Result<TransformGizmoMathOutcome> ValidateOutcome(Math::Transform transform, const Math::Vec3 worldPosition) {
-            const Result<Math::Mat4> matrix = transform.TryToMatrix();
-            if (matrix.HasError())
+            if (const Result<Math::Mat4> matrix = transform.TryToMatrix(); matrix.HasError())
                 return Result<TransformGizmoMathOutcome>::Failure(matrix.ErrorValue());
             if (!Math::IsFinite(worldPosition))
                 return Result<TransformGizmoMathOutcome>::Failure(
                     MakeError(TransformGizmoErrors::InvalidUpdate, "Transform gizmo produced a non-finite world position."));
             return Result<TransformGizmoMathOutcome>::Success(TransformGizmoMathOutcome{std::move(transform), worldPosition});
+        }
+
+        [[nodiscard]] Result<std::pair<Math::Transform, Math::Vec3>> EvaluateMoveMath(const TransformGizmoMathSession &session,
+                                                                                      const TransformGizmoMathUpdate &update) {
+            Math::Transform next = session.initialLocalTransform;
+            const float worldDistance = update.projectedPixels / session.pixelsPerWorldUnit;
+            const Math::Vec3 worldPosition = session.initialWorldPosition + session.worldAxis * worldDistance;
+            next.translation = Math::TransformAffinePoint(session.parentWorldInverse, worldPosition);
+            return Result<std::pair<Math::Transform, Math::Vec3>>::Success({std::move(next), worldPosition});
+        }
+
+        [[nodiscard]] Result<std::pair<Math::Transform, Math::Vec3>> EvaluateRotateMath(const TransformGizmoMathSession &session,
+                                                                                        const TransformGizmoMathUpdate &update) {
+            if (!update.currentRotationVector.has_value())
+                return Result<std::pair<Math::Transform, Math::Vec3>>::Failure(MakeError(TransformGizmoErrors::RotationVectorRequired));
+            const Result<Math::Vec3> current = Math::TryNormalize(*update.currentRotationVector);
+            if (current.HasError())
+                return Result<std::pair<Math::Transform, Math::Vec3>>::Failure(current.ErrorValue());
+            const float angle = std::atan2(Math::Dot(session.worldAxis, Math::Cross(session.startRotationVector, current.Value())),
+                                           Math::Dot(session.startRotationVector, current.Value()));
+            Math::Transform next = session.initialLocalTransform;
+            if (session.space == EditorTransformSpace::Local) {
+                const Result<Math::Quaternion> delta = Math::Quaternion::TryFromAxisAngle(LocalAxis(session.axis), angle);
+                if (delta.HasError())
+                    return Result<std::pair<Math::Transform, Math::Vec3>>::Failure(delta.ErrorValue());
+                const Result<Math::Quaternion> rotation = (session.initialLocalTransform.rotation * delta.Value()).TryNormalized();
+                if (rotation.HasError())
+                    return Result<std::pair<Math::Transform, Math::Vec3>>::Failure(rotation.ErrorValue());
+                next.rotation = rotation.Value();
+            } else {
+                const Result<Math::Quaternion> delta = Math::Quaternion::TryFromAxisAngle(session.worldAxis, angle);
+                if (delta.HasError())
+                    return Result<std::pair<Math::Transform, Math::Vec3>>::Failure(delta.ErrorValue());
+                Math::Mat4 desiredWorld =
+                    Math::Multiply(Math::Transform{.rotation = delta.Value()}.ToMatrix(), session.initialWorldTransform);
+                SetTranslation(desiredWorld, session.initialWorldPosition);
+                const Result<Math::Transform> local = Math::TryDecomposeAffineTRS(Math::Multiply(session.parentWorldInverse, desiredWorld));
+                if (local.HasError())
+                    return Result<std::pair<Math::Transform, Math::Vec3>>::Failure(local.ErrorValue());
+                next = local.Value();
+            }
+            return Result<std::pair<Math::Transform, Math::Vec3>>::Success({std::move(next), session.initialWorldPosition});
+        }
+
+        [[nodiscard]] Result<std::pair<Math::Transform, Math::Vec3>> EvaluateScaleMath(const TransformGizmoMathSession &session,
+                                                                                       const TransformGizmoMathUpdate &update) {
+            Math::Transform next = session.initialLocalTransform;
+            const float factor = std::clamp(std::exp(update.projectedPixels / 120.0F), 0.01F, 100.0F);
+            if (session.space == EditorTransformSpace::Local) {
+                MultiplyScaleComponent(next.scale, session.axis, factor);
+            } else {
+                const Math::Mat4 scaleMatrix = session.axis == 3 ? Math::Transform{.scale = {factor, factor, factor}}.ToMatrix()
+                                                                 : WorldAxisScaleMatrix(session.worldAxis, factor);
+                Math::Mat4 desiredWorld = Math::Multiply(scaleMatrix, session.initialWorldTransform);
+                SetTranslation(desiredWorld, session.initialWorldPosition);
+                const Result<Math::Transform> local = Math::TryDecomposeAffineTRS(Math::Multiply(session.parentWorldInverse, desiredWorld));
+                if (local.HasError())
+                    return Result<std::pair<Math::Transform, Math::Vec3>>::Failure(local.ErrorValue());
+                next = local.Value();
+                PreserveScaleSigns(next.scale, session.initialLocalTransform.scale);
+            }
+            return Result<std::pair<Math::Transform, Math::Vec3>>::Success({std::move(next), session.initialWorldPosition});
         }
     }  // namespace
 
@@ -150,62 +216,28 @@ namespace Horo::Editor {
     /** @copydoc EvaluateTransformGizmoMath */
     Result<TransformGizmoMathOutcome> EvaluateTransformGizmoMath(const TransformGizmoMathSession &session,
                                                                  const TransformGizmoMathUpdate &update) {
+        using enum EditorTransformTool;
         if (!std::isfinite(update.projectedPixels))
             return Result<TransformGizmoMathOutcome>::Failure(MakeError(TransformGizmoErrors::InvalidUpdate));
 
-        Math::Transform next = session.initialLocalTransform;
-        Math::Vec3 worldPosition = session.initialWorldPosition;
-        if (session.tool == EditorTransformTool::Move) {
-            const float worldDistance = update.projectedPixels / session.pixelsPerWorldUnit;
-            worldPosition = session.initialWorldPosition + session.worldAxis * worldDistance;
-            next.translation = Math::TransformAffinePoint(session.parentWorldInverse, worldPosition);
-        } else if (session.tool == EditorTransformTool::Rotate) {
-            if (!update.currentRotationVector.has_value())
-                return Result<TransformGizmoMathOutcome>::Failure(MakeError(TransformGizmoErrors::RotationVectorRequired));
-            const Result<Math::Vec3> current = Math::TryNormalize(*update.currentRotationVector);
-            if (current.HasError())
-                return Result<TransformGizmoMathOutcome>::Failure(current.ErrorValue());
-            const float angle = std::atan2(Math::Dot(session.worldAxis, Math::Cross(session.startRotationVector, current.Value())),
-                                           Math::Dot(session.startRotationVector, current.Value()));
-            if (session.space == EditorTransformSpace::Local) {
-                const Result<Math::Quaternion> delta = Math::Quaternion::TryFromAxisAngle(LocalAxis(session.axis), angle);
-                if (delta.HasError())
-                    return Result<TransformGizmoMathOutcome>::Failure(delta.ErrorValue());
-                const Result<Math::Quaternion> rotation = (session.initialLocalTransform.rotation * delta.Value()).TryNormalized();
-                if (rotation.HasError())
-                    return Result<TransformGizmoMathOutcome>::Failure(rotation.ErrorValue());
-                next.rotation = rotation.Value();
-            } else {
-                const Result<Math::Quaternion> delta = Math::Quaternion::TryFromAxisAngle(session.worldAxis, angle);
-                if (delta.HasError())
-                    return Result<TransformGizmoMathOutcome>::Failure(delta.ErrorValue());
-                Math::Mat4 desiredWorld =
-                    Math::Multiply(Math::Transform{.rotation = delta.Value()}.ToMatrix(), session.initialWorldTransform);
-                SetTranslation(desiredWorld, session.initialWorldPosition);
-                const Result<Math::Transform> local = Math::TryDecomposeAffineTRS(Math::Multiply(session.parentWorldInverse, desiredWorld));
-                if (local.HasError())
-                    return Result<TransformGizmoMathOutcome>::Failure(local.ErrorValue());
-                next = local.Value();
-            }
-        } else if (session.tool == EditorTransformTool::Scale) {
-            const float factor = std::clamp(std::exp(update.projectedPixels / 120.0F), 0.01F, 100.0F);
-            if (session.space == EditorTransformSpace::Local) {
-                MultiplyScaleComponent(next.scale, session.axis, factor);
-            } else {
-                const Math::Mat4 scaleMatrix = session.axis == 3 ? Math::Transform{.scale = {factor, factor, factor}}.ToMatrix()
-                                                                 : WorldAxisScaleMatrix(session.worldAxis, factor);
-                Math::Mat4 desiredWorld = Math::Multiply(scaleMatrix, session.initialWorldTransform);
-                SetTranslation(desiredWorld, session.initialWorldPosition);
-                const Result<Math::Transform> local = Math::TryDecomposeAffineTRS(Math::Multiply(session.parentWorldInverse, desiredWorld));
-                if (local.HasError())
-                    return Result<TransformGizmoMathOutcome>::Failure(local.ErrorValue());
-                next = local.Value();
-                PreserveScaleSigns(next.scale, session.initialLocalTransform.scale);
-            }
-        } else {
-            return Result<TransformGizmoMathOutcome>::Failure(MakeError(TransformGizmoErrors::InvalidRequest));
+        Result<std::pair<Math::Transform, Math::Vec3>> evaluated =
+            Result<std::pair<Math::Transform, Math::Vec3>>::Failure(MakeError(TransformGizmoErrors::InvalidRequest));
+        switch (session.tool) {
+            case Move:
+                evaluated = EvaluateMoveMath(session, update);
+                break;
+            case Rotate:
+                evaluated = EvaluateRotateMath(session, update);
+                break;
+            case Scale:
+                evaluated = EvaluateScaleMath(session, update);
+                break;
+            default:
+                break;
         }
-        return ValidateOutcome(std::move(next), worldPosition);
+        if (evaluated.HasError())
+            return Result<TransformGizmoMathOutcome>::Failure(evaluated.ErrorValue());
+        return ValidateOutcome(std::move(evaluated.Value().first), evaluated.Value().second);
     }
 
     /** @copydoc ResolveTransformGizmoWorldAxes */

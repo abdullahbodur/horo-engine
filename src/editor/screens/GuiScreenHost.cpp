@@ -42,12 +42,14 @@ namespace Horo::Editor {
 
     }  // namespace
 
-    GuiScreenHost::GuiScreenHost(const EditorGuiContext &context, EditorModalHost &modalHost, EditorSettingsService &settingsService,
-                                 LocalizationService &localization, EngineDataBus &engineEvents, ProjectCreationService &creationService,
-                                 JobSystem &jobs, Input::InputRouter &inputRouter, const RendererAvailabilitySnapshot &rendererAvailability,
-                                 ScreenRegistry screenRegistry, WorkspacePanelRegistry workspacePanelRegistry, std::uintptr_t logoTexture,
+    GuiScreenHost::GuiScreenHost(const EditorGuiContext &context, EditorModalHost &modalHost,  // NOSONAR(cpp:S107)
+                                 EditorSettingsService &settingsService, LocalizationService &localization, EngineDataBus &engineEvents,
+                                 ProjectCreationService &creationService, JobSystem &jobs, Input::InputRouter &inputRouter,
+                                 const RendererAvailabilitySnapshot &rendererAvailability, ScreenRegistry screenRegistry,
+                                 WorkspacePanelRegistry workspacePanelRegistry, std::uintptr_t logoTexture,
                                  Extensions::ExtensionInventory *extensionInventory,
                                  Extensions::ExtensionMarketplaceService *extensionMarketplace)
+
         : context_(&context), modalHost_(&modalHost), settingsService_(&settingsService), localization_(&localization),
           engineEvents_(&engineEvents), logoTexture_(logoTexture), extensionInventory_(extensionInventory),
           extensionMarketplace_(extensionMarketplace), screenRegistry_(std::move(screenRegistry)),

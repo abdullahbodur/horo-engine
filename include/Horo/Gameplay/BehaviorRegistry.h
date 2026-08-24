@@ -18,7 +18,7 @@ namespace Horo::Gameplay {
     };
 
     /** @brief Host-owned registry frozen before any runtime scene activates. */
-    class BehaviorRegistry final {
+    class BehaviorRegistry final {  // NOSONAR(cpp:S3624) Pimpl type with custom destructor and move operations
     public:
         BehaviorRegistry();
         ~BehaviorRegistry();

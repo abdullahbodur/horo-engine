@@ -358,9 +358,11 @@ namespace Horo::Editor {
             const bool changed = Ui::ComboControl("##value", &value, static_cast<int>(entries.size()), source, ctx.theme.fonts);
             ImGui::PopItemWidth();
             const RendererBackendAvailability &selected = entries[static_cast<std::size_t>(value)];
-            Ui::Hint(selected.IsSelectable() ? "Available on this editor installation."
-                                             : (selected.diagnostic.empty() ? "Renderer is unavailable." : selected.diagnostic.c_str()),
-                     ctx.theme.fonts);
+            const char *hintText = "Available on this editor installation.";
+            if (!selected.IsSelectable())
+                hintText = selected.diagnostic.empty() ? "Renderer is unavailable." : selected.diagnostic.c_str();
+            Ui::Hint(hintText, ctx.theme.fonts);
+
             ImGui::EndGroup();
             ImGui::PopID();
             return changed;

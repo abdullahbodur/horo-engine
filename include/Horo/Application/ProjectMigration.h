@@ -355,7 +355,7 @@ namespace Horo::Application {
     };
 
     /** @brief Move-only unpublished filesystem candidate; destruction removes its disposable state. */
-    class PreparedProjectMigration {
+    class PreparedProjectMigration {  // NOSONAR(cpp:S3624) Pimpl type with custom destructor and move operations
     public:
         struct State;
         ~PreparedProjectMigration();

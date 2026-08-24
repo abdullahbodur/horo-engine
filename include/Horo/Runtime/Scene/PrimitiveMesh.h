@@ -64,7 +64,7 @@ namespace Horo::Runtime {
     };
 
     /** @brief Thread-safe bounded cache keyed by the complete versioned primitive descriptor. */
-    class PrimitiveMeshCache final {
+    class PrimitiveMeshCache final {  // NOSONAR(cpp:S3624) Pimpl type with custom destructor and move operations
     public:
         /** @brief Creates a cache with explicit bounded budgets. @param limits Maximum resident item and CPU-byte counts.
          */

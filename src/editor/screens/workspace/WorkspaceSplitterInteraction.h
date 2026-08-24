@@ -61,7 +61,7 @@ namespace Horo::Editor {
          */
         [[nodiscard]] WorkspaceSplitterInteractionResult Update(std::span<const WorkspaceSplitterRegion> regions,
                                                                 const WorkspaceSplitterPointerInput &input, Input::InputRouter &router,
-                                                                Input::InputContextToken &context);
+                                                                const Input::InputContextToken &context);
 
         void OnInputCaptureCancelled(Input::CaptureCancellationReason reason) noexcept override;
 

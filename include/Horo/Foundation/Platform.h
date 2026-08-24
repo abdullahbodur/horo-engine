@@ -37,7 +37,7 @@ namespace Horo {
     };
 
     /** @brief Move-only operating-system-held exclusive file lock. */
-    class ExclusiveFileLock {
+    class ExclusiveFileLock {  // NOSONAR(cpp:S3624) Pimpl type with custom destructor and move operations
     public:
         struct State;
 

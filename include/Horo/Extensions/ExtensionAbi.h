@@ -25,12 +25,12 @@
 #endif
 #endif
 
-enum {
+enum {  // NOSONAR(cpp:S3642) C ABI constant group
     HORO_EXTENSION_ABI_VERSION = 1,
     HORO_ASSET_IMPORTER_ABI_VERSION = 1,
 };
 
-enum HoroExtensionStatus {
+enum HoroExtensionStatus {  // NOSONAR(cpp:S3642) C ABI enumeration
     HORO_EXTENSION_SUCCESS = 0,
     HORO_EXTENSION_ERROR_VERSION_MISMATCH = 1,
     HORO_EXTENSION_ERROR_INIT_FAILED = 2,

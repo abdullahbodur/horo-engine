@@ -156,7 +156,45 @@ namespace Horo::Assets {
             });
         }
 
+        Result<void> CookAndEncodeSlot(const CookerCatalogSnapshot &catalog, CookSlot &slot, const AssetCookTargetId &target,
+                                       const CancellationToken &cancellation) {
+            const auto *strategy = catalog.Find(slot.record.type, target);
+
+            if (!strategy)
+                return Result<void>::Failure(Error{CookErrors::CookerMissing.code});
+
+            const CookSourceView sourceView{
+                .id = slot.record.id,
+                .type = slot.record.type,
+                .target = target,
+                .sourceDigest = slot.sourceDigest,
+                .bytes = slot.sourceBytes,
+            };
+
+            auto cookResult = strategy->Cook(sourceView, cancellation);
+            if (cookResult.HasError())
+                return Result<void>::Failure(cookResult.ErrorValue());
+
+            auto sink = std::move(cookResult).Value();
+            const AssetCookArtifact artifact{
+                .id = sourceView.id,
+                .type = sourceView.type,
+                .target = sourceView.target,
+                .sourceDigest = sourceView.sourceDigest,
+                .payloadDigest = ComputeSha256(std::as_bytes(std::span{sink.payload})),
+                .payload = std::move(sink.payload),
+            };
+
+            auto encodeResult = EncodeCookedArtifact(artifact);
+            if (encodeResult.HasError())
+                return Result<void>::Failure(encodeResult.ErrorValue());
+
+            slot.cookedArtifact = std::move(encodeResult).Value();
+            return Result<void>::Success();
+        }
+
         Result<AssetCookReport> PublishCookedSlots(const AssetCookRequest &request, const AssetCookCache &cache,
+
                                                    std::vector<CookSlot> &slots, const std::size_t cacheHits,
                                                    const CancellationToken &cancellation, CookOperationScope &operation) {
             if (request.buildOutputStore != nullptr) {
@@ -210,6 +248,71 @@ namespace Horo::Assets {
                 .cacheHits = cacheHits,
             });
         }
+
+        Result<std::vector<CookSlot>> PrepareCookSlots(const AssetCookRequest &request, const CookerCatalogSnapshot &catalog,
+                                                       std::span<const AssetRecord> records, CookOperationScope &operation) {
+            std::vector<CookSlot> slots;
+            slots.reserve(records.size());
+            operation.Update("prepare", "Reading asset sources", 0.1F);
+
+            for (const auto &record : records) {
+                if (const auto *strategy = catalog.Find(record.type, request.target); !strategy)
+                    return Result<std::vector<CookSlot>>::Failure(Error{CookErrors::CookerMissing.code});
+
+                auto readResult = ReadSourceBytes(request.sourceRoot, record.sourcePath.String(), request.limits.maximumSourceBytes);
+                if (readResult.HasError())
+                    return Result<std::vector<CookSlot>>::Failure(readResult.ErrorValue());
+
+                auto sourceBytes = std::move(readResult).Value();
+                auto sourceDigest = ComputeSha256(std::as_bytes(std::span{sourceBytes}));
+                auto cacheKey = BuildAssetCookCacheKey(AssetCookCacheKeyInputs{
+                    .assetId = record.id,
+                    .assetType = record.type,
+                    .sourceDigest = sourceDigest,
+                    .cookerContributionId = record.type.Value(),
+                    .cookerVersion = "1.0.0",
+                    .target = request.target,
+                    .artifactFormatVersion = AssetCookArtifact::CurrentFormatVersion,
+                });
+
+                slots.push_back(CookSlot{
+                    .record = record,
+                    .sourceBytes = std::move(sourceBytes),
+                    .sourceDigest = sourceDigest,
+                    .cacheKey = cacheKey,
+                });
+            }
+            return Result<std::vector<CookSlot>>::Success(std::move(slots));
+        }
+
+        Result<std::size_t> ResolveCacheHits(const AssetCookRequest &request, const AssetCookCache &cache, std::span<CookSlot> slots,
+                                             const CancellationToken &cancellation, CookOperationScope &operation) {
+            operation.Update("cache_check", "Checking artifact cache", 0.2F);
+            std::size_t cacheHits = 0;
+            for (auto &slot : slots) {
+                auto cacheResult = cache.Load(slot.cacheKey, cancellation);
+                if (cacheResult.HasError())
+                    return Result<std::size_t>::Failure(cacheResult.ErrorValue());
+
+                if (const auto &cached = cacheResult.Value(); cached.has_value()) {
+                    slot.cacheHit = true;
+                    slot.cookedArtifact = *cached;
+                    ++cacheHits;
+                    if (request.buildOutputStore != nullptr) {
+                        request.buildOutputStore->Append(BuildOutputRecord{
+                            .timestampUtc = std::chrono::system_clock::now(),
+                            .status = BuildOutputStatus::Cached,
+                            .phase = "cook",
+                            .message = slot.record.sourcePath.String(),
+                            .source =
+                                DiagnosticSourceLocation{
+                                    .absolutePath = (request.sourceRoot / slot.record.sourcePath.String()).lexically_normal().string()},
+                        });
+                    }
+                }
+            }
+            return Result<std::size_t>::Success(cacheHits);
+        }
     }  // namespace
 
     AssetCookService::AssetCookService(JobSystem &jobs, std::shared_ptr<const CookerCatalogSnapshot> catalog)
@@ -253,62 +356,15 @@ namespace Horo::Assets {
             return Result<AssetCookReport>::Failure(Error{CookErrors::TooLarge.code});
 
         AssetCookCache cache(request.cacheRoot, request.limits);
-        std::vector<CookSlot> slots;
-        slots.reserve(records.size());
-        operation.Update("prepare", "Reading asset sources", 0.1F);
+        auto slotsResult = PrepareCookSlots(request, *catalog_, records, operation);
+        if (slotsResult.HasError())
+            return Result<AssetCookReport>::Failure(slotsResult.ErrorValue());
+        auto slots = std::move(slotsResult).Value();
 
-        for (const auto &record : records) {
-            if (const auto *strategy = catalog_->Find(record.type, request.target); !strategy)
-                return Result<AssetCookReport>::Failure(Error{CookErrors::CookerMissing.code});
-
-            auto readResult = ReadSourceBytes(request.sourceRoot, record.sourcePath.String(), request.limits.maximumSourceBytes);
-            if (readResult.HasError())
-                return Result<AssetCookReport>::Failure(readResult.ErrorValue());
-
-            auto sourceBytes = std::move(readResult).Value();
-            auto sourceDigest = ComputeSha256(std::as_bytes(std::span{sourceBytes}));
-            auto cacheKey = BuildAssetCookCacheKey(AssetCookCacheKeyInputs{
-                .assetId = record.id,
-                .assetType = record.type,
-                .sourceDigest = sourceDigest,
-                .cookerContributionId = record.type.Value(),
-                .cookerVersion = "1.0.0",
-                .target = request.target,
-                .artifactFormatVersion = AssetCookArtifact::CurrentFormatVersion,
-            });
-
-            slots.push_back(CookSlot{
-                .record = record,
-                .sourceBytes = std::move(sourceBytes),
-                .sourceDigest = sourceDigest,
-                .cacheKey = cacheKey,
-            });
-        }
-
-        operation.Update("cache_check", "Checking artifact cache", 0.2F);
-        std::size_t cacheHits = 0;
-        for (auto &slot : slots) {
-            auto cacheResult = cache.Load(slot.cacheKey, cancellation);
-            if (cacheResult.HasError())
-                return Result<AssetCookReport>::Failure(cacheResult.ErrorValue());
-
-            if (auto &cached = cacheResult.Value(); cached.has_value()) {
-                slot.cacheHit = true;
-                slot.cookedArtifact = std::move(*cached);
-                ++cacheHits;
-                if (request.buildOutputStore != nullptr) {
-                    request.buildOutputStore->Append(BuildOutputRecord{
-                        .timestampUtc = std::chrono::system_clock::now(),
-                        .status = BuildOutputStatus::Cached,
-                        .phase = "cook",
-                        .message = slot.record.sourcePath.String(),
-                        .source =
-                            DiagnosticSourceLocation{
-                                .absolutePath = (request.sourceRoot / slot.record.sourcePath.String()).lexically_normal().string()},
-                    });
-                }
-            }
-        }
+        auto cacheHitsResult = ResolveCacheHits(request, cache, slots, cancellation, operation);
+        if (cacheHitsResult.HasError())
+            return Result<AssetCookReport>::Failure(cacheHitsResult.ErrorValue());
+        const std::size_t cacheHits = cacheHitsResult.Value();
 
         if (cacheHits < slots.size()) {
             operation.Update("cook", std::format("Cooking {} assets", slots.size() - cacheHits), 0.4F);
@@ -318,45 +374,13 @@ namespace Horo::Assets {
                 if (slot.cacheHit)
                     continue;
 
-                auto work = [&slot, this, &request](const CancellationToken &jobCancellation) -> Result<void> {
+                const JobFunction work = [&slot, this, &request](const CancellationToken &jobCancellation) {
                     if (jobCancellation.IsCancellationRequested())
                         return Result<void>::Failure(Error{CookErrors::Cancelled.code});
 
-                    const auto *strategy = catalog_->Find(slot.record.type, request.target);
-                    if (!strategy)
-                        return Result<void>::Failure(Error{CookErrors::CookerMissing.code});
-
-                    CookSourceView sourceView{
-                        .id = slot.record.id,
-                        .type = slot.record.type,
-                        .target = request.target,
-                        .sourceDigest = slot.sourceDigest,
-                        .bytes = slot.sourceBytes,
-                    };
-
-                    auto cookResult = strategy->Cook(sourceView, jobCancellation);
-                    if (cookResult.HasError())
-                        return Result<void>::Failure(cookResult.ErrorValue());
-
-                    auto sink = std::move(cookResult).Value();
-
-                    AssetCookArtifact artifact;
-                    artifact.id = sourceView.id;
-                    artifact.type = sourceView.type;
-                    artifact.target = sourceView.target;
-                    artifact.sourceDigest = sourceView.sourceDigest;
-                    artifact.payloadDigest = ComputeSha256(std::as_bytes(std::span{sink.payload}));
-                    artifact.payload = std::move(sink.payload);
-
-                    auto encodeResult = EncodeCookedArtifact(artifact);
-                    if (encodeResult.HasError())
-                        return Result<void>::Failure(encodeResult.ErrorValue());
-
-                    slot.cookedArtifact = std::move(encodeResult).Value();
-                    return Result<void>::Success();
+                    return CookAndEncodeSlot(*catalog_, slot, request.target, jobCancellation);
                 };
-
-                auto spawnResult = group.Spawn({}, std::move(work));
+                auto spawnResult = group.Spawn({}, work);
                 if (spawnResult.HasError())
                     return Result<AssetCookReport>::Failure(spawnResult.ErrorValue());
             }

@@ -20,8 +20,8 @@ namespace Horo::Editor {
             if (viewProjection.HasError())
                 return std::nullopt;
             const Result<Math::Vec3> projected = Math::TryProject(viewProjection.Value(), worldPosition);
-            const float minimumDepth = depthRange == Math::ClipDepthRange::NegativeOneToOne ? -1.0F : 0.0F;
-            if (projected.HasError() || projected.Value().z < minimumDepth || projected.Value().z > 1.0F)
+            if (const float minimumDepth = depthRange == Math::ClipDepthRange::NegativeOneToOne ? -1.0F : 0.0F;
+                projected.HasError() || projected.Value().z < minimumDepth || projected.Value().z > 1.0F)
                 return std::nullopt;
             return ImVec2{origin.x + (projected.Value().x * 0.5F + 0.5F) * width, origin.y + (0.5F - projected.Value().y * 0.5F) * height};
         }
@@ -81,39 +81,43 @@ namespace Horo::Editor {
             }
         }
 
+        void DrawLinearAxisHandle(ImDrawList &drawList, const TransformGizmoGeometryRequest &request, TransformGizmoFrameGeometry &geometry,
+                                  const int axis, const ImU32 axisColor, float &closestDistance) {
+            const auto projected = ProjectToViewport(request.camera, geometry.worldPosition + geometry.worldAxes[axis], request.origin,
+                                                     request.width, request.height, request.depthRange);
+            if (!projected.has_value())
+                return;
+            const ImVec2 delta{projected->x - geometry.center->x, projected->y - geometry.center->y};
+            geometry.pixelsPerWorldUnit[axis] = std::sqrt(delta.x * delta.x + delta.y * delta.y);
+            if (geometry.pixelsPerWorldUnit[axis] < 4.0F)
+                return;
+            geometry.screenDirections[axis] = {
+                delta.x / geometry.pixelsPerWorldUnit[axis],
+                delta.y / geometry.pixelsPerWorldUnit[axis],
+            };
+            const ImVec2 end{
+                geometry.center->x + geometry.screenDirections[axis].x * 48.0F,
+                geometry.center->y + geometry.screenDirections[axis].y * 48.0F,
+            };
+            const float distance = DistanceToSegment(request.pointer, *geometry.center, end);
+            const bool active = request.activeAxis == axis;
+            const bool hit = request.hovered && distance <= 7.0F;
+            drawList.AddLine(*geometry.center, end, active || hit ? Theme::U32(Theme::Text()) : axisColor, active || hit ? 4.0F : 2.5F);
+            if (request.tool == EditorTransformTool::Scale)
+                drawList.AddRectFilled({end.x - 4.0F, end.y - 4.0F}, {end.x + 4.0F, end.y + 4.0F}, axisColor);
+            else
+                drawList.AddCircleFilled(end, hit ? 5.0F : 4.0F, axisColor);
+            if (hit && distance < closestDistance) {
+                closestDistance = distance;
+                geometry.hoveredAxis = axis;
+            }
+        }
+
         void DrawLinearHandles(ImDrawList &drawList, const TransformGizmoGeometryRequest &request, TransformGizmoFrameGeometry &geometry,
                                const std::array<ImU32, 3> &axisColors) {
             float closestDistance = std::numeric_limits<float>::max();
             for (int axis = 0; axis < 3; ++axis) {
-                const auto projected = ProjectToViewport(request.camera, geometry.worldPosition + geometry.worldAxes[axis], request.origin,
-                                                         request.width, request.height, request.depthRange);
-                if (!projected.has_value())
-                    continue;
-                const ImVec2 delta{projected->x - geometry.center->x, projected->y - geometry.center->y};
-                geometry.pixelsPerWorldUnit[axis] = std::sqrt(delta.x * delta.x + delta.y * delta.y);
-                if (geometry.pixelsPerWorldUnit[axis] < 4.0F)
-                    continue;
-                geometry.screenDirections[axis] = {
-                    delta.x / geometry.pixelsPerWorldUnit[axis],
-                    delta.y / geometry.pixelsPerWorldUnit[axis],
-                };
-                const ImVec2 end{
-                    geometry.center->x + geometry.screenDirections[axis].x * 48.0F,
-                    geometry.center->y + geometry.screenDirections[axis].y * 48.0F,
-                };
-                const float distance = DistanceToSegment(request.pointer, *geometry.center, end);
-                const bool active = request.activeAxis == axis;
-                const bool hit = request.hovered && distance <= 7.0F;
-                drawList.AddLine(*geometry.center, end, active || hit ? Theme::U32(Theme::Text()) : axisColors[axis],
-                                 active || hit ? 4.0F : 2.5F);
-                if (request.tool == EditorTransformTool::Scale)
-                    drawList.AddRectFilled({end.x - 4.0F, end.y - 4.0F}, {end.x + 4.0F, end.y + 4.0F}, axisColors[axis]);
-                else
-                    drawList.AddCircleFilled(end, hit ? 5.0F : 4.0F, axisColors[axis]);
-                if (hit && distance < closestDistance) {
-                    closestDistance = distance;
-                    geometry.hoveredAxis = axis;
-                }
+                DrawLinearAxisHandle(drawList, request, geometry, axis, axisColors[axis], closestDistance);
             }
             if (request.tool == EditorTransformTool::Scale) {
                 const bool uniformHit = request.hovered && Distance(request.pointer, *geometry.center) <= 8.0F;
@@ -156,7 +160,7 @@ namespace Horo::Editor {
     std::optional<Math::Vec3> ProjectTransformGizmoRotationVector(const EditorViewportCamera &camera, const Math::Vec3 center,
                                                                   const Math::Vec3 normal, const ImVec2 pointer, const ImVec2 origin,
                                                                   const float width, const float height,
-                                                                  const Math::ClipDepthRange depthRange) noexcept {
+                                                                  const Math::ClipDepthRange depthRange) noexcept {  // NOSONAR(cpp:S107)
         if (width <= 0.0F || height <= 0.0F)
             return std::nullopt;
         const Result<Math::Ray> ray =

@@ -176,8 +176,8 @@ namespace Horo::Editor {
                 m_filterDirty = true;
 
             ImGui::SameLine(0.0F, Ui::ScaledLayoutValue(ControlGap));
-            const std::string &clearLabel = context.localization.Get("editor", "workspace.global_dock.operations.clear");
-            if (Ui::Button({.label = clearLabel.c_str(),
+            if (const std::string &clearLabel = context.localization.Get("editor", "workspace.global_dock.operations.clear");
+                Ui::Button({.label = clearLabel.c_str(),
                             .size = {ActionControlWidth, 0.0F},
                             .variant = Ui::ButtonVariant::Secondary,
                             .font = fonts.sansCompact,
@@ -250,10 +250,10 @@ namespace Horo::Editor {
                            {operation.message, Theme::Muted()},
                            {canCancel ? cancelLabel : std::string{}, canCancel ? Theme::Warn() : Theme::Muted()}}});
         }
-        const Ui::TableInteraction interaction =
-            Ui::DrawTable({.id = "##OperationsTable", .componentSize = Ui::ComponentSize::Small, .selectableCells = true}, columns, rows,
-                          fonts);
-        if (interaction.activatedRow.has_value() && interaction.activatedColumn == 5U && m_operationControl != nullptr) {
+        if (const Ui::TableInteraction interaction =
+                Ui::DrawTable({.id = "##OperationsTable", .componentSize = Ui::ComponentSize::Small, .selectableCells = true}, columns,
+                              rows, fonts);
+            interaction.activatedRow.has_value() && interaction.activatedColumn == 5U && m_operationControl != nullptr) {
             const OperationRecord &operation = m_snapshot.operations[m_filteredIndices[*interaction.activatedRow]];
             static_cast<void>(m_operationControl->RequestCancel(operation.id));
         }
@@ -282,8 +282,8 @@ namespace Horo::Editor {
         std::vector<std::size_t> projected;
         projected.reserve(operations.size());
         for (std::size_t index = 0; index < operations.size(); ++index) {
-            const OperationRecord &operation = operations[index];
-            if (!search.empty() && !ContainsCaseInsensitive(operation.title, search) && !ContainsCaseInsensitive(operation.phase, search) &&
+            if (const OperationRecord &operation = operations[index];
+                !search.empty() && !ContainsCaseInsensitive(operation.title, search) && !ContainsCaseInsensitive(operation.phase, search) &&
                 !ContainsCaseInsensitive(operation.message, search) &&
                 !ContainsCaseInsensitive(TechnicalStatusText(operation.state), search))
                 continue;

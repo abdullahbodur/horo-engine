@@ -20,7 +20,9 @@ namespace Horo::Editor {
     void ViewportInteractionController::Draw(ImDrawList &drawList, const ImVec2 &origin, const float width, const float height,
                                              const bool hovered, const EditorWorkspaceViewModel &viewModel,
                                              EditorWorkspaceViewCommandData &command, const EditorGuiContext &context,
-                                             const float deltaSeconds, const Math::ClipDepthRange depthRange) {
+                                             const float deltaSeconds,
+                                             const Math::ClipDepthRange depthRange) {  // NOSONAR(cpp:S107)
+
         const Input::InputRouter *router = capture_.Router();
         if (router == nullptr || capture_.WorkspaceContext() == nullptr)
             return;

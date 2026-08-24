@@ -86,9 +86,34 @@ namespace Horo::Assets {
         return Internal::ReadExactArtifact(input, size, cancellation);
     }
 
-    struct MemoryAssetProvider::State {
-        std::unordered_map<AssetId, std::vector<std::uint8_t>, AssetIdHash> assets;
-        mutable std::mutex mutex;
+    class MemoryAssetProvider::State {
+    public:
+        void Insert(const AssetId id, std::vector<std::uint8_t> bytes) {
+            std::scoped_lock lock{mutex_};
+            assets_.insert_or_assign(id, std::move(bytes));
+        }
+
+        void Remove(const AssetId id) {
+            std::scoped_lock lock{mutex_};
+            assets_.erase(id);
+        }
+
+        [[nodiscard]] bool Contains(const AssetId id) const {
+            std::scoped_lock lock{mutex_};
+            return assets_.contains(id);
+        }
+
+        [[nodiscard]] std::optional<std::vector<std::uint8_t>> Find(const AssetId id) const {
+            std::scoped_lock lock{mutex_};
+            const auto found = assets_.find(id);
+            if (found == assets_.end())
+                return std::nullopt;
+            return found->second;
+        }
+
+    private:
+        std::unordered_map<AssetId, std::vector<std::uint8_t>, AssetIdHash> assets_;
+        mutable std::mutex mutex_;
     };
 
     MemoryAssetProvider::MemoryAssetProvider() : state_(std::make_unique<State>()) {}
@@ -97,33 +122,29 @@ namespace Horo::Assets {
 
     /** @copydoc MemoryAssetProvider::Insert */
     void MemoryAssetProvider::Insert(const AssetId id, std::vector<std::uint8_t> bytes) {
-        std::scoped_lock lock{state_->mutex};
-        state_->assets.insert_or_assign(id, std::move(bytes));
+        state_->Insert(id, std::move(bytes));
     }
 
     /** @copydoc MemoryAssetProvider::Remove */
     void MemoryAssetProvider::Remove(const AssetId id) {
-        std::scoped_lock lock{state_->mutex};
-        state_->assets.erase(id);
+        state_->Remove(id);
     }
 
     /** @copydoc IAssetProvider::Exists */
     Result<bool> MemoryAssetProvider::Exists(const AssetId id, const CancellationToken &cancellation) const {
         if (cancellation.IsCancellationRequested())
             return Failure<bool>(AssetErrors::LoadCancelled);
-        std::scoped_lock lock{state_->mutex};
-        return Result<bool>::Success(state_->assets.contains(id));
+        return Result<bool>::Success(state_->Contains(id));
     }
 
     /** @copydoc IAssetProvider::Load */
     Result<std::vector<std::uint8_t>> MemoryAssetProvider::Load(const AssetId id, const CancellationToken &cancellation) const {
         if (cancellation.IsCancellationRequested())
             return Failure<std::vector<std::uint8_t>>(AssetErrors::LoadCancelled);
-        std::scoped_lock lock{state_->mutex};
-        const auto found = state_->assets.find(id);
-        if (found == state_->assets.end())
+        const auto found = state_->Find(id);
+        if (!found)
             return Failure<std::vector<std::uint8_t>>(AssetErrors::ProviderNotFound);
-        return Result<std::vector<std::uint8_t>>::Success(found->second);
+        return Result<std::vector<std::uint8_t>>::Success(*found);
     }
 
     struct AssetLoadHandle::Request {

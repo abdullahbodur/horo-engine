@@ -28,7 +28,7 @@ namespace Horo::Editor {
     };
 
     /** @brief Move-only proof that one process and host operation owns project mutation authority. */
-    class ProjectMutationLease {
+    class ProjectMutationLease {  // NOSONAR(cpp:S3624) Pimpl type with custom destructor and move operations
     public:
         struct State;
         ~ProjectMutationLease();

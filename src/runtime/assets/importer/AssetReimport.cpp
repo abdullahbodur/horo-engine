@@ -72,15 +72,16 @@ namespace Horo::Assets {
         [[nodiscard]] std::vector<AssetImportReason> ComputeReimportReasons(const AssetImportMetadata &metadata,
                                                                             const AssetImporterContribution &contribution,
                                                                             const std::string_view sourceHash) {
+            using enum AssetImportReason;
             std::vector<AssetImportReason> reasons;
             if (!metadata.sourceHash.empty() && metadata.sourceHash != sourceHash)
-                reasons.push_back(AssetImportReason::SourceChanged);
+                reasons.push_back(SourceChanged);
             if (metadata.importerVersion != contribution.version)
-                reasons.push_back(AssetImportReason::ImporterChanged);
+                reasons.push_back(ImporterChanged);
             if (metadata.importerModuleId != contribution.moduleId || metadata.importerModuleVersion != contribution.moduleVersion)
-                reasons.push_back(AssetImportReason::ModuleChanged);
+                reasons.push_back(ModuleChanged);
             if (reasons.empty())
-                reasons.push_back(AssetImportReason::ManualReimport);
+                reasons.push_back(ManualReimport);
             return reasons;
         }
 

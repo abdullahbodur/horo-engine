@@ -48,7 +48,7 @@ namespace Horo::Assets {
     };
 
     /** @brief One item in an import operation. */
-    struct AssetImportItem {
+    struct AssetImportItem {                          // NOSONAR(cpp:S1820) Aggregate transfer struct for import dialog state
         ProjectPath sourceFile;                       /**< Project-relative source path (display only). */
         std::filesystem::path absoluteSourcePath;     /**< Absolute path to source file for reading. */
         std::string importerContributionId;           /**< Selected importer contribution. */
@@ -208,7 +208,7 @@ namespace Horo::Assets {
         void Cancel();
 
     private:
-        JobSystem &jobs_;
+        [[maybe_unused]] JobSystem &jobs_;  // NOSONAR(cpp:S1068) Retained for asynchronous job execution parity
         std::shared_ptr<const AssetImporterCatalogSnapshot> catalog_;
         AssetImportSnapshot snapshot_;
         std::uint64_t revision_{0};

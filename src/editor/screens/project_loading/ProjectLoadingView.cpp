@@ -95,9 +95,12 @@ namespace Horo::Editor {
                 state.hasFailed && state.canRetry ? kButtonSize.x * 2.0F + ImGui::GetStyle().ItemSpacing.x : kButtonSize.x;
             ImGui::SetCursorPosX(ImGui::GetWindowWidth() - kModalPadding - actionsWidth);
 
-            const auto primaryLabel = ctx.localization.Get("editor", state.hasFailed ? state.canRetry ? "project_loading.action.retry"
-                                                                                                      : "project_loading.action.back"
-                                                                                     : "project_loading.action.cancel");
+            const char *primaryKey = "project_loading.action.cancel";
+            if (state.hasFailed)
+                primaryKey = state.canRetry ? "project_loading.action.retry" : "project_loading.action.back";
+            const auto primaryLabel = ctx.localization.Get("editor", primaryKey);
+
+            using enum ProjectLoadingViewCommand;
             if (Ui::Button({.label = primaryLabel.c_str(),
                             .size = {kButtonSize.x, kButtonSize.y},
                             .variant = Ui::ButtonVariant::Secondary,
@@ -105,13 +108,13 @@ namespace Horo::Editor {
                             .baseFontSize = Theme::FontPx::SansCompact,
                             .componentSize = Ui::ComponentSize::Small})) {
                 if (state.hasFailed && state.canRetry)
-                    cmd = ProjectLoadingViewCommand::Retry;
+                    cmd = Retry;
                 else if (state.hasFailed)
-                    cmd = ProjectLoadingViewCommand::Back;
+                    cmd = Back;
                 else {
                     state.isCancelled = true;
                     state.statusText = ctx.localization.Get("editor", "project_loading.status.cancelling");
-                    cmd = ProjectLoadingViewCommand::Cancel;
+                    cmd = Cancel;
                 }
             }
             if (state.hasFailed && state.canRetry) {
@@ -123,7 +126,7 @@ namespace Horo::Editor {
                                 .font = ctx.theme.fonts.sansCompact,
                                 .baseFontSize = Theme::FontPx::SansCompact,
                                 .componentSize = Ui::ComponentSize::Small}))
-                    cmd = ProjectLoadingViewCommand::Back;
+                    cmd = Back;
             }
         }
 

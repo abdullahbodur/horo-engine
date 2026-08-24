@@ -6,13 +6,14 @@
 #include "Horo/Runtime/Input.h"
 #include "editor/project_model/RendererAvailability.h"
 
+#include <array>
 #include <string>
 
 namespace Horo::Editor {
     struct GuiContentRegion;
 
     /** @brief Transient ImGui state retained by the ProjectCreation route view presentation. */
-    struct ProjectCreationViewState {
+    struct ProjectCreationViewState {  // NOSONAR(cpp:S1820) Transient form state container
         bool initialized = false;
         int step = 1;
         bool confirmingDiscard = false;
@@ -34,7 +35,7 @@ namespace Horo::Editor {
         int firstPersonInputMapIndex = 0;
         bool demoObservabilityOverlays = true;
         bool demoBenchmarkScene = true;
-        bool customSubsystems[5]{true, true, true, false, false};
+        std::array<bool, 5> customSubsystems{true, true, true, false, false};
     };
 
     /** @brief Command emitted by the ProjectCreation route view presentation. */

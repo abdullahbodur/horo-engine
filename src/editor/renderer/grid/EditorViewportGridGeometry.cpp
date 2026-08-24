@@ -14,7 +14,13 @@ namespace Horo::Editor {
             const float exponent = std::floor(std::log10(requested));
             const float scale = std::pow(10.0F, exponent);
             const float normalized = requested / scale;
-            const float step = normalized <= 1.0F ? 1.0F : normalized <= 2.0F ? 2.0F : normalized <= 5.0F ? 5.0F : 10.0F;
+            float step = 10.0F;
+            if (normalized <= 1.0F)
+                step = 1.0F;
+            else if (normalized <= 2.0F)
+                step = 2.0F;
+            else if (normalized <= 5.0F)
+                step = 5.0F;
             return step * scale;
         }
 
@@ -57,8 +63,8 @@ namespace Horo::Editor {
 
     /** @copydoc ViewportGridLineBatch::IsValid */
     bool ViewportGridLineBatch::IsValid() const noexcept {
-        const std::size_t verticesPerPrimitive = topology == ViewportGridPrimitiveTopology::Lines ? 2 : 3;
-        if (positions.size() % verticesPerPrimitive != 0 || !Math::IsFinite(color))
+        if (const std::size_t verticesPerPrimitive = topology == ViewportGridPrimitiveTopology::Lines ? 2 : 3;
+            positions.size() % verticesPerPrimitive != 0 || !Math::IsFinite(color))
             return false;
         return std::ranges::all_of(positions, [](const Math::Vec3 position) {
             return Math::IsFinite(position);
@@ -133,24 +139,25 @@ namespace Horo::Editor {
             const float x = centerX + static_cast<float>(offset) * output.minorSpacing;
             const float z = centerZ + static_cast<float>(offset) * output.minorSpacing;
 
-            const auto appendXLine = [&]() {
-                if (IsAxisCoordinate(x, output.minorSpacing))
-                    return AppendLine(output.axisPositions, output.axisVertexCount, {x, 0.0F, minimumZ}, {x, 0.0F, maximumZ});
-                return AppendStroke(output.regularPositions, output.regularVertexCount, {x, 0.0F, minimumZ}, {x, 0.0F, maximumZ},
-                                    {halfStrokeWidth, 0.0F, 0.0F});
-            };
-            if (!appendXLine())
+            const bool isAxisX = IsAxisCoordinate(x, output.minorSpacing);
+            if (const bool appendedX =
+                    isAxisX ? AppendLine(output.axisPositions, output.axisVertexCount, {x, 0.0F, minimumZ}, {x, 0.0F, maximumZ})
+                            : AppendStroke(output.regularPositions, output.regularVertexCount, {x, 0.0F, minimumZ}, {x, 0.0F, maximumZ},
+                                           {halfStrokeWidth, 0.0F, 0.0F});
+                !appendedX) {
                 return false;
+            }
 
-            const auto appendZLine = [&]() {
-                if (IsAxisCoordinate(z, output.minorSpacing))
-                    return AppendLine(output.axisPositions, output.axisVertexCount, {minimumX, 0.0F, z}, {maximumX, 0.0F, z});
-                return AppendStroke(output.regularPositions, output.regularVertexCount, {minimumX, 0.0F, z}, {maximumX, 0.0F, z},
-                                    {0.0F, 0.0F, halfStrokeWidth});
-            };
-            if (!appendZLine())
+            const bool isAxisZ = IsAxisCoordinate(z, output.minorSpacing);
+            if (const bool appendedZ =
+                    isAxisZ ? AppendLine(output.axisPositions, output.axisVertexCount, {minimumX, 0.0F, z}, {maximumX, 0.0F, z})
+                            : AppendStroke(output.regularPositions, output.regularVertexCount, {minimumX, 0.0F, z}, {maximumX, 0.0F, z},
+                                           {0.0F, 0.0F, halfStrokeWidth});
+                !appendedZ) {
                 return false;
+            }
         }
         return output.IsValid();
     }
+
 }  // namespace Horo::Editor

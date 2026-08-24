@@ -60,6 +60,45 @@ namespace Horo::Editor {
                 return std::nullopt;
             return path.lexically_normal().string();
         }
+
+        void HandleDirectoryDragDropTarget(const ContentBrowserEntry &entry, const ImVec2 &cardMin, const AssetBrowserGridMetrics &metrics,
+                                           ImDrawList *drawList, EditorWorkspaceViewCommandData &command) {
+            if (entry.kind != ContentBrowserEntryKind::Directory || !ImGui::BeginDragDropTarget()) {
+                return;
+            }
+            const ImGuiPayload *acceptedPayload =
+                ImGui::AcceptDragDropPayload(AssetSceneDragPayloadType,
+                                             ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
+            if (const std::optional<std::string> source = AbsoluteAssetPathFromPayload(acceptedPayload); source.has_value()) {
+                const bool copy = ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeySuper;
+                const bool validTarget = copy || std::filesystem::path{*source}.parent_path() != std::filesystem::path{entry.absolutePath};
+                drawList->AddRect(cardMin, {cardMin.x + metrics.cardWidth, cardMin.y + metrics.cardWidth + CardFooterHeight},
+                                  Theme::U32(validTarget ? Theme::Accent() : Theme::Err()), CardRadius, 0, 2.0F);
+                if (validTarget && acceptedPayload->IsDelivery()) {
+                    command = AssetBrowserInteractionSession::Transfer(*source, entry.absolutePath,
+                                                                       copy ? ContentBrowserTransferMode::Copy
+                                                                            : ContentBrowserTransferMode::Move);
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+
+        void HandleAssetDragDropSource(const ContentBrowserEntry &entry, const ILocalizationService &localization) {
+            if (entry.kind != ContentBrowserEntryKind::Asset || !ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
+                return;
+            }
+            const AssetSceneDragPayload payload =
+                MakeAssetSceneDragPayload(entry.assetId, entry.assetType, entry.absolutePath, entry.registered);
+            ImGui::SetDragDropPayload(AssetSceneDragPayloadType, &payload, sizeof(payload));
+            ImGui::TextUnformatted(entry.displayName.c_str());
+            const bool copy = ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeySuper;
+            ImGui::TextColored(Theme::Dim(), "%s",
+                               localization
+                                   .Get("editor",
+                                        copy ? "workspace.content_browser.action.copy" : "workspace.content_browser.action.move_here")
+                                   .c_str());
+            ImGui::EndDragDropSource();
+        }
     }  // namespace
 
     AssetBrowserGridMetrics ComputeAssetBrowserGridMetrics(const float availableWidth) noexcept {
@@ -156,37 +195,8 @@ namespace Horo::Editor {
             if (entry.kind == ContentBrowserEntryKind::Directory && cardHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
                 command = AssetBrowserInteractionSession::Navigate(entry.absolutePath);
             }
-            if (entry.kind == ContentBrowserEntryKind::Asset && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) {
-                const AssetSceneDragPayload payload =
-                    MakeAssetSceneDragPayload(entry.assetId, entry.assetType, entry.absolutePath, entry.registered);
-                ImGui::SetDragDropPayload(AssetSceneDragPayloadType, &payload, sizeof(payload));
-                ImGui::TextUnformatted(entry.displayName.c_str());
-                const bool copy = ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeySuper;
-                ImGui::TextColored(Theme::Dim(), "%s",
-                                   localization
-                                       .Get("editor",
-                                            copy ? "workspace.content_browser.action.copy" : "workspace.content_browser.action.move_here")
-                                       .c_str());
-                ImGui::EndDragDropSource();
-            }
-            if (entry.kind == ContentBrowserEntryKind::Directory && ImGui::BeginDragDropTarget()) {
-                const ImGuiPayload *acceptedPayload =
-                    ImGui::AcceptDragDropPayload(AssetSceneDragPayloadType,
-                                                 ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
-                if (const std::optional<std::string> source = AbsoluteAssetPathFromPayload(acceptedPayload); source.has_value()) {
-                    const bool copy = ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeySuper;
-                    const bool validTarget =
-                        copy || std::filesystem::path{*source}.parent_path() != std::filesystem::path{entry.absolutePath};
-                    drawList->AddRect(cardMin, {cardMin.x + metrics.cardWidth, cardMin.y + metrics.cardWidth + CardFooterHeight},
-                                      Theme::U32(validTarget ? Theme::Accent() : Theme::Err()), CardRadius, 0, 2.0F);
-                    if (validTarget && acceptedPayload->IsDelivery()) {
-                        command = AssetBrowserInteractionSession::Transfer(*source, entry.absolutePath,
-                                                                           copy ? ContentBrowserTransferMode::Copy
-                                                                                : ContentBrowserTransferMode::Move);
-                    }
-                }
-                ImGui::EndDragDropTarget();
-            }
+            HandleAssetDragDropSource(entry, localization);
+            HandleDirectoryDragDropTarget(entry, cardMin, metrics, drawList, command);
             DrawAssetBrowserEntryActions(entry, viewModel, interactionSession, command, context);
             ImGui::PopID();
         }

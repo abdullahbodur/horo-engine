@@ -430,17 +430,16 @@ namespace Horo::Editor {
         if (ImGui::Begin("##EditorSnackbarOverlay", nullptr, windowFlags)) {
             ImDrawList *drawList = ImGui::GetWindowDrawList();
 
+            using enum CardInteractionStatus;
             for (std::size_t idx = 0; idx < visibleCount; ++idx) {
                 const ImVec2 pMin = ImGui::GetCursorScreenPos();
                 const float cardHeight = MeasureCardHeight(activeSnackbars_[idx]);
-                const auto cardResult = DrawSnackbarCard(activeSnackbars_[idx], drawList);
 
-                if (cardResult.status != CardInteractionStatus::None) {
-                    if (cardResult.status == CardInteractionStatus::Dismissed) {
-                        DismissAt(idx);
-                    } else if (cardResult.status == CardInteractionStatus::ActionTriggered) {
-                        result = cardResult.actionEvent;
-                    }
+                if (const auto cardResult = DrawSnackbarCard(activeSnackbars_[idx], drawList); cardResult.status == Dismissed) {
+                    DismissAt(idx);
+                    break;
+                } else if (cardResult.status == ActionTriggered) {
+                    result = cardResult.actionEvent;
                     break;
                 }
 

@@ -16,7 +16,7 @@ namespace Horo::Editor {
         }
 
         template <std::size_t Size> [[nodiscard]] bool IsTerminated(const std::array<char, Size> &value) noexcept {
-            return std::find(value.begin(), value.end(), '\0') != value.end();
+            return std::ranges::find(value, '\0') != value.end();
         }
 
         [[nodiscard]] float Snap(const float value, const float step) noexcept {
@@ -39,18 +39,17 @@ namespace Horo::Editor {
     }
 
     AssetSceneDropPolicyResult EvaluateAssetSceneDrop(const AssetSceneDragPayload &payload) noexcept {
-        using enum Horo::Editor::AssetSceneDropRejection;
+        using enum AssetSceneDropRejection;
         if (!IsTerminated(payload.assetId) || !IsTerminated(payload.assetType) || !IsTerminated(payload.absolutePath)) {
-            return {false, AssetSceneDropRejection::InvalidPayload};
+            return {false, InvalidPayload};
         }
         if (!payload.registered || payload.assetId.front() == '\0')
-            return {false, AssetSceneDropRejection::Unregistered};
-        const auto parsed = Assets::AssetId::Parse(payload.assetId.data());
-        if (parsed.HasError())
-            return {false, AssetSceneDropRejection::InvalidPayload};
+            return {false, Unregistered};
+        if (const auto parsed = Assets::AssetId::Parse(payload.assetId.data()); parsed.HasError())
+            return {false, InvalidPayload};
         if (!CanInstantiateAssetType(payload.assetType.data()))
-            return {false, AssetSceneDropRejection::UnsupportedType};
-        return {true, AssetSceneDropRejection::None};
+            return {false, UnsupportedType};
+        return {true, None};
     }
 
     Result<AssetViewportPlacement> ResolveAssetViewportPlacement(const AssetViewportPlacementRequest &request) {

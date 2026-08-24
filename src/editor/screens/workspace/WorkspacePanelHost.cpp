@@ -28,13 +28,13 @@ namespace Horo::Editor {
         }
 
         bool ContainsPanel(const LayoutNode &node, const std::string_view panelId) {
-            return std::visit([&](const auto &value) {
-                using NodeType = std::decay_t<decltype(value)>;
+            return std::visit([&]<typename NodeValue>(const NodeValue &value) {
+                using NodeType = std::decay_t<NodeValue>;
                 if constexpr (std::is_same_v<NodeType, SplitNode>) {
                     return (value.first != nullptr && ContainsPanel(*value.first, panelId)) ||
                            (value.second != nullptr && ContainsPanel(*value.second, panelId));
                 } else if constexpr (std::is_same_v<NodeType, TabStackNode>) {
-                    return std::find(value.tabs.begin(), value.tabs.end(), panelId) != value.tabs.end();
+                    return std::ranges::find(value.tabs, panelId) != value.tabs.end();
                 } else {
                     return value.panel == panelId;
                 }
@@ -43,10 +43,11 @@ namespace Horo::Editor {
 
         bool SplitAround(LayoutNode &node, const std::string_view targetNodeId, const std::string_view panelId,
                          const WorkspacePanelHost::DropKind kind) {
-            const bool isTarget = std::visit([&](const auto &value) {
+            if (const bool isTarget = std::visit(
+                    [&]<typename NodeValue>(const NodeValue &value) {
                 return value.id == targetNodeId;
             }, node.value);
-            if (isTarget) {
+                isTarget) {
                 const bool horizontal = kind == WorkspacePanelHost::DropKind::SplitLeft || kind == WorkspacePanelHost::DropKind::SplitRight;
                 const bool panelFirst = kind == WorkspacePanelHost::DropKind::SplitLeft || kind == WorkspacePanelHost::DropKind::SplitTop;
                 auto original = std::make_unique<LayoutNode>(std::move(node));
@@ -66,8 +67,8 @@ namespace Horo::Editor {
                 return true;
             }
 
-            return std::visit([&](auto &value) {
-                using NodeType = std::decay_t<decltype(value)>;
+            return std::visit([&]<typename NodeValue>(NodeValue &value) {
+                using NodeType = std::decay_t<NodeValue>;
                 if constexpr (std::is_same_v<NodeType, SplitNode>) {
                     return (value.first != nullptr && SplitAround(*value.first, targetNodeId, panelId, kind)) ||
                            (value.second != nullptr && SplitAround(*value.second, targetNodeId, panelId, kind));
@@ -82,13 +83,14 @@ namespace Horo::Editor {
     }
 
     WorkspaceLayoutOperationResult WorkspacePanelHost::OpenPanel(const std::string_view panelId, const std::string_view stackId) {
+        using enum WorkspaceLayoutOperationCode;
         if (panelId.empty())
-            return {WorkspaceLayoutOperationCode::UnknownPanel};
+            return {UnknownPanel};
         auto *stack = m_layout.FindTabStack(stackId);
         if (stack == nullptr)
-            return {WorkspaceLayoutOperationCode::UnknownStack};
+            return {UnknownStack};
         if (ContainsPanel(m_layout.root, panelId))
-            return {WorkspaceLayoutOperationCode::UnknownPanel};
+            return {UnknownPanel};
         stack->tabs.emplace_back(panelId);
         stack->activeTab = stack->tabs.back();
         return {};
@@ -103,11 +105,12 @@ namespace Horo::Editor {
     }
 
     WorkspaceLayoutOperationResult WorkspacePanelHost::SetActiveTab(const std::string_view stackId, const std::string_view panelId) {
+        using enum WorkspaceLayoutOperationCode;
         auto *stack = m_layout.FindTabStack(stackId);
         if (stack == nullptr)
-            return {WorkspaceLayoutOperationCode::UnknownStack};
-        if (std::find(stack->tabs.begin(), stack->tabs.end(), panelId) == stack->tabs.end()) {
-            return {WorkspaceLayoutOperationCode::UnknownPanel};
+            return {UnknownStack};
+        if (std::ranges::find(stack->tabs, panelId) == stack->tabs.end()) {
+            return {UnknownPanel};
         }
         stack->activeTab = std::string(panelId);
         return {};
@@ -115,17 +118,18 @@ namespace Horo::Editor {
 
     WorkspaceLayoutOperationResult WorkspacePanelHost::DockPanel(const std::string_view panelId, const std::string_view targetNodeId,
                                                                  const DropKind kind) {
+        using enum WorkspaceLayoutOperationCode;
         if (panelId.empty())
-            return {WorkspaceLayoutOperationCode::UnknownPanel};
+            return {UnknownPanel};
         if (m_layout.FindNode(targetNodeId) == nullptr)
-            return {WorkspaceLayoutOperationCode::UnknownStack};
+            return {UnknownStack};
 
         const WorkspaceLayout backup = m_layout;
         const bool alreadyPresent = ContainsPanel(m_layout.root, panelId);
         if (kind == DropKind::TabCenter) {
             auto *stack = m_layout.FindTabStack(targetNodeId);
             if (stack == nullptr)
-                return {WorkspaceLayoutOperationCode::UnknownStack};
+                return {UnknownStack};
             if (alreadyPresent) {
                 const auto result = m_layout.MoveTab(panelId, TabPlacement{std::string(targetNodeId), std::nullopt});
                 if (!result.Succeeded())
@@ -139,11 +143,11 @@ namespace Horo::Editor {
 
         if (alreadyPresent && !m_layout.CloseTab(panelId).Succeeded()) {
             m_layout = backup;
-            return {WorkspaceLayoutOperationCode::UnknownPanel};
+            return {UnknownPanel};
         }
         if (!SplitAround(m_layout.root, targetNodeId, panelId, kind)) {
             m_layout = backup;
-            return {WorkspaceLayoutOperationCode::UnknownStack};
+            return {UnknownStack};
         }
         return {};
     }
@@ -153,10 +157,11 @@ namespace Horo::Editor {
     }
 
     bool WorkspacePanelHost::RestoreLayout(const std::filesystem::path &path, std::string *error) {
-        const auto restored = WorkspaceLayoutPersistence::Load(path, error);
+        auto restored = WorkspaceLayoutPersistence::Load(path, error);
         if (!restored.has_value())
             return false;
         m_layout = std::move(*restored);
         return true;
     }
+
 }  // namespace Horo::Editor

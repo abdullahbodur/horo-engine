@@ -227,10 +227,11 @@ namespace Horo::Editor {
          * @param extensionInventory Optional installed-extension inventory.
          * @param extensionMarketplace Optional extension marketplace service.
          */
-        explicit GuiScreenHost(const EditorGuiContext &context, EditorModalHost &modalHost, EditorSettingsService &settingsService,
-                               LocalizationService &localization, EngineDataBus &engineEvents, ProjectCreationService &creationService,
-                               JobSystem &jobs, Input::InputRouter &inputRouter, const RendererAvailabilitySnapshot &rendererAvailability,
-                               ScreenRegistry screenRegistry, WorkspacePanelRegistry workspacePanelRegistry, std::uintptr_t logoTexture = 0,
+        explicit GuiScreenHost(const EditorGuiContext &context, EditorModalHost &modalHost,  // NOSONAR(cpp:S107) Service aggregate
+                               EditorSettingsService &settingsService, LocalizationService &localization, EngineDataBus &engineEvents,
+                               ProjectCreationService &creationService, JobSystem &jobs, Input::InputRouter &inputRouter,
+                               const RendererAvailabilitySnapshot &rendererAvailability, ScreenRegistry screenRegistry,
+                               WorkspacePanelRegistry workspacePanelRegistry, std::uintptr_t logoTexture = 0,
                                Extensions::ExtensionInventory *extensionInventory = nullptr,
                                Extensions::ExtensionMarketplaceService *extensionMarketplace = nullptr);
 

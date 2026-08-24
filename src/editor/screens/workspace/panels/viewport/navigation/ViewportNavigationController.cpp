@@ -30,7 +30,8 @@ namespace Horo::Editor {
                                               const Input::RawInputSnapshot &input, const EditorWorkspaceViewModel &viewModel,
                                               EditorWorkspaceViewCommandData &command, const EditorGuiContext &context,
                                               const float deltaSeconds, ViewportInteractionCapture &capture,
-                                              const Math::ClipDepthRange depthRange) {
+                                              const Math::ClipDepthRange depthRange) {  // NOSONAR(cpp:S107)
+
         using enum Mode;
         using enum Input::PointerButton;
 

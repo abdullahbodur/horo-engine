@@ -173,7 +173,9 @@ namespace Horo::Editor {
 
     void ViewportPanel::DrawViewportSurface(ImDrawList &drawList, const ImVec2 &origin, const float width, const float height,
                                             const float centerX, const float horizon, const float ground,
-                                            const EditorViewportTextureView &textureView, const bool hasRenderedViewport) {
+                                            const EditorViewportTextureView &textureView,
+                                            const bool hasRenderedViewport) {  // NOSONAR(cpp:S107)
+
         if (hasRenderedViewport) {
             const auto texture = static_cast<ImTextureID>(textureView.textureId);
             drawList.AddImage(texture, origin, ImVec2(origin.x + width, origin.y + height), ImVec2(textureView.u0, textureView.v0),

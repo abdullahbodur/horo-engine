@@ -219,12 +219,13 @@ namespace Horo::Editor {
         ImGui::PopStyleColor(5);
         ImGui::PopStyleVar(2);
 
-        const bool needsFocusedContext = searchActive || renamingId_.has_value();
-        if (needsFocusedContext && !focusedWidgetContext_.IsActive() && inputRouter_ != nullptr)
+        if (const bool needsFocusedContext = searchActive || renamingId_.has_value();
+            needsFocusedContext && !focusedWidgetContext_.IsActive() && inputRouter_ != nullptr)
             focusedWidgetContext_ =
                 inputRouter_->PushContext(Input::InputContextId{"editor.hierarchy.text"}, Input::InputContextKind::FocusedGuiWidget);
         else if (!needsFocusedContext)
             focusedWidgetContext_.Reset();
+
         const bool workspaceEligible =
             inputRouter_ != nullptr && workspaceInputContext_ != nullptr && inputRouter_->IsContextActive(*workspaceInputContext_);
 

@@ -149,6 +149,9 @@ namespace Horo::Extensions {
         UnloadAll();
     }
 
+    ExtensionManager::ExtensionManager(ExtensionManager &&) noexcept = default;
+    ExtensionManager &ExtensionManager::operator=(ExtensionManager &&) noexcept = default;
+
     std::vector<std::string> ExtensionManager::DiscoverExtensions(const std::string &directoryPath) const {
         std::vector<std::string> discovered;
         std::error_code ec;

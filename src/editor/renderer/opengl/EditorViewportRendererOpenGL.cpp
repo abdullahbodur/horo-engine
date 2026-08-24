@@ -118,21 +118,7 @@ namespace Horo::Editor {
             glDeleteFramebuffers(1, &shadowFramebuffer_);
             shadowFramebuffer_ = 0;
         }
-        mvpLocation_ = -1;
-        modelLocation_ = -1;
-        cameraPositionLocation_ = -1;
-        lightCountLocation_ = -1;
-        lightPositionKindLocation_ = -1;
-        lightDirectionRangeLocation_ = -1;
-        lightColorIntensityLocation_ = -1;
-        lightConeLocation_ = -1;
-        shadowViewProjectionLocation_ = -1;
-        shadowMapLocation_ = -1;
-        shadowEnabledLocation_ = -1;
-        shadowLightIndexLocation_ = -1;
-        shadowMvpLocation_ = -1;
-        selectionColorLocation_ = -1;
-        selectionStrengthLocation_ = -1;
+        uniforms_ = {};
         requestedExtent_ = {};
         gridOptions_ = {};
         lightVisualizerOptions_ = {};
@@ -142,20 +128,17 @@ namespace Horo::Editor {
 
     /** @copydoc EditorViewportRendererOpenGL::RequestExtent */
     void EditorViewportRendererOpenGL::RequestExtent(const EditorViewportExtent extent) noexcept {
-        requestedExtent_.width = std::min(extent.width, maxViewportDimension);
-        requestedExtent_.height = std::min(extent.height, maxViewportDimension);
+        requestedExtent_ = extent;
     }
 
     /** @copydoc EditorViewportRendererOpenGL::RequestGrid */
-    void EditorViewportRendererOpenGL::RequestGrid(EditorViewportGridOptions options) noexcept {
-        if (!std::isfinite(options.targetMinorSpacingPixels) || options.targetMinorSpacingPixels <= 0.0F)
-            options.targetMinorSpacingPixels = 48.0F;
+    void EditorViewportRendererOpenGL::RequestGrid(const EditorViewportGridOptions options) noexcept {
         gridOptions_ = options;
     }
 
     /** @copydoc EditorViewportRendererOpenGL::RequestLightVisualizer */
-    void EditorViewportRendererOpenGL::RequestLightVisualizer(EditorViewportLightVisualizerOptions options) noexcept {
-        lightVisualizerOptions_ = std::move(options);
+    void EditorViewportRendererOpenGL::RequestLightVisualizer(const EditorViewportLightVisualizerOptions options) noexcept {
+        lightVisualizerOptions_ = options;
     }
 
     /** @copydoc EditorViewportRendererOpenGL::RequestedExtent */
@@ -169,7 +152,8 @@ namespace Horo::Editor {
     }
 
     /** @copydoc EditorViewportRendererOpenGL::ExecuteStaticMeshPass */
-    Result<void> EditorViewportRendererOpenGL::ExecuteStaticMeshPass(const Render::StaticMeshPassDescriptor &descriptor) {
+    Result<void> EditorViewportRendererOpenGL::ExecuteStaticMeshPass(  // NOSONAR(cpp:S3776)
+        const Render::StaticMeshPassDescriptor &descriptor) {
         if (!initialized_) {
             return Result<void>::Failure(
                 MakeViewportError(RendererErrors::ViewportNotInitialized, "Viewport renderer is not initialized."));
@@ -270,10 +254,11 @@ namespace Horo::Editor {
                 BuildRenderMvp(descriptor.scene.camera, instance.localToWorld, aspect, Math::ClipDepthRange::NegativeOneToOne);
             if (mvp.HasError())
                 return Result<void>::Failure(mvp.ErrorValue());
-            glUniformMatrix4fv(mvpLocation_, 1, GL_FALSE, mvp.Value().values.data());
-            glUniformMatrix4fv(modelLocation_, 1, GL_FALSE, instance.localToWorld.values.data());
-            glUniform3f(selectionColorLocation_, instance.presentation.tint.x, instance.presentation.tint.y, instance.presentation.tint.z);
-            glUniform1f(selectionStrengthLocation_, instance.presentation.tintStrength);
+            glUniformMatrix4fv(uniforms_.mvp, 1, GL_FALSE, mvp.Value().values.data());
+            glUniformMatrix4fv(uniforms_.model, 1, GL_FALSE, instance.localToWorld.values.data());
+            glUniform3f(uniforms_.selectionColor, instance.presentation.tint.x, instance.presentation.tint.y, instance.presentation.tint.z);
+            glUniform1f(uniforms_.selectionStrength, instance.presentation.tintStrength);
+
             glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh->second.indexCount), GL_UNSIGNED_INT, nullptr);
         }
         if (const Result<void> visualizer = DrawLightVisualizer(descriptor.scene.camera, aspect); visualizer.HasError())
@@ -335,11 +320,11 @@ namespace Horo::Editor {
         glBindVertexArray(gridVertexArray_);
         glBindBuffer(GL_ARRAY_BUFFER, gridVertexBuffer_);
         glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(geometry.Lines().size_bytes()), geometry.Lines().data(), GL_DYNAMIC_DRAW);
-        glUniformMatrix4fv(mvpLocation_, 1, GL_FALSE, viewProjection.Value().values.data());
+        glUniformMatrix4fv(uniforms_.mvp, 1, GL_FALSE, viewProjection.Value().values.data());
         const Math::Mat4 identity = Math::Mat4::Identity();
-        glUniformMatrix4fv(modelLocation_, 1, GL_FALSE, identity.values.data());
-        glUniform3f(selectionColorLocation_, geometry.color.x, geometry.color.y, geometry.color.z);
-        glUniform1f(selectionStrengthLocation_, 1.0F);
+        glUniformMatrix4fv(uniforms_.model, 1, GL_FALSE, identity.values.data());
+        glUniform3f(uniforms_.selectionColor, geometry.color.x, geometry.color.y, geometry.color.z);
+        glUniform1f(uniforms_.selectionStrength, 1.0F);
         glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(geometry.vertexCount));
         glDepthMask(GL_TRUE);
         return Result<void>::Success();
@@ -347,7 +332,7 @@ namespace Horo::Editor {
 
     /** @copydoc EditorViewportRendererOpenGL::DrawGrid */
     Result<void> EditorViewportRendererOpenGL::DrawGrid(const Render::RenderCameraView &camera, const float aspect,
-                                                        const float viewportHeightPixels) {
+                                                        const float viewportHeightPixels) const {
         if (!gridOptions_.visible)
             return Result<void>::Success();
 
@@ -372,16 +357,16 @@ namespace Horo::Editor {
 
         glDepthMask(GL_FALSE);
         glBindVertexArray(gridVertexArray_);
-        glUniformMatrix4fv(mvpLocation_, 1, GL_FALSE, viewProjection.Value().values.data());
+        glUniformMatrix4fv(uniforms_.mvp, 1, GL_FALSE, viewProjection.Value().values.data());
         const Math::Mat4 identity = Math::Mat4::Identity();
-        glUniformMatrix4fv(modelLocation_, 1, GL_FALSE, identity.values.data());
-        glUniform1f(selectionStrengthLocation_, 1.0F);
+        glUniformMatrix4fv(uniforms_.model, 1, GL_FALSE, identity.values.data());
+        glUniform1f(uniforms_.selectionStrength, 1.0F);
         const auto drawBatch = [&](const ViewportGridLineBatch &batch) {
             if (batch.positions.empty())
                 return;
             glBindBuffer(GL_ARRAY_BUFFER, gridVertexBuffer_);
             glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(batch.positions.size_bytes()), batch.positions.data(), GL_DYNAMIC_DRAW);
-            glUniform3f(selectionColorLocation_, batch.color.x, batch.color.y, batch.color.z);
+            glUniform3f(uniforms_.selectionColor, batch.color.x, batch.color.y, batch.color.z);
             const GLenum primitive = batch.topology == ViewportGridPrimitiveTopology::Triangles ? GL_TRIANGLES : GL_LINES;
             glDrawArrays(primitive, 0, static_cast<GLsizei>(batch.positions.size()));
         };
@@ -548,27 +533,28 @@ void main()
             return Result<void>::Failure(
                 MakeViewportError(RendererErrors::ViewportShaderLinkFailed, "Viewport shader linking failed: " + log));
         }
-        mvpLocation_ = glGetUniformLocation(program_, "uMvp");
-        modelLocation_ = glGetUniformLocation(program_, "uModel");
-        cameraPositionLocation_ = glGetUniformLocation(program_, "uCameraPosition");
-        lightCountLocation_ = glGetUniformLocation(program_, "uLightCount");
-        lightPositionKindLocation_ = glGetUniformLocation(program_, "uLightPositionKind[0]");
-        lightDirectionRangeLocation_ = glGetUniformLocation(program_, "uLightDirectionRange[0]");
-        lightColorIntensityLocation_ = glGetUniformLocation(program_, "uLightColorIntensity[0]");
-        lightConeLocation_ = glGetUniformLocation(program_, "uLightCone[0]");
-        shadowViewProjectionLocation_ = glGetUniformLocation(program_, "uShadowViewProjection");
-        shadowMapLocation_ = glGetUniformLocation(program_, "uShadowMap");
-        shadowEnabledLocation_ = glGetUniformLocation(program_, "uShadowEnabled");
-        shadowLightIndexLocation_ = glGetUniformLocation(program_, "uShadowLightIndex");
-        selectionColorLocation_ = glGetUniformLocation(program_, "uSelectionColor");
-        selectionStrengthLocation_ = glGetUniformLocation(program_, "uSelectionStrength");
-        if (mvpLocation_ < 0 || modelLocation_ < 0 || cameraPositionLocation_ < 0 || lightCountLocation_ < 0 ||
-            lightPositionKindLocation_ < 0 || lightDirectionRangeLocation_ < 0 || lightColorIntensityLocation_ < 0 ||
-            lightConeLocation_ < 0 || shadowViewProjectionLocation_ < 0 || shadowMapLocation_ < 0 || shadowEnabledLocation_ < 0 ||
-            shadowLightIndexLocation_ < 0 || selectionColorLocation_ < 0 || selectionStrengthLocation_ < 0) {
+        uniforms_.mvp = glGetUniformLocation(program_, "uMvp");
+        uniforms_.model = glGetUniformLocation(program_, "uModel");
+        uniforms_.cameraPosition = glGetUniformLocation(program_, "uCameraPosition");
+        uniforms_.lightCount = glGetUniformLocation(program_, "uLightCount");
+        uniforms_.lightPositionKind = glGetUniformLocation(program_, "uLightPositionKind[0]");
+        uniforms_.lightDirectionRange = glGetUniformLocation(program_, "uLightDirectionRange[0]");
+        uniforms_.lightColorIntensity = glGetUniformLocation(program_, "uLightColorIntensity[0]");
+        uniforms_.lightCone = glGetUniformLocation(program_, "uLightCone[0]");
+        uniforms_.shadowViewProjection = glGetUniformLocation(program_, "uShadowViewProjection");
+        uniforms_.shadowMap = glGetUniformLocation(program_, "uShadowMap");
+        uniforms_.shadowEnabled = glGetUniformLocation(program_, "uShadowEnabled");
+        uniforms_.shadowLightIndex = glGetUniformLocation(program_, "uShadowLightIndex");
+        uniforms_.selectionColor = glGetUniformLocation(program_, "uSelectionColor");
+        uniforms_.selectionStrength = glGetUniformLocation(program_, "uSelectionStrength");
+        if (uniforms_.mvp < 0 || uniforms_.model < 0 || uniforms_.cameraPosition < 0 || uniforms_.lightCount < 0 ||
+            uniforms_.lightPositionKind < 0 || uniforms_.lightDirectionRange < 0 || uniforms_.lightColorIntensity < 0 ||
+            uniforms_.lightCone < 0 || uniforms_.shadowViewProjection < 0 || uniforms_.shadowMap < 0 || uniforms_.shadowEnabled < 0 ||
+            uniforms_.shadowLightIndex < 0 || uniforms_.selectionColor < 0 || uniforms_.selectionStrength < 0) {
             return Result<void>::Failure(
                 MakeViewportError(RendererErrors::ViewportShaderContractInvalid, "Viewport shader is missing a required frame uniform."));
         }
+
         return Result<void>::Success();
     }
 
@@ -611,8 +597,8 @@ void main() {}
             return Result<void>::Failure(
                 MakeViewportError(RendererErrors::ViewportShaderLinkFailed, "Viewport shadow shader linking failed: " + log));
         }
-        shadowMvpLocation_ = glGetUniformLocation(shadowProgram_, "uShadowMvp");
-        if (shadowMvpLocation_ < 0) {
+        uniforms_.shadowMvp = glGetUniformLocation(shadowProgram_, "uShadowMvp");
+        if (uniforms_.shadowMvp < 0) {
             return Result<void>::Failure(
                 MakeViewportError(RendererErrors::ViewportShaderContractInvalid, "Viewport shadow shader is missing its matrix uniform."));
         }
@@ -670,7 +656,7 @@ void main() {}
                     MakeViewportError(RendererErrors::ViewportStaleMeshResource, "Shadow pass instance references a stale mesh resource."));
             }
             const Math::Mat4 shadowMvp = Math::Multiply(shadow.viewProjection, instance.localToWorld);
-            glUniformMatrix4fv(shadowMvpLocation_, 1, GL_FALSE, shadowMvp.values.data());
+            glUniformMatrix4fv(uniforms_.shadowMvp, 1, GL_FALSE, shadowMvp.values.data());
             glBindVertexArray(mesh->second.vertexArray);
             glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh->second.indexCount), GL_UNSIGNED_INT, nullptr);
         }
@@ -701,18 +687,18 @@ void main() {}
             cones[index * 2] = light.innerConeCosine;
             cones[index * 2 + 1] = light.outerConeCosine;
         }
-        glUniform3f(cameraPositionLocation_, scene.camera.position.x, scene.camera.position.y, scene.camera.position.z);
-        glUniform1i(lightCountLocation_, static_cast<GLint>(scene.lights.size()));
+        glUniform3f(uniforms_.cameraPosition, scene.camera.position.x, scene.camera.position.y, scene.camera.position.z);
+        glUniform1i(uniforms_.lightCount, static_cast<GLint>(scene.lights.size()));
         const Math::Mat4 shadowViewProjection = shadow.has_value() ? shadow->viewProjection : Math::Mat4::Identity();
-        glUniformMatrix4fv(shadowViewProjectionLocation_, 1, GL_FALSE, shadowViewProjection.values.data());
-        glUniform1i(shadowMapLocation_, 7);
-        glUniform1i(shadowEnabledLocation_, shadow.has_value() ? 1 : 0);
-        glUniform1i(shadowLightIndexLocation_, shadow.has_value() ? static_cast<GLint>(shadow->lightIndex) : -1);
+        glUniformMatrix4fv(uniforms_.shadowViewProjection, 1, GL_FALSE, shadowViewProjection.values.data());
+        glUniform1i(uniforms_.shadowMap, 7);
+        glUniform1i(uniforms_.shadowEnabled, shadow.has_value() ? 1 : 0);
+        glUniform1i(uniforms_.shadowLightIndex, shadow.has_value() ? static_cast<GLint>(shadow->lightIndex) : -1);
         if (!scene.lights.empty()) {
-            glUniform4fv(lightPositionKindLocation_, static_cast<GLsizei>(scene.lights.size()), positionKind.data());
-            glUniform4fv(lightDirectionRangeLocation_, static_cast<GLsizei>(scene.lights.size()), directionRange.data());
-            glUniform4fv(lightColorIntensityLocation_, static_cast<GLsizei>(scene.lights.size()), colorIntensity.data());
-            glUniform2fv(lightConeLocation_, static_cast<GLsizei>(scene.lights.size()), cones.data());
+            glUniform4fv(uniforms_.lightPositionKind, static_cast<GLsizei>(scene.lights.size()), positionKind.data());
+            glUniform4fv(uniforms_.lightDirectionRange, static_cast<GLsizei>(scene.lights.size()), directionRange.data());
+            glUniform4fv(uniforms_.lightColorIntensity, static_cast<GLsizei>(scene.lights.size()), colorIntensity.data());
+            glUniform2fv(uniforms_.lightCone, static_cast<GLsizei>(scene.lights.size()), cones.data());
         }
     }
 
@@ -744,10 +730,12 @@ void main() {}
             glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(sizeof(Render::MeshVertex)), nullptr);
             glEnableVertexAttribArray(1);
             glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(sizeof(Render::MeshVertex)),
-                                  reinterpret_cast<const void *>(offsetof(Render::MeshVertex, normal)));
+                                  reinterpret_cast<const void *>(
+                                      static_cast<std::uintptr_t>(offsetof(Render::MeshVertex, normal))));  // NOSONAR(cpp:S3630)
             glEnableVertexAttribArray(2);
             glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(sizeof(Render::MeshVertex)),
-                                  reinterpret_cast<const void *>(offsetof(Render::MeshVertex, uv)));
+                                  reinterpret_cast<const void *>(
+                                      static_cast<std::uintptr_t>(offsetof(Render::MeshVertex, uv))));  // NOSONAR(cpp:S3630)
             if (mesh.vertexArray == 0 || mesh.vertexBuffer == 0 || mesh.indexBuffer == 0) {
                 DestroyMesh(mesh);
                 glBindVertexArray(static_cast<GLuint>(previousVertexArray));

@@ -78,7 +78,7 @@ namespace Horo::Editor {
         PanelId panel;
     };
 
-    struct LayoutNode {
+    struct LayoutNode {  // NOSONAR(cpp:S3624) Default destructor is safe because variant/unique_ptr members clean up automatically
         std::variant<SplitNode, TabStackNode, PanelNode> value;
 
         LayoutNode() = default;

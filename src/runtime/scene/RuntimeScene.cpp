@@ -15,12 +15,12 @@ namespace Horo::Runtime {
             return Result<T>::Failure(MakeError(code, std::move(message)));
         }
 
-        [[nodiscard]] bool IsTerminal(const Assets::AssetLoadState state) noexcept {
-            using enum Assets::AssetLoadState;
+        [[nodiscard]] bool IsTerminal(const Horo::Assets::AssetLoadState state) noexcept {
+            using enum Horo::Assets::AssetLoadState;
             return state == Succeeded || state == Failed || state == Cancelled;
         }
 
-        [[nodiscard]] Error WithAssetContext(Error error, const SceneDefinitionId scene, const Assets::AssetId asset) {
+        [[nodiscard]] Error WithAssetContext(Error error, const SceneDefinitionId scene, const Horo::Assets::AssetId asset) {
             error.diagnostics.emplace_back(DiagnosticCode{"scene.asset.context"}, DiagnosticSeverity::Note,
                                            std::format("Scene {} requires asset {}.", scene.value, asset.ToString()),
                                            SourceLocation{asset.ToString(), 0, 0});
@@ -41,9 +41,9 @@ namespace Horo::Runtime {
         }
 
         [[nodiscard]] Result<void> CheckDependenciesExist(const RuntimeSceneDefinition &definition,
-                                                          const Assets::AssetRegistrySnapshot &snapshot) {
+                                                          const Horo::Assets::AssetRegistrySnapshot &snapshot) {
             for (const SceneAssetDependency &dependency : definition.AssetDependencies()) {
-                const Assets::AssetRecord *record = snapshot.Find(dependency.id);
+                const Horo::Assets::AssetRecord *record = snapshot.Find(dependency.id);
                 if (!record)
                     return Result<void>::Failure(WithAssetContext(MakeError(SceneErrors::AssetMissing), definition.Id(), dependency.id));
                 if (record->type != dependency.expectedType)
@@ -52,6 +52,7 @@ namespace Horo::Runtime {
             }
             return Result<void>::Success();
         }
+
     }  // namespace
 
     /** @copydoc SceneCommandBuffer::Create */

@@ -14,12 +14,19 @@ namespace Horo::Runtime {
         template <typename Callback> [[nodiscard]] Result<void> ContainParticipantException(Callback &&callback) {
             try {
                 return callback();
-            } catch (const std::exception &exception) {
+            } catch (const std::runtime_error &exception) {  // NOSONAR(cpp:S1181)
+                return Result<void>::Failure(MakeError(RuntimeErrors::UnexpectedException, exception.what()));
+            } catch (const std::logic_error &exception) {  // NOSONAR(cpp:S1181)
+                return Result<void>::Failure(MakeError(RuntimeErrors::UnexpectedException, exception.what()));
+            } catch (const std::bad_alloc &exception) {
+                return Result<void>::Failure(MakeError(RuntimeErrors::UnexpectedException, exception.what()));
+            } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181)
                 return Result<void>::Failure(MakeError(RuntimeErrors::UnexpectedException, exception.what()));
             } catch (...) {  // NOSONAR(cpp:S1181, cpp:S2738)
                 return Result<void>::Failure(MakeError(RuntimeErrors::UnexpectedException));
             }
         }
+
     }  // namespace
 
     RuntimeLifecycle::~RuntimeLifecycle() {

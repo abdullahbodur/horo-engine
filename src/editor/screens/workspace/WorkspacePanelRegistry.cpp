@@ -5,17 +5,18 @@
 namespace Horo::Editor {
     namespace {
         [[nodiscard]] bool TryGetAreaIndex(const WorkspaceDockArea area, std::size_t &index) noexcept {
+            using enum WorkspaceDockArea;
             switch (area) {
-                case WorkspaceDockArea::Left:
+                case Left:
                     index = 0;
                     return true;
-                case WorkspaceDockArea::Right:
+                case Right:
                     index = 1;
                     return true;
-                case WorkspaceDockArea::Bottom:
+                case Bottom:
                     index = 2;
                     return true;
-                case WorkspaceDockArea::Document:
+                case Document:
                     index = 3;
                     return true;
                 default:
@@ -49,8 +50,7 @@ namespace Horo::Editor {
     }
 
     const std::vector<std::shared_ptr<IWorkspacePanel>> &WorkspacePanelRegistry::GetPanelsForArea(const WorkspaceDockArea area) const {
-        std::size_t index = 0;
-        if (TryGetAreaIndex(area, index)) {
+        if (std::size_t index = 0; TryGetAreaIndex(area, index)) {
             return m_panelsByArea[index];
         }
 

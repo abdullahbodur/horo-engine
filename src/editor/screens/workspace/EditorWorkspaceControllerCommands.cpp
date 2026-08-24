@@ -311,10 +311,10 @@ namespace Horo::Editor {
                         request.objects = {*cmd.objectPayload};
                         request.primary = *cmd.objectPayload;
                     }
-                    if (const Result<void> selected = m_selection.SetObjects(std::move(request.objects), request.primary);
-                        selected.HasError()) {
+                    if (const Result<void> selected = m_selection.SetObjects(request.objects, request.primary); selected.HasError()) {
                         LOG_ERROR("editor.selection", "Select object failed: %s", selected.ErrorValue().message.c_str());
                     }
+
                     RefreshSelectionProjection();
                 }
                 break;
@@ -373,7 +373,7 @@ namespace Horo::Editor {
         } else {
             objects.push_back(object);
         }
-        if (const Result<void> selected = m_selection.SetObjects(std::move(objects), primary); selected.HasError())
+        if (const Result<void> selected = m_selection.SetObjects(objects, primary); selected.HasError())
             LOG_ERROR("editor.selection", "Viewport selection failed: %s", selected.ErrorValue().message.c_str());
     }
 

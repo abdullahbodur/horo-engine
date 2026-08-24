@@ -119,8 +119,8 @@ namespace Horo::Application {
                     MigrationError(ProjectErrors::MigrationInventoryLimit, "Migration input exceeds the configured byte limit."));
             std::vector<std::byte> bytes(size);
             if (std::ifstream stream(path, std::ios::binary);
-                !stream || (size > 0 && !stream.read(reinterpret_cast<char *>(bytes.data()),
-                                                     static_cast<std::streamsize>(size)))) {  // NOSONAR(cpp:S6022)
+                !stream || (size > 0 && !stream.read(reinterpret_cast<char *>(bytes.data()),  // NOSONAR(cpp:S6022)
+                                                     static_cast<std::streamsize>(size)))) {
                 return Result<std::vector<std::byte>>::Failure(
                     MigrationError(ProjectErrors::MigrationInventoryInvalid, "Cannot read migration input: " + path.generic_string()));
             }
