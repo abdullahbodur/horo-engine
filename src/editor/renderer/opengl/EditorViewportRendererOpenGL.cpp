@@ -6,8 +6,8 @@
 
 #include <SDL3/SDL_video.h>
 #include <algorithm>
-#include <bit>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <glad/gl.h>
 #include <string>

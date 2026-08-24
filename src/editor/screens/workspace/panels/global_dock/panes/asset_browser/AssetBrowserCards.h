@@ -51,8 +51,10 @@ namespace Horo::Editor {
         [[nodiscard]] std::uintptr_t ResolvePreview(const ContentBrowserEntry &entry);
 
         IEditorGuiRenderer *m_renderer{nullptr};
+
         struct TransparentStringHash {
             using is_transparent = void;
+
             [[nodiscard]] std::size_t operator()(const std::string_view value) const noexcept {
                 return std::hash<std::string_view>{}(value);
             }

@@ -132,15 +132,15 @@ namespace Horo::Editor {
                 }
                 ImGui::EndDragDropTarget();
             }
-            const std::optional<SceneObjectId> clickedLight = DrawViewportLightMarkers(
-                {.drawList = drawList,
-                 .origin = origin,
-                 .width = width,
-                 .height = height,
-                 .camera = viewModel.viewportCamera,
-                 .depthRange = depthRange,
-                 .acceptInput = surfaceHovered && !interaction_.IsActive() && !assetDragActive},
-                viewModel.viewportLights, viewModel.primarySelection);
+            const std::optional<SceneObjectId> clickedLight =
+                DrawViewportLightMarkers({.drawList = drawList,
+                                          .origin = origin,
+                                          .width = width,
+                                          .height = height,
+                                          .camera = viewModel.viewportCamera,
+                                          .depthRange = depthRange,
+                                          .acceptInput = surfaceHovered && !interaction_.IsActive() && !assetDragActive},
+                                         viewModel.viewportLights, viewModel.primarySelection);
             if (clickedLight.has_value()) {
                 command.command = EditorWorkspaceViewCommand::SelectObject;
                 command.objectPayload = *clickedLight;
