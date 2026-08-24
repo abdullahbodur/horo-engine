@@ -67,6 +67,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Platform Abstraction](./foundation/platform-abstraction.md): paths, files,
   windows, events, processes, clocks, native dialogs, credentials, and crash
   services.
+- [Android Platform Host](./foundation/android-platform-host.md): Android
+  activity lifecycle, replaceable native surfaces, permissions, storage,
+  packaging, deployment, resource pressure, and standalone-XR prerequisites.
 - [Engine Data Bus](./foundation/engine-data-bus.md): process-scoped typed
   notifications.
 
@@ -162,9 +165,10 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Multiplayer Replication Architecture](./runtime/multiplayer-replication-architecture.md):
   replication roles, property deltas, RPCs, prediction, interest management,
   dedicated servers, and security.
-- [VR / AR Architecture](./runtime/vr-ar-architecture.md): OpenXR, stereo
-  rendering, foveated capabilities, motion/hand tracking, AR passthrough, and
-  privacy.
+- [XR Architecture](./runtime/vr-ar-architecture.md): OpenXR lifecycle,
+  runtime-driven view configurations, renderer/input boundaries, interaction,
+  mixed reality, privacy, standalone Android dependencies, and evidence-based
+  device qualification.
 
 ## Extensions
 

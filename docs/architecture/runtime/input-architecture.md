@@ -371,6 +371,37 @@ pad.SetAxis(GamepadAxis::LeftX, 1.0f);
 Virtual input commits through the same snapshot path as platform devices. Tests
 must not mutate gameplay state by bypassing the input service.
 
+## XR Input And Interaction Profiles
+
+The XR backend publishes bounded pose/action snapshots and projects admitted
+OpenXR actions into the same canonical Horo action router. Input does not poll
+OpenXR or retain native action/path handles.
+
+XR device identities include the XR session generation. Grip/aim poses,
+buttons, axes, hand joints, and haptic targets become invalid when tracking,
+focus, interaction profile, device, or session generation changes. The next
+input frame neutralizes affected actions instead of preserving stale values.
+
+Suggested-binding data is schema-versioned independently from ordinary user
+input profiles. Resolution records:
+
+- the runtime-selected interaction profile;
+- the engine action and native component-path mapping;
+- generic fallback and unsupported bindings;
+- conflicts and missing required actions;
+- active-profile changes during a session;
+- migration of compatible user overrides after schema changes.
+
+Native OpenXR paths are physical binding identities, not localized labels or
+gameplay action IDs. Presentation uses the existing glyph/label provider model.
+Frame-hot hand joints use fixed-capacity or owner-backed spans rather than one
+heap allocation per hand per frame.
+
+XR haptics follow the same ownership principles as gamepad haptics but include
+session/device generation, action/subpath target, duration, frequency where
+supported, cancellation, and explicit unsupported fallback. Ordinary input or
+focus loss cancels effects owned by the lost scope.
+
 ## Data Bus Relationship
 
 High-frequency input does not travel through `EngineDataBus` or
@@ -431,6 +462,10 @@ Required tests cover:
 - binding-specific gamepad deadzone policies
 - glyph-provider fallback when no glyph package is installed
 - virtual gamepad injection through the snapshot path
+- XR interaction-profile changes and binding-schema migration
+- XR focus/tracking/session loss neutralization
+- bounded hand-joint snapshots and stale XR device rejection
+- XR haptic cancellation and unsupported fallback
 
 ## Related Documents
 
@@ -441,3 +476,4 @@ Required tests cover:
 - [GUI Screen Host](../editor/gui-screen-host.md)
 - [Configuration System](../foundation/configuration-system.md)
 - [Platform Abstraction](../foundation/platform-abstraction.md)
+- [XR Architecture](./vr-ar-architecture.md)

@@ -50,9 +50,15 @@ capability returns a typed error.
 
 The platform layer includes:
 
-- Windows, macOS, and Linux implementations
+- Windows, macOS, Linux, and Android implementations
 - deterministic or in-memory test implementations
 - headless implementations where appropriate
+
+Android application/activity lifecycle, replaceable native surfaces, runtime
+permissions, scoped storage, deployment, and resource-pressure specialization
+follow [Android Platform Host](./android-platform-host.md). Portable callers use
+the same capability model; they do not branch on Android APIs or lifecycle
+callbacks.
 
 ## Filesystem And Paths
 
@@ -116,6 +122,13 @@ state, not directly inside arbitrary native callbacks.
 
 Native callbacks enqueue or update platform-owned state; they do not mutate
 editor documents or application services.
+
+On mobile hosts, a native window is a replaceable capability rather than a
+process-lifetime assumption. Activity resume does not guarantee that a window
+already exists, and pause or surface destruction does not necessarily terminate
+the process. Every native-window snapshot therefore carries a generation;
+renderer presentation rejects stale generations and owns graphics-resource
+retirement.
 
 ## Time
 
@@ -247,6 +260,10 @@ Capabilities declare affinity:
 | Credential UI | Interactive main thread |
 | Monotonic clock | Any thread |
 
+Android activity and permission callbacks arrive through the platform adapter
+and are committed on the application owner thread. Native surface handoff still
+obeys the renderer's render-capable-thread contract.
+
 The platform layer does not dispatch arbitrary callbacks while holding native
 or internal locks.
 
@@ -274,6 +291,8 @@ Required tests cover:
 - [Configuration System](./configuration-system.md)
 - [Concurrency And Job System](./concurrency-and-jobs.md)
 - [Input Architecture](../runtime/input-architecture.md)
+- [Android Platform Host](./android-platform-host.md)
+- [XR Architecture](../runtime/vr-ar-architecture.md)
 - [Release Security](../release/release-security.md)
 - [Extension System](../extensions/plugin-system.md)
 - [Gameplay Module Boundary](../extensions/gameplay-module-boundary.md)
