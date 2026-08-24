@@ -637,6 +637,30 @@ recreate device-owned resources and resume voices according to explicit policy.
 Sample-rate, channel-layout, and buffer-size changes are committed at a safe
 boundary.
 
+## Input Capture And Speech Boundary
+
+Audio owns input-device discovery, permission-aware capture lifecycle,
+timestamped PCM format, bounded capture buffers, monitoring, and recording
+publication. Capture and output may share a platform device service, but they
+have separate stream generations, queues, permission states, and failure paths.
+
+Capture producers write into preallocated or policy-bounded buffers and never
+block the real-time callback. Consumers receive owner-backed timestamped spans
+or bounded stream reads; they do not retain native device handles. Device change,
+permission revocation, focus loss, overrun, and shutdown terminate or replace a
+capture generation explicitly.
+
+Audio does not own speech recognition, language inference, model providers,
+agent intent, or network voice transport. A provider-neutral speech service may
+consume an admitted capture stream and publish partial/final transcript results.
+The Editor AI system decides whether a transcript enters an agent request. A
+transcript is not an input-action edge and never constitutes approval for an
+editor mutation.
+
+Raw microphone data is privacy-sensitive. It is excluded from ordinary logs,
+conversation history, diagnostic bundles, and telemetry by default. Recording
+or retaining it requires a separate explicit user action and storage policy.
+
 ## Threading Rules
 
 The real-time callback cannot:
@@ -869,6 +893,11 @@ Required tests cover:
 - occlusion provider deadline miss produces stale-value fallback and metric
 - spatializer fallback emits observable metric
 - parameter/event lookup failures emit observable metric
+- capture permission denial, revocation, input-device replacement, overrun,
+  cancellation, and shutdown
+- allocation/lock checks on the capture callback path
+- speech consumers cannot obtain native device handles or convert transcripts
+  into implicit editor approval
 
 ## Editor UI Wireframes
 
@@ -979,3 +1008,5 @@ or feature plan must be updated in the same change.
 - [Game UI And HUD](./game-ui-and-hud.md)
 - [Configuration System](../foundation/configuration-system.md)
 - [Observability Metrics And Profiling](../observability/observability-performance.md)
+- [XR Architecture](./vr-ar-architecture.md)
+- [Editor AI Agent Architecture](../editor/editor-ai-agent-architecture.md)

@@ -426,6 +426,37 @@ component pools, editor widgets, or backend objects.
 Multiple views, including game, scene viewport, thumbnails, and previews, use
 separate `RenderView` descriptors over compatible snapshots.
 
+## XR Views And External Presentation Targets
+
+XR supplies a bounded runtime-driven set of view descriptors and
+generation-scoped runtime-owned image identities. Renderer does not assume that
+an XR frame contains exactly two eyes, and public render contracts do not expose
+fixed two-element matrix or target arrays.
+
+The first production implementation may explicitly admit primary stereo only.
+The contract still preserves view role, ordering, extent, projection, target,
+and configuration identity so later quad-view or foveated-inset execution does
+not require a public API migration. An unsupported view configuration is
+rejected before resource acquisition and is never silently truncated.
+
+Runtime-owned images enter the graph as typed external resources with declared:
+
+- format, extent, array/view index, and permitted uses;
+- color/depth role and composition requirements;
+- acquire/wait/release ownership;
+- synchronization and frames-in-flight lifetime;
+- session, swapchain, image, and configuration generations.
+
+Dynamic resolution, fixed or gaze-driven foveation, variable-rate shading,
+density maps, depth submission, and motion inputs are renderer capabilities.
+They are negotiated before frame execution. Foveation is not modeled as a
+generic post-process, and Horo does not implement runtime-owned asynchronous
+reprojection. Ordinary projection-layer rendering is the explicit fallback
+when optional features are unavailable.
+
+See [XR Architecture](./vr-ar-architecture.md) for session, view, capability,
+privacy, and qualification ownership.
+
 ## Frame Contract
 
 One frame:
@@ -638,6 +669,10 @@ Required tests cover:
 - shader reflection/material validation
 - null backend contract equivalence
 - backend initialization and device-loss error mapping
+- XR external-image generation, acquire/import/release ordering, and loss
+- one-view, primary-stereo, and explicitly unsupported greater-than-two view
+  configurations
+- XR dynamic-resolution/foveation capability fallback and history invalidation
 
 ## Related Documents
 
@@ -651,3 +686,4 @@ Required tests cover:
 - [Built-In Scene Primitives](./built-in-scene-primitives.md)
 - [Ownership And Resource Lifetime](../foundation/ownership-and-resource-lifetime.md)
 - [Platform Abstraction](../foundation/platform-abstraction.md)
+- [XR Architecture](./vr-ar-architecture.md)
