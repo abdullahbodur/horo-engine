@@ -1,0 +1,274 @@
+# Current Target And Dependency Inventory
+
+## Purpose
+
+This document records the production CMake target graph that exists today and
+compares it with the target architecture in
+[System Design](./system-design.md),
+[Desired Project Trees](../desired-project-tree.md), and
+[Build System](../delivery/build-system.md). It is an evidence snapshot for
+planning migration work; it does not authorize the current divergences as new
+architecture.
+
+Snapshot:
+
+- repository commit: `763066ddb35188648bed48911214600e5dfa3341`
+- inventory date: 2026-08-25
+- authoritative declarations inspected: root, `src/`, and `apps/`
+  `CMakeLists.txt` files
+- generated graphs inspected: macOS headless and combined OpenGL/Metal editor
+  configurations with tests and examples disabled
+- excluded from the production inventory: test, example, generated utility,
+  and third-party targets
+
+## Status Terms
+
+| Status | Meaning |
+|---|---|
+| Implemented | The documented target exists with production sources and its stated primary responsibility. |
+| Partial | Some responsibility exists, but the documented boundary is incomplete, combined with another target, or named differently. |
+| Planned | A placeholder path or architecture contract exists, but there is no production target. |
+| Absent | No production target or implementation path was found. |
+| Transitional | A real target exists but is not part of the documented target set or has a known temporary boundary. |
+
+## Current Production Targets
+
+The current combined macOS editor composition contains 30 first-party library
+targets and two executable targets. `HoroEngine::*` names below are CMake aliases;
+the unqualified names are the real targets that CMake modifies and builds.
+
+Dependency entries contain first-party direct link edges only. `Public surface`
+describes semantic ownership inferred from sources and headers; the current CMake
+include directories do not enforce those ownership boundaries, as documented in
+[Public Header Inventory And Boundary](#public-header-inventory-and-boundary).
+
+### Foundation, Platform, Application, And Runtime
+
+| Real target (alias) | Availability | Owner and public/private boundary | Direct first-party dependencies |
+|---|---|---|---|
+| `HoroFoundation` (`HoroEngine::Foundation`) | Always | Owns Foundation primitives, diagnostics, logging, telemetry facade, jobs, configuration, paths, hashing, strings, and `Math/SceneMath.h`. Implementation is under `src/foundation/`. | None |
+| `HoroOpenTelemetry` (`HoroEngine::OpenTelemetry`) | `HORO_ENABLE_OPENTELEMETRY` | Owns the optional OTLP sink and `Foundation/Telemetry/OpenTelemetrySink.h`; the concrete exporter dependencies are private. | Foundation (public) |
+| `HoroPlatform` (`HoroEngine::Platform`) | Always | Owns `Platform/**` dynamic-library and process contracts plus POSIX/Windows implementations. OS headers and `dl` are private. | Foundation (public) |
+| `HoroApplication` (`HoroEngine::Application`) | Always | Owns project version, compatibility, migration planning/execution, and host observability contracts in `Application/**`, except gameplay build. Generated compatibility data is private. | Foundation (public) |
+| `HoroProjectMigrations` (`HoroEngine::ProjectMigrations`) | Always | Owns generated concrete migration catalog composition. It intentionally exposes the Application migration contract rather than a separate header family. | Application (public) |
+| `HoroRuntime` (`HoroEngine::Runtime`) | Always | Owns frame scheduling, runtime lifecycle, and runtime host contracts in `Runtime/FrameScheduler.h`, `Runtime/RuntimeLifecycle.h`, and `Runtime/RuntimeHost.h`. | Foundation (public) |
+| `HoroAssets` (`HoroEngine::Assets`) | Always | Owns all current `Assets/**` headers. The target currently combines registry, provider, import, preview, reimport, cook, cache, and output responsibilities. | Foundation (public) |
+| `HoroInput` (`HoroEngine::Input`) | Always | Owns the backend-neutral `Runtime/Input.h` contract and runtime implementation. | Foundation (public) |
+| `HoroInputSdl` (`HoroEngine::InputSdl`) | Editor GUI only | Owns the SDL input adapter. It has no dedicated public Horo header; its implementation path is nevertheless exported as a public include directory. | Input (public) |
+
+### Gameplay And Extensions
+
+| Real target (alias) | Availability | Owner and public/private boundary | Direct first-party dependencies |
+|---|---|---|---|
+| `HoroGameplayApi` (`HoroEngine::GameplayApi`) | Always | Owns the project-facing gameplay descriptor, behavior type, native behavior, module, and error contracts under `Gameplay/**`. | Foundation (public) |
+| `HoroGameplayRuntime` (`HoroEngine::GameplayRuntime`) | Always | Owns `Gameplay/BehaviorRegistry.h` and `Gameplay/BehaviorRuntime.h` and authoritative behavior execution. | GameplayApi, RuntimeScene (public) |
+| `HoroGameplayModuleHost` (`HoroEngine::GameplayModuleHost`) | Always | Owns `Gameplay/GameModuleHost.h` and dynamic project-module loading. Native dynamic loading stays private. | GameplayRuntime (public), Platform (private) |
+| `HoroGameplayLua` (`HoroEngine::GameplayLua`) | Always | Owns `Gameplay/LuaBehavior.h` and the concrete Lua behavior adapter. Lua and JSON dependencies are private. | GameplayRuntime (public) |
+| `HoroGameplayBuild` (`HoroEngine::GameplayBuild`) | Always | Owns `Application/GameplayBuildService.h` and project gameplay build orchestration. | Foundation (public), GameplayModuleHost and Platform (private) |
+| `HoroExtensions` (`HoroEngine::Extensions`) | Always | Owns all current `Extensions/**` headers and combines ABI, manifest, inventory, host, marketplace, and external asset-import adapter responsibilities. Third-party transport/archive/parser dependencies are private. | Foundation, Platform, Assets (public) |
+
+### Scene And Rendering
+
+| Real target (alias) | Availability | Owner and public/private boundary | Direct first-party dependencies |
+|---|---|---|---|
+| `HoroRuntimeScene` (`HoroEngine::RuntimeScene`) | Always | Owns runtime scene definition, scene state, and scene component contracts under `Runtime/Scene/**`, excluding primitive mesh/catalog headers. | Foundation, Runtime, Assets, GameplayApi (public) |
+| `HoroSceneModel` (`HoroEngine::SceneModel`) | Always | Owns `Runtime/Scene/PrimitiveCatalog.h`, `PrimitiveMesh.h`, and `PrimitiveMeshDescriptor.h`. | Foundation, RenderApi (public) |
+| `HoroRenderApi` (`HoroEngine::RenderApi`) | Always | Interface target owning backend-neutral mesh, render-scene, and backend contracts under `Runtime/Render/**`, excluding registry/frontend/module headers. | Foundation (interface) |
+| `HoroRenderBackendRegistry` (`HoroEngine::RenderBackendRegistry`) | Always | Owns `Runtime/Render/RenderBackendRegistry.h` and backend registration/selection state. | RenderApi (public) |
+| `HoroRenderFrontend` (`HoroEngine::RenderFrontend`) | Always | Owns `Runtime/Render/RenderFrontend.h` and frontend submission/resource coordination. | RenderApi, RenderBackendRegistry (public) |
+| `HoroRenderNull` (`HoroEngine::RenderNull`) | Always | Owns `Runtime/Render/NullBackendModule.h`; implementation is private and deterministic/headless. | RenderApi, RenderBackendRegistry (public) |
+| `HoroRenderOpenGL` (`HoroEngine::RenderOpenGL`) | `HORO_BUILD_RENDER_OPENGL` | Owns the concrete OpenGL backend. OpenGL and GL loader types remain private; no backend-specific public Horo header exists. | RenderBackendRegistry (public) |
+| `HoroRenderMetal` (`HoroEngine::RenderMetal`) | Apple and `HORO_BUILD_RENDER_METAL` | Owns the concrete Metal backend. Objective-C++, Metal, Foundation, and QuartzCore types remain private; no backend-specific public Horo header exists. | RenderBackendRegistry (public) |
+
+### Editor And Composition Roots
+
+| Real target (alias) | Availability | Owner and public/private boundary | Direct first-party dependencies |
+|---|---|---|---|
+| `HoroEditorModel` (`HoroEngine::EditorModel`) | Always | Owns scene-document, selection, and viewport model code. Its intended contract spans selected `Editor/**` headers and internal `src/editor/**` headers; all of `src/` is currently exported to consumers. | Foundation, SceneModel, RuntimeScene (public) |
+| `HoroEditorViewportScene` (`HoroEngine::EditorViewportScene`) | Always | Owns backend-neutral editor viewport scene/camera/light visualization geometry. It has no isolated installed public surface and exports `src/`. | EditorModel (public) |
+| `HoroEditorRenderExtraction` (`HoroEngine::EditorRenderExtraction`) | Always | Owns editor-to-render snapshot extraction, mesh cache, picking, and asset drop conversion. It has no isolated installed public surface and exports `src/`. | EditorModel, EditorViewportScene (public) |
+| `HoroEditorServices` (`HoroEngine::EditorServices`) | Always | Owns current GUI-neutral project, settings, localization, input orchestration, workspace model, editor bus, modal host, notification, menu, hierarchy, and status contracts under `Editor/**`. It also exports `src/`. | Foundation, Application, Platform, EditorModel, GameplayLua, GameplayModuleHost, GameplayBuild, Input, ProjectMigrations (public); Assets (private) |
+| `HoroEditorViewportOpenGL` (`HoroEngine::EditorViewportOpenGL`) | GUI and OpenGL | Owns the OpenGL ImGui/viewport/presentation bridge. Backend, SDL, GLAD, and ImGui adapter details are private, but SDL is currently a public link dependency. | EditorViewportScene, RenderOpenGL (public) |
+| `HoroEditorViewportMetal` (`HoroEngine::EditorViewportMetal`) | Apple, GUI, and Metal | Owns the Metal ImGui/viewport/presentation bridge. Objective-C++ and ImGui adapter details are private, but SDL is currently a public link dependency. | EditorViewportScene, RenderMetal (public) |
+| `HoroGui` (`HoroEngine::Gui`) | Editor GUI only | Owns ImGui screens, modals, panels, workspace controllers, and design-system implementation. ImGui is private, while all of `include/` and `src/` are exported as public include roots. | EditorServices, Foundation (public); EditorRenderExtraction and Extensions (private) |
+| `horo-engine` | Always | Terminal/headless composition root. It currently composes only Application and does not yet compose CLI command or MCP targets. | Application (private) |
+| `HoroEditor` | Editor GUI only | Graphical composition root. It selects GUI, editor services/extraction, runtime, extensions, platform, input, migrations, frontend, and enabled concrete viewport backends. | Composition-only private links |
+
+## Public Header Inventory And Boundary
+
+There are 129 non-placeholder headers under `include/Horo/` at this snapshot:
+
+| Public path | Header count | Semantic owner |
+|---|---:|---|
+| `Application/` | 6 | Application, except `GameplayBuildService.h` owned by GameplayBuild |
+| `Assets/` | 14 | Assets |
+| `Editor/` | 46 | EditorModel, EditorServices, and Gui; ownership is not physically separated |
+| `Extensions/` | 6 | Extensions |
+| `Foundation/` | 28 | Foundation, except the optional OpenTelemetry sink header |
+| `Gameplay/` | 9 | GameplayApi, GameplayRuntime, GameplayModuleHost, and GameplayLua |
+| `Math/` | 1 | Foundation |
+| `Platform/` | 3 | Platform |
+| `Runtime/` | 16 | Runtime, Input, RuntimeScene, SceneModel, RenderApi, RenderBackendRegistry, RenderFrontend, and RenderNull |
+
+The current CMake boundary is broader than this semantic ownership map:
+
+- every first-party library target publishes the repository-wide `include/`
+  root, so linking any one library makes every Horo header discoverable;
+- EditorModel, EditorViewportScene, EditorRenderExtraction, EditorServices,
+  InputSdl, and Gui additionally publish all or part of `src/` to dependents;
+- several implementation-only adapter targets therefore appear to have a
+  public C++ surface even when no stable public header belongs to them;
+- CMake cannot currently reject a consumer that includes a header owned by an
+  undeclared target.
+
+Consequently, header location communicates intended ownership but target usage
+requirements do not enforce it. Separating SDK/public, internal-shared, and
+target-private include surfaces is follow-up work owned by ARC-001.2.
+
+## Documented Target Status
+
+This table covers every canonical target named by System Design. Build System
+uses `SceneRuntime`, `PluginApi`, and `PluginHost` for three entries where System
+Design uses `RuntimeScene`, `ExtensionApi`, and `ExtensionHost`; those naming
+conflicts are recorded rather than treated as additional implementations.
+
+| Documented target | Status | Current evidence or gap |
+|---|---|---|
+| `HoroEngine::Foundation` | Implemented | `HoroFoundation` |
+| `HoroEngine::Platform` | Implemented | `HoroPlatform` |
+| `HoroEngine::Runtime` | Implemented | `HoroRuntime` |
+| `HoroEngine::Assets` | Partial | Target exists, but registry, import, cook, cache, and preview are combined beyond the narrower ownership described by System Design. |
+| `HoroEngine::SceneModel` | Partial | Target exists but publicly depends on RenderApi, contrary to the documented Foundation-only level. |
+| `HoroEngine::RuntimeScene` | Implemented | `HoroRuntimeScene`; Build System still calls this `HoroEngine::SceneRuntime`. |
+| `HoroEngine::Physics` | Planned | Architecture and placeholder paths exist; no production target. |
+| `HoroEngine::AudioApi` | Planned | Architecture and placeholder public path exist; no production target. |
+| `HoroEngine::AudioRuntime` | Planned | Architecture exists; no production target. |
+| `HoroEngine::AudioPlatform` | Absent | No target or implementation path. |
+| `HoroEngine::AudioNull` | Absent | No target or implementation path. |
+| `HoroEngine::NetworkApi` | Planned | Architecture exists; no production target. |
+| `HoroEngine::NetworkRuntime` | Planned | Architecture exists; no production target. |
+| `HoroEngine::NetworkSockets` | Absent | No target or implementation path. |
+| `HoroEngine::RenderApi` | Implemented | `HoroRenderApi` |
+| `HoroEngine::RenderFrontend` | Implemented | `HoroRenderFrontend` |
+| `HoroEngine::RenderModuleAbi` | Planned | Renderer module manifest/distribution contracts exist; no target. |
+| `HoroEngine::RenderModuleHost` | Planned | Runtime loading architecture exists; no target. |
+| `HoroEngine::RenderOpenGL` | Implemented | Optional `HoroRenderOpenGL` |
+| `HoroEngine::RenderNull` | Implemented | `HoroRenderNull` |
+| `HoroEngine::RenderVulkan` | Planned | Architecture and source-layout slot exist; no target. |
+| `HoroEngine::RenderMetal` | Implemented | Optional Apple-only `HoroRenderMetal` |
+| `HoroEngine::RenderD3D12` | Planned | Architecture exists; no target. |
+| `HoroEngine::Pipeline` | Planned | Architecture and placeholder source paths exist; no target. |
+| `HoroEngine::Application` | Partial | Project/migration/observability subset exists; the broader shared use-case surface is not composed. |
+| `HoroEngine::ProjectMigrations` | Implemented | `HoroProjectMigrations` |
+| `HoroEngine::EditorModel` | Partial | Target exists; intended public contract is mixed with exported `src/` headers. |
+| `HoroEngine::EditorServices` | Partial | Target exists but aggregates many domains and publicly links concrete GameplayLua. |
+| `HoroEngine::Gui` | Partial | Target exists; public/private include boundary is not enforced. |
+| `HoroEngine::Mcp` | Planned | Placeholder paths and architecture exist; no target. |
+| `HoroEngine::GameplayApi` | Implemented | `HoroGameplayApi` |
+| `HoroEngine::ExtensionApi` | Partial | ABI/model headers exist inside combined `HoroExtensions`; no isolated target. Build System calls this `PluginApi`. |
+| `HoroEngine::ExtensionHost` | Partial | Host implementation exists inside combined `HoroExtensions`; no isolated target. Build System calls this `PluginHost`. |
+| `HoroEditor` | Implemented | Optional graphical composition root. |
+| `horo-engine` | Partial | Executable exists but only links Application; documented CLI and MCP composition is missing. |
+| `horopak` | Planned | `apps/horopak/package_tool/.gitkeep` exists; no executable target. |
+
+Build System additionally documents `HoroEngine::RenderBackendRegistry`,
+`HoroEngine::EditorRenderExtraction`, `HoroEngine::EditorViewportScene`,
+`HoroEngine::EditorViewportOpenGL`, and `HoroEngine::EditorViewportMetal`; all
+five are implemented. Its `HoroEngine::TestSdk`, `EditorSourceEditor`, and
+`EditorGraphEditor` targets are planned and have no production target.
+
+Current but non-canonical targets are Transitional: OpenTelemetry,
+GameplayRuntime, GameplayModuleHost, GameplayLua, GameplayBuild, Input,
+InputSdl, Extensions, and the renderer registry. They represent useful real
+boundaries, but the canonical target lists must either adopt them or assign
+their responsibilities to another documented target.
+
+## Desired Tree Comparison
+
+The desired tree is explicitly aspirational. The following differences are the
+ones that affect target ownership or would mislead a migration ticket.
+
+| Desired area | Status | Current repository evidence |
+|---|---|---|
+| `cmake/HoroCompilerOptions.cmake`, `HoroTargets.cmake`, `HoroDependencies.cmake`, `HoroPackaging.cmake`, `HoroSDK.cmake` | Partial | Equivalent responsibilities are partly in root CMake and differently named files such as `Dependencies.cmake`; several named files are absent. |
+| `include/Horo/` module contracts | Partial | 129 headers exist, but target-specific public surfaces are not enforced and several documented domains are placeholders or absent. |
+| `src/foundation`, `platform`, `application`, `editor`, `runtime`, `gameplay`, `extensions` | Partial | Active implementations exist, but most production targets are declared centrally in one `src/CMakeLists.txt`. |
+| Dedicated `src/asset`, `scene`, `render`, `pipeline`, `physics`, `audio`, and `network` module roots | Partial | Asset, scene, and render code currently live under `src/runtime/`; pipeline, physics, audio, and network targets are absent. |
+| `src/transport/mcp` and editor MCP bridge | Planned | Placeholder interface/editor paths exist; no MCP production target. |
+| `apps/HoroEditor` | Implemented | Graphical process entry and app composition exist. |
+| `apps/horo-engine` | Partial | Process entry exists without the documented CLI/MCP composition. |
+| `apps/horopak` | Planned | Placeholder only. |
+| `tools/*` | Planned | Tool directories are placeholders only. |
+| `sdk/` | Partial | Gameplay SDK package files are generated from current CMake/scripts; the desired stable schema/template surface is incomplete. |
+| `tests/` | Implemented | Broad unit/integration/UI coverage exists; there is no `HoroEngine::TestSdk` production-style support target. |
+| `deprecated/` exclusion | Implemented | Root CMake does not discover or compile the deprecated tree. |
+
+## Dependency Direction Findings
+
+### Confirmed violations
+
+1. **SceneModel depends upward on RenderApi.** System Design places both
+   SceneModel and RenderApi at the Foundation-only contract level. The real
+   `HoroSceneModel -> HoroRenderApi` public edge lets render types define the
+   scene primitive model boundary.
+2. **Private editor implementation headers are public usage requirements.** Six
+   targets export `src/` or a broad source path. This violates the rule that
+   private implementation headers do not leak through public CMake interfaces.
+3. **Public header ownership is not enforceable.** Every first-party library
+   publishes the full repository `include/` root, so undeclared cross-module
+   includes compile even when the matching target is not linked.
+4. **EditorServices publicly selects a concrete scripting adapter.** The public
+   `EditorServices -> GameplayLua` edge places a concrete Lua implementation
+   below every EditorServices consumer instead of selecting it at a composition
+   boundary.
+
+### Contract and implementation divergences
+
+These require a focused decision before being classified as code defects:
+
+- RenderNull, RenderOpenGL, and RenderMetal depend on RenderBackendRegistry,
+  while the normative dependency diagram permits concrete backends to depend on
+  Platform plus their owning API. The static registration model predates the
+  documented RenderModuleAbi/RenderModuleHost boundary.
+- `HoroExtensions` combines ExtensionApi, ExtensionHost, marketplace transport,
+  platform loading, and an asset importer in one target. This prevents the
+  documented API-to-host dependency direction from being represented in CMake.
+- Assets combines registry/provider contracts with importer, cooker, cache, and
+  preview implementations despite System Design describing those as later
+  consumers or separate targets.
+- The headless configuration excludes Gui, InputSdl, backend viewport bridges,
+  and HoroEditor, but still builds editor model/services/extraction/viewport
+  scene and Extensions as default targets. This does not match the Build System
+  claim that the CLI profile excludes EditorModel and EditorServices.
+- System Design, Build System, and CMake disagree on `RuntimeScene` versus
+  `SceneRuntime` and `Extension*` versus `Plugin*` names. There must be one
+  canonical naming source before migration scripts or target checks are added.
+
+No reverse edge from Application to ProjectMigrations, RuntimeScene to editor,
+Foundation to higher layers, or RenderApi to a concrete renderer was found.
+Native OpenGL, Metal, SDL, Lua, UFBX, curl, and platform framework dependencies
+remain inside their current concrete/owning targets at link time.
+
+## Migration Inputs
+
+This inventory supports the following focused sequence without moving
+production code in this ticket:
+
+1. ARC-001.2 should establish target-specific SDK/public,
+   internal-shared, and target-private include surfaces, starting with the six
+   targets that export `src/`.
+2. Resolve the SceneModel/RenderApi ownership direction before adding more scene
+   primitives or renderer-facing mesh fields.
+3. Decide whether the current non-canonical targets become canonical and align
+   System Design and Build System on one target vocabulary.
+4. Split ExtensionApi from ExtensionHost and isolate concrete gameplay scripting
+   selection at a composition root.
+5. Make headless profile membership explicit and test it from generated target
+   graphs.
+6. Add missing Pipeline, MCP, horopak, renderer module host/ABI, and later
+   subsystem targets only through their owning roadmap tickets.
+
+Any later migration ticket should regenerate both inspected configurations and
+update this inventory in the same change when it changes a production target,
+public include boundary, canonical target status, or first-party dependency
+edge.
