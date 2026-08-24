@@ -36,10 +36,25 @@ namespace Horo::Editor {
                        const EditorGuiContext &ctx) override;
 
     private:
+        struct ViewportSurfaceLayout {
+            ImVec2 origin{};
+            float width{0.0F};
+            float height{0.0F};
+            float centerX{0.0F};
+            float horizon{0.0F};
+            float ground{0.0F};
+        };
+
         void RequestViewportExtent(float width, float height) const noexcept;
-        static void DrawViewportSurface(ImDrawList &drawList, const ImVec2 &origin, float width, float height, float centerX, float horizon,
-                                        float ground, const EditorViewportTextureView &textureView,
-                                        bool hasRenderedViewport);  // NOSONAR(cpp:S107)
+        void ConfigureRenderer(const EditorWorkspaceViewModel &viewModel, const EditorGuiContext &context) const;
+        void DrawInteractiveViewport(ImDrawList &drawList, const ViewportSurfaceLayout &layout, const EditorWorkspaceViewModel &viewModel,
+                                     EditorWorkspaceViewCommandData &command, const EditorGuiContext &context,
+                                     Math::ClipDepthRange depthRange);
+        static bool AcceptViewportAssetDrop(ImDrawList &drawList, const ViewportSurfaceLayout &layout,
+                                            const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &command,
+                                            Math::ClipDepthRange depthRange);
+        static void DrawViewportSurface(ImDrawList &drawList, const ViewportSurfaceLayout &layout,
+                                        const EditorViewportTextureView &textureView, bool hasRenderedViewport);
 
         static void DrawProjectionControl(const ImVec2 &origin, const EditorWorkspaceViewModel &viewModel,
                                           EditorWorkspaceViewCommandData &command, const EditorGuiContext &context);

@@ -39,7 +39,7 @@ namespace {
             gridOptions = options;
         }
 
-        void RequestLightVisualizer(Horo::Editor::EditorViewportLightVisualizerOptions options) noexcept override {
+        void RequestLightVisualizer(const Horo::Editor::EditorViewportLightVisualizerOptions &options) noexcept override {
             lightVisualizerOptions = std::move(options);
         }
 

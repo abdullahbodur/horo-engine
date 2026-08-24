@@ -37,7 +37,24 @@ namespace Horo::Editor {
                        const EditorGuiContext &ctx) override;
 
     private:
+        struct PanelInteractionState;
+        struct RowFrame;
+        struct RowControls;
+
         void BeginRename(HierarchyNodeId id);
+        [[nodiscard]] PanelInteractionState DrawSearch(float panelWidth, float uiScale, const EditorGuiContext &context);
+        void UpdateFocusedInputContext(bool searchActive);
+        void HandleRenameShortcut(const PanelInteractionState &interaction);
+        [[nodiscard]] bool DrawRows(const std::vector<HierarchyVisibleRow> &rows, float listWidth, float outerPadding, float uiScale,
+                                    const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &command,
+                                    const EditorGuiContext &context);
+        void DrawRowContextMenu(const RowFrame &frame, bool workspaceEligible, bool &pendingDelete, EditorWorkspaceViewCommandData &command,
+                                const EditorGuiContext &context);
+        [[nodiscard]] RowControls DrawRowControls(const RowFrame &frame, bool workspaceEligible, const EditorGuiContext &context);
+        static void DrawRowPresentation(const RowFrame &frame, const RowControls &controls, const EditorGuiContext &context);
+        void ApplyRowInteraction(const RowFrame &frame, const RowControls &controls, bool workspaceEligible,
+                                 EditorWorkspaceViewCommandData &command);
+        void DrawRowLabel(const RowFrame &frame, EditorWorkspaceViewCommandData &command);
 
         HierarchyEditSession editSession_;
         std::array<char, 128> searchBuffer_{};

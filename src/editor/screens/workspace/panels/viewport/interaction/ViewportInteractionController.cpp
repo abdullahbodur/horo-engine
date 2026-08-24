@@ -17,19 +17,37 @@ namespace Horo::Editor {
         return navigation_.IsActive() || gizmo_.IsActive();
     }
 
-    void ViewportInteractionController::Draw(ImDrawList &drawList, const ImVec2 &origin, const float width, const float height,
-                                             const bool hovered, const EditorWorkspaceViewModel &viewModel,
-                                             EditorWorkspaceViewCommandData &command, const EditorGuiContext &context,
-                                             const float deltaSeconds,
-                                             const Math::ClipDepthRange depthRange) {  // NOSONAR(cpp:S107)
-
+    void ViewportInteractionController::Draw(const ViewportInteractionDrawContext &context) {
         const Input::InputRouter *router = capture_.Router();
         if (router == nullptr || capture_.WorkspaceContext() == nullptr)
             return;
         const Input::RawInputSnapshot &input = router->Snapshot();
-        if (gizmo_.Draw(drawList, origin, width, height, hovered, input, viewModel, command, capture_, depthRange))
+        const TransformGizmoDrawContext gizmoContext{
+            .origin = context.origin,
+            .width = context.width,
+            .height = context.height,
+            .hovered = context.hovered,
+            .input = input,
+            .viewModel = context.viewModel,
+            .command = context.command,
+            .depthRange = context.depthRange,
+        };
+        if (gizmo_.Draw(context.drawList, gizmoContext, capture_))
             return;
-        navigation_.Update(origin, width, height, hovered, input, viewModel, command, context, deltaSeconds, capture_, depthRange);
+        navigation_.Update(
+            ViewportNavigationUpdateContext{
+                .origin = context.origin,
+                .width = context.width,
+                .height = context.height,
+                .hovered = context.hovered,
+                .input = input,
+                .viewModel = context.viewModel,
+                .command = context.command,
+                .gui = context.gui,
+                .deltaSeconds = context.deltaSeconds,
+                .depthRange = context.depthRange,
+            },
+            capture_);
     }
 
     void ViewportInteractionController::OnViewportCaptureCancelled(const Input::CaptureCancellationReason) noexcept {

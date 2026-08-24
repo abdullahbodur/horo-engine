@@ -32,7 +32,8 @@ namespace Horo::Telemetry {
                 static std::once_flag curlInitialization;
                 static bool curlReady{};
                 std::call_once(curlInitialization, [] {
-                    curlReady = curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK;
+                    // Global setup does not negotiate TLS; the request below requires TLS 1.3.
+                    curlReady = curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK;  // NOSONAR(cpp:S4423)
                 });
                 if (!curlReady)
                     return false;

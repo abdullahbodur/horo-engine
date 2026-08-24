@@ -11,6 +11,18 @@ namespace Horo::Editor {
     struct TransformGizmoFrameGeometry;
     class ViewportInteractionCapture;
 
+    /** @brief Frame-local inputs used to draw and advance a transform gizmo. */
+    struct TransformGizmoDrawContext {
+        ImVec2 origin{};
+        float width{0.0F};
+        float height{0.0F};
+        bool hovered{false};
+        const Input::RawInputSnapshot &input;
+        const EditorWorkspaceViewModel &viewModel;
+        EditorWorkspaceViewCommandData &command;
+        Math::ClipDepthRange depthRange{Math::ClipDepthRange::NegativeOneToOne};
+    };
+
     /**
      * @brief Owns one viewport transform-gizmo interaction session and emits semantic preview/commit commands.
      *
@@ -28,10 +40,7 @@ namespace Horo::Editor {
          * @brief Draws the current gizmo and advances its pointer interaction.
          * @return True when the gizmo consumed the viewport interaction for this frame.
          */
-        [[nodiscard]] bool Draw(ImDrawList &drawList, const ImVec2 &origin, float width, float height, bool hovered,
-                                const Input::RawInputSnapshot &input, const EditorWorkspaceViewModel &viewModel,
-                                EditorWorkspaceViewCommandData &command, ViewportInteractionCapture &capture,
-                                Math::ClipDepthRange depthRange);  // NOSONAR(cpp:S107)
+        [[nodiscard]] bool Draw(ImDrawList &drawList, const TransformGizmoDrawContext &context, ViewportInteractionCapture &capture);
 
     private:
         struct DragSession {
@@ -47,13 +56,9 @@ namespace Horo::Editor {
         };
 
         [[nodiscard]] Result<void> TryBeginDrag(const TransformGizmoFrameGeometry &geometry, const Math::Mat4 &worldTransform,
-                                                const SceneObject &selectedObject, const EditorWorkspaceViewModel &viewModel,
-                                                const Input::RawInputSnapshot &input, const ImVec2 &origin, float width, float height,
-                                                ViewportInteractionCapture &capture,
-                                                Math::ClipDepthRange depthRange);  // NOSONAR(cpp:S107)
-        void AdvanceDrag(const Input::RawInputSnapshot &input, const EditorWorkspaceViewModel &viewModel, const ImVec2 &origin, float width,
-                         float height, EditorWorkspaceViewCommandData &command, ViewportInteractionCapture &capture,
-                         Math::ClipDepthRange depthRange);  // NOSONAR(cpp:S107)
+                                                const SceneObject &selectedObject, const TransformGizmoDrawContext &context,
+                                                ViewportInteractionCapture &capture);
+        void AdvanceDrag(const TransformGizmoDrawContext &context, ViewportInteractionCapture &capture);
 
         std::optional<DragSession> drag_;
         bool cancelPreviewOnNextDraw_{false};

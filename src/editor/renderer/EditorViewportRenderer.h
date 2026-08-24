@@ -67,7 +67,7 @@ namespace Horo::Editor {
         virtual void RequestGrid(const EditorViewportGridOptions &options) noexcept = 0;
 
         /** @brief Records the selected Light visualizer requested for the next viewport pass. */
-        virtual void RequestLightVisualizer(EditorViewportLightVisualizerOptions options) noexcept = 0;
+        virtual void RequestLightVisualizer(const EditorViewportLightVisualizerOptions &options) noexcept = 0;
 
         /** @brief Returns the most recent panel extent request for static-mesh pass construction. */
         [[nodiscard]] virtual EditorViewportExtent RequestedExtent() const noexcept = 0;

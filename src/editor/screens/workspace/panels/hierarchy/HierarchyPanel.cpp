@@ -65,8 +65,19 @@ namespace Horo::Editor {
             return preferred != nullptr ? preferred : ImGui::GetFont();
         }
 
-        [[nodiscard]] bool DrawHierarchyLabel(ImDrawList &drawList, ImFont &font, const float fontSize, const ImVec2 minimum,
-                                              const ImVec2 maximum, const float centerY, const ImU32 color, const std::string_view text) {
+        struct HierarchyLabelDrawRequest {
+            ImDrawList &drawList;
+            ImFont &font;
+            float fontSize{0.0F};
+            ImVec2 minimum{};
+            ImVec2 maximum{};
+            float centerY{0.0F};
+            ImU32 color{};
+            std::string_view text;
+        };
+
+        [[nodiscard]] bool DrawHierarchyLabel(const HierarchyLabelDrawRequest &request) {
+            const auto &[drawList, font, fontSize, minimum, maximum, centerY, color, text] = request;
             if (text.empty() || maximum.x <= minimum.x)
                 return !text.empty();
             const ImVec2 fullSize = font.CalcTextSizeA(fontSize, 100000.0F, 0.0F, text.data(), text.data() + text.size());
@@ -154,6 +165,63 @@ namespace Horo::Editor {
         }
     }  // namespace
 
+    struct HierarchyPanel::PanelInteractionState {
+        bool searchActive{false};
+        bool panelFocused{false};
+        bool workspaceEligible{false};
+    };
+
+    struct HierarchyRowGeometry {
+        HierarchyRowLayout layout;
+        ImVec2 rowMin{};
+        ImVec2 rowMax{};
+        ImVec2 chevronMin{};
+        ImVec2 chevronMax{};
+        ImVec2 typeIconMin{};
+        ImVec2 typeIconMax{};
+        ImVec2 labelMin{};
+        ImVec2 labelMax{};
+        ImVec2 actionsMin{};
+        ImVec2 actionsMax{};
+        ImVec2 visibilityMin{};
+        ImVec2 visibilityMax{};
+        ImVec2 lockMin{};
+        ImVec2 lockMax{};
+        ImVec2 nextRowCursor{};
+    };
+
+    struct HierarchyPanel::RowFrame {
+        const HierarchyVisibleRow &row;
+        const HierarchyNode &node;
+        ImDrawList &drawList;
+        ImFont &nameFont;
+        HierarchyRowGeometry geometry;
+        float uiScale{1.0F};
+        float nameFontSize{0.0F};
+        bool rowHovered{false};
+        bool rowFocused{false};
+        bool rowLeftClicked{false};
+        bool rowRightClicked{false};
+        bool selected{false};
+        bool primarySelected{false};
+        bool pointerInActions{false};
+        bool assetDropDelivered{false};
+        bool searching{false};
+    };
+
+    struct HierarchyPanel::RowControls {
+        bool chevronHovered{false};
+        bool chevronPressed{false};
+        bool visibilityHovered{false};
+        bool visibilityPressed{false};
+        bool lockHovered{false};
+        bool lockPressed{false};
+
+        [[nodiscard]] bool IsHovered(const RowFrame &frame) const noexcept {
+            return frame.rowHovered || chevronHovered || visibilityHovered || lockHovered;
+        }
+    };
+
     void HierarchyPanel::OnAttach(PanelContext &context) {
         inputRouter_ = context.inputRouter;
         workspaceInputContext_ = context.workspaceInputContext;
@@ -188,6 +256,353 @@ namespace Horo::Editor {
         dl->AddLine(ImVec2(ox + 4, oy + 12), ImVec2(ox + 12, oy + 12), color, 1.5f);
     }
 
+    HierarchyPanel::PanelInteractionState HierarchyPanel::DrawSearch(const float panelWidth, const float uiScale,
+                                                                     const EditorGuiContext &context) {
+        ImGui::SetCursorPos(ImVec2(kOuterPadding * uiScale, kOuterPadding * uiScale));
+        ImGui::SetNextItemWidth(std::max(1.0F, panelWidth - kOuterPadding * 2.0F * uiScale));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0F * uiScale, 5.0F * uiScale));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::Layout::Radius);
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Bg3());
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Bg3());
+        ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
+        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
+        bool searchActive = false;
+        {
+            const Theme::ScopedFont searchFont(context.theme.fonts.sansCompact);
+            ImGui::InputTextWithHint("##HierarchySearch", context.localization.Get("editor", "workspace.hierarchy.search").c_str(),
+                                     searchBuffer_.data(), searchBuffer_.size());
+            searchActive = ImGui::IsItemActive();
+        }
+        const bool panelFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
+        ImGui::PopStyleColor(5);
+        ImGui::PopStyleVar(2);
+        const bool workspaceEligible =
+            inputRouter_ != nullptr && workspaceInputContext_ != nullptr && inputRouter_->IsContextActive(*workspaceInputContext_);
+        return {.searchActive = searchActive, .panelFocused = panelFocused, .workspaceEligible = workspaceEligible};
+    }
+
+    void HierarchyPanel::UpdateFocusedInputContext(const bool searchActive) {
+        const bool needsFocusedContext = searchActive || renamingId_.has_value();
+        if (needsFocusedContext && !focusedWidgetContext_.IsActive() && inputRouter_ != nullptr)
+            focusedWidgetContext_ =
+                inputRouter_->PushContext(Input::InputContextId{"editor.hierarchy.text"}, Input::InputContextKind::FocusedGuiWidget);
+        else if (!needsFocusedContext)
+            focusedWidgetContext_.Reset();
+    }
+
+    void HierarchyPanel::HandleRenameShortcut(const PanelInteractionState &interaction) {
+        if (!interaction.workspaceEligible || !interaction.panelFocused || interaction.searchActive || renamingId_.has_value() ||
+            !editSession_.SelectedId().has_value() || !inputRouter_->ConsumeKey(*workspaceInputContext_, Input::Key::F2))
+            return;
+        const HierarchyNode *selectedNode = editSession_.Find(*editSession_.SelectedId());
+        if (selectedNode != nullptr && !selectedNode->effectivelyLocked)
+            BeginRename(*editSession_.SelectedId());
+    }
+
+    void HierarchyPanel::DrawRowContextMenu(const RowFrame &frame, const bool workspaceEligible, bool &pendingDelete,
+                                            EditorWorkspaceViewCommandData &command, const EditorGuiContext &context) {
+        if (frame.pointerInActions || !Ui::BeginContextMenu("##HierarchyContext"))
+            return;
+        const bool editable = workspaceEligible && !frame.node.effectivelyLocked;
+        if (editable &&
+            Ui::BeginContextSubmenu((context.localization.Get("editor", "workspace.create") + "###hierarchy_create_root").c_str(),
+                                    context.theme.fonts)) {
+            DrawCreateMenuItems(GetPrimitiveCreateMenuItems(), SceneObjectId{frame.node.id}, command, context);
+            Ui::EndContextSubmenu();
+        }
+        Ui::ContextMenuSeparator();
+        if (editable &&
+            Ui::ContextMenuItem(context.localization.Get("editor", "workspace.hierarchy.rename").c_str(), "F2", context.theme.fonts))
+            BeginRename(frame.node.id);
+        if (editable &&
+            Ui::ContextMenuItem(context.localization.Get("editor", "workspace.hierarchy.duplicate").c_str(), nullptr, context.theme.fonts))
+            command = HierarchyEditSession::DuplicateCommand(frame.node.id);
+        Ui::ContextMenuSeparator();
+        if (editable && Ui::ContextMenuItem(context.localization.Get("editor", "workspace.hierarchy.delete").c_str(), "Delete",
+                                            context.theme.fonts, Ui::ContextMenuItemTone::Danger))
+            pendingDelete = true;
+        Ui::EndContextMenu();
+    }
+
+    HierarchyPanel::RowControls HierarchyPanel::DrawRowControls(const RowFrame &frame, const bool workspaceEligible,
+                                                                const EditorGuiContext &context) {
+        RowControls controls;
+        if (!frame.node.children.empty() && searchBuffer_[0] == '\0') {
+            ImGui::SetCursorScreenPos(frame.geometry.chevronMin);
+            ImGui::InvisibleButton("##hierarchy_chevron", ImVec2(frame.geometry.layout.chevron.Width(), frame.geometry.layout.height));
+            controls.chevronHovered = ImGui::IsItemHovered();
+            controls.chevronPressed = workspaceEligible && ImGui::IsItemClicked(ImGuiMouseButton_Left);
+            ImGui::SetCursorScreenPos(frame.geometry.nextRowCursor);
+        }
+        if (frame.geometry.layout.visibilityAction.Width() <= 0.0F)
+            return controls;
+
+        ImGui::SetCursorScreenPos(frame.geometry.visibilityMin);
+        ImGui::InvisibleButton("##hierarchy_visibility",
+                               ImVec2(frame.geometry.layout.visibilityAction.Width(), frame.geometry.layout.height));
+        controls.visibilityHovered = ImGui::IsItemHovered();
+        controls.visibilityPressed = ImGui::IsItemClicked(ImGuiMouseButton_Left);
+        if (controls.visibilityHovered) {
+            const char *tooltip = "workspace.hierarchy.show";
+            if (frame.node.hiddenByParent && frame.node.locallyVisible)
+                tooltip = "workspace.hierarchy.hidden_by_parent";
+            else if (frame.node.locallyVisible)
+                tooltip = "workspace.hierarchy.hide";
+            ImGui::SetTooltip("%s", context.localization.Get("editor", tooltip).c_str());
+        }
+
+        ImGui::SetCursorScreenPos(frame.geometry.lockMin);
+        ImGui::InvisibleButton("##hierarchy_lock", ImVec2(frame.geometry.layout.lockAction.Width(), frame.geometry.layout.height));
+        controls.lockHovered = ImGui::IsItemHovered();
+        controls.lockPressed = ImGui::IsItemClicked(ImGuiMouseButton_Left);
+        if (controls.lockHovered) {
+            const char *tooltip = "workspace.hierarchy.lock";
+            if (frame.node.lockedByParent && !frame.node.locallyLocked)
+                tooltip = "workspace.hierarchy.locked_by_parent";
+            else if (frame.node.locallyLocked)
+                tooltip = "workspace.hierarchy.unlock";
+            ImGui::SetTooltip("%s", context.localization.Get("editor", tooltip).c_str());
+        }
+        ImGui::SetCursorScreenPos(frame.geometry.nextRowCursor);
+        return controls;
+    }
+
+    void HierarchyPanel::DrawRowPresentation(const RowFrame &frame, const RowControls &controls, const EditorGuiContext &context) {
+        const bool hovered = controls.IsHovered(frame);
+        if (frame.selected) {
+            ImVec4 selectedBackground = Theme::Accent();
+            selectedBackground.w = hovered ? 0.17F : 0.13F;
+            frame.drawList.AddRectFilled(frame.geometry.rowMin, frame.geometry.rowMax, Theme::U32(selectedBackground),
+                                         2.0F * frame.uiScale);
+            if (frame.primarySelected)
+                frame.drawList.AddRectFilled(frame.geometry.rowMin,
+                                             {frame.geometry.rowMin.x + 2.0F * frame.uiScale, frame.geometry.rowMax.y},
+                                             Theme::U32(Theme::Accent()), 2.0F * frame.uiScale);
+        } else if (hovered) {
+            frame.drawList.AddRectFilled(frame.geometry.rowMin, frame.geometry.rowMax, Theme::U32(Theme::Hover()), 2.0F * frame.uiScale);
+        }
+        if (frame.rowFocused)
+            frame.drawList.AddRect(frame.geometry.rowMin, frame.geometry.rowMax, Theme::U32(Theme::BorderStrong()), 2.0F * frame.uiScale, 0,
+                                   frame.uiScale);
+
+        const float centerY = frame.geometry.rowMin.y + frame.geometry.layout.height * 0.5F;
+        const float chevronCenterX = (frame.geometry.chevronMin.x + frame.geometry.chevronMax.x) * 0.5F;
+        if (frame.row.depth > 0) {
+            const float guideX = chevronCenterX - 12.0F * frame.uiScale;
+            frame.drawList.AddLine({guideX, frame.geometry.rowMin.y}, {guideX, centerY}, Theme::U32(Theme::Border()), 1.0F);
+            frame.drawList.AddLine({guideX, centerY}, {frame.geometry.chevronMin.x, centerY}, Theme::U32(Theme::Border()), 1.0F);
+        }
+        if (!frame.node.children.empty()) {
+            if (frame.node.expanded || frame.searching)
+                frame.drawList.AddTriangleFilled({chevronCenterX - 3.0F * frame.uiScale, centerY - 2.0F * frame.uiScale},
+                                                 {chevronCenterX + 3.0F * frame.uiScale, centerY - 2.0F * frame.uiScale},
+                                                 {chevronCenterX, centerY + 2.0F * frame.uiScale},
+                                                 Theme::U32(controls.chevronHovered ? Theme::Text() : Theme::Dim()));
+            else
+                frame.drawList.AddTriangleFilled({chevronCenterX - 2.0F * frame.uiScale, centerY - 3.0F * frame.uiScale},
+                                                 {chevronCenterX - 2.0F * frame.uiScale, centerY + 3.0F * frame.uiScale},
+                                                 {chevronCenterX + 2.0F * frame.uiScale, centerY},
+                                                 Theme::U32(controls.chevronHovered ? Theme::Text() : Theme::Dim()));
+        }
+
+        const HierarchyIconPresentation icon = GetIconPresentation(frame.node.type);
+        const float iconSize = 16.0F * frame.uiScale;
+        ImVec4 typeColor = icon.color;
+        if (frame.node.effectivelyLocked)
+            typeColor.w *= 0.65F;
+        Ui::DrawEditorIcon(&frame.drawList, icon.icon, {frame.geometry.typeIconMin.x, centerY - iconSize * 0.5F}, {iconSize, iconSize},
+                           Theme::U32(typeColor));
+        if (icon.tooltipKey != nullptr && ImGui::IsMouseHoveringRect(frame.geometry.typeIconMin, frame.geometry.typeIconMax))
+            ImGui::SetTooltip("%s", context.localization.Get("editor", icon.tooltipKey).c_str());
+
+        if (frame.geometry.layout.visibilityAction.Width() <= 0.0F)
+            return;
+        const float actionIconSize =
+            std::max(0.0F, std::min({15.0F * frame.uiScale, frame.geometry.layout.visibilityAction.Width() - 4.0F * frame.uiScale,
+                                     frame.geometry.layout.lockAction.Width() - 4.0F * frame.uiScale,
+                                     frame.geometry.layout.height - 4.0F * frame.uiScale}));
+        const auto drawAction = [&](const Ui::UiIcon actionIcon, const ImVec2 minimum, const ImVec2 maximum, const bool actionHovered,
+                                    const bool active, const bool inherited) {
+            if (actionIconSize <= 0.0F)
+                return;
+            ImVec4 color = actionHovered || active ? Theme::Text() : Theme::Muted();
+            if (active && !actionHovered)
+                color.w *= 0.82F;
+            if (inherited)
+                color.w *= 0.55F;
+            const ImVec2 position{minimum.x + ((maximum.x - minimum.x) - actionIconSize) * 0.5F,
+                                  minimum.y + ((maximum.y - minimum.y) - actionIconSize) * 0.5F};
+            Ui::DrawEditorIcon(&frame.drawList, actionIcon, position, {actionIconSize, actionIconSize}, Theme::U32(color));
+        };
+        drawAction(frame.node.effectivelyVisible ? Ui::UiIcon::Visibility : Ui::UiIcon::VisibilityOff, frame.geometry.visibilityMin,
+                   frame.geometry.visibilityMax, controls.visibilityHovered, !frame.node.effectivelyVisible,
+                   frame.node.hiddenByParent && frame.node.locallyVisible);
+        drawAction(Ui::UiIcon::Lock, frame.geometry.lockMin, frame.geometry.lockMax, controls.lockHovered, frame.node.effectivelyLocked,
+                   frame.node.lockedByParent && !frame.node.locallyLocked);
+    }
+
+    void HierarchyPanel::ApplyRowInteraction(const RowFrame &frame, const RowControls &controls, const bool workspaceEligible,
+                                             EditorWorkspaceViewCommandData &command) {
+        if (frame.assetDropDelivered)
+            return;
+        if (controls.chevronPressed) {
+            editSession_.ToggleExpanded(frame.node.id);
+            return;
+        }
+        if (workspaceEligible && controls.visibilityPressed) {
+            if (!(frame.node.hiddenByParent && frame.node.locallyVisible))
+                command = HierarchyEditSession::ToggleVisibilityCommand(frame.node);
+            return;
+        }
+        if (workspaceEligible && controls.lockPressed) {
+            if (!(frame.node.lockedByParent && !frame.node.locallyLocked))
+                command = HierarchyEditSession::ToggleLockCommand(frame.node);
+            return;
+        }
+        if (!workspaceEligible || !frame.rowLeftClicked || frame.pointerInActions)
+            return;
+        editSession_.Select(frame.node.id);
+        const ImGuiIO &io = ImGui::GetIO();
+        HierarchySelectionGesture gesture = HierarchySelectionGesture::Replace;
+        if (io.KeyShift)
+            gesture = HierarchySelectionGesture::Range;
+        else if (io.KeyCtrl || io.KeySuper)
+            gesture = HierarchySelectionGesture::Toggle;
+        command = editSession_.SelectCommand(frame.node.id, gesture);
+    }
+
+    void HierarchyPanel::DrawRowLabel(const RowFrame &frame, EditorWorkspaceViewCommandData &command) {
+        const float centerY = frame.geometry.rowMin.y + frame.geometry.layout.height * 0.5F;
+        if (renamingId_ != frame.node.id) {
+            const bool truncated = DrawHierarchyLabel({.drawList = frame.drawList,
+                                                       .font = frame.nameFont,
+                                                       .fontSize = frame.nameFontSize,
+                                                       .minimum = frame.geometry.labelMin,
+                                                       .maximum = frame.geometry.labelMax,
+                                                       .centerY = centerY,
+                                                       .color = Theme::U32(frame.node.effectivelyLocked ? Theme::Muted() : Theme::Text()),
+                                                       .text = frame.node.name});
+            if (truncated && ImGui::IsMouseHoveringRect(frame.geometry.labelMin, frame.geometry.labelMax))
+                ImGui::SetTooltip("%s", frame.node.name.c_str());
+            return;
+        }
+
+        ImGui::SetCursorScreenPos({frame.geometry.labelMin.x, frame.geometry.rowMin.y + 2.0F * frame.uiScale});
+        ImGui::SetNextItemWidth(std::max(1.0F, frame.geometry.labelMax.x - frame.geometry.labelMin.x));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {3.0F * frame.uiScale, 1.0F * frame.uiScale});
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
+        ImGui::PushStyleColor(ImGuiCol_Border, Theme::Accent());
+        if (requestRenameFocus_) {
+            ImGui::SetKeyboardFocusHere();
+            requestRenameFocus_ = false;
+        }
+        const bool submittedByWidget = ImGui::InputText("##Rename", renameBuffer_.data(), renameBuffer_.size(),
+                                                        ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+        const bool submitted =
+            submittedByWidget && inputRouter_ != nullptr && inputRouter_->ConsumeKey(focusedWidgetContext_, Input::Key::Enter);
+        const bool cancelled = inputRouter_ != nullptr && inputRouter_->ConsumeKey(focusedWidgetContext_, Input::Key::Escape);
+        ImGui::PopStyleColor(2);
+        ImGui::PopStyleVar();
+        if (submitted) {
+            command = HierarchyEditSession::RenameCommand(frame.node.id, renameBuffer_.data());
+            renamingId_.reset();
+        } else if (cancelled) {
+            renamingId_.reset();
+        }
+    }
+
+    bool HierarchyPanel::DrawRows(const std::vector<HierarchyVisibleRow> &rows, const float listWidth, const float outerPadding,
+                                  const float uiScale, const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &command,
+                                  const EditorGuiContext &context) {
+        bool pendingDelete = false;
+        ImDrawList &drawList = *ImGui::GetWindowDrawList();
+        ImFont &nameFont = *ResolveFont(context.theme.fonts.sans);
+        const float nameFontSize = nameFont.FontSize * uiScale;
+        const bool workspaceEligible =
+            inputRouter_ != nullptr && workspaceInputContext_ != nullptr && inputRouter_->IsContextActive(*workspaceInputContext_);
+
+        for (const HierarchyVisibleRow &row : rows) {
+            const HierarchyNode &node = *row.node;
+            ImGui::PushID(&node.id);
+            ImGui::SetCursorPosX(outerPadding);
+            const ImVec2 rowMin = ImGui::GetCursorScreenPos();
+            const HierarchyRowLayout layout = CalculateHierarchyRowLayout(listWidth, row.depth, uiScale, kRowActionsWidth * uiScale);
+            const ImVec2 rowMax{rowMin.x + listWidth, rowMin.y + layout.height};
+            const ImVec2 actionsMin{rowMin.x + layout.actions.minimum, rowMin.y};
+            const ImVec2 actionsMax{rowMin.x + layout.actions.maximum, rowMax.y};
+            ImGui::SetNextItemAllowOverlap();
+            ImGui::InvisibleButton("##hierarchy_object_row", {listWidth, layout.height});
+            const ImVec2 nextRowCursor = ImGui::GetCursorScreenPos();
+            const bool rowHovered = ImGui::IsItemHovered();
+            const bool rowFocused = ImGui::IsItemFocused();
+            const bool rowLeftClicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
+            const bool rowRightClicked = ImGui::IsItemClicked(ImGuiMouseButton_Right);
+            const bool pointerInActions = ImGui::IsMouseHoveringRect(actionsMin, actionsMax);
+            const bool assetDropDelivered = AcceptAssetDrop(SceneObjectId{node.id}, AssetSceneDropTarget::HierarchyChild, rowMin, rowMax,
+                                                            viewModel.documentRevision, command, drawList);
+            const RowFrame frame{
+                .row = row,
+                .node = node,
+                .drawList = drawList,
+                .nameFont = nameFont,
+                .geometry =
+                    {
+                        .layout = layout,
+                        .rowMin = rowMin,
+                        .rowMax = rowMax,
+                        .chevronMin = {rowMin.x + layout.chevron.minimum, rowMin.y},
+                        .chevronMax = {rowMin.x + layout.chevron.maximum, rowMax.y},
+                        .typeIconMin = {rowMin.x + layout.typeIcon.minimum, rowMin.y},
+                        .typeIconMax = {rowMin.x + layout.typeIcon.maximum, rowMax.y},
+                        .labelMin = {rowMin.x + layout.label.minimum, rowMin.y},
+                        .labelMax = {rowMin.x + layout.label.maximum, rowMax.y},
+                        .actionsMin = actionsMin,
+                        .actionsMax = actionsMax,
+                        .visibilityMin = {rowMin.x + layout.visibilityAction.minimum, rowMin.y},
+                        .visibilityMax = {rowMin.x + layout.visibilityAction.maximum, rowMax.y},
+                        .lockMin = {rowMin.x + layout.lockAction.minimum, rowMin.y},
+                        .lockMax = {rowMin.x + layout.lockAction.maximum, rowMax.y},
+                        .nextRowCursor = nextRowCursor,
+                    },
+                .uiScale = uiScale,
+                .nameFontSize = nameFontSize,
+                .rowHovered = rowHovered,
+                .rowFocused = rowFocused,
+                .rowLeftClicked = rowLeftClicked,
+                .rowRightClicked = rowRightClicked,
+                .selected = editSession_.IsSelected(node.id),
+                .primarySelected = editSession_.SelectedId() == node.id,
+                .pointerInActions = pointerInActions,
+                .assetDropDelivered = assetDropDelivered,
+                .searching = searchBuffer_[0] != '\0',
+            };
+
+            if (workspaceEligible && frame.rowRightClicked && !frame.pointerInActions && !frame.selected) {
+                editSession_.Select(node.id);
+                command = editSession_.SelectCommand(node.id, HierarchySelectionGesture::Replace);
+            }
+            DrawRowContextMenu(frame, workspaceEligible, pendingDelete, command, context);
+            const RowControls controls = DrawRowControls(frame, workspaceEligible, context);
+            DrawRowPresentation(frame, controls, context);
+            ApplyRowInteraction(frame, controls, workspaceEligible, command);
+            DrawRowLabel(frame, command);
+            ImGui::SetCursorScreenPos(nextRowCursor);
+            ImGui::PopID();
+        }
+
+        if (rows.empty()) {
+            ImGui::SetCursorPosX(outerPadding + 8.0F * uiScale);
+            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
+            ImGui::TextUnformatted(
+                context.localization
+                    .Get("editor", searchBuffer_[0] == '\0' ? "workspace.hierarchy.empty" : "workspace.hierarchy.no_matches")
+                    .c_str());
+            ImGui::PopStyleColor();
+        }
+        return pendingDelete;
+    }
+
     void HierarchyPanel::DrawPanel(const ImVec2 &pos, const ImVec2 &size, const EditorWorkspaceViewModel &vm,
                                    EditorWorkspaceViewCommandData &cmd, const EditorGuiContext &ctx) {
         static_cast<void>(pos);
@@ -199,290 +614,17 @@ namespace Horo::Editor {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0F, 0.0F));
         ImGui::BeginChild("##HierarchyContent", ImVec2(size.x, size.y - kTabHeight), false, ImGuiWindowFlags_NoSavedSettings);
 
-        ImGui::SetCursorPos(ImVec2(kOuterPadding * uiScale, kOuterPadding * uiScale));
-        ImGui::SetNextItemWidth(std::max(1.0F, size.x - kOuterPadding * 2.0F * uiScale));
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0F * uiScale, 5.0F * uiScale));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Theme::Layout::Radius);
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
-        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Theme::Bg3());
-        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Theme::Bg3());
-        ImGui::PushStyleColor(ImGuiCol_Border, Theme::Border());
-        ImGui::PushStyleColor(ImGuiCol_Text, Theme::Text());
-        bool searchActive = false;
-        {
-            const Theme::ScopedFont searchFont(ctx.theme.fonts.sansCompact);
-            ImGui::InputTextWithHint("##HierarchySearch", ctx.localization.Get("editor", "workspace.hierarchy.search").c_str(),
-                                     searchBuffer_.data(), searchBuffer_.size());
-            searchActive = ImGui::IsItemActive();
-        }
-        const bool panelFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
-        ImGui::PopStyleColor(5);
-        ImGui::PopStyleVar(2);
-
-        if (const bool needsFocusedContext = searchActive || renamingId_.has_value();
-            needsFocusedContext && !focusedWidgetContext_.IsActive() && inputRouter_ != nullptr)
-            focusedWidgetContext_ =
-                inputRouter_->PushContext(Input::InputContextId{"editor.hierarchy.text"}, Input::InputContextKind::FocusedGuiWidget);
-        else if (!needsFocusedContext)
-            focusedWidgetContext_.Reset();
-
-        const bool workspaceEligible =
-            inputRouter_ != nullptr && workspaceInputContext_ != nullptr && inputRouter_->IsContextActive(*workspaceInputContext_);
-
+        const PanelInteractionState interaction = DrawSearch(size.x, uiScale, ctx);
+        UpdateFocusedInputContext(interaction.searchActive);
         const std::vector<HierarchyVisibleRow> &visibleRows = editSession_.VisibleRows(searchBuffer_.data());
-        if (workspaceEligible && panelFocused && !searchActive && !renamingId_.has_value() && editSession_.SelectedId().has_value() &&
-            inputRouter_->ConsumeKey(*workspaceInputContext_, Input::Key::F2)) {
-            const HierarchyNode *selectedNode = editSession_.Find(*editSession_.SelectedId());
-            if (selectedNode != nullptr && !selectedNode->effectivelyLocked)
-                BeginRename(*editSession_.SelectedId());
-        }
-
-        bool pendingDelete = false;
+        HandleRenameShortcut(interaction);
 
         const float outerPadding = kOuterPadding * uiScale;
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 8.0F * uiScale);
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0F, 0.0F));
         const float listWidth = std::max(1.0F, size.x - outerPadding * 2.0F);
         ImDrawList *drawList = ImGui::GetWindowDrawList();
-        ImFont *nameFont = ResolveFont(ctx.theme.fonts.sans);
-        const float nameFontSize = nameFont->FontSize * uiScale;
-
-        for (const HierarchyVisibleRow &row : visibleRows) {
-            const HierarchyNode &node = *row.node;
-            ImGui::PushID(&node.id);
-            ImGui::SetCursorPosX(outerPadding);
-            const ImVec2 rowMin = ImGui::GetCursorScreenPos();
-            const HierarchyRowLayout layout = CalculateHierarchyRowLayout(listWidth, row.depth, uiScale, kRowActionsWidth * uiScale);
-            const ImVec2 rowMax{rowMin.x + listWidth, rowMin.y + layout.height};
-            const ImVec2 chevronMin{rowMin.x + layout.chevron.minimum, rowMin.y};
-            const ImVec2 chevronMax{rowMin.x + layout.chevron.maximum, rowMax.y};
-            const ImVec2 typeIconMin{rowMin.x + layout.typeIcon.minimum, rowMin.y};
-            const ImVec2 typeIconMax{rowMin.x + layout.typeIcon.maximum, rowMax.y};
-            const ImVec2 labelMin{rowMin.x + layout.label.minimum, rowMin.y};
-            const ImVec2 labelMax{rowMin.x + layout.label.maximum, rowMax.y};
-            const ImVec2 actionsMin{rowMin.x + layout.actions.minimum, rowMin.y};
-            const ImVec2 actionsMax{rowMin.x + layout.actions.maximum, rowMax.y};
-            const ImVec2 visibilityMin{rowMin.x + layout.visibilityAction.minimum, rowMin.y};
-            const ImVec2 visibilityMax{rowMin.x + layout.visibilityAction.maximum, rowMax.y};
-            const ImVec2 lockMin{rowMin.x + layout.lockAction.minimum, rowMin.y};
-            const ImVec2 lockMax{rowMin.x + layout.lockAction.maximum, rowMax.y};
-            ImGui::SetNextItemAllowOverlap();
-            ImGui::InvisibleButton("##hierarchy_object_row", ImVec2(listWidth, layout.height));
-            const bool rowHovered = ImGui::IsItemHovered();
-            const bool rowFocused = ImGui::IsItemFocused();
-            const bool rowLeftClicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
-            const bool rowRightClicked = ImGui::IsItemClicked(ImGuiMouseButton_Right);
-            const ImVec2 nextRowCursor = ImGui::GetCursorScreenPos();
-            const bool selected = editSession_.IsSelected(node.id);
-            const bool primarySelected = editSession_.SelectedId() == node.id;
-            const bool pointerInActions = ImGui::IsMouseHoveringRect(actionsMin, actionsMax);
-            const bool assetDropDelivered = AcceptAssetDrop(SceneObjectId{node.id}, AssetSceneDropTarget::HierarchyChild, rowMin, rowMax,
-                                                            vm.documentRevision, cmd, *drawList);
-
-            if (workspaceEligible && rowRightClicked && !pointerInActions && !selected) {
-                editSession_.Select(node.id);
-                cmd = editSession_.SelectCommand(node.id, HierarchySelectionGesture::Replace);
-            }
-            if (!pointerInActions && Ui::BeginContextMenu("##HierarchyContext")) {
-                if (workspaceEligible && !node.effectivelyLocked &&
-                    Ui::BeginContextSubmenu((ctx.localization.Get("editor", "workspace.create") + "###hierarchy_create_root").c_str(),
-                                            ctx.theme.fonts)) {
-                    DrawCreateMenuItems(GetPrimitiveCreateMenuItems(), SceneObjectId{node.id}, cmd, ctx);
-                    Ui::EndContextSubmenu();
-                }
-                Ui::ContextMenuSeparator();
-                if (workspaceEligible && !node.effectivelyLocked &&
-                    Ui::ContextMenuItem(ctx.localization.Get("editor", "workspace.hierarchy.rename").c_str(), "F2", ctx.theme.fonts)) {
-                    BeginRename(node.id);
-                }
-                if (workspaceEligible && !node.effectivelyLocked &&
-                    Ui::ContextMenuItem(ctx.localization.Get("editor", "workspace.hierarchy.duplicate").c_str(), nullptr,
-                                        ctx.theme.fonts)) {
-                    cmd = HierarchyEditSession::DuplicateCommand(node.id);
-                }
-                Ui::ContextMenuSeparator();
-                if (workspaceEligible && !node.effectivelyLocked &&
-                    Ui::ContextMenuItem(ctx.localization.Get("editor", "workspace.hierarchy.delete").c_str(), "Delete", ctx.theme.fonts,
-                                        Ui::ContextMenuItemTone::Danger)) {
-                    pendingDelete = true;
-                }
-                Ui::EndContextMenu();
-            }
-
-            bool chevronHovered = false;
-            bool chevronPressed = false;
-            if (!node.children.empty() && searchBuffer_[0] == '\0') {
-                ImGui::SetCursorScreenPos(chevronMin);
-                ImGui::InvisibleButton("##hierarchy_chevron", ImVec2(layout.chevron.Width(), layout.height));
-                chevronHovered = ImGui::IsItemHovered();
-                chevronPressed = workspaceEligible && ImGui::IsItemClicked(ImGuiMouseButton_Left);
-                ImGui::SetCursorScreenPos(nextRowCursor);
-            }
-            bool visibilityHovered = false;
-            bool visibilityPressed = false;
-            bool lockHovered = false;
-            bool lockPressed = false;
-            if (layout.visibilityAction.Width() > 0.0F) {
-                ImGui::SetCursorScreenPos(visibilityMin);
-                ImGui::InvisibleButton("##hierarchy_visibility", ImVec2(layout.visibilityAction.Width(), layout.height));
-                visibilityHovered = ImGui::IsItemHovered();
-                visibilityPressed = ImGui::IsItemClicked(ImGuiMouseButton_Left);
-                if (visibilityHovered) {
-                    const char *tooltip = "workspace.hierarchy.show";
-                    if (node.hiddenByParent && node.locallyVisible) {
-                        tooltip = "workspace.hierarchy.hidden_by_parent";
-                    } else if (node.locallyVisible) {
-                        tooltip = "workspace.hierarchy.hide";
-                    }
-                    ImGui::SetTooltip("%s", ctx.localization.Get("editor", tooltip).c_str());
-                }
-                ImGui::SetCursorScreenPos(lockMin);
-                ImGui::InvisibleButton("##hierarchy_lock", ImVec2(layout.lockAction.Width(), layout.height));
-                lockHovered = ImGui::IsItemHovered();
-                lockPressed = ImGui::IsItemClicked(ImGuiMouseButton_Left);
-                if (lockHovered) {
-                    const char *tooltip = "workspace.hierarchy.lock";
-                    if (node.lockedByParent && !node.locallyLocked) {
-                        tooltip = "workspace.hierarchy.locked_by_parent";
-                    } else if (node.locallyLocked) {
-                        tooltip = "workspace.hierarchy.unlock";
-                    }
-                    ImGui::SetTooltip("%s", ctx.localization.Get("editor", tooltip).c_str());
-                }
-                ImGui::SetCursorScreenPos(nextRowCursor);
-            }
-            const bool hovered = rowHovered || chevronHovered || visibilityHovered || lockHovered;
-
-            if (selected) {
-                ImVec4 selectedBackground = Theme::Accent();
-                selectedBackground.w = hovered ? 0.17F : 0.13F;
-                drawList->AddRectFilled(rowMin, rowMax, Theme::U32(selectedBackground), 2.0F * uiScale);
-                if (primarySelected) {
-                    drawList->AddRectFilled(rowMin, ImVec2(rowMin.x + 2.0F * uiScale, rowMax.y), Theme::U32(Theme::Accent()),
-                                            2.0F * uiScale);
-                }
-            } else if (hovered) {
-                drawList->AddRectFilled(rowMin, rowMax, Theme::U32(Theme::Hover()), 2.0F * uiScale);
-            }
-            if (rowFocused)
-                drawList->AddRect(rowMin, rowMax, Theme::U32(Theme::BorderStrong()), 2.0F * uiScale, 0, 1.0F * uiScale);
-
-            const float centerY = rowMin.y + layout.height * 0.5F;
-            const float chevronCenterX = (chevronMin.x + chevronMax.x) * 0.5F;
-            if (row.depth > 0) {
-                const float guideX = chevronCenterX - 12.0F * uiScale;
-                drawList->AddLine(ImVec2(guideX, rowMin.y), ImVec2(guideX, centerY), Theme::U32(Theme::Border()), 1.0F);
-                drawList->AddLine(ImVec2(guideX, centerY), ImVec2(chevronMin.x, centerY), Theme::U32(Theme::Border()), 1.0F);
-            }
-            if (!node.children.empty()) {
-                const float chevronScale = uiScale;
-                if (node.expanded || searchBuffer_[0] != '\0') {
-                    drawList->AddTriangleFilled(ImVec2(chevronCenterX - 3.0F * chevronScale, centerY - 2.0F * chevronScale),
-                                                ImVec2(chevronCenterX + 3.0F * chevronScale, centerY - 2.0F * chevronScale),
-                                                ImVec2(chevronCenterX, centerY + 2.0F * chevronScale),
-                                                Theme::U32(chevronHovered ? Theme::Text() : Theme::Dim()));
-                } else {
-                    drawList->AddTriangleFilled(ImVec2(chevronCenterX - 2.0F * chevronScale, centerY - 3.0F * chevronScale),
-                                                ImVec2(chevronCenterX - 2.0F * chevronScale, centerY + 3.0F * chevronScale),
-                                                ImVec2(chevronCenterX + 2.0F * chevronScale, centerY),
-                                                Theme::U32(chevronHovered ? Theme::Text() : Theme::Dim()));
-                }
-            }
-
-            const HierarchyIconPresentation icon = GetIconPresentation(node.type);
-            const float iconSize = 16.0F * uiScale;
-            const ImVec2 iconPosition{typeIconMin.x, centerY - iconSize * 0.5F};
-            ImVec4 typeColor = icon.color;
-            if (node.effectivelyLocked)
-                typeColor.w *= 0.65F;
-            Ui::DrawEditorIcon(drawList, icon.icon, iconPosition, {iconSize, iconSize}, Theme::U32(typeColor));
-            if (icon.tooltipKey != nullptr && ImGui::IsMouseHoveringRect(typeIconMin, typeIconMax))
-                ImGui::SetTooltip("%s", ctx.localization.Get("editor", icon.tooltipKey).c_str());
-
-            if (layout.visibilityAction.Width() > 0.0F) {
-                const float actionIconSize =
-                    std::max(0.0F, std::min({15.0F * uiScale, layout.visibilityAction.Width() - 4.0F * uiScale,
-                                             layout.lockAction.Width() - 4.0F * uiScale, layout.height - 4.0F * uiScale}));
-                const auto drawAction = [&](const Ui::UiIcon actionIcon, const ImVec2 minimum, const ImVec2 maximum,
-                                            const bool actionHovered, const bool active, const bool inherited) {
-                    if (actionIconSize <= 0.0F)
-                        return;
-                    ImVec4 color = actionHovered || active ? Theme::Text() : Theme::Muted();
-                    if (active && !actionHovered)
-                        color.w *= 0.82F;
-                    if (inherited)
-                        color.w *= 0.55F;
-                    const ImVec2 position{minimum.x + ((maximum.x - minimum.x) - actionIconSize) * 0.5F,
-                                          minimum.y + ((maximum.y - minimum.y) - actionIconSize) * 0.5F};
-                    Ui::DrawEditorIcon(drawList, actionIcon, position, {actionIconSize, actionIconSize}, Theme::U32(color));
-                };
-                drawAction(node.effectivelyVisible ? Ui::UiIcon::Visibility : Ui::UiIcon::VisibilityOff, visibilityMin, visibilityMax,
-                           visibilityHovered, !node.effectivelyVisible, node.hiddenByParent && node.locallyVisible);
-                drawAction(Ui::UiIcon::Lock, lockMin, lockMax, lockHovered, node.effectivelyLocked,
-                           node.lockedByParent && !node.locallyLocked);
-            }
-
-            if (!assetDropDelivered && chevronPressed) {
-                editSession_.ToggleExpanded(node.id);
-            } else if (!assetDropDelivered && workspaceEligible && visibilityPressed) {
-                if (!(node.hiddenByParent && node.locallyVisible))
-                    cmd = HierarchyEditSession::ToggleVisibilityCommand(node);
-            } else if (!assetDropDelivered && workspaceEligible && lockPressed) {
-                if (!(node.lockedByParent && !node.locallyLocked))
-                    cmd = HierarchyEditSession::ToggleLockCommand(node);
-            } else if (!assetDropDelivered && workspaceEligible && rowLeftClicked && !pointerInActions) {
-                editSession_.Select(node.id);
-                const ImGuiIO &io = ImGui::GetIO();
-                HierarchySelectionGesture gesture = HierarchySelectionGesture::Replace;
-                if (io.KeyShift) {
-                    gesture = HierarchySelectionGesture::Range;
-                } else if (io.KeyCtrl || io.KeySuper) {
-                    gesture = HierarchySelectionGesture::Toggle;
-                }
-                cmd = editSession_.SelectCommand(node.id, gesture);
-            }
-
-            if (renamingId_ == node.id) {
-                ImGui::SetCursorScreenPos(ImVec2(labelMin.x, rowMin.y + 2.0F * uiScale));
-                ImGui::SetNextItemWidth(std::max(1.0F, labelMax.x - labelMin.x));
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(3.0F * uiScale, 1.0F * uiScale));
-                ImGui::PushStyleColor(ImGuiCol_FrameBg, Theme::Bg3());
-                ImGui::PushStyleColor(ImGuiCol_Border, Theme::Accent());
-                if (requestRenameFocus_) {
-                    ImGui::SetKeyboardFocusHere();
-                    requestRenameFocus_ = false;
-                }
-                const bool submittedByWidget = ImGui::InputText("##Rename", renameBuffer_.data(), renameBuffer_.size(),
-                                                                ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
-                const bool submitted =
-                    submittedByWidget && inputRouter_ != nullptr && inputRouter_->ConsumeKey(focusedWidgetContext_, Input::Key::Enter);
-                const bool cancelled = inputRouter_ != nullptr && inputRouter_->ConsumeKey(focusedWidgetContext_, Input::Key::Escape);
-                ImGui::PopStyleColor(2);
-                ImGui::PopStyleVar();
-                if (submitted) {
-                    cmd = HierarchyEditSession::RenameCommand(node.id, renameBuffer_.data());
-                    renamingId_.reset();
-                } else if (cancelled) {
-                    renamingId_.reset();
-                }
-            } else {
-                const bool truncated = DrawHierarchyLabel(*drawList, *nameFont, nameFontSize, labelMin, labelMax, centerY,
-                                                          Theme::U32(node.effectivelyLocked ? Theme::Muted() : Theme::Text()), node.name);
-                if (truncated && ImGui::IsMouseHoveringRect(labelMin, labelMax))
-                    ImGui::SetTooltip("%s", node.name.c_str());
-            }
-            ImGui::SetCursorScreenPos(nextRowCursor);
-            ImGui::PopID();
-        }
-
-        if (visibleRows.empty()) {
-            ImGui::SetCursorPosX(outerPadding + 8.0F * uiScale);
-            ImGui::PushStyleColor(ImGuiCol_Text, Theme::Dim());
-            ImGui::TextUnformatted(
-                ctx.localization.Get("editor", searchBuffer_[0] == '\0' ? "workspace.hierarchy.empty" : "workspace.hierarchy.no_matches")
-                    .c_str());
-            ImGui::PopStyleColor();
-        }
+        bool pendingDelete = DrawRows(visibleRows, listWidth, outerPadding, uiScale, vm, cmd, ctx);
 
         const ImVec2 remaining = ImGui::GetContentRegionAvail();
         const ImVec2 rootDropMin = ImGui::GetCursorScreenPos();
@@ -491,7 +633,7 @@ namespace Horo::Editor {
         static_cast<void>(AcceptAssetDrop(std::nullopt, AssetSceneDropTarget::HierarchyRoot, rootDropMin, rootDropMax, vm.documentRevision,
                                           cmd, *drawList));
         if (Ui::BeginContextMenu("##HierarchyRootContext")) {
-            if (workspaceEligible &&
+            if (interaction.workspaceEligible &&
                 Ui::BeginContextSubmenu((ctx.localization.Get("editor", "workspace.create") + "###hierarchy_create_root").c_str(),
                                         ctx.theme.fonts)) {
                 DrawCreateMenuItems(GetPrimitiveCreateMenuItems(), std::nullopt, cmd, ctx);
@@ -501,7 +643,8 @@ namespace Horo::Editor {
         }
         ImGui::PopStyleVar();
 
-        if (workspaceEligible && panelFocused && !searchActive && !renamingId_.has_value() && editSession_.SelectedId().has_value()) {
+        if (interaction.workspaceEligible && interaction.panelFocused && !interaction.searchActive && !renamingId_.has_value() &&
+            editSession_.SelectedId().has_value()) {
             const Input::ModifierState &modifiers = inputRouter_->Snapshot().modifiers;
             if ((HierarchyEditSession::IsDeleteShortcut(Input::Key::Delete, modifiers) &&
                  inputRouter_->ConsumeKey(*workspaceInputContext_, Input::Key::Delete)) ||

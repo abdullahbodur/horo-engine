@@ -26,20 +26,15 @@ namespace Horo::Editor {
         return mode_ != Mode::None;
     }
 
-    void ViewportNavigationController::Update(const ImVec2 &origin, const float width, const float height, const bool hovered,
-                                              const Input::RawInputSnapshot &input, const EditorWorkspaceViewModel &viewModel,
-                                              EditorWorkspaceViewCommandData &command, const EditorGuiContext &context,
-                                              const float deltaSeconds, ViewportInteractionCapture &capture,
-                                              const Math::ClipDepthRange depthRange) {  // NOSONAR(cpp:S107)
-
+    void ViewportNavigationController::TryBeginNavigation(const ViewportNavigationUpdateContext &context,
+                                                          ViewportInteractionCapture &capture) {
         using enum Mode;
         using enum Input::PointerButton;
-
-        const Input::ButtonState primary = input.State(Primary);
-        const Input::ButtonState secondary = input.State(Secondary);
-        const Input::ButtonState middle = input.State(Middle);
-
-        if (mode_ == None && hovered) {
+        if (mode_ == None && context.hovered) {
+            const Input::RawInputSnapshot &input = context.input;
+            const Input::ButtonState primary = input.State(Primary);
+            const Input::ButtonState secondary = input.State(Secondary);
+            const Input::ButtonState middle = input.State(Middle);
             if (secondary.pressed && capture.Begin(Secondary))
                 mode_ = Fly;
             else if (middle.pressed && capture.Begin(Middle))
@@ -47,26 +42,37 @@ namespace Horo::Editor {
             else if (input.modifiers.alt && primary.pressed && capture.Begin(Primary))
                 mode_ = Orbit;
         }
+    }
 
-        if (const bool navigationHeld =
-                (mode_ == Fly && secondary.down) || (mode_ == Pan && middle.down) || (mode_ == Orbit && primary.down);
+    void ViewportNavigationController::EndReleasedNavigation(const Input::RawInputSnapshot &input, ViewportInteractionCapture &capture) {
+        using enum Mode;
+        using enum Input::PointerButton;
+        if (const bool navigationHeld = (mode_ == Fly && input.State(Secondary).down) || (mode_ == Pan && input.State(Middle).down) ||
+                                        (mode_ == Orbit && input.State(Primary).down);
             mode_ != None && !navigationHeld) {
             capture.Finish();
             Reset();
         }
+    }
 
+    EditorViewportNavigationDelta ViewportNavigationController::BuildNavigationDelta(const ViewportNavigationUpdateContext &context) const {
+        using enum Mode;
+        const Input::RawInputSnapshot &input = context.input;
+        const EditorWorkspaceViewModel &viewModel = context.viewModel;
         EditorViewportNavigationDelta navigation;
         if (mode_ != None) {
             ImGui::SetMouseCursor(ImGuiMouseCursor_None);
-            const float orbitSensitivity = std::clamp(static_cast<float>(context.settings.settings.orbitSensitivity) / 100.0F, 0.1F, 3.0F);
-            const float panSensitivity = std::clamp(static_cast<float>(context.settings.settings.panSensitivity) / 100.0F, 0.1F, 3.0F);
+            const float orbitSensitivity =
+                std::clamp(static_cast<float>(context.gui.settings.settings.orbitSensitivity) / 100.0F, 0.1F, 3.0F);
+            const float panSensitivity = std::clamp(static_cast<float>(context.gui.settings.settings.panSensitivity) / 100.0F, 0.1F, 3.0F);
             const float lookSensitivity = 0.003F * orbitSensitivity;
             if (mode_ == Fly || mode_ == Orbit) {
                 navigation.yawRadians = -input.pointer.deltaX * lookSensitivity;
-                navigation.pitchRadians = -input.pointer.deltaY * lookSensitivity * (context.settings.settings.invertOrbitY ? -1.0F : 1.0F);
+                navigation.pitchRadians =
+                    -input.pointer.deltaY * lookSensitivity * (context.gui.settings.settings.invertOrbitY ? -1.0F : 1.0F);
                 navigation.orbit = mode_ == Orbit;
             } else {
-                const float viewportHeight = std::max(height, 1.0F);
+                const float viewportHeight = std::max(context.height, 1.0F);
                 const float targetDistance = Math::Length(viewModel.viewportCamera.target - viewModel.viewportCamera.position);
                 const float worldUnitsPerPixel =
                     viewModel.viewportCamera.projection == Runtime::CameraProjection::Perspective
@@ -78,33 +84,47 @@ namespace Horo::Editor {
             if (mode_ == Fly) {
                 using enum Input::Key;
                 const float speed =
-                    (input.modifiers.shift ? FastFlyMovementSpeed : FlyMovementSpeed) * std::clamp(deltaSeconds, 0.0F, 0.1F);
+                    (input.modifiers.shift ? FastFlyMovementSpeed : FlyMovementSpeed) * std::clamp(context.deltaSeconds, 0.0F, 0.1F);
                 navigation.moveForward = (input.State(W).down ? speed : 0.0F) - (input.State(S).down ? speed : 0.0F);
                 navigation.moveRight += (input.State(D).down ? speed : 0.0F) - (input.State(A).down ? speed : 0.0F);
                 navigation.moveUp += (input.State(E).down ? speed : 0.0F) - (input.State(Q).down ? speed : 0.0F);
             }
         }
-
-        if (mode_ == None && hovered && input.pointer.wheelY != 0.0F)
+        if (mode_ == None && context.hovered && input.pointer.wheelY != 0.0F)
             navigation.dollyScale = std::exp(-input.pointer.wheelY * 0.15F);
+        return navigation;
+    }
 
+    void ViewportNavigationController::EmitNavigationCommand(const ViewportNavigationUpdateContext &context,
+                                                             const EditorViewportNavigationDelta &navigation,
+                                                             const ViewportInteractionCapture &capture) const {
+        using enum Mode;
+        using enum Input::PointerButton;
+        const Input::RawInputSnapshot &input = context.input;
         const Input::InputContextToken *workspaceContext = capture.WorkspaceContext();
         Input::InputRouter *router = capture.Router();
-        if (mode_ == None && hovered && workspaceContext != nullptr && router != nullptr &&
+        if (mode_ == None && context.hovered && workspaceContext != nullptr && router != nullptr &&
             router->ReadAction(*workspaceContext, Input::ActionId{kActionViewportFocusSelected}).pressed &&
-            viewModel.primarySelectionWorldBounds.has_value()) {
-            command.command = EditorWorkspaceViewCommand::FocusViewportSelection;
-            command.floatPayload = width / height;
+            context.viewModel.primarySelectionWorldBounds.has_value()) {
+            context.command.command = EditorWorkspaceViewCommand::FocusViewportSelection;
+            context.command.floatPayload = context.width / context.height;
         } else if (HasNavigation(navigation)) {
-            command.command = EditorWorkspaceViewCommand::NavigateViewport;
-            command.viewportNavigationPayload = navigation;
-        } else if (mode_ == None && hovered && !input.modifiers.alt && primary.pressed) {
-            command.command = EditorWorkspaceViewCommand::PickViewport;
-            command.viewportPickPayload = ViewportPickRequest{.normalizedX = std::clamp((input.pointer.x - origin.x) / width, 0.0F, 1.0F),
-                                                              .normalizedY = std::clamp((input.pointer.y - origin.y) / height, 0.0F, 1.0F),
-                                                              .aspect = width / height,
-                                                              .depthRange = depthRange,
-                                                              .toggleSelection = input.modifiers.control || input.modifiers.command};
+            context.command.command = EditorWorkspaceViewCommand::NavigateViewport;
+            context.command.viewportNavigationPayload = navigation;
+        } else if (mode_ == None && context.hovered && !input.modifiers.alt && input.State(Primary).pressed) {
+            context.command.command = EditorWorkspaceViewCommand::PickViewport;
+            context.command.viewportPickPayload =
+                ViewportPickRequest{.normalizedX = std::clamp((input.pointer.x - context.origin.x) / context.width, 0.0F, 1.0F),
+                                    .normalizedY = std::clamp((input.pointer.y - context.origin.y) / context.height, 0.0F, 1.0F),
+                                    .aspect = context.width / context.height,
+                                    .depthRange = context.depthRange,
+                                    .toggleSelection = input.modifiers.control || input.modifiers.command};
         }
+    }
+
+    void ViewportNavigationController::Update(const ViewportNavigationUpdateContext &context, ViewportInteractionCapture &capture) {
+        TryBeginNavigation(context, capture);
+        EndReleasedNavigation(context.input, capture);
+        EmitNavigationCommand(context, BuildNavigationDelta(context), capture);
     }
 }  // namespace Horo::Editor

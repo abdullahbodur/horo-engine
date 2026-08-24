@@ -141,7 +141,7 @@ namespace Horo::Editor {
     }
 
     /** @copydoc EditorViewportRendererOpenGL::RequestLightVisualizer */
-    void EditorViewportRendererOpenGL::RequestLightVisualizer(const EditorViewportLightVisualizerOptions options) noexcept {
+    void EditorViewportRendererOpenGL::RequestLightVisualizer(const EditorViewportLightVisualizerOptions &options) noexcept {
         lightVisualizerOptions_ = options;
     }
 

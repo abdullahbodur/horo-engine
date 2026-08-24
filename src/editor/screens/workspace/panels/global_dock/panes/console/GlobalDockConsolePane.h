@@ -24,6 +24,8 @@ namespace Horo::Editor {
         void Draw(const ImVec2 &contentOrigin, float contentWidth, const EditorGuiContext &context);
 
     private:
+        void DrawLevelFilters(bool stacked, const EditorGuiContext &context);
+        void DrawLogRows(bool rebuildSelectableText, const EditorGuiContext &context);
         [[nodiscard]] bool RefreshSnapshot();
         void RebuildFilter();
 

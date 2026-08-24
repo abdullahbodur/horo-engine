@@ -157,21 +157,19 @@ namespace Horo::Editor {
     }
 
     /** @copydoc ProjectTransformGizmoRotationVector */
-    std::optional<Math::Vec3> ProjectTransformGizmoRotationVector(const EditorViewportCamera &camera, const Math::Vec3 center,
-                                                                  const Math::Vec3 normal, const ImVec2 pointer, const ImVec2 origin,
-                                                                  const float width, const float height,
-                                                                  const Math::ClipDepthRange depthRange) noexcept {  // NOSONAR(cpp:S107)
-        if (width <= 0.0F || height <= 0.0F)
+    std::optional<Math::Vec3> ProjectTransformGizmoRotationVector(const TransformGizmoRotationProjectionRequest &request) noexcept {
+        if (request.width <= 0.0F || request.height <= 0.0F)
             return std::nullopt;
-        const Result<Math::Ray> ray =
-            BuildEditorViewportRay(camera, (pointer.x - origin.x) / width, (pointer.y - origin.y) / height, width / height, depthRange);
-        const Result<Math::Plane> plane = Math::TryMakePlane(center, normal);
+        const Result<Math::Ray> ray = BuildEditorViewportRay(request.camera, (request.pointer.x - request.origin.x) / request.width,
+                                                             (request.pointer.y - request.origin.y) / request.height,
+                                                             request.width / request.height, request.depthRange);
+        const Result<Math::Plane> plane = Math::TryMakePlane(request.center, request.normal);
         if (ray.HasError() || plane.HasError())
             return std::nullopt;
         const Result<std::optional<Math::RayHit>> hit = Math::IntersectRayPlane(ray.Value(), plane.Value());
         if (hit.HasError() || !hit.Value().has_value())
             return std::nullopt;
-        const Result<Math::Vec3> vector = Math::TryNormalize(hit.Value()->position - center);
+        const Result<Math::Vec3> vector = Math::TryNormalize(hit.Value()->position - request.center);
         return vector.HasValue() ? std::optional{vector.Value()} : std::nullopt;
     }
 }  // namespace Horo::Editor
