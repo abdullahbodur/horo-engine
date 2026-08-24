@@ -52,6 +52,10 @@ namespace Horo::Editor {
                                 const EditorGuiContext &context);
         [[nodiscard]] RowControls DrawRowControls(const RowFrame &frame, bool workspaceEligible, const EditorGuiContext &context);
         static void DrawRowPresentation(const RowFrame &frame, const RowControls &controls, const EditorGuiContext &context);
+        static void DrawRowBackground(const RowFrame &frame, bool hovered);
+        static void DrawRowTree(const RowFrame &frame, const RowControls &controls, float centerY);
+        static void DrawRowTypeIcon(const RowFrame &frame, const EditorGuiContext &context, float centerY);
+        static void DrawRowActions(const RowFrame &frame, const RowControls &controls);
         void ApplyRowInteraction(const RowFrame &frame, const RowControls &controls, bool workspaceEligible,
                                  EditorWorkspaceViewCommandData &command);
         void DrawRowLabel(const RowFrame &frame, EditorWorkspaceViewCommandData &command);

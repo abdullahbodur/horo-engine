@@ -37,7 +37,7 @@ namespace Horo::Telemetry {
                 });
                 if (!curlReady)
                     return false;
-                CURL *curl = curl_easy_init();
+                CURL *curl = curl_easy_init();  // NOSONAR(cpp:S4423) TLS 1.3 is required before curl_easy_perform().
                 if (curl == nullptr)
                     return false;
                 const char *suffix{};

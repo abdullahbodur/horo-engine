@@ -55,43 +55,56 @@ namespace Horo::Editor {
         }
     }
 
-    EditorViewportNavigationDelta ViewportNavigationController::BuildNavigationDelta(const ViewportNavigationUpdateContext &context) const {
+    void ViewportNavigationController::ApplyPointerNavigation(const ViewportNavigationUpdateContext &context, const float orbitSensitivity,
+                                                              const float panSensitivity, EditorViewportNavigationDelta &navigation) const {
         using enum Mode;
         const Input::RawInputSnapshot &input = context.input;
         const EditorWorkspaceViewModel &viewModel = context.viewModel;
+        if (mode_ == Fly || mode_ == Orbit) {
+            const float lookSensitivity = 0.003F * orbitSensitivity;
+            navigation.yawRadians = -input.pointer.deltaX * lookSensitivity;
+            navigation.pitchRadians = -input.pointer.deltaY * lookSensitivity * (context.gui.settings.settings.invertOrbitY ? -1.0F : 1.0F);
+            navigation.orbit = mode_ == Orbit;
+            return;
+        }
+
+        const float viewportHeight = std::max(context.height, 1.0F);
+        const float targetDistance = Math::Length(viewModel.viewportCamera.target - viewModel.viewportCamera.position);
+        const float worldUnitsPerPixel =
+            viewModel.viewportCamera.projection == Runtime::CameraProjection::Perspective
+                ? 2.0F * targetDistance * std::tan(viewModel.viewportCamera.verticalFovRadians * 0.5F) / viewportHeight
+                : viewModel.viewportCamera.orthographicHeight / viewportHeight;
+        navigation.moveRight = -input.pointer.deltaX * worldUnitsPerPixel * panSensitivity;
+        navigation.moveUp = input.pointer.deltaY * worldUnitsPerPixel * panSensitivity;
+    }
+
+    void ViewportNavigationController::ApplyFlyNavigation(const ViewportNavigationUpdateContext &context,
+                                                          EditorViewportNavigationDelta &navigation) const {
+        using enum Mode;
+        using enum Input::Key;
+        if (mode_ != Fly)
+            return;
+        const Input::RawInputSnapshot &input = context.input;
+        const float speed =
+            (input.modifiers.shift ? FastFlyMovementSpeed : FlyMovementSpeed) * std::clamp(context.deltaSeconds, 0.0F, 0.1F);
+        navigation.moveForward = (input.State(W).down ? speed : 0.0F) - (input.State(S).down ? speed : 0.0F);
+        navigation.moveRight += (input.State(D).down ? speed : 0.0F) - (input.State(A).down ? speed : 0.0F);
+        navigation.moveUp += (input.State(E).down ? speed : 0.0F) - (input.State(Q).down ? speed : 0.0F);
+    }
+
+    EditorViewportNavigationDelta ViewportNavigationController::BuildNavigationDelta(const ViewportNavigationUpdateContext &context) const {
+        using enum Mode;
         EditorViewportNavigationDelta navigation;
         if (mode_ != None) {
             ImGui::SetMouseCursor(ImGuiMouseCursor_None);
             const float orbitSensitivity =
                 std::clamp(static_cast<float>(context.gui.settings.settings.orbitSensitivity) / 100.0F, 0.1F, 3.0F);
             const float panSensitivity = std::clamp(static_cast<float>(context.gui.settings.settings.panSensitivity) / 100.0F, 0.1F, 3.0F);
-            const float lookSensitivity = 0.003F * orbitSensitivity;
-            if (mode_ == Fly || mode_ == Orbit) {
-                navigation.yawRadians = -input.pointer.deltaX * lookSensitivity;
-                navigation.pitchRadians =
-                    -input.pointer.deltaY * lookSensitivity * (context.gui.settings.settings.invertOrbitY ? -1.0F : 1.0F);
-                navigation.orbit = mode_ == Orbit;
-            } else {
-                const float viewportHeight = std::max(context.height, 1.0F);
-                const float targetDistance = Math::Length(viewModel.viewportCamera.target - viewModel.viewportCamera.position);
-                const float worldUnitsPerPixel =
-                    viewModel.viewportCamera.projection == Runtime::CameraProjection::Perspective
-                        ? 2.0F * targetDistance * std::tan(viewModel.viewportCamera.verticalFovRadians * 0.5F) / viewportHeight
-                        : viewModel.viewportCamera.orthographicHeight / viewportHeight;
-                navigation.moveRight = -input.pointer.deltaX * worldUnitsPerPixel * panSensitivity;
-                navigation.moveUp = input.pointer.deltaY * worldUnitsPerPixel * panSensitivity;
-            }
-            if (mode_ == Fly) {
-                using enum Input::Key;
-                const float speed =
-                    (input.modifiers.shift ? FastFlyMovementSpeed : FlyMovementSpeed) * std::clamp(context.deltaSeconds, 0.0F, 0.1F);
-                navigation.moveForward = (input.State(W).down ? speed : 0.0F) - (input.State(S).down ? speed : 0.0F);
-                navigation.moveRight += (input.State(D).down ? speed : 0.0F) - (input.State(A).down ? speed : 0.0F);
-                navigation.moveUp += (input.State(E).down ? speed : 0.0F) - (input.State(Q).down ? speed : 0.0F);
-            }
+            ApplyPointerNavigation(context, orbitSensitivity, panSensitivity, navigation);
+            ApplyFlyNavigation(context, navigation);
         }
-        if (mode_ == None && context.hovered && input.pointer.wheelY != 0.0F)
-            navigation.dollyScale = std::exp(-input.pointer.wheelY * 0.15F);
+        if (mode_ == None && context.hovered && context.input.pointer.wheelY != 0.0F)
+            navigation.dollyScale = std::exp(-context.input.pointer.wheelY * 0.15F);
         return navigation;
     }
 

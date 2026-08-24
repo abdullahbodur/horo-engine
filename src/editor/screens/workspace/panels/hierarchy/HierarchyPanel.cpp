@@ -368,8 +368,7 @@ namespace Horo::Editor {
         return controls;
     }
 
-    void HierarchyPanel::DrawRowPresentation(const RowFrame &frame, const RowControls &controls, const EditorGuiContext &context) {
-        const bool hovered = controls.IsHovered(frame);
+    void HierarchyPanel::DrawRowBackground(const RowFrame &frame, const bool hovered) {
         if (frame.selected) {
             ImVec4 selectedBackground = Theme::Accent();
             selectedBackground.w = hovered ? 0.17F : 0.13F;
@@ -385,8 +384,9 @@ namespace Horo::Editor {
         if (frame.rowFocused)
             frame.drawList.AddRect(frame.geometry.rowMin, frame.geometry.rowMax, Theme::U32(Theme::BorderStrong()), 2.0F * frame.uiScale, 0,
                                    frame.uiScale);
+    }
 
-        const float centerY = frame.geometry.rowMin.y + frame.geometry.layout.height * 0.5F;
+    void HierarchyPanel::DrawRowTree(const RowFrame &frame, const RowControls &controls, const float centerY) {
         const float chevronCenterX = (frame.geometry.chevronMin.x + frame.geometry.chevronMax.x) * 0.5F;
         if (frame.row.depth > 0) {
             const float guideX = chevronCenterX - 12.0F * frame.uiScale;
@@ -405,7 +405,9 @@ namespace Horo::Editor {
                                                  {chevronCenterX + 2.0F * frame.uiScale, centerY},
                                                  Theme::U32(controls.chevronHovered ? Theme::Text() : Theme::Dim()));
         }
+    }
 
+    void HierarchyPanel::DrawRowTypeIcon(const RowFrame &frame, const EditorGuiContext &context, const float centerY) {
         const HierarchyIconPresentation icon = GetIconPresentation(frame.node.type);
         const float iconSize = 16.0F * frame.uiScale;
         ImVec4 typeColor = icon.color;
@@ -415,7 +417,9 @@ namespace Horo::Editor {
                            Theme::U32(typeColor));
         if (icon.tooltipKey != nullptr && ImGui::IsMouseHoveringRect(frame.geometry.typeIconMin, frame.geometry.typeIconMax))
             ImGui::SetTooltip("%s", context.localization.Get("editor", icon.tooltipKey).c_str());
+    }
 
+    void HierarchyPanel::DrawRowActions(const RowFrame &frame, const RowControls &controls) {
         if (frame.geometry.layout.visibilityAction.Width() <= 0.0F)
             return;
         const float actionIconSize =
@@ -440,6 +444,14 @@ namespace Horo::Editor {
                    frame.node.hiddenByParent && frame.node.locallyVisible);
         drawAction(Ui::UiIcon::Lock, frame.geometry.lockMin, frame.geometry.lockMax, controls.lockHovered, frame.node.effectivelyLocked,
                    frame.node.lockedByParent && !frame.node.locallyLocked);
+    }
+
+    void HierarchyPanel::DrawRowPresentation(const RowFrame &frame, const RowControls &controls, const EditorGuiContext &context) {
+        DrawRowBackground(frame, controls.IsHovered(frame));
+        const float centerY = frame.geometry.rowMin.y + frame.geometry.layout.height * 0.5F;
+        DrawRowTree(frame, controls, centerY);
+        DrawRowTypeIcon(frame, context, centerY);
+        DrawRowActions(frame, controls);
     }
 
     void HierarchyPanel::ApplyRowInteraction(const RowFrame &frame, const RowControls &controls, const bool workspaceEligible,
@@ -475,15 +487,16 @@ namespace Horo::Editor {
     void HierarchyPanel::DrawRowLabel(const RowFrame &frame, EditorWorkspaceViewCommandData &command) {
         const float centerY = frame.geometry.rowMin.y + frame.geometry.layout.height * 0.5F;
         if (renamingId_ != frame.node.id) {
-            const bool truncated = DrawHierarchyLabel({.drawList = frame.drawList,
-                                                       .font = frame.nameFont,
-                                                       .fontSize = frame.nameFontSize,
-                                                       .minimum = frame.geometry.labelMin,
-                                                       .maximum = frame.geometry.labelMax,
-                                                       .centerY = centerY,
-                                                       .color = Theme::U32(frame.node.effectivelyLocked ? Theme::Muted() : Theme::Text()),
-                                                       .text = frame.node.name});
-            if (truncated && ImGui::IsMouseHoveringRect(frame.geometry.labelMin, frame.geometry.labelMax))
+            if (const bool truncated =
+                    DrawHierarchyLabel({.drawList = frame.drawList,
+                                        .font = frame.nameFont,
+                                        .fontSize = frame.nameFontSize,
+                                        .minimum = frame.geometry.labelMin,
+                                        .maximum = frame.geometry.labelMax,
+                                        .centerY = centerY,
+                                        .color = Theme::U32(frame.node.effectivelyLocked ? Theme::Muted() : Theme::Text()),
+                                        .text = frame.node.name});
+                truncated && ImGui::IsMouseHoveringRect(frame.geometry.labelMin, frame.geometry.labelMax))
                 ImGui::SetTooltip("%s", frame.node.name.c_str());
             return;
         }
@@ -645,11 +658,11 @@ namespace Horo::Editor {
 
         if (interaction.workspaceEligible && interaction.panelFocused && !interaction.searchActive && !renamingId_.has_value() &&
             editSession_.SelectedId().has_value()) {
+            using enum Input::Key;
             const Input::ModifierState &modifiers = inputRouter_->Snapshot().modifiers;
-            if ((HierarchyEditSession::IsDeleteShortcut(Input::Key::Delete, modifiers) &&
-                 inputRouter_->ConsumeKey(*workspaceInputContext_, Input::Key::Delete)) ||
-                (HierarchyEditSession::IsDeleteShortcut(Input::Key::Backspace, modifiers) &&
-                 inputRouter_->ConsumeKey(*workspaceInputContext_, Input::Key::Backspace))) {
+            if ((HierarchyEditSession::IsDeleteShortcut(Delete, modifiers) && inputRouter_->ConsumeKey(*workspaceInputContext_, Delete)) ||
+                (HierarchyEditSession::IsDeleteShortcut(Backspace, modifiers) &&
+                 inputRouter_->ConsumeKey(*workspaceInputContext_, Backspace))) {
                 pendingDelete = true;
             }
         }

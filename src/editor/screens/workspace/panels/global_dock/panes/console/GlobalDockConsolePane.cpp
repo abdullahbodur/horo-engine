@@ -173,8 +173,8 @@ namespace Horo::Editor {
             };
             const std::array<const char *, 5> filterLabels{filterText[0].c_str(), filterText[1].c_str(), filterText[2].c_str(),
                                                            filterText[3].c_str(), filterText[4].c_str()};
-            const std::string &levelsLabel = context.localization.Get("editor", "workspace.global_dock.console.levels");
-            if (Ui::MultiSelectField("##ConsoleLevels", levelsLabel.c_str(), filterLabels, m_levelEnabled, fonts, 104.0F,
+            if (const std::string &levelsLabel = context.localization.Get("editor", "workspace.global_dock.console.levels");
+                Ui::MultiSelectField("##ConsoleLevels", levelsLabel.c_str(), filterLabels, m_levelEnabled, fonts, 104.0F,
                                      Ui::ComponentSize::Small))
                 m_filterDirty = true;
             return;
