@@ -63,13 +63,14 @@ namespace Horo::Assets {
             if (value.empty() || value.size() > 64 || value.find('+') != std::string_view::npos)
                 return false;
             const std::size_t dash = value.find('-');
-            const std::string_view core = value.substr(0, dash);
-            if (!ValidateSemanticVersionCore(core))
+            if (const std::string_view core = value.substr(0, dash); !ValidateSemanticVersionCore(core))
                 return false;
+
             if (dash == std::string_view::npos)
                 return true;
             return ValidateSemanticVersionPrerelease(value.substr(dash + 1));
         }
+
     }  // namespace
 
     // ---------------------------------------------------------------------------

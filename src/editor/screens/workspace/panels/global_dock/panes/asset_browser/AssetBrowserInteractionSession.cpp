@@ -77,10 +77,11 @@ namespace Horo::Editor {
 
     /** @copydoc AssetBrowserInteractionSession::Navigate */
     EditorWorkspaceViewCommandData AssetBrowserInteractionSession::Navigate(const EditorWorkspaceViewCommand navigationCommand) {
+        using enum EditorWorkspaceViewCommand;
         switch (navigationCommand) {
-            case EditorWorkspaceViewCommand::NavigateContentBrowserBack:
-            case EditorWorkspaceViewCommand::NavigateContentBrowserForward:
-            case EditorWorkspaceViewCommand::NavigateContentBrowserUp:
+            case NavigateContentBrowserBack:
+            case NavigateContentBrowserForward:
+            case NavigateContentBrowserUp:
                 return {.command = navigationCommand};
             default:
                 return {};

@@ -2,6 +2,7 @@
 
 #include "../FoundationErrors.h"
 
+#include <charconv>
 #include <fstream>
 #include <regex>
 #include <sstream>
@@ -79,6 +80,22 @@ namespace Horo {
             return escaped.str();
         }
 
+        void DecodeUnicodeEscape(const std::string_view input, std::size_t &idx, std::string &output) {
+            if (idx + 5 < input.size()) {
+                unsigned int codePoint = 0;
+                const auto [ptr, ec] = std::from_chars(input.data() + idx + 2, input.data() + idx + 6, codePoint, 16);
+                if (ec == std::errc{} && codePoint < 0x80) {
+                    output.push_back(static_cast<char>(codePoint));
+                } else {
+                    output.push_back('?');
+                }
+                idx += 6;
+            } else {
+                output.push_back(input[idx]);
+                ++idx;
+            }
+        }
+
         [[nodiscard]] std::string UnescapeJsonString(const std::string_view input) {
             std::string output;
             output.reserve(input.size());
@@ -119,23 +136,7 @@ namespace Horo {
                             idx += 2;
                             break;
                         case 'u':
-                            if (idx + 5 < input.size()) {
-                                std::string hexStr(input.substr(idx + 2, 4));
-                                try {
-                                    const auto codePoint = static_cast<unsigned int>(std::stoul(hexStr, nullptr, 16));
-                                    if (codePoint < 0x80) {
-                                        output.push_back(static_cast<char>(codePoint));
-                                    } else {
-                                        output.push_back('?');
-                                    }
-                                } catch (...) {
-                                    output.push_back('?');
-                                }
-                                idx += 6;
-                            } else {
-                                output.push_back(input[idx]);
-                                idx++;
-                            }
+                            DecodeUnicodeEscape(input, idx, output);
                             break;
                         default:
                             output.push_back(input[idx + 1]);

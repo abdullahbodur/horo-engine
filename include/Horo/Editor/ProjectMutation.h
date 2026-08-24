@@ -28,14 +28,14 @@ namespace Horo::Editor {
     };
 
     /** @brief Move-only proof that one process and host operation owns project mutation authority. */
-    class ProjectMutationLease {
+    class ProjectMutationLease {  // NOSONAR(cpp:S3624) Pimpl pattern: destructor defined in .cpp to complete State
     public:
         struct State;
-        ~ProjectMutationLease();
-        ProjectMutationLease(ProjectMutationLease &&) noexcept;
-        ProjectMutationLease &operator=(ProjectMutationLease &&) noexcept;
         ProjectMutationLease(const ProjectMutationLease &) = delete;
         ProjectMutationLease &operator=(const ProjectMutationLease &) = delete;
+        ProjectMutationLease(ProjectMutationLease &&) noexcept;
+        ProjectMutationLease &operator=(ProjectMutationLease &&) noexcept;
+        ~ProjectMutationLease();
 
     private:
         friend class ProjectMutationCoordinator;

@@ -180,9 +180,9 @@ namespace Horo::Editor {
             using enum WorkspaceLayoutIssueCode;
 
             if (id.empty()) {
-                issues.push_back({EmptyNodeId, {}, {}});
-            } else if (!nodeIds.insert(std::string{id}).second) {
-                issues.push_back({DuplicateNodeId, std::string{id}, {}});
+                issues.emplace_back(EmptyNodeId, std::string{}, std::string{});
+            } else if (!nodeIds.emplace(id).second) {
+                issues.emplace_back(DuplicateNodeId, std::string{id}, std::string{});
             }
         }
 
@@ -191,9 +191,9 @@ namespace Horo::Editor {
             using enum WorkspaceLayoutIssueCode;
 
             if (panel.empty()) {
-                issues.push_back({EmptyPanelId, std::string{nodeId}, {}});
-            } else if (!panelIds.insert(std::string{panel}).second) {
-                issues.push_back({DuplicatePanelId, std::string{nodeId}, std::string{panel}});
+                issues.emplace_back(EmptyPanelId, std::string{nodeId}, std::string{});
+            } else if (!panelIds.emplace(panel).second) {
+                issues.emplace_back(DuplicatePanelId, std::string{nodeId}, std::string{panel});
             }
         }
 
@@ -201,11 +201,11 @@ namespace Horo::Editor {
             using enum WorkspaceLayoutIssueCode;
 
             if (stack.activeTab.has_value() && std::ranges::find(stack.tabs, *stack.activeTab) == stack.tabs.end()) {
-                issues.push_back({ActiveTabMissing, stack.id, *stack.activeTab});
+                issues.emplace_back(ActiveTabMissing, stack.id, *stack.activeTab);
             }
             for (const auto &tab : stack.tabs) {
-                if (tab.empty() || !panelIds.insert(tab).second) {
-                    issues.push_back({DuplicatePanelId, stack.id, tab});
+                if (tab.empty() || !panelIds.emplace(tab).second) {
+                    issues.emplace_back(DuplicatePanelId, stack.id, tab);
                 }
             }
         }
@@ -215,7 +215,7 @@ namespace Horo::Editor {
             using enum WorkspaceLayoutIssueCode;
 
             if (split.first == nullptr || split.second == nullptr || split.ratio <= 0.0F || split.ratio >= 1.0F) {
-                issues.push_back({InvalidSplit, split.id, {}});
+                issues.emplace_back(InvalidSplit, split.id, std::string{});
             }
             if (split.first) {
                 ValidateNode(*split.first, issues, nodeIds, panelIds);

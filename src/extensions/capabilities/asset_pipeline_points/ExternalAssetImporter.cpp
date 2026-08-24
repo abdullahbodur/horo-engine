@@ -115,9 +115,10 @@ namespace Horo::Extensions {
             return static_cast<const CancellationToken *>(context)->IsCancellationRequested() ? 1U : 0U;
         }
 
-        [[nodiscard]] HoroExtensionStatus ResizeVector(void *context, const std::uint64_t byteCount,
-                                                       std::uint8_t **outBytes) {  // NOSONAR(cpp:S5008)
+        [[nodiscard]] HoroExtensionStatus ResizeVector(void *context, const std::uint64_t byteCount,  // NOSONAR(cpp:S5008) C ABI callback
+                                                       std::uint8_t **outBytes) {                     // NOSONAR(cpp:S5008)
             if (context == nullptr || outBytes == nullptr || byteCount > kMaxPayloadBytes)
+
                 return HORO_EXTENSION_ERROR_OUTPUT_REJECTED;
             try {
                 auto &bytes = *static_cast<std::vector<std::uint8_t> *>(context);

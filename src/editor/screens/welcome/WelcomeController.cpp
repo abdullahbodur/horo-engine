@@ -117,6 +117,40 @@ namespace Horo::Editor {
                 return Inaccessible;
             return std::nullopt;
         }
+
+        [[nodiscard]] std::optional<RecentProjectCompatibilityProjection> ParseCachedCompatibility(const Json &value) {
+            if (!value.contains("compatibility") || !value["compatibility"].is_object())
+                return std::nullopt;
+            const Json &cached = value["compatibility"];
+            if (!cached.contains("status") || !cached["status"].is_string() || !cached.contains("targetVersion") ||
+                !cached["targetVersion"].is_string())
+                return std::nullopt;
+
+            auto status = ParseCompatibilityStatus(cached["status"].get_ref<const std::string &>());
+            auto target = Application::ParseHoroVersion(cached["targetVersion"].get_ref<const std::string &>());
+            if (!status.has_value() || !target.HasValue())
+                return std::nullopt;
+
+            RecentProjectCompatibilityProjection projection{.status = *status,
+                                                            .targetVersion = Application::EngineReleaseVersion{target.Value()},
+                                                            .inspectionState = RecentProjectInspectionState::Cached};
+            if (cached.contains("projectVersion") && cached["projectVersion"].is_string()) {
+                auto projectVersion = Application::ParseHoroVersion(cached["projectVersion"].get_ref<const std::string &>());
+                if (projectVersion.HasValue())
+                    projection.projectVersion = Application::EngineReleaseVersion{projectVersion.Value()};
+            }
+            return projection;
+        }
+
+        [[nodiscard]] std::optional<RecentProjectEntry> ParseRecentProjectEntry(const Json &value) {
+            if (!value.is_object() || !value.contains("name") || !value["name"].is_string() || !value.contains("rootPath") ||
+                !value["rootPath"].is_string())
+                return std::nullopt;
+            RecentProjectEntry entry{value["name"].get<std::string>(), value["rootPath"].get<std::string>(),
+                                     value.value("lastOpenedLabel", "Recently"), value.value("thumbnailKey", "custom")};
+            entry.compatibility = ParseCachedCompatibility(value);
+            return entry;
+        }
     }  // namespace
 
     /** @copydoc LoadRecentProjectsFromDisk */
@@ -146,41 +180,12 @@ namespace Horo::Editor {
         if (!file.read(content.data(), size))
             return BuildDefaultBootstrapRecentProjects();
         std::vector<RecentProjectEntry> results;
-        Json root;
-        try {
-            root = Json::parse(content);
-        } catch (...) {
-            return BuildDefaultBootstrapRecentProjects();
-        }
-        if (!root.is_array() || root.size() > 128)
+        const Json root = Json::parse(content, nullptr, false);
+        if (root.is_discarded() || !root.is_array() || root.size() > 128)
             return BuildDefaultBootstrapRecentProjects();
         for (const Json &value : root) {
-            if (!value.is_object() || !value.contains("name") || !value["name"].is_string() || !value.contains("rootPath") ||
-                !value["rootPath"].is_string())
-                continue;
-            RecentProjectEntry entry{value["name"].get<std::string>(), value["rootPath"].get<std::string>(),
-                                     value.value("lastOpenedLabel", "Recently"), value.value("thumbnailKey", "custom")};
-            if (value.contains("compatibility") && value["compatibility"].is_object()) {
-                const Json &cached = value["compatibility"];
-                if (cached.contains("status") && cached["status"].is_string() && cached.contains("targetVersion") &&
-                    cached["targetVersion"].is_string()) {
-                    auto status = ParseCompatibilityStatus(cached["status"].get_ref<const std::string &>());
-                    auto target = Application::ParseHoroVersion(cached["targetVersion"].get_ref<const std::string &>());
-                    if (status.has_value() && target.HasValue()) {
-                        RecentProjectCompatibilityProjection projection{.status = *status,
-                                                                        .targetVersion = Application::EngineReleaseVersion{target.Value()},
-                                                                        .inspectionState = RecentProjectInspectionState::Cached};
-                        if (cached.contains("projectVersion") && cached["projectVersion"].is_string()) {
-                            auto projectVersion = Application::ParseHoroVersion(cached["projectVersion"].get_ref<const std::string &>());
-                            if (projectVersion.HasValue())
-                                projection.projectVersion = Application::EngineReleaseVersion{projectVersion.Value()};
-                        }
-                        entry.compatibility = std::move(projection);
-                    }
-                }
-            }
-            if (IsDisplayableRecentProject(entry))
-                results.push_back(std::move(entry));
+            if (auto entry = ParseRecentProjectEntry(value); entry && IsDisplayableRecentProject(*entry))
+                results.push_back(std::move(*entry));
         }
 
         if (results.empty()) {

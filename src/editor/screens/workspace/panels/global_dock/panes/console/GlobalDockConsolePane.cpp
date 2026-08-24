@@ -83,16 +83,6 @@ namespace Horo::Editor {
             return level == Log::Level::Critical ? "CRITICAL" : Log::ToString(level);
         }
 
-        [[nodiscard]] bool ContainsCaseInsensitive(const std::string_view text, const std::string_view needle) {
-            if (needle.empty())
-                return true;
-            if (needle.size() > text.size())
-                return false;
-            return !std::ranges::search(text, needle, [](const char left, const char right) {
-                return std::tolower(static_cast<unsigned char>(left)) == std::tolower(static_cast<unsigned char>(right));
-            }).empty();
-        }
-
         [[nodiscard]] std::string FormatConsoleTimestamp(const std::chrono::system_clock::time_point timestamp) {
             const std::time_t value = std::chrono::system_clock::to_time_t(timestamp);
             const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(timestamp.time_since_epoch()) % 1000;
@@ -104,6 +94,43 @@ namespace Horo::Editor {
 #endif
             return std::format("{:04d}-{:02d}-{:02d}T{:02d}:{:02d}:{:02d}.{:03d}+00:00", utc.tm_year + 1900, utc.tm_mon + 1, utc.tm_mday,
                                utc.tm_hour, utc.tm_min, utc.tm_sec, milliseconds.count());
+        }
+
+        void AppendFormattedConsoleRecord(std::string &selectableText, std::vector<Ui::SelectableTextLineLayout> &lineLayouts,
+                                          const Log::StructuredLogRecord &record, const float referenceTimestampWidth,
+                                          const float spaceWidth) {
+            const std::string timestamp = FormatConsoleTimestamp(record.timestampUtc);
+            const float timestampWidth = ImGui::CalcTextSize(timestamp.c_str()).x;
+            const float smartGap = std::max(spaceWidth, referenceTimestampWidth + spaceWidth * 3.0F - timestampWidth);
+
+            if (!selectableText.empty())
+                selectableText += '\n';
+            const std::size_t lineStartByteOffset = selectableText.size();
+            selectableText += timestamp;
+            selectableText.append(static_cast<std::size_t>(std::max(1.0F, std::ceil(smartGap / std::max(spaceWidth, 1.0F)))), ' ');
+            const std::size_t contentColumnByteOffset = selectableText.size();
+            selectableText += '[';
+            selectableText += ConsoleLevelLabel(record.level);
+            selectableText += ']';
+            selectableText += record.context;
+            selectableText += ' ';
+            selectableText += record.category;
+            selectableText += ": ";
+            selectableText += record.message;
+            lineLayouts.push_back({
+                .color = ConsoleLevelColor(record.level),
+                .alignedColumnByteOffset = contentColumnByteOffset - lineStartByteOffset,
+            });
+        }
+
+        [[nodiscard]] bool ContainsCaseInsensitive(const std::string_view text, const std::string_view needle) {
+            if (needle.empty())
+                return true;
+            if (needle.size() > text.size())
+                return false;
+            return !std::ranges::search(text, needle, [](const char left, const char right) {
+                return std::tolower(static_cast<unsigned char>(left)) == std::tolower(static_cast<unsigned char>(right));
+            }).empty();
         }
     }  // namespace
 
@@ -256,29 +283,7 @@ namespace Horo::Editor {
                 m_lineLayouts.reserve(m_filteredIndices.size());
                 for (const std::size_t recordIndex : m_filteredIndices) {
                     const Log::StructuredLogRecord &record = *m_snapshot.records[recordIndex];
-                    const std::string timestamp = FormatConsoleTimestamp(record.timestampUtc);
-                    const float timestampWidth = ImGui::CalcTextSize(timestamp.c_str()).x;
-                    const float smartGap = std::max(spaceWidth, referenceTimestampWidth + spaceWidth * 3.0F - timestampWidth);
-
-                    if (!m_selectableText.empty())
-                        m_selectableText += '\n';
-                    const std::size_t lineStartByteOffset = m_selectableText.size();
-                    m_selectableText += timestamp;
-                    m_selectableText.append(static_cast<std::size_t>(std::max(1.0F, std::ceil(smartGap / std::max(spaceWidth, 1.0F)))),
-                                            ' ');
-                    const std::size_t contentColumnByteOffset = m_selectableText.size();
-                    m_selectableText += '[';
-                    m_selectableText += ConsoleLevelLabel(record.level);
-                    m_selectableText += ']';
-                    m_selectableText += record.context;
-                    m_selectableText += ' ';
-                    m_selectableText += record.category;
-                    m_selectableText += ": ";
-                    m_selectableText += record.message;
-                    m_lineLayouts.push_back({
-                        .color = ConsoleLevelColor(record.level),
-                        .alignedColumnByteOffset = contentColumnByteOffset - lineStartByteOffset,
-                    });
+                    AppendFormattedConsoleRecord(m_selectableText, m_lineLayouts, record, referenceTimestampWidth, spaceWidth);
                 }
             }
 

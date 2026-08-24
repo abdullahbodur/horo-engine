@@ -253,8 +253,7 @@ namespace Horo::Application {
         if (checkpointResult.HasError())
             return Result<ProjectMigrationPlan>::Failure(checkpointResult.ErrorValue());
 
-        const std::vector<const ProjectMigrationDefinition *> &declaredCheckpoints = checkpointResult.Value();
-        if (declaredCheckpoints.size() == 1) {
+        if (const auto &declaredCheckpoints = checkpointResult.Value(); declaredCheckpoints.size() == 1) {
             const ProjectMigrationDefinition &checkpoint = *declaredCheckpoints.front();
             if (checkpoint.sourceContract != sourceContract || checkpoint.targetContract != support.targetContract)
                 return Result<ProjectMigrationPlan>::Failure(
@@ -267,8 +266,7 @@ namespace Horo::Application {
                 return Result<ProjectMigrationPlan>::Failure(chainResult.ErrorValue());
         }
 
-        auto weightResult = ValidatePlanProvidersAndComputeWeight(plan, support);
-        if (weightResult.HasError())
+        if (const auto weightResult = ValidatePlanProvidersAndComputeWeight(plan, support); weightResult.HasError())
             return Result<ProjectMigrationPlan>::Failure(weightResult.ErrorValue());
 
         for (const ProjectMigrationDefinition &definition : plan.definitions)

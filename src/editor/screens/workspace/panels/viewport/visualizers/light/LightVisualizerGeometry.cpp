@@ -147,14 +147,15 @@ namespace Horo::Editor {
         output.color = SafeDisplayColor(request.light.color);
 
         bool built = false;
+        using enum Render::RenderLightKind;
         switch (request.light.kind) {
-            case Render::RenderLightKind::Directional:
+            case Directional:
                 built = BuildDirectional(request, output);
                 break;
-            case Render::RenderLightKind::Point:
+            case Point:
                 built = BuildPoint(request, output);
                 break;
-            case Render::RenderLightKind::Spot:
+            case Spot:
                 built = BuildSpot(request, output);
                 break;
         }

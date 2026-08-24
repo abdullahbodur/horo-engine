@@ -957,19 +957,21 @@ def check_observability_and_services(report: DoctorReport, settings: DeveloperSe
 
 
 def _find_sonar_scanner() -> Path | None:
-    """Locate the bundled SonarScanner executable under tools/sonar-scanner-*/bin/."""
+    """Locate the SonarScanner executable under tools/sonar-scanner-*/bin/ or in system PATH."""
     tools_dir = REPOSITORY_ROOT / "tools"
-    if not tools_dir.is_dir():
-        return None
-    for entry in sorted(tools_dir.iterdir(), reverse=True):
-        if not entry.is_dir() or not entry.name.startswith("sonar-scanner"):
-            continue
-        bin_dir = entry / "bin"
-        for candidate in ("sonar-scanner.bat", "sonar-scanner.cmd", "sonar-scanner"):
-            exe = bin_dir / candidate
-            if exe.is_file():
-                return exe
+    if tools_dir.is_dir():
+        for entry in sorted(tools_dir.iterdir(), reverse=True):
+            if not entry.is_dir() or not entry.name.startswith("sonar-scanner"):
+                continue
+            bin_dir = entry / "bin"
+            for candidate in ("sonar-scanner.bat", "sonar-scanner.cmd", "sonar-scanner"):
+                exe = bin_dir / candidate
+                if exe.is_file():
+                    return exe
+    if system_scanner := shutil.which("sonar-scanner"):
+        return Path(system_scanner)
     return None
+
 
 
 def _persist_sonar_token(token: str) -> None:

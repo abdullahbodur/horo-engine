@@ -93,8 +93,133 @@ namespace Horo::Editor {
             ImGui::PopID();
         }
 
+        [[nodiscard]] std::string FormatImporterInfo(const ContentBrowserEntry &entry, const std::string &none) {
+            if (entry.importerContributionId.empty()) {
+                return none;
+            }
+            std::string result = entry.importerContributionId;
+            if (!entry.importerVersion.empty()) {
+                result += " @ " + entry.importerVersion;
+            }
+            if (entry.importerChanged) {
+                result += " \xE2\x86\x92 " + entry.activeImporterVersion;
+            }
+            return result;
+        }
+
+        [[nodiscard]] std::string FormatModuleInfo(const ContentBrowserEntry &entry, const std::string &none) {
+            if (entry.importerModuleId.empty()) {
+                return none;
+            }
+            std::string result = entry.importerModuleId;
+            if (!entry.importerModuleVersion.empty()) {
+                result += " @ " + entry.importerModuleVersion;
+            }
+            if (entry.moduleChanged) {
+                result += " \xE2\x86\x92 " + entry.activeImporterModuleId + " @ " + entry.activeImporterModuleVersion;
+            }
+            return result;
+        }
+
+        [[nodiscard]] std::string FormatReimportState(const ContentBrowserEntry &entry, const ILocalizationService &localization) {
+            std::string reimportState = localization.Get("editor", "workspace.content_browser.info.reimport_manual");
+            if (entry.sourceChanged) {
+                reimportState = localization.Get("editor", "workspace.content_browser.info.reimport_source_stale");
+            }
+            if (entry.importerChanged || entry.moduleChanged) {
+                if (entry.sourceChanged) {
+                    reimportState += ", ";
+                } else {
+                    reimportState.clear();
+                }
+                const char *key = entry.moduleChanged ? "workspace.content_browser.info.reimport_module_changed"
+                                                      : "workspace.content_browser.info.reimport_importer_changed";
+                reimportState += localization.Get("editor", key);
+            }
+            return reimportState;
+        }
+
+        [[nodiscard]] std::string FormatLastImportReasons(const ContentBrowserEntry &entry, const ILocalizationService &localization) {
+            using enum Assets::AssetImportReason;
+            std::string lastImport;
+            for (const Assets::AssetImportReason reason : entry.lastImportReasons) {
+                const char *key = nullptr;
+                switch (reason) {
+                    case InitialImport:
+                        key = "workspace.content_browser.info.import_reason_initial";
+                        break;
+                    case ManualReimport:
+                        key = "workspace.content_browser.info.import_reason_manual";
+                        break;
+                    case SourceChanged:
+                        key = "workspace.content_browser.info.reimport_source_changed";
+                        break;
+                    case ImporterChanged:
+                        key = "workspace.content_browser.info.reimport_importer_changed";
+                        break;
+                    case ModuleChanged:
+                        key = "workspace.content_browser.info.reimport_module_changed";
+                        break;
+                }
+                if (key != nullptr) {
+                    if (!lastImport.empty()) {
+                        lastImport += ", ";
+                    }
+                    lastImport += localization.Get("editor", key);
+                }
+            }
+            return lastImport;
+        }
+
+        void DrawDeleteDialogEntryDetails(const ContentBrowserEntry &entry, const EditorGuiContext &context) {
+            ImGui::Dummy({0.0F, 6.0F});
+            ImGui::TextColored(Theme::Text(), "%s", entry.displayName.c_str());
+            if (entry.kind != ContentBrowserEntryKind::Asset) {
+                return;
+            }
+            const std::string dependencyCount = std::to_string(entry.dependencyCount);
+            DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.delete.dependencies").c_str(),
+                        dependencyCount.c_str(), context);
+            if (entry.dependencyCount > 0) {
+                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 400.0F);
+                ImGui::TextColored(Theme::Warn(), "%s",
+                                   context.localization.Get("editor", "workspace.content_browser.delete.dependency_warning").c_str());
+                ImGui::PopTextWrapPos();
+            }
+        }
+
+        void DrawAssetDetailsRows(const ContentBrowserEntry &entry, const EditorGuiContext &context) {
+            const std::string &none = context.localization.Get("editor", "workspace.content_browser.info.none");
+            const std::string size = FormatByteSize(entry.byteSize);
+            DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.type").c_str(),
+                        entry.assetType.empty() ? none.c_str() : entry.assetType.c_str(), context);
+            DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.asset_id").c_str(),
+                        entry.assetId.empty() ? none.c_str() : entry.assetId.c_str(), context);
+            DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.registration").c_str(),
+                        context.localization
+                            .Get("editor", entry.registered ? "workspace.content_browser.info.registered"
+                                                            : "workspace.content_browser.info.unregistered")
+                            .c_str(),
+                        context);
+            DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.size").c_str(), size.c_str(), context);
+            const std::string importer = FormatImporterInfo(entry, none);
+            DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.importer").c_str(), importer.c_str(), context);
+            const std::string moduleInfo = FormatModuleInfo(entry, none);
+            DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.module").c_str(), moduleInfo.c_str(), context);
+            DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.source").c_str(),
+                        entry.absoluteImportSourcePath.empty() ? none.c_str() : entry.absoluteImportSourcePath.c_str(), context);
+            const std::string reimportState = FormatReimportState(entry, context.localization);
+            DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.reimport_status").c_str(),
+                        entry.canReimport ? reimportState.c_str() : none.c_str(), context);
+            const std::string lastImport = FormatLastImportReasons(entry, context.localization);
+            DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.last_import_reason").c_str(),
+                        lastImport.empty() ? none.c_str() : lastImport.c_str(), context);
+            DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.metadata").c_str(),
+                        entry.absoluteMetadataPath.empty() ? none.c_str() : entry.absoluteMetadataPath.c_str(), context);
+        }
+
         void DrawInfoPopup(AssetBrowserInteractionState &state, const EditorGuiContext &context) {
-            constexpr const char *popupId = "##ContentBrowserAssetInfo";
+            constexpr const char *popupId = "##ContentBrowserInfo";
             if (state.openAssetInfo) {
                 ImGui::OpenPopup(popupId);
                 state.openAssetInfo = false;
@@ -102,7 +227,7 @@ namespace Horo::Editor {
             const ImGuiViewport *viewport = ImGui::GetMainViewport();
             const float popupWidth = std::max(160.0F, std::min(560.0F, viewport->WorkSize.x - 32.0F));
             ImGui::SetNextWindowPos(viewport->GetWorkCenter(), ImGuiCond_Appearing, {0.5F, 0.5F});
-            ImGui::SetNextWindowSizeConstraints({popupWidth, 0.0F}, {popupWidth, std::max(240.0F, viewport->WorkSize.y - 48.0F)});
+            ImGui::SetNextWindowSizeConstraints({popupWidth, 0.0F}, {popupWidth, viewport->WorkSize.y - 48.0F});
             PushModalStyle();
             if (ImGui::BeginPopupModal(popupId, nullptr,
                                        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar |
@@ -110,95 +235,14 @@ namespace Horo::Editor {
                 if (DrawClosableModalHeading(context.localization.Get("editor", "workspace.content_browser.info.title"), context))
                     ImGui::CloseCurrentPopup();
                 if (state.popupEntry.has_value()) {
-                    const ContentBrowserEntry &entry = *state.popupEntry;
-                    {
-                        Theme::ScopedTextStyle textStyle(context.theme.fonts.sansEmphasis, 17.0F, Theme::FontPx::SansEmphasis);
-                        ImGui::PushTextWrapPos(0.0F);
-                        ImGui::TextWrapped("%s", entry.displayName.c_str());
-                        ImGui::PopTextWrapPos();
-                    }
+                    const auto &entry = *state.popupEntry;
+                    DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.name").c_str(),
+                                entry.displayName.c_str(), context);
                     ImGui::Dummy({0.0F, 2.0F});
                     DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.path").c_str(),
                                 entry.absolutePath.c_str(), context);
                     if (entry.kind == ContentBrowserEntryKind::Asset) {
-                        const std::string &none = context.localization.Get("editor", "workspace.content_browser.info.none");
-                        const std::string size = FormatByteSize(entry.byteSize);
-                        DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.type").c_str(),
-                                    entry.assetType.empty() ? none.c_str() : entry.assetType.c_str(), context);
-                        DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.asset_id").c_str(),
-                                    entry.assetId.empty() ? none.c_str() : entry.assetId.c_str(), context);
-                        DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.registration").c_str(),
-                                    context.localization
-                                        .Get("editor", entry.registered ? "workspace.content_browser.info.registered"
-                                                                        : "workspace.content_browser.info.unregistered")
-                                        .c_str(),
-                                    context);
-                        DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.size").c_str(), size.c_str(),
-                                    context);
-                        const std::string importer =
-                            entry.importerContributionId.empty()
-                                ? none
-                                : entry.importerContributionId +
-                                      (entry.importerVersion.empty() ? std::string{} : " @ " + entry.importerVersion) +
-                                      (entry.importerChanged ? " \xE2\x86\x92 " + entry.activeImporterVersion : std::string{});
-                        DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.importer").c_str(), importer.c_str(),
-                                    context);
-                        const std::string module =
-                            entry.importerModuleId.empty()
-                                ? none
-                                : entry.importerModuleId +
-                                      (entry.importerModuleVersion.empty() ? std::string{} : " @ " + entry.importerModuleVersion) +
-                                      (entry.moduleChanged
-                                           ? " \xE2\x86\x92 " + entry.activeImporterModuleId + " @ " + entry.activeImporterModuleVersion
-                                           : std::string{});
-                        DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.module").c_str(), module.c_str(),
-                                    context);
-                        DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.source").c_str(),
-                                    entry.absoluteImportSourcePath.empty() ? none.c_str() : entry.absoluteImportSourcePath.c_str(),
-                                    context);
-                        std::string reimportState = context.localization.Get("editor", "workspace.content_browser.info.reimport_manual");
-                        if (entry.sourceChanged)
-                            reimportState = context.localization.Get("editor", "workspace.content_browser.info.reimport_source_stale");
-                        if (entry.importerChanged || entry.moduleChanged) {
-                            if (entry.sourceChanged)
-                                reimportState += ", ";
-                            else
-                                reimportState.clear();
-                            reimportState +=
-                                context.localization.Get("editor", entry.moduleChanged
-                                                                       ? "workspace.content_browser.info.reimport_module_changed"
-                                                                       : "workspace.content_browser.info.reimport_importer_changed");
-                        }
-                        DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.reimport_status").c_str(),
-                                    entry.canReimport ? reimportState.c_str() : none.c_str(), context);
-                        std::string lastImport;
-                        for (const Assets::AssetImportReason reason : entry.lastImportReasons) {
-                            const char *key = nullptr;
-                            switch (reason) {
-                                case Assets::AssetImportReason::InitialImport:
-                                    key = "workspace.content_browser.info.import_reason_initial";
-                                    break;
-                                case Assets::AssetImportReason::ManualReimport:
-                                    key = "workspace.content_browser.info.import_reason_manual";
-                                    break;
-                                case Assets::AssetImportReason::SourceChanged:
-                                    key = "workspace.content_browser.info.reimport_source_changed";
-                                    break;
-                                case Assets::AssetImportReason::ImporterChanged:
-                                    key = "workspace.content_browser.info.reimport_importer_changed";
-                                    break;
-                                case Assets::AssetImportReason::ModuleChanged:
-                                    key = "workspace.content_browser.info.reimport_module_changed";
-                                    break;
-                            }
-                            if (!lastImport.empty())
-                                lastImport += ", ";
-                            lastImport += context.localization.Get("editor", key);
-                        }
-                        DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.last_import_reason").c_str(),
-                                    lastImport.empty() ? none.c_str() : lastImport.c_str(), context);
-                        DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.info.metadata").c_str(),
-                                    entry.absoluteMetadataPath.empty() ? none.c_str() : entry.absoluteMetadataPath.c_str(), context);
+                        DrawAssetDetailsRows(entry, context);
                     }
                 }
                 ImGui::EndPopup();
@@ -272,21 +316,9 @@ namespace Horo::Editor {
                                    context.localization.Get("editor", "workspace.content_browser.delete.message").c_str());
                 ImGui::PopTextWrapPos();
                 if (state.popupEntry.has_value()) {
-                    ImGui::Dummy({0.0F, 6.0F});
-                    ImGui::TextColored(Theme::Text(), "%s", state.popupEntry->displayName.c_str());
-                    if (state.popupEntry->kind == ContentBrowserEntryKind::Asset) {
-                        const std::string dependencyCount = std::to_string(state.popupEntry->dependencyCount);
-                        DrawInfoRow(context.localization.Get("editor", "workspace.content_browser.delete.dependencies").c_str(),
-                                    dependencyCount.c_str(), context);
-                        if (state.popupEntry->dependencyCount > 0) {
-                            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 400.0F);
-                            ImGui::TextColored(Theme::Warn(), "%s",
-                                               context.localization.Get("editor", "workspace.content_browser.delete.dependency_warning")
-                                                   .c_str());
-                            ImGui::PopTextWrapPos();
-                        }
-                    }
+                    DrawDeleteDialogEntryDetails(*state.popupEntry, context);
                 }
+
                 ImGui::Dummy({0.0F, 12.0F});
                 if (Ui::Button({
                         .label = context.localization.Get("editor", "workspace.content_browser.action.cancel").c_str(),

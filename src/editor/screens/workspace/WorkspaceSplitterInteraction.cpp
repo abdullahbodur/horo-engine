@@ -1,6 +1,7 @@
 #include "WorkspaceSplitterInteraction.h"
 
 #include <algorithm>
+#include <memory>
 
 namespace Horo::Editor {
     namespace {
@@ -13,18 +14,19 @@ namespace Horo::Editor {
             const auto match = std::ranges::find_if(regions, [id](const WorkspaceSplitterRegion &region) {
                 return region.id == id;
             });
-            return match == regions.end() ? nullptr : &*match;
+            return match == regions.end() ? nullptr : std::to_address(match);
         }
     }  // namespace
 
     /** @copydoc WorkspaceSplitterInteraction::Update */
     WorkspaceSplitterInteractionResult WorkspaceSplitterInteraction::Update(const std::span<const WorkspaceSplitterRegion> regions,
                                                                             const WorkspaceSplitterPointerInput &input,
-                                                                            Input::InputRouter &router, Input::InputContextToken &context) {
+                                                                            Input::InputRouter &router,
+                                                                            const Input::InputContextToken &context) {
         const auto hovered = std::ranges::find_if(regions, [&input](const WorkspaceSplitterRegion &region) {
             return Contains(region, input);
         });
-        const WorkspaceSplitterRegion *hoveredRegion = hovered == regions.end() ? nullptr : &*hovered;
+        const WorkspaceSplitterRegion *hoveredRegion = hovered == regions.end() ? nullptr : std::to_address(hovered);
 
         if (!input.primaryDown) {
             active_ = WorkspaceSplitterId::None;

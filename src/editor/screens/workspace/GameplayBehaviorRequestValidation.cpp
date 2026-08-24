@@ -9,7 +9,7 @@
 
 namespace Horo::Editor {
     namespace {
-        constexpr std::string_view kForbiddenNameCharacters{"<>:\"/\\|?*"};
+        constexpr std::string_view kForbiddenNameCharacters{R"(<>:"/\|?*)"};
 
         [[nodiscard]] std::string FoldPortableStem(const std::string_view name) {
             std::string stem{name};
@@ -145,9 +145,9 @@ namespace Horo::Editor {
         const bool absoluteDestination = destination.is_absolute() || destination.has_root_directory();
         const bool validPath = !request.destination.empty() && absoluteDestination && !request.baseName.empty() &&
                                baseName.filename() == baseName && baseName.extension().empty();
-        const bool validName =
-            request.kind == GameplayBehaviorKind::Native ? IsCppIdentifier(request.baseName) : IsPortableBehaviorName(request.baseName);
-        if (!validPath || !validName)
+        if (const bool validName =
+                request.kind == GameplayBehaviorKind::Native ? IsCppIdentifier(request.baseName) : IsPortableBehaviorName(request.baseName);
+            !validPath || !validName)
             return Result<void>::Failure(InvalidRequestError());
         return Result<void>::Success();
     }

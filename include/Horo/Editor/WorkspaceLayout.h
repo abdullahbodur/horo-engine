@@ -78,11 +78,10 @@ namespace Horo::Editor {
         PanelId panel;
     };
 
-    struct LayoutNode {
+    struct LayoutNode {  // NOSONAR(cpp:S3624) Tree memory is managed by std::unique_ptr in SplitNode
         std::variant<SplitNode, TabStackNode, PanelNode> value;
 
         LayoutNode() = default;
-        ~LayoutNode() = default;
 
         /** @brief Constructs a node holding the given concrete node value. */
         explicit LayoutNode(SplitNode node) : value(std::move(node)) {}
@@ -98,6 +97,7 @@ namespace Horo::Editor {
 
         /** @brief Deep-copies the node subtree owned by @p other. */
         LayoutNode &operator=(const LayoutNode &other);
+
         LayoutNode(LayoutNode &&) noexcept = default;
         LayoutNode &operator=(LayoutNode &&) noexcept = default;
     };

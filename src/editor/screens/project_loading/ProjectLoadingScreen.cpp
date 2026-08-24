@@ -60,23 +60,21 @@ namespace Horo::Editor {
                 hasPresentedLoadingView_ = true;
                 if (readyStateAwaitingPresentation_)
                     readyStatePresented_ = true;
+                using enum ProjectLoadingViewCommand;
                 switch (command) {
-                    case ProjectLoadingViewCommand::Cancel:
+                    case Cancel:
+                    case Back:
                         CancelActive();
                         static_cast<void>(host_.Navigate({GuiRouteKind::Welcome, WelcomeRouteParameters{}}));
                         break;
-                    case ProjectLoadingViewCommand::Retry:
+                    case Retry:
                         state_.hasFailed = false;
                         state_.canRetry = false;
                         state_.isCancelled = false;
                         state_.progress = 0.0F;
                         StartOpen();
                         break;
-                    case ProjectLoadingViewCommand::Back:
-                        CancelActive();
-                        static_cast<void>(host_.Navigate({GuiRouteKind::Welcome, WelcomeRouteParameters{}}));
-                        break;
-                    case ProjectLoadingViewCommand::None:
+                    case None:
                         break;
                 }
             }
@@ -191,51 +189,52 @@ namespace Horo::Editor {
             }
 
             [[nodiscard]] std::string PhaseText(const ProjectOpenPhase phase) const {
+                using enum ProjectOpenPhase;
                 const char *key = "project_loading.status.processing";
                 switch (phase) {
-                    case ProjectOpenPhase::Inspecting:
+                    case Inspecting:
                         key = "project_loading.status.inspecting";
                         break;
-                    case ProjectOpenPhase::CleaningRecovery:
+                    case CleaningRecovery:
                         key = "project_loading.status.cleaning";
                         break;
-                    case ProjectOpenPhase::Recovering:
+                    case Recovering:
                         key = "project_loading.status.recovering";
                         break;
-                    case ProjectOpenPhase::ValidatingCompatibility:
+                    case ValidatingCompatibility:
                         key = "project_loading.status.validating";
                         break;
-                    case ProjectOpenPhase::PlanningMigration:
+                    case PlanningMigration:
                         key = "project_loading.status.planning";
                         break;
-                    case ProjectOpenPhase::Migrating:
+                    case Migrating:
                         key = "project_loading.status.migrating";
                         break;
-                    case ProjectOpenPhase::UpdatingProjectMetadata:
+                    case UpdatingProjectMetadata:
                         key = "project_loading.status.updating";
                         break;
-                    case ProjectOpenPhase::ValidatingDefaultScene:
+                    case ValidatingDefaultScene:
                         key = "project_loading.status.loading_scene";
                         break;
-                    case ProjectOpenPhase::RebuildingDerivedState:
+                    case RebuildingDerivedState:
                         key = "project_loading.status.rebuilding";
                         break;
-                    case ProjectOpenPhase::RendererPreflight:
+                    case RendererPreflight:
                         key = "project_loading.status.renderer";
                         break;
-                    case ProjectOpenPhase::PreparingWorkspace:
+                    case PreparingWorkspace:
                         key = "project_loading.status.workspace";
                         break;
-                    case ProjectOpenPhase::ReadyToActivate:
+                    case ReadyToActivate:
                         key = "project_loading.status.ready";
                         break;
-                    case ProjectOpenPhase::RequiresRendererRestart:
+                    case RequiresRendererRestart:
                         key = "project_loading.status.renderer_restart";
                         break;
-                    case ProjectOpenPhase::Failed:
+                    case Failed:
                         key = "project_loading.status.failed";
                         break;
-                    case ProjectOpenPhase::Cancelled:
+                    case Cancelled:
                         key = "project_loading.status.cancelling";
                         break;
                 }
@@ -281,7 +280,11 @@ namespace Horo::Editor {
             }
 
             [[nodiscard]] std::uint64_t Subject() const {
-                return creationOperation_.has_value() ? *creationOperation_ : openOperation_.has_value() ? openOperation_->Id().value : 0;
+                if (creationOperation_.has_value())
+                    return *creationOperation_;
+                if (openOperation_.has_value())
+                    return openOperation_->Id().value;
+                return 0;
             }
 
             GuiScreenHost &host_;

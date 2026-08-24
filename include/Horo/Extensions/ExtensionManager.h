@@ -2,10 +2,10 @@
 
 #include "Horo/Extensions/ExtensionManifest.h"
 #include "Horo/Foundation/Result.h"
+#include "Horo/Foundation/TransparentString.h"
 
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace Horo::Assets {
@@ -34,6 +34,10 @@ namespace Horo::Extensions {
          */
         explicit ExtensionManager(Assets::AssetImporterCatalog *importerCatalog = nullptr);
         ~ExtensionManager();
+        ExtensionManager(const ExtensionManager &) = delete;
+        ExtensionManager &operator=(const ExtensionManager &) = delete;
+        ExtensionManager(ExtensionManager &&) noexcept;
+        ExtensionManager &operator=(ExtensionManager &&) noexcept;
 
         /**
          * @brief Discovers extensions in the specified directory.
@@ -68,7 +72,7 @@ namespace Horo::Extensions {
 
     private:
         Assets::AssetImporterCatalog *m_importerCatalog{};
-        std::unordered_map<std::string, std::unique_ptr<LoadedExtension>> m_loadedExtensions;
+        TransparentStringMap<std::unique_ptr<LoadedExtension>> m_loadedExtensions;
     };
 
 }  // namespace Horo::Extensions

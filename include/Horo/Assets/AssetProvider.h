@@ -5,6 +5,7 @@
  * @brief Backend-neutral cooked-byte providers and bounded asynchronous loading.
  */
 
+#include "Horo/Assets/AssetId.h"
 #include "Horo/Assets/AssetRegistry.h"
 #include "Horo/Foundation/CancellationToken.h"
 #include "Horo/Foundation/JobSystem.h"

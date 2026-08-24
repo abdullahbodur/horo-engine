@@ -4,10 +4,11 @@
 
 namespace Horo::Editor {
     ActivityBarLayout::ActivityBarLayout() {
-        m_groups[RailIndex(ActivityBarRail::Left)].resize(kDefaultGroupCount);
-        m_groups[RailIndex(ActivityBarRail::Right)].resize(kDefaultGroupCount);
-        m_groups[RailIndex(ActivityBarRail::Bottom)].resize(kDefaultGroupCount);
-        m_groups[RailIndex(ActivityBarRail::DocumentTop)].resize(1);
+        using enum ActivityBarRail;
+        m_groups[RailIndex(Left)].resize(kDefaultGroupCount);
+        m_groups[RailIndex(Right)].resize(kDefaultGroupCount);
+        m_groups[RailIndex(Bottom)].resize(kDefaultGroupCount);
+        m_groups[RailIndex(DocumentTop)].resize(1);
     }
 
     std::size_t ActivityBarLayout::RailIndex(const ActivityBarRail rail) noexcept {
@@ -25,37 +26,39 @@ namespace Horo::Editor {
     }
 
     ActivityBarLayoutOperationResult ActivityBarLayout::Insert(const std::string_view panelId, const ActivityBarSlot slot) {
+        using enum ActivityBarLayoutOperationCode;
         if (panelId.empty()) {
-            return {ActivityBarLayoutOperationCode::UnknownItem};
+            return {UnknownItem};
         }
         if (FindSlot(panelId).has_value()) {
-            return {ActivityBarLayoutOperationCode::DuplicateItem};
+            return {DuplicateItem};
         }
 
         ActivityBarGroup *group = GetGroup(slot);
         if (group == nullptr) {
-            return {ActivityBarLayoutOperationCode::InvalidGroup};
+            return {InvalidGroup};
         }
         if (slot.itemIndex > group->items.size()) {
-            return {ActivityBarLayoutOperationCode::InvalidInsertionIndex};
+            return {InvalidInsertionIndex};
         }
 
-        group->items.insert(group->items.begin() + static_cast<std::ptrdiff_t>(slot.itemIndex), PanelId{panelId});
+        group->items.emplace(group->items.begin() + static_cast<std::ptrdiff_t>(slot.itemIndex), panelId);
         return {};
     }
 
     ActivityBarLayoutOperationResult ActivityBarLayout::Move(const std::string_view panelId, const ActivityBarSlot slot) {
+        using enum ActivityBarLayoutOperationCode;
         const auto sourceSlot = FindSlot(panelId);
         if (!sourceSlot.has_value()) {
-            return {ActivityBarLayoutOperationCode::UnknownItem};
+            return {UnknownItem};
         }
 
         const ActivityBarGroup *targetGroup = GetGroup(slot);
         if (targetGroup == nullptr) {
-            return {ActivityBarLayoutOperationCode::InvalidGroup};
+            return {InvalidGroup};
         }
         if (slot.itemIndex > targetGroup->items.size()) {
-            return {ActivityBarLayoutOperationCode::InvalidInsertionIndex};
+            return {InvalidInsertionIndex};
         }
 
         ActivityBarGroup *sourceGroup = GetGroup(*sourceSlot);
@@ -64,7 +67,7 @@ namespace Horo::Editor {
         const std::size_t requestedIndex = slot.itemIndex;
 
         if (sourceGroup == mutableTargetGroup && (requestedIndex == sourceIndex || requestedIndex == sourceIndex + 1)) {
-            return {ActivityBarLayoutOperationCode::NoOp};
+            return {NoOp};
         }
 
         PanelId moved = std::move(sourceGroup->items[sourceIndex]);
@@ -72,7 +75,7 @@ namespace Horo::Editor {
 
         const std::size_t adjustedIndex =
             sourceGroup == mutableTargetGroup && requestedIndex > sourceIndex ? requestedIndex - 1 : requestedIndex;
-        mutableTargetGroup->items.insert(mutableTargetGroup->items.begin() + static_cast<std::ptrdiff_t>(adjustedIndex), std::move(moved));
+        mutableTargetGroup->items.emplace(mutableTargetGroup->items.begin() + static_cast<std::ptrdiff_t>(adjustedIndex), std::move(moved));
         return {};
     }
 

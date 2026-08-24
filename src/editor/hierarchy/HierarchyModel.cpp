@@ -1,33 +1,19 @@
 #include "Horo/Editor/HierarchyModel.h"
 
 #include <algorithm>
+#include <span>
 #include <unordered_map>
 #include <utility>
 
 namespace Horo::Editor {
     namespace {
-        [[nodiscard]] HierarchyNode *FindNode(std::vector<std::unique_ptr<HierarchyNode>> &nodes,
-                                              const HierarchyNodeId id) noexcept {  // NOSONAR(cpp:S995)
+        [[nodiscard]] HierarchyNode *FindNode(const std::span<const std::unique_ptr<HierarchyNode>> nodes,
+                                              const HierarchyNodeId id) noexcept {
             for (const auto &node : nodes) {
-                if (node->id == id) {
+                if (node->id == id)
                     return node.get();
-                }
-                if (HierarchyNode *found = FindNode(node->children, id)) {
+                if (HierarchyNode *found = FindNode(node->children, id))
                     return found;
-                }
-            }
-            return nullptr;
-        }
-
-        [[nodiscard]] const HierarchyNode *FindNode(const std::vector<std::unique_ptr<HierarchyNode>> &nodes,
-                                                    const HierarchyNodeId id) noexcept {
-            for (const auto &node : nodes) {
-                if (node->id == id) {
-                    return node.get();
-                }
-                if (const HierarchyNode *found = FindNode(node->children, id)) {
-                    return found;
-                }
             }
             return nullptr;
         }

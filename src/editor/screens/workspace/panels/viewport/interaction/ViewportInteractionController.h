@@ -22,7 +22,7 @@ namespace Horo::Editor {
 
         void Draw(ImDrawList &drawList, const ImVec2 &origin, float width, float height, bool hovered,
                   const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &command, const EditorGuiContext &context,
-                  float deltaSeconds, Math::ClipDepthRange depthRange);
+                  float deltaSeconds, Math::ClipDepthRange depthRange);  // NOSONAR(cpp:S107)
 
         void OnViewportCaptureCancelled(Input::CaptureCancellationReason reason) noexcept override;
 

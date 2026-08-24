@@ -72,7 +72,7 @@ namespace Horo::Assets {
          * @param root Cache root directory. Created if it does not exist.
          * @param limits Size bounds applied to loaded and stored entries.
          */
-        explicit AssetCookCache(std::filesystem::path root, AssetCookLimits limits = {});
+        explicit AssetCookCache(std::filesystem::path root, const AssetCookLimits &limits = {});
 
         /**
          * @brief Loads and verifies a cached artifact envelope.

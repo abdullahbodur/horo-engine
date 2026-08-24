@@ -7,11 +7,11 @@
 
 #include "Horo/Extensions/ExtensionManifest.h"
 #include "Horo/Foundation/Result.h"
+#include "Horo/Foundation/TransparentString.h"
 
 #include <filesystem>
 #include <string>
 #include <string_view>
-#include <unordered_set>
 #include <vector>
 
 namespace Horo::Extensions {
@@ -109,7 +109,7 @@ namespace Horo::Extensions {
         std::filesystem::path installRoot_;
         std::filesystem::path statePath_;
         std::vector<ExtensionInventoryEntry> entries_;
-        std::unordered_set<std::string> enabled_;
-        std::unordered_set<std::string> trusted_;
+        TransparentStringSet enabled_;
+        TransparentStringSet trusted_;
     };
 }  // namespace Horo::Extensions

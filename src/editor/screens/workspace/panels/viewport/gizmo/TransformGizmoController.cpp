@@ -27,7 +27,8 @@ namespace Horo::Editor {
     bool TransformGizmoController::Draw(ImDrawList &drawList, const ImVec2 &origin, const float width, const float height,
                                         const bool hovered, const Input::RawInputSnapshot &input, const EditorWorkspaceViewModel &viewModel,
                                         EditorWorkspaceViewCommandData &command, ViewportInteractionCapture &capture,
-                                        const Math::ClipDepthRange depthRange) {
+                                        const Math::ClipDepthRange depthRange) {  // NOSONAR(cpp:S107)
+
         if (cancelPreviewOnNextDraw_) {
             cancelPreviewOnNextDraw_ = false;
             command.command = EditorWorkspaceViewCommand::CancelObjectTransformPreview;
@@ -101,7 +102,7 @@ namespace Horo::Editor {
                                                         const SceneObject &selectedObject, const EditorWorkspaceViewModel &viewModel,
                                                         const Input::RawInputSnapshot &input, const ImVec2 &origin, const float width,
                                                         const float height, ViewportInteractionCapture &capture,
-                                                        const Math::ClipDepthRange depthRange) {
+                                                        const Math::ClipDepthRange depthRange) {  // NOSONAR(cpp:S107)
         if (drag_.has_value() || !geometry.hoveredAxis.has_value() || !input.State(Input::PointerButton::Primary).pressed ||
             !capture.Begin(Input::PointerButton::Primary))
             return Result<void>::Success();
@@ -153,7 +154,8 @@ namespace Horo::Editor {
     void TransformGizmoController::AdvanceDrag(const Input::RawInputSnapshot &input, const EditorWorkspaceViewModel &viewModel,
                                                const ImVec2 &origin, const float width, const float height,
                                                EditorWorkspaceViewCommandData &command, ViewportInteractionCapture &capture,
-                                               const Math::ClipDepthRange depthRange) {
+                                               const Math::ClipDepthRange depthRange) {  // NOSONAR(cpp:S107)
+
         const Input::ButtonState primary = input.State(Input::PointerButton::Primary);
         if (input.State(Input::Key::Escape).pressed) {
             capture.Cancel(Input::CaptureCancellationReason::Escape);

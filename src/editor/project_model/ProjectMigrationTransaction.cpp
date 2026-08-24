@@ -218,9 +218,8 @@ namespace Horo::Editor {
                         keys.pop_back();
                     return true;
                 };
-                json result = json::parse(reinterpret_cast<const char *>(bytes.data()),  // NOSONAR(cpp:S6022)
-                                          reinterpret_cast<const char *>(bytes.data() + bytes.size()),
-                                          callback);  // NOSONAR
+                json result = json::parse(bytes.begin(), bytes.end(), callback);
+
                 if (const std::string canonical = result.dump() + "\n";
                     duplicate || canonical.size() != bytes.size() || std::memcmp(canonical.data(), bytes.data(), bytes.size()) != 0 ||
                     !result.is_object() || !result.contains("receipts") || !result["receipts"].is_array()) {
@@ -235,11 +234,12 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] std::string Hex(const MigrationContentHash &hash) {
-            std::ostringstream out;
-            out << "sha256:" << std::hex << std::setfill('0');
-            for (const auto value : hash.bytes)
-                out << std::setw(2) << unsigned(value);
-            return out.str();
+            std::string out = "sha256:";
+            out.reserve(7 + hash.bytes.size() * 2);
+            for (const auto value : hash.bytes) {
+                std::format_to(std::back_inserter(out), "{:02x}", static_cast<unsigned char>(value));
+            }
+            return out;
         }
 
         [[nodiscard]] std::string Hex(const MigrationDefinitionHash &hash) {
@@ -681,8 +681,8 @@ namespace Horo::Editor {
     }
 
     /** @copydoc ProjectMigrationTransactionService::Execute */
-    Result<ProjectMigrationTransactionResult> ProjectMigrationTransactionService::Execute(
-        const ProjectMigrationTransactionRequest &request) {  // NOSONAR(cpp:S3776)
+    Result<ProjectMigrationTransactionResult> ProjectMigrationTransactionService::Execute(  // NOSONAR(cpp:S3776)
+        const ProjectMigrationTransactionRequest &request) {
         const std::string operationId = OperationId();
         const std::string sourceVersion = FormatHoroVersion(request.sourceMetadata.horoVersion.value);
         const std::string targetVersion = FormatHoroVersion(request.targetDecision.release.value);
@@ -959,8 +959,8 @@ namespace Horo::Editor {
     }
 
     /** @copydoc ProjectMigrationTransactionService::Recover */
-    Result<void> ProjectMigrationTransactionService::Recover(const std::filesystem::path &projectRoot,
-                                                             const CancellationToken cancellation) {  // NOSONAR(cpp:S3776)
+    Result<void> ProjectMigrationTransactionService::Recover(const std::filesystem::path &projectRoot,  // NOSONAR(cpp:S3776)
+                                                             const CancellationToken cancellation) {
         const auto initialSnapshot = InspectPendingRecovery(projectRoot);
 
         if (initialSnapshot.action == MigrationRecoveryAction::None)

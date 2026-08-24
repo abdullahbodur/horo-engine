@@ -18,7 +18,8 @@ namespace Horo::Editor {
 
         void Update(const ImVec2 &origin, float width, float height, bool hovered, const Input::RawInputSnapshot &input,
                     const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &command, const EditorGuiContext &context,
-                    float deltaSeconds, ViewportInteractionCapture &capture, Math::ClipDepthRange depthRange);
+                    float deltaSeconds, ViewportInteractionCapture &capture,
+                    Math::ClipDepthRange depthRange);  // NOSONAR(cpp:S107)
 
     private:
         enum class Mode {

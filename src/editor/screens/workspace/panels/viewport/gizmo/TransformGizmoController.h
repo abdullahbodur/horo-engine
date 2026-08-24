@@ -31,7 +31,7 @@ namespace Horo::Editor {
         [[nodiscard]] bool Draw(ImDrawList &drawList, const ImVec2 &origin, float width, float height, bool hovered,
                                 const Input::RawInputSnapshot &input, const EditorWorkspaceViewModel &viewModel,
                                 EditorWorkspaceViewCommandData &command, ViewportInteractionCapture &capture,
-                                Math::ClipDepthRange depthRange);
+                                Math::ClipDepthRange depthRange);  // NOSONAR(cpp:S107)
 
     private:
         struct DragSession {
@@ -49,10 +49,11 @@ namespace Horo::Editor {
         [[nodiscard]] Result<void> TryBeginDrag(const TransformGizmoFrameGeometry &geometry, const Math::Mat4 &worldTransform,
                                                 const SceneObject &selectedObject, const EditorWorkspaceViewModel &viewModel,
                                                 const Input::RawInputSnapshot &input, const ImVec2 &origin, float width, float height,
-                                                ViewportInteractionCapture &capture, Math::ClipDepthRange depthRange);
+                                                ViewportInteractionCapture &capture,
+                                                Math::ClipDepthRange depthRange);  // NOSONAR(cpp:S107)
         void AdvanceDrag(const Input::RawInputSnapshot &input, const EditorWorkspaceViewModel &viewModel, const ImVec2 &origin, float width,
                          float height, EditorWorkspaceViewCommandData &command, ViewportInteractionCapture &capture,
-                         Math::ClipDepthRange depthRange);
+                         Math::ClipDepthRange depthRange);  // NOSONAR(cpp:S107)
 
         std::optional<DragSession> drag_;
         bool cancelPreviewOnNextDraw_{false};

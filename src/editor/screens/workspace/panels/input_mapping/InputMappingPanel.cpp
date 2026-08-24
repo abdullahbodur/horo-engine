@@ -63,6 +63,60 @@ namespace Horo::Editor {
                     return "Key";
             }
         }
+
+        void UpdateBindingDeadzone(Input::InputRouter &router, const Input::ActionDescriptor &selectedAction,
+                                   const std::span<const Input::InputBinding> bindings, const std::size_t bindingIndex,
+                                   const float deadzone, std::string &statusMessage) {
+            Input::InputBindingProfile profile = router.Profile();
+            auto existing = std::ranges::find(profile.overrides, selectedAction.id, &Input::BindingOverride::action);
+            if (existing == profile.overrides.end()) {
+                profile.overrides.emplace_back(selectedAction.id, std::vector<Input::InputBinding>(bindings.begin(), bindings.end()));
+                existing = std::prev(profile.overrides.end());
+            }
+            existing->bindings[bindingIndex].deadzone = deadzone;
+            if (const Result<void> applied = router.SetProfile(std::move(profile)); applied.HasError())
+                statusMessage = applied.ErrorValue().message;
+        }
+
+        template <typename ApplyFn> bool PollGamepadBinding(const Input::RawInputSnapshot &snapshot, const ApplyFn &apply) {
+            for (const Input::GamepadState &gamepad : snapshot.gamepads) {
+                for (std::size_t index = 0; index < gamepad.buttons.size(); ++index) {
+                    if (gamepad.buttons[index].pressed) {
+                        apply(Input::InputBinding{.kind = Input::BindingControlKind::GamepadButton,
+                                                  .gamepadButton = static_cast<Input::GamepadButton>(index)});
+                        return true;
+                    }
+                }
+                for (std::size_t index = 0; index < gamepad.rawButtons.size(); ++index) {
+                    if (gamepad.rawButtons[index].pressed) {
+                        apply(Input::InputBinding{.kind = Input::BindingControlKind::RawGamepadButton,
+                                                  .rawControl = static_cast<std::uint16_t>(index)});
+                        return true;
+                    }
+                }
+                for (std::size_t index = 0; index < gamepad.axes.size(); ++index) {
+                    if (std::fabs(gamepad.axes[index]) >= 0.75F) {
+                        apply(Input::InputBinding{.kind = Input::BindingControlKind::GamepadAxis,
+                                                  .gamepadAxis = static_cast<Input::GamepadAxis>(index),
+                                                  .scale = gamepad.axes[index] < 0.0F ? -1.0F : 1.0F,
+                                                  .deadzoneKind = Input::DeadzoneKind::Axial,
+                                                  .deadzone = 0.15F});
+                        return true;
+                    }
+                }
+                for (std::size_t index = 0; index < gamepad.rawAxes.size(); ++index) {
+                    if (std::fabs(gamepad.rawAxes[index]) >= 0.75F) {
+                        apply(Input::InputBinding{.kind = Input::BindingControlKind::RawGamepadAxis,
+                                                  .rawControl = static_cast<std::uint16_t>(index),
+                                                  .scale = gamepad.rawAxes[index] < 0.0F ? -1.0F : 1.0F,
+                                                  .deadzoneKind = Input::DeadzoneKind::Axial,
+                                                  .deadzone = 0.15F});
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
     }  // namespace
 
     void InputMappingPanel::OnAttach(PanelContext &context) {
@@ -91,7 +145,7 @@ namespace Horo::Editor {
             context.localization.Get("editor", "workspace.input_mapping.devices").c_str(),
             context.localization.Get("editor", "workspace.input_mapping.profiles").c_str(),
         };
-        const int selected = static_cast<int>(page_);
+        const auto selected = static_cast<int>(page_);
         const int next = Ui::DrawDockTabs(labels, selected, context.theme.fonts);
         page_ = static_cast<Page>(next);
         ImGui::BeginChild("##InputMappingContent", {size.x, size.y - 30.0F}, false, ImGuiWindowFlags_NoSavedSettings);
@@ -165,15 +219,7 @@ namespace Horo::Editor {
                 ImGui::PushID(static_cast<int>(bindingIndex));
                 if (ImGui::SliderFloat(context.localization.Get("editor", "workspace.input_mapping.deadzone").c_str(), &deadzone, 0.0F,
                                        0.95F, "%.2f")) {
-                    Input::InputBindingProfile profile = router_->Profile();
-                    auto existing = std::ranges::find(profile.overrides, selectedAction.id, &Input::BindingOverride::action);
-                    if (existing == profile.overrides.end()) {
-                        profile.overrides.push_back(Input::BindingOverride{selectedAction.id, bindings});
-                        existing = std::prev(profile.overrides.end());
-                    }
-                    existing->bindings[bindingIndex].deadzone = deadzone;
-                    if (const Result<void> applied = router_->SetProfile(std::move(profile)); applied.HasError())
-                        statusMessage_ = applied.ErrorValue().message;
+                    UpdateBindingDeadzone(*router_, selectedAction, bindings, bindingIndex, deadzone, statusMessage_);
                 }
                 ImGui::PopID();
             }
@@ -197,7 +243,8 @@ namespace Horo::Editor {
             return;
         }
         for (const Input::GamepadState &gamepad : gamepads) {
-            Ui::ScopedCard card(("device-" + std::to_string(gamepad.id.slot)).c_str(), {0.0F, 78.0F});
+            const std::string cardId = std::format("device-{}", gamepad.id.slot);
+            Ui::ScopedCard card(cardId.c_str(), {0.0F, 78.0F});
             ImGui::TextUnformatted(gamepad.name.c_str());
             ImGui::Text("%s %u / %s %llu", context.localization.Get("editor", "workspace.input_mapping.slot").c_str(), gamepad.id.slot,
                         context.localization.Get("editor", "workspace.input_mapping.generation").c_str(),
@@ -225,8 +272,8 @@ namespace Horo::Editor {
             return;
         ImGui::Text("%s: %s", context.localization.Get("editor", "workspace.input_mapping.active_profile").c_str(),
                     router_->Profile().profileId.c_str());
-        const std::string &save = context.localization.Get("editor", "workspace.input_mapping.save_profile");
-        if (Ui::Button({.label = save.c_str(), .font = context.theme.fonts.sans})) {
+        if (const std::string &save = context.localization.Get("editor", "workspace.input_mapping.save_profile");
+            Ui::Button({.label = save.c_str(), .font = context.theme.fonts.sans})) {
             Input::InputBindingProfile profile = router_->Profile();
             profile.profileId = "editor-global";
             const Result<void> result = Input::SaveBindingProfileAtomically(EditorProfilePath(), profile);
@@ -259,9 +306,8 @@ namespace Horo::Editor {
 
     Result<Input::InputBindingProfile> InputMappingPanel::LoadComposedProfile() const {
         Input::InputBindingProfile merged{.profileId = "project-composed"};
-        const auto mergeFile = [&](const std::filesystem::path &path) -> Result<void> {
-            std::error_code error;
-            if (!std::filesystem::exists(path, error))
+        const auto mergeFile = [&](const std::filesystem::path &path) {
+            if (std::error_code error; !std::filesystem::exists(path, error))
                 return error ? Result<void>::Failure(MakeError(ProfileExistsFailed, error.message())) : Result<void>::Success();
             const Result<Input::InputBindingProfile> loaded = Input::LoadBindingProfile(path);
             if (loaded.HasError())
@@ -291,8 +337,8 @@ namespace Horo::Editor {
         const Input::RawInputSnapshot &snapshot = router_->Snapshot();
         const auto apply = [&](const Input::InputBinding &binding) {
             Input::InputBindingProfile profile = router_->Profile();
-            const auto existing = std::ranges::find(profile.overrides, *listeningAction_, &Input::BindingOverride::action);
-            if (existing == profile.overrides.end())
+            if (const auto existing = std::ranges::find(profile.overrides, *listeningAction_, &Input::BindingOverride::action);
+                existing == profile.overrides.end())
                 profile.overrides.push_back(Input::BindingOverride{*listeningAction_, {binding}});
             else
                 existing->bindings = {binding};
@@ -303,17 +349,16 @@ namespace Horo::Editor {
             bindingCaptureContext_.Reset();
         };
         for (std::size_t index = 1; index < static_cast<std::size_t>(Input::Key::Count); ++index) {
-            const Input::Key key = static_cast<Input::Key>(index);
-            if (!snapshot.State(key).pressed)
-                continue;
-            if (key == Input::Key::Escape) {
-                listeningAction_.reset();
-                bindingCaptureContext_.Reset();
-                statusMessage_.clear();
+            if (const auto key = static_cast<Input::Key>(index); snapshot.State(key).pressed) {
+                if (key == Input::Key::Escape) {
+                    listeningAction_.reset();
+                    bindingCaptureContext_.Reset();
+                    statusMessage_.clear();
+                    return;
+                }
+                apply(Input::InputBinding{.kind = Input::BindingControlKind::Key, .key = key, .requiredModifiers = snapshot.modifiers});
                 return;
             }
-            apply(Input::InputBinding{.kind = Input::BindingControlKind::Key, .key = key, .requiredModifiers = snapshot.modifiers});
-            return;
         }
         for (std::size_t index = 0; index < static_cast<std::size_t>(Input::PointerButton::Count); ++index) {
             const auto button = static_cast<Input::PointerButton>(index);
@@ -322,42 +367,7 @@ namespace Horo::Editor {
                 return;
             }
         }
-        for (const Input::GamepadState &gamepad : snapshot.gamepads) {
-            for (std::size_t index = 0; index < gamepad.buttons.size(); ++index) {
-                if (gamepad.buttons[index].pressed) {
-                    apply(Input::InputBinding{.kind = Input::BindingControlKind::GamepadButton,
-                                              .gamepadButton = static_cast<Input::GamepadButton>(index)});
-                    return;
-                }
-            }
-            for (std::size_t index = 0; index < gamepad.rawButtons.size(); ++index) {
-                if (gamepad.rawButtons[index].pressed) {
-                    apply(Input::InputBinding{.kind = Input::BindingControlKind::RawGamepadButton,
-                                              .rawControl = static_cast<std::uint16_t>(index)});
-                    return;
-                }
-            }
-            for (std::size_t index = 0; index < gamepad.axes.size(); ++index) {
-                if (std::fabs(gamepad.axes[index]) >= 0.75F) {
-                    apply(Input::InputBinding{.kind = Input::BindingControlKind::GamepadAxis,
-                                              .gamepadAxis = static_cast<Input::GamepadAxis>(index),
-                                              .scale = gamepad.axes[index] < 0.0F ? -1.0F : 1.0F,
-                                              .deadzoneKind = Input::DeadzoneKind::Axial,
-                                              .deadzone = 0.15F});
-                    return;
-                }
-            }
-            for (std::size_t index = 0; index < gamepad.rawAxes.size(); ++index) {
-                if (std::fabs(gamepad.rawAxes[index]) >= 0.75F) {
-                    apply(Input::InputBinding{.kind = Input::BindingControlKind::RawGamepadAxis,
-                                              .rawControl = static_cast<std::uint16_t>(index),
-                                              .scale = gamepad.rawAxes[index] < 0.0F ? -1.0F : 1.0F,
-                                              .deadzoneKind = Input::DeadzoneKind::Axial,
-                                              .deadzone = 0.15F});
-                    return;
-                }
-            }
-        }
+        PollGamepadBinding(snapshot, apply);
     }
 
     std::filesystem::path InputMappingPanel::EditorProfilePath() const {

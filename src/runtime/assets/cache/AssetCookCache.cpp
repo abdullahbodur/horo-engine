@@ -63,20 +63,13 @@ namespace Horo::Assets {
         }
 
         /**
-         * @brief Formats two hex digits from a byte.
-         */
-        constexpr char HexNibble(std::uint8_t nibble) noexcept {
-            return static_cast<char>(nibble < 10 ? '0' + nibble : 'a' + (nibble - 10));
-        }
-
-        /**
          * @brief Formats a digest as lowercase hex for filesystem paths.
          */
         std::string FormatHex(const Sha256Digest &digest) {
-            std::string result(64, '\0');
-            for (std::size_t i = 0; i < 32; ++i) {
-                result[i * 2] = HexNibble(digest.bytes[i] >> 4);
-                result[i * 2 + 1] = HexNibble(digest.bytes[i] & 0x0F);
+            std::string result;
+            result.reserve(64);
+            for (const auto byte : digest.bytes) {
+                std::format_to(std::back_inserter(result), "{:02x}", byte);
             }
             return result;
         }
@@ -129,7 +122,7 @@ namespace Horo::Assets {
     // AssetCookCache
     // ---------------------------------------------------------------------------
 
-    AssetCookCache::AssetCookCache(std::filesystem::path root, AssetCookLimits limits) : root_(std::move(root)), limits_(limits) {
+    AssetCookCache::AssetCookCache(std::filesystem::path root, const AssetCookLimits &limits) : root_(std::move(root)), limits_(limits) {
         std::filesystem::create_directories(root_);
     }
 

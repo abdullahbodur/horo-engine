@@ -37,16 +37,16 @@ namespace Horo {
     };
 
     /** @brief Move-only operating-system-held exclusive file lock. */
-    class ExclusiveFileLock {
+    class ExclusiveFileLock {  // NOSONAR(cpp:S3624) Pimpl pattern: destructor defined in .cpp to complete State
     public:
         struct State;
 
         ExclusiveFileLock() noexcept;
-        ~ExclusiveFileLock();
-        ExclusiveFileLock(ExclusiveFileLock &&) noexcept;
-        ExclusiveFileLock &operator=(ExclusiveFileLock &&) noexcept;
         ExclusiveFileLock(const ExclusiveFileLock &) = delete;
         ExclusiveFileLock &operator=(const ExclusiveFileLock &) = delete;
+        ExclusiveFileLock(ExclusiveFileLock &&) noexcept;
+        ExclusiveFileLock &operator=(ExclusiveFileLock &&) noexcept;
+        ~ExclusiveFileLock();
 
         /** @brief Reports whether this object currently owns the native lock. */
         [[nodiscard]] explicit operator bool() const noexcept;

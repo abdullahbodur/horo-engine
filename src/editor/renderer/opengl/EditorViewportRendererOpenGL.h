@@ -35,7 +35,7 @@ namespace Horo::Editor {
         [[nodiscard]] Result<void> CreateShadowResources();
         [[nodiscard]] Result<void> DrawDirectionalShadowMap(const Render::RenderSceneView &scene,
                                                             const EditorViewportDirectionalShadowView &shadow);
-        [[nodiscard]] Result<void> DrawGrid(const Render::RenderCameraView &camera, float aspect, float viewportHeightPixels);
+        [[nodiscard]] Result<void> DrawGrid(const Render::RenderCameraView &camera, float aspect, float viewportHeightPixels) const;
         [[nodiscard]] Result<void> DrawLightVisualizer(const Render::RenderCameraView &camera, float aspect);
         void UploadLighting(const Render::RenderSceneView &scene, const std::optional<EditorViewportDirectionalShadowView> &shadow) const;
 
@@ -47,8 +47,26 @@ namespace Horo::Editor {
             std::uint32_t generation{0};
         };
 
+        struct UniformLocations {
+            std::int32_t mvp{-1};
+            std::int32_t model{-1};
+            std::int32_t cameraPosition{-1};
+            std::int32_t lightCount{-1};
+            std::int32_t lightPositionKind{-1};
+            std::int32_t lightDirectionRange{-1};
+            std::int32_t lightColorIntensity{-1};
+            std::int32_t lightCone{-1};
+            std::int32_t shadowViewProjection{-1};
+            std::int32_t shadowMap{-1};
+            std::int32_t shadowEnabled{-1};
+            std::int32_t shadowLightIndex{-1};
+            std::int32_t shadowMvp{-1};
+            std::int32_t selectionColor{-1};
+            std::int32_t selectionStrength{-1};
+        };
+
         [[nodiscard]] Result<void> SynchronizeMeshes(std::span<const EditorViewportMeshResourceView> resources);
-        void DestroyMesh(GpuMesh &mesh) noexcept;
+        static void DestroyMesh(GpuMesh &mesh) noexcept;
         [[nodiscard]] Result<void> RecreateTarget(EditorViewportExtent extent);
         void DestroyTarget() noexcept;
 
@@ -62,21 +80,7 @@ namespace Horo::Editor {
         std::uint32_t framebuffer_{0};
         std::uint32_t colorTexture_{0};
         std::uint32_t depthBuffer_{0};
-        std::int32_t mvpLocation_{-1};
-        std::int32_t modelLocation_{-1};
-        std::int32_t cameraPositionLocation_{-1};
-        std::int32_t lightCountLocation_{-1};
-        std::int32_t lightPositionKindLocation_{-1};
-        std::int32_t lightDirectionRangeLocation_{-1};
-        std::int32_t lightColorIntensityLocation_{-1};
-        std::int32_t lightConeLocation_{-1};
-        std::int32_t shadowViewProjectionLocation_{-1};
-        std::int32_t shadowMapLocation_{-1};
-        std::int32_t shadowEnabledLocation_{-1};
-        std::int32_t shadowLightIndexLocation_{-1};
-        std::int32_t shadowMvpLocation_{-1};
-        std::int32_t selectionColorLocation_{-1};
-        std::int32_t selectionStrengthLocation_{-1};
+        UniformLocations uniforms_{};
         EditorViewportExtent requestedExtent_{};
         EditorViewportExtent allocatedExtent_{};
         EditorViewportGridOptions gridOptions_{};
@@ -84,4 +88,5 @@ namespace Horo::Editor {
         Render::RenderTargetHandle targetHandle_{};
         bool initialized_{false};
     };
+
 }  // namespace Horo::Editor

@@ -39,8 +39,7 @@ namespace Horo::Editor {
                                                                                  const TransformGizmoGeometryRequest &request);
 
     /** @brief Projects a pointer ray onto a rotation plane and returns its normalized center-relative vector. */
-    [[nodiscard]] std::optional<Math::Vec3> ProjectTransformGizmoRotationVector(const EditorViewportCamera &camera, Math::Vec3 center,
-                                                                                Math::Vec3 normal, ImVec2 pointer, ImVec2 origin,
-                                                                                float width, float height,
-                                                                                Math::ClipDepthRange depthRange) noexcept;
+    [[nodiscard]] std::optional<Math::Vec3> ProjectTransformGizmoRotationVector(
+        const EditorViewportCamera &camera, Math::Vec3 center, Math::Vec3 normal, ImVec2 pointer, ImVec2 origin, float width, float height,
+        Math::ClipDepthRange depthRange) noexcept;  // NOSONAR(cpp:S107)
 }  // namespace Horo::Editor

@@ -76,7 +76,7 @@ int main(const int argc, char **argv) {
             std::cerr << "horo-engine: " << result.ErrorValue().message << '\n';
             return 3;
         }
-        std::cout << result.Value().outputPath.string() << '\n';
+        std::cout << result.Value().outputPath.string() << '\n';  // NOSONAR(cpp:S5145)
     }
     return 0;
 }

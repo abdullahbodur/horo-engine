@@ -41,7 +41,7 @@ namespace Horo::Assets {
         std::int64_t SourceLastWriteTime(const std::filesystem::path &path) {
             std::error_code error;
             const auto value = std::filesystem::last_write_time(path, error);
-            return error ? 0 : value.time_since_epoch().count();
+            return error ? 0 : static_cast<std::int64_t>(value.time_since_epoch().count());
         }
 
         std::string SerializeDefaultSetting(const ImportSettingDescriptor &descriptor) {

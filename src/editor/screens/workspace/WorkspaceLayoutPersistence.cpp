@@ -90,9 +90,11 @@ namespace Horo::Editor {
 
             bool String(std::string &out) {
                 Skip();
-                if (m_pos >= m_text.size() || m_text[m_pos++] != '"')
+                if (m_pos >= m_text.size() || m_text[m_pos] != '"')
                     return false;
+                ++m_pos;
                 out.clear();
+
                 while (m_pos < m_text.size()) {
                     const char c = m_text[m_pos++];
                     if (c == '"')
@@ -299,8 +301,7 @@ namespace Horo::Editor {
         }
 
         void WriteNode(std::ostringstream &out, const LayoutNode &node) {
-            std::visit([&](const auto &value) {
-                using T = std::decay_t<decltype(value)>;
+            std::visit([&out]<typename T>(const T &value) {
                 if constexpr (std::is_same_v<T, PanelNode>)
                     WritePanelNode(out, value);
                 else if constexpr (std::is_same_v<T, TabStackNode>)
@@ -309,6 +310,7 @@ namespace Horo::Editor {
                     WriteSplitNode(out, value);
             }, node.value);
         }
+
     }  // namespace
 
     std::string WorkspaceLayoutPersistence::Serialize(const WorkspaceLayout &layout) {

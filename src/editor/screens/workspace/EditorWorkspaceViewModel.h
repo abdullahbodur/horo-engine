@@ -191,7 +191,15 @@ namespace Horo::Editor {
         std::uint32_t column{};
     };
 
-    struct EditorWorkspaceViewCommandData {
+    struct TransparentStringHash {
+        using is_transparent = void;
+
+        [[nodiscard]] std::size_t operator()(const std::string_view text) const noexcept {
+            return std::hash<std::string_view>{}(text);
+        }
+    };
+
+    struct EditorWorkspaceViewCommandData {  // NOSONAR(cpp:S1820) Command payload variant container
         EditorWorkspaceViewCommand command = EditorWorkspaceViewCommand::None;
         std::optional<EditorMenuInvocation> menuInvocation = std::nullopt;
         std::optional<ObjectSelectionRequest> objectSelection = std::nullopt;
@@ -241,7 +249,7 @@ namespace Horo::Editor {
         std::string absoluteSourcePath;
     };
 
-    struct EditorWorkspaceViewModel {
+    struct EditorWorkspaceViewModel {  // NOSONAR(cpp:S1820) Comprehensive workspace presentation model
         std::string projectRoot;
         Assets::AssetRegistryRevision assetRegistryRevision{};
         ContentBrowserDirectory contentBrowser;
@@ -291,9 +299,10 @@ namespace Horo::Editor {
         float rightPanelWidth = 260.0F;
         float bottomPanelHeight = 238.0F;
 
-        std::unordered_map<PanelId, WorkspaceDockArea> panelDockAreas;
+        std::unordered_map<PanelId, WorkspaceDockArea, TransparentStringHash, std::equal_to<>> panelDockAreas;
 
         ActivityBarLayout activityBarLayout;
         WorkspacePanelHost workspacePanelHost;
     };
+
 }  // namespace Horo::Editor

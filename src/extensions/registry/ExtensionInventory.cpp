@@ -99,10 +99,11 @@ namespace Horo::Extensions {
 
             std::size_t entryCount = 0;
             std::uintmax_t totalBytes = 0;
-            for (fs::recursive_directory_iterator it{source, fs::directory_options::skip_permission_denied, error}, end; it != end;
-                 it.increment(error)) {
+            fs::recursive_directory_iterator it{source, fs::directory_options::skip_permission_denied, error};
+            const fs::recursive_directory_iterator end;
+            while (!error && it != end) {
                 ++entryCount;
-                if (error || entryCount > kMaximumPackageEntries)
+                if (entryCount > kMaximumPackageEntries)
                     return Result<void>::Failure(
                         MakeError(ExtensionErrors::LoadFailed, "Extension package traversal failed or exceeded entry limits."));
                 const fs::file_status status = it->symlink_status(error);
@@ -128,11 +129,12 @@ namespace Horo::Extensions {
                         fs::copy_file(it->path(), target, fs::copy_options::none, error);
                 } else {
                     return Result<void>::Failure(
-                        MakeError(ExtensionErrors::LoadFailed, "Extension package contains an unsupported filesystem entry."));
+                        MakeError(ExtensionErrors::LoadFailed, "Extension packages may contain only regular files and directories."));
                 }
-                if (error)
-                    return Result<void>::Failure(MakeError(ExtensionErrors::LoadFailed, "Unable to stage extension package contents."));
+                it.increment(error);
             }
+            if (error)
+                return Result<void>::Failure(MakeError(ExtensionErrors::LoadFailed, "Unable to stage extension package contents."));
             return Result<void>::Success();
         }
     }  // namespace

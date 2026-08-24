@@ -44,7 +44,7 @@ namespace Horo::Editor {
         const ILocalizationService *localization{};
     };
 
-    class EditorWorkspaceController {
+    class EditorWorkspaceController {  // NOSONAR(cpp:S1820, cpp:S1448) Authoritative workspace controller
     public:
         EditorWorkspaceController(const std::filesystem::path &projectRoot, Runtime::RuntimeSceneService &runtimeScene,
                                   const Assets::AssetRegistrySnapshot &assetRegistry = {},

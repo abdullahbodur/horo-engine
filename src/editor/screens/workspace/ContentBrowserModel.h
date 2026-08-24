@@ -54,8 +54,9 @@ namespace Horo::Editor {
     };
 
     /** @brief One direct child of the current absolute Content Browser directory. */
-    struct ContentBrowserEntry {
+    struct ContentBrowserEntry {  // NOSONAR(cpp:S1820) Aggregate directory entry representation
         ContentBrowserEntryKind kind{ContentBrowserEntryKind::Asset};
+
         std::string absolutePath;                                 /**< Canonical absolute path; relative navigation is never exposed. */
         std::string displayName;                                  /**< File or directory name shown on the card. */
         std::string assetId;                                      /**< Stable asset identity; empty for directories. */

@@ -159,10 +159,11 @@ namespace Horo::Editor {
             }
 
             const std::string_view draggedPanelId(static_cast<const char *>(payload->Data));
-            const bool knownPanel = std::ranges::any_of(panelRegistry.GetAllPanels(), [draggedPanelId](const auto &panel) {
+            if (const bool knownPanel = std::ranges::any_of(panelRegistry.GetAllPanels(),
+                                                            [draggedPanelId](const auto &panel) {
                 return panel->GetId() == draggedPanelId;
             });
-            if (!knownPanel) {
+                !knownPanel) {
                 return;
             }
 
