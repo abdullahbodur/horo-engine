@@ -22,7 +22,7 @@ button{height:26px;border:1px solid var(--bd);border-radius:var(--r);background:
 <header class="header">
   <div class="header-main">
     <h1>XR Setup</h1>
-    <div class="header-meta"><span class="sub">OpenXR runtime, headset views, hand tracking, passthrough capabilities, and privacy permissions</span><span class="context">Runtime: Quest Link · 90 Hz</span></div>
+    <div class="header-meta"><span class="sub">OpenXR discovery, runtime-driven views, interaction profiles, optional capabilities, privacy, and qualification evidence</span><span class="context">Runtime-selected configuration</span></div>
   </div>
   <div class="actions">
     <button type="button">Refresh</button>
@@ -35,28 +35,29 @@ button{height:26px;border:1px solid var(--bd);border-radius:var(--r);background:
   <div class="tab" onclick="switchTab('input',this)">Input</div>
   <div class="tab" onclick="switchTab('ar',this)">AR</div>
   <div class="tab" onclick="switchTab('privacy',this)">Privacy</div>
+  <div class="tab" onclick="switchTab('qualification',this)">Qualification</div>
 </nav>
 <div class="layout">
   <aside class="side">
     <div class="label">Devices</div>
-    <div class="card active"><div class="title">OpenXR Runtime</div><div class="mut">Meta Quest Link · stereo · 90 Hz</div></div>
-    <div class="card"><div class="title">Controllers</div><div class="mut">left/right tracked · touch profile</div></div>
-    <div class="card"><div class="title">Hand Tracking</div><div class="mut">basic joints · confidence medium</div></div>
+    <div class="card active"><div class="title">Selected Runtime</div><div class="mut">discovered identity · version · connection</div></div>
+    <div class="card"><div class="title">Interaction Profiles</div><div class="mut">runtime-resolved · bindings versioned</div></div>
+    <div class="card"><div class="title">Tracking Providers</div><div class="mut">capability and confidence reported</div></div>
     <div class="label" style="margin-top:14px">Capabilities</div>
-    <div class="kv"><span>Instanced stereo</span><span class="pill ok">yes</span></div>
-    <div class="kv"><span>Foveation</span><span class="pill warn">fixed</span></div>
-    <div class="kv"><span>Passthrough</span><span class="pill ok">granted</span></div>
+    <div class="kv"><span>View configuration</span><span class="pill ok">admitted</span></div>
+    <div class="kv"><span>Foveation</span><span class="pill warn">optional</span></div>
+    <div class="kv"><span>Passthrough</span><span class="pill warn">permission</span></div>
   </aside>
   <main class="main">
     <div id="pane-runtime" class="pane active">
       <div class="grid">
-        <div class="card"><div class="label">Runtime</div><div class="kv"><span>API</span><span>OpenXR</span></div><div class="kv"><span>Runtime</span><span>Quest Link</span></div><div class="kv"><span>Refresh</span><span>90 Hz</span></div><div class="kv"><span>Frame budget</span><span>11.1 ms</span></div></div>
-        <div class="card"><div class="label">Rendering</div><div class="kv"><span>Mode</span><span>Instanced stereo</span></div><div class="kv"><span>Views</span><span>2 eyes</span></div><div class="kv"><span>Recommended size</span><span>1832×1920</span></div><div class="kv"><span>Late-warp</span><span class="pill ok">available</span></div></div>
+        <div class="card"><div class="label">Runtime</div><div class="kv"><span>API</span><span>OpenXR</span></div><div class="kv"><span>Identity</span><span>runtime reported</span></div><div class="kv"><span>Refresh modes</span><span>enumerated</span></div><div class="kv"><span>Active budget</span><span>derived</span></div></div>
+        <div class="card"><div class="label">Rendering</div><div class="kv"><span>Configuration</span><span>runtime selected</span></div><div class="kv"><span>View count</span><span>runtime reported</span></div><div class="kv"><span>Per-view extents</span><span>enumerated</span></div><div class="kv"><span>Reprojection</span><span>runtime owned</span></div></div>
       </div>
-      <div class="view-grid"><div class="eye" data-eye="LEFT EYE"><div class="pose"></div></div><div class="eye" data-eye="RIGHT EYE"><div class="pose"></div></div></div>
+      <div class="view-grid"><div class="eye" data-eye="RUNTIME VIEW SET"><div class="pose"></div></div><div class="eye" data-eye="PER-VIEW STATUS"><div class="pose"></div></div></div>
     </div>
     <div id="pane-input" class="pane">
-      <div class="card"><div class="label">Motion Controllers</div><div class="kv"><span>Interaction profile</span><span>/oculus/touch_controller</span></div><div class="kv"><span>Left grip</span><span class="pill ok">tracked</span></div><div class="kv"><span>Right grip</span><span class="pill ok">tracked</span></div><div class="kv"><span>Aim rays</span><span>stable</span></div></div>
+      <div class="card"><div class="label">Motion Controllers</div><div class="kv"><span>Interaction profile</span><span>runtime resolved</span></div><div class="kv"><span>Bindings schema</span><span>versioned</span></div><div class="kv"><span>Profile changes</span><span>observable</span></div><div class="kv"><span>Aim/grip state</span><span>confidence aware</span></div></div>
       <div class="card"><div class="label">Hand Tracking</div><div class="kv"><span>Joint set</span><span>basic</span></div><div class="kv"><span>Confidence</span><span class="pill warn">medium</span></div><div class="kv"><span>Gesture</span><span>pinch ready</span></div></div>
     </div>
     <div id="pane-ar" class="pane">
@@ -67,13 +68,17 @@ button{height:26px;border:1px solid var(--bd);border-radius:var(--r);background:
       <div class="card"><div class="label">Privacy Permissions</div><div class="kv"><span>Eye tracking</span><span class="pill warn">disabled</span></div><div class="kv"><span>Raw camera logging</span><span class="pill ok">off</span></div><div class="kv"><span>Spatial anchors</span><span>local</span></div><div class="kv"><span>Diagnostics</span><span>redacted</span></div></div>
       <div class="card"><div class="label">Data Retention</div><div class="kv"><span>Pose traces</span><span>session only</span></div><div class="kv"><span>Crash dumps</span><span>no camera frames</span></div></div>
     </div>
+    <div id="pane-qualification" class="pane">
+      <div class="card"><div class="label">Evidence Identity</div><div class="kv"><span>Headset</span><span>device reported</span></div><div class="kv"><span>Runtime / version</span><span>runtime reported</span></div><div class="kv"><span>OS / renderer</span><span>host snapshot</span></div><div class="kv"><span>Connection mode</span><span>explicit</span></div><div class="kv"><span>Interaction profile</span><span>runtime resolved</span></div><div class="kv"><span>Extensions</span><span>admitted set</span></div></div>
+      <div class="card"><div class="label">Qualification</div><div class="kv"><span>Planning category</span><span>Reference</span></div><div class="kv"><span>Device evidence</span><span class="pill warn">not run</span></div><div class="kv"><span>Simulator evidence</span><span>separate</span></div><div class="kv"><span>Known issues</span><span>tracked</span></div></div>
+    </div>
   </main>
   <aside class="detail">
     <div class="label">Session</div>
     <div class="kv"><span>state</span><span class="pill ok">ready</span></div>
-    <div class="kv"><span>view config</span><span>Stereo</span></div>
-    <div class="kv"><span>refresh</span><span>90 Hz</span></div>
-    <div class="kv"><span>budget</span><span>11.1 ms</span></div>
+    <div class="kv"><span>view config</span><span>runtime selected</span></div>
+    <div class="kv"><span>refresh</span><span>runtime mode</span></div>
+    <div class="kv"><span>budget</span><span>derived</span></div>
     <div class="label" style="margin-top:16px">Privacy</div>
     <div class="kv"><span>Passthrough</span><span class="pill ok">granted</span></div>
     <div class="kv"><span>Eye tracking</span><span class="pill warn">disabled</span></div>
@@ -81,7 +86,7 @@ button{height:26px;border:1px solid var(--bd);border-radius:var(--r);background:
     <div class="kv"><span>Camera logging</span><span>off</span></div>
   </aside>
 </div>
-<footer class="status"><span><strong>OpenXR active</strong> · privacy safe</span><span>Instanced stereo</span><span>Passthrough granted</span><span class="spacer"></span><span>dx12_vulkan · 90 Hz</span></footer>
+<footer class="status"><span><strong>OpenXR preflight</strong> · evidence pending</span><span>View configuration admitted</span><span>Optional features explicit</span><span class="spacer"></span><span>renderer · runtime refresh</span></footer>
 <script>
 function switchTab(id, tab){
   document.querySelectorAll('#page-tabs .tab').forEach(function(t){t.classList.remove('active')});

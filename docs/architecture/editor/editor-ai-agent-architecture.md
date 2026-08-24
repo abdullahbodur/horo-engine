@@ -7,12 +7,17 @@ editor-integrated side chat, viewport inline agent, magic AI tools, agent
 context model, Horo MCP tool-calling bridge, conversation persistence, and the
 internal request/response pipeline.
 
-The Editor AI Agent provides an always-available authoring assistant for the
-engine editor. The agent has **built-in, always-on** read/write access to the
-editor scene, asset database, build system, and diagnostic surfaces through the
-Horo MCP tool protocol — no configuration or plugin required. Its persistent UI
-surface is a side panel shared across all editor screens; contextual entry
-points include viewport inline prompts and magic AI tools.
+The Editor AI Agent provides an available authoring assistant for the engine
+editor when the host composition and project policy enable it. Horo ships the
+MCP-backed capability registry needed by the agent, but registration is not
+authorization: project trust, provider policy, context admission, tool
+permissions, and per-operation approval still apply. The agent never receives
+implicit unrestricted project read/write access.
+
+Its persistent UI surface is a side panel shared across editor screens;
+contextual entry points include viewport inline prompts, magic AI tools, and an
+optional immersive XR authoring surface. Every surface shares the same provider,
+context, permission, transaction, history, and audit owners.
 
 ## System Overview
 
@@ -71,7 +76,8 @@ Example flow:
    cleaner".
 5. The agent receives selection, editor camera pose, reticle hit, visible object
    set, and local scene neighborhood.
-6. The agent proposes or applies a bounded editor transaction through MCP tools.
+6. The agent proposes a bounded editor transaction through MCP tools and waits
+   for review before application.
 
 The editor camera used by inline chat is not a gameplay camera component. It is
 the authoring viewport camera owned by the editor host. Runtime scenes must not
@@ -112,6 +118,72 @@ Examples:
 These tools must expose bounded inputs and deterministic postconditions. The
 agent may choose parameters, but execution goes through editor transactions and
 can be previewed, accepted, or reverted.
+
+### Immersive Multimodal Authoring
+
+Immersive authoring lets a developer wearing an XR headset issue voice commands
+while pointing at, selecting, grabbing, or physically interacting with spatial
+content. It is an Editor AI surface, not an XR runtime subsystem and not an
+in-game NPC/dialogue feature.
+
+```text
+Audio capture -------> speech transcription ----+
+                                                  |
+XR poses/rays/actions ----------------------------+--> multimodal envelope
+                                                  |          |
+Editor selection / scene revisions ---------------+          v
+                                                     intent + tool plan
+                                                             |
+                                                             v
+                                                scene proposal + ghost preview
+                                                             |
+                                                   explicit non-voice approval
+                                                             |
+                                                             v
+                                                   editor transaction/history
+```
+
+Ownership rules:
+
+- Audio owns input-device and timestamped capture semantics. AIA consumes an
+  admitted bounded stream and does not open a native microphone directly.
+- A provider-neutral speech service owns partial/final transcription, locale,
+  confidence, cancellation, and local/cloud adapters. A transcript is evidence,
+  never approval.
+- XR owns session identity, poses, rays, actions, tracking validity, and
+  interaction-profile state. AIA consumes time-aligned snapshots and does not
+  poll OpenXR.
+- Physics, XR interaction, and gameplay own point, grab, contact, throw, and
+  trigger mechanics. AIA may adapt those events into spatial evidence but does
+  not own the mechanics or gameplay meaning.
+- MCP validates admitted tools. The editor document/command owner validates and
+  commits mutations. AIA owns orchestration and presentation only.
+
+Both editor-owned authoring proxies and real scene/gameplay objects may provide
+spatial references. Every evidence record identifies its source, timestamp,
+confidence, object generation, scene revision, and XR session generation.
+Destroyed, stale, cross-project, hidden, locked, or unauthorized identities are
+rejected before planning.
+
+Immersive requests follow an explicit presentation state machine:
+
+```text
+Idle -> Listening -> Understanding -> PreparingPreview -> ReadyForReview
+                                                       -> Rejected -> Idle
+                                                       -> Applying -> Completed
+                                                                    -> Failed
+```
+
+Voice, gaze, a pointing gesture, contact, or a physical throw cannot transition
+`ReadyForReview` to `Applying`. Approval uses an explicit admitted controller,
+keyboard, or accessible UI action bound to the exact proposal and document
+revision. Camera and world-transform changes receive heightened impact warning.
+
+Long-running transcription, planning, tool execution, and preview generation
+are cancellable and expose stable progressive feedback. They do not hide
+latency with speculative authoritative world mutation. Feedback supports
+captions, non-voice input, reduced motion, handedness, localization, and more
+than color/audio alone for critical states.
 
 ## Numeric-First Agent Perception
 
@@ -302,8 +374,8 @@ of relying on fragile visual guessing.
 
 ## Context Model
 
-The agent is always aware of the user's editor context. Before each prompt,
-the context provider assembles a structured snapshot:
+Before each request, the context provider assembles only the editor context
+admitted for that request and makes the active context visible to the user:
 
 ```cpp
 struct AgentContext {
@@ -421,10 +493,11 @@ User types message
 
 ## Tool Calling
 
-The agent has **built-in, always-on** access to the Horo MCP protocol. Every
-tool call goes through the `HoroEngineMCP` bridge — the user does not need to
-enable, configure, or install anything. The agent decides when and how to use
-tools based on the user's request.
+The host can compose the Horo MCP bridge without a third-party plugin. Every
+agent tool call goes through that bridge, but availability remains distinct from
+admission and authorization. The effective tool set is derived from host role,
+project trust, user policy, context scope, capabilities, and operation approval.
+The model may request a tool; it never decides its own authority.
 
 ## Internal IDE Communication
 
@@ -607,9 +680,11 @@ schema, bounded scope, preview output, and undoable transaction path.
 | `editor.inspect`   | Read inspector property values | No    |
 | `editor.run_tests` | Trigger project test suite     | Yes   |
 
-Write-capable tools require explicit user confirmation before execution. The
-confirmation gate is configured per-tool and can be bypassed for trusted
-workflows (configurable in project settings).
+Write-capable tools produce a reviewable proposal and require explicit user
+approval before execution. Project policy may streamline presentation for
+deterministic tools, but it cannot let model output, voice, gaze, pointing, or a
+gesture approve its own mutation. Destructive and immersive scene changes always
+retain the visible proposal and revision-bound approval boundary.
 
 ## Backend Providers
 
@@ -617,31 +692,46 @@ The system supports pluggable LLM backends:
 
 ```cpp
 enum class AgentProvider {
-    Local,    // Ollama, llama.cpp — offline, zero-latency, no data leaves machine
-    Cloud,    // Anthropic, OpenAI — higher capability, requires API key
-    Hybrid,   // Local for simple queries, cloud for complex reasoning
+    Local,
+    Cloud,
+    Hybrid,
 };
 ```
 
-### Local Provider (Ollama)
+### Local Provider
 
 - Runs the model on the developer's machine
 - Recommended for offline work, privacy-sensitive projects
-- Lower capability ceiling but zero network dependency
-- Models: Llama 3, Mistral, CodeQwen, DeepSeek Coder
+- Has no network dependency after its model/runtime is available
+- Reports model capabilities, context limits, cost class, and availability
+  through the same provider contract as remote adapters
 
 ### Cloud Provider
 
-- Connects to Anthropic (Claude) or OpenAI (GPT) APIs
-- Higher reasoning capability for complex scene operations
-- Requires API key configured in project settings
-- Data policy: only context + prompt sent; no project files uploaded
+- Connects through a provider adapter selected by host/project policy
+- Uses an opaque credential reference rather than persisting a raw secret in
+  project settings
+- Receives only the context admitted and disclosed for the current request
+- Declares retry, quota, streaming, tool-call, and data-residency capabilities
 
 ### Provider Selection
 
 The active provider is selected in the chat panel header. Per-conversation
 override is supported. System administrators can lock the provider via
 project settings.
+
+### Provider Budget And Degraded Operation
+
+Provider selection also resolves a policy-bounded budget for transcription and
+model inference. The policy can limit requests, tokens/audio duration, monetary
+estimate, concurrency, retries, and session/project totals. Usage presentation
+must distinguish an estimate from provider-authoritative billing.
+
+Rate limiting, quota exhaustion, offline state, credential loss, and provider
+failure are normal lifecycle results. They may offer an admitted local provider,
+queue a user-visible retry, or stop the request. They never trigger unbounded
+background retries, silently switch data residency, or mutate scene state.
+Cancellation and shutdown revoke retries and release provider work.
 
 ## Conversation Management
 
@@ -681,11 +771,14 @@ These are surfaced in the chat UI as context chips above the input area.
 ### Data Boundaries
 
 - **Local mode**: No data leaves the machine. The LLM runs on-device.
-- **Cloud mode**: Only the assembled prompt (system context + history + user
-  message) is sent to the API. Project files, scene data, and asset contents
-  are NOT uploaded unless the user explicitly drags a file into the chat.
+- **Cloud mode**: Only context explicitly admitted by the active policy and
+  shown to the user is sent to the provider. Project files, scene data, assets,
+  transcripts, tracking evidence, and tool results are individually classified;
+  enabling cloud inference does not admit them automatically.
 - **Tool results**: MCP tool responses are included in the LLM context. Read
-  results contain scene/asset metadata only; binary asset data is never sent.
+  results are schema-bounded and redacted before provider admission. Binary
+  assets, raw voice, continuous gaze/pose history, camera frames, and environment
+  geometry are excluded by default.
 
 ### Permission Model
 
@@ -706,14 +799,18 @@ effective permission set is displayed as a badge in the chat header.
 
 ### Audit Trail
 
-All tool invocations are logged to the editor console with:
+All tool invocations append schema-bounded, redacted audit records with:
 
 - Timestamp
-- Tool name and arguments
+- Tool name and admitted argument summary
 - Result summary (success / error code)
 - User confirmation status
+- Provider/session, operation, proposal, and document revision identities
 
-This provides a full audit trail for debugging and review.
+Raw credentials, raw voice, continuous gaze/pose history, camera frames,
+environment geometry, and unrestricted tool payloads are not copied into the
+audit store. The editor console is a projection of the audit record rather than
+its authoritative owner.
 
 ## Editor Integration
 
@@ -727,12 +824,14 @@ This provides a full audit trail for debugging and review.
 
 ### Activity Bar Button
 
-The AI Chat button is injected automatically into every right activity bar
-by the shared JavaScript. The button:
+When the AI capability is composed, the AI Chat button is contributed to the
+right activity bar through the shared panel/command registration path. The
+button:
 
 - Shows a chat bubble icon
 - Highlights blue when the panel is open
-- Is always available on editor screens; absent on modal dialogs
+- Is absent when AI is disabled or unavailable and does not appear on modal
+  dialogs
 
 ### Cross-Page State
 
@@ -786,9 +885,10 @@ first:
 3. Present inline actions: **Apply**, **Refine**, **Cancel**.
 4. Commit only through `ai.apply_transaction`.
 
-Low-risk exact requests, such as "move selected object 1m up", may commit
-directly if project policy allows trusted agent edits. Destructive actions
-always require preview or confirmation.
+Even low-risk exact requests, such as "move selected object 1m up", produce a
+reviewable proposal. The UI can keep this review compact, but agent-authored
+scene mutation does not bypass revision-bound approval. Destructive or immersive
+changes receive a more prominent impact summary.
 
 ### Example: Fix This Corner
 
@@ -888,6 +988,10 @@ The LLM should choose strategy; the editor tool should execute the strategy.
 - Preview overlays are transient editor resources; they are not scene objects and
   are never saved.
 - Every applied agent transaction must be undoable in one user-level undo step.
+- Voice/transcription and XR evidence queues are bounded; continuous audio,
+  gaze, pose, or environment history is not retained as ordinary context.
+- Disabled immersive/provider paths do not add work to the XR frame loop or
+  audio callback.
 
 ## Failure Handling
 
@@ -915,7 +1019,8 @@ JavaScript source.
 
 - **Agent-to-agent communication**: Multiple agents (e.g., architect +
   implementer) collaborating on complex tasks
-- **Voice input**: Speech-to-text for hands-free prompting
+- **In-game voice agents**: player-facing dialogue/NPC agents are a separate
+  runtime product from the editor-owned immersive authoring workflow
 - **Proactive suggestions**: Agent monitors console output and offers help
   when errors or warnings appear
 - **Code generation**: Agent writes C++ component stubs, material graphs,
