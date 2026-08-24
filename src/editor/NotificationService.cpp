@@ -8,7 +8,7 @@ namespace Horo::Editor {
             static std::atomic<std::uint64_t> counter{1};
             return counter.fetch_add(1);
         }
-    }
+    }  // namespace
 
     void NotificationService::Publish(std::string_view source, NotificationSeverity severity, std::string message, std::string title,
                                       std::string deduplicationKey, float durationSeconds, std::vector<NotificationAction> actions) const {
