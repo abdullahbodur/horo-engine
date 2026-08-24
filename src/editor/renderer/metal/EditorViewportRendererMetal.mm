@@ -393,7 +393,7 @@ fragment float4 viewport_grid_fragment(GridVertexOut input [[stage_in]],
     }
 
     /** @copydoc EditorViewportRendererMetal::RequestLightVisualizer */
-    void EditorViewportRendererMetal::RequestLightVisualizer(EditorViewportLightVisualizerOptions options) noexcept {
+    void EditorViewportRendererMetal::RequestLightVisualizer(const EditorViewportLightVisualizerOptions &options) noexcept {
         impl_->lightVisualizerOptions = std::move(options);
     }
 

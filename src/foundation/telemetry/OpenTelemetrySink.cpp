@@ -32,7 +32,8 @@ namespace Horo::Telemetry {
                 static std::once_flag curlInitialization;
                 static bool curlReady{};
                 std::call_once(curlInitialization, [] {
-                    curlReady = curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK;
+                    // TLS backends initialize themselves; only WinSock requires explicit process setup.
+                    curlReady = curl_global_init(CURL_GLOBAL_WIN32) == CURLE_OK;
                 });
                 if (!curlReady)
                     return false;

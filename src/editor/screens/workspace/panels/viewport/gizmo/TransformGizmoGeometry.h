@@ -34,12 +34,23 @@ namespace Horo::Editor {
         bool hovered{false};
     };
 
+    /** @brief Inputs required to project a pointer ray onto a gizmo rotation plane. */
+    struct TransformGizmoRotationProjectionRequest {
+        const EditorViewportCamera &camera;
+        Math::Vec3 center;
+        Math::Vec3 normal;
+        ImVec2 pointer{};
+        ImVec2 origin{};
+        float width{0.0F};
+        float height{0.0F};
+        Math::ClipDepthRange depthRange{Math::ClipDepthRange::NegativeOneToOne};
+    };
+
     /** @brief Projects and draws a transform gizmo, returning geometry used to begin an interaction. */
     [[nodiscard]] Result<TransformGizmoFrameGeometry> DrawTransformGizmoGeometry(ImDrawList &drawList,
                                                                                  const TransformGizmoGeometryRequest &request);
 
     /** @brief Projects a pointer ray onto a rotation plane and returns its normalized center-relative vector. */
     [[nodiscard]] std::optional<Math::Vec3> ProjectTransformGizmoRotationVector(
-        const EditorViewportCamera &camera, Math::Vec3 center, Math::Vec3 normal, ImVec2 pointer, ImVec2 origin, float width, float height,
-        Math::ClipDepthRange depthRange) noexcept;  // NOSONAR(cpp:S107)
+        const TransformGizmoRotationProjectionRequest &request) noexcept;
 }  // namespace Horo::Editor

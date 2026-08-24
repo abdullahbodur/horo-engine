@@ -185,12 +185,21 @@ namespace Horo::Editor {
             return;
         }
         selectedAction_ = std::min(selectedAction_, actions.size() - 1);
+        DrawActionValidation(actions);
+        DrawActionTable(actions, context);
+        DrawSelectedAction(actions[selectedAction_], context);
+    }
+
+    void InputMappingPanel::DrawActionValidation(const std::span<const Input::ActionDescriptor> actions) const {
         const Input::BindingValidationReport validation = Input::ValidateBindingProfile(actions, router_->Profile());
         for (const Input::BindingDiagnostic &diagnostic : validation.diagnostics) {
             ImGui::PushStyleColor(ImGuiCol_Text, diagnostic.blocking ? Theme::Err() : Theme::Warn());
             ImGui::TextWrapped("%s", diagnostic.message.c_str());
             ImGui::PopStyleColor();
         }
+    }
+
+    void InputMappingPanel::DrawActionTable(const std::span<const Input::ActionDescriptor> actions, const EditorGuiContext &context) {
         if (ImGui::BeginTable("##ActionMap", 4,
                               ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp)) {
             ImGui::TableSetupColumn(context.localization.Get("editor", "workspace.input_mapping.action").c_str());
@@ -214,7 +223,9 @@ namespace Horo::Editor {
             }
             ImGui::EndTable();
         }
-        const Input::ActionDescriptor &selectedAction = actions[selectedAction_];
+    }
+
+    void InputMappingPanel::DrawSelectedAction(const Input::ActionDescriptor &selectedAction, const EditorGuiContext &context) {
         ImGui::Separator();
         ImGui::TextUnformatted(selectedAction.id.Value().c_str());
         const auto &bindings = BindingsFor(selectedAction, router_->Profile());

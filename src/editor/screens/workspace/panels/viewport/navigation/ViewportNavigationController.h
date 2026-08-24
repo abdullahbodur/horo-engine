@@ -9,6 +9,20 @@
 namespace Horo::Editor {
     class ViewportInteractionCapture;
 
+    /** @brief Frame-local inputs used to update viewport navigation. */
+    struct ViewportNavigationUpdateContext {
+        ImVec2 origin{};
+        float width{0.0F};
+        float height{0.0F};
+        bool hovered{false};
+        const Input::RawInputSnapshot &input;
+        const EditorWorkspaceViewModel &viewModel;
+        EditorWorkspaceViewCommandData &command;
+        const EditorGuiContext &gui;
+        float deltaSeconds{0.0F};
+        Math::ClipDepthRange depthRange{Math::ClipDepthRange::NegativeOneToOne};
+    };
+
     /** @brief Maps routed viewport input to camera, focus, and picking commands without owning viewport state. */
     class ViewportNavigationController {
     public:
@@ -16,10 +30,7 @@ namespace Horo::Editor {
 
         [[nodiscard]] bool IsActive() const noexcept;
 
-        void Update(const ImVec2 &origin, float width, float height, bool hovered, const Input::RawInputSnapshot &input,
-                    const EditorWorkspaceViewModel &viewModel, EditorWorkspaceViewCommandData &command, const EditorGuiContext &context,
-                    float deltaSeconds, ViewportInteractionCapture &capture,
-                    Math::ClipDepthRange depthRange);  // NOSONAR(cpp:S107)
+        void Update(const ViewportNavigationUpdateContext &context, ViewportInteractionCapture &capture);
 
     private:
         enum class Mode {
@@ -28,6 +39,12 @@ namespace Horo::Editor {
             Pan,
             Orbit,
         };
+
+        void TryBeginNavigation(const ViewportNavigationUpdateContext &context, ViewportInteractionCapture &capture);
+        void EndReleasedNavigation(const Input::RawInputSnapshot &input, ViewportInteractionCapture &capture);
+        [[nodiscard]] EditorViewportNavigationDelta BuildNavigationDelta(const ViewportNavigationUpdateContext &context) const;
+        void EmitNavigationCommand(const ViewportNavigationUpdateContext &context, const EditorViewportNavigationDelta &navigation,
+                                   const ViewportInteractionCapture &capture) const;
 
         Mode mode_{Mode::None};
     };

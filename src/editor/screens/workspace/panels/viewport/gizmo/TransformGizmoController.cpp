@@ -24,17 +24,15 @@ namespace Horo::Editor {
         return drag_.has_value();
     }
 
-    bool TransformGizmoController::Draw(ImDrawList &drawList, const ImVec2 &origin, const float width, const float height,
-                                        const bool hovered, const Input::RawInputSnapshot &input, const EditorWorkspaceViewModel &viewModel,
-                                        EditorWorkspaceViewCommandData &command, ViewportInteractionCapture &capture,
-                                        const Math::ClipDepthRange depthRange) {  // NOSONAR(cpp:S107)
-
+    bool TransformGizmoController::Draw(ImDrawList &drawList, const TransformGizmoDrawContext &context,
+                                        ViewportInteractionCapture &capture) {
         if (cancelPreviewOnNextDraw_) {
             cancelPreviewOnNextDraw_ = false;
-            command.command = EditorWorkspaceViewCommand::CancelObjectTransformPreview;
+            context.command.command = EditorWorkspaceViewCommand::CancelObjectTransformPreview;
             return true;
         }
 
+        const EditorWorkspaceViewModel &viewModel = context.viewModel;
         const auto selectedObject = viewModel.primarySelection.has_value()
                                         ? std::ranges::find(viewModel.objects, *viewModel.primarySelection, &SceneObject::id)
                                         : viewModel.objects.end();
@@ -46,7 +44,7 @@ namespace Horo::Editor {
                                   viewModel.activeTransformSpace != drag_->space)) {
             capture.Cancel(Input::CaptureCancellationReason::Explicit);
             cancelPreviewOnNextDraw_ = false;
-            command.command = EditorWorkspaceViewCommand::CancelObjectTransformPreview;
+            context.command.command = EditorWorkspaceViewCommand::CancelObjectTransformPreview;
             return true;
         }
 
@@ -61,15 +59,15 @@ namespace Horo::Editor {
                                                          .worldTransform = worldTransform,
                                                          .tool = viewModel.activeTransformTool,
                                                          .space = viewModel.activeTransformSpace,
-                                                         .depthRange = depthRange,
+                                                         .depthRange = context.depthRange,
                                                          .activeAxis = drag_.has_value() ? std::optional{drag_->axis} : std::nullopt,
                                                          .activeWorldPosition =
                                                              drag_.has_value() ? std::optional{drag_->currentWorldPosition} : std::nullopt,
-                                                         .origin = origin,
-                                                         .width = width,
-                                                         .height = height,
-                                                         .pointer = ImVec2{input.pointer.x, input.pointer.y},
-                                                         .hovered = hovered,
+                                                         .origin = context.origin,
+                                                         .width = context.width,
+                                                         .height = context.height,
+                                                         .pointer = ImVec2{context.input.pointer.x, context.input.pointer.y},
+                                                         .hovered = context.hovered,
                                                      });
             if (geometry.HasError()) {
                 if (!geometryFailureReported_) {
@@ -79,14 +77,13 @@ namespace Horo::Editor {
                 if (drag_.has_value()) {
                     capture.Cancel(Input::CaptureCancellationReason::Explicit);
                     cancelPreviewOnNextDraw_ = false;
-                    command.command = EditorWorkspaceViewCommand::CancelObjectTransformPreview;
+                    context.command.command = EditorWorkspaceViewCommand::CancelObjectTransformPreview;
                     return true;
                 }
                 return false;
             }
             geometryFailureReported_ = false;
-            const Result<void> begun = TryBeginDrag(geometry.Value(), worldTransform, *selectedObject, viewModel, input, origin, width,
-                                                    height, capture, depthRange);
+            const Result<void> begun = TryBeginDrag(geometry.Value(), worldTransform, *selectedObject, context, capture);
             if (begun.HasError()) {
                 LOG_ERROR("editor.viewport_gizmo", "Gizmo drag rejected: %s", begun.ErrorValue().message.c_str());
             }
@@ -94,15 +91,15 @@ namespace Horo::Editor {
 
         if (!drag_.has_value())
             return false;
-        AdvanceDrag(input, viewModel, origin, width, height, command, capture, depthRange);
+        AdvanceDrag(context, capture);
         return true;
     }
 
     Result<void> TransformGizmoController::TryBeginDrag(const TransformGizmoFrameGeometry &geometry, const Math::Mat4 &worldTransform,
-                                                        const SceneObject &selectedObject, const EditorWorkspaceViewModel &viewModel,
-                                                        const Input::RawInputSnapshot &input, const ImVec2 &origin, const float width,
-                                                        const float height, ViewportInteractionCapture &capture,
-                                                        const Math::ClipDepthRange depthRange) {  // NOSONAR(cpp:S107)
+                                                        const SceneObject &selectedObject, const TransformGizmoDrawContext &context,
+                                                        ViewportInteractionCapture &capture) {
+        const Input::RawInputSnapshot &input = context.input;
+        const EditorWorkspaceViewModel &viewModel = context.viewModel;
         if (drag_.has_value() || !geometry.hoveredAxis.has_value() || !input.State(Input::PointerButton::Primary).pressed ||
             !capture.Begin(Input::PointerButton::Primary))
             return Result<void>::Success();
@@ -111,11 +108,16 @@ namespace Horo::Editor {
         const Math::Vec3 chosenAxis = axis < 3 ? geometry.worldAxes[axis] : Math::Vec3{};
         const ImVec2 direction = axis < 3 ? geometry.screenDirections[axis] : ImVec2{0.7071F, -0.7071F};
         const ImVec2 pointer{input.pointer.x, input.pointer.y};
-        const std::optional<Math::Vec3> startRotationVector =
-            viewModel.activeTransformTool == EditorTransformTool::Rotate
-                ? ProjectTransformGizmoRotationVector(viewModel.viewportCamera, geometry.worldPosition, chosenAxis, pointer, origin, width,
-                                                      height, depthRange)
-                : std::nullopt;
+        const std::optional<Math::Vec3> startRotationVector = viewModel.activeTransformTool == EditorTransformTool::Rotate
+                                                                  ? ProjectTransformGizmoRotationVector({.camera = viewModel.viewportCamera,
+                                                                                                         .center = geometry.worldPosition,
+                                                                                                         .normal = chosenAxis,
+                                                                                                         .pointer = pointer,
+                                                                                                         .origin = context.origin,
+                                                                                                         .width = context.width,
+                                                                                                         .height = context.height,
+                                                                                                         .depthRange = context.depthRange})
+                                                                  : std::nullopt;
         if (viewModel.activeTransformTool == EditorTransformTool::Rotate && !startRotationVector.has_value()) {
             capture.Finish();
             return Result<void>::Success();
@@ -151,23 +153,20 @@ namespace Horo::Editor {
         return Result<void>::Success();
     }
 
-    void TransformGizmoController::AdvanceDrag(const Input::RawInputSnapshot &input, const EditorWorkspaceViewModel &viewModel,
-                                               const ImVec2 &origin, const float width, const float height,
-                                               EditorWorkspaceViewCommandData &command, ViewportInteractionCapture &capture,
-                                               const Math::ClipDepthRange depthRange) {  // NOSONAR(cpp:S107)
-
+    void TransformGizmoController::AdvanceDrag(const TransformGizmoDrawContext &context, ViewportInteractionCapture &capture) {
+        const Input::RawInputSnapshot &input = context.input;
         const Input::ButtonState primary = input.State(Input::PointerButton::Primary);
         if (input.State(Input::Key::Escape).pressed) {
             capture.Cancel(Input::CaptureCancellationReason::Escape);
-            command.command = EditorWorkspaceViewCommand::CancelObjectTransformPreview;
+            context.command.command = EditorWorkspaceViewCommand::CancelObjectTransformPreview;
             cancelPreviewOnNextDraw_ = false;
             return;
         }
         if (primary.released) {
             if (drag_->draftTransform != drag_->math.initialLocalTransform) {
-                command.command = EditorWorkspaceViewCommand::CommitObjectTransform;
-                command.objectPayload = drag_->object;
-                command.transformPayload = drag_->draftTransform;
+                context.command.command = EditorWorkspaceViewCommand::CommitObjectTransform;
+                context.command.objectPayload = drag_->object;
+                context.command.transformPayload = drag_->draftTransform;
             }
             drag_.reset();
             capture.Finish();
@@ -181,8 +180,14 @@ namespace Horo::Editor {
         const float projectedPixels = mouseDelta.x * drag_->screenDirection.x + mouseDelta.y * drag_->screenDirection.y;
         std::optional<Math::Vec3> currentRotationVector;
         if (drag_->tool == EditorTransformTool::Rotate) {
-            currentRotationVector = ProjectTransformGizmoRotationVector(viewModel.viewportCamera, drag_->math.initialWorldPosition,
-                                                                        drag_->math.worldAxis, pointer, origin, width, height, depthRange);
+            currentRotationVector = ProjectTransformGizmoRotationVector({.camera = context.viewModel.viewportCamera,
+                                                                         .center = drag_->math.initialWorldPosition,
+                                                                         .normal = drag_->math.worldAxis,
+                                                                         .pointer = pointer,
+                                                                         .origin = context.origin,
+                                                                         .width = context.width,
+                                                                         .height = context.height,
+                                                                         .depthRange = context.depthRange});
             if (!currentRotationVector.has_value())
                 return;
         }
@@ -196,16 +201,16 @@ namespace Horo::Editor {
             LOG_ERROR("editor.viewport_gizmo", "Gizmo update failed: %s", outcome.ErrorValue().message.c_str());
             capture.Cancel(Input::CaptureCancellationReason::Explicit);
             cancelPreviewOnNextDraw_ = false;
-            command.command = EditorWorkspaceViewCommand::CancelObjectTransformPreview;
+            context.command.command = EditorWorkspaceViewCommand::CancelObjectTransformPreview;
             return;
         }
 
         drag_->currentWorldPosition = outcome.Value().worldPosition;
         if (outcome.Value().localTransform != drag_->draftTransform) {
             drag_->draftTransform = outcome.Value().localTransform;
-            command.command = EditorWorkspaceViewCommand::PreviewObjectTransform;
-            command.objectPayload = drag_->object;
-            command.transformPayload = outcome.Value().localTransform;
+            context.command.command = EditorWorkspaceViewCommand::PreviewObjectTransform;
+            context.command.objectPayload = drag_->object;
+            context.command.transformPayload = outcome.Value().localTransform;
         }
     }
 }  // namespace Horo::Editor

@@ -3,6 +3,7 @@
 #include "Horo/Editor/IWorkspacePanel.h"
 
 #include <optional>
+#include <span>
 
 namespace Horo::Editor {
     /** @brief Workspace surface for action maps, live devices, profile persistence, and typed rebinding. */
@@ -38,6 +39,9 @@ namespace Horo::Editor {
         };
 
         void DrawActions(const EditorGuiContext &context);
+        void DrawActionValidation(std::span<const Input::ActionDescriptor> actions) const;
+        void DrawActionTable(std::span<const Input::ActionDescriptor> actions, const EditorGuiContext &context);
+        void DrawSelectedAction(const Input::ActionDescriptor &action, const EditorGuiContext &context);
         void DrawDevices(const EditorGuiContext &context);
         void DrawProfiles(const EditorGuiContext &context);
         void PollBindingCapture(const EditorGuiContext &context);

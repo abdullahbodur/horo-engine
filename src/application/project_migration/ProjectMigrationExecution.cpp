@@ -262,8 +262,8 @@ namespace Horo::Application {
         }
 
         [[nodiscard]] Result<void> ExecuteForEach(const ProjectMigrationDefinition &definition, const ProjectMigrationNode &node,
-                                                  ProjectMigrationContext &context, JobSystem &jobs, const ProjectMigrationLimits &limits,
-                                                  const CancellationToken &cancellation) {
+                                                  const ProjectMigrationContext &context, JobSystem &jobs,
+                                                  const ProjectMigrationLimits &limits, const CancellationToken &cancellation) {
             const MigrationStageDescriptor descriptor = node.documentStage->Describe();
             const std::vector<MigrationDocumentEntry> documents = context.ListDocuments(node.query);
             const std::size_t batchSize = std::max<std::size_t>(1, limits.maxConcurrency);

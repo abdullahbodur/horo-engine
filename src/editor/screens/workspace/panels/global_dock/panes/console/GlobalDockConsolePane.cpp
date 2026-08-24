@@ -158,6 +158,43 @@ namespace Horo::Editor {
         m_textSelectionActive = false;
     }
 
+    void GlobalDockConsolePane::DrawLevelFilters(const bool stacked, const EditorGuiContext &context) {
+        const std::array filterKeys{
+            "workspace.global_dock.console.filter.error", "workspace.global_dock.console.filter.warn",
+            "workspace.global_dock.console.filter.info",  "workspace.global_dock.console.filter.debug",
+            "workspace.global_dock.console.filter.trace",
+        };
+        const auto &fonts = context.theme.fonts;
+        if (stacked) {
+            const std::array<std::string, 5> filterText{
+                context.localization.Get("editor", filterKeys[0]), context.localization.Get("editor", filterKeys[1]),
+                context.localization.Get("editor", filterKeys[2]), context.localization.Get("editor", filterKeys[3]),
+                context.localization.Get("editor", filterKeys[4]),
+            };
+            const std::array<const char *, 5> filterLabels{filterText[0].c_str(), filterText[1].c_str(), filterText[2].c_str(),
+                                                           filterText[3].c_str(), filterText[4].c_str()};
+            const std::string &levelsLabel = context.localization.Get("editor", "workspace.global_dock.console.levels");
+            if (Ui::MultiSelectField("##ConsoleLevels", levelsLabel.c_str(), filterLabels, m_levelEnabled, fonts, 104.0F,
+                                     Ui::ComponentSize::Small))
+                m_filterDirty = true;
+            return;
+        }
+        for (std::size_t index = 0; index < filterKeys.size(); ++index) {
+            const std::string &label = context.localization.Get("editor", filterKeys[index]);
+            if (const Ui::ButtonProps button{
+                    .label = label.c_str(),
+                    .variant = m_levelEnabled[index] ? Ui::ButtonVariant::Primary : Ui::ButtonVariant::Secondary,
+                    .font = fonts.sansCompact,
+                    .componentSize = Ui::ComponentSize::Small,
+                };
+                Ui::Button(button)) {
+                m_levelEnabled[index] = !m_levelEnabled[index];
+                m_filterDirty = true;
+            }
+            ImGui::SameLine(0.0F, ControlGap());
+        }
+    }
+
     /** @copydoc GlobalDockConsolePane::Draw */
     void GlobalDockConsolePane::Draw(const ImVec2 &contentOrigin, const float contentWidth, const EditorGuiContext &context) {
         const bool snapshotChanged = RefreshSnapshot();
@@ -184,39 +221,7 @@ namespace Horo::Editor {
         ImGui::SetCursorScreenPos({barMin.x + ToolbarPadX(), barMin.y + ToolbarPadY()});
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, {ControlGap(), 0.0F});
 
-        const std::array filterKeys{
-            "workspace.global_dock.console.filter.error", "workspace.global_dock.console.filter.warn",
-            "workspace.global_dock.console.filter.info",  "workspace.global_dock.console.filter.debug",
-            "workspace.global_dock.console.filter.trace",
-        };
-        if (stackedToolbar) {
-            const std::array<std::string, 5> filterText{
-                context.localization.Get("editor", filterKeys[0]), context.localization.Get("editor", filterKeys[1]),
-                context.localization.Get("editor", filterKeys[2]), context.localization.Get("editor", filterKeys[3]),
-                context.localization.Get("editor", filterKeys[4]),
-            };
-            const std::array<const char *, 5> filterLabels{filterText[0].c_str(), filterText[1].c_str(), filterText[2].c_str(),
-                                                           filterText[3].c_str(), filterText[4].c_str()};
-            const std::string &levelsLabel = context.localization.Get("editor", "workspace.global_dock.console.levels");
-            if (Ui::MultiSelectField("##ConsoleLevels", levelsLabel.c_str(), filterLabels, m_levelEnabled, fonts, 104.0F,
-                                     Ui::ComponentSize::Small))
-                m_filterDirty = true;
-        } else {
-            for (std::size_t index = 0; index < filterKeys.size(); ++index) {
-                const std::string &label = context.localization.Get("editor", filterKeys[index]);
-                if (const Ui::ButtonProps button{
-                        .label = label.c_str(),
-                        .variant = m_levelEnabled[index] ? Ui::ButtonVariant::Primary : Ui::ButtonVariant::Secondary,
-                        .font = fonts.sansCompact,
-                        .componentSize = Ui::ComponentSize::Small,
-                    };
-                    Ui::Button(button)) {
-                    m_levelEnabled[index] = !m_levelEnabled[index];
-                    m_filterDirty = true;
-                }
-                ImGui::SameLine(0.0F, ControlGap());
-            }
-        }
+        DrawLevelFilters(stackedToolbar, context);
         ImGui::PopStyleVar();  // ItemSpacing
 
         // ── Right: search + clear ───────────────────────────────
@@ -262,6 +267,18 @@ namespace Horo::Editor {
                           ImGuiWindowFlags_AlwaysVerticalScrollbar | ImGuiWindowFlags_NoSavedSettings);
         const bool wasAtBottom = ImGui::GetScrollY() >= std::max(0.0F, ImGui::GetScrollMaxY() - 2.0F);
 
+        DrawLogRows(rebuildSelectableText, context);
+
+        if (snapshotChanged && !m_textSelectionActive && (wasAtBottom || m_initialFollowTail)) {
+            ImGui::SetScrollHereY(1.0F);
+        }
+        m_initialFollowTail = false;
+        ImGui::EndChild();
+        ImGui::PopStyleVar();
+    }
+
+    void GlobalDockConsolePane::DrawLogRows(const bool rebuildSelectableText, const EditorGuiContext &context) {
+        const auto &fonts = context.theme.fonts;
         if (m_filteredIndices.empty()) {
             if (rebuildSelectableText) {
                 m_selectableText.clear();
@@ -271,32 +288,24 @@ namespace Horo::Editor {
             const std::string &empty = context.localization.Get("editor", "workspace.global_dock.console.empty");
             Theme::ScopedTextStyle textStyle(fonts.sans, Theme::FontPx::Sans * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
             ImGui::TextColored(Theme::Dim(), "%s", empty.c_str());
-        } else {
-            Theme::ScopedTextStyle textStyle(fonts.sans, Theme::FontPx::Sans * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
-            const float referenceTimestampWidth = ImGui::CalcTextSize("2022-03-15T13:38:15.567+00:00").x;
-            const float spaceWidth = ImGui::CalcTextSize(" ").x;
-            const float contentColumnX = referenceTimestampWidth + spaceWidth * 3.0F;
+            return;
+        }
 
-            if (rebuildSelectableText) {
-                m_selectableText.clear();
-                m_lineLayouts.clear();
-                m_lineLayouts.reserve(m_filteredIndices.size());
-                for (const std::size_t recordIndex : m_filteredIndices) {
-                    const Log::StructuredLogRecord &record = *m_snapshot.records[recordIndex];
-                    AppendFormattedConsoleRecord(m_selectableText, m_lineLayouts, record, referenceTimestampWidth, spaceWidth);
-                }
+        Theme::ScopedTextStyle textStyle(fonts.sans, Theme::FontPx::Sans * Theme::GetActiveTokens().sizes.uiScale, Theme::FontPx::Sans);
+        const float referenceTimestampWidth = ImGui::CalcTextSize("2022-03-15T13:38:15.567+00:00").x;
+        const float spaceWidth = ImGui::CalcTextSize(" ").x;
+        const float contentColumnX = referenceTimestampWidth + spaceWidth * 3.0F;
+        if (rebuildSelectableText) {
+            m_selectableText.clear();
+            m_lineLayouts.clear();
+            m_lineLayouts.reserve(m_filteredIndices.size());
+            for (const std::size_t recordIndex : m_filteredIndices) {
+                const Log::StructuredLogRecord &record = *m_snapshot.records[recordIndex];
+                AppendFormattedConsoleRecord(m_selectableText, m_lineLayouts, record, referenceTimestampWidth, spaceWidth);
             }
-
-            m_textSelectionActive = Ui::SelectableTextBlock("##ConsoleLogText", m_selectableText.data(), m_selectableText.size() + 1U,
-                                                            m_lineLayouts, contentColumnX);
         }
-
-        if (snapshotChanged && !m_textSelectionActive && (wasAtBottom || m_initialFollowTail)) {
-            ImGui::SetScrollHereY(1.0F);
-        }
-        m_initialFollowTail = false;
-        ImGui::EndChild();
-        ImGui::PopStyleVar();
+        m_textSelectionActive = Ui::SelectableTextBlock("##ConsoleLogText", m_selectableText.data(), m_selectableText.size() + 1U,
+                                                        m_lineLayouts, contentColumnX);
     }
 
     bool GlobalDockConsolePane::RefreshSnapshot() {

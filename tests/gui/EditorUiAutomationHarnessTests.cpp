@@ -62,7 +62,7 @@ namespace {
 
             void RequestGrid(Horo::Editor::EditorViewportGridOptions) noexcept override {}
 
-            void RequestLightVisualizer(Horo::Editor::EditorViewportLightVisualizerOptions) noexcept override {}
+            void RequestLightVisualizer(const Horo::Editor::EditorViewportLightVisualizerOptions &) noexcept override {}
 
             [[nodiscard]] Horo::Editor::EditorViewportExtent RequestedExtent() const noexcept override {
                 return {};
