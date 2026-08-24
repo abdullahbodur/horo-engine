@@ -49,6 +49,9 @@ dependency direction in [System Design](./foundation/system-design.md).
   structures.
 - [System Design](./foundation/system-design.md): hosts, modules, dependency
   direction, application boundaries, and composition rules.
+- [Current Target And Dependency Inventory](./foundation/current-target-and-dependency-inventory.md):
+  evidence-backed CMake targets, public-header ownership, desired-tree status,
+  and current dependency-direction gaps.
 - [Architecture Glossary](./foundation/glossary.md): canonical cross-document
   terminology.
 - [Error And Diagnostics](./foundation/error-and-diagnostics.md): results,
