@@ -26,15 +26,16 @@ namespace Horo::Editor {
 
         [[nodiscard]] Ui::UiIcon IconFor(const Render::RenderLightKind kind) noexcept {
             using enum Render::RenderLightKind;
+            using enum Ui::UiIcon;
             switch (kind) {
                 case Directional:
-                    return Ui::UiIcon::DirectionalLight;
+                    return DirectionalLight;
                 case Point:
-                    return Ui::UiIcon::PointLight;
+                    return PointLight;
                 case Spot:
-                    return Ui::UiIcon::SpotLight;
+                    return SpotLight;
             }
-            return Ui::UiIcon::PointLight;
+            return PointLight;
         }
 
         [[nodiscard]] float DistanceSquared(const ImVec2 left, const ImVec2 right) noexcept {

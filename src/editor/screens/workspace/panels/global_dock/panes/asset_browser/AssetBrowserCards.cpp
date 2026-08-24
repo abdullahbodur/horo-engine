@@ -255,7 +255,11 @@ namespace Horo::Editor {
                               CardRadius, ImDrawFlags_RoundCornersAll, 1.0F);
         }
         drawList->AddLine({cardMin.x, thumbMax.y}, thumbMax, Theme::U32(Theme::Border()), 1.0F);
-        const ImVec4 outlineColor = selected ? Theme::Accent() : (hovered ? Theme::BorderStrong() : Theme::Border());
+        ImVec4 outlineColor = Theme::Border();
+        if (selected)
+            outlineColor = Theme::Accent();
+        else if (hovered)
+            outlineColor = Theme::BorderStrong();
         drawList->AddRect(cardMin, cardMax, Theme::U32(outlineColor), CardRadius, ImDrawFlags_RoundCornersAll, selected ? 1.5F : 1.0F);
         const std::string name{asset.name};
         const ImVec2 textSize = font->CalcTextSizeA(fontSize, cardWidth - 8.0F, 0.0F, name.c_str());

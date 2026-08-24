@@ -243,7 +243,7 @@ namespace Horo::Application {
         }
 
         [[nodiscard]] Result<void> MergeExecutionResults(std::vector<std::optional<MigrationDocumentChange>> &results,
-                                                         ProjectMigrationContext &context) {
+                                                         const ProjectMigrationContext &context) {
             std::unordered_set<std::uint64_t> writes;
             for (auto &result : results) {
                 if (!result.has_value() || !result->changed)

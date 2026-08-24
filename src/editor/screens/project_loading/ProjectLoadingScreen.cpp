@@ -16,6 +16,44 @@
 
 namespace Horo::Editor {
     namespace {
+        /** @brief Returns the localization key associated with a project-open phase. */
+        [[nodiscard]] constexpr const char *PhaseLocalizationKey(const ProjectOpenPhase phase) noexcept {
+            using enum ProjectOpenPhase;
+            switch (phase) {
+                case Inspecting:
+                    return "project_loading.status.inspecting";
+                case CleaningRecovery:
+                    return "project_loading.status.cleaning";
+                case Recovering:
+                    return "project_loading.status.recovering";
+                case ValidatingCompatibility:
+                    return "project_loading.status.validating";
+                case PlanningMigration:
+                    return "project_loading.status.planning";
+                case Migrating:
+                    return "project_loading.status.migrating";
+                case UpdatingProjectMetadata:
+                    return "project_loading.status.updating";
+                case ValidatingDefaultScene:
+                    return "project_loading.status.loading_scene";
+                case RebuildingDerivedState:
+                    return "project_loading.status.rebuilding";
+                case RendererPreflight:
+                    return "project_loading.status.renderer";
+                case PreparingWorkspace:
+                    return "project_loading.status.workspace";
+                case ReadyToActivate:
+                    return "project_loading.status.ready";
+                case RequiresRendererRestart:
+                    return "project_loading.status.renderer_restart";
+                case Failed:
+                    return "project_loading.status.failed";
+                case Cancelled:
+                    return "project_loading.status.cancelling";
+            }
+            return "project_loading.status.processing";
+        }
+
         class ProjectLoadingScreen final : public GuiScreen {
         public:
             explicit ProjectLoadingScreen(const EditorServiceRegistry &services)
@@ -189,43 +227,7 @@ namespace Horo::Editor {
             }
 
             [[nodiscard]] std::string PhaseText(const ProjectOpenPhase phase) const {
-                using enum ProjectOpenPhase;
-                const char *key = [&] {
-                    switch (phase) {
-                        case Inspecting:
-                            return "project_loading.status.inspecting";
-                        case CleaningRecovery:
-                            return "project_loading.status.cleaning";
-                        case Recovering:
-                            return "project_loading.status.recovering";
-                        case ValidatingCompatibility:
-                            return "project_loading.status.validating";
-                        case PlanningMigration:
-                            return "project_loading.status.planning";
-                        case Migrating:
-                            return "project_loading.status.migrating";
-                        case UpdatingProjectMetadata:
-                            return "project_loading.status.updating";
-                        case ValidatingDefaultScene:
-                            return "project_loading.status.loading_scene";
-                        case RebuildingDerivedState:
-                            return "project_loading.status.rebuilding";
-                        case RendererPreflight:
-                            return "project_loading.status.renderer";
-                        case PreparingWorkspace:
-                            return "project_loading.status.workspace";
-                        case ReadyToActivate:
-                            return "project_loading.status.ready";
-                        case RequiresRendererRestart:
-                            return "project_loading.status.renderer_restart";
-                        case Failed:
-                            return "project_loading.status.failed";
-                        case Cancelled:
-                            return "project_loading.status.cancelling";
-                    }
-                    return "project_loading.status.processing";
-                }();
-                return context_.localization.Get("editor", key);
+                return context_.localization.Get("editor", PhaseLocalizationKey(phase));
             }
 
             [[nodiscard]] std::string FailureText(const Error &error) const {
