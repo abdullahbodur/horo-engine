@@ -158,7 +158,7 @@ namespace Horo {
         [[nodiscard]] Result<ModuleIndex> IndexModules(const std::span<const ModuleDescriptor> descriptors) {
             ModuleIndex modules;
             for (std::size_t index = 0; index < descriptors.size(); ++index) {
-                if (const auto failure = ValidateLocalDescriptor(descriptors[index]); failure.has_value())
+                if (auto failure = ValidateLocalDescriptor(descriptors[index]); failure.has_value())
                     return Fail<ModuleIndex>(ModuleDescriptorErrors::InvalidDescriptor, std::move(*failure));
                 if (!modules.try_emplace(descriptors[index].id.value, index).second) {
                     return Fail<ModuleIndex>(ModuleDescriptorErrors::DuplicateModule,
