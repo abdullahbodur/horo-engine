@@ -216,7 +216,7 @@ namespace Horo {
         void RequestCancellationFrom(std::size_t base) noexcept;
         void DeactivateFrom(std::size_t base) noexcept;
         void StopUnactivatedRegistered() noexcept;
-        void RollbackActivation(const ModuleDescriptor &failedDescriptor, std::unique_ptr<ModuleActivationContext> failedContext,
+        void RollbackActivation(const ModuleId &failedId, std::unique_ptr<ModuleActivationContext> failedContext,
                                 std::size_t base) noexcept;
 
         std::vector<ModuleDescriptor> m_registered;

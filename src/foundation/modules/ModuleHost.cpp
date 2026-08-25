@@ -52,9 +52,9 @@ namespace Horo {
             Transition(descriptor->id, ModuleLifecycleState::Activating);
             if (descriptor->lifecycle.activate != nullptr) {
                 if (const Result<void> activated = descriptor->lifecycle.activate(*context); activated.HasError()) {
-                    RollbackActivation(*descriptor, std::move(context), base);
-                    return Fail<std::size_t>(ModuleDescriptorErrors::InvalidDescriptor,
-                                             "Activation of module '" + descriptor->id.value + "' failed.");
+                    const std::string failedId = descriptor->id.value;
+                    RollbackActivation(descriptor->id, std::move(context), base);
+                    return Fail<std::size_t>(ModuleDescriptorErrors::InvalidDescriptor, "Activation of module '" + failedId + "' failed.");
                 }
             }
             ActiveModule active{.id = descriptor->id,
