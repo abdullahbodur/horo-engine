@@ -553,6 +553,7 @@ target_compile_features(HoroFoundationResultTests PRIVATE cxx_std_20)
 target_link_libraries(HoroFoundationResultTests PRIVATE HoroEngine::Foundation)
 add_executable(HoroFoundationModuleDescriptorTests
         unit/foundation/ModuleDescriptorTests.cpp
+        unit/foundation/ModuleDescriptorGraphTests.cpp
 )
 
 target_compile_features(HoroFoundationModuleDescriptorTests PRIVATE cxx_std_20)
