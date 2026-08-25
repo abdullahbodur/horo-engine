@@ -211,7 +211,7 @@ namespace {
         REQUIRE(OrderOf(result.Value()) == std::vector<std::string>{"horo.runtime"});
     }
 
-    TEST_CASE("Module descriptor local validation exercises all error branches", "[unit][foundation][modules]") {
+    TEST_CASE("Module descriptor rejects self and duplicate dependencies", "[unit][foundation][modules]") {
         SECTION("self dependency rejection") {
             ModuleDescriptor module = MakeModule("horo.runtime");
             module.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.runtime"}});
@@ -236,7 +236,9 @@ namespace {
             REQUIRE(result.HasError());
             REQUIRE(result.ErrorValue().message == "Module 'horo.runtime' has a non-canonical dependency identity.");
         }
+    }
 
+    TEST_CASE("Module descriptor validates capability declarations", "[unit][foundation][modules]") {
         SECTION("non-canonical provided capability rejection") {
             ModuleDescriptor module = MakeModule("horo.runtime");
             module.providedCapabilities.push_back(ModuleCapabilityId{"Horo.Capability"});
@@ -279,7 +281,9 @@ namespace {
             REQUIRE(result.HasError());
             REQUIRE(result.ErrorValue().message == "Module 'horo.runtime' cannot require a capability it provides.");
         }
+    }
 
+    TEST_CASE("Module descriptor validates resource budgets and observability", "[unit][foundation][modules]") {
         SECTION("zero limit resource budget rejection") {
             ModuleDescriptor module = MakeModule("horo.runtime");
             module.resourceBudgets.push_back(
@@ -310,7 +314,9 @@ namespace {
             REQUIRE(result.HasError());
             REQUIRE(result.ErrorValue().message == "Module 'horo.runtime' repeats observability descriptor 'horo.runtime.log'.");
         }
+    }
 
+    TEST_CASE("Module descriptor canonical ID grammar and tie-breaking", "[unit][foundation][modules]") {
         SECTION("invalid canonical ID grammar variations") {
             for (const std::string_view invalidId : {"", ".horo", "horo.", "horo..runtime", "horo_-_runtime", "-horo", "horo-",
                                                      "horo space", "horo:runtime", "horo@runtime", "horo/runtime"}) {
