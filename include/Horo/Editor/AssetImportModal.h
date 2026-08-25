@@ -25,7 +25,7 @@ namespace Horo::Editor::Theme {
 namespace Horo::Assets {
     class AssetImporterCatalogSnapshot;
     class ProjectAssetImportCommitter;
-}
+}  // namespace Horo::Assets
 
 namespace Horo::Editor {
     /**

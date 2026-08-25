@@ -19,7 +19,7 @@
 namespace Horo {
     class DurableFileSystem;
     class IExternalProcessRunner;
-}
+}  // namespace Horo
 
 namespace Horo::Application {
     using GameplayBuildSessionId = std::uint64_t;
