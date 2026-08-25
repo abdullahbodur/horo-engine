@@ -8,8 +8,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   clang-tidy:
@@ -82,15 +82,33 @@ jobs:
 
       - name: Run Clang-Tidy
         run: |
+          test -f build/codacy-clang-tidy/compile_commands.json
+
+          matched_files=$(grep -E '"file":' build/codacy-clang-tidy/compile_commands.json | grep -Ev '(\.cmake|_deps|build|submodules)' | grep -E '(src|apps)/.*\.(c|cc|cpp|cxx)' | wc -l)
+          echo "Found ${matched_files} matching translation units to analyze."
+          if [ "${matched_files}" -le 0 ]; then
+            echo "::error::No matching translation units found in compilation database."
+            exit 1
+          fi
+
+          set +e
           run-clang-tidy-18 \
             -p build/codacy-clang-tidy \
             -j "$(nproc)" \
             -quiet \
             '^(?!.*(\.cmake|_deps|build|submodules)).*(src|apps)/.*\.(c|cc|cpp|cxx)$' \
-            2>&1 | tee clang-tidy-output.txt || true
+            2>&1 | tee clang-tidy-output.txt
+          status="${PIPESTATUS[0]}"
+          set -e
 
           test -f clang-tidy-output.txt
-          echo "Clang-Tidy execution finished. Total output lines: $(wc -l < clang-tidy-output.txt)"
+
+          if [ "${status}" -ne 0 ] && [ ! -s clang-tidy-output.txt ]; then
+            echo "::error::run-clang-tidy-18 failed with exit status ${status} and produced no output."
+            exit 1
+          fi
+
+          echo "Clang-Tidy execution finished with tool exit status ${status}. Total output lines: $(wc -l < clang-tidy-output.txt)"
 
       - name: Upload Clang-Tidy results to Codacy
         uses: codacy/codacy-analysis-cli-action@d43360362776a6789b47b99ae8973510854e2d3d
