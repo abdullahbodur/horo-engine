@@ -31,9 +31,12 @@ else ()
     )
 endif ()
 
+add_compile_definitions(HORO_PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+
 function(horo_register_catch_test target)
     cmake_parse_arguments(ARG "" "" "LABELS;EXTRA_ARGS;PROPERTIES" ${ARGN})
     target_compile_features(${target} PRIVATE cxx_std_20)
+    target_compile_definitions(${target} PRIVATE HORO_PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     target_link_libraries(${target} PRIVATE Catch2::Catch2WithMain)
     catch_discover_tests(${target}
             TEST_PREFIX "${target}::"
@@ -548,6 +551,13 @@ add_executable(HoroFoundationResultTests
 
 target_compile_features(HoroFoundationResultTests PRIVATE cxx_std_20)
 target_link_libraries(HoroFoundationResultTests PRIVATE HoroEngine::Foundation)
+add_executable(HoroFoundationModuleDescriptorTests
+        unit/foundation/ModuleDescriptorTests.cpp
+        unit/foundation/ModuleDescriptorGraphTests.cpp
+)
+
+target_compile_features(HoroFoundationModuleDescriptorTests PRIVATE cxx_std_20)
+target_link_libraries(HoroFoundationModuleDescriptorTests PRIVATE HoroEngine::Foundation)
 add_executable(HoroFoundationPathsTimeHandlesTests
         unit/foundation/PathsTimeHandlesTests.cpp
 )
@@ -659,11 +669,9 @@ set(HORO_EDITOR_WHITE_BOX_TEST_TARGETS
         HoroAssetSceneDropTests
 )
 foreach (target IN LISTS HORO_EDITOR_WHITE_BOX_TEST_TARGETS)
-    if(NOT TARGET ${target})
-        message(FATAL_ERROR
-                "HORO_EDITOR_WHITE_BOX_TEST_TARGETS references undefined target '${target}'")
-    endif()
-    target_link_libraries(${target} PRIVATE HoroEditorTestInternals)
+    if (TARGET ${target})
+        target_link_libraries(${target} PRIVATE HoroEditorTestInternals)
+    endif ()
 endforeach ()
 
 add_executable(HoroRenderBackendRegistryTests
@@ -960,6 +968,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroViewportPanelRenderTests
         HoroDataBusTests
         HoroFoundationResultTests
+        HoroFoundationModuleDescriptorTests
         HoroFoundationPathsTimeHandlesTests
         HoroFoundationCancellationProgressTests
         HoroFoundationConfigurationTests

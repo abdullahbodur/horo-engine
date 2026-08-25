@@ -6,6 +6,7 @@ namespace Horo {
         const ErrorDomainId HashingDomain{"horo.foundation.hashing"};
         const ErrorDomainId JobDomain{"horo.foundation.jobs"};
         const ErrorDomainId MathDomain{"horo.foundation.math"};
+        const ErrorDomainId ModuleDescriptorDomain{"horo.foundation.modules"};
         const ErrorDomainId ObservabilityDomain{"horo.foundation.observability"};
     }  // namespace
 
@@ -135,6 +136,51 @@ namespace Horo {
                                                     .retryable = false,
                                                     .userActionable = true};
     }  // namespace HashingErrors
+
+    namespace ModuleDescriptorErrors {
+        const ErrorCodeDescriptor InvalidDescriptor{.domain = ModuleDescriptorDomain,
+                                                    .code = ErrorCode{"foundation.module.invalid_descriptor"},
+                                                    .defaultSeverity = ErrorSeverity::Error,
+                                                    .summary = "Module descriptor is invalid.",
+                                                    .remediationHint = "Correct the inert descriptor before composition.",
+                                                    .retryable = false,
+                                                    .userActionable = false};
+        const ErrorCodeDescriptor DuplicateModule{.domain = ModuleDescriptorDomain,
+                                                  .code = ErrorCode{"foundation.module.duplicate_identity"},
+                                                  .defaultSeverity = ErrorSeverity::Error,
+                                                  .summary = "Module identity is duplicated.",
+                                                  .remediationHint = "Assign each selected module one stable unique identity.",
+                                                  .retryable = false,
+                                                  .userActionable = false};
+        const ErrorCodeDescriptor MissingDependency{.domain = ModuleDescriptorDomain,
+                                                    .code = ErrorCode{"foundation.module.missing_dependency"},
+                                                    .defaultSeverity = ErrorSeverity::Error,
+                                                    .summary = "Required module dependency is missing.",
+                                                    .remediationHint = "Select the required provider before composition.",
+                                                    .retryable = false,
+                                                    .userActionable = false};
+        const ErrorCodeDescriptor IncompatibleDependency{.domain = ModuleDescriptorDomain,
+                                                         .code = ErrorCode{"foundation.module.incompatible_dependency"},
+                                                         .defaultSeverity = ErrorSeverity::Error,
+                                                         .summary = "Module dependency contract is incompatible.",
+                                                         .remediationHint = "Select a provider meeting the minimum contract version.",
+                                                         .retryable = false,
+                                                         .userActionable = false};
+        const ErrorCodeDescriptor MissingCapability{.domain = ModuleDescriptorDomain,
+                                                    .code = ErrorCode{"foundation.module.missing_capability"},
+                                                    .defaultSeverity = ErrorSeverity::Error,
+                                                    .summary = "Required module capability is missing.",
+                                                    .remediationHint = "Select a module that provides the declared capability.",
+                                                    .retryable = false,
+                                                    .userActionable = false};
+        const ErrorCodeDescriptor DependencyCycle{.domain = ModuleDescriptorDomain,
+                                                  .code = ErrorCode{"foundation.module.dependency_cycle"},
+                                                  .defaultSeverity = ErrorSeverity::Error,
+                                                  .summary = "Module dependency graph contains a cycle.",
+                                                  .remediationHint = "Remove the cyclic dependency or capability requirement.",
+                                                  .retryable = false,
+                                                  .userActionable = false};
+    }  // namespace ModuleDescriptorErrors
 
     namespace ObservabilityErrors {
         const ErrorCodeDescriptor InvalidBundleRequest{.domain = ObservabilityDomain,

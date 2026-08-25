@@ -169,6 +169,16 @@ if(BUILD_TESTING)
     )
     FetchContent_MakeAvailable(Catch2)
     list(APPEND CMAKE_MODULE_PATH "${catch2_SOURCE_DIR}/extras")
+    # Ensure Catch2 sees the same C++ standard as the rest of the project.
+    # Without this the library defaults to C++14 on AppleClang/MSVC and
+    # misses StringMaker<std::string_view>, while tests built with cxx_std_20
+    # expect it — linker error on macOS/Windows.
+    if(TARGET Catch2)
+        target_compile_features(Catch2 PRIVATE cxx_std_20)
+    endif()
+    if(TARGET Catch2WithMain)
+        target_compile_features(Catch2WithMain PRIVATE cxx_std_20)
+    endif()
 endif()
 
 if(HORO_BUILD_RENDER_OPENGL)

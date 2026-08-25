@@ -189,6 +189,9 @@ Required module metadata:
 | resource budget hints | Queue, memory, job, thread-affinity, and capture-cost expectations |
 | observability descriptors | Log categories, metric instruments, profiler zones, and diagnostic bundle hooks |
 
+The concrete built-in metadata shape and its pre-composition graph validation
+are defined by the [Internal Module Descriptor Contract](./internal-module-descriptor.md).
+
 This prevents the IDE side of the engine from becoming a monolithic tangle while
 still keeping hot runtime paths explicit and optimizable.
 
