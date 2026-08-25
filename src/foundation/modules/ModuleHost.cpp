@@ -91,7 +91,7 @@ namespace Horo {
             const auto found = std::ranges::find_if(m_registered, [&id](const ModuleDescriptor &descriptor) {
                 return descriptor.id == id;
             });
-            ordered.push_back(&*found);
+            ordered.push_back(std::to_address(found));
         }
 
         // Roll back only modules started by this call; a prior successful activation
