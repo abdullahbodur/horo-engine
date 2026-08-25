@@ -178,6 +178,7 @@ horo_configure_target_header_boundary(HoroGui PUBLIC_HEADERS
     Horo/Editor/EditorSnackbarHost.h
     Horo/Editor/EditorTheme.h
     Horo/Editor/EditorUiComponents.h
+    Horo/Editor/GuiScreen.h
     Horo/Editor/GuiScreenHost.h
     Horo/Editor/IWorkspacePanel.h
     Horo/Editor/ScreenRegistry.h

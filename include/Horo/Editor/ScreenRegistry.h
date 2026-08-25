@@ -2,14 +2,14 @@
 
 #include "Horo/Editor/EditorServiceRegistry.h"
 #include "Horo/Editor/GuiRoute.h"
+#include "Horo/Editor/GuiScreen.h"
 
 #include <functional>
 #include <memory>
 #include <unordered_map>
+#include <utility>
 
 namespace Horo::Editor {
-
-    class GuiScreen;
 
     /**
      * @file ScreenRegistry.h
@@ -25,7 +25,9 @@ namespace Horo::Editor {
          * factory.
          * @param factory Factory invoked when that route is activated.
          */
-        void Register(GuiRouteKind kind, ScreenFactory factory);
+        void Register(const GuiRouteKind kind, ScreenFactory factory) {
+            factories_[kind] = std::move(factory);
+        }
 
         /**
          * @brief Creates the screen registered for a route.
@@ -35,7 +37,12 @@ namespace Horo::Editor {
          * @return A screen instance, or null
          * when the route has no factory.
          */
-        [[nodiscard]] std::unique_ptr<GuiScreen> CreateScreen(const GuiRoute &route, const EditorServiceRegistry &services) const;
+        [[nodiscard]] std::unique_ptr<GuiScreen> CreateScreen(const GuiRoute &route, const EditorServiceRegistry &services) const {
+            if (const auto it = factories_.find(route.kind); it != factories_.end()) {
+                return it->second(services, route);
+            }
+            return nullptr;
+        }
 
         /**
          * @brief Reports whether a route kind has a registered factory.
@@ -43,7 +50,9 @@ namespace Horo::Editor {
          *
          * @return True when a factory is registered.
          */
-        [[nodiscard]] bool HasFactory(GuiRouteKind kind) const noexcept;
+        [[nodiscard]] bool HasFactory(const GuiRouteKind kind) const noexcept {
+            return factories_.contains(kind);
+        }
 
     private:
         std::unordered_map<GuiRouteKind, ScreenFactory> factories_;

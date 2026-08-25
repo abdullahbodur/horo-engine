@@ -96,7 +96,7 @@ include directories do not enforce those ownership boundaries, as documented in
 
 ## Public Header Inventory And Boundary
 
-There are 129 non-placeholder headers under `include/Horo/` at this snapshot:
+There are 130 non-placeholder headers under `include/Horo/` at this snapshot:
 
 | Public path | Header count | Semantic owner |
 |---|---:|---|
@@ -206,7 +206,7 @@ ones that affect target ownership or would mislead a migration ticket.
 | Desired area | Status | Current repository evidence |
 |---|---|---|
 | `cmake/HoroCompilerOptions.cmake`, `HoroTargets.cmake`, `HoroDependencies.cmake`, `HoroPackaging.cmake`, `HoroSDK.cmake` | Partial | Equivalent responsibilities are partly in root CMake and differently named files such as `Dependencies.cmake`; several named files are absent. |
-| `include/Horo/` module contracts | Partial | 129 headers exist, but target-specific public surfaces are not enforced and several documented domains are placeholders or absent. |
+| `include/Horo/` module contracts | Partial | 130 headers exist; target-specific public surfaces are enforced, while several documented domains remain placeholders or absent. |
 | `src/foundation`, `platform`, `application`, `editor`, `runtime`, `gameplay`, `extensions` | Partial | Active implementations exist, but most production targets are declared centrally in one `src/CMakeLists.txt`. |
 | Dedicated `src/asset`, `scene`, `render`, `pipeline`, `physics`, `audio`, and `network` module roots | Partial | Asset, scene, and render code currently live under `src/runtime/`; pipeline, physics, audio, and network targets are absent. |
 | `src/transport/mcp` and editor MCP bridge | Planned | Placeholder interface/editor paths exist; no MCP production target. |
