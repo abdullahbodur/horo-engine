@@ -19,7 +19,9 @@ namespace {
     using namespace Horo::Editor;
 
     struct TempProject {
-        std::filesystem::path root = std::filesystem::temp_directory_path() / "horo-project-open-service-test";
+        std::filesystem::path root =
+            std::filesystem::temp_directory_path() /
+            ("horo-project-open-service-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
 
         TempProject() {
             std::error_code error;
