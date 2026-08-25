@@ -18,6 +18,13 @@ namespace {
         return order;
     }
 
+    template <std::size_t N>
+    void RequireOrder(const std::array<ModuleDescriptor, N> &descriptors, const std::vector<std::string> &expectedOrder) {
+        const auto result = ValidateModuleGraph(descriptors);
+        REQUIRE(result.HasValue());
+        REQUIRE(OrderOf(result.Value()) == expectedOrder);
+    }
+
     TEST_CASE("Module descriptors produce a deterministic provider-first graph", "[unit][foundation][modules]") {
         ModuleDescriptor editor = MakeModule("horo.editor");
         editor.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.runtime"}, .minimumVersion = {1, 2, 0}});
@@ -35,11 +42,7 @@ namespace {
         renderNull.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.foundation"}});
 
         const std::array descriptors{editor, runtime, application, MakeModule("horo.foundation"), renderNull};
-        const Result<ValidatedModuleGraph> result = ValidateModuleGraph(descriptors);
-
-        REQUIRE(result.HasValue());
-        REQUIRE(OrderOf(result.Value()) ==
-                std::vector<std::string>{"horo.foundation", "horo.application", "horo.render.null", "horo.runtime", "horo.editor"});
+        RequireOrder(descriptors, {"horo.foundation", "horo.application", "horo.render.null", "horo.runtime", "horo.editor"});
     }
 
     TEST_CASE("Module descriptor graph rejects invalid module dependencies", "[unit][foundation][modules]") {
@@ -88,9 +91,7 @@ namespace {
             ModuleDescriptor consumer = MakeModule("horo.consumer");
             consumer.requiredCapabilities.push_back(ModuleCapabilityId{"horo.shared_cap"});
 
-            const auto result = ValidateModuleGraph(std::array{consumer, providerB, providerA});
-            REQUIRE(result.HasValue());
-            REQUIRE(OrderOf(result.Value()) == std::vector<std::string>{"horo.provider.a", "horo.provider.b", "horo.consumer"});
+            RequireOrder(std::array{consumer, providerB, providerA}, {"horo.provider.a", "horo.provider.b", "horo.consumer"});
         }
     }
 
@@ -101,9 +102,7 @@ namespace {
                                                               .minimumVersion = {1, 0, 0},
                                                               .kind = ModuleDependencyKind::Optional});
             ModuleDescriptor provider = MakeModule("horo.optional_provider");
-            const auto result = ValidateModuleGraph(std::array{dependant, provider});
-            REQUIRE(result.HasValue());
-            REQUIRE(OrderOf(result.Value()) == std::vector<std::string>{"horo.optional_provider", "horo.dependant"});
+            RequireOrder(std::array{dependant, provider}, {"horo.optional_provider", "horo.dependant"});
         }
 
         SECTION("absent optional dependency does not fail validation") {
@@ -111,9 +110,7 @@ namespace {
             runtime.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.render.opengl"},
                                                             .minimumVersion = {1, 0, 0},
                                                             .kind = ModuleDependencyKind::Optional});
-            const auto result = ValidateModuleGraph(std::array{runtime});
-            REQUIRE(result.HasValue());
-            REQUIRE(OrderOf(result.Value()) == std::vector<std::string>{"horo.runtime"});
+            RequireOrder(std::array{runtime}, {"horo.runtime"});
         }
 
         SECTION("redundant dependency and capability edge does not duplicate indegree") {
@@ -123,9 +120,7 @@ namespace {
             dependant.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.provider"}});
             dependant.requiredCapabilities.push_back(ModuleCapabilityId{"horo.service"});
 
-            const auto result = ValidateModuleGraph(std::array{dependant, provider});
-            REQUIRE(result.HasValue());
-            REQUIRE(OrderOf(result.Value()) == std::vector<std::string>{"horo.provider", "horo.dependant"});
+            RequireOrder(std::array{dependant, provider}, {"horo.provider", "horo.dependant"});
         }
     }
 
@@ -156,14 +151,10 @@ namespace {
             leaf.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.left"}});
             leaf.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.right"}});
 
-            const auto result = ValidateModuleGraph(std::array{leaf, right, left, root});
-            REQUIRE(result.HasValue());
-            REQUIRE(OrderOf(result.Value()) == std::vector<std::string>{"horo.root", "horo.left", "horo.right", "horo.leaf"});
+            RequireOrder(std::array{leaf, right, left, root}, {"horo.root", "horo.left", "horo.right", "horo.leaf"});
 
             const std::array independent{MakeModule("horo.gamma"), MakeModule("horo.alpha"), MakeModule("horo.beta")};
-            const auto independentResult = ValidateModuleGraph(independent);
-            REQUIRE(independentResult.HasValue());
-            REQUIRE(OrderOf(independentResult.Value()) == std::vector<std::string>{"horo.alpha", "horo.beta", "horo.gamma"});
+            RequireOrder(independent, {"horo.alpha", "horo.beta", "horo.gamma"});
         }
     }
 }  // namespace
