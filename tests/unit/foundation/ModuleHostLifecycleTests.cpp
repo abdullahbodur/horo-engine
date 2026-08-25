@@ -17,7 +17,7 @@ namespace {
     std::optional<ModuleCallbackLease> g_callbackLease;
     std::atomic<bool> g_callbackObservedCancellation{false};
     std::atomic<bool> g_callbackFinished{false};
-    const void *g_callbackObservedBindings = nullptr;
+    const IDependencyBindings *g_callbackObservedBindings = nullptr;
     bool g_drainObservedClosedAdmission = false;
     bool g_deactivateObservedDrain = false;
 
@@ -98,7 +98,11 @@ TEST_CASE("Module shutdown drains admitted callbacks before releasing borrowed b
     descriptor.lifecycle = ModuleLifecycleCallbacks{.activate = &LeaseActivate, .drain = &LeaseDrain, .deactivate = &LeaseDeactivate};
     REQUIRE(host.Register(descriptor).HasValue());
 
-    const int approvedBinding = 42;
+    struct TestApprovedBindings final : IDependencyBindings {
+        int value{42};
+    };
+
+    const TestApprovedBindings approvedBinding{};
     REQUIRE(host.ActivateRegistered(&approvedBinding).HasValue());
     REQUIRE(g_callbackLease.has_value());
 

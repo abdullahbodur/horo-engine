@@ -18,7 +18,7 @@ namespace Horo {
         bool accepting{true};
     };
 
-    ModuleCallbackLease::ModuleCallbackLease(std::shared_ptr<ModuleCallbackGate> gate, const void *bindings,
+    ModuleCallbackLease::ModuleCallbackLease(std::shared_ptr<ModuleCallbackGate> gate, const IDependencyBindings *bindings,
                                              CancellationToken cancellation) noexcept
         : m_gate(std::move(gate)), m_bindings(bindings), m_cancellation(std::move(cancellation)) {}
 
@@ -43,7 +43,7 @@ namespace Horo {
     }
 
     /** @copydoc ModuleCallbackLease::Bindings */
-    const void *ModuleCallbackLease::Bindings() const noexcept {
+    const IDependencyBindings *ModuleCallbackLease::Bindings() const noexcept {
         return m_bindings;
     }
 
@@ -109,7 +109,7 @@ namespace Horo {
     }
 
     /** @copydoc ModuleActivationContext::RequestShutdown */
-    void ModuleActivationContext::RequestShutdown() noexcept {
+    void ModuleActivationContext::RequestShutdown() const noexcept {
         {
             const std::lock_guard lock(m_callbackGate->mutex);
             m_callbackGate->accepting = false;
@@ -118,7 +118,7 @@ namespace Horo {
     }
 
     /** @copydoc ModuleActivationContext::DrainCallbacks */
-    void ModuleActivationContext::DrainCallbacks() noexcept {
+    void ModuleActivationContext::DrainCallbacks() const noexcept {
         std::unique_lock lock(m_callbackGate->mutex);
         constexpr auto kDrainTimeout = std::chrono::seconds(5);
         const bool drained = m_callbackGate->drained.wait_for(lock, kDrainTimeout, [this] {

@@ -18,6 +18,20 @@ namespace Horo {
     class ModuleActivationContext;
     class ModuleCallbackGate;
 
+    /** @brief Host-approved dependency bindings owned by the composition root. */
+    class IDependencyBindings {
+    public:
+        virtual ~IDependencyBindings() = default;
+
+        IDependencyBindings(const IDependencyBindings &) = delete;
+        IDependencyBindings &operator=(const IDependencyBindings &) = delete;
+
+    protected:
+        IDependencyBindings() = default;
+        IDependencyBindings(IDependencyBindings &&) = default;
+        IDependencyBindings &operator=(IDependencyBindings &&) = default;
+    };
+
     /** @brief Explicit observable state of one module registration lifetime. */
     enum class ModuleLifecycleState : std::uint8_t {
         Registered,
@@ -46,7 +60,7 @@ namespace Horo {
         ModuleCallbackLease &operator=(ModuleCallbackLease &&other) noexcept;
 
         /** @brief Returns the activation-scoped bindings borrow guarded by this lease. */
-        [[nodiscard]] const void *Bindings() const noexcept;
+        [[nodiscard]] const IDependencyBindings *Bindings() const noexcept;
 
         /** @brief Returns the module-owned cancellation token associated with this lease. */
         [[nodiscard]] CancellationToken Cancellation() const noexcept;
@@ -54,11 +68,12 @@ namespace Horo {
     private:
         friend class ModuleActivationContext;
 
-        ModuleCallbackLease(std::shared_ptr<ModuleCallbackGate> gate, const void *bindings, CancellationToken cancellation) noexcept;
+        ModuleCallbackLease(std::shared_ptr<ModuleCallbackGate> gate, const IDependencyBindings *bindings,
+                            CancellationToken cancellation) noexcept;
         void Release() noexcept;
 
         std::shared_ptr<ModuleCallbackGate> m_gate;
-        const void *m_bindings{};
+        const IDependencyBindings *m_bindings{};
         CancellationToken m_cancellation;
     };
 
@@ -86,7 +101,7 @@ namespace Horo {
     class ModuleActivationContext {
     public:
         /** @brief Opaque carrier for host-approved bindings; owned by the composition root. */
-        using DependencyBindings = const void *;
+        using DependencyBindings = const IDependencyBindings *;
 
         ModuleActivationContext(ModuleId module, DependencyBindings bindings);
         ~ModuleActivationContext();
@@ -127,7 +142,7 @@ namespace Horo {
     private:
         friend class ModuleHost;
 
-        void RequestShutdown() noexcept;
+        void RequestShutdown() const noexcept;
 
         /**
          * @brief Blocks until all admitted callback leases are released or a timeout is reached.
@@ -137,7 +152,7 @@ namespace Horo {
          * drainage logs a warning after a bounded timeout and shutdown proceeds to prevent
          * indefinite teardown blockage.
          */
-        void DrainCallbacks() noexcept;
+        void DrainCallbacks() const noexcept;
 
         ModuleId m_module;
         DependencyBindings m_bindings;

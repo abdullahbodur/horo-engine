@@ -93,7 +93,11 @@ TEST_CASE("Composition registers and activates modules in validated order", "[un
     // Registration is inert: no callback runs before ActivateRegistered.
     REQUIRE(g_log.activated.empty());
 
-    const int approvedBindings = 42;
+    struct TestApprovedBindings final : IDependencyBindings {
+        int value{42};
+    };
+
+    const TestApprovedBindings approvedBindings{};
     const Result<std::size_t> activated = host.ActivateRegistered(&approvedBindings);
     REQUIRE(activated.HasValue());
     REQUIRE(activated.Value() == 2);
