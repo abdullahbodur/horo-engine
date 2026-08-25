@@ -8,7 +8,7 @@ endif()
 list(APPEND CMAKE_MODULE_PATH "${HORO_ENGINE_SOURCE_DIR}/cmake")
 include(HoroDependencyDirection)
 
-add_library(HoroFoundation INTERFACE)
+add_library(HoroFoundation STATIC Empty.cpp)
 add_library(HoroEditorServices INTERFACE)
 target_link_libraries(HoroFoundation INTERFACE HoroEditorServices)
 
