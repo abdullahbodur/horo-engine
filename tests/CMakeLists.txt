@@ -1,5 +1,13 @@
 include(Catch)
 
+add_test(NAME HoroDependencyDirectionNegativeConfigureTest
+    COMMAND "${CMAKE_COMMAND}"
+        "-DHORO_ENGINE_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DHORO_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/dependency-direction-negative"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/RunDependencyDirectionNegativeTest.cmake")
+set_tests_properties(HoroDependencyDirectionNegativeConfigureTest PROPERTIES
+    LABELS "architecture;cmake")
+
 # One translation unit per registered public header verifies that consumers can
 # compile the contract using only its owning target's usage requirements.
 horo_add_public_header_consumer_targets()
