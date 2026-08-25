@@ -69,6 +69,7 @@ find_package(Python3 REQUIRED COMPONENTS Interpreter)
 include(HoroGameplayModule)
 include(GenerateProjectMigrations)
 include(GenerateProjectCompatibility)
+include(HoroTargetBoundaries)
 
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/CMakeLists.txt")

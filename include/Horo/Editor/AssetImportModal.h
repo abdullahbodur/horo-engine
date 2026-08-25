@@ -10,7 +10,6 @@
 #include "Horo/Foundation/JobSystem.h"
 #include "Horo/Foundation/Logging/LogContext.h"
 #include "Horo/Foundation/OperationStore.h"
-#include "runtime/assets/importer/ProjectAssetImportCommitter.h"
 
 #include <filesystem>
 #include <memory>
@@ -25,6 +24,7 @@ namespace Horo::Editor::Theme {
 
 namespace Horo::Assets {
     class AssetImporterCatalogSnapshot;
+    class ProjectAssetImportCommitter;
 }
 
 namespace Horo::Editor {
@@ -51,6 +51,9 @@ namespace Horo::Editor {
          */
         AssetImportModal(const Theme::Fonts &fonts, JobSystem &jobs, std::shared_ptr<const Assets::AssetImporterCatalogSnapshot> catalog,
                          Assets::AssetRegistry *assetRegistry = nullptr, OperationStore *operationStore = nullptr) noexcept;
+
+        /** @brief Destroys the modal and its target-private project committer. */
+        ~AssetImportModal() override;
 
         [[nodiscard]] ModalId Id() const override;
         [[nodiscard]] ModalPresentation Presentation() const override;

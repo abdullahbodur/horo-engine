@@ -125,6 +125,21 @@ Consequently, header location communicates intended ownership but target usage
 requirements do not enforce it. Separating SDK/public, internal-shared, and
 target-private include surfaces is follow-up work owned by ARC-001.2.
 
+### ARC-001.2 boundary update
+
+ARC-001.2 replaces the broad build-tree usage requirements described in this
+snapshot with target-specific staged public include views. The explicit ownership
+registry accounts for every `include/Horo/` header, production `src/` roots are no
+longer public usage requirements, and generated per-target consumers compile each
+public header through its actual owner. Existing `Horo/...` include spellings are
+preserved. The migration also makes the existing `RuntimeScene -> SceneModel`
+public-header dependency explicit and removes the accidental GameplayApi-to-
+GameplayRuntime header dependency by keeping registration data in GameplayApi.
+`SceneComponents.h` is assigned to the neutral SceneModel contract so
+PrimitiveCatalog does not create a reverse dependency on RuntimeScene.
+The normative contract and caller migration guidance live in
+[Header Visibility And Ownership](./header-visibility-and-ownership.md).
+
 ## Documented Target Status
 
 This table covers every canonical target named by System Design. Build System
@@ -254,9 +269,8 @@ remain inside their current concrete/owning targets at link time.
 This inventory supports the following focused sequence without moving
 production code in this ticket:
 
-1. ARC-001.2 should establish target-specific SDK/public,
-   internal-shared, and target-private include surfaces, starting with the six
-   targets that export `src/`.
+1. Preserve the ARC-001.2 target-specific header registry when adding or moving
+   public contracts; never restore repository-wide public include roots.
 2. Resolve the SceneModel/RenderApi ownership direction before adding more scene
    primitives or renderer-facing mesh fields.
 3. Decide whether the current non-canonical targets become canonical and align

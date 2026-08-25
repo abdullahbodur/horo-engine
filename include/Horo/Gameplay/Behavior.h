@@ -193,4 +193,10 @@ namespace Horo::Gameplay {
         IBehaviorInstance *(*create)(void *userData){};
         void (*destroy)(void *userData, IBehaviorInstance *instance) noexcept {};
     };
+
+    /** @brief One validated descriptor and its module-owned implementation factory. */
+    struct BehaviorRegistration {
+        BehaviorDescriptor descriptor;
+        BehaviorFactoryBinding factory;
+    };
 }  // namespace Horo::Gameplay

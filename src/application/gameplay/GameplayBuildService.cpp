@@ -1,9 +1,11 @@
 #include "Horo/Application/GameplayBuildService.h"
 
 #include "Horo/Foundation/PathUtils.h"
+#include "Horo/Foundation/Platform.h"
 #include "Horo/Foundation/Sha256.h"
 #include "Horo/Gameplay/GameModule.h"
 #include "Horo/Gameplay/GameModuleHost.h"
+#include "Horo/Platform/ExternalProcess.h"
 
 #include <algorithm>
 #include <exception>

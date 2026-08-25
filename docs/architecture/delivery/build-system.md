@@ -309,6 +309,30 @@ Rules:
   concrete backends and plugin host targets.
 - Third-party dependencies are private unless present in a public contract.
 
+### Header Visibility
+
+The source layout and the compiler-visible layout are intentionally different.
+Public headers keep their stable `Horo/...` include spelling in the source tree,
+while CMake creates a separate build-tree include view for each owning target.
+Linking one target therefore does not make unrelated Horo headers discoverable.
+
+`cmake/HoroPublicHeaderOwnership.cmake` is the authoritative ownership registry.
+Every `include/Horo/*.h` file is listed exactly once and configure rejects missing
+or duplicate ownership. `horo_configure_target_header_boundary` removes broad
+repository include roots from usage requirements and publishes only the owning
+target's staged view. Publicly linked dependencies contribute their own views in
+the normal CMake dependency chain.
+
+Headers under `src/` are target-private by default and must never be exposed by a
+production target's `PUBLIC` or `INTERFACE` include directories. A source header
+needed by another target is an architecture decision: move the stable contract
+to its owning public surface or introduce a narrowly scoped, non-installed
+internal interface target. Adding `${PROJECT_SOURCE_DIR}/src` back as a public
+include root is not an allowed migration shortcut.
+
+See [Header Visibility And Ownership](../foundation/header-visibility-and-ownership.md)
+for the classification and migration contract.
+
 The architecture dependency check runs in CI and rejects forbidden include or
 link directions.
 
@@ -544,10 +568,11 @@ The check runs as part of `scripts/dev.py check` and in CI.
 3. Link the real target privately to `HoroEngine::CompileOptions`. Add
    `HoroEngine::SanitizerOptions` or `HoroEngine::CoverageOptions` only through
    the established preset-controlled pattern.
-4. Declare build and install include directories and classify every dependency
-   as `PUBLIC`, `PRIVATE`, or `INTERFACE`.
-5. Add public headers to `include/HoroEngine/<Module>/` and verify that each
-   header compiles independently.
+4. Declare dependencies as `PUBLIC`, `PRIVATE`, or `INTERFACE`; do not publish a
+   repository-wide include root.
+5. Add public headers under `include/Horo/<Module>/`, assign every new header to
+   the real target in `cmake/HoroPublicHeaderOwnership.cmake`, and verify the
+   generated per-target consumer target.
 6. Decide whether the target uses no PCH, defines a module-specific PCH, or can
    safely `REUSE_FROM Foundation` under the compatibility rules below.
 7. Add the module to the root `src/CMakeLists.txt` and verify its dependency
@@ -791,8 +816,11 @@ python3 scripts/dev.py architecture-check
 
 ## Public Header Check
 
-Every public header must compile independently and must not pull in private
-dependencies. CI compiles each public header in isolation.
+Every public header must compile independently using only its owning target and
+that target's declared public dependencies. `horo_add_public_header_consumer_targets`
+generates one translation unit per registered header. The configure-time inventory
+also rejects a new header until it has exactly one owner. This combination prevents
+accidental reliance on the repository-wide source include tree.
 
 ## Install Targets
 

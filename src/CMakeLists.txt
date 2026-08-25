@@ -274,6 +274,10 @@ target_include_directories(HoroSceneModel
 )
 target_link_libraries(HoroSceneModel PUBLIC HoroEngine::Foundation HoroEngine::RenderApi)
 
+# RuntimeSceneDefinition exposes PrimitiveMeshDescriptor in its public scene
+# contract, so the owning SceneModel dependency is part of the public edge.
+target_link_libraries(HoroRuntimeScene PUBLIC HoroEngine::SceneModel)
+
 add_library(HoroRenderNull STATIC
         runtime/renderer/modules/null/NullRenderBackend.cpp
         runtime/renderer/modules/null/NullRenderBackendErrors.cpp
@@ -337,6 +341,7 @@ if (HORO_BUILD_RENDER_METAL)
 endif ()
 
 add_library(HoroEditorModel STATIC
+        editor/data_bus/EditorDataBus.cpp
         editor/document/SceneDocument.cpp
         editor/document/RuntimeSceneConversion.cpp
         editor/project_model/EditorModelErrors.cpp
@@ -449,7 +454,6 @@ add_library(HoroEditorServices STATIC
         editor/menu/EditorMenuModel.cpp
         editor/status_bar/EditorStatusBarModel.cpp
         editor/hierarchy/HierarchyModel.cpp
-        editor/data_bus/EditorDataBus.cpp
         editor/NotificationService.cpp
         editor/input/EditorInputActions.cpp
         editor/modals/EditorModalHost.cpp
@@ -613,8 +617,8 @@ if (HORO_BUILD_EDITOR_GUI)
             PUBLIC
             HoroEngine::EditorServices
             HoroEngine::Foundation
-            PRIVATE
             HoroThirdParty::ImGui
+            PRIVATE
             HoroEngine::EditorRenderExtraction
             nlohmann_json::nlohmann_json
     )
@@ -654,3 +658,7 @@ target_link_libraries(HoroExtensions
 if (HORO_BUILD_EDITOR_GUI)
     target_link_libraries(HoroGui PRIVATE HoroEngine::Extensions)
 endif ()
+
+# Apply the build-tree public/private include contract only after every optional
+# production target has been declared.
+include(HoroPublicHeaderOwnership)
