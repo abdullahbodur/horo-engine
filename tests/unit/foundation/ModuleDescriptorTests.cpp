@@ -332,4 +332,246 @@ namespace {
             REQUIRE(OrderOf(result.Value()) == std::vector<std::string>{"horo.alpha", "horo.beta", "horo.gamma"});
         }
     }
+
+    TEST_CASE("Empty module descriptor set validates successfully", "[unit][foundation][modules]") {
+        const std::span<const ModuleDescriptor> emptyDescriptors{};
+        const auto result = ValidateModuleGraph(emptyDescriptors);
+        REQUIRE(result.HasValue());
+        REQUIRE(result.Value().initializationOrder.empty());
+    }
+
+    TEST_CASE("Module contract and identifier comparison operators", "[unit][foundation][modules]") {
+        SECTION("ModuleId comparisons") {
+            const ModuleId a{"horo.a"};
+            const ModuleId aCopy{"horo.a"};
+            const ModuleId b{"horo.b"};
+            REQUIRE(a == aCopy);
+            REQUIRE(a != b);
+            REQUIRE(a < b);
+            REQUIRE(b > a);
+            REQUIRE(a <= aCopy);
+            REQUIRE(a <= b);
+            REQUIRE(b >= a);
+        }
+
+        SECTION("ModuleCapabilityId comparisons") {
+            const ModuleCapabilityId a{"horo.cap.a"};
+            const ModuleCapabilityId aCopy{"horo.cap.a"};
+            const ModuleCapabilityId b{"horo.cap.b"};
+            REQUIRE(a == aCopy);
+            REQUIRE(a != b);
+            REQUIRE(a < b);
+            REQUIRE(b > a);
+            REQUIRE(a <= aCopy);
+            REQUIRE(a <= b);
+            REQUIRE(b >= a);
+        }
+
+        SECTION("ModuleContractVersion comparisons") {
+            const ModuleContractVersion v100{1, 0, 0};
+            const ModuleContractVersion v100Copy{1, 0, 0};
+            const ModuleContractVersion v101{1, 0, 1};
+            const ModuleContractVersion v110{1, 1, 0};
+            const ModuleContractVersion v200{2, 0, 0};
+
+            REQUIRE(v100 == v100Copy);
+            REQUIRE(v100 != v101);
+            REQUIRE(v100 < v101);
+            REQUIRE(v101 < v110);
+            REQUIRE(v110 < v200);
+            REQUIRE(v200 > v110);
+            REQUIRE(v100 <= v100Copy);
+            REQUIRE(v100 <= v101);
+            REQUIRE(v200 >= v110);
+        }
+    }
+
+    TEST_CASE("Module lifecycle callbacks require both activate and deactivate", "[unit][foundation][modules]") {
+        SECTION("only activate provided") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.lifecycle.activate = &Activate;
+            module.lifecycle.deactivate = nullptr;
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().code.Value() == "foundation.module.invalid_descriptor");
+            REQUIRE(result.ErrorValue().message == "Module 'horo.runtime' must declare both lifecycle callbacks or neither.");
+        }
+
+        SECTION("only deactivate provided") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.lifecycle.activate = nullptr;
+            module.lifecycle.deactivate = &Deactivate;
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().code.Value() == "foundation.module.invalid_descriptor");
+            REQUIRE(result.ErrorValue().message == "Module 'horo.runtime' must declare both lifecycle callbacks or neither.");
+        }
+
+        SECTION("neither callback provided") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.lifecycle.activate = nullptr;
+            module.lifecycle.deactivate = nullptr;
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasValue());
+        }
+
+        SECTION("both callbacks provided") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.lifecycle.activate = &Activate;
+            module.lifecycle.deactivate = &Deactivate;
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasValue());
+        }
+    }
+
+    TEST_CASE("Module namespacing prefix validation edge cases", "[unit][foundation][modules]") {
+        SECTION("budget ID equal to module ID without dot suffix") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.resourceBudgets.push_back(
+                ModuleResourceBudget{.id = "horo.runtime", .kind = ModuleResourceBudgetKind::MemoryBytes, .limit = 1024});
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().message == "Resource budget 'horo.runtime' is not namespaced by module 'horo.runtime'.");
+        }
+
+        SECTION("budget ID starting with module ID but without dot separator") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.resourceBudgets.push_back(
+                ModuleResourceBudget{.id = "horo.runtime_extra", .kind = ModuleResourceBudgetKind::QueueDepth, .limit = 16});
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().message == "Resource budget 'horo.runtime_extra' is not namespaced by module 'horo.runtime'.");
+        }
+
+        SECTION("observability ID equal to module ID without dot suffix") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.observability.push_back(
+                ModuleObservabilityDescriptor{.kind = ModuleObservabilityKind::MetricInstrument, .id = "horo.runtime"});
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().message == "Observability descriptor 'horo.runtime' is not namespaced by module 'horo.runtime'.");
+        }
+
+        SECTION("observability ID starting with module ID but without dot separator") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.observability.push_back(
+                ModuleObservabilityDescriptor{.kind = ModuleObservabilityKind::ProfilerZone, .id = "horo.runtime_update"});
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().message ==
+                    "Observability descriptor 'horo.runtime_update' is not namespaced by module 'horo.runtime'.");
+        }
+
+        SECTION("different observability kinds with same namespaced ID are permitted") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.observability.push_back(
+                ModuleObservabilityDescriptor{.kind = ModuleObservabilityKind::LogCategory, .id = "horo.runtime.lifecycle"});
+            module.observability.push_back(
+                ModuleObservabilityDescriptor{.kind = ModuleObservabilityKind::MetricInstrument, .id = "horo.runtime.lifecycle"});
+            module.observability.push_back(
+                ModuleObservabilityDescriptor{.kind = ModuleObservabilityKind::ProfilerZone, .id = "horo.runtime.lifecycle"});
+            module.observability.push_back(
+                ModuleObservabilityDescriptor{.kind = ModuleObservabilityKind::DiagnosticBundleHook, .id = "horo.runtime.lifecycle"});
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasValue());
+        }
+    }
+
+    TEST_CASE("Module descriptor complex graphs: multiple providers, optional dependencies, cycles", "[unit][foundation][modules]") {
+        SECTION("multiple providers for same capability order before consumer") {
+            ModuleDescriptor providerA = MakeModule("horo.provider.a");
+            providerA.providedCapabilities.push_back(ModuleCapabilityId{"horo.shared_cap"});
+
+            ModuleDescriptor providerB = MakeModule("horo.provider.b");
+            providerB.providedCapabilities.push_back(ModuleCapabilityId{"horo.shared_cap"});
+
+            ModuleDescriptor consumer = MakeModule("horo.consumer");
+            consumer.requiredCapabilities.push_back(ModuleCapabilityId{"horo.shared_cap"});
+
+            const auto result = ValidateModuleGraph(std::array{consumer, providerB, providerA});
+            REQUIRE(result.HasValue());
+            const auto order = OrderOf(result.Value());
+            REQUIRE(order == std::vector<std::string>{"horo.provider.a", "horo.provider.b", "horo.consumer"});
+        }
+
+        SECTION("present optional dependency participates in ordering") {
+            ModuleDescriptor dependant = MakeModule("horo.dependant");
+            dependant.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.optional_provider"},
+                                                              .minimumVersion = {1, 0, 0},
+                                                              .kind = ModuleDependencyKind::Optional});
+            ModuleDescriptor provider = MakeModule("horo.optional_provider");
+
+            const auto result = ValidateModuleGraph(std::array{dependant, provider});
+            REQUIRE(result.HasValue());
+            REQUIRE(OrderOf(result.Value()) == std::vector<std::string>{"horo.optional_provider", "horo.dependant"});
+        }
+
+        SECTION("redundant dependency and capability edge does not duplicate indegree") {
+            ModuleDescriptor provider = MakeModule("horo.provider");
+            provider.providedCapabilities.push_back(ModuleCapabilityId{"horo.service"});
+
+            ModuleDescriptor dependant = MakeModule("horo.dependant");
+            dependant.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.provider"}});
+            dependant.requiredCapabilities.push_back(ModuleCapabilityId{"horo.service"});
+
+            const auto result = ValidateModuleGraph(std::array{dependant, provider});
+            REQUIRE(result.HasValue());
+            REQUIRE(OrderOf(result.Value()) == std::vector<std::string>{"horo.provider", "horo.dependant"});
+        }
+
+        SECTION("three module dependency cycle") {
+            ModuleDescriptor a = MakeModule("horo.a");
+            a.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.b"}});
+            ModuleDescriptor b = MakeModule("horo.b");
+            b.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.c"}});
+            ModuleDescriptor c = MakeModule("horo.c");
+            c.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.a"}});
+
+            const auto result = ValidateModuleGraph(std::array{a, b, c});
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().code.Value() == "foundation.module.dependency_cycle");
+        }
+
+        SECTION("diamond dependency graph") {
+            ModuleDescriptor root = MakeModule("horo.root");
+            ModuleDescriptor left = MakeModule("horo.left");
+            left.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.root"}});
+            ModuleDescriptor right = MakeModule("horo.right");
+            right.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.root"}});
+            ModuleDescriptor leaf = MakeModule("horo.leaf");
+            leaf.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.left"}});
+            leaf.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.right"}});
+
+            const auto result = ValidateModuleGraph(std::array{leaf, right, left, root});
+            REQUIRE(result.HasValue());
+            REQUIRE(OrderOf(result.Value()) == std::vector<std::string>{"horo.root", "horo.left", "horo.right", "horo.leaf"});
+        }
+    }
+
+    TEST_CASE("Module resource budget kinds and thread affinities", "[unit][foundation][modules]") {
+        ModuleDescriptor module = MakeModule("horo.foundation");
+        module.resourceBudgets.push_back(ModuleResourceBudget{.id = "horo.foundation.mem",
+                                                              .kind = ModuleResourceBudgetKind::MemoryBytes,
+                                                              .limit = 1024,
+                                                              .affinity = ModuleThreadAffinity::Any});
+        module.resourceBudgets.push_back(ModuleResourceBudget{.id = "horo.foundation.queue",
+                                                              .kind = ModuleResourceBudgetKind::QueueDepth,
+                                                              .limit = 32,
+                                                              .affinity = ModuleThreadAffinity::Main});
+        module.resourceBudgets.push_back(ModuleResourceBudget{.id = "horo.foundation.jobs",
+                                                              .kind = ModuleResourceBudgetKind::ConcurrentJobs,
+                                                              .limit = 8,
+                                                              .affinity = ModuleThreadAffinity::Worker});
+        module.resourceBudgets.push_back(ModuleResourceBudget{.id = "horo.foundation.threads",
+                                                              .kind = ModuleResourceBudgetKind::DedicatedThreads,
+                                                              .limit = 2,
+                                                              .affinity = ModuleThreadAffinity::Render});
+        module.resourceBudgets.push_back(ModuleResourceBudget{.id = "horo.foundation.capture",
+                                                              .kind = ModuleResourceBudgetKind::CaptureBytesPerSecond,
+                                                              .limit = 65536,
+                                                              .affinity = ModuleThreadAffinity::Io});
+
+        const auto result = ValidateModuleGraph(std::array{module});
+        REQUIRE(result.HasValue());
+    }
 }  // namespace
