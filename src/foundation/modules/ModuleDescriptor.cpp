@@ -223,7 +223,7 @@ namespace Horo {
                 auto provider = ResolveDependencyProvider(d, dep, descriptors, modules);
                 if (provider.HasError())
                     return Result<void>::Failure(provider.ErrorValue());
-                if (provider.Value())
+                if (provider.Value().has_value())
                     AddEdge(edges, *provider.Value(), dependant);
             }
             return Result<void>::Success();
