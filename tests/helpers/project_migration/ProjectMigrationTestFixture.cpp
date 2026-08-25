@@ -123,7 +123,7 @@ namespace Horo::Tests {
     ProjectMigrationTestFixture::ProjectMigrationTestFixture()
         : root_(UniqueFixtureRoot()), logRoot_(root_.parent_path() / (root_.filename().string() + "-logs")) {
         const std::filesystem::path fixture =
-            std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "fixtures/projects/horo_0_0_1_compression";
+            std::filesystem::path{HORO_PROJECT_SOURCE_DIR} / "tests/fixtures/projects/horo_0_0_1_compression";
         std::error_code error;
         std::filesystem::copy(fixture, root_, std::filesystem::copy_options::recursive, error);
         REQUIRE_FALSE((error));

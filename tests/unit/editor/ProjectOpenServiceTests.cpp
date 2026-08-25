@@ -52,7 +52,7 @@ namespace {
 
         LegacyProject() {
             const std::filesystem::path fixture =
-                std::filesystem::path(__FILE__).parent_path().parent_path().parent_path() / "fixtures/projects/horo_0_0_1_compression";
+                std::filesystem::path{HORO_PROJECT_SOURCE_DIR} / "tests/fixtures/projects/horo_0_0_1_compression";
             std::filesystem::copy(fixture, root, std::filesystem::copy_options::recursive);
             nlohmann::json metadata;
             {

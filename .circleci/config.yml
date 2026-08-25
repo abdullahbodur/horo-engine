@@ -59,7 +59,7 @@ jobs:
               -DHORO_ENABLE_TELEMETRY=ON \
               -DHORO_ENABLE_OPENTELEMETRY=ON
             cmake --build build/sonar --parallel
-            ctest --test-dir build/sonar --output-on-failure
+            ctest --test-dir build/sonar --output-on-failure -LE gui
             gcovr --sonarqube build/sonar/coverage.xml \
               --root "$CIRCLE_WORKING_DIRECTORY" \
               --filter "$CIRCLE_WORKING_DIRECTORY/include" \

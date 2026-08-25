@@ -31,9 +31,12 @@ else ()
     )
 endif ()
 
+add_compile_definitions(HORO_PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+
 function(horo_register_catch_test target)
     cmake_parse_arguments(ARG "" "" "LABELS;EXTRA_ARGS;PROPERTIES" ${ARGN})
     target_compile_features(${target} PRIVATE cxx_std_20)
+    target_compile_definitions(${target} PRIVATE HORO_PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     target_link_libraries(${target} PRIVATE Catch2::Catch2WithMain)
     catch_discover_tests(${target}
             TEST_PREFIX "${target}::"
