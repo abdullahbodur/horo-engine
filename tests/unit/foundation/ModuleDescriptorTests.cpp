@@ -210,4 +210,121 @@ namespace {
         REQUIRE(result.HasValue());
         REQUIRE(OrderOf(result.Value()) == std::vector<std::string>{"horo.runtime"});
     }
+
+    TEST_CASE("Module descriptor local validation exercises all error branches", "[unit][foundation][modules]") {
+        SECTION("self dependency rejection") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.runtime"}});
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().message == "Module 'horo.runtime' depends on itself.");
+        }
+
+        SECTION("duplicate dependency rejection") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.foundation"}});
+            module.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.foundation"}});
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().message == "Module 'horo.runtime' repeats dependency 'horo.foundation'.");
+        }
+
+        SECTION("non-canonical dependency identity rejection") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.dependencies.push_back(ModuleDependency{.module = ModuleId{"Horo.Foundation"}});
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().message == "Module 'horo.runtime' has a non-canonical dependency identity.");
+        }
+
+        SECTION("non-canonical provided capability rejection") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.providedCapabilities.push_back(ModuleCapabilityId{"Horo.Capability"});
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().message == "Module 'horo.runtime' has a non-canonical provided capability.");
+        }
+
+        SECTION("duplicate provided capability rejection") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.providedCapabilities.push_back(ModuleCapabilityId{"horo.capability"});
+            module.providedCapabilities.push_back(ModuleCapabilityId{"horo.capability"});
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().message == "Module 'horo.runtime' repeats provided capability 'horo.capability'.");
+        }
+
+        SECTION("non-canonical required capability rejection") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.requiredCapabilities.push_back(ModuleCapabilityId{"Horo.Capability"});
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().message == "Module 'horo.runtime' has a non-canonical required capability.");
+        }
+
+        SECTION("duplicate required capability rejection") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.requiredCapabilities.push_back(ModuleCapabilityId{"horo.capability"});
+            module.requiredCapabilities.push_back(ModuleCapabilityId{"horo.capability"});
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().message == "Module 'horo.runtime' repeats required capability 'horo.capability'.");
+        }
+
+        SECTION("requiring a provided capability rejection") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.providedCapabilities.push_back(ModuleCapabilityId{"horo.shared.service"});
+            module.requiredCapabilities.push_back(ModuleCapabilityId{"horo.shared.service"});
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().message == "Module 'horo.runtime' cannot require a capability it provides.");
+        }
+
+        SECTION("zero limit resource budget rejection") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.resourceBudgets.push_back(
+                ModuleResourceBudget{.id = "horo.runtime.jobs", .kind = ModuleResourceBudgetKind::ConcurrentJobs, .limit = 0});
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().message == "Resource budget 'horo.runtime.jobs' has a zero limit.");
+        }
+
+        SECTION("duplicate resource budget rejection") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.resourceBudgets.push_back(
+                ModuleResourceBudget{.id = "horo.runtime.jobs", .kind = ModuleResourceBudgetKind::ConcurrentJobs, .limit = 2});
+            module.resourceBudgets.push_back(
+                ModuleResourceBudget{.id = "horo.runtime.jobs", .kind = ModuleResourceBudgetKind::ConcurrentJobs, .limit = 4});
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().message == "Module 'horo.runtime' repeats resource budget 'horo.runtime.jobs'.");
+        }
+
+        SECTION("duplicate observability descriptor rejection") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.observability.push_back(
+                ModuleObservabilityDescriptor{.kind = ModuleObservabilityKind::LogCategory, .id = "horo.runtime.log"});
+            module.observability.push_back(
+                ModuleObservabilityDescriptor{.kind = ModuleObservabilityKind::LogCategory, .id = "horo.runtime.log"});
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().message == "Module 'horo.runtime' repeats observability descriptor 'horo.runtime.log'.");
+        }
+
+        SECTION("invalid canonical ID grammar variations") {
+            for (const std::string_view invalidId : {"", ".horo", "horo.", "horo..runtime", "horo_-_runtime", "-horo", "horo-",
+                                                     "horo space", "horo:runtime", "horo@runtime", "horo/runtime"}) {
+                const ModuleDescriptor module = MakeModule(std::string(invalidId));
+                const auto result = ValidateModuleGraph(std::array{module});
+                REQUIRE(result.HasError());
+            }
+        }
+
+        SECTION("deterministic alphabetical tie-breaking on independent modules") {
+            const std::array descriptors{MakeModule("horo.gamma"), MakeModule("horo.alpha"), MakeModule("horo.beta")};
+            const auto result = ValidateModuleGraph(descriptors);
+            REQUIRE(result.HasValue());
+            REQUIRE(OrderOf(result.Value()) == std::vector<std::string>{"horo.alpha", "horo.beta", "horo.gamma"});
+        }
+    }
 }  // namespace
