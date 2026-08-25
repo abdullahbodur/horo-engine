@@ -54,6 +54,8 @@ dependency direction in [System Design](./foundation/system-design.md).
   and current dependency-direction gaps.
 - [Header Visibility And Ownership](./foundation/header-visibility-and-ownership.md):
   enforced public, internal-shared, and target-private header boundaries.
+- [Internal Module Descriptor](./foundation/internal-module-descriptor.md): inert
+  built-in module metadata and pre-composition graph validation.
 - [Architecture Glossary](./foundation/glossary.md): canonical cross-document
   terminology.
 - [Error And Diagnostics](./foundation/error-and-diagnostics.md): results,

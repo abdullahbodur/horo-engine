@@ -189,6 +189,9 @@ Required module metadata:
 | resource budget hints | Queue, memory, job, thread-affinity, and capture-cost expectations |
 | observability descriptors | Log categories, metric instruments, profiler zones, and diagnostic bundle hooks |
 
+The concrete built-in metadata shape and its pre-composition graph validation
+are defined by the [Internal Module Descriptor Contract](./internal-module-descriptor.md).
+
 This prevents the IDE side of the engine from becoming a monolithic tangle while
 still keeping hot runtime paths explicit and optimizable.
 
@@ -412,6 +415,32 @@ Required rules:
 - Gameplay modules depend only on public runtime capabilities. External extension
   packages cross the versioned extension ABI and do not expose a C++ ABI between
   releases.
+
+### Automated Target Policy
+
+`cmake/HoroDependencyPolicy.cmake` is the executable target-level form of this
+dependency direction. Every production library and executable composition target
+has an explicit allowlist of direct first-party dependencies. CMake compares the
+configured link graph with that allowlist after all production targets are
+declared and stops configuration when a target is unregistered or adds a
+forbidden edge. Third-party links remain governed by their owning target's public
+and private boundary rather than this first-party graph policy.
+
+An architectural migration may temporarily preserve a forbidden edge only through
+`horo_allow_temporary_dependency_exception`. Each exception must name the owning
+workstream, an open removal ticket, and the reason the edge still exists. CMake
+rejects malformed, duplicate, and stale exceptions; an exception is never an
+implicit permission for another edge.
+
+The current transitional exceptions are:
+
+| Edge | Owner | Removal ticket | Reason |
+|---|---|---|---|
+| `HoroSceneModel -> HoroRenderApi` | Rendering | #275 | Primitive mesh contracts still reuse renderer mesh types. |
+| `HoroEditorServices -> HoroGameplayLua` | Gameplay | #61 | Editor services still select the concrete Lua gameplay adapter. |
+| `HoroRenderNull -> HoroRenderBackendRegistry` | Rendering | #62 | Static backend registration predates the renderer module host. |
+| `HoroRenderOpenGL -> HoroRenderBackendRegistry` | Rendering | #62 | Static backend registration predates the renderer module host. |
+| `HoroRenderMetal -> HoroRenderBackendRegistry` | Rendering | #62 | Static backend registration predates the renderer module host. |
 
 ## Application Layer
 

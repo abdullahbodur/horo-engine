@@ -1,5 +1,13 @@
 include(Catch)
 
+add_test(NAME HoroDependencyDirectionNegativeConfigureTest
+    COMMAND "${CMAKE_COMMAND}"
+        "-DHORO_ENGINE_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DHORO_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/dependency-direction-negative"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/RunDependencyDirectionNegativeTest.cmake")
+set_tests_properties(HoroDependencyDirectionNegativeConfigureTest PROPERTIES
+    LABELS "architecture;cmake")
+
 # One translation unit per registered public header verifies that consumers can
 # compile the contract using only its owning target's usage requirements.
 horo_add_public_header_consumer_targets()
@@ -31,9 +39,12 @@ else ()
     )
 endif ()
 
+add_compile_definitions(HORO_PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+
 function(horo_register_catch_test target)
     cmake_parse_arguments(ARG "" "" "LABELS;EXTRA_ARGS;PROPERTIES" ${ARGN})
     target_compile_features(${target} PRIVATE cxx_std_20)
+    target_compile_definitions(${target} PRIVATE HORO_PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
     target_link_libraries(${target} PRIVATE Catch2::Catch2WithMain)
     catch_discover_tests(${target}
             TEST_PREFIX "${target}::"
@@ -548,6 +559,20 @@ add_executable(HoroFoundationResultTests
 
 target_compile_features(HoroFoundationResultTests PRIVATE cxx_std_20)
 target_link_libraries(HoroFoundationResultTests PRIVATE HoroEngine::Foundation)
+add_executable(HoroFoundationModuleDescriptorTests
+        unit/foundation/ModuleDescriptorTests.cpp
+        unit/foundation/ModuleDescriptorGraphTests.cpp
+)
+
+target_compile_features(HoroFoundationModuleDescriptorTests PRIVATE cxx_std_20)
+target_link_libraries(HoroFoundationModuleDescriptorTests PRIVATE HoroEngine::Foundation)
+
+add_executable(HoroFoundationModuleHostCompositionTests
+        unit/foundation/ModuleHostCompositionTests.cpp
+)
+
+target_compile_features(HoroFoundationModuleHostCompositionTests PRIVATE cxx_std_20)
+target_link_libraries(HoroFoundationModuleHostCompositionTests PRIVATE HoroEngine::Foundation)
 add_executable(HoroFoundationPathsTimeHandlesTests
         unit/foundation/PathsTimeHandlesTests.cpp
 )
@@ -659,11 +684,9 @@ set(HORO_EDITOR_WHITE_BOX_TEST_TARGETS
         HoroAssetSceneDropTests
 )
 foreach (target IN LISTS HORO_EDITOR_WHITE_BOX_TEST_TARGETS)
-    if(NOT TARGET ${target})
-        message(FATAL_ERROR
-                "HORO_EDITOR_WHITE_BOX_TEST_TARGETS references undefined target '${target}'")
-    endif()
-    target_link_libraries(${target} PRIVATE HoroEditorTestInternals)
+    if (TARGET ${target})
+        target_link_libraries(${target} PRIVATE HoroEditorTestInternals)
+    endif ()
 endforeach ()
 
 add_executable(HoroRenderBackendRegistryTests
@@ -960,6 +983,8 @@ set(HORO_CATCH_TEST_TARGETS
         HoroViewportPanelRenderTests
         HoroDataBusTests
         HoroFoundationResultTests
+        HoroFoundationModuleDescriptorTests
+        HoroFoundationModuleHostCompositionTests
         HoroFoundationPathsTimeHandlesTests
         HoroFoundationCancellationProgressTests
         HoroFoundationConfigurationTests

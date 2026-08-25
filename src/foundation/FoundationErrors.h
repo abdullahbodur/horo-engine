@@ -26,6 +26,15 @@ namespace Horo::HashingErrors {
     extern const ErrorCodeDescriptor InvalidSha256Text;
 }  // namespace Horo::HashingErrors
 
+namespace Horo::ModuleDescriptorErrors {
+    extern const ErrorCodeDescriptor InvalidDescriptor;
+    extern const ErrorCodeDescriptor DuplicateModule;
+    extern const ErrorCodeDescriptor MissingDependency;
+    extern const ErrorCodeDescriptor IncompatibleDependency;
+    extern const ErrorCodeDescriptor MissingCapability;
+    extern const ErrorCodeDescriptor DependencyCycle;
+}  // namespace Horo::ModuleDescriptorErrors
+
 namespace Horo::ObservabilityErrors {
     extern const ErrorCodeDescriptor InvalidBundleRequest;
     extern const ErrorCodeDescriptor BundleReadFailed;
