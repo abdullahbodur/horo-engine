@@ -98,9 +98,10 @@ rules into agent-specific instruction files.
   requirements. Use `horo_configure_target_header_boundary` so consumers see only
   the owning target's staged public headers and the public headers of declared
   dependencies.
-- Headers under `src/` are target-private by default. A cross-target internal
-  contract must be promoted deliberately to a narrow public contract or a
-  dedicated non-installed internal interface. If neither is appropriate, stop
+- Headers under `src/` are target-private by default. The supported options for
+  a cross-target internal contract are deliberate promotion to a narrow public
+  contract or a dedicated non-installed internal interface. If neither is
+  appropriate, stop
   and request an architecture decision instead of restoring a broad `src/`
   include path merely to make an include compile.
 - When public ownership or dependencies change, update the ownership registry,
