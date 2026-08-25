@@ -109,9 +109,8 @@ namespace Horo {
         }
 
         /** @brief Validates one resource budget entry within a descriptor. */
-        [[nodiscard]] std::optional<std::string> ValidateBudgetEntry(const ModuleResourceBudget &budget,
-                                                                    const std::string_view moduleId,
-                                                                    std::set<std::string, std::less<>> &budgetIds) {
+        [[nodiscard]] std::optional<std::string> ValidateBudgetEntry(const ModuleResourceBudget &budget, const std::string_view moduleId,
+                                                                     std::set<std::string, std::less<>> &budgetIds) {
             if (!IsCanonicalId(budget.id))
                 return "Module '" + std::string(moduleId) + "' has a non-canonical resource budget identity.";
             if (!IsNamespacedBy(budget.id, moduleId))
@@ -135,8 +134,7 @@ namespace Horo {
 
         /** @brief Validates one observability entry within a descriptor. */
         [[nodiscard]] std::optional<std::string> ValidateObservabilityEntry(
-            const ModuleObservabilityDescriptor &entry,
-            const std::string_view moduleId,
+            const ModuleObservabilityDescriptor &entry, const std::string_view moduleId,
             std::set<std::pair<ModuleObservabilityKind, std::string>> &observability) {
             if (!IsCanonicalId(entry.id))
                 return "Module '" + std::string(moduleId) + "' has a non-canonical observability identity.";
@@ -167,11 +165,8 @@ namespace Horo {
             }
             using ValidatorFn = std::optional<std::string> (*)(const ModuleDescriptor &);
             constexpr std::array<ValidatorFn, 5> kValidators = {
-                &ValidateDependencies,
-                &ValidateProvidedCapabilities,
-                &ValidateRequiredCapabilities,
-                &ValidateBudgets,
-                &ValidateObservability,
+                &ValidateDependencies, &ValidateProvidedCapabilities, &ValidateRequiredCapabilities,
+                &ValidateBudgets,      &ValidateObservability,
             };
             for (const auto validator : kValidators) {
                 if (auto failure = validator(descriptor); failure.has_value())

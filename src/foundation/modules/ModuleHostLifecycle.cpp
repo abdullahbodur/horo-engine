@@ -76,8 +76,7 @@ namespace Horo {
         m_registered.clear();
     }
 
-    void ModuleHost::RollbackActivation(const ModuleDescriptor &failedDescriptor,
-                                        std::unique_ptr<ModuleActivationContext> failedContext,
+    void ModuleHost::RollbackActivation(const ModuleDescriptor &failedDescriptor, std::unique_ptr<ModuleActivationContext> failedContext,
                                         const std::size_t base) noexcept {
         Transition(failedDescriptor.id, ModuleLifecycleState::Failed);
         failedContext->RequestShutdown();

@@ -150,14 +150,14 @@ TEST_CASE("ModuleCallbackLease supports move semantics and explicit release", "[
     ModuleCallbackLease lease3 = std::move(lease2);
     REQUIRE(lease3.Bindings() == nullptr);
 
-    // Self move-assignment is a safe no-op
-    #if defined(__clang__)
-    #pragma clang diagnostic push
-    #pragma clang diagnostic ignored "-Wself-move"
-    #endif
+// Self move-assignment is a safe no-op
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wself-move"
+#endif
     lease3 = std::move(lease3);
-    #if defined(__clang__)
-    #pragma clang diagnostic pop
-    #endif
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
     REQUIRE(lease3.Bindings() == nullptr);
 }

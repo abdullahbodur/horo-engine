@@ -15,9 +15,8 @@ namespace Horo {
         }
 
         /** @brief Indexes descriptors by identity so activation follows the validated ID order. */
-        [[nodiscard]] std::vector<const ModuleDescriptor *> OrderRegisteredDescriptors(
-            const std::vector<ModuleDescriptor> &registered,
-            const std::vector<ModuleId> &order) {
+        [[nodiscard]] std::vector<const ModuleDescriptor *> OrderRegisteredDescriptors(const std::vector<ModuleDescriptor> &registered,
+                                                                                       const std::vector<ModuleId> &order) {
             std::vector<const ModuleDescriptor *> ordered;
             ordered.reserve(order.size());
             for (const ModuleId &id : order) {
