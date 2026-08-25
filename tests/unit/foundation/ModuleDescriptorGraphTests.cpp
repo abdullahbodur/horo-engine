@@ -1,4 +1,5 @@
 #include "Horo/Foundation/ModuleDescriptor.h"
+#include "ModuleDescriptorTestUtils.h"
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
@@ -7,13 +8,7 @@
 
 namespace {
     using namespace Horo;
-
-    [[nodiscard]] ModuleDescriptor MakeModule(std::string id, const ModuleContractVersion version = {1, 0, 0}) {
-        ModuleDescriptor descriptor;
-        descriptor.id = ModuleId{std::move(id)};
-        descriptor.version = version;
-        return descriptor;
-    }
+    using Horo::Test::MakeModule;
 
     [[nodiscard]] std::vector<std::string> OrderOf(const ValidatedModuleGraph &graph) {
         std::vector<std::string> order;

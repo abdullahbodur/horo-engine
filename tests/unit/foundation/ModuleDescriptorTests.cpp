@@ -1,4 +1,5 @@
 #include "Horo/Foundation/ModuleDescriptor.h"
+#include "ModuleDescriptorTestUtils.h"
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
@@ -6,6 +7,7 @@
 
 namespace {
     using namespace Horo;
+    using Horo::Test::MakeModule;
 
     int g_activateCalls = 0;
     int g_deactivateCalls = 0;
@@ -17,13 +19,6 @@ namespace {
 
     void Deactivate(ModuleActivationContext &) noexcept {
         ++g_deactivateCalls;
-    }
-
-    [[nodiscard]] ModuleDescriptor MakeModule(std::string id, const ModuleContractVersion version = {1, 0, 0}) {
-        ModuleDescriptor descriptor;
-        descriptor.id = ModuleId{std::move(id)};
-        descriptor.version = version;
-        return descriptor;
     }
 
     TEST_CASE("Empty module descriptor set validates successfully", "[unit][foundation][modules]") {
