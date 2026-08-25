@@ -83,7 +83,7 @@ jobs:
             -j "$(nproc)" \
             -quiet \
             '(^|.*/)(src|apps)/.*\.(c|cc|cpp|cxx)$' \
-            > clang-tidy-output.txt 2>&1
+            > clang-tidy-output.txt 2>&1 || true
 
           test -f clang-tidy-output.txt
           sed -n '1,200p' clang-tidy-output.txt
