@@ -60,9 +60,34 @@ Independent modules are ordered by stable module ID, so the result does not
 depend on descriptor input order.
 
 Validation does not prove trust, permissions, feature flags, or host resource
-policy. Those remain later host-owned gates. Explicit registration, activation
-rollback, lifecycle states, callback drainage, and reverse shutdown are also
-outside this descriptor contract.
+policy. Those remain later host-owned gates.
+
+## Composition-Time Registration
+
+`Horo/Foundation/ModuleHost.h` defines the host-owned registration and
+activation stage that consumes this descriptor contract. A composition root:
+
+1. Registers each selected descriptor explicitly with `ModuleHost::Register`.
+   Registration is inert: it performs only local metadata checks and never
+   invokes a callback or inspects the full graph.
+2. Calls `ModuleHost::ActivateRegistered`, which validates the complete graph,
+   then activates modules in the validated provider-before-dependant order,
+   passing a composition-root-supplied dependency bundle through
+   `ModuleActivationContext`. Modules receive only approved bindings; there is
+   no runtime discovery.
+3. On activation failure, the host deactivates every already-activated module
+   in reverse order, so a failed composition leaves no partially active set.
+   A rejected graph leaves registrations intact so composition can be retried
+   after correcting the descriptor set.
+
+Headless compositions stay headless by construction: they simply do not
+register GUI-only descriptors, so GUI modules are neither activated nor linked
+into the composition path. `DeactivateAll` provides idempotent reverse-order
+teardown; attached module instances are released with their activation
+contexts.
+
+Lifecycle states beyond this stage (callback drainage, runtime shutdown
+ordering) remain owned by ARC-001.6.
 
 ## Ownership And Migration
 

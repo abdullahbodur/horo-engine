@@ -558,6 +558,13 @@ add_executable(HoroFoundationModuleDescriptorTests
 
 target_compile_features(HoroFoundationModuleDescriptorTests PRIVATE cxx_std_20)
 target_link_libraries(HoroFoundationModuleDescriptorTests PRIVATE HoroEngine::Foundation)
+
+add_executable(HoroFoundationModuleHostCompositionTests
+        unit/foundation/ModuleHostCompositionTests.cpp
+)
+
+target_compile_features(HoroFoundationModuleHostCompositionTests PRIVATE cxx_std_20)
+target_link_libraries(HoroFoundationModuleHostCompositionTests PRIVATE HoroEngine::Foundation)
 add_executable(HoroFoundationPathsTimeHandlesTests
         unit/foundation/PathsTimeHandlesTests.cpp
 )
@@ -969,6 +976,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroDataBusTests
         HoroFoundationResultTests
         HoroFoundationModuleDescriptorTests
+        HoroFoundationModuleHostCompositionTests
         HoroFoundationPathsTimeHandlesTests
         HoroFoundationCancellationProgressTests
         HoroFoundationConfigurationTests
