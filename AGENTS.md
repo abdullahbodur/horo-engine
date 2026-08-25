@@ -89,9 +89,10 @@ rules into agent-specific instruction files.
 
 ### Header Boundary Enforcement
 
-- Every header under `include/Horo/` must be assigned to exactly one real CMake
-  target in `cmake/HoroPublicHeaderOwnership.cmake`. Configure must fail for an
-  unowned or multiply owned public header.
+- Unless the current task explicitly revises this architecture contract with a
+  documented migration, assign every header under `include/Horo/` to exactly one
+  real CMake target in `cmake/HoroPublicHeaderOwnership.cmake`. Configure rejects
+  unowned or multiply owned public headers.
 - Do not publish `${PROJECT_SOURCE_DIR}/include`, `${PROJECT_SOURCE_DIR}/src`, or
   another repository-wide source root through `PUBLIC` or `INTERFACE` usage
   requirements. Use `horo_configure_target_header_boundary` so consumers see only
@@ -99,8 +100,9 @@ rules into agent-specific instruction files.
   dependencies.
 - Headers under `src/` are target-private by default. A cross-target internal
   contract must be promoted deliberately to a narrow public contract or a
-  dedicated non-installed internal interface; never restore a broad `src/`
-  include path to make an include compile.
+  dedicated non-installed internal interface. If neither is appropriate, stop
+  and request an architecture decision instead of restoring a broad `src/`
+  include path merely to make an include compile.
 - When public ownership or dependencies change, update the ownership registry,
   migration notes, and public-header consumer coverage in the same change.
 
