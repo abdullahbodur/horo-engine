@@ -214,26 +214,37 @@ namespace Horo {
                 ++edges.incomingCount[dependant];
         }
 
+        [[nodiscard]] Result<std::optional<std::size_t>> ResolveDependencyProvider(const ModuleDescriptor &descriptor,
+                                                                                   const ModuleDependency &dependency,
+                                                                                   const std::span<const ModuleDescriptor> descriptors,
+                                                                                   const ModuleIndex &modules) {
+            const auto provider = modules.find(dependency.module.value);
+            if (provider == modules.end()) {
+                if (dependency.kind == ModuleDependencyKind::Required) {
+                    return Fail<std::optional<std::size_t>>(ModuleDescriptorErrors::MissingDependency, "Module '" + descriptor.id.value +
+                                                                                                           "' requires missing module '" +
+                                                                                                           dependency.module.value + "'.");
+                }
+                return Result<std::optional<std::size_t>>::Success(std::nullopt);
+            }
+            if (descriptors[provider->second].version < dependency.minimumVersion) {
+                return Fail<std::optional<std::size_t>>(ModuleDescriptorErrors::IncompatibleDependency,
+                                                        "Module '" + descriptor.id.value + "' requires a newer contract from '" +
+                                                            dependency.module.value + "'.");
+            }
+            return Result<std::optional<std::size_t>>::Success(provider->second);
+        }
+
         /** @brief Resolves and validates explicit module dependencies for one dependant. */
         [[nodiscard]] Result<void> AddDependencyEdges(const std::span<const ModuleDescriptor> descriptors, const ModuleIndex &modules,
                                                       const std::size_t dependant, GraphEdges &edges) {
             const ModuleDescriptor &descriptor = descriptors[dependant];
             for (const ModuleDependency &dependency : descriptor.dependencies) {
-                const auto provider = modules.find(dependency.module.value);
-                if (provider == modules.end()) {
-                    if (dependency.kind == ModuleDependencyKind::Required) {
-                        return Fail<void>(ModuleDescriptorErrors::MissingDependency, "Module '" + descriptor.id.value +
-                                                                                         "' requires missing module '" +
-                                                                                         dependency.module.value + "'.");
-                    }
-                    continue;
-                }
-                if (descriptors[provider->second].version < dependency.minimumVersion) {
-                    return Fail<void>(ModuleDescriptorErrors::IncompatibleDependency, "Module '" + descriptor.id.value +
-                                                                                          "' requires a newer contract from '" +
-                                                                                          dependency.module.value + "'.");
-                }
-                AddEdge(edges, provider->second, dependant);
+                const auto provider = ResolveDependencyProvider(descriptor, dependency, descriptors, modules);
+                if (provider.HasError())
+                    return Result<void>::Failure(provider.ErrorValue());
+                if (provider.Value().has_value())
+                    AddEdge(edges, *provider.Value(), dependant);
             }
             return Result<void>::Success();
         }

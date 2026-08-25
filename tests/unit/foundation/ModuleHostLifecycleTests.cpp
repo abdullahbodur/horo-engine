@@ -36,10 +36,18 @@ namespace {
         return Result<void>::Success();
     }
 
+    [[nodiscard]] const char *CancellationLabel(const ModuleActivationContext &context) noexcept {
+        return context.Cancellation().IsCancellationRequested() ? "cancelled" : "not-cancelled";
+    }
+
+    [[nodiscard]] const char *AdmissionLabel(const ModuleActivationContext &context) noexcept {
+        return context.AcquireCallbackLease().has_value() ? "admission-open" : "admission-closed";
+    }
+
     void OrderedDrain(ModuleActivationContext &context) noexcept {
         g_events.push_back("drain:" + context.Module().value);
-        g_events.push_back(context.Cancellation().IsCancellationRequested() ? "cancelled" : "not-cancelled");
-        g_events.push_back(context.AcquireCallbackLease().has_value() ? "admission-open" : "admission-closed");
+        g_events.push_back(CancellationLabel(context));
+        g_events.push_back(AdmissionLabel(context));
     }
 
     void OrderedDeactivate(ModuleActivationContext &context) noexcept {
@@ -48,7 +56,9 @@ namespace {
 
     Result<void> LeaseActivate(ModuleActivationContext &context) noexcept {
         g_callbackLease = context.AcquireCallbackLease();
-        return g_callbackLease.has_value() ? Result<void>::Success() : Result<void>::Failure(Error{});
+        if (!g_callbackLease.has_value())
+            return Result<void>::Failure(Error{});
+        return Result<void>::Success();
     }
 
     void LeaseDrain(ModuleActivationContext &context) noexcept {
@@ -57,7 +67,8 @@ namespace {
     }
 
     void LeaseDeactivate(ModuleActivationContext &) noexcept {
-        g_deactivateObservedDrain = g_deactivateObservedDrain && g_callbackFinished.load();
+        if (!g_callbackFinished.load())
+            g_deactivateObservedDrain = false;
     }
 
     [[nodiscard]] ModuleDescriptor MakeLifecycleModule(std::string id) {

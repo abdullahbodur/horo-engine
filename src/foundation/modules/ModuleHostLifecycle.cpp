@@ -21,6 +21,17 @@ namespace Horo {
             }};
             return std::ranges::find(kAllowedTransitions, std::pair{from, to}) != kAllowedTransitions.end();
         }
+
+        void DeactivateActiveModule(ModuleHost &host, ActiveModule &active) noexcept {
+            host.Transition(active.id, ModuleLifecycleState::Draining);
+            active.context->DrainCallbacks();
+            if (active.drain != nullptr)
+                active.drain(*active.context);
+            if (active.deactivate != nullptr)
+                active.deactivate(*active.context);
+            active.context.reset();
+            host.Transition(active.id, ModuleLifecycleState::Stopped);
+        }
     }  // namespace
 
     /** @copydoc ModuleHost::StateOf */
@@ -55,15 +66,7 @@ namespace Horo {
 
     void ModuleHost::DeactivateFrom(const std::size_t base) noexcept {
         while (m_active.size() > base) {
-            ActiveModule &active = m_active.back();
-            Transition(active.id, ModuleLifecycleState::Draining);
-            active.context->DrainCallbacks();
-            if (active.drain != nullptr)
-                active.drain(*active.context);
-            if (active.deactivate != nullptr)
-                active.deactivate(*active.context);
-            active.context.reset();
-            Transition(active.id, ModuleLifecycleState::Stopped);
+            DeactivateActiveModule(*this, m_active.back());
             m_active.pop_back();
         }
     }
