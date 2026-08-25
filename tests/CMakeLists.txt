@@ -624,6 +624,46 @@ add_executable(HoroAssetSceneDropTests
 )
 target_compile_features(HoroAssetSceneDropTests PRIVATE cxx_std_20)
 target_link_libraries(HoroAssetSceneDropTests PRIVATE HoroEngine::EditorRenderExtraction)
+
+# White-box editor tests opt into implementation headers explicitly. Keep this
+# non-installed test interface separate from every production usage requirement;
+# legacy editor/... include spellings require the source root until those tests
+# migrate to narrower per-subsystem spellings.
+add_library(HoroEditorTestInternals INTERFACE)
+target_include_directories(HoroEditorTestInternals INTERFACE ${PROJECT_SOURCE_DIR}/src)
+set(HORO_EDITOR_WHITE_BOX_TEST_TARGETS
+        HoroEditorPlaySessionControllerTests
+        HoroProjectGameplayRegistryTests
+        HoroGuiScreenHostLifecycleTests
+        HoroProjectCreationControllerTests
+        HoroRendererAvailabilityTests
+        HoroProjectMetadataTests
+        HoroProjectOpenServiceTests
+        HoroProjectMigrationIntegrationTests
+        HoroEditorWorkspaceControllerTests
+        HoroGameplayBehaviorFilenameModalStateTests
+        HoroEditorSelectionModelTests
+        HoroEditorViewportModelTests
+        HoroHierarchyPanelRenderTests
+        HoroHierarchyEditSessionTests
+        HoroInspectorPanelRenderTests
+        HoroInspectorEditSessionTests
+        HoroGlobalDockPanelRenderTests
+        HoroAssetBrowserInteractionSessionTests
+        HoroViewportPanelRenderTests
+        HoroTransformGizmoMathTests
+        HoroEditorViewportSceneTests
+        HoroSceneDocumentTests
+        HoroSceneDocumentPersistenceTests
+        HoroEditorViewportPickingTests
+        HoroAssetSceneDropTests
+)
+foreach (target IN LISTS HORO_EDITOR_WHITE_BOX_TEST_TARGETS)
+    if(TARGET ${target})
+        target_link_libraries(${target} PRIVATE HoroEditorTestInternals)
+    endif()
+endforeach ()
+
 add_executable(HoroRenderBackendRegistryTests
         unit/runtime/renderer/RenderBackendRegistryTests.cpp
 )

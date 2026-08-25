@@ -75,6 +75,12 @@ actual owning target. White-box tests that need implementation details must use 
 narrow test-private include path or an explicit internal interface rather than
 depending on production transitivity.
 
+Legacy editor white-box tests use the non-installed `HoroEditorTestInternals`
+interface as an explicit migration boundary. It is test-only and may expose the
+source root to its listed consumers while their historical `editor/...` include
+spellings remain. New tests should prefer a narrower test-private include path;
+do not link this interface from production or SDK examples.
+
 `HoroGui` currently exposes Dear ImGui types in several established public
 headers, so `HoroThirdParty::ImGui` remains a truthful public usage requirement.
 It may become private only after those signatures migrate to Horo-owned types.
