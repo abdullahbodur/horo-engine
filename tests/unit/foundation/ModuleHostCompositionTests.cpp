@@ -16,8 +16,11 @@ namespace {
     // all hosts in this translation unit. Each test resets the log first.
     struct ActivationLog {
         std::vector<std::string> activated;
+        std::vector<std::string> drained;
         std::vector<std::string> deactivated;
         std::vector<ModuleActivationContext::DependencyBindings> bindings;
+        std::vector<bool> drainObservedCancellation;
+        std::vector<bool> drainObservedClosedAdmission;
     };
 
     ActivationLog g_log;
@@ -28,8 +31,11 @@ namespace {
 
     void ResetLog() {
         g_log.activated.clear();
+        g_log.drained.clear();
         g_log.deactivated.clear();
         g_log.bindings.clear();
+        g_log.drainObservedCancellation.clear();
+        g_log.drainObservedClosedAdmission.clear();
         g_instancesAlive = 0;
         g_failModule.clear();
         g_activationCompletions.clear();
@@ -60,9 +66,15 @@ namespace {
         g_log.deactivated.push_back(context.Module().value);
     }
 
+    void LogDrain(ModuleActivationContext &context) noexcept {
+        g_log.drained.push_back(context.Module().value);
+        g_log.drainObservedCancellation.push_back(context.Cancellation().IsCancellationRequested());
+        g_log.drainObservedClosedAdmission.push_back(!context.AcquireCallbackLease().has_value());
+    }
+
     [[nodiscard]] ModuleDescriptor MakeLoggedModule(std::string id, const ModuleContractVersion version = {1, 0, 0}) {
         ModuleDescriptor descriptor = MakeModule(std::move(id), version);
-        descriptor.lifecycle = ModuleLifecycleCallbacks{.activate = &LogActivate, .deactivate = &LogDeactivate};
+        descriptor.lifecycle = ModuleLifecycleCallbacks{.activate = &LogActivate, .drain = &LogDrain, .deactivate = &LogDeactivate};
         return descriptor;
     }
 }  // namespace
@@ -76,6 +88,7 @@ TEST_CASE("Composition registers and activates modules in validated order", "[un
 
     REQUIRE(host.Register(editor).HasValue());
     REQUIRE(host.Register(MakeLoggedModule("horo.foundation")).HasValue());
+    REQUIRE(host.StateOf(ModuleId{"horo.editor"}) == ModuleLifecycleState::Registered);
 
     // Registration is inert: no callback runs before ActivateRegistered.
     REQUIRE(g_log.activated.empty());
@@ -85,6 +98,8 @@ TEST_CASE("Composition registers and activates modules in validated order", "[un
     REQUIRE(activated.HasValue());
     REQUIRE(activated.Value() == 2);
     REQUIRE(host.HasActiveModules());
+    REQUIRE(host.StateOf(ModuleId{"horo.foundation"}) == ModuleLifecycleState::Active);
+    REQUIRE(host.StateOf(ModuleId{"horo.editor"}) == ModuleLifecycleState::Active);
     REQUIRE(g_log.activated == std::vector<std::string>{"horo.foundation", "horo.editor"});
     REQUIRE(g_log.bindings == std::vector<ModuleActivationContext::DependencyBindings>{&approvedBindings, &approvedBindings});
 }
@@ -109,6 +124,10 @@ TEST_CASE("Failed composition rolls back active modules in reverse order", "[uni
     // deactivated in reverse activation order, leaving nothing partially active.
     REQUIRE(g_log.activated == std::vector<std::string>{"horo.first", "horo.second", "horo.failing"});
     REQUIRE(g_log.deactivated == std::vector<std::string>{"horo.second", "horo.first"});
+    REQUIRE(g_log.drained == std::vector<std::string>{"horo.second", "horo.first"});
+    REQUIRE(host.StateOf(ModuleId{"horo.first"}) == ModuleLifecycleState::Stopped);
+    REQUIRE(host.StateOf(ModuleId{"horo.second"}) == ModuleLifecycleState::Stopped);
+    REQUIRE(host.StateOf(ModuleId{"horo.failing"}) == ModuleLifecycleState::Failed);
     REQUIRE_FALSE(host.HasActiveModules());
 }
 
@@ -122,6 +141,7 @@ TEST_CASE("Rejected composition leaves registrations untouched for retry", "[uni
     // Graph validation fails before any callback: no module was activated.
     REQUIRE(host.ActivateRegistered(nullptr).HasError());
     REQUIRE(g_log.activated.empty());
+    REQUIRE(host.StateOf(ModuleId{"horo.consumer"}) == ModuleLifecycleState::Registered);
     REQUIRE_FALSE(host.HasActiveModules());
 
     ModuleDescriptor provider = MakeModule("horo.absent");
@@ -140,7 +160,7 @@ TEST_CASE("Headless composition never activates GUI-only modules", "[unit][found
     renderNull.providedCapabilities.push_back(ModuleCapabilityId{"horo.render.device"});
     ModuleDescriptor gui = MakeModule("horo.gui");
     gui.requiredCapabilities.push_back(ModuleCapabilityId{"horo.window.surface"});
-    gui.lifecycle = ModuleLifecycleCallbacks{.activate = &LogActivate, .deactivate = &LogDeactivate};
+    gui.lifecycle = ModuleLifecycleCallbacks{.activate = &LogActivate, .drain = &LogDrain, .deactivate = &LogDeactivate};
 
     REQUIRE(host.Register(renderNull).HasValue());
     REQUIRE(host.Register(gui).HasValue());
@@ -193,24 +213,17 @@ TEST_CASE("Incremental activation rolls back only modules started by the failed 
     // The module started in this pass is rolled back, while the earlier successful
     // activation survives untouched and stays active.
     REQUIRE(g_log.deactivated == std::vector<std::string>{"horo.late_started"});
+    REQUIRE(g_log.drained == std::vector<std::string>{"horo.late_started"});
     REQUIRE(g_log.activated == std::vector<std::string>{"horo.late_started", "horo.late_failure"});
     REQUIRE(g_activationCompletions == std::vector<std::string>{"horo.early", "horo.late_started"});
     REQUIRE(host.HasActiveModules());
     REQUIRE(g_instancesAlive == 1);
-
-    // Registrations survive an activation failure, so correcting the callback's
-    // failure condition allows the same pending set to be retried.
-    g_failModule.clear();
-    g_log.deactivated.clear();
-    g_log.activated.clear();
-    const Result<std::size_t> retried = host.ActivateRegistered(nullptr);
-    REQUIRE(retried.HasValue());
-    REQUIRE(retried.Value() == 2);
-    REQUIRE(g_log.activated == std::vector<std::string>{"horo.late_started", "horo.late_failure"});
-    REQUIRE(g_instancesAlive == 3);
+    REQUIRE(host.StateOf(ModuleId{"horo.early"}) == ModuleLifecycleState::Active);
+    REQUIRE(host.StateOf(ModuleId{"horo.late_started"}) == ModuleLifecycleState::Stopped);
+    REQUIRE(host.StateOf(ModuleId{"horo.late_failure"}) == ModuleLifecycleState::Failed);
 
     host.DeactivateAll();
-    REQUIRE(g_log.deactivated == std::vector<std::string>{"horo.late_failure", "horo.late_started", "horo.early"});
+    REQUIRE(g_log.deactivated == std::vector<std::string>{"horo.late_started", "horo.early"});
     REQUIRE_FALSE(host.HasActiveModules());
     REQUIRE(g_instancesAlive == 0);
 }
@@ -234,5 +247,6 @@ TEST_CASE("Deactivation releases attached instances exactly once", "[unit][found
     // Pending registrations are part of host teardown as documented.
     REQUIRE(host.Register(MakeModule("horo.pending")).HasValue());
     host.DeactivateAll();
-    REQUIRE(host.Register(MakeModule("horo.pending")).HasValue());
+    REQUIRE(host.StateOf(ModuleId{"horo.pending"}) == ModuleLifecycleState::Stopped);
+    REQUIRE(host.Register(MakeModule("horo.pending")).HasError());
 }

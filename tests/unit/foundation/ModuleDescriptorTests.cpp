@@ -21,6 +21,8 @@ namespace {
         ++g_deactivateCalls;
     }
 
+    void Drain(ModuleActivationContext &) noexcept {}
+
     TEST_CASE("Empty module descriptor set validates successfully", "[unit][foundation][modules]") {
         const std::span<const ModuleDescriptor> emptyDescriptors{};
         const auto result = ValidateModuleGraph(emptyDescriptors);
@@ -90,10 +92,19 @@ namespace {
             REQUIRE(result.ErrorValue().code.Value() == "foundation.module.invalid_descriptor");
         }
 
+        SECTION("drain without an activation lifetime") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.lifecycle.drain = &Drain;
+            const auto result = ValidateModuleGraph(std::array{module});
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().code.Value() == "foundation.module.invalid_descriptor");
+        }
+
         SECTION("both or neither callbacks provided") {
             ModuleDescriptor module = MakeModule("horo.runtime");
             REQUIRE(ValidateModuleGraph(std::array{module}).HasValue());
             module.lifecycle.activate = &Activate;
+            module.lifecycle.drain = &Drain;
             module.lifecycle.deactivate = &Deactivate;
             REQUIRE(ValidateModuleGraph(std::array{module}).HasValue());
         }

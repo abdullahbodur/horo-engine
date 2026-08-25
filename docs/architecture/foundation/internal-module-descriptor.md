@@ -77,9 +77,10 @@ activation stage that consumes this descriptor contract. A composition root:
    there is no runtime discovery.
 3. On activation failure, the host deactivates every module started by that
    activation call in reverse order, so a failed composition leaves no partially
-   active set from that call while preserving modules active before it. A rejected
-   graph leaves registrations intact so composition can be retried after correcting
-   the descriptor set.
+   active set from that call while preserving modules active before it. Modules
+   reached by the failed attempt enter one terminal state. A graph rejected before
+   activation leaves registrations intact so composition can be retried after
+   correcting the descriptor set.
 
 Headless compositions stay headless by construction: they simply do not
 register GUI-only descriptors, so GUI modules are neither activated nor linked
@@ -87,8 +88,37 @@ into the composition path. `DeactivateAll` provides idempotent reverse-order
 teardown; attached module instances are released with their activation
 contexts.
 
-Lifecycle states beyond this stage (callback drainage, runtime shutdown
-ordering) remain owned by ARC-001.6.
+## Module Lifecycle And Shutdown
+
+`ModuleHost` owns the explicit per-registration state machine:
+
+```text
+Registered -> Activating -> Active -> CancellationRequested -> Draining -> Stopped
+                      \-> Failed
+Registered -----------------------------------------------> Stopped
+```
+
+`Stopped` and `Failed` are terminal for an identity registered with one host.
+Graph validation rejection does not advance `Registered`; an activation callback
+failure marks the failing module `Failed`, stops modules already started by that
+attempt, stops unattempted registrations in the rejected attempt, and preserves
+modules that were active before the call.
+
+Each `ModuleActivationContext` owns a cooperative cancellation source and a
+callback-admission gate. Asynchronous module callbacks acquire a move-only
+`ModuleCallbackLease` before retaining activation-scoped bindings. Shutdown:
+
+1. requests cancellation and closes callback admission for every active module;
+2. visits modules in reverse validated activation order;
+3. waits for every admitted callback lease to be released;
+4. invokes the optional module drain callback;
+5. invokes deactivation and releases the activation context and attached instance.
+
+This order keeps providers alive while dependants drain, prevents new callbacks
+from entering after shutdown begins, and ensures activation-scoped binding borrows
+end before their context is released. Repeated shutdown is a no-op after the first
+terminal transition. The host destructor is a final safety net that runs the same
+idempotent shutdown path.
 
 ## Ownership And Migration
 

@@ -48,9 +48,11 @@ namespace Horo {
             return Result<ValueT>::Failure(MakeError(descriptor, std::move(message)));
         }
 
-        /** @brief Returns whether lifecycle callbacks are both absent or both present. */
-        [[nodiscard]] bool HasPairedCallbacks(const ModuleLifecycleCallbacks &callbacks) noexcept {
-            return (callbacks.activate == nullptr) == (callbacks.deactivate == nullptr);
+        /** @brief Returns whether lifecycle callbacks form one valid activation lifetime. */
+        [[nodiscard]] bool HasValidLifecycleCallbacks(const ModuleLifecycleCallbacks &callbacks) noexcept {
+            const bool hasPairedEndpoints = (callbacks.activate == nullptr) == (callbacks.deactivate == nullptr);
+            const bool drainHasLifetime = callbacks.drain == nullptr || callbacks.activate != nullptr;
+            return hasPairedEndpoints && drainHasLifetime;
         }
 
         /** @brief Returns whether a child identity is strictly nested below its parent identity. */
@@ -132,8 +134,10 @@ namespace Horo {
         [[nodiscard]] std::optional<std::string> ValidateLocalDescriptor(const ModuleDescriptor &descriptor) {
             if (!IsCanonicalId(descriptor.id.value))
                 return "Module identity is not canonical: '" + descriptor.id.value + "'.";
-            if (!HasPairedCallbacks(descriptor.lifecycle))
-                return "Module '" + descriptor.id.value + "' must declare both lifecycle callbacks or neither.";
+            if (!HasValidLifecycleCallbacks(descriptor.lifecycle)) {
+                return "Module '" + descriptor.id.value +
+                       "' must pair activation and deactivation, and may drain only within that lifetime.";
+            }
             if (const auto failure = ValidateDependencies(descriptor); failure.has_value())
                 return failure;
             if (const auto failure = ValidateProvidedCapabilities(descriptor); failure.has_value())

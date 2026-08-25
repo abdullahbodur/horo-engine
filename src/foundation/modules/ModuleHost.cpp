@@ -14,21 +14,11 @@ namespace Horo {
             return Result<ValueT>::Failure(MakeError(descriptor, std::move(message)));
         }
 
-        /** @brief Deactivates one active entry and releases its activation context. */
-        void DeactivateOne(ActiveModule &active) noexcept {
-            if (active.deactivate != nullptr && active.context != nullptr)
-                active.deactivate(*active.context);
-            active.context.reset();
-        }
-
-        /** @brief Rolls back every activation started after @p base in reverse order. */
-        void RollBackTo(std::vector<ActiveModule> &activeModules, const std::size_t base) noexcept {
-            while (activeModules.size() > base) {
-                DeactivateOne(activeModules.back());
-                activeModules.pop_back();
-            }
-        }
     }  // namespace
+
+    ModuleHost::~ModuleHost() {
+        DeactivateAll();
+    }
 
     /** @copydoc ModuleHost::ActivateRegistered */
     Result<std::size_t> ModuleHost::ActivateRegistered(const ModuleActivationContext::DependencyBindings bindings) {
@@ -50,17 +40,33 @@ namespace Horo {
         // Roll back only modules started by this call; a prior successful activation
         // may still own the front of the active list (incremental compose-then-activate).
         const std::size_t base = m_active.size();
+        m_active.reserve(base + ordered.size());
         for (const ModuleDescriptor *descriptor : ordered) {
             auto context = std::make_unique<ModuleActivationContext>(descriptor->id, bindings);
+            Transition(descriptor->id, ModuleLifecycleState::Activating);
             if (descriptor->lifecycle.activate != nullptr) {
                 if (const Result<void> activated = descriptor->lifecycle.activate(*context); activated.HasError()) {
-                    RollBackTo(m_active, base);
+                    Transition(descriptor->id, ModuleLifecycleState::Failed);
+                    context->RequestShutdown();
+                    RequestCancellationFrom(base);
+                    context->DrainCallbacks();
+                    context.reset();
+                    DeactivateFrom(base);
+                    for (const ModuleDescriptor &pending : m_registered) {
+                        if (StateOf(pending.id) == ModuleLifecycleState::Registered)
+                            Transition(pending.id, ModuleLifecycleState::Stopped);
+                    }
+                    m_registered.clear();
                     return Fail<std::size_t>(ModuleDescriptorErrors::InvalidDescriptor,
                                              "Activation of module '" + descriptor->id.value + "' failed.");
                 }
             }
-            ActiveModule active{.id = descriptor->id, .deactivate = descriptor->lifecycle.deactivate, .context = std::move(context)};
+            ActiveModule active{.id = descriptor->id,
+                                .drain = descriptor->lifecycle.drain,
+                                .deactivate = descriptor->lifecycle.deactivate,
+                                .context = std::move(context)};
             m_active.push_back(std::move(active));
+            Transition(descriptor->id, ModuleLifecycleState::Active);
         }
         m_registered.clear();
         return Result<std::size_t>::Success(m_active.size() - base);
@@ -68,7 +74,12 @@ namespace Horo {
 
     /** @copydoc ModuleHost::DeactivateAll */
     void ModuleHost::DeactivateAll() noexcept {
-        RollBackTo(m_active, 0);
+        RequestCancellationFrom(0);
+        DeactivateFrom(0);
+        for (const ModuleDescriptor &pending : m_registered) {
+            if (StateOf(pending.id) == ModuleLifecycleState::Registered)
+                Transition(pending.id, ModuleLifecycleState::Stopped);
+        }
         m_registered.clear();
     }
 

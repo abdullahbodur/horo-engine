@@ -3,6 +3,7 @@ add_library(HoroFoundation STATIC
         foundation/modules/ModuleActivationContext.cpp
         foundation/modules/ModuleDescriptor.cpp
         foundation/modules/ModuleHost.cpp
+        foundation/modules/ModuleHostLifecycle.cpp
         foundation/modules/ModuleHostRegistration.cpp
         foundation/diagnostics/ErrorCode.cpp
         foundation/diagnostics/DiagnosticBundle.cpp

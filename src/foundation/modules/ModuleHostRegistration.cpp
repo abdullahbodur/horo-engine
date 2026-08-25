@@ -18,19 +18,12 @@ namespace Horo {
                                                        "Module '" + descriptor.id.value + "' repeats a dependency at registration."));
             }
         }
-        for (const ActiveModule &active : m_active) {
-            if (active.id == descriptor.id) {
-                return Result<void>::Failure(
-                    MakeError(ModuleDescriptorErrors::DuplicateModule, "Module '" + descriptor.id.value + "' is already active."));
-            }
-        }
-        if (std::ranges::find_if(m_registered, [&descriptor](const ModuleDescriptor &registered) {
-            return registered.id == descriptor.id;
-        }) != m_registered.end()) {
+        if (StateOf(descriptor.id).has_value()) {
             return Result<void>::Failure(
-                MakeError(ModuleDescriptorErrors::DuplicateModule, "Module '" + descriptor.id.value + "' is already registered."));
+                MakeError(ModuleDescriptorErrors::DuplicateModule, "Module '" + descriptor.id.value + "' already has a host lifetime."));
         }
         m_registered.push_back(descriptor);
+        m_states.push_back(ModuleStateRecord{.id = descriptor.id});
         return Result<void>::Success();
     }
 }  // namespace Horo

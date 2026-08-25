@@ -569,6 +569,7 @@ target_link_libraries(HoroFoundationModuleDescriptorTests PRIVATE HoroEngine::Fo
 
 add_executable(HoroFoundationModuleHostCompositionTests
         unit/foundation/ModuleHostCompositionTests.cpp
+        unit/foundation/ModuleHostLifecycleTests.cpp
 )
 
 target_compile_features(HoroFoundationModuleHostCompositionTests PRIVATE cxx_std_20)
