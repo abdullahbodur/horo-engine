@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <condition_variable>
+#include <format>
 #include <mutex>
 #include <string>
 #include <utility>
@@ -126,8 +127,8 @@ namespace Horo {
         });
         if (!drained) {
             Log::Logger::Write("foundation.modules", Log::Level::Warn,
-                               "Module '" + m_module.value + "' callback drainage timed out with " +
-                                   std::to_string(m_callbackGate->activeCallbacks) + " active callback(s).");
+                               std::format("Module '{}' callback drainage timed out with {} active callback(s).", m_module.value,
+                                           m_callbackGate->activeCallbacks));
         }
     }
 }  // namespace Horo

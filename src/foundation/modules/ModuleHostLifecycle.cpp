@@ -22,16 +22,6 @@ namespace Horo {
             return std::ranges::find(kAllowedTransitions, std::pair{from, to}) != kAllowedTransitions.end();
         }
 
-        void DeactivateActiveModule(ModuleHost &host, ActiveModule &active) noexcept {
-            host.Transition(active.id, ModuleLifecycleState::Draining);
-            active.context->DrainCallbacks();
-            if (active.drain != nullptr)
-                active.drain(*active.context);
-            if (active.deactivate != nullptr)
-                active.deactivate(*active.context);
-            active.context.reset();
-            host.Transition(active.id, ModuleLifecycleState::Stopped);
-        }
     }  // namespace
 
     /** @copydoc ModuleHost::StateOf */
@@ -58,15 +48,26 @@ namespace Horo {
 
     void ModuleHost::RequestCancellationFrom(const std::size_t base) noexcept {
         for (std::size_t index = m_active.size(); index > base; --index) {
-            ActiveModule &active = m_active[index - 1];
+            const ActiveModule &active = m_active[index - 1];
             active.context->RequestShutdown();
             Transition(active.id, ModuleLifecycleState::CancellationRequested);
         }
     }
 
+    void ModuleHost::DeactivateActiveModule(ActiveModule &active) noexcept {
+        Transition(active.id, ModuleLifecycleState::Draining);
+        active.context->DrainCallbacks();
+        if (active.drain != nullptr)
+            active.drain(*active.context);
+        if (active.deactivate != nullptr)
+            active.deactivate(*active.context);
+        active.context.reset();
+        Transition(active.id, ModuleLifecycleState::Stopped);
+    }
+
     void ModuleHost::DeactivateFrom(const std::size_t base) noexcept {
         while (m_active.size() > base) {
-            DeactivateActiveModule(*this, m_active.back());
+            DeactivateActiveModule(m_active.back());
             m_active.pop_back();
         }
     }

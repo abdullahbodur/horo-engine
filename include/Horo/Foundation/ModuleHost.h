@@ -230,6 +230,7 @@ namespace Horo {
         void Transition(const ModuleId &id, ModuleLifecycleState state) noexcept;
         void RequestCancellationFrom(std::size_t base) noexcept;
         void DeactivateFrom(std::size_t base) noexcept;
+        void DeactivateActiveModule(ActiveModule &active) noexcept;
         void StopUnactivatedRegistered() noexcept;
         void RollbackActivation(const ModuleId &failedId, std::unique_ptr<ModuleActivationContext> failedContext,
                                 std::size_t base) noexcept;
