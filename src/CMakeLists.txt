@@ -593,6 +593,7 @@ if (HORO_BUILD_EDITOR_GUI)
             editor/screens/workspace/EditorWorkspaceView.cpp
             editor/screens/workspace/EditorWorkspaceScreen.cpp
             editor/screens/NavigationErrors.cpp
+            editor/screens/ScreenRegistry.cpp
             editor/screens/GuiScreenHost.cpp
     )
 
