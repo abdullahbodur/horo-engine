@@ -38,11 +38,10 @@ namespace Horo {
         const auto found = std::ranges::find_if(m_states, [&id](const ModuleStateRecord &record) {
             return record.id == id;
         });
-        if (found == m_states.end() || !IsLegalTransition(found->state, state)) {
-            assert(found != m_states.end() && "Unknown module identity in lifecycle transition.");
-            assert(found != m_states.end() && IsLegalTransition(found->state, state) && "Illegal module lifecycle transition.");
+        const bool valid = found != m_states.end() && IsLegalTransition(found->state, state);
+        assert(valid && "Invalid module lifecycle transition.");
+        if (!valid)
             return;
-        }
         found->state = state;
     }
 

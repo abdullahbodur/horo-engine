@@ -282,28 +282,40 @@ namespace Horo {
             return Result<GraphEdges>::Success(std::move(edges));
         }
 
-        /** @brief Produces stable provider-first order or reports a remaining cycle. */
-        [[nodiscard]] Result<ValidatedModuleGraph> OrderGraph(const std::span<const ModuleDescriptor> descriptors, GraphEdges edges) {
-            const auto compareById = [&descriptors](const std::size_t left, const std::size_t right) {
-                return descriptors[left].id.value < descriptors[right].id.value;
-            };
-            std::set<std::size_t, decltype(compareById)> ready(compareById);
-            for (std::size_t index = 0; index < edges.incomingCount.size(); ++index) {
-                if (edges.incomingCount[index] == 0)
+        template <typename Compare>
+        void CollectReadyNodes(const std::vector<std::size_t> &incomingCount, std::set<std::size_t, Compare> &ready) {
+            for (std::size_t index = 0; index < incomingCount.size(); ++index) {
+                if (incomingCount[index] == 0)
                     ready.emplace(index);
             }
+        }
 
-            ValidatedModuleGraph graph;
-            graph.initializationOrder.reserve(descriptors.size());
+        template <typename Compare>
+        void DrainReadyNodes(std::set<std::size_t, Compare> &ready, const std::span<const ModuleDescriptor> descriptors, GraphEdges &edges,
+                             ValidatedModuleGraph &graph) {
             while (!ready.empty()) {
-                const std::size_t provider = *ready.begin();
-                ready.erase(ready.begin());
+                const auto iter = ready.begin();
+                const std::size_t provider = *iter;
+                ready.erase(iter);
                 graph.initializationOrder.push_back(descriptors[provider].id);
                 for (const std::size_t dependant : edges.outgoing[provider]) {
                     if (--edges.incomingCount[dependant] == 0)
                         ready.emplace(dependant);
                 }
             }
+        }
+
+        /** @brief Produces stable provider-first order or reports a remaining cycle. */
+        [[nodiscard]] Result<ValidatedModuleGraph> OrderGraph(const std::span<const ModuleDescriptor> descriptors, GraphEdges edges) {
+            const auto compareById = [&descriptors](const std::size_t left, const std::size_t right) {
+                return descriptors[left].id.value < descriptors[right].id.value;
+            };
+            std::set<std::size_t, decltype(compareById)> ready(compareById);
+            CollectReadyNodes(edges.incomingCount, ready);
+
+            ValidatedModuleGraph graph;
+            graph.initializationOrder.reserve(descriptors.size());
+            DrainReadyNodes(ready, descriptors, edges, graph);
 
             if (graph.initializationOrder.size() != descriptors.size()) {
                 return Fail<ValidatedModuleGraph>(ModuleDescriptorErrors::DependencyCycle,
