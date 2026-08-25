@@ -64,6 +64,7 @@ jobs:
               --root "$CIRCLE_WORKING_DIRECTORY" \
               --filter "$CIRCLE_WORKING_DIRECTORY/include" \
               --filter "$CIRCLE_WORKING_DIRECTORY/src" \
+              --gcov-ignore-parse-errors=negative_hits.warn_once_per_file \
               build/sonar
             ccache --show-stats
       - save_cache:
