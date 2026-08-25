@@ -1,4 +1,5 @@
 #include "Horo/Foundation/ModuleHost.h"
+#include "ModuleDescriptorTestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
@@ -8,6 +9,7 @@
 
 namespace {
     using namespace Horo;
+    using Horo::Test::MakeModule;
 
     // Module lifecycle callbacks are plain function addresses copied into
     // descriptors, so every piece of state they touch is file-local and outlives
@@ -59,17 +61,8 @@ namespace {
     }
 
     [[nodiscard]] ModuleDescriptor MakeLoggedModule(std::string id, const ModuleContractVersion version = {1, 0, 0}) {
-        ModuleDescriptor descriptor;
-        descriptor.id = ModuleId{std::move(id)};
-        descriptor.version = version;
+        ModuleDescriptor descriptor = MakeModule(std::move(id), version);
         descriptor.lifecycle = ModuleLifecycleCallbacks{.activate = &LogActivate, .deactivate = &LogDeactivate};
-        return descriptor;
-    }
-
-    [[nodiscard]] ModuleDescriptor MakeModule(std::string id, const ModuleContractVersion version = {1, 0, 0}) {
-        ModuleDescriptor descriptor;
-        descriptor.id = ModuleId{std::move(id)};
-        descriptor.version = version;
         return descriptor;
     }
 }  // namespace

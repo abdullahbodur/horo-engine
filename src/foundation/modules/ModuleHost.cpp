@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <memory>
-#include <set>
 #include <string>
 #include <utility>
 
@@ -30,52 +29,6 @@ namespace Horo {
             }
         }
     }  // namespace
-
-    /** @copydoc ModuleActivationContext::ModuleActivationContext */
-    ModuleActivationContext::ModuleActivationContext(ModuleId identifier, const DependencyBindings bindings) noexcept
-        : m_module(std::move(identifier)), m_bindings(bindings) {}
-
-    /** @copydoc ModuleActivationContext::Module */
-    const ModuleId &ModuleActivationContext::Module() const noexcept {
-        return m_module;
-    }
-
-    /** @copydoc ModuleActivationContext::Bindings */
-    ModuleActivationContext::DependencyBindings ModuleActivationContext::Bindings() const noexcept {
-        return m_bindings;
-    }
-
-    /** @copydoc ModuleActivationContext::AttachInstance */
-    Result<void> ModuleActivationContext::AttachInstance(std::unique_ptr<IModuleInstance> instance) {
-        if (instance == nullptr)
-            return Fail<void>(ModuleDescriptorErrors::InvalidDescriptor, "Module '" + m_module.value + "' attached a null instance.");
-        m_instance = std::move(instance);
-        return Result<void>::Success();
-    }
-
-    /** @copydoc ModuleHost::Register */
-    Result<void> ModuleHost::Register(const ModuleDescriptor &descriptor) {
-        // Registration is inert: local metadata is checked here, but graph-wide rules
-        // (duplicates across the set, missing providers, cycles) stay in ActivateRegistered
-        // so that registration never depends on the full set's state.
-        std::set<std::string, std::less<>> dependencyIds;
-        for (const ModuleDependency &dependency : descriptor.dependencies) {
-            if (!dependencyIds.emplace(dependency.module.value).second)
-                return Fail<void>(ModuleDescriptorErrors::InvalidDescriptor,
-                                  "Module '" + descriptor.id.value + "' repeats a dependency at registration.");
-        }
-        for (const ActiveModule &active : m_active) {
-            if (active.id == descriptor.id)
-                return Fail<void>(ModuleDescriptorErrors::DuplicateModule, "Module '" + descriptor.id.value + "' is already active.");
-        }
-        if (std::ranges::find_if(m_registered, [&descriptor](const ModuleDescriptor &registered) {
-            return registered.id == descriptor.id;
-        }) != m_registered.end()) {
-            return Fail<void>(ModuleDescriptorErrors::DuplicateModule, "Module '" + descriptor.id.value + "' is already registered.");
-        }
-        m_registered.push_back(descriptor);
-        return Result<void>::Success();
-    }
 
     /** @copydoc ModuleHost::ActivateRegistered */
     Result<std::size_t> ModuleHost::ActivateRegistered(const ModuleActivationContext::DependencyBindings bindings) {
