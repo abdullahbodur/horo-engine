@@ -70,6 +70,7 @@ include(HoroGameplayModule)
 include(GenerateProjectMigrations)
 include(GenerateProjectCompatibility)
 include(HoroTargetBoundaries)
+include(HoroDependencyDirection)
 
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/CMakeLists.txt")
@@ -100,6 +101,15 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_gameplay_behavior_b
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/apps/CMakeLists.txt")
     add_subdirectory(apps)
 endif()
+
+# Validate only production targets. Tests and examples consume production
+# contracts but are not layers in the shipped module graph.
+include(HoroDependencyPolicy)
+horo_collect_directory_targets(HORO_DEPENDENCY_POLICY_TARGETS
+    "${CMAKE_CURRENT_SOURCE_DIR}/apps")
+get_property(HORO_DEPENDENCY_POLICY_LIBRARY_TARGETS GLOBAL PROPERTY HORO_HEADER_BOUNDARY_TARGETS)
+list(APPEND HORO_DEPENDENCY_POLICY_TARGETS ${HORO_DEPENDENCY_POLICY_LIBRARY_TARGETS})
+horo_verify_dependency_direction(TARGETS ${HORO_DEPENDENCY_POLICY_TARGETS})
 
 if(HORO_BUILD_EXAMPLES AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/CMakeLists.txt")
     add_subdirectory(examples)

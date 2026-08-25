@@ -140,6 +140,16 @@ PrimitiveCatalog does not create a reverse dependency on RuntimeScene.
 The normative contract and caller migration guidance live in
 [Header Visibility And Ownership](./header-visibility-and-ownership.md).
 
+### ARC-001.3 dependency-direction update
+
+ARC-001.3 adds a configure-time policy for every production target's direct
+first-party dependency edges. The configured graph is rejected when a production
+target has no policy entry or links a first-party target outside its explicit
+allowlist. Known pre-policy violations are visible temporary exceptions with an
+owner and removal ticket; CMake rejects an exception once its edge becomes stale.
+The normative policy and current exception inventory live in
+[System Design](./system-design.md#automated-target-policy).
+
 ## Documented Target Status
 
 This table covers every canonical target named by System Design. Build System
