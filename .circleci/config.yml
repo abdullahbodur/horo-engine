@@ -64,6 +64,9 @@ jobs:
               --root "$CIRCLE_WORKING_DIRECTORY" \
               --filter "$CIRCLE_WORKING_DIRECTORY/include" \
               --filter "$CIRCLE_WORKING_DIRECTORY/src" \
+              --exclude-throw-branches \
+              --exclude-unreachable-branches \
+              --exclude-noncode-lines \
               --gcov-ignore-parse-errors=negative_hits.warn_once_per_file \
               build/sonar
             ccache --show-stats
