@@ -134,13 +134,13 @@ namespace Horo {
                 return "Module identity is not canonical: '" + descriptor.id.value + "'.";
             if (!HasPairedCallbacks(descriptor.lifecycle))
                 return "Module '" + descriptor.id.value + "' must declare both lifecycle callbacks or neither.";
-            if (auto failure = ValidateDependencies(descriptor))
+            if (const auto failure = ValidateDependencies(descriptor); failure.has_value())
                 return failure;
-            if (auto failure = ValidateProvidedCapabilities(descriptor))
+            if (const auto failure = ValidateProvidedCapabilities(descriptor); failure.has_value())
                 return failure;
-            if (auto failure = ValidateRequiredCapabilities(descriptor))
+            if (const auto failure = ValidateRequiredCapabilities(descriptor); failure.has_value())
                 return failure;
-            if (auto failure = ValidateBudgets(descriptor))
+            if (const auto failure = ValidateBudgets(descriptor); failure.has_value())
                 return failure;
             return ValidateObservability(descriptor);
         }
@@ -158,7 +158,7 @@ namespace Horo {
         [[nodiscard]] Result<ModuleIndex> IndexModules(const std::span<const ModuleDescriptor> descriptors) {
             ModuleIndex modules;
             for (std::size_t index = 0; index < descriptors.size(); ++index) {
-                if (auto failure = ValidateLocalDescriptor(descriptors[index]))
+                if (const auto failure = ValidateLocalDescriptor(descriptors[index]); failure.has_value())
                     return Fail<ModuleIndex>(ModuleDescriptorErrors::InvalidDescriptor, std::move(*failure));
                 if (!modules.try_emplace(descriptors[index].id.value, index).second) {
                     return Fail<ModuleIndex>(ModuleDescriptorErrors::DuplicateModule,

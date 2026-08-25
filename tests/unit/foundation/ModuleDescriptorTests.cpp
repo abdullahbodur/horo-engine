@@ -28,11 +28,11 @@ namespace {
         return descriptor;
     }
 
-    [[nodiscard]] std::vector<std::string_view> OrderOf(const ValidatedModuleGraph &graph) {
-        std::vector<std::string_view> order;
+    [[nodiscard]] std::vector<std::string> OrderOf(const ValidatedModuleGraph &graph) {
+        std::vector<std::string> order;
         order.reserve(graph.initializationOrder.size());
         for (const ModuleId &id : graph.initializationOrder)
-            order.emplace_back(id.value);
+            order.push_back(id.value);
         return order;
     }
 
@@ -71,7 +71,7 @@ namespace {
 
         REQUIRE(result.HasValue());
         REQUIRE(OrderOf(result.Value()) ==
-                std::vector<std::string_view>{"horo.foundation", "horo.application", "horo.render.null", "horo.runtime", "horo.editor"});
+                std::vector<std::string>{"horo.foundation", "horo.application", "horo.render.null", "horo.runtime", "horo.editor"});
         REQUIRE(g_activateCalls == 0);
         REQUIRE(g_deactivateCalls == 0);
     }
@@ -208,6 +208,6 @@ namespace {
         const auto result = ValidateModuleGraph(descriptors);
 
         REQUIRE(result.HasValue());
-        REQUIRE(OrderOf(result.Value()) == std::vector<std::string_view>{"horo.runtime"});
+        REQUIRE(OrderOf(result.Value()) == std::vector<std::string>{"horo.runtime"});
     }
 }  // namespace
