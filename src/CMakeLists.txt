@@ -1,5 +1,6 @@
 add_library(HoroFoundation STATIC
         foundation/FoundationErrors.cpp
+        foundation/modules/ModuleDescriptor.cpp
         foundation/diagnostics/ErrorCode.cpp
         foundation/diagnostics/DiagnosticBundle.cpp
         foundation/hashing/Sha256.cpp

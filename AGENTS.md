@@ -86,6 +86,11 @@ rules into agent-specific instruction files.
 - Breaking a public contract requires a written reason, affected callers, a
   migration path, and regression coverage. Do not silently preserve two competing
   sources of truth as a compatibility workaround.
+- Internal module descriptors are inert metadata. Creating or validating a
+  descriptor must not register services, invoke lifecycle callbacks, inspect a
+  service locator, select a backend, or otherwise mutate ambient state. Keep
+  registration and activation in an explicit host/application composition root;
+  follow `docs/architecture/foundation/internal-module-descriptor.md`.
 
 ### Header Boundary Enforcement
 
