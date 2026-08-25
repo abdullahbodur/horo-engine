@@ -76,17 +76,21 @@ jobs:
             -DHORO_ENABLE_OPENTELEMETRY=ON \
             -DHORO_ENABLE_IMGUI_UI_TESTS=OFF
 
+      - name: Build generated headers
+        run: |
+          cmake --build build/codacy-clang-tidy --target HoroBuildInfo HoroProjectCompatibilityCatalog HoroProjectMigrationCatalog
+
       - name: Run Clang-Tidy
         run: |
           run-clang-tidy-18 \
             -p build/codacy-clang-tidy \
             -j "$(nproc)" \
             -quiet \
-            '(^|.*/)(src|apps)/.*\.(c|cc|cpp|cxx)$' \
-            > clang-tidy-output.txt 2>&1 || true
+            '^(?!.*(\.cmake|_deps|build|submodules)).*(src|apps)/.*\.(c|cc|cpp|cxx)$' \
+            2>&1 | tee clang-tidy-output.txt || true
 
           test -f clang-tidy-output.txt
-          sed -n '1,200p' clang-tidy-output.txt
+          echo "Clang-Tidy execution finished. Total output lines: $(wc -l < clang-tidy-output.txt)"
 
       - name: Upload Clang-Tidy results to Codacy
         uses: codacy/codacy-analysis-cli-action@d43360362776a6789b47b99ae8973510854e2d3d

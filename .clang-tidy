@@ -18,7 +18,7 @@ Checks: >
   performance-*,
   portability-*
 WarningsAsErrors: ''
-HeaderFilterRegex: '(^|.*[/\\])(include[/\\]Horo|src|apps)[/\\]'
+HeaderFilterRegex: '^(?!.*(\.cmake|_deps|build|submodules)).*(include[/\\]Horo|src|apps)[/\\]'
 FormatStyle: file
 CheckOptions:
   bugprone-unchecked-optional-access.IgnoreSmartPointerDereference: 'true'
