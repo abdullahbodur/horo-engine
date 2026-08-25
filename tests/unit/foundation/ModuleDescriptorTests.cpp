@@ -141,6 +141,26 @@ namespace {
             REQUIRE(result.HasError());
             REQUIRE(result.ErrorValue().code.Value() == "foundation.module.invalid_descriptor");
         }
+
+        SECTION("resource budget outside module namespace") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.resourceBudgets.push_back(
+                ModuleResourceBudget{.id = "other.jobs", .kind = ModuleResourceBudgetKind::ConcurrentJobs, .limit = 1});
+            const std::array descriptors{module};
+            const auto result = ValidateModuleGraph(descriptors);
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().message == "Resource budget 'other.jobs' is not namespaced by module 'horo.runtime'.");
+        }
+
+        SECTION("non-canonical observability identity") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.observability.push_back(
+                ModuleObservabilityDescriptor{.kind = ModuleObservabilityKind::LogCategory, .id = "Horo.Runtime"});
+            const std::array descriptors{module};
+            const auto result = ValidateModuleGraph(descriptors);
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().message == "Module 'horo.runtime' has a non-canonical observability identity.");
+        }
     }
 
     TEST_CASE("Optional absent modules do not invalidate a descriptor graph", "[unit][foundation][modules]") {
