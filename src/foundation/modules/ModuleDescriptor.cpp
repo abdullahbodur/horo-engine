@@ -160,7 +160,7 @@ namespace Horo {
             for (std::size_t index = 0; index < descriptors.size(); ++index) {
                 if (auto failure = ValidateLocalDescriptor(descriptors[index]))
                     return Fail<ModuleIndex>(ModuleDescriptorErrors::InvalidDescriptor, std::move(*failure));
-                if (!modules.emplace(descriptors[index].id.value, index).second) {
+                if (!modules.try_emplace(descriptors[index].id.value, index).second) {
                     return Fail<ModuleIndex>(ModuleDescriptorErrors::DuplicateModule,
                                              "Duplicate module identity: '" + descriptors[index].id.value + "'.");
                 }
@@ -231,11 +231,11 @@ namespace Horo {
             GraphEdges edges{.outgoing = std::vector<std::set<std::size_t>>(descriptors.size()),
                              .incomingCount = std::vector<std::size_t>(descriptors.size())};
             for (std::size_t dependant = 0; dependant < descriptors.size(); ++dependant) {
-                const Result<void> dependencyResult = AddDependencyEdges(descriptors, modules, dependant, edges);
-                if (dependencyResult.HasError())
+                if (const Result<void> dependencyResult = AddDependencyEdges(descriptors, modules, dependant, edges);
+                    dependencyResult.HasError())
                     return Result<GraphEdges>::Failure(dependencyResult.ErrorValue());
-                const Result<void> capabilityResult = AddCapabilityEdges(descriptors, capabilityProviders, dependant, edges);
-                if (capabilityResult.HasError())
+                if (const Result<void> capabilityResult = AddCapabilityEdges(descriptors, capabilityProviders, dependant, edges);
+                    capabilityResult.HasError())
                     return Result<GraphEdges>::Failure(capabilityResult.ErrorValue());
             }
             return Result<GraphEdges>::Success(std::move(edges));

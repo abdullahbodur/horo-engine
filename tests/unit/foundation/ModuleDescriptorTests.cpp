@@ -167,6 +167,37 @@ namespace {
         }
     }
 
+    TEST_CASE("Module descriptor identities enforce canonical namespacing", "[unit][foundation][modules]") {
+        SECTION("non-canonical module identity") {
+            const ModuleDescriptor module = MakeModule("Horo.Runtime");
+            const std::array descriptors{module};
+            const auto result = ValidateModuleGraph(descriptors);
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().message == "Module identity is not canonical: 'Horo.Runtime'.");
+        }
+
+        SECTION("non-canonical resource budget identity") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.resourceBudgets.push_back(
+                ModuleResourceBudget{.id = "Horo.Runtime.Jobs", .kind = ModuleResourceBudgetKind::ConcurrentJobs, .limit = 1});
+            const std::array descriptors{module};
+            const auto result = ValidateModuleGraph(descriptors);
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().message == "Module 'horo.runtime' has a non-canonical resource budget identity.");
+        }
+
+        SECTION("observability identity outside module namespace") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.observability.push_back(
+                ModuleObservabilityDescriptor{.kind = ModuleObservabilityKind::LogCategory, .id = "other.lifecycle"});
+            const std::array descriptors{module};
+            const auto result = ValidateModuleGraph(descriptors);
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().message ==
+                    "Observability descriptor 'other.lifecycle' is not namespaced by module 'horo.runtime'.");
+        }
+    }
+
     TEST_CASE("Optional absent modules do not invalidate a descriptor graph", "[unit][foundation][modules]") {
         ModuleDescriptor runtime = MakeModule("horo.runtime");
         runtime.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.render.opengl"},

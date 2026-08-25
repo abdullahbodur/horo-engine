@@ -40,7 +40,7 @@ jobs:
               sudo apt-get update
             fi
             sudo apt-get install -y --no-install-recommends \
-              ninja-build ccache unzip \
+              ninja-build ccache unzip gcovr \
               libwayland-dev wayland-protocols libxkbcommon-dev \
               libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
               libxext-dev libxss-dev libxtst-dev libxxf86vm-dev \
@@ -48,15 +48,23 @@ jobs:
       - run:
           name: Configure and build
           command: |
-            cmake -S . -B build/sonar -G Ninja -DBUILD_TESTING=OFF \
+            cmake -S . -B build/sonar -G Ninja -DBUILD_TESTING=ON \
               -DFETCHCONTENT_BASE_DIR="$FETCHCONTENT_BASE_DIR" \
               -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \
+              -DCMAKE_C_FLAGS_DEBUG="--coverage -fprofile-abs-path" \
+              -DCMAKE_CXX_FLAGS_DEBUG="--coverage -fprofile-abs-path" \
               -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
               -DHORO_ENABLE_EDITOR=ON \
               -DHORO_ENABLE_TELEMETRY=ON \
               -DHORO_ENABLE_OPENTELEMETRY=ON
             cmake --build build/sonar --parallel
+            ctest --test-dir build/sonar --output-on-failure
+            gcovr --sonarqube build/sonar/coverage.xml \
+              --root "$CIRCLE_WORKING_DIRECTORY" \
+              --filter "$CIRCLE_WORKING_DIRECTORY/include" \
+              --filter "$CIRCLE_WORKING_DIRECTORY/src" \
+              build/sonar
             ccache --show-stats
       - save_cache:
           key: v2-fetchcontent-{{ arch }}-{{ checksum "CMakeLists.txt" }}-{{ checksum "cmake/Dependencies.cmake" }}
@@ -77,6 +85,7 @@ jobs:
               -Dsonar.projectKey=abdullahbodur_horo-engine \
               -Dsonar.sourceEncoding=UTF-8 \
               -Dsonar.cfamily.compile-commands=build/sonar/compile_commands.json \
+              -Dsonar.coverageReportPaths=build/sonar/coverage.xml \
               -Dsonar.cfamily.analysisCache.mode=fs \
               -Dsonar.cfamily.analysisCache.path="$CIRCLE_WORKING_DIRECTORY/.sonar/cfamily-cache" \
               -Dsonar.qualitygate.wait=true \
