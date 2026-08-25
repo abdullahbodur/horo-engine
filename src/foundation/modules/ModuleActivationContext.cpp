@@ -54,16 +54,13 @@ namespace Horo {
     }
 
     void ModuleCallbackLease::Release() noexcept {
-        if (m_gate == nullptr)
-            return;
-        {
+        if (m_gate != nullptr) {
             const std::lock_guard lock(m_gate->mutex);
-            --m_gate->activeCallbacks;
-            if (m_gate->activeCallbacks == 0)
+            if (--m_gate->activeCallbacks == 0)
                 m_gate->drained.notify_all();
+            m_gate.reset();
+            m_bindings = nullptr;
         }
-        m_gate.reset();
-        m_bindings = nullptr;
     }
 
     /** @copydoc ModuleActivationContext::ModuleActivationContext */
