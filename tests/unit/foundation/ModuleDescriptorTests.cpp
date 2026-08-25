@@ -102,6 +102,17 @@ namespace {
             REQUIRE(result.ErrorValue().code.Value() == "foundation.module.incompatible_dependency");
         }
 
+        SECTION("present outdated optional dependency contract") {
+            ModuleDescriptor module = MakeModule("horo.runtime");
+            module.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.render.opengl"},
+                                                           .minimumVersion = {2, 0, 0},
+                                                           .kind = ModuleDependencyKind::Optional});
+            const std::array descriptors{MakeModule("horo.render.opengl", {1, 9, 9}), module};
+            const auto result = ValidateModuleGraph(descriptors);
+            REQUIRE(result.HasError());
+            REQUIRE(result.ErrorValue().code.Value() == "foundation.module.incompatible_dependency");
+        }
+
         SECTION("missing required capability") {
             ModuleDescriptor module = MakeModule("horo.editor");
             module.requiredCapabilities.push_back(ModuleCapabilityId{"horo.project.read"});
