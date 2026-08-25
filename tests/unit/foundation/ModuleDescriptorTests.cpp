@@ -2,7 +2,6 @@
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
-#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -318,8 +317,8 @@ namespace {
 
     TEST_CASE("Module descriptor canonical ID grammar and tie-breaking", "[unit][foundation][modules]") {
         SECTION("invalid canonical ID grammar variations") {
-            for (const std::string_view invalidId : {"", ".horo", "horo.", "horo..runtime", "horo_-_runtime", "-horo", "horo-",
-                                                     "horo space", "horo:runtime", "horo@runtime", "horo/runtime"}) {
+            for (const char *invalidId : {"", ".horo", "horo.", "horo..runtime", "horo_-_runtime", "-horo", "horo-", "horo space",
+                                          "horo:runtime", "horo@runtime", "horo/runtime"}) {
                 const ModuleDescriptor module = MakeModule(std::string(invalidId));
                 const auto result = ValidateModuleGraph(std::array{module});
                 REQUIRE(result.HasError());
