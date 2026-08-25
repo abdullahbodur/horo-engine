@@ -3,6 +3,7 @@
 #include "foundation/FoundationErrors.h"
 
 #include <algorithm>
+#include <memory>
 #include <set>
 #include <string>
 #include <utility>
@@ -14,21 +15,34 @@ namespace Horo {
             return Result<ValueT>::Failure(MakeError(descriptor, std::move(message)));
         }
 
-        /** @brief Deactivates one active module and releases its activation context. */
-        void DeactivateOne(ActiveModule &module) noexcept {
-            if (module.deactivate != nullptr && module.context != nullptr)
-                module.deactivate(*module.context);
-            module.context.reset();
+        /** @brief Deactivates one active entry and releases its activation context. */
+        void DeactivateOne(ActiveModule &active) noexcept {
+            if (active.deactivate != nullptr && active.context != nullptr)
+                active.deactivate(*active.context);
+            active.context.reset();
+        }
+
+        /** @brief Rolls back every activation started after @p base in reverse order. */
+        void RollBackTo(std::vector<ActiveModule> &activeModules, const std::size_t base) noexcept {
+            while (activeModules.size() > base) {
+                DeactivateOne(activeModules.back());
+                activeModules.pop_back();
+            }
         }
     }  // namespace
 
     /** @copydoc ModuleActivationContext::ModuleActivationContext */
-    ModuleActivationContext::ModuleActivationContext(ModuleId module, const DependencyBindings bindings) noexcept
-        : m_module(std::move(module)), m_bindings(bindings) {}
+    ModuleActivationContext::ModuleActivationContext(ModuleId identifier, const DependencyBindings bindings) noexcept
+        : m_module(std::move(identifier)), m_bindings(bindings) {}
 
     /** @copydoc ModuleActivationContext::Module */
     const ModuleId &ModuleActivationContext::Module() const noexcept {
         return m_module;
+    }
+
+    /** @copydoc ModuleActivationContext::Bindings */
+    ModuleActivationContext::DependencyBindings ModuleActivationContext::Bindings() const noexcept {
+        return m_bindings;
     }
 
     /** @copydoc ModuleActivationContext::AttachInstance */
@@ -80,34 +94,29 @@ namespace Horo {
             ordered.push_back(&*found);
         }
 
-        std::size_t activatedCount = 0;
+        // Roll back only modules started by this call; a prior successful activation
+        // may still own the front of the active list (incremental compose-then-activate).
+        const std::size_t base = m_active.size();
         for (const ModuleDescriptor *descriptor : ordered) {
             auto context = std::make_unique<ModuleActivationContext>(descriptor->id, bindings);
             if (descriptor->lifecycle.activate != nullptr) {
                 if (const Result<void> activated = descriptor->lifecycle.activate(*context); activated.HasError()) {
-                    // Roll back every already-activated module in reverse order; the failed
-                    // module never joined the active set because its callback reported failure.
-                    while (activatedCount > 0)
-                        DeactivateOne(m_active[--activatedCount]);
-                    m_active.clear();
+                    RollBackTo(m_active, base);
                     return Fail<std::size_t>(ModuleDescriptorErrors::InvalidDescriptor,
                                              "Activation of module '" + descriptor->id.value + "' failed.");
                 }
             }
             ActiveModule active{.id = descriptor->id, .deactivate = descriptor->lifecycle.deactivate, .context = std::move(context)};
             m_active.push_back(std::move(active));
-            ++activatedCount;
         }
         m_registered.clear();
-        return Result<std::size_t>::Success(activatedCount);
+        return Result<std::size_t>::Success(m_active.size() - base);
     }
 
     /** @copydoc ModuleHost::DeactivateAll */
     void ModuleHost::DeactivateAll() noexcept {
-        while (!m_active.empty()) {
-            DeactivateOne(m_active.back());
-            m_active.pop_back();
-        }
+        RollBackTo(m_active, 0);
+        m_registered.clear();
     }
 
     /** @copydoc ModuleHost::HasActiveModules */

@@ -49,6 +49,12 @@ namespace Horo {
         [[nodiscard]] const ModuleId &Module() const noexcept;
 
         /**
+         * @brief Returns the host-approved dependency bindings supplied for activation.
+         * @return Opaque bindings owned by the composition root; may be null.
+         */
+        [[nodiscard]] DependencyBindings Bindings() const noexcept;
+
+        /**
          * @brief Stores an instance the activated module owns until deactivation.
          * @param instance Non-null module-owned instance.
          * @return Failure when @p instance is null; success otherwise.
@@ -74,8 +80,9 @@ namespace Horo {
      * @brief Registers inert descriptors explicitly at composition time, validates them,
      *        activates modules in deterministic order, and rolls back on failure.
      *
-     * A failed activation deactivates every already-activated module in reverse order,
-     * leaving no partially active set. Registration never invokes callbacks; only
+     * A failed activation deactivates every module started by that activation call in
+     * reverse order, leaving no partially active set from the failed call and preserving
+     * modules active before it. Registration never invokes callbacks; only
      * ActivateRegistered does. Single-threaded by contract: use it from the composition
      * root before any worker threads start.
      */
@@ -97,8 +104,9 @@ namespace Horo {
         /**
          * @brief Validates the full registration graph and activates modules in validated order.
          * @param bindings Host-approved dependency bindings handed to every activation callback.
-         * @return Success with the activated count, or a typed validation/activation failure
-         *         with all previously activated modules deactivated in reverse order.
+         * @return Success with the count activated by this call, or a typed validation/
+         *         activation failure with only this call's started modules deactivated
+         *         in reverse order.
          */
         [[nodiscard]] Result<std::size_t> ActivateRegistered(ModuleActivationContext::DependencyBindings bindings);
 

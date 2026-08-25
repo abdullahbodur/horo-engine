@@ -15,6 +15,7 @@ namespace {
     struct ActivationLog {
         std::vector<std::string> activated;
         std::vector<std::string> deactivated;
+        std::vector<ModuleActivationContext::DependencyBindings> bindings;
     };
 
     ActivationLog g_log;
@@ -26,6 +27,7 @@ namespace {
     void ResetLog() {
         g_log.activated.clear();
         g_log.deactivated.clear();
+        g_log.bindings.clear();
         g_instancesAlive = 0;
         g_failModule.clear();
         g_activationCompletions.clear();
@@ -44,6 +46,7 @@ namespace {
 
     Result<void> LogActivate(ModuleActivationContext &context) noexcept {
         g_log.activated.push_back(context.Module().value);
+        g_log.bindings.push_back(context.Bindings());
         if (g_failModule == context.Module().value)
             return Result<void>::Failure(Error{});
         (void)context.AttachInstance(std::make_unique<CountingInstance>());
@@ -84,11 +87,13 @@ TEST_CASE("Composition registers and activates modules in validated order", "[un
     // Registration is inert: no callback runs before ActivateRegistered.
     REQUIRE(g_log.activated.empty());
 
-    const Result<std::size_t> activated = host.ActivateRegistered(nullptr);
+    const int approvedBindings = 42;
+    const Result<std::size_t> activated = host.ActivateRegistered(&approvedBindings);
     REQUIRE(activated.HasValue());
     REQUIRE(activated.Value() == 2);
     REQUIRE(host.HasActiveModules());
     REQUIRE(g_log.activated == std::vector<std::string>{"horo.foundation", "horo.editor"});
+    REQUIRE(g_log.bindings == std::vector<ModuleActivationContext::DependencyBindings>{&approvedBindings, &approvedBindings});
 }
 
 TEST_CASE("Failed composition rolls back active modules in reverse order", "[unit][foundation][modules][composition]") {
@@ -169,6 +174,54 @@ TEST_CASE("Registration rejects duplicates and repeated dependencies", "[unit][f
     REQUIRE(host.Register(repeated).HasError());
 }
 
+TEST_CASE("Incremental activation rolls back only modules started by the failed call", "[unit][foundation][modules][composition]") {
+    ResetLog();
+    g_failModule = "horo.late_failure";
+
+    ModuleHost host;
+    REQUIRE(host.Register(MakeLoggedModule("horo.early")).HasValue());
+    const Result<std::size_t> first = host.ActivateRegistered(nullptr);
+    REQUIRE(first.HasValue());
+    REQUIRE(first.Value() == 1);
+
+    // Compose-then-activate again: Register explicitly permits IDs that are
+    // not already active, so this flow is supported.
+    ModuleDescriptor lateFailure = MakeLoggedModule("horo.late_failure");
+    lateFailure.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.late_started"}});
+    ModuleDescriptor lateStarted = MakeLoggedModule("horo.late_started");
+    REQUIRE(host.Register(lateStarted).HasValue());
+    REQUIRE(host.Register(lateFailure).HasValue());
+
+    g_log.deactivated.clear();
+    g_log.activated.clear();
+    const Result<std::size_t> second = host.ActivateRegistered(nullptr);
+    REQUIRE(second.HasError());
+
+    // The module started in this pass is rolled back, while the earlier successful
+    // activation survives untouched and stays active.
+    REQUIRE(g_log.deactivated == std::vector<std::string>{"horo.late_started"});
+    REQUIRE(g_log.activated == std::vector<std::string>{"horo.late_started", "horo.late_failure"});
+    REQUIRE(g_activationCompletions == std::vector<std::string>{"horo.early", "horo.late_started"});
+    REQUIRE(host.HasActiveModules());
+    REQUIRE(g_instancesAlive == 1);
+
+    // Registrations survive an activation failure, so correcting the callback's
+    // failure condition allows the same pending set to be retried.
+    g_failModule.clear();
+    g_log.deactivated.clear();
+    g_log.activated.clear();
+    const Result<std::size_t> retried = host.ActivateRegistered(nullptr);
+    REQUIRE(retried.HasValue());
+    REQUIRE(retried.Value() == 2);
+    REQUIRE(g_log.activated == std::vector<std::string>{"horo.late_started", "horo.late_failure"});
+    REQUIRE(g_instancesAlive == 3);
+
+    host.DeactivateAll();
+    REQUIRE(g_log.deactivated == std::vector<std::string>{"horo.late_failure", "horo.late_started", "horo.early"});
+    REQUIRE_FALSE(host.HasActiveModules());
+    REQUIRE(g_instancesAlive == 0);
+}
+
 TEST_CASE("Deactivation releases attached instances exactly once", "[unit][foundation][modules][composition]") {
     ResetLog();
     ModuleHost host;
@@ -184,4 +237,9 @@ TEST_CASE("Deactivation releases attached instances exactly once", "[unit][found
     // Idempotent teardown.
     host.DeactivateAll();
     REQUIRE(g_instancesAlive == 0);
+
+    // Pending registrations are part of host teardown as documented.
+    REQUIRE(host.Register(MakeModule("horo.pending")).HasValue());
+    host.DeactivateAll();
+    REQUIRE(host.Register(MakeModule("horo.pending")).HasValue());
 }

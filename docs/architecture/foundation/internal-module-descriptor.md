@@ -73,12 +73,13 @@ activation stage that consumes this descriptor contract. A composition root:
 2. Calls `ModuleHost::ActivateRegistered`, which validates the complete graph,
    then activates modules in the validated provider-before-dependant order,
    passing a composition-root-supplied dependency bundle through
-   `ModuleActivationContext`. Modules receive only approved bindings; there is
-   no runtime discovery.
-3. On activation failure, the host deactivates every already-activated module
-   in reverse order, so a failed composition leaves no partially active set.
-   A rejected graph leaves registrations intact so composition can be retried
-   after correcting the descriptor set.
+   `ModuleActivationContext::Bindings`. Modules receive only approved bindings;
+   there is no runtime discovery.
+3. On activation failure, the host deactivates every module started by that
+   activation call in reverse order, so a failed composition leaves no partially
+   active set from that call while preserving modules active before it. A rejected
+   graph leaves registrations intact so composition can be retried after correcting
+   the descriptor set.
 
 Headless compositions stay headless by construction: they simply do not
 register GUI-only descriptors, so GUI modules are neither activated nor linked
