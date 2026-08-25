@@ -52,6 +52,8 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Current Target And Dependency Inventory](./foundation/current-target-and-dependency-inventory.md):
   evidence-backed CMake targets, public-header ownership, desired-tree status,
   and current dependency-direction gaps.
+- [Header Visibility And Ownership](./foundation/header-visibility-and-ownership.md):
+  enforced public, internal-shared, and target-private header boundaries.
 - [Architecture Glossary](./foundation/glossary.md): canonical cross-document
   terminology.
 - [Error And Diagnostics](./foundation/error-and-diagnostics.md): results,

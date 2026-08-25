@@ -5,7 +5,7 @@
  * @brief Exact-SDK-generation native project gameplay module boundary.
  */
 
-#include "Horo/Gameplay/BehaviorRegistry.h"
+#include "Horo/Gameplay/Behavior.h"
 
 #include <cstdint>
 #include <span>

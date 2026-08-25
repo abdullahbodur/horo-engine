@@ -12,12 +12,6 @@
 #include <vector>
 
 namespace Horo::Gameplay {
-    /** @brief One validated descriptor and its implementation factory. */
-    struct BehaviorRegistration {
-        BehaviorDescriptor descriptor;
-        BehaviorFactoryBinding factory;
-    };
-
     /** @brief Host-owned registry frozen before any runtime scene activates. */
     class BehaviorRegistry final {
     public:

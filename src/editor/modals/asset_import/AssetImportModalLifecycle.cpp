@@ -156,6 +156,9 @@ namespace Horo::Editor {
                                        Assets::AssetRegistry *assetRegistry, OperationStore *operationStore) noexcept
         : m_fonts(fonts), m_jobs(jobs), m_catalog(std::move(catalog)), m_assetRegistry(assetRegistry), m_operationStore(operationStore) {}
 
+    /** @copydoc AssetImportModal::~AssetImportModal */
+    AssetImportModal::~AssetImportModal() = default;
+
     ModalId AssetImportModal::Id() const {
         return ModalId{kModalId};
     }

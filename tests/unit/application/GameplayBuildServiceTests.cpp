@@ -1,5 +1,6 @@
 #include "Horo/Application/GameplayBuildService.h"
 #include "Horo/Foundation/Platform.h"
+#include "Horo/Platform/ExternalProcess.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>

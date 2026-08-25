@@ -2,6 +2,7 @@
 
 #include "Horo/Editor/EditorServiceRegistry.h"
 #include "Horo/Editor/GuiRoute.h"
+#include "Horo/Editor/GuiScreen.h"
 
 #include <functional>
 #include <memory>
@@ -9,8 +10,6 @@
 #include <utility>
 
 namespace Horo::Editor {
-
-    class GuiScreen;
 
     /**
      * @file ScreenRegistry.h
@@ -20,10 +19,24 @@ namespace Horo::Editor {
     public:
         using ScreenFactory = std::function<std::unique_ptr<GuiScreen>(const EditorServiceRegistry &services, const GuiRoute &route)>;
 
-        void Register(GuiRouteKind kind, ScreenFactory factory) {
+        /**
+         * @brief Registers or replaces the screen factory for one route kind.
+         * @param kind Route kind owned by the
+         * factory.
+         * @param factory Factory invoked when that route is activated.
+         */
+        void Register(const GuiRouteKind kind, ScreenFactory factory) {
             factories_[kind] = std::move(factory);
         }
 
+        /**
+         * @brief Creates the screen registered for a route.
+         * @param route Route and payload passed to the selected
+         * factory.
+         * @param services Editor services passed to the selected factory.
+         * @return A screen instance, or null
+         * when the route has no factory.
+         */
         [[nodiscard]] std::unique_ptr<GuiScreen> CreateScreen(const GuiRoute &route, const EditorServiceRegistry &services) const {
             if (const auto it = factories_.find(route.kind); it != factories_.end()) {
                 return it->second(services, route);
@@ -31,7 +44,13 @@ namespace Horo::Editor {
             return nullptr;
         }
 
-        [[nodiscard]] bool HasFactory(GuiRouteKind kind) const noexcept {
+        /**
+         * @brief Reports whether a route kind has a registered factory.
+         * @param kind Route kind to query.
+         *
+         * @return True when a factory is registered.
+         */
+        [[nodiscard]] bool HasFactory(const GuiRouteKind kind) const noexcept {
             return factories_.contains(kind);
         }
 

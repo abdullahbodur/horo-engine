@@ -5,7 +5,7 @@
  * @brief Declarative native behavior annotation and generated-factory helpers.
  */
 
-#include "Horo/Gameplay/BehaviorRegistry.h"
+#include "Horo/Gameplay/Behavior.h"
 
 #include <memory>
 #include <type_traits>

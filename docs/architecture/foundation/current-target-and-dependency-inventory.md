@@ -96,7 +96,7 @@ include directories do not enforce those ownership boundaries, as documented in
 
 ## Public Header Inventory And Boundary
 
-There are 129 non-placeholder headers under `include/Horo/` at this snapshot:
+There are 130 non-placeholder headers under `include/Horo/` at this snapshot:
 
 | Public path | Header count | Semantic owner |
 |---|---:|---|
@@ -124,6 +124,21 @@ The current CMake boundary is broader than this semantic ownership map:
 Consequently, header location communicates intended ownership but target usage
 requirements do not enforce it. Separating SDK/public, internal-shared, and
 target-private include surfaces is follow-up work owned by ARC-001.2.
+
+### ARC-001.2 boundary update
+
+ARC-001.2 replaces the broad build-tree usage requirements described in this
+snapshot with target-specific staged public include views. The explicit ownership
+registry accounts for every `include/Horo/` header, production `src/` roots are no
+longer public usage requirements, and generated per-target consumers compile each
+public header through its actual owner. Existing `Horo/...` include spellings are
+preserved. The migration also makes the existing `RuntimeScene -> SceneModel`
+public-header dependency explicit and removes the accidental GameplayApi-to-
+GameplayRuntime header dependency by keeping registration data in GameplayApi.
+`SceneComponents.h` is assigned to the neutral SceneModel contract so
+PrimitiveCatalog does not create a reverse dependency on RuntimeScene.
+The normative contract and caller migration guidance live in
+[Header Visibility And Ownership](./header-visibility-and-ownership.md).
 
 ## Documented Target Status
 
@@ -191,7 +206,7 @@ ones that affect target ownership or would mislead a migration ticket.
 | Desired area | Status | Current repository evidence |
 |---|---|---|
 | `cmake/HoroCompilerOptions.cmake`, `HoroTargets.cmake`, `HoroDependencies.cmake`, `HoroPackaging.cmake`, `HoroSDK.cmake` | Partial | Equivalent responsibilities are partly in root CMake and differently named files such as `Dependencies.cmake`; several named files are absent. |
-| `include/Horo/` module contracts | Partial | 129 headers exist, but target-specific public surfaces are not enforced and several documented domains are placeholders or absent. |
+| `include/Horo/` module contracts | Partial | 130 headers exist; target-specific public surfaces are enforced, while several documented domains remain placeholders or absent. |
 | `src/foundation`, `platform`, `application`, `editor`, `runtime`, `gameplay`, `extensions` | Partial | Active implementations exist, but most production targets are declared centrally in one `src/CMakeLists.txt`. |
 | Dedicated `src/asset`, `scene`, `render`, `pipeline`, `physics`, `audio`, and `network` module roots | Partial | Asset, scene, and render code currently live under `src/runtime/`; pipeline, physics, audio, and network targets are absent. |
 | `src/transport/mcp` and editor MCP bridge | Planned | Placeholder interface/editor paths exist; no MCP production target. |
@@ -254,9 +269,8 @@ remain inside their current concrete/owning targets at link time.
 This inventory supports the following focused sequence without moving
 production code in this ticket:
 
-1. ARC-001.2 should establish target-specific SDK/public,
-   internal-shared, and target-private include surfaces, starting with the six
-   targets that export `src/`.
+1. Preserve the ARC-001.2 target-specific header registry when adding or moving
+   public contracts; never restore repository-wide public include roots.
 2. Resolve the SceneModel/RenderApi ownership direction before adding more scene
    primitives or renderer-facing mesh fields.
 3. Decide whether the current non-canonical targets become canonical and align

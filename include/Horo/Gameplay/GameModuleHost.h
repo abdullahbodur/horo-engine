@@ -12,6 +12,8 @@
 #include <string>
 
 namespace Horo::Gameplay {
+    class BehaviorRegistry;
+
     /** @brief Loaded module whose registry and callable objects are destroyed before its library unloads. */
     class LoadedGameModule final {
     public:

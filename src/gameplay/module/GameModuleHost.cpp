@@ -1,5 +1,6 @@
 #include "Horo/Gameplay/GameModuleHost.h"
 
+#include "Horo/Gameplay/BehaviorRegistry.h"
 #include "Horo/Gameplay/GameplayErrors.h"
 #include "Horo/Platform/DynamicLibrary.h"
 

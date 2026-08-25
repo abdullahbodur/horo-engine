@@ -8,8 +8,6 @@
 #include "Horo/Foundation/BuildOutputStore.h"
 #include "Horo/Foundation/JobSystem.h"
 #include "Horo/Foundation/OperationStore.h"
-#include "Horo/Foundation/Platform.h"
-#include "Horo/Platform/ExternalProcess.h"
 
 #include <chrono>
 #include <cstdint>
@@ -17,6 +15,11 @@
 #include <memory>
 #include <optional>
 #include <string>
+
+namespace Horo {
+    class DurableFileSystem;
+    class IExternalProcessRunner;
+}  // namespace Horo
 
 namespace Horo::Application {
     using GameplayBuildSessionId = std::uint64_t;

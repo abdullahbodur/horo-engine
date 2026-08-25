@@ -1,5 +1,9 @@
 include(Catch)
 
+# One translation unit per registered public header verifies that consumers can
+# compile the contract using only its owning target's usage requirements.
+horo_add_public_header_consumer_targets()
+
 execute_process(
         COMMAND "${Python3_EXECUTABLE}" -c "import pytest; print(pytest.__version__)"
         RESULT_VARIABLE HORO_PYTEST_IMPORT_RESULT
@@ -198,35 +202,6 @@ add_executable(HoroActivityStoreTests
 target_compile_features(HoroActivityStoreTests PRIVATE cxx_std_20)
 target_link_libraries(HoroActivityStoreTests PRIVATE HoroEngine::Foundation Threads::Threads)
 
-set(HORO_FOUNDATION_PUBLIC_HEADERS
-        Horo/Application/HostObservability.h
-        Horo/Foundation/Diagnostics.h
-        Horo/Foundation/ErrorCode.h
-        Horo/Foundation/Result.h
-        Horo/Foundation/Sha256.h
-        Horo/Foundation/Diagnostics/DiagnosticBundle.h
-        Horo/Foundation/Diagnostics/OperationHistory.h
-        Horo/Foundation/Logging/LogContext.h
-        Horo/Foundation/Logging/Logger.h
-        Horo/Foundation/Logging/StructuredLogStore.h
-        Horo/Foundation/Telemetry/OpenTelemetrySink.h
-        Horo/Foundation/Telemetry/Operation.h
-        Horo/Foundation/Telemetry/Telemetry.h
-)
-set(HORO_FOUNDATION_PUBLIC_HEADER_COMPILE_SOURCES)
-foreach (HORO_PUBLIC_HEADER IN LISTS HORO_FOUNDATION_PUBLIC_HEADERS)
-    string(MAKE_C_IDENTIFIER "${HORO_PUBLIC_HEADER}" HORO_PUBLIC_HEADER_IDENTIFIER)
-    set(HORO_PUBLIC_HEADER_SOURCE
-            "${CMAKE_CURRENT_BINARY_DIR}/public_headers/${HORO_PUBLIC_HEADER_IDENTIFIER}.cpp")
-    file(GENERATE OUTPUT "${HORO_PUBLIC_HEADER_SOURCE}"
-            CONTENT "#include \"${HORO_PUBLIC_HEADER}\"\n")
-    list(APPEND HORO_FOUNDATION_PUBLIC_HEADER_COMPILE_SOURCES "${HORO_PUBLIC_HEADER_SOURCE}")
-endforeach ()
-add_library(HoroFoundationPublicHeaderCompile OBJECT
-        ${HORO_FOUNDATION_PUBLIC_HEADER_COMPILE_SOURCES}
-)
-target_compile_features(HoroFoundationPublicHeaderCompile PRIVATE cxx_std_20)
-target_include_directories(HoroFoundationPublicHeaderCompile PRIVATE ${PROJECT_SOURCE_DIR}/include)
 add_executable(HoroPrimitiveMeshTests
         unit/runtime/scene/PrimitiveMeshTests.cpp
 )
@@ -618,7 +593,11 @@ target_compile_definitions(HoroGameplayBuildServiceTests PRIVATE
         HORO_GAMEPLAY_CXX_COMPILER="${CMAKE_CXX_COMPILER}"
         HORO_TEST_CMAKE_GENERATOR="${CMAKE_GENERATOR}"
 )
-target_link_libraries(HoroGameplayBuildServiceTests PRIVATE HoroEngine::GameplayBuild)
+target_link_libraries(HoroGameplayBuildServiceTests
+        PRIVATE
+        HoroEngine::GameplayBuild
+        HoroEngine::Platform
+)
 add_executable(HoroEditorViewportSceneTests
         unit/editor/EditorViewportSceneTests.cpp
 )
@@ -645,6 +624,48 @@ add_executable(HoroAssetSceneDropTests
 )
 target_compile_features(HoroAssetSceneDropTests PRIVATE cxx_std_20)
 target_link_libraries(HoroAssetSceneDropTests PRIVATE HoroEngine::EditorRenderExtraction)
+
+# White-box editor tests opt into implementation headers explicitly. Keep this
+# non-installed test interface separate from every production usage requirement;
+# legacy editor/... include spellings require the source root until those tests
+# migrate to narrower per-subsystem spellings.
+add_library(HoroEditorTestInternals INTERFACE)
+target_include_directories(HoroEditorTestInternals INTERFACE ${PROJECT_SOURCE_DIR}/src)
+set(HORO_EDITOR_WHITE_BOX_TEST_TARGETS
+        HoroEditorPlaySessionControllerTests
+        HoroProjectGameplayRegistryTests
+        HoroGuiScreenHostLifecycleTests
+        HoroProjectCreationControllerTests
+        HoroRendererAvailabilityTests
+        HoroProjectMetadataTests
+        HoroProjectOpenServiceTests
+        HoroProjectMigrationIntegrationTests
+        HoroEditorWorkspaceControllerTests
+        HoroGameplayBehaviorFilenameModalStateTests
+        HoroEditorSelectionModelTests
+        HoroEditorViewportModelTests
+        HoroHierarchyPanelRenderTests
+        HoroHierarchyEditSessionTests
+        HoroInspectorPanelRenderTests
+        HoroInspectorEditSessionTests
+        HoroGlobalDockPanelRenderTests
+        HoroAssetBrowserInteractionSessionTests
+        HoroViewportPanelRenderTests
+        HoroTransformGizmoMathTests
+        HoroEditorViewportSceneTests
+        HoroSceneDocumentTests
+        HoroSceneDocumentPersistenceTests
+        HoroEditorViewportPickingTests
+        HoroAssetSceneDropTests
+)
+foreach (target IN LISTS HORO_EDITOR_WHITE_BOX_TEST_TARGETS)
+    if(NOT TARGET ${target})
+        message(FATAL_ERROR
+                "HORO_EDITOR_WHITE_BOX_TEST_TARGETS references undefined target '${target}'")
+    endif()
+    target_link_libraries(${target} PRIVATE HoroEditorTestInternals)
+endforeach ()
+
 add_executable(HoroRenderBackendRegistryTests
         unit/runtime/renderer/RenderBackendRegistryTests.cpp
 )
@@ -779,51 +800,6 @@ target_include_directories(HoroModularAssetImportIntegrationTests PRIVATE
         ${PROJECT_SOURCE_DIR}/src/runtime/assets/cooker/builtin
         ${PROJECT_SOURCE_DIR}/src/runtime/assets/importer
 )
-function(horo_add_public_header_compile_target target owning_target)
-    set(generated_sources)
-    foreach (header IN LISTS ARGN)
-        string(REPLACE "/" "_" source_name "${header}")
-        set(source "${CMAKE_CURRENT_BINARY_DIR}/header_compile/${source_name}.cpp")
-        file(GENERATE OUTPUT "${source}" CONTENT "#include \"${header}\"\n")
-        list(APPEND generated_sources "${source}")
-    endforeach ()
-    add_library(${target} OBJECT ${generated_sources})
-    target_compile_features(${target} PRIVATE cxx_std_20)
-    target_link_libraries(${target} PRIVATE ${owning_target})
-endfunction()
-
-horo_add_public_header_compile_target(HoroRuntimePublicHeaderCompile HoroEngine::RuntimeScene
-        Horo/Runtime/FrameScheduler.h
-        Horo/Runtime/RuntimeHost.h
-        Horo/Runtime/RuntimeLifecycle.h
-        Horo/Runtime/Scene/RuntimeScene.h
-        Horo/Runtime/Scene/RuntimeSceneDefinition.h
-)
-horo_add_public_header_compile_target(HoroAssetsPublicHeaderCompile HoroEngine::Assets
-        Horo/Assets/AssetId.h
-        Horo/Assets/AssetImporter.h
-        Horo/Assets/AssetPreview.h
-        Horo/Assets/AssetRegistry.h
-        Horo/Assets/AssetProvider.h
-        Horo/Assets/AssetCook.h
-)
-horo_add_public_header_compile_target(HoroApplicationPublicHeaderCompile HoroEngine::Application
-        Horo/Application/ProjectVersion.h
-        Horo/Application/ProjectCompatibility.h
-        Horo/Application/ProjectMigration.h
-        Horo/Application/ProjectMigrationCatalog.h
-)
-horo_add_public_header_compile_target(HoroPlatformPublicHeaderCompile HoroEngine::Platform
-        Horo/Foundation/Platform.h
-)
-horo_add_public_header_compile_target(HoroEditorServicesPublicHeaderCompile HoroEngine::EditorServices
-        Horo/Editor/ProjectMutation.h
-        Horo/Editor/ProjectMigrationTransaction.h
-        Horo/Editor/ProjectSession.h
-        Horo/Editor/ProjectOpenService.h
-        Horo/Editor/RecentProjectInspectionService.h
-)
-
 add_executable(HoroExtensionManagerTests
         unit/extensions/ExtensionManagerTests.cpp
 )
