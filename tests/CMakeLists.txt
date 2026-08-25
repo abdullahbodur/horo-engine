@@ -659,9 +659,11 @@ set(HORO_EDITOR_WHITE_BOX_TEST_TARGETS
         HoroAssetSceneDropTests
 )
 foreach (target IN LISTS HORO_EDITOR_WHITE_BOX_TEST_TARGETS)
-    if(TARGET ${target})
-        target_link_libraries(${target} PRIVATE HoroEditorTestInternals)
+    if(NOT TARGET ${target})
+        message(FATAL_ERROR
+                "HORO_EDITOR_WHITE_BOX_TEST_TARGETS references undefined target '${target}'")
     endif()
+    target_link_libraries(${target} PRIVATE HoroEditorTestInternals)
 endforeach ()
 
 add_executable(HoroRenderBackendRegistryTests

@@ -92,7 +92,8 @@ rules into agent-specific instruction files.
 - Unless the current task explicitly revises this architecture contract with a
   documented migration, assign every header under `include/Horo/` to exactly one
   real CMake target in `cmake/HoroPublicHeaderOwnership.cmake`. Configure rejects
-  unowned or multiply owned public headers.
+  unowned or multiply owned public headers across the supported `.h`, `.hh`,
+  `.hpp`, `.hxx`, `.inl`, `.ipp`, and `.tpp` extensions.
 - Do not publish `${PROJECT_SOURCE_DIR}/include`, `${PROJECT_SOURCE_DIR}/src`, or
   another repository-wide source root through `PUBLIC` or `INTERFACE` usage
   requirements. Use `horo_configure_target_header_boundary` so consumers see only

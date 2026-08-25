@@ -35,7 +35,8 @@ by consumers.
 
 Configure is the first enforcement gate:
 
-- an unowned public header is rejected;
+- an unowned public `.h`, `.hh`, `.hpp`, `.hxx`, `.inl`, `.ipp`, or `.tpp`
+  header is rejected;
 - duplicate ownership is rejected;
 - a registered path that does not exist is rejected;
 - broad source/public include roots are removed from target usage requirements.

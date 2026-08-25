@@ -4,6 +4,7 @@ include(GNUInstallDirs)
 
 set(HORO_TARGET_INCLUDE_ROOT "${CMAKE_BINARY_DIR}/target-includes" CACHE INTERNAL
     "Per-target build-tree include views")
+set(HORO_PUBLIC_HEADER_EXTENSIONS h hh hpp hxx inl ipp tpp)
 
 function(horo_configure_target_header_boundary target)
     cmake_parse_arguments(ARG "" "" "PUBLIC_HEADERS" ${ARGN})
@@ -14,8 +15,9 @@ function(horo_configure_target_header_boundary target)
     # Ownership is configuration-independent. Optional targets still own their
     # contracts when a headless or backend-limited profile omits the target.
     foreach(header IN LISTS ARG_PUBLIC_HEADERS)
-        if(NOT header MATCHES "^Horo/.+\\.h$")
-            message(FATAL_ERROR "Public header '${header}' for ${target} must be relative to include/")
+        if(NOT header MATCHES "^Horo/.+\\.(h|hh|hpp|hxx|inl|ipp|tpp)$")
+            message(FATAL_ERROR
+                "Public header '${header}' for ${target} must be relative to include/ and use a supported header extension")
         endif()
         if(NOT EXISTS "${PROJECT_SOURCE_DIR}/include/${header}")
             message(FATAL_ERROR "Registered public header does not exist: include/${header}")
@@ -88,10 +90,15 @@ function(horo_configure_target_header_boundary target)
 endfunction()
 
 function(horo_verify_public_header_inventory)
+    set(repository_header_globs)
+    foreach(extension IN LISTS HORO_PUBLIC_HEADER_EXTENSIONS)
+        list(APPEND repository_header_globs
+            "${PROJECT_SOURCE_DIR}/include/Horo/*.${extension}")
+    endforeach()
     file(GLOB_RECURSE repository_headers
         CONFIGURE_DEPENDS
         RELATIVE "${PROJECT_SOURCE_DIR}/include"
-        "${PROJECT_SOURCE_DIR}/include/Horo/*.h")
+        ${repository_header_globs})
 
     set(unowned_headers)
     foreach(header IN LISTS repository_headers)
