@@ -76,7 +76,7 @@ namespace {
         REQUIRE(g_deactivateCalls == 0);
     }
 
-    TEST_CASE("Module descriptor graph rejects invalid inputs before composition", "[unit][foundation][modules]") {
+    TEST_CASE("Module descriptor graph rejects invalid module dependencies", "[unit][foundation][modules]") {
         SECTION("duplicate module identity") {
             const std::array descriptors{MakeModule("horo.foundation"), MakeModule("horo.foundation")};
             const auto result = ValidateModuleGraph(descriptors);
@@ -112,7 +112,9 @@ namespace {
             REQUIRE(result.HasError());
             REQUIRE(result.ErrorValue().code.Value() == "foundation.module.incompatible_dependency");
         }
+    }
 
+    TEST_CASE("Module descriptor graph rejects missing capabilities and cycles", "[unit][foundation][modules]") {
         SECTION("missing required capability") {
             ModuleDescriptor module = MakeModule("horo.editor");
             module.requiredCapabilities.push_back(ModuleCapabilityId{"horo.project.read"});
@@ -132,7 +134,9 @@ namespace {
             REQUIRE(result.HasError());
             REQUIRE(result.ErrorValue().code.Value() == "foundation.module.dependency_cycle");
         }
+    }
 
+    TEST_CASE("Module descriptor graph rejects invalid local metadata", "[unit][foundation][modules]") {
         SECTION("unpaired lifecycle callback") {
             ModuleDescriptor module = MakeModule("horo.runtime");
             module.lifecycle.activate = &Activate;

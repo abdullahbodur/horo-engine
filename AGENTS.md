@@ -90,7 +90,10 @@ rules into agent-specific instruction files.
   descriptor must not register services, invoke lifecycle callbacks, inspect a
   service locator, select a backend, or otherwise mutate ambient state. Keep
   registration and activation in an explicit host/application composition root;
-  follow `docs/architecture/foundation/internal-module-descriptor.md`.
+  follow `docs/architecture/foundation/internal-module-descriptor.md`. Changing
+  this invariant requires explicit user authorization for the current task plus
+  a same-change normative architecture update and regression coverage; agents
+  must not infer an exception from local convenience.
 
 ### Header Boundary Enforcement
 
