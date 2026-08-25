@@ -128,6 +128,13 @@ namespace Horo {
         friend class ModuleHost;
 
         void RequestShutdown() noexcept;
+
+        /**
+         * @brief Blocks until all admitted callback leases are released.
+         *
+         * Module callbacks are expected to cooperate by checking CancellationToken and
+         * releasing leases promptly upon observing cancellation.
+         */
         void DrainCallbacks() noexcept;
 
         ModuleId m_module;
@@ -206,6 +213,10 @@ namespace Horo {
         void Transition(const ModuleId &id, ModuleLifecycleState state) noexcept;
         void RequestCancellationFrom(std::size_t base) noexcept;
         void DeactivateFrom(std::size_t base) noexcept;
+        void StopUnactivatedRegistered() noexcept;
+        void RollbackActivation(const ModuleDescriptor &failedDescriptor,
+                                std::unique_ptr<ModuleActivationContext> failedContext,
+                                std::size_t base) noexcept;
 
         std::vector<ModuleDescriptor> m_registered;
         std::vector<ActiveModule> m_active;

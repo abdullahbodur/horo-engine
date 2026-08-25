@@ -121,3 +121,43 @@ TEST_CASE("Module shutdown drains admitted callbacks before releasing borrowed b
     REQUIRE(g_deactivateObservedDrain);
     REQUIRE(host.StateOf(ModuleId{"horo.async"}) == ModuleLifecycleState::Stopped);
 }
+
+TEST_CASE("StateOf returns nullopt for unknown module identity", "[unit][foundation][modules][lifecycle]") {
+    ModuleHost host;
+    REQUIRE_FALSE(host.StateOf(ModuleId{"horo.unknown"}).has_value());
+}
+
+TEST_CASE("ModuleActivationContext rejects attaching a null instance", "[unit][foundation][modules][lifecycle]") {
+    ModuleActivationContext context(ModuleId{"horo.test"}, nullptr);
+    REQUIRE(context.AttachInstance(nullptr).HasError());
+    REQUIRE(context.Module() == ModuleId{"horo.test"});
+    REQUIRE(context.Bindings() == nullptr);
+    REQUIRE_FALSE(context.Cancellation().IsCancellationRequested());
+}
+
+TEST_CASE("ModuleCallbackLease supports move semantics and explicit release", "[unit][foundation][modules][lifecycle]") {
+    ModuleActivationContext context(ModuleId{"horo.lease_test"}, nullptr);
+    std::optional<ModuleCallbackLease> lease1 = context.AcquireCallbackLease();
+    REQUIRE(lease1.has_value());
+    REQUIRE(lease1->Bindings() == nullptr);
+    REQUIRE_FALSE(lease1->Cancellation().IsCancellationRequested());
+
+    // Move constructor
+    ModuleCallbackLease lease2(std::move(*lease1));
+    REQUIRE(lease2.Bindings() == nullptr);
+
+    // Move assignment
+    ModuleCallbackLease lease3 = std::move(lease2);
+    REQUIRE(lease3.Bindings() == nullptr);
+
+    // Self move-assignment is a safe no-op
+    #if defined(__clang__)
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wself-move"
+    #endif
+    lease3 = std::move(lease3);
+    #if defined(__clang__)
+    #pragma clang diagnostic pop
+    #endif
+    REQUIRE(lease3.Bindings() == nullptr);
+}

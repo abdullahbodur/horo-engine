@@ -3,6 +3,7 @@
 #include "foundation/FoundationErrors.h"
 
 #include <algorithm>
+#include <array>
 #include <map>
 #include <optional>
 #include <set>
@@ -23,6 +24,20 @@ namespace Horo {
             return lowercaseAscii || digitAscii;
         }
 
+        /** @brief Validates a single character and updates separator tracking in a canonical identifier. */
+        [[nodiscard]] bool IsValidSegmentChar(const unsigned char character, bool &previousWasSeparator) noexcept {
+            if (IsIdSeparator(character)) {
+                if (previousWasSeparator)
+                    return false;
+                previousWasSeparator = true;
+                return true;
+            }
+            if (!IsLowercaseAsciiAlphanumeric(character))
+                return false;
+            previousWasSeparator = false;
+            return true;
+        }
+
         /** @brief Validates the lowercase ASCII segmented identifier grammar. */
         [[nodiscard]] bool IsCanonicalId(const std::string_view value) {
             if (value.empty())
@@ -30,15 +45,8 @@ namespace Horo {
 
             bool previousWasSeparator = true;
             for (const unsigned char character : value) {
-                if (IsIdSeparator(character)) {
-                    if (previousWasSeparator)
-                        return false;
-                    previousWasSeparator = true;
-                    continue;
-                }
-                if (!IsLowercaseAsciiAlphanumeric(character))
+                if (!IsValidSegmentChar(character, previousWasSeparator))
                     return false;
-                previousWasSeparator = false;
             }
             return !previousWasSeparator;
         }
@@ -100,19 +108,42 @@ namespace Horo {
             return std::nullopt;
         }
 
+        /** @brief Validates one resource budget entry within a descriptor. */
+        [[nodiscard]] std::optional<std::string> ValidateBudgetEntry(const ModuleResourceBudget &budget,
+                                                                    const std::string_view moduleId,
+                                                                    std::set<std::string, std::less<>> &budgetIds) {
+            if (!IsCanonicalId(budget.id))
+                return "Module '" + std::string(moduleId) + "' has a non-canonical resource budget identity.";
+            if (!IsNamespacedBy(budget.id, moduleId))
+                return "Resource budget '" + budget.id + "' is not namespaced by module '" + std::string(moduleId) + "'.";
+            if (budget.limit == 0)
+                return "Resource budget '" + budget.id + "' has a zero limit.";
+            if (!budgetIds.emplace(budget.id).second)
+                return "Module '" + std::string(moduleId) + "' repeats resource budget '" + budget.id + "'.";
+            return std::nullopt;
+        }
+
         /** @brief Validates one descriptor's named resource budget hints. */
         [[nodiscard]] std::optional<std::string> ValidateBudgets(const ModuleDescriptor &descriptor) {
             std::set<std::string, std::less<>> budgetIds;
             for (const ModuleResourceBudget &budget : descriptor.resourceBudgets) {
-                if (!IsCanonicalId(budget.id))
-                    return "Module '" + descriptor.id.value + "' has a non-canonical resource budget identity.";
-                if (!IsNamespacedBy(budget.id, descriptor.id.value))
-                    return "Resource budget '" + budget.id + "' is not namespaced by module '" + descriptor.id.value + "'.";
-                if (budget.limit == 0)
-                    return "Resource budget '" + budget.id + "' has a zero limit.";
-                if (!budgetIds.emplace(budget.id).second)
-                    return "Module '" + descriptor.id.value + "' repeats resource budget '" + budget.id + "'.";
+                if (auto failure = ValidateBudgetEntry(budget, descriptor.id.value, budgetIds); failure.has_value())
+                    return failure;
             }
+            return std::nullopt;
+        }
+
+        /** @brief Validates one observability entry within a descriptor. */
+        [[nodiscard]] std::optional<std::string> ValidateObservabilityEntry(
+            const ModuleObservabilityDescriptor &entry,
+            const std::string_view moduleId,
+            std::set<std::pair<ModuleObservabilityKind, std::string>> &observability) {
+            if (!IsCanonicalId(entry.id))
+                return "Module '" + std::string(moduleId) + "' has a non-canonical observability identity.";
+            if (!IsNamespacedBy(entry.id, moduleId))
+                return "Observability descriptor '" + entry.id + "' is not namespaced by module '" + std::string(moduleId) + "'.";
+            if (!observability.emplace(entry.kind, entry.id).second)
+                return "Module '" + std::string(moduleId) + "' repeats observability descriptor '" + entry.id + "'.";
             return std::nullopt;
         }
 
@@ -120,12 +151,8 @@ namespace Horo {
         [[nodiscard]] std::optional<std::string> ValidateObservability(const ModuleDescriptor &descriptor) {
             std::set<std::pair<ModuleObservabilityKind, std::string>> observability;
             for (const ModuleObservabilityDescriptor &entry : descriptor.observability) {
-                if (!IsCanonicalId(entry.id))
-                    return "Module '" + descriptor.id.value + "' has a non-canonical observability identity.";
-                if (!IsNamespacedBy(entry.id, descriptor.id.value))
-                    return "Observability descriptor '" + entry.id + "' is not namespaced by module '" + descriptor.id.value + "'.";
-                if (!observability.emplace(entry.kind, entry.id).second)
-                    return "Module '" + descriptor.id.value + "' repeats observability descriptor '" + entry.id + "'.";
+                if (auto failure = ValidateObservabilityEntry(entry, descriptor.id.value, observability); failure.has_value())
+                    return failure;
             }
             return std::nullopt;
         }
@@ -138,15 +165,19 @@ namespace Horo {
                 return "Module '" + descriptor.id.value +
                        "' must pair activation and deactivation, and may drain only within that lifetime.";
             }
-            if (const auto failure = ValidateDependencies(descriptor); failure.has_value())
-                return failure;
-            if (const auto failure = ValidateProvidedCapabilities(descriptor); failure.has_value())
-                return failure;
-            if (const auto failure = ValidateRequiredCapabilities(descriptor); failure.has_value())
-                return failure;
-            if (const auto failure = ValidateBudgets(descriptor); failure.has_value())
-                return failure;
-            return ValidateObservability(descriptor);
+            using ValidatorFn = std::optional<std::string> (*)(const ModuleDescriptor &);
+            constexpr std::array<ValidatorFn, 5> kValidators = {
+                &ValidateDependencies,
+                &ValidateProvidedCapabilities,
+                &ValidateRequiredCapabilities,
+                &ValidateBudgets,
+                &ValidateObservability,
+            };
+            for (const auto validator : kValidators) {
+                if (auto failure = validator(descriptor); failure.has_value())
+                    return failure;
+            }
+            return std::nullopt;
         }
 
         using ModuleIndex = std::map<std::string, std::size_t, std::less<>>;

@@ -105,6 +105,7 @@ namespace Horo {
         return Result<void>::Success();
     }
 
+    /** @copydoc ModuleActivationContext::RequestShutdown */
     void ModuleActivationContext::RequestShutdown() noexcept {
         {
             const std::lock_guard lock(m_callbackGate->mutex);
@@ -113,6 +114,7 @@ namespace Horo {
         m_cancellation.RequestCancellation();
     }
 
+    /** @copydoc ModuleActivationContext::DrainCallbacks */
     void ModuleActivationContext::DrainCallbacks() noexcept {
         std::unique_lock lock(m_callbackGate->mutex);
         m_callbackGate->drained.wait(lock, [this] {

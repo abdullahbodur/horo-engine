@@ -1,29 +1,25 @@
 #include "Horo/Foundation/ModuleHost.h"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
+#include <utility>
 
 namespace Horo {
     namespace {
         /** @brief Returns whether one host-owned module state transition is legal. */
-        [[nodiscard]] bool IsLegalTransition(const ModuleLifecycleState from, const ModuleLifecycleState to) noexcept {
+        [[nodiscard]] constexpr bool IsLegalTransition(const ModuleLifecycleState from, const ModuleLifecycleState to) noexcept {
             using enum ModuleLifecycleState;
-            switch (from) {
-                case Registered:
-                    return to == Activating || to == Stopped;
-                case Activating:
-                    return to == Active || to == Failed;
-                case Active:
-                    return to == CancellationRequested;
-                case CancellationRequested:
-                    return to == Draining;
-                case Draining:
-                    return to == Stopped;
-                case Stopped:
-                case Failed:
-                    return false;
-            }
-            return false;
+            constexpr std::array<std::pair<ModuleLifecycleState, ModuleLifecycleState>, 7> kAllowedTransitions{{
+                {Registered, Activating},
+                {Registered, Stopped},
+                {Activating, Active},
+                {Activating, Failed},
+                {Active, CancellationRequested},
+                {CancellationRequested, Draining},
+                {Draining, Stopped},
+            }};
+            return std::ranges::find(kAllowedTransitions, std::pair{from, to}) != kAllowedTransitions.end();
         }
     }  // namespace
 
@@ -41,8 +37,11 @@ namespace Horo {
         const auto found = std::ranges::find_if(m_states, [&id](const ModuleStateRecord &record) {
             return record.id == id;
         });
-        assert(found != m_states.end());
-        assert(IsLegalTransition(found->state, state));
+        if (found == m_states.end() || !IsLegalTransition(found->state, state)) {
+            assert(found != m_states.end() && "Unknown module identity in lifecycle transition.");
+            assert(found != m_states.end() && IsLegalTransition(found->state, state) && "Illegal module lifecycle transition.");
+            return;
+        }
         found->state = state;
     }
 
@@ -67,5 +66,25 @@ namespace Horo {
             Transition(active.id, ModuleLifecycleState::Stopped);
             m_active.pop_back();
         }
+    }
+
+    void ModuleHost::StopUnactivatedRegistered() noexcept {
+        for (const ModuleDescriptor &pending : m_registered) {
+            if (StateOf(pending.id) == ModuleLifecycleState::Registered)
+                Transition(pending.id, ModuleLifecycleState::Stopped);
+        }
+        m_registered.clear();
+    }
+
+    void ModuleHost::RollbackActivation(const ModuleDescriptor &failedDescriptor,
+                                        std::unique_ptr<ModuleActivationContext> failedContext,
+                                        const std::size_t base) noexcept {
+        Transition(failedDescriptor.id, ModuleLifecycleState::Failed);
+        failedContext->RequestShutdown();
+        RequestCancellationFrom(base);
+        failedContext->DrainCallbacks();
+        failedContext.reset();
+        DeactivateFrom(base);
+        StopUnactivatedRegistered();
     }
 }  // namespace Horo

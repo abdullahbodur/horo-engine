@@ -14,6 +14,20 @@ namespace Horo {
             return Result<ValueT>::Failure(MakeError(descriptor, std::move(message)));
         }
 
+        /** @brief Indexes descriptors by identity so activation follows the validated ID order. */
+        [[nodiscard]] std::vector<const ModuleDescriptor *> OrderRegisteredDescriptors(
+            const std::vector<ModuleDescriptor> &registered,
+            const std::vector<ModuleId> &order) {
+            std::vector<const ModuleDescriptor *> ordered;
+            ordered.reserve(order.size());
+            for (const ModuleId &id : order) {
+                const auto found = std::ranges::find_if(registered, [&id](const ModuleDescriptor &descriptor) {
+                    return descriptor.id == id;
+                });
+                ordered.push_back(std::to_address(found));
+            }
+            return ordered;
+        }
     }  // namespace
 
     ModuleHost::~ModuleHost() {
@@ -27,15 +41,8 @@ namespace Horo {
         if (validated.HasError())
             return Result<std::size_t>::Failure(validated.ErrorValue());
 
-        // Index descriptors by identity so activation follows the validated ID order.
-        std::vector<const ModuleDescriptor *> ordered;
-        ordered.reserve(validated.Value().initializationOrder.size());
-        for (const ModuleId &id : validated.Value().initializationOrder) {
-            const auto found = std::ranges::find_if(m_registered, [&id](const ModuleDescriptor &descriptor) {
-                return descriptor.id == id;
-            });
-            ordered.push_back(std::to_address(found));
-        }
+        const std::vector<const ModuleDescriptor *> ordered =
+            OrderRegisteredDescriptors(m_registered, validated.Value().initializationOrder);
 
         // Roll back only modules started by this call; a prior successful activation
         // may still own the front of the active list (incremental compose-then-activate).
@@ -46,17 +53,7 @@ namespace Horo {
             Transition(descriptor->id, ModuleLifecycleState::Activating);
             if (descriptor->lifecycle.activate != nullptr) {
                 if (const Result<void> activated = descriptor->lifecycle.activate(*context); activated.HasError()) {
-                    Transition(descriptor->id, ModuleLifecycleState::Failed);
-                    context->RequestShutdown();
-                    RequestCancellationFrom(base);
-                    context->DrainCallbacks();
-                    context.reset();
-                    DeactivateFrom(base);
-                    for (const ModuleDescriptor &pending : m_registered) {
-                        if (StateOf(pending.id) == ModuleLifecycleState::Registered)
-                            Transition(pending.id, ModuleLifecycleState::Stopped);
-                    }
-                    m_registered.clear();
+                    RollbackActivation(*descriptor, std::move(context), base);
                     return Fail<std::size_t>(ModuleDescriptorErrors::InvalidDescriptor,
                                              "Activation of module '" + descriptor->id.value + "' failed.");
                 }
@@ -76,11 +73,7 @@ namespace Horo {
     void ModuleHost::DeactivateAll() noexcept {
         RequestCancellationFrom(0);
         DeactivateFrom(0);
-        for (const ModuleDescriptor &pending : m_registered) {
-            if (StateOf(pending.id) == ModuleLifecycleState::Registered)
-                Transition(pending.id, ModuleLifecycleState::Stopped);
-        }
-        m_registered.clear();
+        StopUnactivatedRegistered();
     }
 
     /** @copydoc ModuleHost::HasActiveModules */
