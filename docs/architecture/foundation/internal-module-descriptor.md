@@ -88,6 +88,24 @@ into the composition path. `DeactivateAll` provides idempotent reverse-order
 teardown; attached module instances are released with their activation
 contexts.
 
+## Supported Host Profiles
+
+`apps/common/HostModuleComposition.h` is the non-installed contract shared by
+the two application composition roots. It translates the modules actually
+linked into each executable into the descriptor graph consumed by `ModuleHost`:
+
+| Host profile | Required participation | Optional selection |
+|---|---|---|
+| `horo-engine` | Foundation, Application, CLI host | None in the current implementation |
+| `HoroEditor` | The linked application, runtime, scene, asset, input, gameplay, editor, extension, GUI, and renderer-neutral modules | Exactly one compiled interactive renderer and viewport adapter; OpenTelemetry when linked |
+
+The profile is validated and activated before the host creates platform windows
+or presentation resources. An impossible profile therefore fails before any
+module activation, and a valid profile produces the same provider-before-
+dependant order from the same selection. Concrete renderer choice remains in the
+`HoroEditor` composition root; feature modules receive only the resulting
+backend-neutral services.
+
 ## Module Lifecycle And Shutdown
 
 `ModuleHost` owns the explicit per-registration state machine:
@@ -116,9 +134,11 @@ callback-admission gate. Asynchronous module callbacks acquire a move-only
 
 This order keeps providers alive while dependants drain, prevents new callbacks
 from entering after shutdown begins, and ensures activation-scoped binding borrows
-end before their context is released. Repeated shutdown is a no-op after the first
-terminal transition. The host destructor is a final safety net that runs the same
-idempotent shutdown path.
+end before their context is released. A callback that does not cooperate delays
+shutdown; the host must not trade a bounded wait for releasing a dependency that
+an admitted callback can still borrow. Repeated shutdown is a no-op after the
+first terminal transition. The host destructor is a final safety net that runs
+the same idempotent shutdown path.
 
 ## Ownership And Migration
 

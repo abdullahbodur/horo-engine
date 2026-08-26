@@ -58,7 +58,8 @@ horo_allow_target_dependencies(TARGET HoroExtensions
     DEPENDENCIES HoroFoundation HoroPlatform HoroAssets)
 
 # Executables are composition roots and may select any production module.
-horo_allow_target_dependencies(TARGET horo-engine DEPENDENCIES HoroApplication)
+horo_allow_target_dependencies(TARGET HoroHostModuleComposition DEPENDENCIES HoroFoundation)
+horo_allow_target_dependencies(TARGET horo-engine DEPENDENCIES HoroApplication HoroHostModuleComposition)
 horo_allow_target_dependencies(TARGET HoroEditor
     DEPENDENCIES
         HoroGui
@@ -73,7 +74,8 @@ horo_allow_target_dependencies(TARGET HoroEditor
         HoroInputSdl
         HoroOpenTelemetry
         HoroEditorViewportOpenGL
-        HoroEditorViewportMetal)
+        HoroEditorViewportMetal
+        HoroHostModuleComposition)
 
 # These edges predate the target-level architecture. Each exception is tied to
 # an active roadmap owner and must disappear when that ticket resolves the
