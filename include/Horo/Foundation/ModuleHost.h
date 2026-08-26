@@ -145,12 +145,12 @@ namespace Horo {
         void RequestShutdown() const noexcept;
 
         /**
-         * @brief Blocks until all admitted callback leases are released or a timeout is reached.
+         * @brief Blocks until all admitted callback leases are released.
          *
          * Module callbacks are expected to cooperate by checking CancellationToken and
-         * releasing leases promptly upon observing cancellation. If a callback hangs,
-         * drainage logs a warning after a bounded timeout and shutdown proceeds to prevent
-         * indefinite teardown blockage.
+         * releasing leases promptly upon observing cancellation. Drainage logs periodic
+         * warnings while a callback remains outstanding, but never releases activation-scoped
+         * dependencies while a lease can still borrow them.
          */
         void DrainCallbacks() const noexcept;
 

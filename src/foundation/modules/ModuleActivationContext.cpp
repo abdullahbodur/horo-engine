@@ -118,13 +118,12 @@ namespace Horo {
     /** @copydoc ModuleActivationContext::DrainCallbacks */
     void ModuleActivationContext::DrainCallbacks() const noexcept {
         std::unique_lock lock(m_callbackGate->mutex);
-        constexpr auto kDrainTimeout = std::chrono::seconds(5);
-        const bool drained = m_callbackGate->drained.wait_for(lock, kDrainTimeout, [this] {
+        constexpr auto kDrainWarningInterval = std::chrono::seconds(5);
+        while (!m_callbackGate->drained.wait_for(lock, kDrainWarningInterval, [this] {
             return m_callbackGate->activeCallbacks == 0;
-        });
-        if (!drained) {
+        })) {
             Log::Logger::Write("foundation.modules", Log::Level::Warn,
-                               std::format("Module '{}' callback drainage timed out with {} active callback(s).", m_module.value,
+                               std::format("Module '{}' is still draining {} active callback(s).", m_module.value,
                                            m_callbackGate->activeCallbacks));
         }
     }
