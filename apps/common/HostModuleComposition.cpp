@@ -28,6 +28,37 @@ namespace Horo::Application::Internal {
                                             .message = std::move(message)});
         }
 
+        /** @brief Describes the renderer-independent modules linked into the editor host. */
+        [[nodiscard]] std::vector<ModuleDescriptor> DescribeEditorCoreModules() {
+            return {
+                Describe("horo.foundation"),
+                Describe("horo.application", {"horo.foundation"}),
+                Describe("horo.application.project_migrations", {"horo.application"}),
+                Describe("horo.platform", {"horo.foundation"}),
+                Describe("horo.runtime", {"horo.foundation"}),
+                Describe("horo.assets", {"horo.foundation"}),
+                Describe("horo.input", {"horo.foundation"}),
+                Describe("horo.input.sdl", {"horo.input"}),
+                Describe("horo.gameplay.api", {"horo.foundation"}),
+                Describe("horo.render.api", {"horo.foundation"}),
+                Describe("horo.scene.model", {"horo.foundation", "horo.render.api"}),
+                Describe("horo.runtime.scene", {"horo.foundation", "horo.runtime", "horo.assets", "horo.gameplay.api", "horo.scene.model"}),
+                Describe("horo.gameplay.runtime", {"horo.gameplay.api", "horo.runtime.scene"}),
+                Describe("horo.gameplay.module_host", {"horo.gameplay.runtime", "horo.platform"}),
+                Describe("horo.gameplay.build", {"horo.foundation", "horo.platform", "horo.gameplay.module_host"}),
+                Describe("horo.gameplay.lua", {"horo.gameplay.runtime"}),
+                Describe("horo.render.backend_registry", {"horo.render.api"}),
+                Describe("horo.render.frontend", {"horo.render.api", "horo.render.backend_registry"}),
+                Describe("horo.editor.model", {"horo.foundation", "horo.scene.model", "horo.runtime.scene"}),
+                Describe("horo.editor.viewport_scene", {"horo.editor.model"}),
+                Describe("horo.editor.render_extraction", {"horo.editor.model", "horo.editor.viewport_scene"}),
+                Describe("horo.editor.services",
+                         {"horo.foundation", "horo.application", "horo.platform", "horo.editor.model", "horo.gameplay.module_host",
+                          "horo.gameplay.build", "horo.gameplay.lua", "horo.input", "horo.application.project_migrations", "horo.assets"}),
+                Describe("horo.extensions", {"horo.foundation", "horo.platform", "horo.assets"}),
+                Describe("horo.gui", {"horo.editor.services", "horo.foundation", "horo.editor.render_extraction", "horo.extensions"}),
+            };
+        }
     }  // namespace
 
     /** @copydoc DescribeHostModules */
@@ -50,34 +81,7 @@ namespace Horo::Application::Internal {
                 "The graphical editor host requires one concrete interactive renderer module.");
         }
 
-        std::vector<ModuleDescriptor> modules{
-            Describe("horo.foundation"),
-            Describe("horo.application", {"horo.foundation"}),
-            Describe("horo.application.project_migrations", {"horo.application"}),
-            Describe("horo.platform", {"horo.foundation"}),
-            Describe("horo.runtime", {"horo.foundation"}),
-            Describe("horo.assets", {"horo.foundation"}),
-            Describe("horo.input", {"horo.foundation"}),
-            Describe("horo.input.sdl", {"horo.input"}),
-            Describe("horo.gameplay.api", {"horo.foundation"}),
-            Describe("horo.render.api", {"horo.foundation"}),
-            Describe("horo.scene.model", {"horo.foundation", "horo.render.api"}),
-            Describe("horo.runtime.scene", {"horo.foundation", "horo.runtime", "horo.assets", "horo.gameplay.api", "horo.scene.model"}),
-            Describe("horo.gameplay.runtime", {"horo.gameplay.api", "horo.runtime.scene"}),
-            Describe("horo.gameplay.module_host", {"horo.gameplay.runtime", "horo.platform"}),
-            Describe("horo.gameplay.build", {"horo.foundation", "horo.platform", "horo.gameplay.module_host"}),
-            Describe("horo.gameplay.lua", {"horo.gameplay.runtime"}),
-            Describe("horo.render.backend_registry", {"horo.render.api"}),
-            Describe("horo.render.frontend", {"horo.render.api", "horo.render.backend_registry"}),
-            Describe("horo.editor.model", {"horo.foundation", "horo.scene.model", "horo.runtime.scene"}),
-            Describe("horo.editor.viewport_scene", {"horo.editor.model"}),
-            Describe("horo.editor.render_extraction", {"horo.editor.model", "horo.editor.viewport_scene"}),
-            Describe("horo.editor.services",
-                     {"horo.foundation", "horo.application", "horo.platform", "horo.editor.model", "horo.gameplay.module_host",
-                      "horo.gameplay.build", "horo.gameplay.lua", "horo.input", "horo.application.project_migrations", "horo.assets"}),
-            Describe("horo.extensions", {"horo.foundation", "horo.platform", "horo.assets"}),
-            Describe("horo.gui", {"horo.editor.services", "horo.foundation", "horo.editor.render_extraction", "horo.extensions"}),
-        };
+        std::vector<ModuleDescriptor> modules = DescribeEditorCoreModules();
 
         const bool useOpenGL = selection.renderer == HostRenderer::OpenGL;
         const std::string_view rendererModule = useOpenGL ? "horo.render.opengl" : "horo.render.metal";
