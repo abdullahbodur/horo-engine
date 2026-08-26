@@ -2,27 +2,22 @@
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
-#include <string>
 #include <vector>
 
 namespace {
     using namespace Horo;
     using namespace Horo::Application::Internal;
 
-    [[nodiscard]] std::vector<std::string> ModuleIds(const std::vector<ModuleDescriptor> &descriptors) {
-        std::vector<std::string> ids;
-        ids.reserve(descriptors.size());
-        for (const ModuleDescriptor &descriptor : descriptors)
-            ids.push_back(descriptor.id.value);
-        return ids;
-    }
 }  // namespace
 
 TEST_CASE("Headless host composition activates only its linked module set", "[unit][application][modules]") {
     const HostModuleSelection selection{.host = HostKind::Headless};
     auto described = DescribeHostModules(selection);
     REQUIRE(described.HasValue());
-    REQUIRE(ModuleIds(described.Value()) == std::vector<std::string>{"horo.foundation", "horo.application", "horo.host.cli"});
+    REQUIRE(described.Value().size() == 3);
+    CHECK(described.Value()[0].id == ModuleId{"horo.foundation"});
+    CHECK(described.Value()[1].id == ModuleId{"horo.application"});
+    CHECK(described.Value()[2].id == ModuleId{"horo.host.cli"});
 
     auto composed = ComposeHostModules(selection);
     REQUIRE(composed.HasValue());

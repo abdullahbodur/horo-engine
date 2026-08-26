@@ -83,22 +83,26 @@ namespace Horo::Application::Internal {
 
         std::vector<ModuleDescriptor> modules = DescribeEditorCoreModules();
 
-        const bool useOpenGL = selection.renderer == HostRenderer::OpenGL;
-        const std::string_view rendererModule = useOpenGL ? "horo.render.opengl" : "horo.render.metal";
-        const std::string_view viewportModule = useOpenGL ? "horo.editor.viewport.opengl" : "horo.editor.viewport.metal";
-        modules.push_back(Describe(std::string{rendererModule}, {"horo.render.backend_registry"}));
-        modules.push_back(Describe(std::string{viewportModule}, {"horo.editor.viewport_scene", rendererModule}));
+        struct RendererModules {
+            std::string_view renderer;
+            std::string_view viewport;
+        };
+
+        const RendererModules selectedModules = selection.renderer == HostRenderer::OpenGL
+                                                    ? RendererModules{"horo.render.opengl", "horo.editor.viewport.opengl"}
+                                                    : RendererModules{"horo.render.metal", "horo.editor.viewport.metal"};
+        modules.push_back(Describe(std::string{selectedModules.renderer}, {"horo.render.backend_registry"}));
+        modules.push_back(Describe(std::string{selectedModules.viewport}, {"horo.editor.viewport_scene", selectedModules.renderer}));
         if (selection.includeOpenTelemetry)
             modules.push_back(Describe("horo.observability.opentelemetry", {"horo.foundation"}));
 
         ModuleDescriptor host =
             Describe("horo.host.editor", {"horo.gui", "horo.editor.services", "horo.editor.render_extraction", "horo.render.frontend",
                                           "horo.runtime", "horo.runtime.scene", "horo.extensions", "horo.platform", "horo.input.sdl",
-                                          "horo.application.project_migrations", viewportModule});
-        if (selection.includeOpenTelemetry) {
-            host.dependencies.push_back(
-                ModuleDependency{.module = ModuleId{"horo.observability.opentelemetry"}, .minimumVersion = kContractVersion});
-        }
+                                          "horo.application.project_migrations", selectedModules.viewport});
+        host.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.observability.opentelemetry"},
+                                                     .minimumVersion = kContractVersion,
+                                                     .kind = ModuleDependencyKind::Optional});
         modules.push_back(std::move(host));
         return Result<std::vector<ModuleDescriptor>>::Success(std::move(modules));
     }
