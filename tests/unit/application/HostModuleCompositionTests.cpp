@@ -25,7 +25,6 @@ TEST_CASE("Headless host composition activates only its linked module set", "[un
     REQUIRE(ModuleIds(described.Value()) == std::vector<std::string>{"horo.foundation", "horo.application", "horo.host.cli"});
 
     auto composed = ComposeHostModules(selection);
-    INFO((composed.HasError() ? composed.ErrorValue().message : std::string{}));
     REQUIRE(composed.HasValue());
     REQUIRE(composed.Value()->HasActiveModules());
     REQUIRE(composed.Value()->StateOf(ModuleId{"horo.host.cli"}) == ModuleLifecycleState::Active);
@@ -37,7 +36,6 @@ TEST_CASE("Headless host composition activates only its linked module set", "[un
 TEST_CASE("Editor host composition selects exactly one concrete renderer", "[unit][application][modules]") {
     const HostModuleSelection selection{.host = HostKind::Editor, .renderer = HostRenderer::OpenGL, .includeOpenTelemetry = true};
     auto composed = ComposeHostModules(selection);
-    INFO((composed.HasError() ? composed.ErrorValue().message : std::string{}));
     REQUIRE(composed.HasValue());
     REQUIRE(composed.Value()->StateOf(ModuleId{"horo.host.editor"}) == ModuleLifecycleState::Active);
     REQUIRE(composed.Value()->StateOf(ModuleId{"horo.render.opengl"}) == ModuleLifecycleState::Active);
@@ -55,7 +53,6 @@ TEST_CASE("Supported host descriptor order is deterministic from the same select
     REQUIRE(second.HasValue());
 
     auto firstGraph = ValidateModuleGraph(first.Value());
-    INFO((firstGraph.HasError() ? firstGraph.ErrorValue().message : std::string{}));
     REQUIRE(firstGraph.HasValue());
     std::vector<ModuleDescriptor> reversed = second.Value();
     std::ranges::reverse(reversed);
