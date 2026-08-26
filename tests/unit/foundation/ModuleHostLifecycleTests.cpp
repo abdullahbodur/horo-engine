@@ -137,6 +137,40 @@ TEST_CASE("Module shutdown drains admitted callbacks before releasing borrowed b
     REQUIRE(host.StateOf(ModuleId{"horo.async"}) == ModuleLifecycleState::Stopped);
 }
 
+TEST_CASE("Module shutdown cannot stop while a callback lease still borrows bindings", "[unit][foundation][modules][lifecycle]") {
+    ResetLifecycleLog();
+    ModuleHost host;
+    ModuleDescriptor descriptor = MakeModule("horo.blocked_callback");
+    descriptor.lifecycle = ModuleLifecycleCallbacks{.activate = &LeaseActivate, .drain = &LeaseDrain, .deactivate = &LeaseDeactivate};
+    REQUIRE(host.Register(descriptor).HasValue());
+
+    struct TestApprovedBindings final : IDependencyBindings {};
+
+    const TestApprovedBindings approvedBinding{};
+    REQUIRE(host.ActivateRegistered(&approvedBinding).HasValue());
+    REQUIRE(g_callbackLease.has_value());
+
+    std::atomic<bool> shutdownReturned{false};
+    std::thread shutdown([&host, &shutdownReturned] {
+        host.DeactivateAll();
+        shutdownReturned.store(true);
+    });
+
+    while (!g_callbackLease->Cancellation().IsCancellationRequested())
+        std::this_thread::yield();
+    const bool returnedBeforeLeaseRelease = shutdownReturned.load();
+    const IDependencyBindings *bindingsDuringDrain = g_callbackLease->Bindings();
+
+    g_callbackFinished.store(true);
+    g_callbackLease.reset();
+    shutdown.join();
+
+    REQUIRE_FALSE(returnedBeforeLeaseRelease);
+    REQUIRE(bindingsDuringDrain == &approvedBinding);
+    REQUIRE(shutdownReturned.load());
+    REQUIRE(host.StateOf(ModuleId{"horo.blocked_callback"}) == ModuleLifecycleState::Stopped);
+}
+
 TEST_CASE("StateOf returns nullopt for unknown module identity", "[unit][foundation][modules][lifecycle]") {
     ModuleHost host;
     REQUIRE_FALSE(host.StateOf(ModuleId{"horo.unknown"}).has_value());

@@ -134,9 +134,11 @@ callback-admission gate. Asynchronous module callbacks acquire a move-only
 
 This order keeps providers alive while dependants drain, prevents new callbacks
 from entering after shutdown begins, and ensures activation-scoped binding borrows
-end before their context is released. Repeated shutdown is a no-op after the first
-terminal transition. The host destructor is a final safety net that runs the same
-idempotent shutdown path.
+end before their context is released. A callback that does not cooperate delays
+shutdown; the host must not trade a bounded wait for releasing a dependency that
+an admitted callback can still borrow. Repeated shutdown is a no-op after the
+first terminal transition. The host destructor is a final safety net that runs
+the same idempotent shutdown path.
 
 ## Ownership And Migration
 
