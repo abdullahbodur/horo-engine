@@ -67,6 +67,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Project Versioning And Migration](./foundation/project-versioning-and-migration.md):
   one Horo project version, automatic project-open migration chains, release
   bundles, staging, journaled publication, recovery, and Welcome/loading UX.
+- [Cross-Engine Project Interchange](./foundation/cross-engine-interchange.md):
+  application-owned foreign-project conversion, adapter isolation, fidelity
+  reporting, compatibility, parser trust boundaries, and transactional publication.
 - [Concurrency And Job System](./foundation/concurrency-and-jobs.md): workers,
   task groups, cancellation, progress, affinity, backpressure, and shutdown.
 - [Ownership And Resource Lifetime](./foundation/ownership-and-resource-lifetime.md):

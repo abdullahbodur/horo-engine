@@ -2,10 +2,11 @@
 
 ## Status
 
-Normative for [PEX-001]. Architecture decision: [ADR-007 — Cross-Engine
-Project Interchange](../../adr/007-cross-engine-project-interchange.md).
-No interchange adapter, model type, or operation exists yet; this document
-defines the boundary production adapters must implement under.
+Proposed contract for [PEX-001]. Architecture decision: [ADR-007 — Cross-Engine
+Project Interchange](../../adr/007-cross-engine-project-interchange.md). This
+document becomes normative only when ADR-007 is accepted after the required
+Godot, Unity, and Unreal feasibility evidence is reviewed. No interchange
+adapter, model type, or operation exists yet.
 
 ## Purpose
 
@@ -117,8 +118,11 @@ Four independent version identities exist:
    declares supported source-version ranges; probing outside them fails the
    preflight with a structured "unsupported source version" result.
 2. **Adapter contract version** — the interface adapters implement. Additive
-   within a major line; breaking changes bump the major and require new
-   adapter targets rather than in-place redefinition.
+   within a major line; breaking changes bump the major. An adapter may be
+   upgraded in place when the release supports only the new major. If two
+   contract majors must ship concurrently, each major uses a distinct,
+   versioned adapter target so its dependency allowlist and compatibility
+   claims remain unambiguous.
 3. **Interchange model version** — the canonical typed model adapters produce
    and hosts consume. Independent of any engine's versioning.
 4. **Portable bundle version** — the on-disk export snapshot format, with its
@@ -134,8 +138,11 @@ Four independent version identities exist:
   needs capability X" instead of failing mid-import.
 
 Support windows: each release manifest declares which bundle major versions
-it reads; support does not silently extend forever, mirroring
-`minimumMigratableVersion` policy from project migration.
+it reads. Every declared major has either a bundled reader or an explicit,
+deterministic converter to a supported major. A bundle older than the support
+window is rejected without mutation and reports the oldest readable major and
+the required converter, when one exists. Support does not silently extend
+forever, mirroring `minimumMigratableVersion` policy from project migration.
 
 ## Parser Trust Boundary
 
@@ -150,8 +157,10 @@ Foreign project files are untrusted input:
   construction: native/third-party parsers, and any format whose parser reads
   untrusted length, offset, or count fields (binary formats in particular).
   In-process parsing is permitted only for bounded pure-data text formats
-  validated against a strict schema before use. The parent treats an isolated
-  parser crash as a failed probe with diagnostics, not a host fault.
+  validated against a strict schema before use; the schema-validation tokenizer
+  and decoder must themselves be memory-safe and enforce the same input, depth,
+  and time budgets. The parent treats an isolated parser crash as a failed probe
+  with diagnostics, not a host fault.
 - No interchange step executes embedded logic from the source project:
   scripts, shaders, and plugins are data to be classified, never run.
 - Paths extracted from foreign projects are treated as hostile: normalized,

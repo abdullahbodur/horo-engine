@@ -124,9 +124,12 @@ detail adapters may adopt, not a schema interchange depends on.
 ### Feasibility before freezing the contract
 
 Read-only feasibility spikes against representative Godot, Unity, and Unreal
-projects precede freezing the adapter contract (PEX-001.2 onward). Spike
-evidence identifies required adapter capabilities and engine-version risks;
-the contract is not finalized on assumptions.
+projects precede accepting this ADR and freezing the adapter contract. For each
+engine, the evidence records the inspected engine and project versions, source
+fixture provenance, project/scene/asset/reference formats encountered, parser
+and licensing constraints, required adapter capabilities, and known fidelity or
+version risks. Until all three evidence records are reviewed, this ADR remains
+`Proposed`, the normative contract is not frozen, and #2308 must remain open.
 
 ## Consequences
 

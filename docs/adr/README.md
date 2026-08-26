@@ -17,6 +17,8 @@ to the replacement.
 | [003](003-artifact-identity.md)       | Artifact Identity                    | accepted | 2026-05-25 |
 | [004](004-cli-core-gui-boundary.md)   | CLI, Core, and GUI Boundary          | accepted | 2026-05-25 |
 | [005](005-submodule-compatibility.md) | Submodule Compatibility Constraints  | accepted | 2026-05-25 |
+| [006](006-lua-5-4-gameplay-runtime.md) | Lua 5.4 Gameplay Runtime             | accepted | 2026-08-02 |
+| [007](007-cross-engine-project-interchange.md) | Cross-Engine Project Interchange | proposed | 2026-08-26 |
 
 ## Conventions
 
