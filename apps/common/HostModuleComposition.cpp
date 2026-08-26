@@ -2,6 +2,8 @@
 
 #include "Horo/Foundation/ErrorCode.h"
 
+#include <algorithm>
+#include <array>
 #include <initializer_list>
 #include <string>
 #include <string_view>
@@ -10,6 +12,12 @@
 namespace Horo::Application::Internal {
     namespace {
         constexpr ModuleContractVersion kContractVersion{1, 0, 0};
+
+        /** @brief Explicit backend identities supported by host module composition. */
+        constexpr std::array<std::pair<std::string_view, HostRenderer>, 2> kHostRenderers{{
+            {"opengl", HostRenderer::OpenGL},
+            {"metal", HostRenderer::Metal},
+        }};
 
         /**
          * @brief Builds inert metadata for one module and its required dependencies.
@@ -78,11 +86,10 @@ namespace Horo::Application::Internal {
 
     /** @copydoc HostRendererFromBackendId */
     Result<HostRenderer> HostRendererFromBackendId(const std::string_view backendId) {
-        if (backendId == "opengl")
-            return Result<HostRenderer>::Success(HostRenderer::OpenGL);
-        if (backendId == "metal")
-            return Result<HostRenderer>::Success(HostRenderer::Metal);
-        return InvalidSelection<HostRenderer>("Unsupported interactive renderer backend identity: " + std::string{backendId});
+        const auto selected = std::ranges::find(kHostRenderers, backendId, &std::pair<std::string_view, HostRenderer>::first);
+        if (selected == kHostRenderers.end())
+            return InvalidSelection<HostRenderer>("Unsupported interactive renderer backend identity: " + std::string{backendId});
+        return Result<HostRenderer>::Success(selected->second);
     }
 
     /** @copydoc DescribeHostModules */
