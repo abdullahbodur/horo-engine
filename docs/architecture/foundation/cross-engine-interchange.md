@@ -146,9 +146,12 @@ Foreign project files are untrusted input:
   a budget aborts parsing with a structured error.
 - Native-code parsers for third-party formats live only inside their owning
   adapter target and are never exposed through public headers.
-- Where feasible, parsing of hostile-input-prone formats happens in an
-  isolated child process; the parent treats a parser crash as a failed probe
-  with diagnostics, not a host fault.
+- Process isolation is **mandatory** for parsers that are not memory-safe by
+  construction: native/third-party parsers, and any format whose parser reads
+  untrusted length, offset, or count fields (binary formats in particular).
+  In-process parsing is permitted only for bounded pure-data text formats
+  validated against a strict schema before use. The parent treats an isolated
+  parser crash as a failed probe with diagnostics, not a host fault.
 - No interchange step executes embedded logic from the source project:
   scripts, shaders, and plugins are data to be classified, never run.
 - Paths extracted from foreign projects are treated as hostile: normalized,
@@ -207,6 +210,9 @@ staging scratch space is reclaimed.
 - Trust-boundary tests: truncated inputs, depth bombs, path escapes,
   non-ASCII/space paths, duplicate keys, oversized entries, version-skewed
   bundles, unknown-future bundle versions.
+- Parser-budget enforcement tests: each declared budget (input size, entity
+  count, nesting depth, decompression ratio, wall-clock time) is proven to
+  abort with a structured error rather than grow unbounded.
 - Publication tests: cancellation at every phase, injected publish failure,
   process-termination recovery, and idempotent retry.
 - Host-parity tests: the same operation via editor GUI driver, CLI, and MCP

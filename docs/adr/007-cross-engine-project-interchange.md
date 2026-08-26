@@ -109,8 +109,9 @@ readers can identify what they cannot represent.
 ### Parser trust boundaries
 
 Foreign parsers run with bounded resources (input size, node count, depth,
-time) and process isolation expectations defined in the normative document.
-A parser failure yields a structured error and a failed preflight — never a
+time). Process isolation is mandatory for parsers that are not memory-safe by
+construction; the normative document defines the exact criteria. A parser
+failure yields a structured error and a failed preflight — never a
 destination mutation.
 
 ### glTF reuse
