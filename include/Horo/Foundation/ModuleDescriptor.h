@@ -96,13 +96,17 @@ namespace Horo {
     /** @brief Typed activation callback invoked later by an application composition root. */
     using ModuleActivateCallback = Result<void> (*)(ModuleActivationContext &context) noexcept;
 
+    /** @brief Typed drainage callback invoked after cancellation and callback admission closure. */
+    using ModuleDrainCallback = void (*)(ModuleActivationContext &context) noexcept;
+
     /** @brief Typed deactivation callback invoked later by an application composition root. */
     using ModuleDeactivateCallback = void (*)(ModuleActivationContext &context) noexcept;
 
     /** @brief Optional lifecycle entry points named by an inert module descriptor. */
     struct ModuleLifecycleCallbacks {
         ModuleActivateCallback activate{};     /**< Activation entry point; never called during validation. */
-        ModuleDeactivateCallback deactivate{}; /**< Matching deactivation entry point. */
+        ModuleDrainCallback drain{};           /**< Optional owned-work drain after cancellation is requested. */
+        ModuleDeactivateCallback deactivate{}; /**< Matching final resource-release entry point. */
     };
 
     /** @brief Complete inert metadata used to validate one built-in module before composition. */

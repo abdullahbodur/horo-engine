@@ -21,6 +21,26 @@ namespace {
         ++g_deactivateCalls;
     }
 
+    void Drain(ModuleActivationContext &) noexcept {}
+
+    template <typename T> void VerifyComparisonOperators(const T &a, const T &aCopy, const T &b) {
+        REQUIRE(a == aCopy);
+        REQUIRE(a != b);
+        REQUIRE(a < b);
+        REQUIRE(b > a);
+        REQUIRE(a <= aCopy);
+        REQUIRE(a <= b);
+        REQUIRE(b >= a);
+    }
+
+    void ExpectInvalidLifecycle(const ModuleLifecycleCallbacks &callbacks) {
+        ModuleDescriptor module = MakeModule("horo.runtime");
+        module.lifecycle = callbacks;
+        const auto result = ValidateModuleGraph(std::array{module});
+        REQUIRE(result.HasError());
+        REQUIRE(result.ErrorValue().code.Value() == "foundation.module.invalid_descriptor");
+    }
+
     TEST_CASE("Empty module descriptor set validates successfully", "[unit][foundation][modules]") {
         const std::span<const ModuleDescriptor> emptyDescriptors{};
         const auto result = ValidateModuleGraph(emptyDescriptors);
@@ -30,29 +50,11 @@ namespace {
 
     TEST_CASE("Module identifier comparison operators", "[unit][foundation][modules]") {
         SECTION("ModuleId comparisons") {
-            const ModuleId a{"horo.a"};
-            const ModuleId aCopy{"horo.a"};
-            const ModuleId b{"horo.b"};
-            REQUIRE(a == aCopy);
-            REQUIRE(a != b);
-            REQUIRE(a < b);
-            REQUIRE(b > a);
-            REQUIRE(a <= aCopy);
-            REQUIRE(a <= b);
-            REQUIRE(b >= a);
+            VerifyComparisonOperators(ModuleId{"horo.a"}, ModuleId{"horo.a"}, ModuleId{"horo.b"});
         }
 
         SECTION("ModuleCapabilityId comparisons") {
-            const ModuleCapabilityId a{"horo.cap.a"};
-            const ModuleCapabilityId aCopy{"horo.cap.a"};
-            const ModuleCapabilityId b{"horo.cap.b"};
-            REQUIRE(a == aCopy);
-            REQUIRE(a != b);
-            REQUIRE(a < b);
-            REQUIRE(b > a);
-            REQUIRE(a <= aCopy);
-            REQUIRE(a <= b);
-            REQUIRE(b >= a);
+            VerifyComparisonOperators(ModuleCapabilityId{"horo.cap.a"}, ModuleCapabilityId{"horo.cap.a"}, ModuleCapabilityId{"horo.cap.b"});
         }
     }
 
@@ -75,25 +77,22 @@ namespace {
 
     TEST_CASE("Module lifecycle callbacks require pairing", "[unit][foundation][modules]") {
         SECTION("only activate provided") {
-            ModuleDescriptor module = MakeModule("horo.runtime");
-            module.lifecycle.activate = &Activate;
-            const auto result = ValidateModuleGraph(std::array{module});
-            REQUIRE(result.HasError());
-            REQUIRE(result.ErrorValue().code.Value() == "foundation.module.invalid_descriptor");
+            ExpectInvalidLifecycle(ModuleLifecycleCallbacks{.activate = &Activate});
         }
 
         SECTION("only deactivate provided") {
-            ModuleDescriptor module = MakeModule("horo.runtime");
-            module.lifecycle.deactivate = &Deactivate;
-            const auto result = ValidateModuleGraph(std::array{module});
-            REQUIRE(result.HasError());
-            REQUIRE(result.ErrorValue().code.Value() == "foundation.module.invalid_descriptor");
+            ExpectInvalidLifecycle(ModuleLifecycleCallbacks{.deactivate = &Deactivate});
+        }
+
+        SECTION("drain without an activation lifetime") {
+            ExpectInvalidLifecycle(ModuleLifecycleCallbacks{.drain = &Drain});
         }
 
         SECTION("both or neither callbacks provided") {
             ModuleDescriptor module = MakeModule("horo.runtime");
             REQUIRE(ValidateModuleGraph(std::array{module}).HasValue());
             module.lifecycle.activate = &Activate;
+            module.lifecycle.drain = &Drain;
             module.lifecycle.deactivate = &Deactivate;
             REQUIRE(ValidateModuleGraph(std::array{module}).HasValue());
         }
@@ -127,26 +126,27 @@ namespace {
     }
 
     TEST_CASE("Module descriptor validates capability declarations", "[unit][foundation][modules]") {
-        SECTION("non-canonical or duplicate provided capability") {
+        auto checkInvalidCapabilities = [](auto setCaps) {
             ModuleDescriptor nonCanonical = MakeModule("horo.runtime");
-            nonCanonical.providedCapabilities.push_back(ModuleCapabilityId{"Horo.Capability"});
+            setCaps(nonCanonical, std::vector<ModuleCapabilityId>{ModuleCapabilityId{"Horo.Capability"}});
             REQUIRE(ValidateModuleGraph(std::array{nonCanonical}).HasError());
 
             ModuleDescriptor duplicate = MakeModule("horo.runtime");
-            duplicate.providedCapabilities.push_back(ModuleCapabilityId{"horo.capability"});
-            duplicate.providedCapabilities.push_back(ModuleCapabilityId{"horo.capability"});
+            setCaps(duplicate,
+                    std::vector<ModuleCapabilityId>{ModuleCapabilityId{"horo.capability"}, ModuleCapabilityId{"horo.capability"}});
             REQUIRE(ValidateModuleGraph(std::array{duplicate}).HasError());
+        };
+
+        SECTION("non-canonical or duplicate provided capability") {
+            checkInvalidCapabilities([](ModuleDescriptor &m, std::vector<ModuleCapabilityId> caps) {
+                m.providedCapabilities = std::move(caps);
+            });
         }
 
         SECTION("non-canonical or duplicate required capability") {
-            ModuleDescriptor nonCanonical = MakeModule("horo.runtime");
-            nonCanonical.requiredCapabilities.push_back(ModuleCapabilityId{"Horo.Capability"});
-            REQUIRE(ValidateModuleGraph(std::array{nonCanonical}).HasError());
-
-            ModuleDescriptor duplicate = MakeModule("horo.runtime");
-            duplicate.requiredCapabilities.push_back(ModuleCapabilityId{"horo.capability"});
-            duplicate.requiredCapabilities.push_back(ModuleCapabilityId{"horo.capability"});
-            REQUIRE(ValidateModuleGraph(std::array{duplicate}).HasError());
+            checkInvalidCapabilities([](ModuleDescriptor &m, std::vector<ModuleCapabilityId> caps) {
+                m.requiredCapabilities = std::move(caps);
+            });
         }
 
         SECTION("requiring a provided capability rejection") {

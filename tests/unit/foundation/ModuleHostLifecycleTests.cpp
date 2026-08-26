@@ -1,0 +1,178 @@
+#include "Horo/Foundation/ModuleHost.h"
+#include "ModuleDescriptorTestUtils.h"
+
+#include <atomic>
+#include <catch2/catch_test_macros.hpp>
+#include <optional>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
+
+namespace {
+    using namespace Horo;
+    using Horo::Test::MakeModule;
+
+    std::vector<std::string> g_events;
+    std::optional<ModuleCallbackLease> g_callbackLease;
+    std::atomic<bool> g_callbackObservedCancellation{false};
+    std::atomic<bool> g_callbackFinished{false};
+    const IDependencyBindings *g_callbackObservedBindings = nullptr;
+    bool g_drainObservedClosedAdmission = false;
+    bool g_deactivateObservedDrain = false;
+
+    void ResetLifecycleLog() {
+        g_events.clear();
+        g_callbackLease.reset();
+        g_callbackObservedCancellation.store(false);
+        g_callbackFinished.store(false);
+        g_callbackObservedBindings = nullptr;
+        g_drainObservedClosedAdmission = false;
+        g_deactivateObservedDrain = false;
+    }
+
+    Result<void> OrderedActivate(ModuleActivationContext &context) noexcept {
+        g_events.push_back("activate:" + context.Module().value);
+        return Result<void>::Success();
+    }
+
+    [[nodiscard]] const char *CancellationLabel(const ModuleActivationContext &context) noexcept {
+        return context.Cancellation().IsCancellationRequested() ? "cancelled" : "not-cancelled";
+    }
+
+    [[nodiscard]] const char *AdmissionLabel(const ModuleActivationContext &context) noexcept {
+        return context.AcquireCallbackLease().has_value() ? "admission-open" : "admission-closed";
+    }
+
+    void OrderedDrain(ModuleActivationContext &context) noexcept {
+        g_events.push_back("drain:" + context.Module().value);
+        g_events.push_back(CancellationLabel(context));
+        g_events.push_back(AdmissionLabel(context));
+    }
+
+    void OrderedDeactivate(ModuleActivationContext &context) noexcept {
+        g_events.push_back("deactivate:" + context.Module().value);
+    }
+
+    Result<void> LeaseActivate(ModuleActivationContext &context) noexcept {
+        g_callbackLease = context.AcquireCallbackLease();
+        if (!g_callbackLease.has_value())
+            return Result<void>::Failure(Error{});
+        return Result<void>::Success();
+    }
+
+    void LeaseDrain(ModuleActivationContext &context) noexcept {
+        g_drainObservedClosedAdmission = !context.AcquireCallbackLease().has_value();
+        g_deactivateObservedDrain = g_callbackFinished.load();
+    }
+
+    void LeaseDeactivate(ModuleActivationContext &) noexcept {
+        if (!g_callbackFinished.load())
+            g_deactivateObservedDrain = false;
+    }
+
+    [[nodiscard]] ModuleDescriptor MakeLifecycleModule(std::string id) {
+        ModuleDescriptor descriptor = MakeModule(std::move(id));
+        descriptor.lifecycle =
+            ModuleLifecycleCallbacks{.activate = &OrderedActivate, .drain = &OrderedDrain, .deactivate = &OrderedDeactivate};
+        return descriptor;
+    }
+}  // namespace
+
+TEST_CASE("Module shutdown requests cancellation before dependency-reverse drainage", "[unit][foundation][modules][lifecycle]") {
+    ResetLifecycleLog();
+    ModuleHost host;
+
+    ModuleDescriptor dependant = MakeLifecycleModule("horo.dependant");
+    dependant.dependencies.push_back(ModuleDependency{.module = ModuleId{"horo.provider"}});
+    REQUIRE(host.Register(dependant).HasValue());
+    REQUIRE(host.Register(MakeLifecycleModule("horo.provider")).HasValue());
+    REQUIRE(host.ActivateRegistered(nullptr).HasValue());
+
+    host.DeactivateAll();
+
+    REQUIRE(g_events == std::vector<std::string>{"activate:horo.provider", "activate:horo.dependant", "drain:horo.dependant", "cancelled",
+                                                 "admission-closed", "deactivate:horo.dependant", "drain:horo.provider", "cancelled",
+                                                 "admission-closed", "deactivate:horo.provider"});
+    REQUIRE(host.StateOf(ModuleId{"horo.dependant"}) == ModuleLifecycleState::Stopped);
+    REQUIRE(host.StateOf(ModuleId{"horo.provider"}) == ModuleLifecycleState::Stopped);
+
+    const std::size_t eventCount = g_events.size();
+    host.DeactivateAll();
+    REQUIRE(g_events.size() == eventCount);
+}
+
+TEST_CASE("Module shutdown drains admitted callbacks before releasing borrowed bindings", "[unit][foundation][modules][lifecycle]") {
+    ResetLifecycleLog();
+    ModuleHost host;
+    ModuleDescriptor descriptor = MakeModule("horo.async");
+    descriptor.lifecycle = ModuleLifecycleCallbacks{.activate = &LeaseActivate, .drain = &LeaseDrain, .deactivate = &LeaseDeactivate};
+    REQUIRE(host.Register(descriptor).HasValue());
+
+    struct TestApprovedBindings final : IDependencyBindings {
+        int value{42};
+    };
+
+    const TestApprovedBindings approvedBinding{};
+    REQUIRE(host.ActivateRegistered(&approvedBinding).HasValue());
+    REQUIRE(g_callbackLease.has_value());
+
+    std::thread callback([lease = std::move(*g_callbackLease)]() mutable {
+        while (!lease.Cancellation().IsCancellationRequested())
+            std::this_thread::yield();
+        g_callbackObservedBindings = lease.Bindings();
+        g_callbackObservedCancellation.store(true);
+        g_callbackFinished.store(true);
+    });
+    g_callbackLease.reset();
+
+    host.DeactivateAll();
+    callback.join();
+
+    REQUIRE(g_callbackObservedCancellation.load());
+    REQUIRE(g_callbackObservedBindings == &approvedBinding);
+    REQUIRE(g_callbackFinished.load());
+    REQUIRE(g_drainObservedClosedAdmission);
+    REQUIRE(g_deactivateObservedDrain);
+    REQUIRE(host.StateOf(ModuleId{"horo.async"}) == ModuleLifecycleState::Stopped);
+}
+
+TEST_CASE("StateOf returns nullopt for unknown module identity", "[unit][foundation][modules][lifecycle]") {
+    ModuleHost host;
+    REQUIRE_FALSE(host.StateOf(ModuleId{"horo.unknown"}).has_value());
+}
+
+TEST_CASE("ModuleActivationContext rejects attaching a null instance", "[unit][foundation][modules][lifecycle]") {
+    ModuleActivationContext context(ModuleId{"horo.test"}, nullptr);
+    REQUIRE(context.AttachInstance(nullptr).HasError());
+    REQUIRE(context.Module() == ModuleId{"horo.test"});
+    REQUIRE(context.Bindings() == nullptr);
+    REQUIRE_FALSE(context.Cancellation().IsCancellationRequested());
+}
+
+TEST_CASE("ModuleCallbackLease supports move semantics and explicit release", "[unit][foundation][modules][lifecycle]") {
+    ModuleActivationContext context(ModuleId{"horo.lease_test"}, nullptr);
+    std::optional<ModuleCallbackLease> lease1 = context.AcquireCallbackLease();
+    REQUIRE(lease1.has_value());
+    REQUIRE(lease1->Bindings() == nullptr);
+    REQUIRE_FALSE(lease1->Cancellation().IsCancellationRequested());
+
+    // Move constructor
+    ModuleCallbackLease lease2(std::move(*lease1));
+    REQUIRE(lease2.Bindings() == nullptr);
+
+    // Move assignment
+    ModuleCallbackLease lease3 = std::move(lease2);
+    REQUIRE(lease3.Bindings() == nullptr);
+
+// Self move-assignment is a safe no-op
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wself-move"
+#endif
+    lease3 = std::move(lease3);
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+    REQUIRE(lease3.Bindings() == nullptr);
+}

@@ -3,64 +3,66 @@
 #include "foundation/FoundationErrors.h"
 
 #include <algorithm>
+#include <format>
 #include <memory>
 #include <string>
 #include <utility>
 
 namespace Horo {
     namespace {
-        /** @brief Creates a typed composition failure from a stable error descriptor. */
-        template <typename ValueT> [[nodiscard]] Result<ValueT> Fail(const ErrorCodeDescriptor &descriptor, std::string message) {
-            return Result<ValueT>::Failure(MakeError(descriptor, std::move(message)));
+        /** @brief Returns a typed composition failure from a stable error descriptor. */
+        template <typename T> [[nodiscard]] Result<T> Fail(const ErrorCodeDescriptor &descriptor, std::string message) {
+            return Result<T>::Failure(MakeError(descriptor, std::move(message)));
         }
 
-        /** @brief Deactivates one active entry and releases its activation context. */
-        void DeactivateOne(ActiveModule &active) noexcept {
-            if (active.deactivate != nullptr && active.context != nullptr)
-                active.deactivate(*active.context);
-            active.context.reset();
-        }
-
-        /** @brief Rolls back every activation started after @p base in reverse order. */
-        void RollBackTo(std::vector<ActiveModule> &activeModules, const std::size_t base) noexcept {
-            while (activeModules.size() > base) {
-                DeactivateOne(activeModules.back());
-                activeModules.pop_back();
+        /** @brief Maps validated initialization order back to registered descriptor pointers. */
+        [[nodiscard]] std::vector<const ModuleDescriptor *> OrderRegisteredDescriptors(const std::vector<ModuleDescriptor> &registered,
+                                                                                       const std::vector<ModuleId> &order) {
+            std::vector<const ModuleDescriptor *> result;
+            result.reserve(order.size());
+            for (const ModuleId &id : order) {
+                const auto found = std::ranges::find_if(registered, [&id](const ModuleDescriptor &d) {
+                    return d.id == id;
+                });
+                result.push_back(std::to_address(found));
             }
+            return result;
         }
     }  // namespace
+
+    ModuleHost::~ModuleHost() {
+        DeactivateAll();
+    }
 
     /** @copydoc ModuleHost::ActivateRegistered */
     Result<std::size_t> ModuleHost::ActivateRegistered(const ModuleActivationContext::DependencyBindings bindings) {
         // Graph validation runs before any callback: a rejected set leaves the host untouched.
-        const Result<ValidatedModuleGraph> validated = ValidateModuleGraph(m_registered);
+        auto validated = ValidateModuleGraph(m_registered);
         if (validated.HasError())
             return Result<std::size_t>::Failure(validated.ErrorValue());
 
-        // Index descriptors by identity so activation follows the validated ID order.
-        std::vector<const ModuleDescriptor *> ordered;
-        ordered.reserve(validated.Value().initializationOrder.size());
-        for (const ModuleId &id : validated.Value().initializationOrder) {
-            const auto found = std::ranges::find_if(m_registered, [&id](const ModuleDescriptor &descriptor) {
-                return descriptor.id == id;
-            });
-            ordered.push_back(std::to_address(found));
-        }
+        const std::vector<const ModuleDescriptor *> ordered =
+            OrderRegisteredDescriptors(m_registered, validated.Value().initializationOrder);
 
-        // Roll back only modules started by this call; a prior successful activation
-        // may still own the front of the active list (incremental compose-then-activate).
+        // Roll back only modules started by this call; prior activations own the front of the list.
         const std::size_t base = m_active.size();
+        m_active.reserve(base + ordered.size());
         for (const ModuleDescriptor *descriptor : ordered) {
             auto context = std::make_unique<ModuleActivationContext>(descriptor->id, bindings);
+            Transition(descriptor->id, ModuleLifecycleState::Activating);
             if (descriptor->lifecycle.activate != nullptr) {
-                if (const Result<void> activated = descriptor->lifecycle.activate(*context); activated.HasError()) {
-                    RollBackTo(m_active, base);
+                if (const Result<void> r = descriptor->lifecycle.activate(*context); r.HasError()) {
+                    const std::string failedId = descriptor->id.value;
+                    RollbackActivation(descriptor->id, std::move(context), base);
                     return Fail<std::size_t>(ModuleDescriptorErrors::InvalidDescriptor,
-                                             "Activation of module '" + descriptor->id.value + "' failed.");
+                                             std::format("Activation of module '{}' failed.", failedId));
                 }
             }
-            ActiveModule active{.id = descriptor->id, .deactivate = descriptor->lifecycle.deactivate, .context = std::move(context)};
-            m_active.push_back(std::move(active));
+            m_active.push_back(ActiveModule{.id = descriptor->id,
+                                            .drain = descriptor->lifecycle.drain,
+                                            .deactivate = descriptor->lifecycle.deactivate,
+                                            .context = std::move(context)});
+            Transition(descriptor->id, ModuleLifecycleState::Active);
         }
         m_registered.clear();
         return Result<std::size_t>::Success(m_active.size() - base);
@@ -68,8 +70,9 @@ namespace Horo {
 
     /** @copydoc ModuleHost::DeactivateAll */
     void ModuleHost::DeactivateAll() noexcept {
-        RollBackTo(m_active, 0);
-        m_registered.clear();
+        RequestCancellationFrom(0);
+        DeactivateFrom(0);
+        StopUnactivatedRegistered();
     }
 
     /** @copydoc ModuleHost::HasActiveModules */
