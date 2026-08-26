@@ -181,7 +181,11 @@ Descriptor construction and CPU preparation may occur on workers. Registry
 mutation, backend realization, publication, replacement, and destruction occur
 serially on the frontend's host-declared render-capable thread. Queued work owns
 or copies every value and byte range needed until completion; it does not capture
-shorter-lived references.
+shorter-lived references. Serialization covers the short registry state
+transitions and graphics-affine native calls, not decoding, mesh preparation, or
+other CPU-heavy work. Producers submit bounded value requests, and the frontend
+batches or drains them within its declared upload budget instead of permitting
+concurrent registry mutation.
 
 ### Asset and residency identity
 
