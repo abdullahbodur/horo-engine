@@ -33,7 +33,7 @@ Snapshot:
 
 ## Current Production Targets
 
-The current combined macOS editor composition contains 30 first-party library
+The current combined macOS editor composition contains 31 first-party library
 targets and two executable targets. `HoroEngine::*` names below are CMake aliases;
 the unqualified names are the real targets that CMake modifies and builds.
 
@@ -91,6 +91,7 @@ include directories do not enforce those ownership boundaries, as documented in
 | `HoroEditorViewportOpenGL` (`HoroEngine::EditorViewportOpenGL`) | GUI and OpenGL | Owns the OpenGL ImGui/viewport/presentation bridge. Backend, SDL, GLAD, and ImGui adapter details are private, but SDL is currently a public link dependency. | EditorViewportScene, RenderOpenGL (public) |
 | `HoroEditorViewportMetal` (`HoroEngine::EditorViewportMetal`) | Apple, GUI, and Metal | Owns the Metal ImGui/viewport/presentation bridge. Objective-C++ and ImGui adapter details are private, but SDL is currently a public link dependency. | EditorViewportScene, RenderMetal (public) |
 | `HoroGui` (`HoroEngine::Gui`) | Editor GUI only | Owns ImGui screens, modals, panels, workspace controllers, and design-system implementation. ImGui is private, while all of `include/` and `src/` are exported as public include roots. | EditorServices, Foundation (public); EditorRenderExtraction and Extensions (private) |
+| `HoroHostModuleComposition` | Always | Non-installed application-host composition contract under `apps/common/`. It describes and activates the real linked module profiles for supported hosts without exposing an SDK header. | Foundation (public) |
 | `horo-engine` | Always | Terminal/headless composition root. It currently composes only Application and does not yet compose CLI command or MCP targets. | Application (private) |
 | `HoroEditor` | Editor GUI only | Graphical composition root. It selects GUI, editor services/extraction, runtime, extensions, platform, input, migrations, frontend, and enabled concrete viewport backends. | Composition-only private links |
 
@@ -150,6 +151,18 @@ owner and removal ticket; CMake rejects an exception once its edge becomes stale
 The normative policy and current exception inventory live in
 [System Design](./system-design.md#automated-target-policy).
 
+### ARC-001.5 host composition update
+
+The two supported executable roots now register and activate explicit descriptor
+graphs through the shared, non-installed `HoroHostModuleComposition` target. The
+headless profile contains only Foundation, Application, and the CLI host. The
+editor profile mirrors the real linked first-party module closure and selects
+exactly one concrete renderer and viewport adapter before window or presentation
+creation. Optional OpenTelemetry participation is derived from the same build
+selection that controls the executable link edge. Focused host-composition tests
+validate deterministic graph ordering, headless exclusion, concrete-backend
+selection, and rejection before activation of impossible host profiles.
+
 ## Documented Target Status
 
 This table covers every canonical target named by System Design. Build System
@@ -204,7 +217,7 @@ five are implemented. Its `HoroEngine::TestSdk`, `EditorSourceEditor`, and
 
 Current but non-canonical targets are Transitional: OpenTelemetry,
 GameplayRuntime, GameplayModuleHost, GameplayLua, GameplayBuild, Input,
-InputSdl, Extensions, and the renderer registry. They represent useful real
+InputSdl, Extensions, HostModuleComposition, and the renderer registry. They represent useful real
 boundaries, but the canonical target lists must either adopt them or assign
 their responsibilities to another documented target.
 

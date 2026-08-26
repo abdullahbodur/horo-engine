@@ -39,6 +39,7 @@
 #include "Horo/Runtime/Input.h"
 #include "Horo/Runtime/Render/RenderFrontend.h"
 #include "Horo/Runtime/RuntimeHost.h"
+#include "HostModuleComposition.h"
 #include "editor/EditorServiceErrors.h"
 #include "editor/document/EditorViewportSceneExtractor.h"
 #include "editor/input/EditorInputActions.h"
@@ -1120,6 +1121,23 @@ namespace Horo::Editor {
         opts.rendererBackend = moduleInfo->id.Value();
         const RendererAvailabilitySnapshot rendererAvailability = BuildRendererAvailabilitySnapshot(opts.rendererBackend);
 
+        const Application::Internal::HostRenderer selectedRenderer =
+            opts.rendererBackend == "opengl" ? Application::Internal::HostRenderer::OpenGL : Application::Internal::HostRenderer::Metal;
+        auto composedModules = Application::Internal::ComposeHostModules({.host = Application::Internal::HostKind::Editor,
+                                                                          .renderer = selectedRenderer,
+#if defined(HORO_HAS_OPENTELEMETRY)
+                                                                          .includeOpenTelemetry = true
+#else
+                                                                          .includeOpenTelemetry = false
+#endif
+        });
+        if (composedModules.HasError()) {
+            LOG_CRITICAL("editor.startup", "Module composition failed: %s", composedModules.ErrorValue().message.c_str());
+            Log::Logger::Shutdown();
+            return 1;
+        }
+        std::unique_ptr<ModuleHost> moduleHost = std::move(composedModules).Value();
+
         SDL_Window *w = nullptr;
         if (!InitializeSdlAndCreateWindow(w, moduleInfo->windowRequirements))
             return 1;
@@ -1239,6 +1257,7 @@ namespace Horo::Editor {
             return RelaunchEditorForProject(argv[0], *rendererRestart);
         }
 
+        moduleHost->DeactivateAll();
         Log::Logger::Shutdown();
         return 0;
     }
