@@ -1,10 +1,7 @@
-#include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Foundation/ModuleHost.h"
 #include "foundation/FoundationErrors.h"
 
-#include <chrono>
 #include <condition_variable>
-#include <format>
 #include <mutex>
 #include <string>
 #include <utility>
@@ -118,13 +115,8 @@ namespace Horo {
     /** @copydoc ModuleActivationContext::DrainCallbacks */
     void ModuleActivationContext::DrainCallbacks() const noexcept {
         std::unique_lock lock(m_callbackGate->mutex);
-        constexpr auto kDrainWarningInterval = std::chrono::seconds(5);
-        while (!m_callbackGate->drained.wait_for(lock, kDrainWarningInterval, [this] {
+        m_callbackGate->drained.wait(lock, [this] {
             return m_callbackGate->activeCallbacks == 0;
-        })) {
-            Log::Logger::Write("foundation.modules", Log::Level::Warn,
-                               std::format("Module '{}' is still draining {} active callback(s).", m_module.value,
-                                           m_callbackGate->activeCallbacks));
-        }
+        });
     }
 }  // namespace Horo

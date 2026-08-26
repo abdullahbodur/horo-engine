@@ -148,9 +148,8 @@ namespace Horo {
          * @brief Blocks until all admitted callback leases are released.
          *
          * Module callbacks are expected to cooperate by checking CancellationToken and
-         * releasing leases promptly upon observing cancellation. Drainage logs periodic
-         * warnings while a callback remains outstanding, but never releases activation-scoped
-         * dependencies while a lease can still borrow them.
+         * releasing leases promptly upon observing cancellation. Drainage never releases
+         * activation-scoped dependencies while a lease can still borrow them.
          */
         void DrainCallbacks() const noexcept;
 
