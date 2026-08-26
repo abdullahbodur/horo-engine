@@ -1,6 +1,7 @@
 #include "Horo/Application/HostObservability.h"
 #include "Horo/Foundation/Logging/Logger.h"
 #include "Horo/Foundation/Telemetry/Telemetry.h"
+#include "HostModuleComposition.h"
 
 #include <filesystem>
 #include <iostream>
@@ -44,6 +45,13 @@ int main(const int argc, char **argv) {
         return 0;
     }
 
+    auto composedModules = Horo::Application::Internal::ComposeHostModules({.host = Horo::Application::Internal::HostKind::Headless});
+    if (composedModules.HasError()) {
+        std::cerr << "horo-engine: module composition failed: " << composedModules.ErrorValue().message << '\n';
+        return 2;
+    }
+    std::unique_ptr<Horo::ModuleHost> moduleHost = std::move(composedModules).Value();
+
     Horo::Application::HostObservabilityConfiguration configuration{.logging = {.logDirectory = "~/.horo/logs",
                                                                                 .baseName = "horo-engine",
                                                                                 .hostName = "horo-engine",
@@ -78,5 +86,6 @@ int main(const int argc, char **argv) {
         }
         std::cout << result.Value().outputPath.string() << '\n';  // NOSONAR(cpp:S5145)
     }
+    moduleHost->DeactivateAll();
     return 0;
 }
