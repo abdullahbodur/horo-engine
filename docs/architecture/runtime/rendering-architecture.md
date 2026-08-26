@@ -537,25 +537,32 @@ manually order backend commands around hidden global state.
 
 ## Resource Model
 
-Supported resource classes include:
+The canonical identity, descriptor, validation, and lifetime policy is
+[ADR-027: Renderer Resource Identity and Descriptors](../../adr/027-renderer-resource-identity-and-descriptors.md).
+Supported resident resource classes are buffers, textures and texture views,
+samplers, shader modules and pipelines, render targets, and meshes. Material
+bindings are typed render data over those resources; backend framebuffer and
+binding-allocation objects remain private.
 
-- buffers
-- textures
-- samplers
-- shaders and pipelines
-- framebuffers and render targets
-- meshes and material bindings
-
-Creation is described by immutable descriptors. Public handles are typed and
-generation checked.
+Creation is described by immutable Horo-owned descriptors. Every public resource
+class has a distinct typed handle whose identity contains the creating frontend
+owner, registry slot, and non-wrapping generation. Handles are process-local
+references rather than ownership, native values, or persistent identities.
 
 ```cpp
 Result<TextureHandle> CreateTexture(const TextureDescriptor&, InitialData);
 Result<void> DestroyTexture(TextureHandle);
 ```
 
-Asset IDs and render handles remain distinct. The asset system owns logical
-asset identity; the renderer owns resident GPU representation.
+The frontend validates structure, owner, generation, registry state, referenced
+resources, and reported capabilities before native execution. Release prevents
+new use immediately, while backend-native destruction is deferred until prior
+GPU work completes on the correct graphics-affine thread.
+
+Asset IDs and render handles remain distinct. The asset system owns persistent
+logical asset identity; the renderer owns one resident realization. Reload,
+resize, replacement, and backend recreation publish new generations instead of
+mutating an existing descriptor or preserving a process-local handle.
 
 ## Upload And Streaming
 
