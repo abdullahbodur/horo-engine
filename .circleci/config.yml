@@ -64,6 +64,7 @@ jobs:
               --root "$CIRCLE_WORKING_DIRECTORY" \
               --filter "$CIRCLE_WORKING_DIRECTORY/include" \
               --filter "$CIRCLE_WORKING_DIRECTORY/src" \
+              --filter "$CIRCLE_WORKING_DIRECTORY/apps/common" \
               --exclude-throw-branches \
               --exclude-unreachable-branches \
               --exclude-noncode-lines \

@@ -1,3 +1,12 @@
+add_library(HoroHostModuleComposition STATIC
+    common/HostModuleComposition.cpp
+)
+target_compile_features(HoroHostModuleComposition PUBLIC cxx_std_20)
+target_include_directories(HoroHostModuleComposition PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/common
+)
+target_link_libraries(HoroHostModuleComposition PUBLIC HoroEngine::Foundation)
+
 # The terminal/headless composition remains available without GUI or GPU targets.
 add_executable(horo-engine
     horo-engine/main.cpp
@@ -8,7 +17,7 @@ target_compile_definitions(horo-engine PRIVATE
     HORO_BUILD_CONFIGURATION="$<CONFIG>"
     HORO_SOURCE_REVISION="${HORO_SOURCE_REVISION}"
 )
-target_link_libraries(horo-engine PRIVATE HoroEngine::Application)
+target_link_libraries(horo-engine PRIVATE HoroEngine::Application HoroHostModuleComposition)
 
 # The graphical executable is an optional composition root. Foundation and
 # headless hosts must remain buildable when the GUI adapter is intentionally off.
@@ -69,6 +78,7 @@ if(HORO_BUILD_EDITOR_GUI)
             HoroEngine::Platform
             HoroEngine::ProjectMigrations
             HoroEngine::InputSdl
+            HoroHostModuleComposition
             HoroThirdParty::ImGui
     )
 
