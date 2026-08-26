@@ -10,6 +10,7 @@
 #include "Horo/Foundation/Result.h"
 
 #include <memory>
+#include <string_view>
 #include <vector>
 
 namespace Horo::Application::Internal {
@@ -32,6 +33,13 @@ namespace Horo::Application::Internal {
         HostRenderer renderer{HostRenderer::None}; /**< Editor renderer selected before presentation creation. */
         bool includeOpenTelemetry{false};          /**< Whether the optional OpenTelemetry module is linked. */
     };
+
+    /**
+     * @brief Maps a concrete renderer backend identity to the host composition renderer type.
+     * @param backendId Canonical backend identity resolved by the renderer module registry.
+     * @return The matching renderer type, or a typed error for an unsupported identity.
+     */
+    [[nodiscard]] Result<HostRenderer> HostRendererFromBackendId(std::string_view backendId);
 
     /**
      * @brief Builds inert descriptors for the real modules linked into a supported host.

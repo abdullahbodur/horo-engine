@@ -10,6 +10,20 @@ namespace {
 
 }  // namespace
 
+TEST_CASE("Renderer backend identities map explicitly to host renderer types", "[unit][application][modules]") {
+    const auto openGL = HostRendererFromBackendId("opengl");
+    REQUIRE(openGL.HasValue());
+    CHECK(openGL.Value() == HostRenderer::OpenGL);
+
+    const auto metal = HostRendererFromBackendId("metal");
+    REQUIRE(metal.HasValue());
+    CHECK(metal.Value() == HostRenderer::Metal);
+
+    const auto unsupported = HostRendererFromBackendId("future-renderer");
+    REQUIRE(unsupported.HasError());
+    CHECK(unsupported.ErrorValue().code.Value() == "application.host.invalid_module_selection");
+}
+
 TEST_CASE("Headless host composition activates only its linked module set", "[unit][application][modules]") {
     const HostModuleSelection selection{.host = HostKind::Headless};
     auto described = DescribeHostModules(selection);

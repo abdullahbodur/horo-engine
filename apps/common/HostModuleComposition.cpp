@@ -11,6 +11,12 @@ namespace Horo::Application::Internal {
     namespace {
         constexpr ModuleContractVersion kContractVersion{1, 0, 0};
 
+        /**
+         * @brief Builds inert metadata for one module and its required dependencies.
+         * @param id Canonical module identity.
+         * @param dependencies Canonical identities of required provider modules.
+         * @return Complete inert descriptor using the current internal contract version.
+         */
         [[nodiscard]] ModuleDescriptor Describe(std::string id, const std::initializer_list<std::string_view> dependencies = {}) {
             ModuleDescriptor descriptor{.id = ModuleId{std::move(id)}, .version = kContractVersion};
             descriptor.dependencies.reserve(dependencies.size());
@@ -21,6 +27,12 @@ namespace Horo::Application::Internal {
             return descriptor;
         }
 
+        /**
+         * @brief Creates a typed failure for an unsupported host composition selection.
+         * @tparam T Success value type expected by the caller.
+         * @param message Actionable explanation of the invalid selection.
+         * @return Failed result in the application host error domain.
+         */
         template <typename T> [[nodiscard]] Result<T> InvalidSelection(std::string message) {
             return Result<T>::Failure(Error{.code = ErrorCode{"application.host.invalid_module_selection"},
                                             .domain = ErrorDomainId{"horo.application.host"},
@@ -28,7 +40,10 @@ namespace Horo::Application::Internal {
                                             .message = std::move(message)});
         }
 
-        /** @brief Describes the renderer-independent modules linked into the editor host. */
+        /**
+         * @brief Describes the renderer-independent modules linked into the editor host.
+         * @return Inert descriptors for the editor's shared module closure.
+         */
         [[nodiscard]] std::vector<ModuleDescriptor> DescribeEditorCoreModules() {
             return {
                 Describe("horo.foundation"),
@@ -61,6 +76,15 @@ namespace Horo::Application::Internal {
         }
     }  // namespace
 
+    /** @copydoc HostRendererFromBackendId */
+    Result<HostRenderer> HostRendererFromBackendId(const std::string_view backendId) {
+        if (backendId == "opengl")
+            return Result<HostRenderer>::Success(HostRenderer::OpenGL);
+        if (backendId == "metal")
+            return Result<HostRenderer>::Success(HostRenderer::Metal);
+        return InvalidSelection<HostRenderer>("Unsupported interactive renderer backend identity: " + std::string{backendId});
+    }
+
     /** @copydoc DescribeHostModules */
     Result<std::vector<ModuleDescriptor>> DescribeHostModules(const HostModuleSelection &selection) {
         if (selection.host == HostKind::Headless) {
@@ -83,6 +107,7 @@ namespace Horo::Application::Internal {
 
         std::vector<ModuleDescriptor> modules = DescribeEditorCoreModules();
 
+        /** @brief Canonical module identities selected for one interactive renderer. */
         struct RendererModules {
             std::string_view renderer;
             std::string_view viewport;

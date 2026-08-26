@@ -1121,10 +1121,14 @@ namespace Horo::Editor {
         opts.rendererBackend = moduleInfo->id.Value();
         const RendererAvailabilitySnapshot rendererAvailability = BuildRendererAvailabilitySnapshot(opts.rendererBackend);
 
-        const Application::Internal::HostRenderer selectedRenderer =
-            opts.rendererBackend == "opengl" ? Application::Internal::HostRenderer::OpenGL : Application::Internal::HostRenderer::Metal;
+        auto selectedRenderer = Application::Internal::HostRendererFromBackendId(opts.rendererBackend);
+        if (selectedRenderer.HasError()) {
+            LOG_CRITICAL("editor.renderer", "%s", selectedRenderer.ErrorValue().message.c_str());
+            Log::Logger::Shutdown();
+            return 1;
+        }
         auto composedModules = Application::Internal::ComposeHostModules({.host = Application::Internal::HostKind::Editor,
-                                                                          .renderer = selectedRenderer,
+                                                                          .renderer = selectedRenderer.Value(),
 #if defined(HORO_HAS_OPENTELEMETRY)
                                                                           .includeOpenTelemetry = true
 #else
