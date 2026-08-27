@@ -52,7 +52,7 @@ Implementation audit (2026-08-27) found the baseline is structurally aligned but
 
 - Public fallible APIs use `Horo::Result<T>` (`Result<void>` as `Status`). The template is the foundation-owned alias for the normative `Expected<ValueT,Error>`; naming is ratified. Implementation detail (`std::variant` vs `std::expected`) is not public. `HasValue()`/`HasError()`/`Value()`/`ErrorValue()` are the branching contract — never `message` text.
 - `Result` is for invalid user/project input, missing files/assets/capabilities, unsupported operations, serialization/validation failures, recoverable platform/renderer failures, cancellation/timeout/exhaustion. Absence is `std::optional<T>`.
-- Validation that needs multiple findings returns `Error` with `vector<Diagnostic> diagnostics` and/or a dedicated validation result carrying `vector<Diagnostic>` — one `Result` still represents one operation. Callers branch on `Error.code`; presentation reads `diagnostics` deterministically ordered.
+- Validation that needs multiple findings returns `Error` with `vector<Diagnostic> diagnostics`; where the operation itself is validation, the success value is `vector<Diagnostic>` via `Result<vector<Diagnostic>>` — one `Result` still represents one operation. Callers branch on `Error.code`; presentation reads `diagnostics` deterministically ordered.
 
 ### Diagnostics (ratify minimal shape)
 
@@ -78,7 +78,7 @@ Rules:
 
 ### Validation surfacing multiple diagnostics
 
-- Ratified: validation preserves `Result` semantics — one operation, one `Result`. Multiple findings are surfaced as `Error.diagnostics` (`vector<Diagnostic>`) and, where the operation itself is validation, as a sibling `vector<Diagnostic>` return alongside `Result<void>`. No second authoritative store is introduced. GUI/CLI/MCP/Python adapters render the same `diagnostics` list; logs carry correlation IDs (`operation_id`, `job_id`) from `LogContext`.
+- Ratified: validation preserves `Result` semantics — one operation, one `Result`. Multiple findings are surfaced as `Error.diagnostics` (`vector<Diagnostic>`); where the operation itself is validation, the success case is `Result<vector<Diagnostic>>` (findings carried as the value, failure as `Error` with its own `diagnostics`). No second authoritative store is introduced. GUI/CLI/MCP/Python adapters render the same `diagnostics` list; logs carry correlation IDs (`operation_id`, `job_id`) from `LogContext`.
 
 ## Consequences
 
