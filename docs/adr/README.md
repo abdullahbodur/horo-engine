@@ -19,6 +19,7 @@ to the replacement.
 | [005](005-submodule-compatibility.md) | Submodule Compatibility Constraints  | accepted | 2026-05-25 |
 | [006](006-lua-5-4-gameplay-runtime.md) | Lua 5.4 Gameplay Runtime             | accepted | 2026-08-02 |
 | [007](007-cross-engine-project-interchange.md) | Cross-Engine Project Interchange | proposed | 2026-08-26 |
+| [008](008-error-model-exception-boundary-and-registry.md) | Error Model, Exception Boundary and Registry Ownership | proposed | 2026-08-27 |
 
 ## Conventions
 
