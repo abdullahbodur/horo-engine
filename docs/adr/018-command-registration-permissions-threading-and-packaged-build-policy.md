@@ -1,4 +1,4 @@
-# ADR-011: Command Registration, Permissions, Threading and Packaged-Build Policy
+# ADR-018: Command Registration, Permissions, Threading and Packaged-Build Policy
 
 - **Status**: Proposed
 - **Date**: 2026-08-28
