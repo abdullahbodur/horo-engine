@@ -41,7 +41,7 @@ Prior to this decision, the boundary between AI decision graphs, generic visual 
 
 3. **Instance State vs Static Plan**:
    - `CookedDecisionPlan` is shared and read-only across all agent instances executing that asset.
-   - Per-agent execution state is encapsulated in an allocation-conscious `DecisionInstanceState` (containing active node index, running task handle, decorator memory, state timers, and blackboard view).
+   - Per-agent execution state is encapsulated in an allocation-conscious `DecisionInstanceState` (bounded active-node set for Parallel composites, running task handle, decorator memory, state timers, and blackboard view). Hot-reload maps that state by stable `DecisionNodeId` on each cooked node.
 
 ---
 

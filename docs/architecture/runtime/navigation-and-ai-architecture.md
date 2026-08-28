@@ -166,17 +166,26 @@ AI decision making is authored as dedicated graph assets that compile into flat,
      - `CookedUtilityPlan`
    - A cooked plan is a contiguous array of node descriptors with precomputed integer jump offsets, child ranges, decorator masks, and blackboard index offsets.
    - Static plans are shared and read-only across all agent instances executing the asset, eliminating per-agent plan duplication and pointer chasing.
-   - Per-agent dynamic state is stored in an allocation-conscious `DecisionInstanceState` containing the active node index, running task handle, state timers, decorator memory, and blackboard view.
+   - Per-agent dynamic state is stored in an allocation-conscious `DecisionInstanceState`. Parallel composites require a bounded set of active node indices (not a single cursor). Hot-reload maps instance state by stable `DecisionNodeId`, never by array index.
 
 ```cpp
 struct CookedDecisionNode {
+    DecisionNodeId           stableId; // persisted identity; survives recompile index shifts
     DecisionNodeTypeId       typeId;
     uint16_t                 parentIndex;
     uint16_t                 firstChildIndex;
     uint16_t                 childCount;
     uint16_t                 decoratorMask;
     DecisionNodeKind         nodeKind; // Composite, Decorator, Task, Service
-    std::span<const uint8_t> staticPayload;
+    std::span<const uint8_t> staticPayload; // includes Wait duration range and other static params
+};
+
+struct DecisionInstanceState {
+    static constexpr uint16_t kMaxActiveNodes = 8; // Parallel fan-out bound
+    std::array<uint16_t, kMaxActiveNodes> activeNodeIndices{};
+    uint16_t activeNodeCount{0};
+    JobHandle runningTask{};
+    // decorator memory and timers are indexed by stableId, not by live array index
 };
 
 struct CookedBehaviorTreePlan {
