@@ -1,4 +1,4 @@
-# ADR-011: World Index and Cell Format Architecture Decision
+# ADR-023: World Index and Cell Format Architecture Decision
 
 - **Status**: Proposed
 - **Date**: 2026-08-28
