@@ -325,14 +325,13 @@ authority. The bounded emergency exception below is the only bypass.
 Before creating a normal delivery branch, resolve and preserve all three
 identifiers:
 
-- the Jira issue key (`HORO` is this site's Jira project key), for example
-  `HORO-1784`;
+- the Jira issue key, where Horo Engine (`HORO`) is this site's project key; for
+  example, `HORO-1784`;
 - the GitHub issue number, for example `#1828`;
-- the repository domain ticket alias from the GitHub issue title (`JOB` denotes
-  the Jobs workstream and `REND` the Renderer workstream), for example
-  `[JOB-001.1]` or `[REND-001.2]`.
+- the repository domain ticket alias from the GitHub issue title, such as Jobs
+  (`JOB`) in `[JOB-001.1]` or Rendering (`REND`) in `[REND-001.2]`.
 
-Normal commit subjects and pull-request titles must use this order:
+The normal commit-subject and pull-request-title order is:
 
 ```text
 <type>(<scope>): <imperative summary> <JIRA_ID> #<GITHUB_ISSUE> [<DOMAIN_ALIAS>]
