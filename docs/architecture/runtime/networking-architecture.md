@@ -280,7 +280,7 @@ The networking subsystem requires targeted automated verification:
 
 ## Related Documents
 
-- [ADR-011: Network Target Ownership and Dependency Boundary](../../adr/011-network-target-ownership-and-dependency-boundary.md)
+- [ADR-020: Network Target Ownership and Dependency Boundary](../../adr/020-network-target-ownership-and-dependency-boundary.md)
 - [System Design](../foundation/system-design.md)
 - [Desired Project Trees](../desired-project-tree.md)
 - [Multiplayer Replication Architecture](./multiplayer-replication-architecture.md)

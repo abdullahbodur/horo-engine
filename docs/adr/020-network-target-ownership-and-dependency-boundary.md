@@ -5,7 +5,7 @@
 - **Supersedes**: None
 - **Scope**: Network target topology, compile-time dependency directions, public API encapsulation, optional linking and composition, threading model, and deterministic lifecycle/shutdown.
 - **Issue**: [#1098](https://github.com/abdullahbodur/horo-engine/issues/1098) ([NET-001.1])
-- **JIRA**: HORO-1088
+- **JIRA**: HORO-1098
 - **Normative documents**:
   - [Networking Architecture](../architecture/runtime/networking-architecture.md)
   - [System Design](../architecture/foundation/system-design.md)
