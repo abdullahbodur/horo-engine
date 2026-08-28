@@ -132,6 +132,7 @@ struct ClosedCaptionSettings {
 - **Consumers**: Render Graph post-process pass, Gameplay/HUD visual styling.
 
 #### Typed Transport (Colorblind)
+
 Colorblind modes are implemented as 3×3 color transformation matrices applied in the
 post-processing pipeline immediately after tonemapping via `ColorGradingSettings`.
 Gameplay and HUD systems query the active mode synchronously via `IColorAccessibilityQuery`.
@@ -197,6 +198,7 @@ struct VisualAccessibilitySettings {
   device accumulation.
 - **Layer 3 (`InputRouter` / `InputMapping`)**: Owns semantic action remapping, toggle
   action semantics, and gyro aim resolution.
+
 
 #### Typed Transport (Remapping)
 Accessibility controls extend the existing `RawInputCollector` and `InputMapping`
