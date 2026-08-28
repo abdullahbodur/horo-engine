@@ -736,6 +736,9 @@ src/editor/modals/
   between screens and modal workflows.
 - [Input Architecture](../runtime/input-architecture.md): central interaction scopes,
   capture cancellation, and modal input routing.
+- [Input Layer and Modal Ownership](../runtime/input-layer-ownership.md): `EditorInteractionScope`
+  ↔ `InputContextKind` mapping, frame-order invariants, `FocusedGuiWidget` lifecycle,
+  and `PointerCaptureToken` cancellation catalogue.
 - [Configuration System](../foundation/configuration-system.md): Settings draft, preview,
   validation, and atomic snapshot commit.
 - [Release Architecture](../release/release.md): authoritative release request and job

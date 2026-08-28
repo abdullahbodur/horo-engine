@@ -162,6 +162,10 @@ While `EditorInteractionScopeKind::Modal` is active:
 
 A dim layer alone is not an input barrier. Central routing enforces exclusivity.
 
+See [Input Layer and Modal Ownership](./input-layer-ownership.md) for the
+`EditorInteractionScope` ↔ `InputContextKind` mapping, frame-order invariants,
+and `PointerCaptureToken` cancellation catalogue.
+
 ## Text Input
 
 Text input uses native text/composition events and is separate from physical key
@@ -471,6 +475,7 @@ Required tests cover:
 
 - [Input Mapping Editor UI Reference](./input-mapping-editor.html): action maps, bindings, device preview, and conflict detection panel.
 
+- [Input Layer and Modal Ownership](./input-layer-ownership.md): layer ownership table, context kind priority, `EditorInteractionScope` mapping, frame-order invariants, and per-layer testing obligations.
 - [Runtime Lifecycle](./runtime-lifecycle.md)
 - [Editor Modal Host](../editor/editor-modal-host.md)
 - [GUI Screen Host](../editor/gui-screen-host.md)
