@@ -1003,7 +1003,7 @@ Navigation capacities and workloads scale according to host CPU worker pool capa
 
 ## Related Documents
 
-- [ADR-011: Navigation Target Ownership and Dependency Boundary](../../adr/011-navigation-target-ownership-and-dependency-boundary.md)
+- [ADR-016: Navigation Target Ownership and Dependency Boundary](../../adr/016-navigation-target-ownership-and-dependency-boundary.md)
 - [Navigation Bake UI Reference](./navigation-bake.html)
 
 - [ADR-021: Gameplay AI Ownership, Scheduling and Behavior Boundary](../../adr/021-gameplay-ai-ownership-scheduling-and-behavior-boundary.md)
