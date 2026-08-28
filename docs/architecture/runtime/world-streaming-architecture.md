@@ -88,12 +88,25 @@ enum class WorldLayerFlags : uint32_t {
     ClientOnly  = 1 << 3, // Excluded from dedicated server streaming
 };
 
+enum class WorldLayerOwnership : uint8_t {
+    WorldStreaming      = 0, // managed by the streaming system
+    GameplayScript      = 1, // managed by gameplay code
+    NetworkReplication  = 2, // managed by the networking layer
+};
+
 struct WorldLayerDefinition {
     uint32_t layerId;
     std::string layerName;
-    WorldLayerOwnership ownership; // WorldStreaming, GameplayScript, NetworkReplication
+    WorldLayerOwnership ownership;
     WorldLayerFlags flags;
     float priorityMultiplier;     // multiplier applied to cells in this layer
+};
+
+enum class StreamingVolumeType : uint8_t {
+    Camera             = 0,
+    Gameplay           = 1,
+    NetworkRelevance   = 2,
+    Preload            = 3,
 };
 
 enum class StreamingVolumeShape : uint8_t {
@@ -104,7 +117,7 @@ enum class StreamingVolumeShape : uint8_t {
 
 struct WorldStreamingVolumeDefinition {
     uint32_t volumeId;
-    StreamingVolumeType type;      // Camera, Gameplay, NetworkRelevance, Preload
+    StreamingVolumeType type;
     StreamingVolumeShape shape;
     Vec3 origin;                   // world meters
     Vec3 extents;                  // radius (Sphere) or half-extents (Box)
@@ -145,7 +158,7 @@ struct WorldIndexManifest {
 A cooked streaming cell is packaged either as a standalone `.wcell` file or as
 an individual chunk within a `.horo` package archive (`horopak`).
 
-### Fixed Header Layout (64 Bytes, Little-Endian)
+### Fixed Header Layout (96 Bytes, Little-Endian)
 
 All scalar types and headers are explicitly encoded in **Little-Endian (LE)**.
 
@@ -165,13 +178,15 @@ All scalar types and headers are explicitly encoded in **Little-Endian (LE)**.
 | `0x24` | `uint32` | `payloadCrc32` | CRC32 checksum of uncompressed payload |
 | `0x28` | `uint64` | `uncompressedSize` | Total uncompressed payload byte count |
 | `0x30` | `uint64` | `compressedSize` | Total compressed payload byte count on disk |
-| `0x38` | `uint32` | `featureTableOffset` | Byte offset to Feature Payload TOC from file start |
+| `0x38` | `uint32` | `featureTableOffset` | Byte offset to Feature Payload TOC from file start (`0x60` when TOC immediately follows this header) |
 | `0x3C` | `uint32` | `featureTableCount` | Number of entries in Feature Payload TOC |
 | `0x40` | `uint8[32]` | `sha256Hash` | SHA-256 cryptographic hash of compressed payload |
 
+The header occupies bytes `0x00`–`0x5F` inclusive (96 bytes). Fields after `0x3C` continue through the 32-byte `sha256Hash` at `0x40`, so the first byte after the header is `0x60`.
+
 ### Feature Provider Table of Contents (TOC)
 
-Immediately following the fixed header (or located at `featureTableOffset`), an
+Immediately following the 96-byte fixed header (offset `0x60`, or another location named by `featureTableOffset`), an
 array of `featureTableCount` entries defines the sub-payload slices:
 
 ```cpp
@@ -291,8 +306,8 @@ Streaming cell decode executes as an asynchronous job pipeline over `HoroFoundat
 ### Decode Phase Guarantees
 
 1. **Async I/O Phase**: Reads raw bytes from the archive into a scratch buffer. If `cancelToken.IsCancelled()` is signaled, the read is aborted and the buffer returned to the pool immediately.
-2. **Integrity & Validation Phase**: Verifies magic bytes `HOROCELL`, endianness, schema version compatibility, and validates that all TOC offsets and sizes are strictly contained within `compressedSize`. Compares CRC32 and SHA-256 against `WorldIndexManifest`. Any mismatch immediately returns `StreamingCellErrorCode::CorruptedIntegrity` without executing decompression.
-3. **Decompression & Slice Extraction Phase**: Decompresses the core ECS block and feature payload slices into bounded staging memory. Memory allocation is verified against the available `StreamingBudget`. If over-budget, returns `AllocationLimitExceeded`.
+2. **Integrity & Validation Phase**: Verifies magic bytes `HOROCELL`, endianness, schema version compatibility, and validates that all TOC offsets and sizes are strictly contained within the on-disk bounds. Compares SHA-256 of the **compressed** payload against the cell header and `WorldIndexManifest`. Any compressed-integrity mismatch immediately returns `StreamingCellErrorCode::CorruptedIntegrity` without executing decompression. Uncompressed `payloadCrc32` is **not** compared in this phase.
+3. **Decompression & Slice Extraction Phase**: Decompresses the core ECS block and feature payload slices into bounded staging memory. Memory allocation is verified against the available `StreamingBudget`. If over-budget, returns `AllocationLimitExceeded`. After successful decompression, compares CRC32 of the **uncompressed** payload against `payloadCrc32` in the cell header and `WorldIndexManifest`. Each `FeaturePayloadEntry::payloadCrc32` is compared after that provider slice is decompressed. CRC mismatch returns `StreamingCellErrorCode::CorruptedIntegrity`.
 4. **Feature Provider & ECS Staging Phase**: Staged memory slices are dispatched to registered `IFeatureStreamingProvider` instances (Terrain, Foliage, Physics Mesh, Audio, NavMesh). Providers construct runtime-ready resources in private candidate containers. ECS entities are constructed in a detached `RuntimeSceneStorage` candidate.
 5. **Atomic Synchronization & Commit**: On the owner thread during `CommitDeferredLifecycleChanges`, the detached candidate is merged into the active `RuntimeScene` in a single structural transaction. If an error or cancellation occurred in phases 1–4, the candidate is discarded, feature providers drop their staged allocations, and the active scene remains completely untouched.
 
@@ -464,15 +479,13 @@ Large worlds are composed from multiple layers:
 - **Dynamic layers**: Runtime-spawned content (projectiles, VFX, temporary
   objects)
 
-Layer ownership determines streaming responsibility:
+Layer ownership determines streaming responsibility. The canonical
+`WorldLayerOwnership` enumeration is defined in the cooked World Index
+schema above:
 
-```cpp
-enum class WorldLayerOwnership {
-    WorldStreaming,       // managed by the streaming system
-    GameplayScript,       // managed by gameplay code
-    NetworkReplication,   // managed by the networking layer
-};
-```
+- `WorldStreaming` — managed by the streaming system
+- `GameplayScript` — managed by gameplay code
+- `NetworkReplication` — managed by the networking layer
 
 ## Networking Integration
 

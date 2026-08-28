@@ -33,13 +33,13 @@ Ticket #1564 ([WST-004.1]) requires ratifying the normative specification for:
 | Area | Current Baseline | Ratified Outcome |
 |---|---|---|
 | **World Index Manifest (`world.index`)** | High-level conceptual descriptions only | **Ratified as a binary and JSON-mirrored manifest** specifying global bounding box, partition grid dimensions, spatial cell hierarchy (multi-LOD grid/quadtree), layer definitions with explicit ownership, pre-authored streaming volumes, and a cryptographic cell checksum table. |
-| **Cell Container Magic & Header** | Undefined format | **Ratified as `HOROCELL` (8-byte ASCII: `0x48, 0x4F, 0x52, 0x4F, 0x43, 0x45, 0x4C, 0x4C`)** with a 64-byte fixed-size little-endian header containing schema version, flags, compression codec, uncompressed/compressed sizes, CRC32, SHA-256, and feature-provider TOC offsets. |
+| **Cell Container Magic & Header** | Undefined format | **Ratified as `HOROCELL` (8-byte ASCII: `0x48, 0x4F, 0x52, 0x4F, 0x43, 0x45, 0x4C, 0x4C`)** with a 96-byte fixed-size little-endian header containing schema version, flags, compression codec, uncompressed/compressed sizes, CRC32, SHA-256, and feature-provider TOC offsets. |
 | **Endianness** | Native/implicit | **Ratified as strict Little-Endian (LE)** across all platforms and architectures (ARM64, x86_64). Big-endian host platforms (if ever supported) must swap on read/write. |
-| **Integrity & Hashing** | General `.horo` archive TOC hash | **Ratified dual-tier integrity verification**: CRC32 for fast stream/decompression verification, and SHA-256 for cryptographic tamper/corruption detection against the `world.index` checksum table. |
+| **Integrity & Hashing** | General `.horo` archive TOC hash | **Ratified dual-tier integrity verification**: SHA-256 of the compressed on-disk payload first (fail-fast tamper/corruption detection against the `world.index` checksum table, before decompression), then CRC32 of the uncompressed payload after decompression. |
 | **Payload Decomposition** | Monolithic baked scene asset | **Ratified modular sliced layout**: Compressed core ECS payload (entities, components, archetypes) plus an extensible feature-provider payload table (Terrain, Foliage, Physics Mesh, Audio, Navigation Mesh). |
 | **Versioning & Compatibility** | Monotonic version bump | **Ratified major/minor schema versioning with capability flags**: Minor revisions allow optional feature payload skipping (`FeaturePayloadFlags::Optional`); major revisions or missing required providers trigger typed rejection. |
 | **Error Handling** | Generic exception or boolean failure | **Ratified Foundation-compliant typed errors**: `Result<LoadedCellPayload, StreamingCellError>` utilizing the `StreamingCellErrorDomain` with stable error codes. |
-| **Decode Lifecycle & Cancellation** | Single-step load | **Ratified 4-phase staged pipeline**: (1) Async I/O, (2) Integrity Verification, (3) Decompression & Slice Extraction, (4) Feature Provider & ECS Instantiation. Cooperative cancellation token evaluated between and within each phase with zero residual state. |
+| **Decode Lifecycle & Cancellation** | Single-step load | **Ratified 4-phase staged pipeline**: (1) Async I/O, (2) Compressed integrity verification (SHA-256), (3) Decompression, uncompressed CRC32, and slice extraction, (4) Feature Provider & ECS Instantiation. Cooperative cancellation token evaluated between and within each phase with zero residual state. |
 
 ---
 
@@ -82,12 +82,25 @@ enum class WorldLayerFlags : uint32_t {
     ClientOnly  = 1 << 3, // Stripped or unstreamed on dedicated server
 };
 
+enum class WorldLayerOwnership : uint8_t {
+    WorldStreaming      = 0, // managed by the streaming system
+    GameplayScript      = 1, // managed by gameplay code
+    NetworkReplication  = 2, // managed by the networking layer
+};
+
 struct WorldLayerDefinition {
     uint32_t layerId;
     std::string layerName;
-    WorldLayerOwnership ownership; // WorldStreaming, GameplayScript, NetworkReplication
+    WorldLayerOwnership ownership;
     WorldLayerFlags flags;
     float priorityMultiplier;     // multiplier applied to cells in this layer
+};
+
+enum class StreamingVolumeType : uint8_t {
+    Camera             = 0,
+    Gameplay           = 1,
+    NetworkRelevance   = 2,
+    Preload            = 3,
 };
 
 enum class StreamingVolumeShape : uint8_t {
@@ -98,7 +111,7 @@ enum class StreamingVolumeShape : uint8_t {
 
 struct WorldStreamingVolumeDefinition {
     uint32_t volumeId;
-    StreamingVolumeType type;      // Camera, Gameplay, NetworkRelevance, Preload
+    StreamingVolumeType type;
     StreamingVolumeShape shape;
     Vec3 origin;                   // world meters
     Vec3 extents;                  // radius (for Sphere) or half-extents (for Box)
@@ -138,7 +151,7 @@ struct WorldIndexManifest {
 
 A cooked streaming cell is packaged either as an individual `.wcell` file or as a dedicated chunk within a `.horo` package archive (`horopak`).
 
-#### Fixed Header Layout (64 Bytes, Little-Endian)
+#### Fixed Header Layout (96 Bytes, Little-Endian)
 
 ```text
 Offset | Type     | Field                     | Description
@@ -157,14 +170,16 @@ Offset | Type     | Field                     | Description
  0x24  | uint32   | payloadCrc32              | CRC32 of uncompressed payload
  0x28  | uint64   | uncompressedSize          | Total uncompressed payload byte count
  0x30  | uint64   | compressedSize            | Total compressed payload byte count on disk
- 0x38  | uint32   | featureTableOffset        | Byte offset to Feature Payload TOC from file start
+ 0x38  | uint32   | featureTableOffset        | Byte offset to Feature Payload TOC from file start (0x60 when TOC immediately follows this header)
  0x3C  | uint32   | featureTableCount         | Number of entries in Feature Payload TOC
  0x40  | uint8[32]| sha256Hash                | SHA-256 cryptographic hash of compressed payload
 ```
 
+The header occupies bytes `0x00`–`0x5F` inclusive (96 bytes). Fields after `0x3C` continue through the 32-byte `sha256Hash` at `0x40`, so the first byte after the header is `0x60`.
+
 #### Feature Provider Table of Contents (TOC)
 
-Immediately following the fixed header (or located at `featureTableOffset`), an array of `featureTableCount` entries defines the sub-payloads:
+Immediately following the 96-byte fixed header (offset `0x60`, or another location named by `featureTableOffset`), an array of `featureTableCount` entries defines the sub-payloads:
 
 ```cpp
 namespace Horo::WorldStreaming {
@@ -283,8 +298,8 @@ Streaming cell decode executes as an asynchronous job pipeline over `HoroFoundat
 #### Lifecycle Phase Guarantees
 
 1. **Async I/O Phase**: Reads raw bytes from the archive into a linear buffer allocated from the streaming scratch pool. If `cancelToken.IsCancelled()` is signaled, the read is aborted and the buffer returned to the pool immediately.
-2. **Integrity & Validation Phase**: Verifies magic bytes `HOROCELL`, endianness, schema version compatibility, and validates that all TOC offsets and sizes are strictly contained within `compressedSize`. Compares CRC32 and SHA-256 against `WorldIndexManifest`. Any mismatch immediately returns `StreamingCellErrorCode::CorruptedIntegrity` without executing decompression.
-3. **Decompression & Slice Extraction Phase**: Decompresses the core ECS block and feature payload slices into bounded staging memory. Memory allocation is verified against the available `StreamingBudget`. If over-budget, returns `AllocationLimitExceeded`.
+2. **Integrity & Validation Phase**: Verifies magic bytes `HOROCELL`, endianness, schema version compatibility, and validates that all TOC offsets and sizes are strictly contained within the on-disk bounds. Compares SHA-256 of the **compressed** payload against the cell header and `WorldIndexManifest`. Any compressed-integrity mismatch immediately returns `StreamingCellErrorCode::CorruptedIntegrity` without executing decompression. Uncompressed `payloadCrc32` is **not** compared in this phase.
+3. **Decompression & Slice Extraction Phase**: Decompresses the core ECS block and feature payload slices into bounded staging memory. Memory allocation is verified against the available `StreamingBudget`. If over-budget, returns `AllocationLimitExceeded`. After successful decompression, compares CRC32 of the **uncompressed** payload against `payloadCrc32` in the cell header and `WorldIndexManifest`. Each `FeaturePayloadEntry::payloadCrc32` is compared after that provider slice is decompressed. CRC mismatch returns `StreamingCellErrorCode::CorruptedIntegrity`.
 4. **Feature Provider & ECS Staging Phase**: Staged memory slices are dispatched to registered `IFeatureStreamingProvider` instances (Terrain, Foliage, Physics Mesh, Audio, NavMesh). Providers construct runtime-ready resources in private candidate containers. ECS entities are constructed in a detached `RuntimeSceneStorage` candidate.
 5. **Atomic Synchronization & Commit**: On the owner thread during `CommitDeferredLifecycleChanges`, the detached candidate is merged into the active `RuntimeScene` in a single structural transaction. If an error or cancellation occurred in phases 1–4, the candidate is discarded, feature providers drop their staged allocations, and the active scene remains completely untouched.
 
@@ -294,7 +309,7 @@ Streaming cell decode executes as an asynchronous job pipeline over `HoroFoundat
 
 ### Positive
 - **Deterministic & Portable**: Fixed little-endian layout ensures bit-identical behavior across ARM64 macOS, x86_64 Linux, and x64 Windows.
-- **Fail-Fast Integrity**: Dual CRC32 and SHA-256 verification catches storage corruption and package truncation before expensive decompression or memory allocation.
+- **Fail-Fast Integrity**: SHA-256 of the compressed payload catches storage corruption and package truncation before expensive decompression or memory allocation. CRC32 of the uncompressed payload then validates decompressor output without a second cryptographic hash.
 - **Subsystem Decoupling**: Modular feature-provider TOC allows terrain, foliage, physics, navigation, and audio to evolve payload schemas independently without breaking core ECS layout.
 - **Leak-Free Cancellation**: Cooperative cancellation and transactional candidate swapping guarantee zero partial entities or orphaned GPU/physics handles when volumes move rapidly.
 - **Foundation Alignment**: Typed `StreamingResult<T>` and `StreamingCellErrorCode` integrate cleanly with Horo's error registry and diagnostic observation.
