@@ -3,6 +3,7 @@
 ## Purpose
 
 This document defines the normative architecture for the world-streaming subsystem in Horo Engine. It establishes:
+
 - The canonical spatial partition authority (`StreamingPartitionAuthority` / `WorldStreamingManager`)
 - Crisp subsystem boundaries between World Streaming, Scene Runtime, Asset Pipeline, Feature Providers, and Editor Authoring
 - Stable typed identities, monotonic generation fencing, and fallible result contracts
@@ -192,6 +193,7 @@ Each frame, `StreamingPartitionAuthority` evaluates active volumes against the p
 $$\text{priority} = \max_{v \in \text{Volumes}} \left( \frac{1.0}{\text{distance}(c, v) + \varepsilon} \times M_{\text{type}}(v) \times M_{\text{override}}(c) \right) + \text{boost}_{\text{anti-starvation}}(c)$$
 
 Where:
+
 - $\text{distance}(c, v)$: Euclidean distance in meters from cell center to volume origin.
 - $M_{\text{type}}$: Volume type multiplier (Preload: 1.5, Camera: 1.0, Gameplay: 0.9, Network: 0.8).
 - $M_{\text{override}}$: Explicit gameplay priority multiplier (0.5 to 2.0).

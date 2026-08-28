@@ -126,7 +126,7 @@ Every partition cell tracked by the `StreamingPartitionAuthority` transitions th
          └───────────────────────────────────────────────────────────┘
 ```
 
-#### State Definitions and Invariants:
+#### State Definitions and Invariants
 
 1. **`Unloaded`**: Zero runtime memory or GPU resources allocated. Cell descriptor exists in the spatial partition index.
 2. **`Loading`**: Async asset I/O is in flight via `AssetLoadService` under an active `CancellationToken`. Feature providers receive `OnCellLoading` to prepare descriptors.
@@ -141,6 +141,7 @@ Every partition cell tracked by the `StreamingPartitionAuthority` transitions th
 ### Typed Identity, Contracts, and Fencing
 
 #### 1. Typed Identities
+
 All partition structures use strongly typed value wrappers to eliminate string parsing and primitive obsession:
 
 ```cpp
@@ -192,12 +193,15 @@ struct StreamingVolumeId {
 ```
 
 #### 2. Generation Fencing Invariant
+
 Every asynchronous operation captures the target `StreamingCellId` and its current `StreamingGeneration`. When an asynchronous worker completes:
+
 - The authority checks `cell.currentGeneration == capturedGeneration`.
 - If equal, the state transition (`Loading -> Resident`, etc.) commits.
 - If not equal (due to rapid cancel/re-request cycles or world replacement), the worker completion is safely discarded with zero mutation to active scene state.
 
 #### 3. Feature Provider Lifecycle Contract
+
 All streaming-aware subsystems implement `IStreamingFeatureProvider`:
 
 ```cpp
@@ -277,6 +281,7 @@ All fallible operations return `Horo::Result<T, Error>` governed by ADR-008. The
 ## Consequences
 
 ### Positive
+
 - **Single Source of Truth**: Eliminates conflicting spatial queries and duplicate streaming implementations across subsystems.
 - **Race Safety**: Monotonic `StreamingGeneration` counters fence asynchronous completions, eliminating race conditions during fast movement or world transitions.
 - **Clean Subsystem Decoupling**: Scene Runtime, Asset Pipeline, Feature Providers, and Editor Authoring have crisp, non-overlapping responsibilities.
@@ -284,6 +289,7 @@ All fallible operations return `Horo::Result<T, Error>` governed by ADR-008. The
 - **Standardized Error Handling**: Conforms strictly to ADR-008 with typed error codes and diagnostics.
 
 ### Negative / Trade-offs
+
 - **Registration Overhead**: Feature subsystems must register lifecycle observers and manage local sub-budgets.
 - **State Complexity**: Moving from 3 to 5 lifecycle states requires strict state transition validation and thorough test coverage across all edge cases.
 
