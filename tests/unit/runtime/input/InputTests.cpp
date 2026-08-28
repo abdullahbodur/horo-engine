@@ -340,6 +340,35 @@ namespace {
         })));
     }
 
+    TEST_CASE("Conflict Validation Rejects Duplicate Action Ids", "[unit][runtime][input]") {
+        const InputContextId workspace{"workspace"};
+        const InputContextId gameplay{"gameplay"};
+        const std::array
+            actions{ActionDescriptor{ActionId{"shared.action"}, ActionValueType::Digital, workspace, false, {KeyBinding(Key::A)}},
+                    ActionDescriptor{ActionId{"shared.action"}, ActionValueType::Digital, gameplay, false, {KeyBinding(Key::B)}}};
+        const BindingValidationReport report = ValidateBindingProfile(actions, InputBindingProfile{});
+        REQUIRE((!report.IsValid()));
+        REQUIRE((std::ranges::any_of(report.diagnostics, [](const BindingDiagnostic &diagnostic) {
+            return diagnostic.code == BindingDiagnosticCode::InvalidAction &&
+                   diagnostic.message.find("shared.action") != std::string::npos;
+        })));
+    }
+
+    TEST_CASE("Conflict Validation Rejects Oversized Chords Without Inspecting Past Storage", "[unit][runtime][input]") {
+        const InputContextId gameplay{"gameplay"};
+        InputBinding malformed = KeyBinding(Key::K);
+        malformed.chordSize = static_cast<std::uint8_t>(malformed.chord.size() + 1);
+        const std::array
+            actions{ActionDescriptor{ActionId{"malformed.chord"}, ActionValueType::Digital, gameplay, false, {malformed}},
+                    ActionDescriptor{ActionId{"valid.chord"}, ActionValueType::Digital, gameplay, false, {KeyBinding(Key::K)}}};
+        const BindingValidationReport report = ValidateBindingProfile(actions, InputBindingProfile{});
+        REQUIRE((!report.IsValid()));
+        REQUIRE((std::ranges::any_of(report.diagnostics, [](const BindingDiagnostic &diagnostic) {
+            return diagnostic.action.Value() == "malformed.chord" &&
+                   diagnostic.code == BindingDiagnosticCode::AmbiguousChord;
+        })));
+    }
+
     TEST_CASE("Conflict Validation Reports Duplicate Overrides For One Action", "[unit][runtime][input]") {
         const InputContextId gameplay{"gameplay"};
         const std::array actions{ActionDescriptor{ActionId{"jump"}, ActionValueType::Digital, gameplay, false, {KeyBinding(Key::Space)}}};

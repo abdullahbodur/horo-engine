@@ -85,7 +85,13 @@ namespace Horo::Input {
                    (mods.alt && binding.key == F4) || (mods.control && mods.alt && binding.key == Delete);
         }
 
+        bool HasValidChordSize(const InputBinding &binding) noexcept {
+            return binding.chordSize <= binding.chord.size();
+        }
+
         bool SameTransition(const InputBinding &left, const InputBinding &right) noexcept {
+            if (!HasValidChordSize(left) || !HasValidChordSize(right))
+                return false;
             return left.kind == right.kind && left.key == right.key && left.pointerButton == right.pointerButton &&
                    left.gamepadButton == right.gamepadButton && left.gamepadAxis == right.gamepadAxis &&
                    left.rawControl == right.rawControl && left.requiredModifiers == right.requiredModifiers &&
@@ -94,6 +100,8 @@ namespace Horo::Input {
         }
 
         bool ChordsOverlap(const InputBinding &left, const InputBinding &right) noexcept {
+            if (!HasValidChordSize(left) || !HasValidChordSize(right))
+                return false;
             if (left.kind != right.kind || left.key != right.key || left.pointerButton != right.pointerButton ||
                 left.gamepadButton != right.gamepadButton || left.gamepadAxis != right.gamepadAxis || left.rawControl != right.rawControl ||
                 left.requiredModifiers != right.requiredModifiers)
@@ -478,9 +486,16 @@ namespace Horo::Input {
                                        const std::span<const ActionDescriptor> actions) {
             using enum BindingDiagnosticCode;
             std::vector<EffectiveBinding> effective;
+            std::unordered_set<std::string, StringViewHash, std::equal_to<>> actionIds;
             for (const ActionDescriptor &action : actions) {
                 if (!action.id.IsValid()) {
                     report.diagnostics.emplace_back(InvalidAction, action.id, "Action descriptor contains an empty action ID.");
+                    continue;
+                }
+                if (!actionIds.insert(action.id.Value()).second) {
+                    report.diagnostics.emplace_back(
+                        InvalidAction, action.id,
+                        std::format("Action map contains more than one descriptor for action ID '{}'.", action.id.Value()));
                     continue;
                 }
                 if (!action.context.IsValid()) {
