@@ -1,4 +1,4 @@
-# ADR-011: Gameplay AI Ownership, Scheduling and Behavior Boundary
+# ADR-021: Gameplay AI Ownership, Scheduling and Behavior Boundary
 
 - **Status**: Proposed
 - **Date**: 2026-08-28
