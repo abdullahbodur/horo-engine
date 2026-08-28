@@ -199,7 +199,6 @@ struct VisualAccessibilitySettings {
 - **Layer 3 (`InputRouter` / `InputMapping`)**: Owns semantic action remapping, toggle
   action semantics, and gyro aim resolution.
 
-
 #### Typed Transport (Remapping)
 
 Accessibility controls extend the existing `RawInputCollector` and `InputMapping`
