@@ -20,6 +20,7 @@ to the replacement.
 | [006](006-lua-5-4-gameplay-runtime.md) | Lua 5.4 Gameplay Runtime             | accepted | 2026-08-02 |
 | [007](007-cross-engine-project-interchange.md) | Cross-Engine Project Interchange | proposed | 2026-08-26 |
 | [008](008-error-model-exception-boundary-and-registry.md) | Error Model, Exception Boundary and Registry Ownership | proposed | 2026-08-27 |
+| [009](009-configuration-schema-precedence-and-secret-boundary.md) | Configuration Schema, Precedence and Secret Boundary | proposed | 2026-08-28 |
 
 ## Conventions
 
