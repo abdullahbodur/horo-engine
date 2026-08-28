@@ -68,9 +68,10 @@ enum class SequenceClockPolicy : uint8_t {
 
 1. **`SimulationTime` (Default for in-game cutscenes and world sequences)**:
    - Driven by committed simulation delta $\Delta t_{sim}$ (`FixedStepContext::fixedDelta` or frame-interpolated simulation time).
-   - Effective delta: $\Delta t_{eff} = \Delta t_{sim} \times \text{playbackSpeed} \times \text{gameplayTimeDilation}$.
+   - $\Delta t_{sim}$ already incorporates engine simulation dilation (`globalTimeDilation` / `gameplayTimeDilation`). Do not multiply `gameplayTimeDilation` again.
+   - Effective delta: $\Delta t_{eff} = \Delta t_{sim} \times \text{playbackSpeed}$.
    - When gameplay simulation is paused (`RuntimeMode::EditorPaused` or menu pause), $\Delta t_{sim} = 0$, deterministically freezing sequence playback.
-   - When sequence playback settings specify `pauseGameplay = true`, the sequence player signals the runtime scheduler to pause gameplay behavior systems while continuing its own simulation-clock evaluation.
+   - When sequence playback settings specify `pauseGameplay = true`, the sequence player signals the runtime scheduler to pause gameplay behavior systems while continuing its own simulation-clock evaluation. The sequencer does not freeze.
 
 2. **`UnscaledWallClock` (For UI animations, intro cinematics, pause menus)**:
    - Driven by platform monotonic frame delta $\Delta t_{real}$ (`FrameContext::realDeltaTime`).
@@ -96,37 +97,42 @@ To guarantee that cinematic keyframes reliably override gameplay transformations
 
 #### Canonical Simulation Tick / Frame Phase Order
 
+This ADR does **not** supersede the already-ratified animation/physics tick contract in [Animation Architecture](../architecture/runtime/animation-architecture.md). Sequencer evaluation is inserted after gameplay parameter/state writes and before animation graph evaluation. Physics remains after animation, IK, root-motion production, and character-controller resolution.
+
 ```text
 1. Poll Platform Events & Build Input Snapshot
-2. Pre-Physics Gameplay Systems
-3. Physics Fixed Steps & Collision Resolution
-4. Physics Transform Publish (Scene Transform Update)
-5. Post-Physics Gameplay Systems & Behavior Script Updates (OnUpdate)
-6. === [Cinematic Sequencer Evaluation Phase] ===
+2. Gameplay Systems & Behavior Script Updates (OnUpdate)
+   - Set animation parameters and behavior state
+3. === [Cinematic Sequencer Evaluation Phase] ===
    - Sample active SequencePlayers (topological parent-to-child transform hierarchy)
    - Apply TransformTrack local transforms
    - Apply PropertyTrack values via PropertyBindingRegistry
    - Process CameraCutTrack & EventTrack triggers
-7. === [Animation & Character Controller Phase] ===
+4. === [Animation Phase] ===
    - Evaluate Animation Graphs & Pose Blend Trees
    - Apply Skeletal IK Solvers & Additive Pose Layers
-   - Evaluate Character Controller Root-Motion extraction / displacement
+   - Produce Character Controller Root-Motion delta
+5. Character Controller consumes root motion / resolves movement
+6. Physics Fixed Steps & Collision Resolution
+7. Physics Transform Publish (Scene Transform Update)
 8. Render Snapshot Extraction (Joint palettes, world matrices, camera view/projection)
 9. Render Execution & GUI Presentation
 ```
 
 ```mermaid
 flowchart TD
-    A[5. Gameplay & Behavior Scripts] -->|Writes Initial Transforms/Properties| B[6. Cinematic Sequencer Evaluation]
-    B -->|Overrides Entity Transforms & Properties| C[7. Animation Graphs & Blend Trees]
-    C -->|Evaluates Skeletal Poses & IK| D[Character Controller Root-Motion]
-    D -->|Final World Transforms & Joint Palettes| E[8. Render Extraction]
+    A[2. Gameplay & Behavior Scripts] -->|Writes Initial Transforms/Properties| B[3. Cinematic Sequencer Evaluation]
+    B -->|Overrides Entity Transforms & Properties| C[4. Animation Graphs & Blend Trees]
+    C -->|Evaluates Skeletal Poses & IK| D[5. Character Controller Root-Motion]
+    D -->|Resolved Movement| E[6. Physics Fixed Steps]
+    E -->|Final World Transforms & Joint Palettes| F[8. Render Extraction]
 ```
 
 #### Rationale
 
-- **After Gameplay (Phase 5)**: Gameplay AI, player input scripts, and behavior controllers execute first. Cinematic tracks have authoritative override power over transforms, materials, and components for entities participating in a cutscene.
-- **Before Animation & IK (Phase 7)**: Skeletal animation graphs, procedural IK solvers (e.g., look-at constraints, foot placement), and character controllers evaluate *after* the cinematic sequence sets the entity's base transform and animation parameters. This enables characters in cinematics to combine cinematic root movement with dynamic skeletal IK and blend trees.
+- **After Gameplay (Phase 2)**: Gameplay AI, player input scripts, and behavior controllers execute first. Cinematic tracks have authoritative override power over transforms, materials, and components for entities participating in a cutscene.
+- **Before Animation & IK (Phase 4)**: Skeletal animation graphs, procedural IK solvers (e.g., look-at constraints, foot placement), and character controllers evaluate *after* the cinematic sequence sets the entity's base transform and animation parameters. This enables characters in cinematics to combine cinematic root movement with dynamic skeletal IK and blend trees.
+- **Before Physics (Phases 6–7)**: Animation pose, IK, root-motion production, and character-controller resolution run before physics fixed steps, matching [Animation Architecture](../architecture/runtime/animation-architecture.md) and [Character Controller Architecture](../architecture/runtime/character-controller-architecture.md).
 - **Editor Preview Execution**: In `EditorIdle` mode, `SequenceEvaluationSystem` runs during `VariableUpdate` before `RenderExtraction`. Viewport scrubbing evaluates transforms directly on the preview scene without running the fixed physics loop.
 
 ---
@@ -204,9 +210,10 @@ In large-world environments, the coordinate system periodically rebases by offse
 
 | Scenario | `ClockPolicy::SimulationTime` | `ClockPolicy::UnscaledWallClock` |
 |---|---|---|
-| Gameplay Paused (`pauseGameplay = true` or menu pause) | Sequence freezes ($\Delta t_{eff} = 0$). | Sequence continues advancing normally. |
+| Sequence `pauseGameplay = true` | Sequence continues on its own simulation clock; gameplay behavior systems pause. | Sequence continues advancing normally. |
+| Gameplay Paused (menu pause / `EditorPaused`) | Sequence freezes ($\Delta t_{eff} = 0$). | Sequence continues advancing normally. |
 | Player Paused (`SequencePlayer::Pause()`) | Sequence freezes; holds current values. | Sequence freezes; holds current values. |
-| Gameplay Time Dilation ($\times 0.5$ slow motion) | Sequence advances at $0.5 \times \text{playbackSpeed}$. | Sequence advances at $1.0 \times \text{playbackSpeed}$. |
+| Gameplay Time Dilation ($\times 0.5$ slow motion) | Sequence advances at the already-dilated $\Delta t_{sim} \times \text{playbackSpeed}$ (no second dilation multiply). | Sequence advances at $1.0 \times \text{playbackSpeed}$. |
 | Host Suspended (App minimized / focus loss) | Suspended; clock baseline reset on resume. | Suspended; clock baseline reset on resume. |
 | Negative Speed ($\text{playbackSpeed} = -1.0$) | Evaluates reverse curves statelessly. | Evaluates reverse curves statelessly. |
 | Seek / Scrubbing (`Seek(t)`) | Immediate random-access sample; bit-identical. | Immediate random-access sample; bit-identical. |
