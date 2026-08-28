@@ -2,232 +2,353 @@
 
 ## Purpose
 
-This document defines Horo Engine's prefab system: how an authored object or
-object group is saved as a reusable prefab asset, how prefab instances are placed
-in scenes, how per-instance overrides are applied, and how prefabs expand into
-the runtime scene definition.
+This document defines Horo Engine's prefab system: how reusable entity hierarchies
+are authored, validated, and versioned as project assets, how prefab instances are
+placed and expanded in scenes, and how cooked prefabs are dynamically spawned at
+runtime by Gameplay and SceneRuntime systems.
 
-A prefab is an authoring-time template. It is stored on disk as a reusable asset
-and instantiated into scenes by reference, not by embedding its contents into
-every scene that uses it.
+## Core Decisions And Dual-Role Model
 
-## Core Decisions
+Horo Engine resolves the tension between authoring convenience, static scene
+optimization, and dynamic gameplay spawning through an explicit **dual-role**
+architecture spanning two lifecycles:
 
-- A prefab is a first-class authored asset, distinct from imported mesh/texture/audio assets.
-- Prefabs serialize as a subset of `SceneDocument` so the same scene serializer,
-  validation, and runtime conversion logic applies.
-- A scene object stores a stable prefab reference (`prefabId` + `sourcePath`), not the prefab's internal data.
-- Per-instance overrides are limited, explicit, and applied after expansion.
-- Runtime conversion expands prefabs into the containing scene's `RuntimeSceneDefinition`.
-- Prefab-owned assets are merged into the scene's asset registry during conversion.
-- Prefabs are not runtime ECS archetypes; they are authoring templates resolved before instantiation.
+1. **Authoring-Time Nested Template (`PrefabDocument` / `.prefab`)**:
+   - Authored in the Editor and stored under `assets/prefabs/`.
+   - Serialized as structured, project-versioned documents conforming to `ProjectVersion`.
+   - Supports multi-object hierarchies, nested prefab instances, and shallow/deep overrides.
+   - For static scene objects, authoring instances are **pre-expanded and flattened** into
+     the containing `SceneDocument` (viewport preview) and baked into `RuntimeSceneDefinition`
+     (scene cook). This delivers optimal contiguous runtime memory layout with zero runtime
+     template expansion overhead.
 
-## Prefab As Authoring Asset
-
-Prefabs live in the project under `assets/prefabs/`:
-
-```text
-assets/
-  prefabs/
-    player.prefab
-    enemy.prefab
-    weapons/
-      rifle_demo.prefab
-```
-
-A `.prefab` file is a `SceneDocument` that describes the prefab root object, its
-components, and any prefab-local asset references. The file uses the same schema
-version and serialization rules as `.horo` scene files.
-
-```cpp
-struct ScenePrefabReference {
-    std::string prefabId;    // stable logical prefab identity
-    std::string sourcePath;  // project-relative path to the .prefab file
-};
-
-struct ScenePrefabInstance {
-    ScenePrefabReference reference;
-    std::optional<std::string> overrideId;
-    std::optional<Vec3> overridePosition;
-    std::optional<Vec3> overrideScale;
-    std::optional<float> overrideYaw;
-    std::optional<float> overridePitch;
-    std::optional<float> overrideRoll;
-    std::optional<std::string> overrideParentId;
-};
-```
-
-The `prefabId` is the stable identity. The `sourcePath` resolves the file on
-editor/conversion load. Both are persisted so the reference survives renames when
-the path index or sidecar metadata is updated.
-
-## Instance Placement
-
-When a prefab is placed into a scene, the scene object stores the reference and
-any allowed overrides:
-
-```cpp
-struct SceneObject {
-    std::string id;
-    std::string parentId;     // empty for root-level objects
-    Vec3 position;
-    Vec3 scale;
-    float yaw = 0.0f;
-    float pitch = 0.0f;
-    float roll = 0.0f;
-    std::optional<ScenePrefabInstance> prefabInstance;
-    // ... other fields
-};
-```
-
-Allowed overrides on the instance are applied during expansion:
-
-- `id` — the instance's scene object ID (root identity in the containing scene).
-- `position`, `scale`, `yaw`, `pitch`, `roll` — instance transform.
-- `parentId` — optional reparenting inside the scene hierarchy.
-
-All other properties come from the prefab file. Deep per-component overrides are
-not supported in the initial system.
-
-## Editor Workflow
+2. **Runtime-Spawnable Cooked Template (`CookedPrefab`)**:
+   - Compiled by the Asset Pipeline from source `.prefab` files into immutable,
+     platform-optimized binary artifacts (`core.prefab` asset type).
+   - Registered in the `AssetRegistry` and `CookCatalog` with a stable 128-bit `AssetId`.
+   - Dynamically instantiated at runtime via `SceneCommandBuffer::SpawnPrefab` or
+     `SceneRuntimeAccess::SpawnPrefab` during active gameplay (e.g. projectiles, dynamic enemies,
+     VFX hierarchies, procedural loot drops).
+   - Instantiation allocates fresh runtime `EntityId`s, initializes components, sets up
+     hierarchy parenting, and triggers standard behavior lifecycle events (`OnCreate`, `OnStart`).
 
 ```text
-select object in editor
-  -> Create Prefab command
-    -> write .prefab file under assets/prefabs/
-    -> replace selected object with prefab instance reference
-    -> scene now references the prefab by path
++-----------------------------------------------------------------------------------+
+| AUTHORING LIFECYCLE (Editor / Tools)                                              |
+|                                                                                   |
+|  [Authored Object(s)] ---> (Create Prefab) ---> [assets/prefabs/enemy.prefab]     |
+|                                                      |          ^                 |
+|                                    Placed in Scene   |          | Nested ref      |
+|                                          v           |          |                 |
+|    [SceneDocument] <--- (Instance Ref + Overrides) --+          +-- [nested.prefab]
+|           |                                                     |
+|           v (Scene Cook / Flattening)                           v (Prefab Cook)
++-----------+-----------------------------------------------------+-----------------+
+| RUNTIME LIFECYCLE (SceneRuntime / Gameplay)                     |
+|           |                                                     |
+|           v                                                     v
+|   [RuntimeSceneDefinition]                             [CookedPrefab Asset]
+|   (Static pre-expanded entities)                       (Immutable binary template)
+|           |                                                     |
+|           v                                                     v
+|   [SceneRuntime Active] <====== (Dynamic Spawn at runtime) <----+
+|   - Contiguous ECS pools         - SceneCommandBuffer::SpawnPrefab
+|   - Pre-allocated entity IDs     - Allocates fresh EntityIds & runs OnCreate/OnStart
++-----------------------------------------------------------------------------------+
 ```
 
-The create-prefab command is an undoable document transaction. It:
+---
 
-1. captures the selected object's state,
-2. writes the prefab asset to a unique project-relative path,
-3. replaces the source object's contents with a `prefabInstance` reference,
-4. preserves the original transform as the first instance override.
+## Capability Tiers
 
-Placing an existing prefab into a scene creates a new scene object whose
-`prefabInstance` points at the prefab file. The editor resolves and expands the
-prefab for viewport preview and runtime conversion.
-
-## Runtime Expansion
-
-During `SceneDocument -> RuntimeSceneDefinition` conversion, prefab references
-are resolved before the runtime scene is built.
+Prefab capabilities are staged across three sequential, contract-stable tiers:
 
 ```text
-SceneDocument
-  -> for each object with prefabInstance
-       load prefab file
-       merge prefab assets into scene asset registry
-       copy prefab root object
-       apply instance overrides
-  -> continue normal conversion
++-------------------------------------------------------------------------------+
+| Tier 0: Authoring Template Expansion & Instantiation (Baseline / M1)          |
+| - Canonical source .prefab format governed by ProjectVersion                  |
+| - Single-root and multi-object parent-child hierarchies                       |
+| - Placed instances in SceneDocument (AssetId + root transform & overrides)    |
+| - Deterministic offline expansion into RuntimeSceneDefinition                 |
+| - Static cycle detection rejecting recursive inclusion loops                  |
+| - Opaque roundtrip preservation of unknown project-owned component data      |
++-------------------------------------------------------------------------------+
+                                    |
+                                    v
++-------------------------------------------------------------------------------+
+| Tier 1: Runtime Dynamic Spawn from Cooked Prefab (Engine Target / M2)         |
+| - Asset Pipeline compiles .prefab into binary CookedPrefab (core.prefab)      |
+| - Registered in AssetRegistry and CookCatalog with AssetId                    |
+| - Dynamic spawn APIs in SceneRuntime and Gameplay (SceneCommandBuffer)        |
+| - Runtime EntityId allocation, hierarchy setup, component copy, lifecycle     |
+| - Fail-safe error returns (missing asset, corrupted data, invalid component)  |
++-------------------------------------------------------------------------------+
+                                    |
+                                    v
++-------------------------------------------------------------------------------+
+| Tier 2: Live Variant Inheritance & Dynamic Override Tracking (Deferred / M3+) |
+| - Prefab Variants inheriting from base prefab asset with delta overrides      |
+| - Multi-level variant chains with DAG cycle verification                      |
+| - Live editor propagation across open documents upon base prefab mutation     |
+| - Granular per-property override tracking (revert/apply to base prefab)       |
++-------------------------------------------------------------------------------+
 ```
 
-Rules:
+### Tier 0: Authoring Template Expansion & Instantiation (Baseline / M1)
 
-- A missing or unloadable prefab emits a conversion diagnostic; the instance is skipped.
-- Prefab asset IDs that collide with scene asset IDs are resolved by the scene's
-  asset merge policy. The scene's explicit asset definition wins.
-- The expanded object retains its original scene object ID so behaviors, scripts,
-  and references resolve correctly.
-- Prefab expansion produces a flat `RuntimeSceneDefinition`. The expansion path
-  is recursive, but because the initial prefab system is single-root and does not
-  allow a prefab to contain another prefab reference, nested expansion does not
-  occur in practice today.
+- **Source Asset Format**: `.prefab` files stored in `assets/prefabs/` as canonical JSON/structured
+  documents governed by `ProjectVersion` (`docs/architecture/foundation/project-versioning-and-migration.md`).
+- **Hierarchy Support**: Single-root and multi-object parent-child hierarchies within explicit bounds.
+- **Scene Placement**: `SceneDocument` stores lightweight instance references (`ScenePrefabInstance`)
+  comprising an `AssetId` and explicit root transform/property overrides.
+- **Authoring Expansion**: The editor expands prefab instances during scene loading and viewport
+  rendering. Scene cook flattens all static prefab instances into `RuntimeSceneDefinition`.
+- **Cycle Detection**: Static validation traps recursive inclusion chains (`A -> B -> A`) before
+  expansion or serialization.
+- **Component Preservation**: Unknown/plugin-owned component payloads are retained opaquely
+  (`RawComponentPayload`) without data loss.
 
-## Prefab Root And Object Count
+### Tier 1: Runtime Dynamic Spawn from Cooked Prefab (Engine Target / M2)
 
-The initial implementation supports a **single root object** per prefab:
+- **Cooked Binary Artifact**: The Asset Pipeline compiles `.prefab` assets into immutable binary
+  `CookedPrefab` artifacts registered under `core.prefab` in `CookCatalog`.
+- **Runtime Asset Management**: Loaded through `IAssetProvider` via stable `AssetId`.
+- **Dynamic Spawn API**: `SceneCommandBuffer` and `SceneRuntimeAccess` expose transactional spawn
+  requests returning `Result<SpawnedPrefabHandle, PrefabSpawnError>`.
+- **Lifecycle Guarantees**: Fresh runtime `EntityId` allocation, component instantiation, hierarchy
+  assembly, followed by `OnCreate` and `OnStart` behavior hooks during tick synchronization.
+- **Fail-Safe Robustness**: Missing assets, invalid formats, or allocation limits fail safely with
+  typed error diagnostics without crashing the runtime or corrupting existing entities.
 
-- The prefab file may contain exactly one authored object that defines the prefab.
-- Multi-object prefabs (a root with children, or a group of sibling objects) are a
-  recognized future extension.
-- Scene hierarchy (`parentId`) may be used for simple parenting, but the prefab
-  itself does not yet store a subtree.
+### Tier 2: Live Variant Inheritance & Dynamic Override Tracking (Deferred / M3+)
 
-This limitation means an object composed of multiple independent primitives — for
-example, a castle built from many separate cubes — cannot currently be saved as
-one prefab. Such a composition should either be merged into a single mesh asset
-through an external DCC tool and imported, or split into one prefab per logical
-part.
+- **Prefab Variants**: A variant `.prefab` references a parent base prefab `AssetId` and stores
+  only delta overrides (modified property fields, added/removed components, extra child objects).
+- **Variant Inheritance DAG**: Multi-level variant chains (`Base -> VariantA -> VariantB`) validated
+  for acyclicity.
+- **Live Editor Propagation**: When a base prefab is modified and saved, open variant documents,
+  scenes referencing the prefab, and active viewport sessions update in real time.
+- **Granular Override Management**: Deep per-property diffing, revert-to-prefab, and apply-to-prefab
+  workflows in the Inspector panel.
 
-## Asset Ownership
+---
 
-A prefab may reference its own assets:
+## Identity, Hierarchy, And Asset Model
+
+### Single Source of Identity
+
+1. **Asset Registry Integration**: Prefabs are first-class assets. Every prefab is identified
+   authoritatively by its 128-bit `AssetId` declared in its companion sidecar (`.prefab.meta`).
+2. **Path Decoupling**: Project paths (`assets/prefabs/weapons/rifle.prefab`) are editor convenience
+   hints. If a prefab is moved or renamed, references remain valid through `AssetId`.
+3. **Project Versioning**: Prefab documents share the unified project schema versioning and
+   automated migration framework (`docs/architecture/foundation/project-versioning-and-migration.md`).
+
+### Hierarchy Addressing And Scoped Identity Composition
+
+A prefab defines a self-contained hierarchy of authored objects. To guarantee collision-free
+identities across multiple instances and nested scopes:
 
 ```cpp
-struct SceneAssetDefinition {
-    std::string id;
-    std::string mesh;
-    // maps, scale, guid, displayName, ...
+namespace Horo::Prefab {
+    /** @brief Zero-based slot index identifying an object inside a prefab template. */
+    struct LocalObjectId {
+        std::uint32_t value{0};
+        [[nodiscard]] constexpr bool IsRoot() const noexcept { return value == 0; }
+        [[nodiscard]] constexpr auto operator<=>(const LocalObjectId&) const noexcept = default;
+    };
+
+    /** @brief Reference to a prefab asset in authoring documents. */
+    struct PrefabAssetReference {
+        Assets::AssetId assetId;
+        std::string pathHint; // Advisory authoring path
+    };
+}
+```
+
+- **Tier 0 Authoring Expansion**:
+  When a prefab instance with `SceneObjectId instanceId` expands into a `SceneDocument`, each
+  expanded object receives a deterministic ID:
+  $$\text{ExpandedObjectId} = \text{Hash64}(\text{instanceId.value}, \text{localId.value})$$
+  This guarantees deterministic identity generation across editor reloads and prevents ID collisions
+  between repeated instances of the same prefab.
+
+- **Tier 1 Runtime Spawning**:
+  When `CookedPrefab` is spawned into `SceneRuntime`, root and child entities receive fresh,
+  monotonic `EntityId` values allocated directly from the active runtime scene's entity pool.
+
+---
+
+## Prefab Document Schema And Explicit Bounds
+
+Prefab documents enforce strict structural bounds to prevent unbounded memory growth, stack
+overflows during recursive expansion, and allocation spikes:
+
+```cpp
+namespace Horo::Prefab {
+    inline constexpr std::size_t MaximumPrefabHierarchyDepth = 16;
+    inline constexpr std::size_t MaximumPrefabObjectCount    = 256;
+    inline constexpr std::size_t MaximumPrefabPayloadBytes   = 4 * 1024 * 1024; // 4 MiB
+    inline constexpr std::size_t MaximumPrefabComponentsPerObject = 64;
+}
+```
+
+### Authoring Document Structure (`PrefabDocument`)
+
+```cpp
+struct PrefabObjectNode {
+    LocalObjectId localId;
+    std::optional<LocalObjectId> parentLocalId;
+    std::string name;
+    Vec3 localPosition{0.0f, 0.0f, 0.0f};
+    Vec3 localScale{1.0f, 1.0f, 1.0f};
+    Quat localRotation{Quat::Identity()};
+
+    // Component payloads (typed built-in components + opaque custom payloads)
+    std::optional<Runtime::MeshComponent> mesh;
+    std::optional<Runtime::CameraComponent> camera;
+    std::optional<Runtime::LightComponent> light;
+    std::optional<Runtime::AudioSourceComponent> audioSource;
+    std::vector<RawComponentPayload> customComponents;
+    std::vector<Gameplay::BehaviorAttachmentDefinition> behaviors;
+};
+
+struct PrefabDocument {
+    std::uint32_t schemaVersion{1};
+    Assets::AssetId assetId;
+    std::vector<PrefabObjectNode> objects; // objects[0] is root (LocalObjectId{0})
+    std::vector<Assets::AssetId> referencedAssets;
 };
 ```
 
-When the prefab expands, its assets are merged into the scene model. The merge
-policy is:
+---
 
-- Same `id` and compatible definition: keep the scene's existing entry.
-- Same `id` with conflicting definition: emit a conversion diagnostic and keep
-  the scene's entry.
-- New `id`: add to the scene asset list.
+## Runtime Cooked Prefab (`CookedPrefab`)
 
-## Identity, Renames, And References
+The Asset Pipeline cooks source `.prefab` files into immutable `CookedPrefab` artifacts.
 
-Prefabs use the same stable GUID rules as other assets. The `prefabId` is the
-primary identity; `sourcePath` is the resolution hint. If a prefab file is moved
-or renamed, the path index must be updated. References that cannot be resolved
-by path may be recovered through the `prefabId` if the project asset index maps
-it to a new location.
+### Binary Layout
 
-## Cooking And Packaging
+- **Header**: Magic bytes (`HPFB`), schema version, cryptographic digest (SHA-256 of source and dependencies),
+  and object count.
+- **Hierarchy Table**: Flat array of parent-child slot indices and local transforms.
+- **Component Tables**: Contiguous, aligned arrays of primitive component data and behavioral descriptors.
+- **Asset Reference Table**: List of dependent `AssetId`s required for instantiation.
 
-Prefabs participate in the asset pipeline as authored assets:
+```cpp
+namespace Horo::Runtime {
+    class CookedPrefab final {
+    public:
+        [[nodiscard]] Assets::AssetId GetAssetId() const noexcept;
+        [[nodiscard]] std::uint32_t GetObjectCount() const noexcept;
+        [[nodiscard]] std::span<const PrefabSlotDescriptor> GetHierarchy() const noexcept;
+        [[nodiscard]] std::span<const Assets::AssetId> GetDependencies() const noexcept;
+        // ... internal typed component table accessors
+    };
+}
+```
 
-- The editor saves prefabs as source `.prefab` files.
-- The cook step resolves prefab references inside scenes and inlines the expanded
-  objects into the cooked scene artifact.
-- Release packages do not ship raw `.prefab` files as runtime data; they ship
-  cooked scenes where prefabs have already been expanded and validated.
-- Prefab source files may be included in developer-facing source or editor package
-  profiles, but not in release player builds.
+---
 
-## Relationship To Other Systems
+## Dynamic Runtime Spawning Contract
 
-- **Editor Document Model**: prefab creation is a document command; prefab
-  placement creates a scene object with a `prefabInstance` reference.
-- **Asset Pipeline**: prefabs are authored assets with sidecar metadata and
-  stable identity. They are resolved and inlined during cook.
-- **Scene Runtime**: runtime scenes never see prefab references directly; they
-  receive an already-expanded `RuntimeSceneDefinition`.
-- **Gameplay Behaviors**: a behavior attached to a prefab root is instantiated
-  for each expanded instance using the same lifecycle as any scene object.
+Gameplay behaviors and runtime systems request prefab spawning through transactional command buffers
+or direct runtime access:
 
-## Diagnostics
+```cpp
+namespace Horo::Runtime {
+    struct PrefabSpawnRequest {
+        Assets::AssetId prefabAssetId;
+        Transform spawnTransform;
+        std::optional<EntityId> parentEntity{std::nullopt};
+    };
 
-Conversion must report clear diagnostics for:
+    struct SpawnedPrefabHandle {
+        EntityId rootEntity;
+        std::vector<EntityId> childEntities;
+    };
+}
+```
 
-- missing prefab file
-- prefab file with unsupported schema version
-- prefab root object missing
-- asset ID conflict between prefab and scene
-- invalid instance override (unknown field, malformed transform)
+### Spawning Execution Sequence
 
-## Future Extensions
+```text
+SceneCommandBuffer::SpawnPrefab(request)
+  -> Verify prefab asset is loaded in AssetRegistry / IAssetProvider
+  -> Check scene entity capacity (reject if capacity exceeded)
+  -> Allocate monotonic EntityId for root and each child object
+  -> Apply spawnTransform to root; set up parent-child entity relations
+  -> Copy component data into scene contiguous component pools
+  -> Attach gameplay behaviors and invoke OnCreate()
+  -> Commit transaction at SceneRuntime tick synchronization point
+  -> Invoke OnStart() for all newly spawned behaviors
+```
 
-- Multi-object prefabs with an explicit root/children subtree.
-- Prefab variants that inherit from a base prefab and apply delta overrides.
-- Nested prefab references where one prefab can place another prefab as a child.
-- Component-level overrides on instances.
-- Prefab thumbnails and viewport drag-and-drop placement.
+---
+
+## Preservation Of Unknown Project Components
+
+To support modular gameplay packages and project-specific C++ plugins:
+
+1. **Opaque Preservation Contract**:
+   ```cpp
+   struct RawComponentPayload {
+       std::string componentTypeId;
+       std::uint32_t schemaVersion{1};
+       std::vector<std::uint8_t> serializedBytes;
+   };
+   ```
+2. **Editor Roundtrip**: If an authored prefab or scene contains custom component types unknown to
+   the base editor binary, the data is preserved in `RawComponentPayload` verbatim. Saving, cloning,
+   or expanding the prefab preserves these components without truncation.
+3. **Runtime Spawning Safety**: If an unregistered component type is encountered during runtime
+   spawn, the runtime skips the unrecognized component, records a structured diagnostic warning,
+   and completes valid entity and behavior instantiation without aborting.
+
+---
+
+## Diagnostics And Error Model
+
+Dynamic spawning and authoring expansion report structured, typed errors:
+
+```cpp
+enum class PrefabError : std::uint32_t {
+    Success = 0,
+    AssetNotFound,              // AssetId not registered in CookCatalog / AssetRegistry
+    AssetNotLoaded,             // Async asset load still pending
+    CorruptedPayload,           // Checksum or magic header validation failed
+    HierarchyDepthExceeded,     // Template exceeds MaximumPrefabHierarchyDepth (16)
+    ObjectCountExceeded,        // Template exceeds MaximumPrefabObjectCount (256)
+    CyclicReferenceDetected,    // Nested prefab inclusion contains a cycle
+    EntityAllocationExhausted,  // Scene runtime ran out of available EntityIds
+    ComponentAllocationFailed   // Memory allocation failed for component pool
+};
+```
+
+### Validation Matrix
+
+| Case Category | Test Scenario | Expected Outcome |
+|---|---|---|
+| **Valid** | Single-root prefab with mesh & transform | Expands/spawns correctly; root entity created |
+| **Valid** | Multi-object hierarchy (depth 3, 5 objects) | Preserves relative transforms and child parenting |
+| **Valid** | Dynamic spawn with attached gameplay behavior | Calls `OnCreate` followed by `OnStart` |
+| **Boundary** | Maximum hierarchy depth (exactly 16) | Expansion and spawn succeed |
+| **Boundary** | Maximum object count (exactly 256) | Allocation and instantiation succeed |
+| **Boundary** | Empty overrides on placed instance | Inherits base template values completely |
+| **Malformed** | Cycle detection (`A -> B -> A`) | Rejection with `PrefabError::CyclicReferenceDetected` |
+| **Malformed** | Hierarchy depth > 16 or count > 256 | Rejection with boundary error diagnostic |
+| **Malformed** | Corrupted magic header or truncated payload | Rejection with `PrefabError::CorruptedPayload` |
+| **Lifecycle** | Spawn non-existent `AssetId` | Returns `PrefabError::AssetNotFound`; no scene leak |
+| **Lifecycle** | Unknown component in cooked template | Preserves/skips component safely without crashing |
+| **Lifecycle** | Scene destruction with active spawned entities | Cleanly tears down entities and behavior instances |
+
+---
 
 ## Related Documents
 
-- [Prefab Editor UI Reference](./prefab-editor.html): hierarchy, instance overrides, variant chain, and apply/revert panel.
-
-- [Asset Pipeline](./asset-pipeline.md)
-- [Scene Runtime](./scene-runtime.md)
+- [ADR-011: Prefab Role, Ownership and Capability-Tier Decision](../../adr/011-prefab-role-ownership-and-capability-tiers.md)
+- [Scene Runtime Architecture](./scene-runtime.md)
+- [Asset Pipeline Architecture](./asset-pipeline.md)
+- [Gameplay Behavior Authoring](../extensions/gameplay-behavior-authoring.md)
+- [Project Versioning and Migration](../foundation/project-versioning-and-migration.md)
 - [Editor Document Model](../editor/editor-document-model.md)
-- [Built-In Scene Primitives](./built-in-scene-primitives.md)
-- [Desired Project Trees](../desired-project-tree.md)
