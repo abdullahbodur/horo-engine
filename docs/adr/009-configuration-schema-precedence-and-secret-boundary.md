@@ -40,7 +40,7 @@ The current implementation provides a useful typed baseline, but it is a single-
 | `SettingScope` | One enum mixes ownership/persistence concepts and cannot express legal source sets | **Revised.** It remains a compatibility field until the typed source-policy contract in [CFG-001.2]/[CFG-001.3] replaces it; it is not the authoritative domain owner. |
 | Immutable shared snapshots | `shared_ptr<const Data>` preserves captured revisions | **Ratified.** Readers continue to observe one complete revision and never a partially applied update. |
 | Resolution and provenance | Defaults plus successive draft commits; no `ConfigurationSource` | **Revised.** [CFG-001.2] adds the single resolver and per-value provenance. Direct `LoadJson()` commits are not the final resolution model. |
-| Unknown and malformed inputs | Unknown JSON keys are ignored; primitive parse/type errors fail fast | **Revised.** Unknown, illegal-source and malformed values produce typed deterministic diagnostics through the resolution pipeline. |
+| Unknown and malformed inputs | Unknown JSON keys are ignored; primitive parse/type errors stop at the first failure | **Revised.** Unknown, illegal-source and malformed values produce typed diagnostics in the deterministic validation order defined below. |
 | Persistence | Direct truncating write and unordered serialization | **Revised.** [CFG-001.2] owns versioned deterministic documents, temporary same-filesystem writes, durable flush and atomic replacement. |
 | Reload and notifications | Immutable commit and post-lock event exist; reload policy/domain projection are not enforced | **Ratified as a starting mechanism, revised as a lifecycle contract.** [CFG-001.4] owns synchronization-point activation, rollback and one deterministic committed-change notification. |
 | Editor settings adapter | Editor model is authoritative; four values are projected into Foundation configuration | **Ratified only as migration compatibility.** [CFG-001.5] moves the Settings modal to the shared authority without preserving two independently mutable sources of truth. |
@@ -70,7 +70,7 @@ The current production schema has no orphan descriptors: `editor.theme.active`, 
 
 ### Canonical source precedence
 
-All hosts use this order from highest to lowest:
+All hosts use this default order from highest to lowest. The descriptor-gated environment/session exception below is the only permitted inversion:
 
 1. explicit invocation arguments;
 2. environment bindings captured by the host;
@@ -82,11 +82,17 @@ All hosts use this order from highest to lowest:
 
 The resolver evaluates only sources permitted by the descriptor. Environment variables are not discovered from dotted keys: each mapping is explicitly declared by the owning module, uses the `HORO_` prefix and is collision-checked at composition.
 
-The documented `sessionOverride` exception is retained: a session value may override a captured environment value only when the descriptor explicitly permits it. Otherwise the environment-derived value is locked for the process lifetime. This exception is part of resolution, not an alternate host-specific precedence list.
+The documented `sessionOverride` exception is retained. When both permitted environment and session candidates exist for one setting, the resolver selects the session candidate only when that setting's descriptor enables `sessionOverride`; otherwise it selects the environment candidate. When only one of those candidates exists, the resolver selects it if the descriptor permits its source. This conditional comparison changes no other pair in the precedence order and is not an alternate host-specific precedence list.
 
 Foundation and feature modules never call `getenv()` to obtain setting values. A host/platform adapter captures the environment once and passes a bounded input map into composition. CLI, GUI, MCP and test hosts use the same resolver API; they may provide different source maps, but not different precedence rules.
 
 Each resolved value records its winning source and optional safe source location. Presentation surfaces may explain shadowed values from this provenance, but callers branch only on typed results and setting identities.
+
+### Validation and diagnostic ordering
+
+Candidate inputs that can be parsed safely are validated completely before activation. The resolver emits findings in `(source precedence, setting key, diagnostic code, source location)` order and returns one typed failure carrying that ordered diagnostic list. It never activates the valid subset of a failed candidate.
+
+Failing immediately is reserved for conditions that make further bounded inspection unsafe or meaningless, such as an unreadable document, an oversized input or invalid document syntax. The returned typed error still identifies the source and preserves any diagnostics produced before parsing became impossible. Hosts do not choose their own fail-fast or aggregation policy.
 
 ### Secret and credential boundary
 
