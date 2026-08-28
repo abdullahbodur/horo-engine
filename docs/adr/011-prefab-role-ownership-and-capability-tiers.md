@@ -12,6 +12,7 @@
 `docs/architecture/runtime/prefab-architecture.md` initially defined a prefab strictly as an authoring-time template expanded into the containing scene's `RuntimeSceneDefinition` prior to runtime initialization, stating that release packages never ship `.prefab` files. However, Gameplay behavior authoring (`docs/architecture/extensions/gameplay-behavior-authoring.md`), the cinematic sequencer (`docs/architecture/runtime/cinematic-sequencer.html`), and dynamic VFX/projectile systems require dynamic runtime instantiation of entity templates during active gameplay.
 
 This discrepancy created an architectural contradiction:
+
 1. If prefabs are solely inlined and stripped at scene cook time, runtime gameplay and scene systems cannot dynamically spawn templated entities (such as projectiles, enemies, interactive props, or particle hierarchies) without inventing a duplicate ad-hoc runtime archetype or prototype system.
 2. Conversely, if raw authoring `.prefab` files are parsed at runtime, release builds incur source parsing overhead, schema version migration baggage, unvalidated editor metadata, and path-authority drift.
 3. Without explicit capability staging, baseline single-root authoring, multi-object authoring, runtime dynamic spawning, and live variant inheritance were conflated across disparate milestone goals.
@@ -72,6 +73,7 @@ Capability delivery is partitioned into three discrete tiers:
 ```
 
 #### Tier 0: Authoring Template Expansion & Instantiation (Baseline / M1)
+
 - Authored `.prefab` files stored under `assets/prefabs/` as canonical JSON/structured source documents adhering to `ProjectVersion`.
 - Supports single-root and multi-object parent-child hierarchies within explicit bounds (max hierarchy depth 16, max object count 256, max payload size 4 MiB).
 - `SceneDocument` references prefabs via `ScenePrefabInstance` containing `AssetId` and root transform overrides.
@@ -80,6 +82,7 @@ Capability delivery is partitioned into three discrete tiers:
 - Serializer and expansion pipeline preserve unrecognized gameplay/plugin components as opaque typed byte payloads without data stripping.
 
 #### Tier 1: Runtime Dynamic Spawn from Cooked Prefab (Engine Target / M2)
+
 - Asset Pipeline cooks `.prefab` source assets into platform-optimized, immutable binary `CookedPrefab` artifacts (`core.prefab` asset type).
 - Cooked prefabs participate in the standard `AssetRegistry` and `CookCatalog`, loaded via `IAssetProvider`.
 - `SceneRuntimeAccess` and `SceneCommandBuffer` expose typed spawn operations:
@@ -94,6 +97,7 @@ Capability delivery is partitioned into three discrete tiers:
 - Fail-safe lifecycle handling: if a cooked prefab is missing, unloadable, or corrupted, the spawn call returns an explicit `PrefabError` without corrupting active scene state or throwing unhandled exceptions.
 
 #### Tier 2: Live Variant Inheritance & Dynamic Override Tracking (Deferred / M3+)
+
 - Prefab Variants allow creating specialized prefabs that inherit from a base prefab asset and record delta overrides (property overrides, added/removed components, extra child entities).
 - Multi-tier variant inheritance chains (`Base -> VariantA -> VariantB`) evaluated as a directed acyclic graph (DAG).
 - Editor workspace listens for base prefab mutation events and propagates updates in real time to open variant documents and active viewport previews.
