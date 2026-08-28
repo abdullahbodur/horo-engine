@@ -431,4 +431,3 @@ Save game architecture is verified by the following test suites:
 - [Gameplay Module Boundary](../extensions/gameplay-module-boundary.md): Dynamic gameplay state serialization contracts
 - [Error And Diagnostics](../foundation/error-and-diagnostics.md): Structured error handling and diagnostic reporting
 - [Application Security](../security/application-security.md): Save file validation, checksums, and signing
-
