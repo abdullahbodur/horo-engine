@@ -349,8 +349,7 @@ namespace {
         const BindingValidationReport report = ValidateBindingProfile(actions, InputBindingProfile{});
         REQUIRE((!report.IsValid()));
         REQUIRE((std::ranges::any_of(report.diagnostics, [](const BindingDiagnostic &diagnostic) {
-            return diagnostic.code == BindingDiagnosticCode::InvalidAction &&
-                   diagnostic.message.find("shared.action") != std::string::npos;
+            return diagnostic.code == BindingDiagnosticCode::InvalidAction && diagnostic.message.find("shared.action") != std::string::npos;
         })));
     }
 
@@ -364,8 +363,7 @@ namespace {
         const BindingValidationReport report = ValidateBindingProfile(actions, InputBindingProfile{});
         REQUIRE((!report.IsValid()));
         REQUIRE((std::ranges::any_of(report.diagnostics, [](const BindingDiagnostic &diagnostic) {
-            return diagnostic.action.Value() == "malformed.chord" &&
-                   diagnostic.code == BindingDiagnosticCode::AmbiguousChord;
+            return diagnostic.action.Value() == "malformed.chord" && diagnostic.code == BindingDiagnosticCode::AmbiguousChord;
         })));
     }
 

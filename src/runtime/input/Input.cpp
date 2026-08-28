@@ -493,9 +493,9 @@ namespace Horo::Input {
                     continue;
                 }
                 if (!actionIds.insert(action.id.Value()).second) {
-                    report.diagnostics.emplace_back(
-                        InvalidAction, action.id,
-                        std::format("Action map contains more than one descriptor for action ID '{}'.", action.id.Value()));
+                    report.diagnostics.emplace_back(InvalidAction, action.id,
+                                                    std::format("Action map contains more than one descriptor for action ID '{}'.",
+                                                                action.id.Value()));
                     continue;
                 }
                 if (!action.context.IsValid()) {
