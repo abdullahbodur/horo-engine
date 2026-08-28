@@ -90,7 +90,7 @@ Metal iOS), WebGL, Desktop, and Consoles:
   operate in camera-relative space, maximizing depth precision near the camera.
 
 See [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin-rebasing.md)
-and [ADR-014](../../adr/014-large-world-precision-and-floating-origin-strategy.md).
+and [ADR-026](../../adr/026-large-world-precision-and-floating-origin-strategy.md).
 
 ## Backend Selection
 
@@ -701,7 +701,7 @@ Required tests cover:
 ## Related Documents
 
 - [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin-rebasing.md)
-- [ADR-014: Large-World Precision and Floating Origin Strategy](../../adr/014-large-world-precision-and-floating-origin-strategy.md)
+- [ADR-026: Large-World Precision and Floating Origin Strategy](../../adr/026-large-world-precision-and-floating-origin-strategy.md)
 - [Render Settings UI Reference](./render-settings.html): quality presets, render feature toggles, resolution, and GPU profiler panel.
 - [Render Backend Parity Contract](./render-backend-parity-contract.md)
 - [Renderer Distribution And Availability](./renderer-distribution-and-availability.md)

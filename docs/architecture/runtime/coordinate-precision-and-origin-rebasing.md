@@ -381,7 +381,7 @@ Automated and integration test suites must cover:
 
 ## Related Documents and ADRs
 
-- [ADR-014: Large-World Precision and Floating Origin Strategy](../../adr/014-large-world-precision-and-floating-origin-strategy.md): Ratified architecture decision and context.
+- [ADR-026: Large-World Precision and Floating Origin Strategy](../../adr/026-large-world-precision-and-floating-origin-strategy.md): Ratified architecture decision and context.
 - [World Streaming Architecture](./world-streaming-architecture.md): Spatial partitioning, streaming cells, volumes, and lifecycle.
 - [Rendering Architecture](./rendering-architecture.md): Render extraction, camera-relative matrices, and GPU resource ownership.
 - [Physics Architecture](./physics-architecture.md): Fixed-step physics, transform authority, and local world simulation.

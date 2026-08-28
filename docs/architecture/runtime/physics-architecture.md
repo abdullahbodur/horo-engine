@@ -186,7 +186,7 @@ The active `PhysicsWorld` executes in local rebased cluster coordinates relative
 - **Solver State Continuity**: Contact manifolds retain relative contact points and penetration normals. Sleeping rigid bodies and deactivated islands remain asleep without triggering wake-up spikes or momentum shocks.
 - **Timing Safe Point**: Origin shifts are forbidden while `PhysicsWorld::Step` is executing. Shifts execute only at the declared pre-render frame synchronization safe point.
 
-See [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin-rebasing.md) and [ADR-014](../../adr/014-large-world-precision-and-floating-origin-strategy.md).
+See [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin-rebasing.md) and [ADR-026](../../adr/026-large-world-precision-and-floating-origin-strategy.md).
 
 ## Debugging And Metrics
 
@@ -235,7 +235,7 @@ Required tests cover:
 - [Physics Debugger UI Reference](./physics-debugger.html): collision layers, contact pairs, rigidbody inspection, and solver diagnostics panel.
 
 - [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin-rebasing.md)
-- [ADR-014: Large-World Precision and Floating Origin Strategy](../../adr/014-large-world-precision-and-floating-origin-strategy.md)
+- [ADR-026: Large-World Precision and Floating Origin Strategy](../../adr/026-large-world-precision-and-floating-origin-strategy.md)
 - [Runtime Lifecycle](./runtime-lifecycle.md)
 - [Scene Runtime](./scene-runtime.md)
 - [World Streaming Architecture](./world-streaming-architecture.md)

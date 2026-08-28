@@ -268,13 +268,13 @@ World streaming in Horo Engine operates on a global coordinate grid backed by 64
 - **Subsystem Synchronization**: The resulting `OriginRebaseEvent` translates local simulation frames across Physics, Audio, VFX, Camera, and Navigation without velocity spikes, particle destruction, or Doppler glitching.
 - **GPU Compatibility**: GPU shaders remain 32-bit `fp32` across all backends. Camera-relative transformations $(P_{\text{world}} - C_{\text{camera}})$ are computed on the CPU during render extraction.
 
-See [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin-rebasing.md) and [ADR-014](../../adr/014-large-world-precision-and-floating-origin-strategy.md) for the complete normative specification.
+See [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin-rebasing.md) and [ADR-026](../../adr/026-large-world-precision-and-floating-origin-strategy.md) for the complete normative specification.
 
 ## Related Documents
 
 - [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin-rebasing.md):
   canonical 64-bit world coordinates, floating origin rebasing, and subsystem adapters
-- [ADR-014: Large-World Precision and Floating Origin Strategy](../../adr/014-large-world-precision-and-floating-origin-strategy.md):
+- [ADR-026: Large-World Precision and Floating Origin Strategy](../../adr/026-large-world-precision-and-floating-origin-strategy.md):
   ratified architectural decision and platform cost analysis
 - [Scene Runtime](./scene-runtime.md): cell loading integrates with the scene
   model
