@@ -340,7 +340,7 @@ namespace Horo::Runtime {
 1. **Storage Full / Write Error**: If disk space is exhausted or a write fails during chunk serialization:
    - The temporary `.tmp` archive is immediately removed.
    - The original `.horosave` file on disk is left unmodified and intact.
-   - A structured diagnostic error (`Result<SaveOperationResult>`) is returned.
+   - A structured diagnostic error (`Result<SaveOperationHandle>`) is returned.
 2. **Cancellation**: If the user or engine requests cancellation via `CancellationToken`:
    - Serialization workers abort cleanly.
    - Partial temporary files are unlinked.
