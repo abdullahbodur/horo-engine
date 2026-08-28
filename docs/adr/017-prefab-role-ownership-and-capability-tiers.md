@@ -1,4 +1,4 @@
-# ADR-011: Prefab Role, Ownership and Capability-Tier Decision
+# ADR-017: Prefab Role, Ownership and Capability-Tier Decision
 
 - **Status**: Proposed
 - **Date**: 2026-08-28
