@@ -5,6 +5,7 @@
 - **Supersedes**: None
 - **Scope**: Runtime VFX subsystem ownership, simulation domain selection policy, platform fallback matrix, render extraction boundary, pass placement and sorting
 - **Issue**: [#1749](https://github.com/abdullahbodur/horo-engine/issues/1749) ([VFX-001.1])
+- **JIRA**: HORO-1706
 - **Normative document**: [VFX And Particles Architecture](../architecture/runtime/vfx-and-particles-architecture.md)
 
 ## Context
