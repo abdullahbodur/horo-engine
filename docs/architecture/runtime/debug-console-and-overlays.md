@@ -424,17 +424,20 @@ queuing mutable commands to the owning safe point:
 Console expectations across dependent subsystems are unified under this policy:
 
 ### Dedicated Server Administration (NET-007.9)
+
 - Server management commands (`net.kick`, `net.ban`, `net.change_map`, `net.server_status`) declare `CommandPermission::Restricted` and `CommandThreadPolicy::OwnerThreadNextFrame`.
 - Remote administration requires cryptographic token authentication before opening an admin session.
 - Execution occurs at server tick safe points without bypassing network admission or gameplay authority. Sensitive arguments are marked `sensitive` and redacted from logs.
 
 ### Authorized Network Debug Controls (NET-008.12)
+
 - Network simulation commands (`net.simulate_latency`, `net.simulate_packet_loss`, `net.disconnect`, `net.request_resync`) declare `CommandPermission::AdminCheat` or `Developer`.
 - Editor debug panels invoke these typed console commands rather than calling transport internals directly.
 - Commands target sessions using generation-safe `SessionHandle` identifiers, failing safely if stale.
 - Descriptors are compiled out of Retail Shipping client builds.
 
 ### World Streaming Diagnostics (WST-010.8)
+
 - Streaming inspection commands (`wst.snapshot`, `wst.cell_status`) declare `CommandPermission::Developer`.
 - Snapshots capture immutable scene/cell state on `OwnerThreadNextFrame`, then dispatch report serialization to a non-blocking `WorkerJob` reporting to `OperationStore`.
 - Mutating commands (`wst.force_evict`, `wst.force_load`) declare `CommandPermission::AdminCheat`.

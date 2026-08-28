@@ -201,6 +201,7 @@ This decision explicitly ratifies and reconciles the console command requirement
 ```
 
 #### A. Dedicated Server Administration ([NET-007.9](https://github.com/abdullahbodur/horo-engine/issues/1169))
+
 - **Role**: Server management commands (e.g. `net.kick`, `net.ban`, `net.change_map`, `net.server_status`, `net.set_max_players`).
 - **Classification**: `CommandPermission::Restricted`.
 - **Reconciliation**:
@@ -209,6 +210,7 @@ This decision explicitly ratifies and reconciles the console command requirement
   - Sensitive arguments (passwords, admin tokens, player IP addresses) must set `sensitive = true` and `CommandFlags::RedactArguments` to guarantee automatic redaction in logs and history.
 
 #### B. Authorized Network Debug Controls ([NET-008.12](https://github.com/abdullahbodur/horo-engine/issues/1183))
+
 - **Role**: Simulation of network impairment and connection lifecycle (e.g. `net.simulate_latency`, `net.simulate_packet_loss`, `net.disconnect`, `net.request_resync`).
 - **Classification**: `CommandPermission::AdminCheat` (for mutations/impairments) and `CommandPermission::Developer` (for inspection).
 - **Reconciliation**:
@@ -217,6 +219,7 @@ This decision explicitly ratifies and reconciles the console command requirement
   - Completely stripped from Retail Shipping client builds.
 
 #### C. World Streaming Diagnostics ([WST-010.8](https://github.com/abdullahbodur/horo-engine/issues/1652))
+
 - **Role**: Streaming cell residency inspection, memory usage query, forced residency changes (e.g. `wst.snapshot`, `wst.cell_status`, `wst.force_evict`).
 - **Classification**: Read-only queries are `CommandPermission::Developer`; forced eviction/loading mutations are `CommandPermission::AdminCheat`.
 - **Reconciliation**:
