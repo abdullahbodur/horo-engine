@@ -896,3 +896,5 @@ play-session or process restart rather than attempting unsafe live mutation.
 - [Editor Document Model](../editor/editor-document-model.md)
 - [Extension System](./plugin-system.md)
 - [Horo Package System](../packages/package-system.md): library-provided behaviors
+- [Navigation And AI Architecture](../runtime/navigation-and-ai-architecture.md): NavMesh, perception, and AI decision runtime
+- [ADR-011: Gameplay AI Ownership, Scheduling and Behavior Boundary](../../adr/011-gameplay-ai-ownership-scheduling-and-behavior-boundary.md)
