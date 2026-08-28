@@ -92,8 +92,9 @@ composition roots:
     `HoroEngine::RenderApi`, `HoroEngine::RuntimeScene`, `HoroEngine::GameplayRuntime`,
     `HoroEngine::Physics`, `HoroEngine::Audio`, or `HoroEngine::Networking`.
   - Cannot instantiate full scene pipelines or launch game runtime loops.
-  - Fast cold-start time (<10ms) and minimal memory footprint suitable for
-    high-throughput containerized asset packaging.
+  - A bounded cold-start and memory budget suitable for high-throughput
+    containerized asset packaging. Concrete thresholds require a release-build
+    benchmark on each supported host profile.
 
 ## Host Model and Execution Pipeline
 
