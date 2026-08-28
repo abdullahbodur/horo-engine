@@ -322,14 +322,19 @@ authority. The bounded emergency exception below is the only bypass.
 
 ### Jira Smart Commits And Delivery Identity
 
+Identifier glossary:
+
+- `HORO`: the Horo Engine Jira project key;
+- `JOB`: the Jobs workstream domain-alias prefix;
+- `REND`: the Rendering workstream domain-alias prefix.
+
 Before creating a normal delivery branch, resolve and preserve all three
 identifiers:
 
-- the Jira issue key, where Horo Engine (`HORO`) is this site's project key; for
-  example, `HORO-1784`;
+- the Jira issue key, for example `HORO-1784`;
 - the GitHub issue number, for example `#1828`;
-- the repository domain ticket alias from the GitHub issue title, such as Jobs
-  (`JOB`) in `[JOB-001.1]` or Rendering (`REND`) in `[REND-001.2]`.
+- the repository domain ticket alias from the GitHub issue title, such as
+  `[JOB-001.1]` or `[REND-001.2]`.
 
 The normal commit-subject and pull-request-title order is:
 
