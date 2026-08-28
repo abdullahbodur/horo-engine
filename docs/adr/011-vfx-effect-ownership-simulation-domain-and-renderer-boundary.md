@@ -192,7 +192,7 @@ struct VfxRenderBatch {
 ### Pass Placement, Material Pipeline, and Sorting
 
 1. **Standard Material Pipeline Integration**:
-   - Particle and decal shaders are authored and compiled via the engine's standard material system (refer to [Material And Shader Model](./material-and-shader-model.md)).
+   - Particle and decal shaders are authored and compiled via the engine's standard material system (refer to [Material And Shader Model](../architecture/runtime/material-and-shader-model.md)).
    - Shading models supported: `Unlit`, `DefaultPBR` (lit particles/mesh particles), and `DecalEmissive`/`DecalPBR`.
    - Blend modes: `Opaque`, `Masked`, `Translucent` (alpha blend), and `Additive`.
    - Soft particles: Translucent particle shaders consume the scene depth buffer texture to evaluate soft-intersection depth fading.
