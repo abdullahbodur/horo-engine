@@ -134,7 +134,7 @@ enum class SimulationDomain : uint8_t {
    - System particle count is low-to-medium (≤ 2,048 particles).
    - Running on low-spec hardware tiers (e.g., `es3`) or in headless/null environments.
 2. **`SimulationDomain::GPU`** is selected when:
-   - System particle count is high (2,048 to 1,000,000+ particles).
+   - System particle count is high (> 2,048 particles).
    - Complex vector fields, curl noise, or GPU depth-buffer collisions are utilized.
    - Effects are purely cosmetic (visual-only, no synchronous gameplay CPU readback).
 3. **`SimulationDomain::Automatic`** (Asset Default):
