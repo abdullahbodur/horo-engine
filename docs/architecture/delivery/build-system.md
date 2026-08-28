@@ -177,6 +177,8 @@ audio/
 network/
     HoroEngine::NetworkApi
     HoroEngine::NetworkRuntime
+    HoroEngine::NetworkTransportNull
+    HoroEngine::NetworkTransportENet
 
 asset/
     HoroEngine::Assets

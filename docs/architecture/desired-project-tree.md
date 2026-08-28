@@ -233,8 +233,18 @@ horo-engine/
 │       │   │   ├── RenderBackend.h
 │       │   │   ├── RenderBackendRegistry.h
 │       │   │   ├── RenderFrontend.h
-│       │   │   └── NullBackendModule.h
-│       │   ├── Networking.h
+│       │   ├── Network/
+│       │   │   ├── NetworkApi.h
+│       │   │   ├── NetworkHandles.h
+│       │   │   ├── NetworkTypes.h
+│       │   │   ├── NetworkAddress.h
+│       │   │   ├── NetworkMessage.h
+│       │   │   ├── NetworkErrors.h
+│       │   │   ├── INetworkTransport.h
+│       │   │   ├── NetworkRuntime.h
+│       │   │   ├── NetworkSession.h
+│       │   │   ├── ReplicationManager.h
+│       │   │   └── ReplicationTraits.h
 │       │   ├── GameUI.h
 │       │   ├── DebugConsole.h
 │       │   ├── PlatformServices.h
@@ -396,6 +406,22 @@ horo-engine/
 │   │   │       ├── SdlInputBackend.h
 │   │   │       └── SdlInputBackend.cpp
 │   │   ├── networking/
+│   │   │   ├── api/
+│   │   │   │   ├── NetworkAddress.cpp
+│   │   │   │   ├── NetworkErrors.cpp
+│   │   │   │   └── NetworkMessage.cpp
+│   │   │   ├── runtime/
+│   │   │   │   ├── NetworkRuntime.cpp
+│   │   │   │   ├── NetworkSession.cpp
+│   │   │   │   ├── ConnectionStateMachine.cpp
+│   │   │   │   └── ReplicationManager.cpp
+│   │   │   └── backends/
+│   │   │       ├── null/
+│   │   │       │   ├── NullTransportBackend.h
+│   │   │       │   └── NullTransportBackend.cpp
+│   │   │       └── enet/
+│   │   │           ├── ENetTransportBackend.h
+│   │   │           └── ENetTransportBackend.cpp
 │   │   ├── debug/
 │   │   └── platform_services/
 │   │       ├── frontend/
@@ -599,6 +625,14 @@ horo-engine/
 │   │   │   │   └── middleware_bridge/
 │   │   │   ├── input/
 │   │   │   ├── networking/
+│   │   │   │   ├── NetworkAddressTests.cpp
+│   │   │   │   ├── NetworkApiTests.cpp
+│   │   │   │   ├── ConnectionStateMachineTests.cpp
+│   │   │   │   ├── BoundedMessageQueueTests.cpp
+│   │   │   │   ├── ReplicationManagerTests.cpp
+│   │   │   │   ├── NetworkTransportNullTests.cpp
+│   │   │   │   ├── NetworkTransportENetTests.cpp
+│   │   │   │   └── NetworkLifecycleAndShutdownTests.cpp
 │   │   │   ├── game_ui/
 │   │   │   ├── debug/
 │   │   │   └── platform_services/
