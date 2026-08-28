@@ -767,6 +767,48 @@ are applied only through explicit graph edit commands with preview, undo, and
 validation. Agent mode cannot bypass behavior access declarations or write graph
 assets directly from a UI callback.
 
+## Gameplay AI And Shared Decision Boundary
+
+Generic object-attached gameplay behaviors and gameplay AI decision graphs (`HoroAI`)
+integrate through shared foundation primitives without creating competing task
+schedulers or divergent blackboard structures:
+
+1. **AI Decision Graph Assets & UI Independence**:
+   - AI decision logic is authored through dedicated, immutable typed assets: `BehaviorTreeAsset` (`.horo_bt`), `StateMachineAsset` (`.horo_sm`), and `UtilityAiAsset` (`.horo_utility`).
+   - Persisted graph schemas contain only semantic data (stable `GraphId`, `NodeId`, `PinId`, property definitions, and blackboard key bindings).
+   - Visual presentation data (node layout $(x, y)$, routing bends, comments, zoom/pan) is stored exclusively in sidecar authoring metadata (`.meta`) or stripped during asset cooking.
+   - Cooked runtime plans have **zero dependency** on `imgui-node-editor` or editor widget libraries.
+   - The `DecisionGraphCompiler` translates source graphs into flat, contiguous, immutable execution plans (`CookedDecisionPlan`) evaluated without runtime pointer chasing.
+
+2. **Core 1.0 AI Paradigms vs Post-1.0 Extensions**:
+   - **1.0 Core**:
+     - *Behavior Trees*: Composites (`Selector`, `Sequence`, `Parallel`), Decorators (`Inverter`, `Cooldown`, `Loop`, `BlackboardCheck`, `TimeLimit`), Tasks (`MoveTo`, `Wait`, `PlayAnim`, `CustomTask`), and Services.
+     - *Hierarchical State Machines (HSM)*: Nested states, transitions, guard conditions, entry/exit/update actions.
+     - *Simple Utility Scoring*: Considerations, response curves, normalized $[0.0, 1.0]$ score aggregation, utility selector.
+   - **Post-1.0 Extensions**:
+     - Hierarchical Task Networks (HTN), Goal-Oriented Action Planning (GOAP), Reinforcement Learning (RL) / learned policy inference, and Generative LLM NPC decision providers are explicitly categorized as post-1.0 extensions and integrate via dedicated provider seams without altering the 1.0 decision core.
+
+3. **Shared Blackboard Model**:
+   - `BlackboardKey`, `BlackboardValue`, and `BlackboardSchema` are shared foundational
+     primitives.
+   - Both `BehaviorComponent` and `AiControllerComponent` bind to typed blackboard
+     instances. A generic gameplay behavior can read blackboard keys written by AI
+     decisions or write blackboard state to trigger AI reactions.
+   - Blackboard mutations are committed at deterministic synchronization safe points
+     before decision evaluation runs.
+
+4. **Single Task Scheduler & Lifecycle Alignment**:
+   - Gameplay behaviors and AI systems must not create competing thread pools or
+     private background task loops.
+   - AI tasks evaluate through `BehaviorExecutionContext` (extending `BehaviorContext`) in fixed-step `SystemPhase::Gameplay`.
+   - Long-running asynchronous operations (such as pathfinding requests, animation playback, or spatial queries) capture a `CancellationToken` bound to the active `SceneRuntime` generation. On abort, `IDecisionTask::OnAbort()` cancels downstream subsystem work cleanly.
+
+5. **Execution Context Parity**:
+   - `BehaviorContext` and `BehaviorExecutionContext` provide consistent, bounded access to
+     `SceneRuntimeAccess`, `EntityId`, `AssetAccess`, `GameplayInputAccess`,
+     `SceneCommandBuffer`, and `RuntimeDiagnostics`, preventing direct unbuffered
+     scene mutations.
+
 ## Play-In-Editor And Live Preview
 
 Play-in-editor creates a full runtime scene clone from the authoring document
