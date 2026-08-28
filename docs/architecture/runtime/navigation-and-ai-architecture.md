@@ -202,6 +202,7 @@ struct CookedBehaviorTreePlan {
 Horo 1.0 standardizes on three complementary decision paradigms:
 
 #### 1. Behavior Trees (BT)
+
 - **Composites**:
   - `Selector`: Evaluates children sequentially until one succeeds or runs.
   - `Sequence`: Evaluates children sequentially until one fails or runs.
@@ -221,18 +222,22 @@ Horo 1.0 standardizes on three complementary decision paradigms:
   - Periodic background evaluations attached to composite or subtree nodes, updating blackboard values or environment queries while the subtree remains active.
 
 #### 2. Hierarchical State Machines (HSM)
+
 - Hierarchical states with nested sub-state machines.
 - Explicit entry actions, update actions, and exit actions.
 - Event-triggered and condition-triggered transitions evaluated against blackboard state.
 - State machines can host Behavior Trees as nested sub-state behaviors.
 
 #### 3. Simple Utility Scoring
+
 - Evaluates competing actions using consideration response curves (Linear, Polynomial, Logistic, Step).
 - Normalized scoring $[0.0, 1.0]$ with priority weighting and multiplier aggregation.
 - Utility selector selects the top-scoring action or samples from a top-tier bucketed probability distribution.
 
 #### 4. Explicit Post-1.0 Extension Paradigms
+
 Advanced planning and learning models are explicitly classified as **Post-1.0 Extensions**:
+
 - **Hierarchical Task Networks (HTN)**: Domain planning with methods and compound tasks.
 - **Goal-Oriented Action Planning (GOAP)**: Dynamic action graphs resolved via regression over world-state preconditions and effects.
 - **Reinforcement Learning (RL) & Learned Policies**: On-device neural network inference / ML-agent decision models.
@@ -264,16 +269,16 @@ public:
 };
 ```
 
-2. **Cooperative Asynchronous Task Execution**:
+1. **Cooperative Asynchronous Task Execution**:
    - When a task returns `DecisionTaskStatus::Running`, it receives recurring update ticks until completion or abort.
    - Long-running async requests (e.g. `MoveTo` navigation or animation playback) capture a `CancellationToken`. On abort, the task's `OnAbort()` cancels downstream subsystem requests cleanly.
 
-3. **Safe-Point Hot Reload And Plan Replacement**:
+1. **Safe-Point Hot Reload And Plan Replacement**:
    - Asset compilation produces a new `CookedDecisionPlan`.
    - Running instances migrate at tick boundaries: compatible active paths retain state; incompatible edits trigger `OnAbort()` on active tasks and restart evaluation from the root node.
    - Stale or invalid plans never replace the active runtime plan and log typed compiler diagnostics.
 
-4. **Blackboard Storage And Typed Keys**:
+1. **Blackboard Storage And Typed Keys**:
    - Blackboard state is shared between behaviors and AI nodes:
 
 ```cpp

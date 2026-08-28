@@ -50,6 +50,7 @@ Prior to this decision, the boundary between AI decision graphs, generic visual 
 Horo 1.0 implements three complementary decision paradigms:
 
 #### A. Behavior Trees (BT)
+
 - **Composites**:
   - `Selector` (Fallback / Priority): Evaluates children in order until one returns `Success` or `Running`.
   - `Sequence`: Evaluates children in order until one returns `Failure` or `Running`.
@@ -69,18 +70,22 @@ Horo 1.0 implements three complementary decision paradigms:
   - Periodic background checks attached to composite or subtree nodes that update the blackboard or evaluate environment queries at declared intervals while the subtree is active.
 
 #### B. Hierarchical State Machines (HSM)
+
 - Hierarchical states with nested sub-state machines.
 - Explicit entry actions, update actions, and exit actions.
 - Event-triggered and condition-triggered transitions with guard expressions evaluated against the blackboard.
 - State machines can invoke Behavior Trees as sub-state behaviors.
 
 #### C. Simple Utility Scoring
+
 - Evaluates a set of competing actions using consideration response curves (Linear, Polynomial, Logistic, Step).
 - Normalized scoring $[0.0, 1.0]$ with priority weighting and multiplier aggregation.
 - Utility selector picks the highest-scoring action or samples from a bucketed top-tier probability distribution.
 
 #### D. Explicit Post-1.0 Deferred Paradigms
+
 The following paradigms are explicitly designated as **Post-1.0 Extensions** and must not delay the 1.0 architecture baseline:
+
 - **Hierarchical Task Networks (HTN)**: Domain planning with compound tasks, methods, and primitive tasks.
 - **Goal-Oriented Action Planning (GOAP)**: Dynamic action graphs solved via A* regression over world-state preconditions and effects.
 - **Reinforcement Learning (RL) & Learned Policies**: On-device neural network inference / ML-agents.
