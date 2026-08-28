@@ -1,4 +1,4 @@
-# ADR-011: Accessibility Ownership, Typed Transport and Non-Gating Policy
+# ADR-015: Accessibility Ownership, Typed Transport and Non-Gating Policy
 
 - **Status**: Proposed
 - **Date**: 2026-08-28
