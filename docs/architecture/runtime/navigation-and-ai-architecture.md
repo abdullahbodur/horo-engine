@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the navigation (NavMesh), pathfinding, and AI subsystems
+This document defines the navigation (NavMesh), pathfinding, tactical environment queries, and AI subsystems
 for Horo Engine. It covers navigation mesh generation, runtime pathfinding,
 dynamic obstacle avoidance, AI perception, behavior integration, crowd
 simulation, fixed-tick simulation phase ordering, network authority roles,
@@ -632,6 +632,203 @@ struct AIPerceptionMemory {
      stale handles and discard the record immediately, preventing use-after-free
      and stale target locking.
 
+## Environment Query System (EQS)
+
+### Purpose And Ownership Boundary
+
+The Environment Query System (EQS) provides composable spatial and tactical
+reasoning for AI decision making (such as finding cover, establishing flanking
+angles, acquiring line of sight, or selecting ambush locations) without embedding
+ad hoc physics traces and NavMesh traversability checks inside behavior trees or
+tick callbacks.
+
+`EnvironmentQueryManager` (part of the Gameplay AI subsystem `HoroAI`) is the
+**single authority** that orchestrates query lifecycles, stage scheduling, test
+execution, score normalization, result caching, and terminal outcomes. Other
+subsystems act strictly as read-only snapshot providers:
+
+- **Navigation System**: provides NavMesh surface projection, polygon
+  containment, traversability, and pathfinding distance/cost calculations.
+- **Physics System**: provides collision raycasts, shape sweeps, and
+  line-of-sight checks.
+- **Perception System**: provides perceived candidate entities, stimulus locations,
+  and sensory memory records.
+- **Decision Systems (Behavior Tree / State Machine / Utility AI)**: consume
+  query results asynchronously via typed task nodes; they never block fixed-tick
+  simulation loops.
+
+```text
++-------------------------------------------------------------------------+
+|                       EnvironmentQueryManager                           |
+|  +-------------------------------------------------------------------+  |
+|  | Tick (Time-Sliced Budget: e.g. 1.5ms / max N items per frame)      |  |
+|  +-------------------------------------------------------------------+  |
+|         |                     |                      |                  |
+|  +--------------+     +----------------+     +------------------+       |
+|  | Query State: |     | Query State:   |     | Query State:     |       |
+|  | Resolving    | --> | Generating /   | --> | Scoring /        |       |
+|  | Context      |     | Nav Projection |     | Physics Traces   |       |
+|  +--------------+     +----------------+     +------------------+       |
+|                                                      |                  |
+|                                              +------------------+       |
+|                                              | Query State:     |       |
+|                                              | Completed /      |       |
+|                                              | PartialSuccess   |       |
+|                                              +------------------+       |
++-------------------------------------------------------------------------+
+```
+
+### Query Templates And Item Model
+
+Queries are defined by immutable compiled assets (`EnvironmentQueryPlan` /
+`EnvironmentQueryTemplate`). Each stage possesses a unique `StageId` that remains
+stable across serialization, renaming, and editor reordering.
+
+```cpp
+enum class EnvQueryItemType : uint8_t {
+    Point,          // WorldCoordinate: spatial points (cover, vantage, patrol)
+    Actor,          // EntityId: scene entities (targets, allies, cover objects)
+    DirectionalRay, // Ray / Direction: tactical vectors (flanking, retreat angles)
+    Custom          // Extensible gameplay payload with explicit typed schema
+};
+
+enum class EnvQueryContextType : uint8_t {
+    Querier,                // Requesting agent entity
+    Target,                 // Primary adversary / focus entity
+    QuerierLocation,        // Agent world position snapshot
+    TargetLocation,         // Target world position snapshot
+    WorldOrigin,            // Scene world origin (0, 0, 0)
+    Custom                  // Pluggable registered context provider
+};
+
+struct QueryContextSnapshot {
+    EntityId           querierEntity;
+    WorldCoordinate    querierPosition;
+    Vector3            querierForward;
+    std::optional<EntityId> targetEntity;
+    std::optional<WorldCoordinate> targetPosition;
+    uint32_t           sceneGeneration;
+};
+```
+
+Context resolution snapshots values into an immutable `QueryContextSnapshot` at
+query start. Query execution never exposes raw mutable scene pointers.
+
+### Generators
+
+Generators produce bounded sets of candidate items around query contexts:
+
+- `GridGenerator`: 2D or 3D regular lattice around context with configurable
+  spacing, radius, and boundary extents.
+- `DonutRingGenerator`: Concentric radial rings around context with inner radius,
+  outer radius, and radial step counts.
+- `ConeGenerator`: Directional wedge/cone oriented along context forward vector
+  with radius, arc half-angle, and angular step count.
+- `NavMeshProjectionGenerator`: Projects spatial candidate points onto valid
+  NavMesh surfaces, discarding off-mesh or non-traversable candidates.
+- `PerceivedEntitiesGenerator`: Populates candidate items from sensory perception
+  memory matching affiliation/sense filters.
+
+All generators enforce a mandatory maximum item clamp (`maxItems`) to prevent
+unbounded allocations and CPU spikes. Every candidate item receives a stable,
+deterministic generation sequence index (`item_index`).
+
+### Tests And Filters
+
+Tests evaluate candidate items against query contexts or world providers:
+
+- `LineOfSightTest`: Raycast or shape sweep between candidate item and context
+  using Physics collision traces.
+- `DistanceTest`: Euclidean, Chebyshev, Manhattan, or NavMesh path distance
+  between candidate item and context.
+- `DotProductTest`: Directional alignment (facing angle, field of view, flanking
+  angle).
+- `PathfindingCostTest`: NavMesh path length, travel cost, or reachability.
+- `CoverExposureTest`: Obstacle height, stance clearance, and exposure angle
+  relative to threat positions.
+
+```cpp
+enum class EnvQueryTestMode : uint8_t {
+    FilterOnly,     // Discards items failing boolean condition
+    ScoreOnly,      // Assigns normalized continuous score [0.0, 1.0]
+    FilterAndScore  // Discards failing items, then scores survivors
+};
+
+enum class EnvQueryScoreCurve : uint8_t {
+    Linear,         // (val - min) / (max - min)
+    InverseLinear,  // 1.0 - (val - min) / (max - min)
+    Sigmoid,        // S-curve emphasizing mid-ranges
+    ThresholdStep   // Step function (0.0 or 1.0)
+};
+```
+
+### Scoring Normalization And Deterministic Tie-Breaking
+
+To prevent scoring arithmetic drift and non-deterministic behavior:
+
+1. **Normalized Range**: All scoring tests normalize raw metrics into
+   `[0.0, 1.0]` using the configured `EnvQueryScoreCurve`.
+2. **Arithmetic Safety**: Non-finite numbers (`NaN`, `+Inf`, `-Inf`) and
+   division-by-zero are trapped; offending items receive a score of `0.0` with
+   diagnostic logging and cannot be selected as winning candidates.
+3. **Total Score Weighted Sum**:
+   $$\text{TotalScore} = \frac{\sum_{i=1}^{N} w_i \cdot s_i}{\sum_{i=1}^{N} w_i}$$
+   where $w_i \ge 0$ is the stage weight and $s_i \in [0.0, 1.0]$ is the normalized test score.
+4. **Deterministic Tie-Breaking Cascade**:
+   - Primary: Highest `TotalScore`.
+   - Secondary: Configured tie-breaker test score (e.g. minimum distance to Querier).
+   - Tertiary: Stable item generation sequence index (`item_index`).
+   Candidate ranking is 100% reproducible and independent of multi-threaded job
+   scheduling or memory allocation layout.
+
+### Time-Budgeted Asynchronous Execution
+
+```cpp
+enum class QueryResultStatus : uint8_t {
+    Completed,      // All stages evaluated, candidates ranked
+    PartialSuccess, // Budget exhausted; best candidate evaluated so far returned
+    Cancelled,      // Cancelled by caller token or task abort
+    TimedOut,       // Maximum frame/tick duration exceeded
+    Aborted         // Querier, target, or scene destroyed in-flight
+};
+
+struct ScoredItem {
+    EnvQueryItemType itemType;
+    WorldCoordinate  position;
+    EntityId         entity;
+    float            totalScore;      // Normalized [0.0, 1.0]
+    uint32_t         itemIndex;       // Stable generation index
+};
+
+struct QueryResult {
+    QueryResultStatus         status;
+    std::vector<ScoredItem>   items;           // Ranked by score and tie-breaker
+    std::optional<ScoredItem> winningItem;     // Highest ranked candidate
+    uint64_t                  executionTicks;  // Duration across slices
+};
+```
+
+1. **Time-Sliced Execution**: Queries execute across multiple simulation ticks
+   under a global per-tick time budget (e.g. `1.5ms` per frame) or candidate item
+   batch limits. High-cost queries yield at stage or item boundaries and resume
+   on subsequent frames.
+2. **Partial-Result Fallback**: When configured, queries encountering budget
+   exhaustion return `QueryResultStatus::PartialSuccess` containing the best
+   valid item evaluated before yielding.
+3. **Deterministic Replay**: Fixed-seed generation and index-based tie-breaking
+   guarantee deterministic tactical decisions in replay and automated tests.
+4. **Caching And Invalidation**:
+   - Query results may be cached using a composite key:
+     `CacheKey(QueryTemplateId, ContextSnapshotHash, NavMeshRevision, PhysicsRevision)`.
+   - Results are retained in a bounded LRU cache with time-to-live (TTL).
+   - Cache eviction never invalidates caller-owned immutable `QueryResult` copies.
+5. **Lifecycle Safety And Cancellation**:
+   - Queries track weak `EntityId` handles and scene generation counters.
+   - When a querier entity, target entity, or scene is destroyed, in-flight
+     queries transition immediately to `Aborted`; outstanding physics traces
+     and pathfinding jobs are cancelled without dangling pointer access.
+
+
 ## AI Architecture And Runtime Ownership
 
 ### Subsystem Boundaries And Decoupling From Editor AI
@@ -1197,6 +1394,8 @@ changes require workload, platform, and measurement evidence, not a new ADR.
 These are required downstream runtime/CI tests, not tests implemented by this ADR-only change.
 
 ## Related Documents
+
+- [ADR-011: Environment Query Ownership, Item and Scoring Model](../../adr/011-environment-query-ownership-item-and-scoring-model.md)
 
 - [ADR-010: Job Waiting and Operation Store Ownership](../../adr/010-job-waiting-and-operation-store-ownership.md)
 - [ADR-017: Prefab Asset and Spawn Contracts](../../adr/017-prefab-role-ownership-and-capability-tiers.md)
