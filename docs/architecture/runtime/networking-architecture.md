@@ -199,12 +199,14 @@ To prevent race conditions and frame stalls, network operations are strictly par
 ## Message Schema and Protocol Negotiation
 
 Messages consist of:
+
 - 16-bit Protocol Identifier and 16-bit Schema Version.
 - 16-bit Message Type ID.
 - 32-bit Sequence / Acknowledgement Numbers.
 - Bounded payload bytes with validated length headers.
 
 Peers perform handshake negotiation upon initial connection:
+
 - Minimum and maximum supported protocol versions.
 - Supported compression algorithms and MTU payload limits.
 - Authentication credentials and capability flags.
@@ -214,6 +216,7 @@ Mismatched protocol versions or invalid authentication tokens immediately reject
 ## Delivery Semantics and Backpressure
 
 Delivery policies:
+
 - **UnreliableUnordered**: Fast state updates (e.g. high-frequency physics/transform telemetry); latest packet overwrites previous.
 - **UnreliableSequenced**: Discards out-of-order packets; only newer packets are accepted.
 - **ReliableOrdered**: Guaranteed delivery in order (e.g., game events, inventory actions, chat).
@@ -222,6 +225,7 @@ Delivery policies:
 ### Backpressure and Overload Policies
 
 All internal queues have bounded capacities:
+
 - **DropOldestSnapshot**: When the outbound queue for unreliable state exceeds threshold, older snapshots are discarded in favor of the latest state.
 - **RejectSend**: Reliable message requests exceeding queue limits return `NetworkErrorCode::QueueFull`.
 - **DisconnectAbusivePeer**: Inbound queues experiencing sustained flood without consumption trigger connection termination.
@@ -251,6 +255,7 @@ Horo Engine products compose networking according to their needs:
 ## Observability and Diagnostics
 
 Networking integrates with Horo's diagnostic and metric infrastructure:
+
 - **Counters**: `net.bytes_sent`, `net.bytes_received`, `net.packets_lost`, `net.packets_dropped`.
 - **Gauges**: `net.active_connections`, `net.inbound_queue_depth`, `net.outbound_queue_depth`, `net.rtt_ms`.
 - **Tracing**: Connection lifecycle events and session handshakes log to the `LogCategory::Network` category. Payloads are scrubbed of sensitive data by default.

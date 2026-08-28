@@ -54,6 +54,7 @@ The network subsystem is decomposed into four discrete CMake targets:
 ```
 
 Rules:
+
 1. `HoroEngine::NetworkApi` depends **only** on `HoroEngine::Foundation`. It contains zero runtime logic, background threads, or socket code.
 2. `HoroEngine::NetworkRuntime` depends on `NetworkApi`, `Foundation`, and `Runtime`. It never links a concrete transport backend directly.
 3. Concrete transports (`NetworkTransportNull`, `NetworkTransportENet`) depend on `NetworkApi` and `Foundation` (plus private third-party libraries). They do not depend on `NetworkRuntime` or `HoroEngine::Runtime`.
@@ -62,6 +63,7 @@ Rules:
 ### 2. Encapsulation and Native Type Shielding
 
 Public headers under `include/Horo/Network/` and `include/Horo/Runtime/` MUST NOT include or expose:
+
 - OS socket headers (`<sys/socket.h>`, `<netinet/in.h>`, `<arpa/inet.h>`, `<winsock2.h>`, `<ws2tcpip.h>`)
 - Native socket descriptors or OS handles (`SOCKET`, `int fd`, file descriptors)
 - Cryptography / TLS context types (`SSL*`, `SSL_CTX*`, OpenSSL / mbedTLS headers)
@@ -73,6 +75,7 @@ All OS and third-party types remain strictly internal to the private compilation
 ### 3. Optional Link and Host Composition
 
 Networking is an optional engine capability.
+
 - **Offline / Non-Networked Products**: Products (such as single-player offline games, command-line utilities like `horopak`, asset compilers, or headless tools) do not link `NetworkRuntime` or concrete transports. Core engine composition, ECS, asset loading, and renderer pipelines operate normally without networking libraries present in the link graph.
 - **Single-Player / Headless Simulation**: If a game project uses replication interfaces or network components locally, the host composition root injects `HoroEngine::NetworkTransportNull`. `NetworkTransportNull` simulates loopback transport in memory without opening OS sockets or creating network I/O threads.
 - **Multiplayer Desktop & Dedicated Server**: Composition roots (`HoroEditor`, `horo-engine server`, game client) explicitly instantiate the chosen transport (`NetworkTransportENet` or platform backend) during startup and register it with `NetworkRuntime`. No static discovery or global registry side effects are allowed.
@@ -112,6 +115,7 @@ Network processing is cleanly partitioned between asynchronous I/O and frame-syn
 ```
 
 Key concurrency and lifecycle rules:
+
 - **Zero I/O Mutation**: Network I/O threads MUST NEVER mutate Scene, ECS, Entity, Component, Editor, or Gameplay state directly.
 - **Dedicated Frame Phases**: Frame execution includes explicit `NetworkPoll` (pre-simulation) and `NetworkFlush` (post-simulation) stages in `FrameScheduler`.
 - **Bounded Queues & Backpressure**: Inbound and outbound message queues have strict, configurable capacity limits. Queue overflow triggers explicit message-class policies (e.g. drop oldest unreliable state snapshot, reject send, or disconnect failing peer) rather than unbounded heap growth.
@@ -120,6 +124,7 @@ Key concurrency and lifecycle rules:
 ### 5. Deterministic Cancellation and Shutdown
 
 Network shutdown is deterministic, bounded, and resource-safe:
+
 - **Connection Teardown**: Transition through `Active -> Closing -> Closed`. A graceful disconnect sends a final disconnect packet with a reason code within a bounded timeout deadline (e.g., 200 ms). If the peer does not acknowledge within the timeout, the local connection is forcefully terminated.
 - **Cancellation**: Asynchronous operations (resolving DNS, connecting, transferring large assets) accept a `CancellationToken`. Triggering cancellation immediately halts processing and reclaims temporary resources without blocking caller threads.
 - **Host Teardown Order**: During engine shutdown, the composition root shuts down `NetworkRuntime` before `Runtime` and `Foundation`:
@@ -132,12 +137,14 @@ Network shutdown is deterministic, bounded, and resource-safe:
 ## Consequences
 
 ### Positive
+
 - Strict compile-time insulation: Changing transport libraries (e.g. upgrading ENet or adding WebRTC) never requires recompilation of gameplay or editor headers.
 - Safe concurrency: Main simulation and editor threads are completely protected from data races, mutex contention, and socket blocking.
 - Clean headless and test execution: `NetworkTransportNull` enables fast, fully deterministic unit and integration testing of replication and session logic without OS socket permissions or network ports.
 - Predictable performance: Bounded queues and dedicated frame ticking prevent network traffic bursts from causing memory blowouts or frame-rate hitches.
 
 ### Negative / Trade-offs
+
 - Message data must be copied across thread boundaries from I/O queues to the simulation thread (mitigated by bounded buffer pools and move semantics).
 - Disconnecting peers requires asynchronous coordination or bounded timeouts rather than instant synchronous socket teardown.
 
