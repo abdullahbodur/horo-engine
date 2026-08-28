@@ -5,6 +5,7 @@
 - **Supersedes**: None
 - **Scope**: AI decision graph assets (`BehaviorTreeAsset`, `StateMachineAsset`, `UtilityAiAsset`), runtime execution plan compilation, node hierarchy, UI separation, 1.0 paradigms vs post-1.0 extensions, task execution and lifecycle alignment
 - **Issue**: [#1333](https://github.com/abdullahbodur/horo-engine/issues/1333) ([GAI-003.1])
+- **JIRA**: HORO-1333
 - **Normative documents**: [Navigation And AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md), [Gameplay Behavior Authoring](../architecture/extensions/gameplay-behavior-authoring.md)
 
 ## Context

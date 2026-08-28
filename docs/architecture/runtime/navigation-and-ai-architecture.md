@@ -341,7 +341,7 @@ group share avoidance data; groups are independent.
 
 - [Navigation Bake UI Reference](./navigation-bake.html)
 
-- [ADR-011: AI Decision Assets and Shared Gameplay Behavior Boundary](../../adr/011-ai-decision-assets-and-gameplay-behavior-boundary.md)
+- [ADR-025: AI Decision Assets and Shared Gameplay Behavior Boundary](../../adr/025-ai-decision-assets-and-gameplay-behavior-boundary.md)
 - [Gameplay Behavior Authoring](../extensions/gameplay-behavior-authoring.md): behavior tree and state machine authoring
 - [Physics Architecture](./physics-architecture.md): collision geometry for NavMesh generation
 - [World Streaming Architecture](./world-streaming-architecture.md): NavMesh tile streaming
