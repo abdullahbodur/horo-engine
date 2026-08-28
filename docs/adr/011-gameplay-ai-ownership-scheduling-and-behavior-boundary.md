@@ -18,6 +18,7 @@
 `docs/architecture/runtime/navigation-and-ai-architecture.md` defines the baseline for NavMesh generation, pathfinding, perception, and high-level behavior integration. As Horo Engine expands its gameplay AI capability (`GAI-001`), the architecture requires explicit boundaries governing state ownership, simulation scheduling, memory lifetime, task execution, and authoring integration.
 
 Without explicit boundaries, gameplay AI risks several common architectural pitfalls:
+
 1. **Ambiguous State Ownership and Aliasing**: AI runtime state (`AiBrainState`, `BlackboardState`, `PerceptionMemory`) living in uncontrolled manager singletons or outliving active scenes, causing stale entity references or memory leaks across scene transitions and Play-In-Editor (PIE) sessions.
 2. **Nondeterministic Mutation and Race Conditions**: Senses, behavior trees, and background pathfinding tasks mutating blackboards or ECS components concurrently or mid-tick without explicit safe points.
 3. **Competing Task Schedulers**: AI sub-modules introducing bespoke thread pools or background task executors that compete with the Foundation `JobSystem` and violate cancellation and budget guarantees.
@@ -82,7 +83,7 @@ flowchart TD
     end
 ```
 
-#### Phase Breakdown:
+#### Phase Breakdown
 
 1. **`SystemPhase::Perception` (Perception Update)**:
    - Evaluates spatial candidate broadphase, line-of-sight raycasts, and sensory stimuli (sight, hearing, damage, proximity, team comms).
@@ -110,7 +111,8 @@ flowchart TD
    - Consumes action/navigation intents, updates kinematics, triggers gameplay events.
    - Writes deferred structural changes to `SceneCommandBuffer`.
 
-#### Mutation Safe Point Invariant:
+#### Mutation Safe Point Invariant
+
 - AI decision nodes and async tasks cannot directly add/remove ECS components, create/destroy entities, or mutate scene hierarchy mid-tick.
 - All structural changes must use `SceneCommandBuffer` and commit at standard Scene Runtime synchronization points (`CommitDeferredLifecycleChanges`).
 
@@ -165,6 +167,7 @@ Gameplay AI and generic gameplay behavior authoring share common foundational pr
 ## Consequences
 
 ### Positive
+
 - **Guaranteed Determinism and Replayability**: Partitioned fixed-tick phases and blackboard safe points ensure AI decisions evaluate consistently without race conditions.
 - **Lifetime Safety**: Strict scene-generation binding prevents dangling entity pointers, stale blackboard references, and cross-scene state leakage.
 - **Zero Runtime Bloat**: Complete isolation from Editor LLM/MCP tooling keeps packaged games and dedicated server binaries lightweight and secure.
@@ -172,6 +175,7 @@ Gameplay AI and generic gameplay behavior authoring share common foundational pr
 - **Modular Extensibility**: Clear extension points for custom perception senses, decision evaluators, and planning providers without breaking core invariants.
 
 ### Negative / Trade-offs
+
 - **Deferred Mutation Latency**: Structural ECS changes requested by AI decisions cannot take effect immediately mid-tick; they must wait for the command buffer synchronization point.
 - **Phase Scheduling Discipline**: Developers cannot write ad-hoc perception raycasts directly inside decision evaluation callbacks without violating phase boundaries; spatial queries must be gathered during perception/query phases or scheduled as async jobs.
 
