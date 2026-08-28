@@ -10,12 +10,14 @@
 ## Context
 
 Autonomous AI agents require sensory systems to detect, interpret, and react to their environment. In early game architectures and legacy implementations, perception was frequently coupled directly to rendering and audio output—scraping framebuffers, querying pixel depth or occlusion buffers, and inspecting audio mixer voice states. Such coupling creates severe architectural problems:
+
 1. **Headless & Dedicated Server Failure**: Dedicated servers, continuous integration smoke runs, and headless simulation environments cannot execute perception if it depends on GPU contexts, display pipelines, or audio devices.
 2. **Non-Deterministic Behavior**: Rendering resolutions, LOD popping, culling optimizations, audio volume attenuation curves, and hardware mixer voice limits introduce frame-rate-dependent and platform-dependent divergence into gameplay logic.
 3. **Unbounded CPU Spikes**: Uncoordinated line-of-sight raycasts and all-to-all agent sensory evaluations cause quadratic scaling ($O(N^2)$) and major frame drops when agent counts increase.
 4. **Memory Leaks and Dangling Handles**: Unbounded perception memory tracking unmanaged entity pointers or raw handles results in memory exhaustion and use-after-free crashes when perceived entities are despawned.
 
 To achieve robust, high-performance, and deterministic AI simulation, Horo Engine requires a strict architecture decision that:
+
 - Separates gameplay perception truth from rendering and audio presentation.
 - Defines clear authority, timing ownership, and query seams for all built-in senses.
 - Establishes a hybrid update model with strict per-tick time budgets and distance-based sensory LOD.
