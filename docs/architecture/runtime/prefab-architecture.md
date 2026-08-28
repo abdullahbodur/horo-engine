@@ -346,7 +346,7 @@ enum class PrefabError : std::uint32_t {
 
 ## Related Documents
 
-- [ADR-011: Prefab Role, Ownership and Capability-Tier Decision](../../adr/011-prefab-role-ownership-and-capability-tiers.md)
+- [ADR-017: Prefab Role, Ownership and Capability-Tier Decision](../../adr/017-prefab-role-ownership-and-capability-tiers.md)
 - [Scene Runtime Architecture](./scene-runtime.md)
 - [Asset Pipeline Architecture](./asset-pipeline.md)
 - [Gameplay Behavior Authoring](../extensions/gameplay-behavior-authoring.md)
