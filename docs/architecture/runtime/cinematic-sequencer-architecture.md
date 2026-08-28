@@ -8,7 +8,7 @@ The goal is to provide a deterministic, data-oriented cinematic runtime capable 
 
 ## Normative Decision Reference
 
-This subsystem is governed by [ADR-011: Sequencer Ownership, Clock Authority and Binding Boundary Decision](../../adr/011-sequencer-ownership-clock-authority-and-binding-boundary.md).
+This subsystem is governed by [ADR-014: Sequencer Ownership, Clock Authority and Binding Boundary Decision](../../adr/014-sequencer-ownership-clock-authority-and-binding-boundary.md).
 
 ## Core Decisions
 
@@ -438,7 +438,7 @@ Sequence assets are stored in the project's asset tree. Sequences reference scen
 
 ## Related Documents
 
-- [ADR-011: Sequencer Ownership, Clock Authority and Binding Boundary Decision](../../adr/011-sequencer-ownership-clock-authority-and-binding-boundary.md)
+- [ADR-014: Sequencer Ownership, Clock Authority and Binding Boundary Decision](../../adr/014-sequencer-ownership-clock-authority-and-binding-boundary.md)
 - [Cinematic Sequencer UI Reference](./cinematic-sequencer.html)
 - [Scene Runtime Architecture](./scene-runtime.md)
 - [Animation Architecture](./animation-architecture.md)

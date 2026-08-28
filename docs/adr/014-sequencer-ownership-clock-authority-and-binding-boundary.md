@@ -5,7 +5,7 @@
 - **Supersedes**: None
 - **Scope**: Cinematic sequencer clock authority, frame evaluation phase, object and property binding resolution, time-scale and pause policies, origin-rebase interaction
 - **Issue**: [#1697](https://github.com/abdullahbodur/horo-engine/issues/1697) ([CIN-001.1])
-- **JIRA**: HORO-1697
+- **JIRA**: HORO-1656
 - **Normative document**: [Cinematic Sequencer Architecture](../architecture/runtime/cinematic-sequencer-architecture.md)
 
 ## Context
