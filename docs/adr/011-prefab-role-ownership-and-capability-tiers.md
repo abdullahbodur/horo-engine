@@ -30,7 +30,7 @@ This discrepancy created an architectural contradiction:
 |---|---|---|
 | Prefab role in static scenes | Authoring template expanded into `RuntimeSceneDefinition` during scene cook/load | **Ratified.** Placed static scene instances are flattened at conversion/cook time for optimal runtime data locality and zero runtime expansion overhead. |
 | Prefab role in dynamic gameplay | Stated as unhandled / no runtime prefab assets shipped in release packages | **Revised.** Prefabs referenced for dynamic spawning are compiled by the asset cooker into immutable `CookedPrefab` binary assets shipped in release packages and spawned dynamically by `SceneRuntime` / `Gameplay`. |
-| Capability staging | Single-root initial limitation with informal future extensions list | **Revised.** Formalized into Tier 0 (Baseline / M1), Tier 1 (Production Target / M2), and Tier 2 (Deferred / M3+). |
+| Capability staging | Single-root initial limitation with informal future extensions list | **Revised.** Formalized into Tier 0 (Baseline / M1), Tier 1 (Engine Target / M2), and Tier 2 (Deferred / M3+). |
 | Identity authority | Mixed `prefabId` and `sourcePath` | **Revised.** Authoritative identity is Asset Registry `AssetId` (128-bit UUID). `sourcePath` is an authoring index hint only. |
 | Local object addressing | Ad-hoc or single-root string IDs | **Revised.** Local objects inside a prefab use deterministic zero-based `LocalObjectId` slots. Instantiated scene/runtime entity IDs are composed deterministically (`Hash(InstanceId, LocalObjectId)`) to prevent collisions. |
 | Component data preservation | Undefined for custom/unregistered project components | **Revised.** Opaque component payloads (`RawComponentPayload`) are preserved verbatim across authoring serialization and expansion. |
@@ -84,14 +84,14 @@ Capability delivery is partitioned into three discrete tiers:
 - Cooked prefabs participate in the standard `AssetRegistry` and `CookCatalog`, loaded via `IAssetProvider`.
 - `SceneRuntimeAccess` and `SceneCommandBuffer` expose typed spawn operations:
   ```cpp
-  Result<SpawnedPrefabHandle> SpawnPrefab(
+  Result<SpawnedPrefabHandle, PrefabError> SpawnPrefab(
       AssetId prefabAssetId,
       const Transform& spawnTransform,
       std::optional<EntityId> parentEntity = std::nullopt
   );
   ```
 - Spawn execution allocates fresh, non-colliding runtime `EntityId`s, instantiates component data, establishes hierarchy parenting, and dispatches behavior lifecycle events (`OnCreate`, followed by `OnStart` during scene synchronization).
-- Fail-safe lifecycle handling: if a cooked prefab is missing, unloadable, or corrupted, the spawn call returns an explicit `PrefabSpawnError` without corrupting active scene state or throwing unhandled exceptions.
+- Fail-safe lifecycle handling: if a cooked prefab is missing, unloadable, or corrupted, the spawn call returns an explicit `PrefabError` without corrupting active scene state or throwing unhandled exceptions.
 
 #### Tier 2: Live Variant Inheritance & Dynamic Override Tracking (Deferred / M3+)
 - Prefab Variants allow creating specialized prefabs that inherit from a base prefab asset and record delta overrides (property overrides, added/removed components, extra child entities).
@@ -115,7 +115,7 @@ Capability delivery is partitioned into three discrete tiers:
    - Authoring operations (clone, save, expand, instance placement) preserve raw payloads verbatim.
 2. **Fail-Safe Lifecycle Handling**:
    - Dynamic spawn operations never throw C++ exceptions across module boundaries.
-   - Missing assets, schema version mismatches, component allocation failures, or payload corruption return typed `Result<SpawnedPrefabHandle, PrefabSpawnError>`:
+   - Missing assets, schema version mismatches, component allocation failures, or payload corruption return typed `Result<SpawnedPrefabHandle, PrefabError>`:
      - `PrefabError::AssetNotFound`: Requested `AssetId` is not registered in `CookCatalog`.
      - `PrefabError::AssetNotLoaded`: Async dependency not yet available in `IAssetProvider`.
      - `PrefabError::CorruptedPayload`: Cryptographic digest or magic header validation failed.

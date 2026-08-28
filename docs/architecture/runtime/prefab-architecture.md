@@ -114,7 +114,7 @@ Prefab capabilities are staged across three sequential, contract-stable tiers:
   `CookedPrefab` artifacts registered under `core.prefab` in `CookCatalog`.
 - **Runtime Asset Management**: Loaded through `IAssetProvider` via stable `AssetId`.
 - **Dynamic Spawn API**: `SceneCommandBuffer` and `SceneRuntimeAccess` expose transactional spawn
-  requests returning `Result<SpawnedPrefabHandle, PrefabSpawnError>`.
+  requests returning `Result<SpawnedPrefabHandle, PrefabError>`.
 - **Lifecycle Guarantees**: Fresh runtime `EntityId` allocation, component instantiation, hierarchy
   assembly, followed by `OnCreate` and `OnStart` behavior hooks during tick synchronization.
 - **Fail-Safe Robustness**: Missing assets, invalid formats, or allocation limits fail safely with
