@@ -14,11 +14,13 @@
 Horo Engine's open-world runtime streams spatial partitions (cells) asynchronously into active runtime scenes. Authoring data (scenes, terrain heightfields, foliage clusters, audio zones, physics colliders, navigation meshes) is transformed by Asset Pipeline cook stages into immutable, runtime-ready streaming partitions.
 
 Prior to this decision:
+
 - `docs/architecture/runtime/world-streaming-architecture.md` established high-level cell grid concepts, streaming volume priority scoring, memory budgets, and the cell lifecycle state machine (`Unloaded`, `Loading`, `Loaded`, `Unloading`, `Failed`).
 - `docs/adr/003-artifact-identity.md` and `docs/architecture/runtime/asset-pipeline.md` defined general `.horo` package chunk containers and asset IDs, but lacked a normative specification for cooked world index manifests (`world.index`) and spatial cell chunks (`.wcell`).
 - The runtime lacked an explicit binary layout contract, little-endian data guarantees, integrity hash algorithms, version negotiation semantics, feature-provider payload offset tables, and a Foundation-compliant typed error model for corrupted or version-skewed cell artifacts.
 
 Ticket #1564 ([WST-004.1]) requires ratifying the normative specification for:
+
 1. **Cooked World Index format (`world.index`)**: Manifest containing world bounding volume, partition grid dimensions, spatial cell hierarchy, layer definitions, streaming volumes, and checksum validation table.
 2. **Cooked Cell Archive format (`.wcell` / `horopak` chunk)**: Header with magic number (`HOROCELL`), schema version, little-endian encoding, CRC32/SHA-256 integrity hash, compressed ECS payload, and feature-provider payload offsets (Terrain, Foliage, Physics mesh, Audio, Navigation mesh).
 3. **Versioning & Extension**: Forward/backward compatibility rules, version negotiation, and typed rejection of corrupted or version-skewed cell artifacts via `Result<LoadedCellPayload, StreamingCellError>`.
@@ -221,6 +223,7 @@ struct FeaturePayloadEntry {
 ### 4. Versioning, Extension, and Error Contract
 
 #### Version Negotiation Rules
+
 1. **Major Version Incompatibility**: If `header.versionMajor != kCellVersionMajor`, the cell artifact is unconditionally rejected. The engine does not perform runtime schema transmutation across major versions; assets must be re-cooked.
 2. **Minor Version Forward Compatibility**: If `header.versionMinor > kCellVersionMinor`, the runtime continues decoding if and only if all unknown feature payloads have the `FeaturePayloadFlags::Optional` flag set. If any unknown or unhandled feature payload has `FeaturePayloadFlags::Required`, the cell is rejected.
 3. **Provider Versioning**: Each feature provider inspects its own `FeaturePayloadEntry::version`. If a provider receives a payload version it cannot support:
@@ -308,6 +311,7 @@ Streaming cell decode executes as an asynchronous job pipeline over `HoroFoundat
 ## Consequences
 
 ### Positive
+
 - **Deterministic & Portable**: Fixed little-endian layout ensures bit-identical behavior across ARM64 macOS, x86_64 Linux, and x64 Windows.
 - **Fail-Fast Integrity**: SHA-256 of the compressed payload catches storage corruption and package truncation before expensive decompression or memory allocation. CRC32 of the uncompressed payload then validates decompressor output without a second cryptographic hash.
 - **Subsystem Decoupling**: Modular feature-provider TOC allows terrain, foliage, physics, navigation, and audio to evolve payload schemas independently without breaking core ECS layout.
@@ -315,6 +319,7 @@ Streaming cell decode executes as an asynchronous job pipeline over `HoroFoundat
 - **Foundation Alignment**: Typed `StreamingResult<T>` and `StreamingCellErrorCode` integrate cleanly with Horo's error registry and diagnostic observation.
 
 ### Negative / Trade-offs
+
 - **Cook Overhead**: Generating dual checksums (CRC32 and SHA-256) and layout manifests adds computational work during the asset cooking phase.
 - **TOC Alignment Padding**: Enforcing 8-byte and 64-byte alignment boundaries adds minor padding overhead (under 128 bytes per cell), which is negligible compared to typical multi-megabyte cell payloads.
 
