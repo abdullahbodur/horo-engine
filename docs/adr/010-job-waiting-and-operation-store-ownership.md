@@ -74,16 +74,30 @@ The current direct `OperationStore` writers are migration points. Application se
 
 Every host-owned thread installs one typed role: `MainEditor`, `RenderOwner`, `TransportOwner`, `Worker`, `IoService` or `ExternalUnknown`. Scheduler workers install `Worker`; host adapters install their owner role before accepting work. Unknown threads use the safest policy and cannot perform an unbounded wait.
 
-Every blocking API accepts a `JoinOptions`/`WaitPolicy` value and checks the caller role plus the awaited job's declared continuation/resource requirements before blocking:
+Every blocking API accepts a `JoinOptions`/`WaitPolicy` value and checks the
+caller role plus the awaited job's declared continuation/resource requirements
+before blocking. These requirements are target contract, not implemented
+metadata: [JOB-001.2] adds immutable typed continuation-affinity and resource
+requirement fields to `JobDescriptor`, captures them at successful submission and
+exposes them to wait validation. An absent or unknown requirement is treated
+conservatively and never grants an owner-thread wait. [JOB-001.5] defines the
+admission and shutdown semantics for each declared resource class.
 
 | Caller role | Rule |
 |---|---|
-| Worker | May join only through task-group primitives with bounded timeout plus helping or deadlock/capacity detection. A single-worker pool rejects nested synchronous child joins before submission. |
+| Worker | May join only through task-group primitives with bounded timeout plus helping or deadlock/capacity detection. A descriptor that declares a synchronous nested child join requires one additional worker; a single-worker pool rejects submission of that parent job before it enters the queue. An undeclared attempt is rejected by `Join()` with a capacity-deadlock `WaitError` before blocking. |
 | Main/editor | Ordinary job waits are forbidden. `MainThreadPumpAllowed` may pump only bounded typed continuations with explicit time/count budgets and must reject a dependency cycle. |
-| Render owner | Cannot wait for work that may require render/GPU-owner continuation or completion. Bounded teardown/readback waits use a separate documented renderer lifecycle path. |
+| Render owner | Cannot wait for work that may require render/GPU-owner continuation or completion. Bounded teardown/readback waits follow [Rendering Architecture: Threading And Synchronization](../architecture/runtime/rendering-architecture.md#threading-and-synchronization) and the ordered [Runtime Lifecycle shutdown path](../architecture/runtime/runtime-lifecycle.md#shutdown). |
 | Transport owner | Cannot synchronously wait for application jobs; it retains request state and completes asynchronously. |
 | I/O service | Cannot wait for work that requires the same I/O service slot; other waits remain bounded and cancellation-aware. |
-| External/unknown | Blocking wait is rejected unless an explicitly registered test/shutdown scope supplies a bounded policy. |
+| External/unknown | Blocking wait is rejected unless an explicitly registered test/shutdown scope supplies a bounded policy. [JOB-001.2] introduces the test scope; [JOB-001.5] introduces the shutdown scope. |
+
+The test/shutdown exception is a host-installed, thread-local
+`ThreadWaitScope` (or project-standard scope guard) containing purpose, thread
+role, deadline and any continuation-pump budget. Only the composition root,
+shutdown coordinator or test harness may install it. Nesting cannot widen the
+outer deadline or permissions, and an ambient process-global bypass flag is not
+allowed.
 
 Every public wait primitive, including `JobHandle::Wait()` and
 `TaskGroup::Join()`, returns a `Result<WaitOutcome, WaitError>` (or the
@@ -112,7 +126,20 @@ Context is frozen after admission succeeds and before the callback becomes visib
 - immutable `ConfigurationSnapshotRef` and revision for configuration-dependent work;
 - bounded request, project and asset identities already admitted by the operation boundary.
 
-The submitting application supplies the configuration snapshot; `JobSystem` does not discover `ConfigurationService` or read ambient global state. A descriptor explicitly marks configuration-independent work instead of silently reading the latest snapshot on a worker. `TaskGroup` freezes its parent submission context at construction; children inherit it and may add narrower diagnostic fields, but they cannot silently switch configuration revision.
+The submitting application supplies the configuration snapshot; `JobSystem`
+does not discover `ConfigurationService` or read ambient global state. Under
+[JOB-001.2], callbacks receive a read-only `JobExecutionContext` containing the
+captured `ConfigurationSnapshotRef`; the job-system target has no dependency on
+the live configuration service. [JOB-001.2] adds architecture dependency
+coverage for that boundary, while developer builds reject ambient
+current-snapshot reads from a `Worker` role. Its regression coverage submits
+against one revision, publishes a new revision before execution and proves that
+the callback still observes the captured revision. A descriptor explicitly marks
+configuration-independent work instead of silently reading the latest snapshot
+on a worker. `TaskGroup` freezes its parent submission context at construction;
+children inherit it and may add
+narrower diagnostic fields, but they cannot silently switch configuration
+revision.
 
 Workers bind the owned context for exactly one callback and restore the previous worker context through RAII on success, failure, cancellation and exception paths. Completion observers receive the same captured identities. Reused workers never inherit fields from a previous job.
 
@@ -126,13 +153,19 @@ OBS-001D attaches spans and correlation to the same work. OBS-001E consumes term
 
 ### Migration boundaries
 
-- [JOB-001.2] owns explicit `JobStore`, durable handle records, progress/timing/results, job/operation/task-group correlation, submission context, configuration capture and ordinary wait APIs.
+- [JOB-001.2] owns explicit `JobStore`, durable handle records, progress/timing/results, job/operation/task-group correlation, typed continuation/resource requirement metadata, submission context, configuration capture, the test `ThreadWaitScope` and ordinary wait APIs.
 - [JOB-001.3] owns cancellation-versus-failure state-machine completion and race coverage.
 - [JOB-001.4] owns priority queues, backpressure and overload observability under the waiting rules decided here.
 - [JOB-001.5] owns resource admission and ordered bounded shutdown/drain behavior.
 - Application vertical slices migrate direct `OperationStore` mutation behind the coordinator seam while preserving one store instance.
 
 No follow-up may make `OperationStore` a scheduler detail, expose every internal job to presentation, use observability persistence as live authority, perform an owner-thread unbounded wait or fetch configuration after worker execution begins.
+
+After acceptance, implementation tickets do not amend this ADR. A later change
+to one boundary is recorded in a narrow follow-on ADR. If it conflicts with an
+accepted decision here, the replacement explicitly carries forward the unchanged
+decisions and supersedes ADR-010 as a whole, following the repository ADR
+convention.
 
 ## Consequences
 

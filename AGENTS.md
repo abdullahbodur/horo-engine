@@ -356,6 +356,10 @@ Do not add `#comment`, `#time` or a workflow transition command merely to create
 a link: those commands mutate Jira. Use them only when the user or workflow
 explicitly authorizes the corresponding comment, worklog or transition, and
 verify that the commit author email maps to a Jira user allowed to perform it.
+The committer or delivery automation performs that check before push. An agent
+compares `git log -1 --format=%ae` with the authenticated Jira user's unique
+verified email; if either identity cannot be verified, it omits the command,
+preserves the plain Jira key for linking and reports the blocked mutation.
 For normal delivery, put each Smart Commit command on a single line in the commit
 body. The subject remains reserved for its human-readable summary and traceability
 identifiers. The emergency exception may omit a Smart Commit command until Jira
