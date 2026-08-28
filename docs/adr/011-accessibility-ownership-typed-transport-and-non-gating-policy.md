@@ -23,7 +23,7 @@ Previously, accessibility concerns were scattered across individual subsystem do
 
 ## Decision
 
-**Accessibility feature families are owned directly by their respective domain subsystems and communicate across narrow, typed transport interfaces. Configuration snapshots carry validated accessibility settings and provenance. The general `EngineDataBus` is strictly reserved for gameplay difficulty assists (`GameplayAccessibilityState`) and must NOT be used as an authoritative store or universal accessibility transport. Accessibility features are non-gating: they never block core engine loops, must be available across all product tiers, platforms, and render backends, and must not introduce circular subsystem dependencies.**
+**Accessibility feature families are owned directly by their respective domain subsystems and communicate across narrow, typed transport interfaces. Configuration snapshots carry validated accessibility settings and provenance. The general `EngineDataBus` is strictly reserved for gameplay difficulty assists (`GameplayAccessibilityStateEvent`) and must NOT be used as an authoritative store or universal accessibility transport. Accessibility features are non-gating: they never block core engine loops, must be available across all product tiers, platforms, and render backends, and must not introduce circular subsystem dependencies.**
 
 ### Ratify-or-revise outcomes
 
@@ -31,7 +31,7 @@ Previously, accessibility concerns were scattered across individual subsystem do
 |---|---|---|
 | Feature ownership | Dispersed across audio, input, rendering, and UI | **Ratified & Partitioned.** Each feature family has exactly one owning subsystem; no monolithic God-object manager is introduced. |
 | Transport mechanism | Informal topic mentions and direct struct access | **Revised.** Typed transports are strictly defined per feature family. |
-| DataBus role | Ambiguous; potential catch-all accessibility bus | **Revised & Restricted.** The DataBus carries only `GameplayAccessibilityState` notifications. Universal bus transport for all accessibility is strictly forbidden. |
+| DataBus role | Ambiguous; potential catch-all accessibility bus | **Revised & Restricted.** The DataBus carries only `GameplayAccessibilityStateEvent` notifications. Universal bus transport for all accessibility is strictly forbidden. |
 | Settings & provenance | Ad hoc settings structs | **Revised.** All settings are registered under the Foundation `accessibility.*` configuration schema and consumed via immutable `ConfigurationSnapshot` handles. |
 | Tier & platform availability | "All Tiers: Yes" noted in table without enforcement rules | **Ratified & Enforced.** Non-gating policy is mandatory across `es3`, `dx11`, `dx12_vulkan`, and `high_end`, as well as headless and null backends. |
 | Threading & real-time loops | Unspecified interaction with real-time audio/render loops | **Ratified with Invariants.** Zero allocation, zero blocking I/O, and zero synchronous OS accessibility calls in real-time callbacks or render passes. |
@@ -44,7 +44,7 @@ Previously, accessibility concerns were scattered across individual subsystem do
 | **Colorblind Filters & Contrast** | Post-Processing / Render Pipeline | Applied as post-process color transform via `ColorGradingSettings`; queried via `IColorAccessibilityQuery` | `accessibility.colorblind.*`, `accessibility.visual.*` | Render graph post-process pass after tonemapping; synchronous query for UI/gameplay |
 | **Input Remapping & Sticky Keys** | `RawInputCollector` (Layer 1) & `InputRouter` / `InputMapping` (Layer 3) | Direct integration in `RawInputCollector` (sticky keys, hold thresholds) and `InputMapping` (remapping, toggle actions) | `accessibility.input.*` | Input frame collection and semantic action resolution; no bus events per key |
 | **Screen Reader / TTS** | Platform / UI Subsystem (`PlatformAccessibilityBridge`) | Direct metadata registration via `AccessibilityNodeDescriptor` and dispatch across `IScreenReader` / OS bridge | `accessibility.screen_reader.*` | Main-thread UI focus/update events; bounded async dispatch to OS accessibility APIs |
-| **Gameplay Difficulty Assists** | Gameplay / Game Simulation | Published strictly via `GameplayAccessibilityState` topic on `EngineDataBus` | `accessibility.gameplay.*` | Simulation tick boundaries; read by gameplay controllers without mid-tick tearing |
+| **Gameplay Difficulty Assists** | Gameplay / Game Simulation | Published strictly via `GameplayAccessibilityStateEvent` topic on `EngineDataBus` | `accessibility.gameplay.*` | Simulation tick boundaries; read by gameplay controllers without mid-tick tearing |
 | **Visual Settings (Scale, Motion, Flash)** | UI Design System (scale/contrast) & Camera/VFX (motion/flash) | Direct consumption of immutable `ConfigurationSnapshot` by UI renderer, Camera Controller, and VFX runtime | `accessibility.visual.*` | Frame start / scene render setup; hooks in camera shake and particle flash passes |
 | **Developer Validation Tools** | Editor Diagnostics & CI Harness | Editor viewport render modes, headless contrast scanner, screen reader capture log | `editor.accessibility.*` | Editor panels and automated test suites; display-independent CI checks |
 
@@ -61,7 +61,7 @@ graph TD
     PostProc -- "ColorGradingSettings & IColorAccessibilityQuery" --> Viewport[Scene Render & Non-Color Cues]
     Input -- "RawInputCollector & InputMapping Affordances" --> SemanticInput[Semantic Action Frames]
     UIBridge -- "Platform Accessibility APIs (NSAccessibility, UIA, AT-SPI)" --> OSBridge[Screen Reader / Assistive Tech]
-    GameCoord -- "EngineDataBus: GameplayAccessibilityState" --> GameSim[Gameplay Simulation Systems]
+    GameCoord -- "EngineDataBus: GameplayAccessibilityStateEvent" --> GameSim[Gameplay Simulation Systems]
     VFX -- "Motion & Flash Suppression Hooks" --> Effects[Particle & Camera Systems]
 ```
 
@@ -69,13 +69,13 @@ graph TD
 
 1. **The DataBus Is Not a Universal Accessibility Store**:
    - The general `EngineDataBus` must **never** be used as a shared repository or message queue for audio dialogue streams, UI accessibility trees, per-stroke input remapping, or color transform updates.
-   - Only `GameplayAccessibilityState` is published via the DataBus. Gameplay difficulty assists cross the boundary between host configuration and game-specific simulation modules where loose coupling is mandatory.
+   - Only `GameplayAccessibilityStateEvent` is published via the DataBus. Gameplay difficulty assists cross the boundary between host configuration and game-specific simulation modules where loose coupling is mandatory.
    - All other feature families communicate via direct, typed domain interfaces.
 2. **No Monolithic Accessibility Singleton**:
    - Accessibility is an architectural cross-cutting concern composed of domain-owned features, not a single monolithic `AccessibilityManager` God-class.
    - Audio owns audio events; Render owns post-processing; Input owns key collectors; Platform owns OS screen reader bridges.
 3. **No Stringly-Typed Payloads**:
-   - Transports must use strongly-typed C++20 structures (`AudioEventSnapshot`, `CaptionEvent`, `ColorGradingSettings`, `AccessibilityNodeDescriptor`, `GameplayAccessibilityState`).
+   - Transports must use strongly-typed C++20 structures (`AudioEventSnapshot`, `CaptionEvent`, `ColorGradingSettings`, `AccessibilityNodeDescriptor`, `GameplayAccessibilityStateEvent`).
    - Configuration keys are registered with typed descriptors in `ConfigurationSchema`; runtime paths must not perform runtime string parsing or dynamic map lookups.
 
 ### Non-Gating Policy And Platform Parity

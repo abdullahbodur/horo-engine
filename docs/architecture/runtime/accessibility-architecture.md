@@ -21,7 +21,7 @@ colorblind viewport simulation, screen reader logging, control scheme validation
    strongly typed interfaces rather than untyped message dictionaries.
 3. **Strict DataBus Boundary**: The general `EngineDataBus` is **not** a universal
    accessibility dumping ground. It is reserved exclusively for gameplay difficulty
-   assist notifications (`GameplayAccessibilityState`). All other features use direct
+   assist notifications (`GameplayAccessibilityStateEvent`). All other features use direct
    typed subsystem transports.
 4. **Non-Gating Policy**: Accessibility features never gate core engine loops, must be
    available across all product tiers and platforms without tier restrictions, and must
@@ -43,7 +43,7 @@ graph TD
     PostProc -- "ColorGradingSettings & IColorAccessibilityQuery" --> Viewport[Scene Render & Non-Color Cues]
     Input -- "RawInputCollector & InputMapping Affordances" --> SemanticInput[Semantic Action Frames]
     UIBridge -- "Platform Accessibility APIs (NSAccessibility, UIA, AT-SPI)" --> OSBridge[Screen Reader / Assistive Tech]
-    GameCoord -- "EngineDataBus: GameplayAccessibilityState" --> GameSim[Gameplay Simulation Systems]
+    GameCoord -- "EngineDataBus: GameplayAccessibilityStateEvent" --> GameSim[Gameplay Simulation Systems]
     VFX -- "Motion & Flash Suppression Hooks" --> Effects[Particle & Camera Systems]
 ```
 
@@ -72,11 +72,13 @@ enum class CaptionPosition : uint8_t {
     FollowSpeaker    // 2D screen-projected tag near speaker entity
 };
 
+inline constexpr std::size_t kMaxCaptionEventsPerSnapshot = 32;
+
 struct CaptionEvent {
     uint64_t         sequenceId;
     CaptionEventType type;
-    std::string_view speakerName;       // Localized speaker identifier
-    std::string_view text;              // Localized caption string
+    std::string      speakerName;       // owned; never a view into mixer/transient storage
+    std::string      text;              // owned localized caption; independent of producer lifetime
     Vector3          sourceWorldPos;    // 3D position for directional cues / projection
     float            durationSeconds;   // Display duration
     float            loudness;          // Relative volume for visual emphasis
@@ -84,7 +86,7 @@ struct CaptionEvent {
 
 struct AudioEventSnapshot {
     FrameNumber                frame;
-    std::vector<CaptionEvent>  captionEvents;
+    std::vector<CaptionEvent>  captionEvents;  // fixed capacity; reserved at AudioSystem init
 };
 
 struct ClosedCaptionSettings {
@@ -102,8 +104,18 @@ struct ClosedCaptionSettings {
 ```
 
 #### Invariants
-- The real-time audio mixer thread pushes `CaptionEvent` objects to a lock-free ring
-  buffer; it never allocates heap memory or performs font layout.
+- `CaptionEvent::speakerName` and `CaptionEvent::text` are owned `std::string` (or
+  interned process-stable string ids). They must not be `std::string_view` into mixer
+  scratch, stack, localization temporaries, or any buffer that dies before the UI
+  drain. A published caption outlives the producer callback.
+- `AudioEventSnapshot::captionEvents` is a fixed-capacity, preallocated container.
+  Capacity is reserved at `AudioSystem` initialization (`kMaxCaptionEventsPerSnapshot`)
+  and must not grow on the mixer thread. Overflow drops the newest event and records
+  a diagnostic.
+- The real-time audio mixer thread pushes `CaptionEvent` objects into that preallocated
+  ring/snapshot storage; it never heap-allocates, reallocates the vector, or performs
+  font layout. String members are interned or reserved before the callback so assignment
+  on the mixer thread does not allocate.
 - The UI layer drains `AudioEventSnapshot` on the main thread during HUD rendering.
 - Captions respect screen safe-area margins across all display aspect ratios.
 
@@ -241,11 +253,11 @@ enum class AnnouncePriority : uint8_t {
 };
 
 struct AccessibilityNodeDescriptor {
-    std::string_view  elementId;
+    std::string       elementId;  // owned; valid across async OS dispatch
     AccessibilityRole role;
-    std::string_view  label;
-    std::string_view  value;
-    std::string_view  helpText;
+    std::string       label;
+    std::string       value;
+    std::string       helpText;
     bool              focused;
     bool              disabled;
     bool              checked;
@@ -262,6 +274,12 @@ public:
 ```
 
 #### Invariants
+- `AccessibilityNodeDescriptor` string fields are owned `std::string` (or interned
+  process-stable ids). They must not be `std::string_view` into widget-local, stack, or
+  ImGui-frame storage. The descriptor remains valid after the producing widget is gone
+  and across asynchronous platform dispatch.
+- `IScreenReader` `std::string_view` parameters are call-duration only. Implementations
+  copy into owned storage before returning if dispatch is asynchronous.
 - `IScreenReader::Announce()` and node updates must never block the main rendering thread.
   Platform bridge implementations enqueue updates for asynchronous dispatch to native APIs.
 - Headless and test environments compose `NullPlatformAccessibilityBridge`, which maintains
@@ -276,7 +294,7 @@ public:
 #### Ownership
 - **Owner**: Gameplay Simulation Subsystem.
 - **Publisher**: Application Accessibility Coordinator.
-- **Transport**: `GameplayAccessibilityState` event topic on the `EngineDataBus`.
+- **Transport**: `GameplayAccessibilityStateEvent` on the `EngineDataBus`.
 
 #### Typed Transport Contract
 Gameplay assists cross the boundary between host settings and decoupled gameplay logic.
@@ -284,7 +302,7 @@ This is the **only** accessibility feature family permitted to publish through t
 `EngineDataBus`.
 
 ```cpp
-struct GameplayAccessibilityState {
+struct GameplayAccessibilityStateEvent {
     static constexpr std::string_view HoroEventTypeName =
         "horo::GameplayAccessibilityStateEvent";
 
@@ -301,7 +319,7 @@ struct GameplayAccessibilityState {
 ```
 
 #### Invariants
-- Gameplay systems subscribe to `GameplayAccessibilityState` and cache the state at
+- Gameplay systems subscribe to `GameplayAccessibilityStateEvent` and cache the state at
   simulation tick boundaries. State transitions never tear across a single simulation tick.
 - Difficulty assists are accessibility features, not cheats; they are recorded as user
   profile accessibility preferences and persisted in user settings.
@@ -410,7 +428,8 @@ All accessibility options are declared under the `accessibility.*` namespace in
 
 ### 2. Compliance Targets
 - **Editor IDE**: Targets **WCAG 2.2 Level AA** compliance.
-- **Game Runtime**: Provides foundational infrastructure to satisfy **CVAA** (21 CFR Part 14),
+- **Game Runtime**: Provides foundational infrastructure to satisfy **CVAA**
+  (47 U.S.C. §§ 609, 613, 617 and 47 CFR Parts 14 and 79),
   the **European Accessibility Act (EAA)**, and console platform accessibility TRCs.
 
 ---
@@ -423,6 +442,6 @@ All accessibility options are declared under the `accessibility.*` namespace in
 - [Input Architecture](./input-architecture.md): Input context and rebinding
 - [Input Layer Ownership](./input-layer-ownership.md): `RawInputCollector` and `InputRouter` contracts
 - [Game UI And HUD](./game-ui-and-hud.md): UI screen reader node metadata and caption rendering
-- [Engine Data Bus](../foundation/engine-data-bus.md): Notification plane and `GameplayAccessibilityState` topic
+- [Engine Data Bus](../foundation/engine-data-bus.md): Notification plane and `GameplayAccessibilityStateEvent`
 - [UI Design System](../editor/ui-design-system.md): High contrast tokens and editor accessibility
 - [Configuration System](../foundation/configuration-system.md): Schema and immutable snapshots
