@@ -1,4 +1,4 @@
-# ADR-011: Perception Ownership, Sense Policy and Budget Decision
+# ADR-024: Perception Ownership, Sense Policy and Budget Decision
 
 - **Status**: Proposed
 - **Date**: 2026-08-28
