@@ -348,4 +348,3 @@ group share avoidance data; groups are independent.
 - [Scene Runtime](./scene-runtime.md): agent entity and component model
 - [Concurrency And Jobs](../foundation/concurrency-and-jobs.md): parallel crowd and perception jobs
 - [Debug Console And Overlays](./debug-console-and-overlays.md): AI debug visualization
-
