@@ -282,7 +282,7 @@ Recommended project configuration:
     "toggleChord": "Grave",
     "historyLimit": 500,
     "allowStartupExec": true,
-    "shippingAllowlist": ["help", "version", "screenshot", "support_bundle"]
+    "shippingAllowlist": ["help", "version", "screenshot"]
   },
   "developmentOverlays": {
     "enabledByDefault": false,

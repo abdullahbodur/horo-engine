@@ -153,9 +153,9 @@ All console command adapters (In-Game UI, Editor Panel, CLI, MCP, Remote WebSock
 
 1. **`ImmediateConsoleThread`**: Purely algorithmic operations (e.g. `help`, `find`, `history`, syntax validation) execute synchronously on the caller thread. Handlers must not access engine subsystems, scene objects, or render resources.
 2. **`OwnerThreadNextFrame`**: Commands that inspect or mutate engine, scene, or gameplay state are enqueued into a lock-free command queue and drained strictly on the **Main Thread** during a dedicated, deterministic frame phase (`PreUpdate` or `DebugPhase`) before gameplay simulation ticks.
-3. **`RenderSafePoint`**: Render-related debug toggles (e.g. `rnd.wireframe`, `rnd.freeze_culling`) dispatch during render frame synchronization boundaries where render frontend/backend state is stable, adhering to [Rendering Architecture](../runtime/rendering-architecture.md).
+3. **`RenderSafePoint`**: Render-related debug toggles (e.g. `rnd.wireframe`, `rnd.freeze_culling`) dispatch during render frame synchronization boundaries where render frontend/backend state is stable, adhering to [Rendering Architecture](../architecture/runtime/rendering-architecture.md).
 4. **`WorkerJob` (Asynchronous / Non-Blocking)**: Heavy diagnostic tasks (e.g. world streaming memory dumps, profiler trace serialization, support bundle generation) dispatch a background job via the Foundation `JobSystem`.
-   - In adherence to [ADR-010 (Job Waiting)](../adr/010-job-waiting-and-operation-store-ownership.md), the **Main/Editor thread is strictly forbidden from synchronously blocking on `WorkerJob` completion (`Wait()` is illegal)**.
+   - In adherence to [ADR-010 (Job Waiting)](010-job-waiting-and-operation-store-ownership.md), the **Main/Editor thread is strictly forbidden from synchronously blocking on `WorkerJob` completion (`Wait()` is illegal)**.
    - The command handler immediately returns an accepted `JobId` / `OperationId`. Progress, diagnostics, and completion are tracked asynchronously through `OperationStore`.
 
 ---
@@ -169,7 +169,7 @@ To ensure security, minimize binary footprint, and eliminate cheat vectors in co
 | **Editor** (`HORO_PROFILE_EDITOR`) | Full command tables and debug UI compiled in. | `Public`, `Developer`, `AdminCheat`, `Restricted` (local). | Local MCP / Editor loopback. |
 | **Game Development** (`HORO_PROFILE_DEVELOPMENT`) | Full command tables compiled in. In-game console UI active. | `Public`, `Developer`, `AdminCheat` (if cheats enabled). | Localhost diagnostics only. |
 | **Game Profile** (`HORO_PROFILE_PROFILE`) | Diagnostic commands compiled in; cheat handlers stripped. | `Public`, read-only `Developer` (metrics, profiler). | Localhost profiling only. |
-| **Game Shipping / Retail** (`HORO_PROFILE_SHIPPING`) | **`Developer` and `AdminCheat` descriptors stripped at compile time.** Debug symbols/strings removed. Console UI compiled out or disabled. | `Public` allowlist only (`help`, `version`, `screenshot`, `support_bundle` if opted in). | **Disabled completely.** |
+| **Game Shipping / Retail** (`HORO_PROFILE_SHIPPING`) | **`Developer` and `AdminCheat` descriptors stripped at compile time.** Debug symbols/strings removed. Console UI compiled out or disabled. | `Public` allowlist only (`help`, `version`, `screenshot`). `support_bundle` remains `CommandPermission::Restricted` and is not a Shipping Public command. | **Disabled completely.** |
 | **Dedicated Server** (`HORO_PROFILE_SERVER`) | Headless CLI / Remote console compiled in. Visual debug UI omitted. | `Public`, server `Developer`, and authenticated `Restricted` admin. | Authenticated TLS/Token remote admin only. |
 
 #### Compile-Time Stripping Mechanism
