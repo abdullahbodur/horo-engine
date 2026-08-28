@@ -1,4 +1,4 @@
-# ADR-011: AI Fixed-Tick Order, Authority and Simulation Budget
+# ADR-022: AI Fixed-Tick Order, Authority and Simulation Budget
 
 - **Status**: Proposed
 - **Date**: 2026-08-28
