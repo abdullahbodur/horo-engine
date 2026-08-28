@@ -51,11 +51,13 @@ graph TD
 
 ### 1. Closed Captions And Subtitles
 
-#### Ownership
+#### Ownership (Captions)
+
 - **Producer**: `AudioRuntime` / `AudioSystem` emits dialogue and sound event metadata.
 - **Consumer**: `CaptionRenderer` in the Game UI / HUD layer formats and displays text.
 
-#### Typed Transport Contract
+#### Typed Transport (Captions)
+
 Captions consume typed `AudioEventSnapshot` and `CaptionEvent` queues directly from the
 audio system. They are **not** routed through the general process data bus.
 
@@ -103,7 +105,8 @@ struct ClosedCaptionSettings {
 };
 ```
 
-#### Invariants
+#### Invariants (Captions)
+
 - `CaptionEvent::speakerName` and `CaptionEvent::text` are owned `std::string` (or
   interned process-stable string ids). They must not be `std::string_view` into mixer
   scratch, stack, localization temporaries, or any buffer that dies before the UI
@@ -123,11 +126,12 @@ struct ClosedCaptionSettings {
 
 ### 2. Colorblind Support And Visual Accessibility
 
-#### Ownership
+#### Ownership (Colorblind)
+
 - **Owner**: Post-Processing & Effects Subsystem / Render Pipeline.
 - **Consumers**: Render Graph post-process pass, Gameplay/HUD visual styling.
 
-#### Typed Transport Contract
+#### Typed Transport (Colorblind)
 Colorblind modes are implemented as 3×3 color transformation matrices applied in the
 post-processing pipeline immediately after tonemapping via `ColorGradingSettings`.
 Gameplay and HUD systems query the active mode synchronously via `IColorAccessibilityQuery`.
@@ -162,6 +166,7 @@ public:
 ```
 
 #### Visual Safety And Overrides
+
 ```cpp
 struct VisualAccessibilitySettings {
     float uiScale;                 // Global UI scale multiplier [0.5, 3.0]
@@ -173,7 +178,8 @@ struct VisualAccessibilitySettings {
 };
 ```
 
-#### Invariants
+#### Invariants (Colorblind)
+
 - Colorblind transformations are applied in the shader post-process chain without CPU-GPU
   synchronization stalls or readbacks.
 - Games must provide non-color visual indicators (patterns, icons, shapes, text tags)
@@ -185,13 +191,14 @@ struct VisualAccessibilitySettings {
 
 ### 3. Control Remapping And Assist Affordances
 
-#### Ownership
+#### Ownership (Remapping)
+
 - **Layer 1 (`RawInputCollector`)**: Owns sticky keys, hold duration thresholds, and raw
   device accumulation.
 - **Layer 3 (`InputRouter` / `InputMapping`)**: Owns semantic action remapping, toggle
   action semantics, and gyro aim resolution.
 
-#### Typed Transport Contract
+#### Typed Transport (Remapping)
 Accessibility controls extend the existing `RawInputCollector` and `InputMapping`
 contracts without publishing raw keypress events to the DataBus.
 
@@ -210,7 +217,8 @@ struct AccessibilityControls {
 };
 ```
 
-#### Invariants
+#### Invariants (Remapping)
+
 - Sticky keys permit sequential activation of modifiers (`Shift`, `Ctrl`, `Alt`)
   followed by an action key, resolved deterministically in `RawInputCollector`.
 - Toggle actions maintain active semantic state in `InputRouter` until a subsequent
@@ -222,11 +230,12 @@ struct AccessibilityControls {
 
 ### 4. Screen Reader And Assistive Bridge
 
-#### Ownership
+#### Ownership (Screen Reader)
+
 - **Owner**: Platform & UI Subsystem (`PlatformAccessibilityBridge`).
 - **Consumers**: Runtime Game UI, HUD, and Editor shared components.
 
-#### Typed Transport Contract
+#### Typed Transport (Screen Reader)
 UI elements register structured metadata with the `PlatformAccessibilityBridge`. The bridge
 dispatches focus changes and announcements to the host OS accessibility APIs
 (macOS NSAccessibility, Windows UI Automation, Linux AT-SPI).
@@ -273,7 +282,8 @@ public:
 };
 ```
 
-#### Invariants
+#### Invariants (Screen Reader)
+
 - `AccessibilityNodeDescriptor` string fields are owned `std::string` (or interned
   process-stable ids). They must not be `std::string_view` into widget-local, stack, or
   ImGui-frame storage. The descriptor remains valid after the producing widget is gone
@@ -291,12 +301,13 @@ public:
 
 ### 5. Gameplay Difficulty And Timing Assists
 
-#### Ownership
+#### Ownership (Gameplay Assists)
+
 - **Owner**: Gameplay Simulation Subsystem.
 - **Publisher**: Application Accessibility Coordinator.
 - **Transport**: `GameplayAccessibilityStateEvent` on the `EngineDataBus`.
 
-#### Typed Transport Contract
+#### Typed Transport (Gameplay Assists)
 Gameplay assists cross the boundary between host settings and decoupled gameplay logic.
 This is the **only** accessibility feature family permitted to publish through the
 `EngineDataBus`.
@@ -318,7 +329,8 @@ struct GameplayAccessibilityStateEvent {
 };
 ```
 
-#### Invariants
+#### Invariants (Gameplay Assists)
+
 - Gameplay systems subscribe to `GameplayAccessibilityStateEvent` and cache the state at
   simulation tick boundaries. State transitions never tear across a single simulation tick.
 - Difficulty assists are accessibility features, not cheats; they are recorded as user
@@ -346,6 +358,7 @@ struct GameplayAccessibilityStateEvent {
 ## Non-Gating Policy And Parity
 
 ### 1. Zero Tier-Gating
+
 Accessibility features are **never gated** behind graphics tiers, product editions, or
 platform capabilities.
 
@@ -360,6 +373,7 @@ platform capabilities.
 | Reduce Motion & Flash Suppression | Yes | Yes | Yes | Yes |
 
 ### 2. Core Loop Non-Blocking Invariant
+
 - **Audio Mixer Callback**: Zero heap allocations, zero blocking locks, zero text layout.
   Caption events are transferred via bounded queues.
 - **Render Submission**: Colorblind matrices and high-contrast palettes are constant-buffer
@@ -368,14 +382,18 @@ platform capabilities.
 - **Input Collection**: Sticky key state is evaluated in Layer 1 with zero bus publication.
 
 ### 3. Headless And Test Parity
+
 Headless hosts (`horo-engine`, CI pipelines) and test harnesses use null/mock bridges:
+
 - `NullPlatformAccessibilityBridge`: Captures structured announcements for assertion.
 - `NullAudioDevice`: Generates deterministic audio event snapshots for caption tests.
 - CI pipelines execute automated WCAG AA contrast calculations and control scheme checks
   headlessly without requiring physical display hardware.
 
 ### 4. Dependency Direction Discipline
+
 The dependency graph between subsystems remains strictly acyclic (DAG):
+
 - `GameUI` depends on `Audio` types (`AudioEventSnapshot`) for captions, but `Audio`
   has zero knowledge of `GameUI`.
 - `Gameplay` queries `PostProcessing` via `IColorAccessibilityQuery`, but `PostProcessing`
@@ -407,6 +425,7 @@ All accessibility options are declared under the `accessibility.*` namespace in
 | `accessibility.gameplay.skip_qte` | `bool` | `false` | `User` | Automatically pass QTE events |
 
 ### Provenance And Synchronization
+
 1. Settings are loaded from platform user configuration files and sealed before resolution.
 2. Updates commit a new monotonic `ConfigurationSnapshot`.
 3. Subsystems capture snapshots at frame boundaries (`BeginFrame` / tick start), ensuring
@@ -417,6 +436,7 @@ All accessibility options are declared under the `accessibility.*` namespace in
 ## Developer Tooling And Compliance
 
 ### 1. Developer Validation Tools
+
 - **Colorblind Viewport Preview**: Renders the active editor viewport through selected
   colorblind simulation matrices in real time.
 - **W3C WCAG AA/AAA Contrast Checker**: Inspects UI text and background colors against
@@ -427,6 +447,7 @@ All accessibility options are declared under the `accessibility.*` namespace in
   essential actions or inaccessible modifier combinations.
 
 ### 2. Compliance Targets
+
 - **Editor IDE**: Targets **WCAG 2.2 Level AA** compliance.
 - **Game Runtime**: Provides foundational infrastructure to satisfy **CVAA**
   (47 U.S.C. §§ 609, 613, 617 and 47 CFR Parts 14 and 79),
