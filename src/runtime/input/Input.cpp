@@ -9,6 +9,7 @@
 #include <fstream>
 #include <limits>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <unordered_set>
 #include <utility>
 
@@ -430,13 +431,17 @@ namespace Horo::Input {
                 report.diagnostics.emplace_back(UnsupportedControl, action, "Binding scale, threshold, or component is invalid.");
         }
 
-        template <typename Bindings>
+        template <typename Bindings, typename MessageFn>
         void ReportDuplicateTransitions(BindingValidationReport &report, const ActionId &action, const Bindings &bindings,
-                                        const std::string &message) {
+                                        MessageFn &&makeMessage) {
+            std::optional<std::string> message;
             for (std::size_t i = 0; i + 1 < bindings.size(); ++i)
                 for (std::size_t j = i + 1; j < bindings.size(); ++j)
-                    if (SameTransition(bindings[i], bindings[j]))
-                        report.diagnostics.emplace_back(BindingDiagnosticCode::DuplicateBinding, action, message);
+                    if (SameTransition(bindings[i], bindings[j])) {
+                        if (!message)
+                            message = std::forward<MessageFn>(makeMessage)();
+                        report.diagnostics.emplace_back(BindingDiagnosticCode::DuplicateBinding, action, *message);
+                    }
         }
 
         void ValidateOverrides(BindingValidationReport &report, const InputBindingProfile &profile,
@@ -457,9 +462,10 @@ namespace Horo::Input {
                 for (const InputBinding &binding : overrideValue.bindings)
                     ValidateBinding(report, overrideValue.action, binding, "Binding deadzone must be in [0, 1).",
                                     "Binding references an unsupported control.", "Binding is reserved by the operating system.");
-                ReportDuplicateTransitions(report, overrideValue.action, overrideValue.bindings,
-                                           std::format("Action '{}' override contains a duplicate binding on the same trigger.",
-                                                       overrideValue.action.Value()));
+                ReportDuplicateTransitions(report, overrideValue.action, overrideValue.bindings, [&overrideValue] {
+                    return std::format("Action '{}' override contains a duplicate binding on the same trigger.",
+                                       overrideValue.action.Value());
+                });
             }
         }
 
@@ -477,9 +483,11 @@ namespace Horo::Input {
                     report.diagnostics.emplace_back(InvalidAction, action.id, "Action descriptor contains an empty action ID.");
                     continue;
                 }
-                if (!action.context.IsValid())
+                if (!action.context.IsValid()) {
                     report.diagnostics.emplace_back(AmbiguousContext, action.id,
                                                     std::format("Action '{}' has an invalid or empty context ID.", action.id.Value()));
+                    continue;
+                }
 
                 const auto overrideValue = std::ranges::find(profile.overrides, action.id, &BindingOverride::action);
                 const std::vector<InputBinding> &bindings =
@@ -498,9 +506,10 @@ namespace Horo::Input {
                                                                     "actions require component 0.",
                                                                     action.id.Value(), binding.component));
                 }
-                ReportDuplicateTransitions(report, action.id, bindings,
-                                           std::format("Action '{}' contains a duplicate binding on the same trigger.", action.id.Value()));
-                effective.reserve(bindings.size());
+                ReportDuplicateTransitions(report, action.id, bindings, [&action] {
+                    return std::format("Action '{}' contains a duplicate binding on the same trigger.", action.id.Value());
+                });
+                effective.reserve(effective.size() + bindings.size());
                 for (const InputBinding &binding : bindings)
                     effective.push_back({&action, &binding});
             }
