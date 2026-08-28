@@ -32,7 +32,7 @@ To support large-scale open worlds, flight/space simulations, and seamless multi
 
 Key design constraints:
 
-1. **Universal GPU Compatibility**: Mobile GPUs (Apple Silicon mobile tiers, ARM Mali, Qualcomm Adreno) and entry-level graphics hardware lack hardware FP64 arithmetic or incur severe ALU throughput penalties (16x–32x slowdown). GPU shaders must remain 32-bit single precision (`fp32`) / half precision (`fp16`).
+1. **Universal GPU Compatibility**: Mobile and entry-level GPUs may lack shader FP64 support or provide materially lower FP64 throughput. GPU shaders therefore remain on the supported `fp32` / `fp16` path.
 2. **Physics Engine Stability**: Commercial and open-source physics engines (e.g., Jolt, PhysX, Box2D) rely on 32-bit floating point calculations for collision detection, EPA/GJK, island solving, and sleeping. Physics clusters must remain localized within low-magnitude coordinate frames.
 3. **Deterministic Persistence & Replication**: Authoring tools, spatial partitioning grids, save games, and multiplayer state replication require a stable, absolute global frame of reference that never drifts when the local rendering origin shifts.
 4. **Zero Velocity Discontinuities**: Origin rebasing is a coordinate frame re-indexing, not a physical displacement over time; it must not induce artificial velocity spikes, Doppler glitches, or particle recreation.
@@ -98,13 +98,13 @@ Key design constraints:
 | Strategy | Performance on Mobile (iOS/Android) | Performance on Desktop (Metal/Vulkan/D3D12) | Implementation Complexity | Architectural Fit |
 |---|---|---|---|---|
 | **GPU Native `fp64`** | **Unsupported / Broken** (Metal iOS & GLES lack `double` support; severe ALU penalty on desktop) | 1/4 to 1/32 FP32 ALU throughput | Low (if hardware supported) | **Rejected**: Violates mobile and console parity goals. |
-| **GPU Emulated DS (`fp32` pairs)** | 4x–8x shader ALU instruction bloat; high register pressure | 3x–4x shader ALU instruction bloat | High | **Rejected**: Excessive energy and bandwidth cost across all platforms. |
-| **Camera-Relative `fp32` (Selected)** | **Zero overhead**; native full-rate `fp32` ALUs | **Zero overhead**; native full-rate `fp32` ALUs | Low (CPU-side matrix subtraction) | **Selected**: Optimal performance, universal hardware compatibility. |
+| **GPU Emulated DS (`fp32` pairs)** | Multiple FP32 operations per emulated scalar and increased register pressure | Multiple FP32 operations per emulated scalar and increased register pressure | High | **Rejected**: Adds shader cost and complexity to every supported platform. |
+| **Camera-Relative `fp32` (Selected)** | Uses the platform's native FP32 shader path; shifts subtraction work to extraction | Uses the platform's native FP32 shader path; shifts subtraction work to extraction | Low (CPU-side matrix subtraction) | **Selected**: Preserves broad hardware compatibility and keeps the cost measurable at one boundary. |
 
 ### 2. CPU Precision Arithmetic Costs
 
 - Subtraction of 64-bit integer / double-precision vector coordinates on CPU occurs during **Render Extraction** (once per render instance per frame) and **Origin Rebasing** (infrequently, e.g., once every several minutes of travel).
-- SIMD-accelerated 64-bit arithmetic (`_mm256_sub_pd`, ARM Neon `vsubq_f64` / `vsubq_s64`) executes in $< 1\,\text{ns}$ per instance, resulting in negligible frame-time impact ($< 0.02\,\text{ms}$ for $10,000$ draw calls).
+- Implementations must benchmark coordinate conversion and camera-relative extraction with representative instance counts, release builds, and each supported CPU architecture. This decision does not prescribe an unmeasured latency target.
 
 ---
 
@@ -153,7 +153,7 @@ enum class PrecisionErrorCode {
 
 ### Positive
 
-- **Limitless World Scale**: Allows worlds spanning millions of kilometers (solar systems, flight sims, continuous landscapes) with sub-millimeter precision near the viewer.
+- **Large Supported Range**: Allows worlds spanning the documented `WorldCoordinate64` range while preserving millimeter-scale canonical storage and high local precision near the viewer.
 - **Universal Hardware Parity**: Shaders execute standard 32-bit single precision on iOS, Android, macOS (Metal), Linux/Windows (Vulkan/OpenGL/D3D12), and consoles.
 - **Stable Multi-User Sync & Saves**: Canonical `WorldCoordinate64` ensures world persistence and network packets never suffer from floating-origin drift or precision loss.
 - **Zero Simulation Artifacts**: Physics, audio, VFX, and AI navigate origin shifts seamlessly without momentum glitches, audio pops, or visual hitching.
@@ -168,7 +168,7 @@ enum class PrecisionErrorCode {
 ## Rejected Alternatives
 
 1. **Uniform 64-bit Floating-Point Everything (`dvec3` on CPU and GPU)**:
-   - *Reason for Rejection*: Mobile GPUs (Mali, Adreno, Apple Mobile) do not support native FP64 arithmetic. Emulating FP64 in GLSL/MSL shaders causes catastrophic performance loss (4x–16x frame time increase).
+   - *Reason for Rejection*: Supported mobile APIs and GPUs do not provide a uniform native FP64 shader contract. Emulation adds substantial ALU and register pressure that must not be imposed on every draw.
 2. **Periodic Scene Reload / Level Chunk Teleportation**:
    - *Reason for Rejection*: Destroys continuity, causes massive frame hitching, breaks live physics simulations, and interrupts audio playback.
 3. **Double-Single (DS) High-Low Emulation in Shaders**:

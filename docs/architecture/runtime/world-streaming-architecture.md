@@ -294,4 +294,3 @@ See [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin
   registration, `StreamingCellStateChangedEvent` on `EditorDataBus`
 - [Editor Document Model](../editor/editor-document-model.md): cell baking as
   editor commands
-

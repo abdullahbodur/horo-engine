@@ -194,20 +194,20 @@ enum class RebasePhase : uint8_t {
 class IOriginRebaseParticipant {
 public:
     virtual ~IOriginRebaseParticipant() = default;
-    
+
     [[nodiscard]] virtual std::string_view GetParticipantName() const noexcept = 0;
-    
+
     /**
      * @brief Phase 1: Validate readiness and pre-allocate migration memory.
      * Must return Error if the subsystem cannot safely shift at this time.
      */
     [[nodiscard]] virtual Result<void> PrepareRebase(const OriginRebaseEvent &event) noexcept = 0;
-    
+
     /**
      * @brief Phase 2: Apply position translation atomically without velocity alteration.
      */
     virtual void CommitRebase(const OriginRebaseEvent &event) noexcept = 0;
-    
+
     /**
      * @brief Rollback: Executed if any participant failed during PrepareRebase.
      */
