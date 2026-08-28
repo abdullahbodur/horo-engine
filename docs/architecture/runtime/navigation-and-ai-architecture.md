@@ -231,6 +231,8 @@ CharacterControllerLocomotion  (Physics Integration)
 
 ### Phase Contracts And Invariants
 
+Phases 1-6 run inside the fixed simulation tick and may mutate simulation state under the phase contracts below. Phase 7 (`RenderExtraction`) is listed for ordering completeness but executes on the variable-rate frame; it is not a seventh fixed-tick mutation phase.
+
 1. **`PerceptionSensePoll`**:
    - Gathers sensory stimuli (sight cone line-of-sight traces, hearing sound events, damage triggers, proximity overlaps) into staged per-agent stimulus buffers.
    - Operates as a read-only pass over physics spatial structures and audio event queues.

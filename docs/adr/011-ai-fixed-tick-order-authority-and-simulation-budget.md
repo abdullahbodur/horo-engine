@@ -20,7 +20,7 @@ Early documentation drafts introduced two architectural defects that require rat
 
 ## Decision
 
-**AI simulation is strictly decoupled from graphics backends and executes within fixed simulation ticks across an explicit seven-phase sequence (`PerceptionSensePoll -> BlackboardSync -> AiDecisionEvaluate -> NavIntentCommit -> CharacterControllerLocomotion -> AnimationRigUpdate -> RenderExtraction`). In networked topologies, dedicated servers retain exclusive authority over AI decisions, perception, and blackboards, while clients receive replicated transforms and animation targets for presentation-only interpolation. AI simulation budgets are governed exclusively by typed `GameplayAiProfile` specifications based on available CPU worker threads and memory constraints.**
+**AI simulation is strictly decoupled from graphics backends and executes six mutation phases inside each fixed simulation tick, plus a seventh presentation extract (`RenderExtraction`) on the variable-rate frame (`PerceptionSensePoll -> BlackboardSync -> AiDecisionEvaluate -> NavIntentCommit -> CharacterControllerLocomotion -> AnimationRigUpdate -> RenderExtraction`). In networked topologies, dedicated servers retain exclusive authority over AI decisions, perception, and blackboards, while clients receive replicated transforms and animation targets for presentation-only interpolation. AI simulation budgets are governed exclusively by typed `GameplayAiProfile` specifications based on available CPU worker threads and memory constraints.**
 
 ### 1. Simulation Tick Phase Order
 
