@@ -897,7 +897,7 @@ See [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin
 
 ## Related Documents and ADRs
 
-- [ADR-011: World Streaming Partition Authority and Subsystem Boundaries](../../adr/011-world-streaming-partition-authority-and-subsystem-boundaries.md): Ratified architectural decision and ratify-or-revise outcomes.
+- [ADR-012: World Streaming Partition Authority and Subsystem Boundaries](../../adr/012-world-streaming-partition-authority-and-subsystem-boundaries.md): Ratified architectural decision and ratify-or-revise outcomes.
 - [Scene Runtime](./scene-runtime.md): ECS entity storage, candidate preparation, and transactional structural mutations.
 - [Asset Pipeline](./asset-pipeline.md): Streaming cell assets, chunked package archives, and async I/O with `CancellationToken`.
 - [Terrain And Foliage Architecture](./terrain-and-foliage-architecture.md): Terrain clipmap streaming and cell-aligned foliage clusters.
