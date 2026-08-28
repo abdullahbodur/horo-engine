@@ -269,37 +269,38 @@ struct AIPerceptionConfig {
     float          memoryDuration;       // Max memory lifetime in seconds
     float          decayRate;            // Linear decay rate per second
     float          forgetThreshold;      // Strength threshold for eviction
-    uint32_t       maxTrackedTargets;    // Bounded stimulus capacity
+    uint32_t       maxTrackedStimuli;    // Runtime cap, <= kMaxTrackedStimuli
     PerceptionMask senseMask;            // Active sense bitmask
 };
 
 struct PerceivedStimulus {
     AISense         sense;
     EntityId        sourceEntity;
-    WorldCoordinate lastKnownLocation;
+    WorldCoordinate lastKnownPosition;
     Vector3         lastKnownVelocity;
-    float           intensity;           // Normalized sensed intensity [0.0, 1.0]
+    float           strength;            // Normalized sensed strength [0.0, 1.0]
     float           age;                 // Seconds since last observed
     bool            isCurrentlySensed;   // Active line-of-sight or contact
 };
 
 struct AIPerceptionMemory {
-    static constexpr uint32_t MaxCapacity = 16;
-    std::array<PerceivedStimulus, MaxCapacity> entries{};
-    uint32_t count = 0;
+    static constexpr uint32_t kMaxTrackedStimuli = 32; // compile-time hard cap
+    std::array<PerceivedStimulus, kMaxTrackedStimuli> entries{};
+    uint32_t count = 0;                 // live count, <= config.maxTrackedStimuli
+    uint32_t maxTrackedStimuli = 16;    // runtime cap, default 16, max 32
 };
 ```
 
 1. **Bounded Stimulus Storage**:
    - Each agent maintains an `AIPerceptionMemory` container with a fixed capacity
-     (`maxTrackedTargets = 16` or `32`), preventing dynamic heap allocation
+     (`maxTrackedStimuli` default 16, compile-time hard cap 32), preventing dynamic heap allocation
      during perception ticks.
 2. **Linear Decay And Forgetting**:
    - Tracked stimuli record `age` (seconds since last sensed) and normalized
-     `intensity` ($[0.0, 1.0]$).
-   - While actively observed, `intensity` is refreshed to $1.0$ and `age` resets
+     `strength` ($[0.0, 1.0]$).
+   - While actively observed, `strength` is refreshed to $1.0$ and `age` resets
      to $0.0$.
-   - When sight/sound is lost, `intensity` decays linearly:
+   - When sight/sound is lost, `strength` decays linearly:
      $$\text{intensity}(t) = 1.0 - \text{decayRate} \cdot \text{age}$$
    - When $\text{intensity} \le \text{forgetThreshold}$ (default $0.0$) or
      $\text{age} \ge \text{memoryDuration}$, the stimulus is purged.

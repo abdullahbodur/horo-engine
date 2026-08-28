@@ -121,7 +121,7 @@ Perception evaluation uses a hybrid execution model to maximize responsiveness w
 ```
 
 1. **Bounded Stimulus Storage**:
-   - Each agent maintains an `AIPerceptionMemory` container with a strict fixed capacity (`maxTrackedStimuli = 16` or `32`).
+   - Each agent maintains an `AIPerceptionMemory` container with a compile-time hard cap (`kMaxTrackedStimuli = 32`) and a runtime cap (`maxTrackedStimuli`, default 16).
    - Prevents dynamic heap allocations during runtime perception ticks.
 2. **Linear Decay and Forgetting**:
    - Every tracked stimulus possesses an `age` (seconds since last sensed) and normalized `strength` ($[0.0, 1.0]$).
