@@ -245,6 +245,7 @@ All fallible operations return `Horo::Result<T, Error>` governed by ADR-008. The
 |---|---|---|
 | `CellNotFound` | Cell coordinate or ID is outside the configured partition bounds. | Request rejected immediately; volume query ignores invalid coordinates. |
 | `CellAlreadyActive` | An activation request was submitted for a cell already in `Active` state. | No-op; returns current status. |
+| `CellAlreadyLoading` | Load requested for a cell already in `Loading` state. | No-op; returns current status. |
 | `CellBudgetExceeded` | Memory or concurrency budget exhausted; cannot admit new cell load. | Request deferred to next frame queue evaluation; anti-starvation boost applied. |
 | `StaleGeneration` | An asynchronous completion payload arrived with an outdated generation. | Completion discarded without state mutation. |
 | `ProviderFailed` | A feature provider (e.g., Terrain or Physics) failed to stage or activate a cell. | Cell transitions to `Failed` state; diagnostic emitted with provider context. |

@@ -414,7 +414,7 @@ In multiplayer environments, streaming authority resides on the server:
 
 ## Error Handling and Diagnostics
 
-All fallible streaming operations conform to [ADR-008](../adr/008-error-model-exception-boundary-and-registry.md) using typed `Horo::Result<T, Error>` returns and the `WorldStreaming` error domain:
+All fallible streaming operations conform to [ADR-008](../../adr/008-error-model-exception-boundary-and-registry.md) using typed `Horo::Result<T, Error>` returns and the `WorldStreaming` error domain:
 
 ```cpp
 namespace Horo::Runtime::Streaming {
