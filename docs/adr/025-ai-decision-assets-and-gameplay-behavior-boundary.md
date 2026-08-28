@@ -1,4 +1,4 @@
-# ADR-011: AI Decision Assets and Shared Gameplay Behavior Boundary Decision
+# ADR-025: AI Decision Assets and Shared Gameplay Behavior Boundary Decision
 
 - **Status**: Proposed
 - **Date**: 2026-08-28
