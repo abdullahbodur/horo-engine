@@ -1,4 +1,4 @@
-# ADR-011: Sequencer Ownership, Clock Authority and Binding Boundary Decision
+# ADR-014: Sequencer Ownership, Clock Authority and Binding Boundary Decision
 
 - **Status**: Proposed
 - **Date**: 2026-08-28
