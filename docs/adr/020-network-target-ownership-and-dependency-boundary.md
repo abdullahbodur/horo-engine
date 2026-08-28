@@ -1,4 +1,4 @@
-# ADR-011: Network Target Ownership and Dependency Boundary
+# ADR-020: Network Target Ownership and Dependency Boundary
 
 - **Status**: Proposed
 - **Date**: 2026-08-28
