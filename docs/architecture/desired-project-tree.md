@@ -259,6 +259,17 @@ horo-engine/
 │       │       ├── AudioOcclusionProvider.h
 │       │       ├── AudioMiddlewareBridge.h
 │       │       └── AudioDecoder.h
+│       ├── Navigation/
+│       │   ├── NavMeshTypes.h
+│       │   ├── NavMeshBuildSettings.h
+│       │   ├── NavMeshData.h
+│       │   ├── NavMeshPath.h
+│       │   ├── NavMeshQuery.h
+│       │   ├── NavAgentProperties.h
+│       │   ├── DynamicObstacle.h
+│       │   ├── NavigationBackend.h
+│       │   ├── NavigationCoordinator.h
+│       │   └── NavigationErrors.h
 │       ├── Gameplay/
 │       │   ├── GameModule.h
 │       │   ├── GameRegistrationContext.h
@@ -423,6 +434,16 @@ horo-engine/
 │   │   │       └── enet/
 │   │   │           ├── ENetTransportBackend.h
 │   │   │           └── ENetTransportBackend.cpp
+│   │   ├── navigation/
+│   │   │   ├── api/
+│   │   │   ├── coordinator/
+│   │   │   ├── cache/
+│   │   │   ├── crowd/
+│   │   │   ├── hierarchical/
+│   │   │   ├── obstacles/
+│   │   │   └── backends/
+│   │   │       ├── recast_detour/
+│   │   │       └── null/
 │   │   ├── debug/
 │   │   └── platform_services/
 │   │       ├── frontend/

@@ -8,6 +8,118 @@ dynamic obstacle avoidance, AI perception, behavior integration, crowd
 simulation, fixed-tick simulation phase ordering, network authority roles,
 and hardware-driven simulation budget profiles.
 
+## Target Ownership And Architecture Boundaries
+
+Navigation in Horo Engine is structured into four distinct CMake targets with strict compile-time boundaries and one-way dependency flow:
+
+```text
++-------------------------------------------------------------------------+
+|                       Gameplay AI / Behavior Layers                     |
+|           (Behavior Trees, State Machines, Utility AI, Blackboard)      |
++-------------------------------------------------------------------------+
+                                    | (issues typed query requests)
+                                    v
++-------------------------------------------------------------------------+
+|                       HoroEngine::NavigationApi                         |
+|   (NavMeshQuery, NavMeshPath, NavAgentProperties, NavMeshBuildSettings,  |
+|    NavMeshData, DynamicObstacle, INavigationBackend, NavigationErrors) |
++-------------------------------------------------------------------------+
+                                    ^
+                                    | implements & coordinates
++-------------------------------------------------------------------------+
+|                     HoroEngine::NavigationRuntime                       |
+|   (NavigationCoordinator, Tile Streaming, Query Cache, Dynamic Overlay, |
+|    Hierarchical Pathfinding, Crowd Job Scheduler, Diagnostics)          |
++-------------------------------------------------------------------------+
+           |                                              |
+           | binds backend                                | binds backend
+           v                                              v
++-------------------------------------+        +--------------------------+
+|  HoroEngine::NavigationRecastDetour |        | HoroEngine::NavigationNull|
+|  (Target-Private: Recast & Detour)  |        | (Deterministic Mock/Stub |
+|  - rcConfig, rcPolyMesh, rcContext  |        |  for Headless / CI Tests)|
+|  - dtNavMesh, dtNavMeshQuery        |        +--------------------------+
+|  - dtTileCache, dtCrowd             |
++-------------------------------------+
+```
+
+### 1. `HoroEngine::NavigationApi`
+- **Target Category**: Public interface and typed model library.
+- **Public Header Path**: `include/Horo/Navigation/`.
+- **Dependencies**: `HoroEngine::Foundation` only.
+- **Contents**:
+  - `NavMeshTypes.h`: Strongly typed identifiers (`NavMeshPolyRef`, `NavMeshTileId`, `NavMeshSurfaceId`, `NavQueryFilterId`).
+  - `NavMeshBuildSettings.h`: Voxelization and generation parameters (`NavMeshBuildSettings`, `NavMeshAgentProfile`).
+  - `NavMeshData.h`: Cooked, immutable NavMesh asset payload (`NavMeshData`, `NavMeshVertex`, `NavMeshPoly`, `NavMeshLink`, `NavMeshTileGrid`).
+  - `NavMeshPath.h`: Query requests and path results (`PathfindingRequest`, `PathfindingResult`, `PathfindingStatus`, `NavMeshPathPoint`).
+  - `NavMeshQuery.h`: Spatial point queries, raycasts, polygon containment, and distance tests (`NavMeshQuery`, `NavMeshRaycastResult`, `NavMeshPointProjection`).
+  - `NavAgentProperties.h`: Agent navigation attributes, traversal capabilities, and query filters (`NavAgentProperties`, `NavMeshQueryFilter`).
+  - `DynamicObstacle.h`: Ephemeral obstacle definitions for runtime carving (`DynamicObstacle`, `ObstacleShape`, `ObstaclePriority`).
+  - `NavigationBackend.h`: Pure virtual `INavigationBackend` contract for pluggable spatial query implementations.
+  - `NavigationErrors.h`: Typed error codes (`NavigationErrorCode`, `NavigationResult<T>`).
+- **Encapsulation Invariant**: Public headers must expose **ZERO** third-party symbols (no Recast `rc*`, no Detour `dt*`, and no third-party includes).
+
+### 2. `HoroEngine::NavigationRuntime`
+- **Target Category**: Core runtime execution library.
+- **Implementation Path**: `src/runtime/navigation/runtime/`.
+- **Public Header**: `include/Horo/Navigation/NavigationCoordinator.h`.
+- **Dependencies**: `HoroEngine::NavigationApi`, `HoroEngine::Foundation`.
+- **Responsibilities**:
+  - `NavigationCoordinator`: Top-level scene navigation coordinator managing active NavMesh instances, tile streaming, and query dispatching.
+  - `NavQueryCache`: Thread-safe, bounded LRU query cache for pathfinding and point reachability queries, invalidated on dynamic obstacle updates or tile streaming.
+  - `DynamicObstacleOverlay`: Manages runtime avoidance cutouts as an overlay without mutating cooked `NavMeshData` assets.
+  - `HierarchicalPathfindingCoordinator`: Coordinates high-level tile graph coarse pathfinding and fine string-pulling within loaded tiles.
+  - `CrowdSimulationCoordinator`: Dispatches agent local avoidance (RVO/ORCA) and formation steps as parallel jobs via `HoroEngine::Foundation::JobSystem`.
+  - Observability & Telemetry: Query latency histograms, cache hit/miss rates, dynamic obstacle carving durations, and profiler zones.
+
+### 3. `HoroEngine::NavigationRecastDetour`
+- **Target Category**: Target-private provider module.
+- **Implementation Path**: `src/runtime/navigation/backends/recast_detour/`.
+- **Public Interface**: Registers with `NavigationCoordinator` or exports factory conforming to `INavigationBackend`.
+- **Dependencies**: `HoroEngine::NavigationApi`, `HoroEngine::Foundation`, private `recastnavigation`.
+- **Responsibilities**:
+  - Implements `INavigationBackend` via Recast voxelization and Detour runtime query/tile-cache pipelines.
+  - Encapsulates all `rc*` (e.g. `rcContext`, `rcHeightfield`, `rcPolyMesh`, `rcConfig`) and `dt*` (e.g. `dtNavMesh`, `dtNavMeshQuery`, `dtTileCache`, `dtCrowd`) symbols.
+  - Translates internal Detour references (`dtPolyRef`, `dtTileRef`, `dtStatus`) into Horo's `NavMeshPolyRef`, `NavMeshTileId`, and `Result<T>`.
+  - Routes third-party memory allocations through Horo foundation memory domains.
+
+### 4. `HoroEngine::NavigationNull`
+- **Target Category**: Deterministic mock / stub module.
+- **Implementation Path**: `src/runtime/navigation/backends/null/`.
+- **Dependencies**: `HoroEngine::NavigationApi`, `HoroEngine::Foundation`.
+- **Responsibilities**:
+  - Implements `INavigationBackend` with deterministic stub responses (direct Euclidean paths, immediate success/failure).
+  - Used in headless continuous integration tests, unit tests, and lightweight simulation environments.
+
+## Third-Party Encapsulation
+
+To ensure strict ABI stability, modularity, and vendor independence:
+
+1. **No Leaked Types**: Public headers in `include/Horo/Navigation/` never include Recast or Detour headers or use `rc*` / `dt*` typedefs.
+2. **Strongly Typed Handles**: Internal Detour pointers and bitfield IDs (`dtPolyRef`) are wrapped into strongly typed 64-bit value structs (`NavMeshPolyRef`, `NavMeshTileId`).
+3. **Engine-Owned Math**: All coordinates, directions, bounding volumes, and transforms use Horo's canonical `SceneMath` types (`WorldCoordinate`, `Vector3`, `AABB`, `Quaternion`).
+4. **Memory Domain Discipline**: Custom allocators (`rcAllocSetCustom`, `dtAllocSetCustom`) redirect third-party allocations to Horo's engine memory domains to ensure accurate memory tracking and leak prevention.
+
+## Subsystem Decoupling
+
+### Decoupling from Editor Viewport Camera Navigation
+- **Domain Separation**: "Viewport Navigation" refers exclusively to the interactive editor camera controls (first-person fly-through, turntable orbit, pan, focus, gizmo framing) located in `HoroEngine::Gui` (`src/editor/screens/workspace/panels/viewport/navigation/`).
+- **Dependency Ban**: Viewport camera navigation code must never depend on `NavigationApi` or `NavigationRuntime`.
+- **Debug Visualization Boundary**: When the editor visualizes the NavMesh overlay in the viewport, it extracts debug geometry (triangles, boundaries, off-mesh links) as transient render-debug primitives via the editor render extraction pipeline. Navigation never touches editor camera matrices or UI state.
+
+### Decoupling from Gameplay AI Decision Graphs
+- **Domain Separation**: High-level decision graphs (Behavior Trees, State Machines, Utility AI, Blackboard), Sensory Perception (`AIPerceptionConfig`, `PerceivedStimulus`), and Tactical Spatial Queries (Environment Query System) belong to `HoroEngine::GameplayApi` and `HoroEngine::GameplayRuntime`.
+- **Communication Direction**: AI behaviors and controllers consume navigation services exclusively by issuing typed requests (`PathfindingRequest`, `RaycastNavMeshRequest`, `FindNearestPolyRequest`) to `NavigationCoordinator` or async task interfaces.
+- **Invariance**: Navigation targets have zero dependency on behavior tree nodes, blackboard entries, or gameplay script bindings.
+
+## Headless And Dedicated Server Support
+
+Navigation is a pure spatial service operating on geometry, spatial graphs, and agent properties. It is entirely decoupled from presentation:
+- Navigation modules have zero dependencies on `HoroEngine::RenderApi`, `HoroEngine::RenderFrontend`, OpenGL, Metal, Vulkan, Direct3D, or ImGui.
+- Dedicated game servers link `HoroEngine::NavigationRuntime` + `HoroEngine::NavigationRecastDetour` to perform authoritative server-side pathfinding, dynamic obstacle carving, and crowd avoidance.
+- Headless server builds compile cleanly without any graphics toolchain prerequisites.
+- Games and tools that do not require navigation simply omit `NavigationRuntime` and `NavigationRecastDetour` from their CMake composition targets.
+
 ## Navigation Mesh
 
 ### NavMesh Generation
@@ -15,8 +127,8 @@ and hardware-driven simulation budget profiles.
 NavMesh is generated from scene collision geometry:
 
 - Static mesh colliders are voxelized and used to build a navigation mesh
-- NavMesh generation runs as an offline asset cook step
-- Generated NavMesh is stored as a `NavMeshAsset` referenced by the scene
+- NavMesh generation runs as an offline asset cook step or background tooling job
+- Generated NavMesh is stored as an immutable `NavMeshAsset` referenced by the scene
 
 ```cpp
 struct NavMeshBuildSettings {
@@ -30,8 +142,7 @@ struct NavMeshBuildSettings {
 };
 ```
 
-Multiple NavMesh surfaces can exist for different agent types (human, large
-creature, flying).
+Multiple NavMesh surfaces can exist for different agent types (human, large creature, flying).
 
 ### NavMesh Data
 
@@ -873,7 +984,20 @@ budget; any resulting LOS, overlap, or spatial lookup consumes one admitted quer
 - Headless dedicated servers running with `NullRenderer` operate with full CPU/memory capacity and are not artificially throttled by presentation-tier checks.
 - AI budgets scale exclusively with host CPU core counts, worker thread availability, and project-configured memory limits.
 
+## Compute Resource Scaling Profiles
+
+Navigation capacities and workloads scale according to host CPU worker pool capacity and available memory, completely independent of the graphics rendering backend:
+
+| Resource Profile | Target Platform Example | Worker Threads | Active Nav Agents | Dynamic Obstacles | Query Cache Size | Crowd Simulation |
+| ---------------- | ----------------------- | -------------- | ----------------- | ----------------- | ---------------- | ---------------- |
+| **Low-Power / Mobile** | Mobile, handheld, embedded | 1 - 2 workers | Up to 64 | Up to 32 | 256 entries (1 MB) | Simple avoidance |
+| **Standard Desktop / Console** | Mid-range PC, modern console | 4 - 8 workers | Up to 1,024 | Up to 256 | 2,048 entries (8 MB) | Full RVO + Formations |
+| **High-Performance Dedicated Server** | Multi-core server, high-end PC | 8+ workers | 5,000+ | 1,024+ | 8,192 entries (32 MB) | Full parallel batch crowd |
+
 ## Related Documents
+
+- [ADR-011: Navigation Target Ownership and Dependency Boundary](../../adr/011-navigation-target-ownership-and-dependency-boundary.md)
+- [Navigation Bake UI Reference](./navigation-bake.html)
 
 - [ADR-021: Gameplay AI Ownership, Scheduling and Behavior Boundary](../../adr/021-gameplay-ai-ownership-scheduling-and-behavior-boundary.md)
 - [ADR-022: AI Fixed-Tick Order, Authority and Simulation Budget](../../adr/022-ai-fixed-tick-order-authority-and-simulation-budget.md)

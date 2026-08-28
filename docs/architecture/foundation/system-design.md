@@ -246,6 +246,12 @@ src/
     runtime/            typed sessions, queues, protocol coordination
     backends/
       sockets/          optional native socket/TLS implementation
+  navigation/
+    api/                backend-neutral contracts, queries, paths, agent properties
+    runtime/            navigation coordinator, query cache, dynamic avoidance overlay, crowd
+    backends/
+      recast_detour/    target-private Recast & Detour implementation
+      null/             deterministic headless/test implementation
   render/
     api/                backend-neutral contracts and value types
     frontend/           render submission and resource coordination
@@ -296,6 +302,10 @@ HoroEngine::NetworkApi
 HoroEngine::NetworkRuntime
 HoroEngine::NetworkTransportNull
 HoroEngine::NetworkTransportENet
+HoroEngine::NavigationApi
+HoroEngine::NavigationRuntime
+HoroEngine::NavigationRecastDetour
+HoroEngine::NavigationNull
 HoroEngine::RenderApi
 HoroEngine::RenderFrontend
 HoroEngine::RenderModuleAbi
@@ -366,6 +376,15 @@ folded into Foundation or a renderer backend. `HoroEngine::RuntimeScene` consume
 Assets one-way for AST-001B snapshot-pinned scene preparation; Assets never
 depends on RuntimeScene.
 
+`HoroEngine::NavigationApi` owns backend-neutral spatial query and NavMesh
+contracts (`NavMeshQuery`, `NavMeshPath`, `NavAgentProperties`, `DynamicObstacle`),
+exposing ZERO Recast/Detour headers. `HoroEngine::NavigationRuntime` owns scene
+navigation coordination, query caching, dynamic obstacle overlays, and crowd
+simulation job scheduling. `HoroEngine::NavigationRecastDetour` encapsulates
+Recast and Detour as a target-private provider. `HoroEngine::NavigationNull`
+provides deterministic stubs for headless CI. Navigation is optional and links
+cleanly in headless servers without rendering or GUI dependencies.
+
 ## Dependency Direction
 
 Arrows point from the dependent target to the target that defines the contract:
@@ -376,15 +395,17 @@ platform -----------------------------------------------> foundation
 runtime -----------------------------------------------> foundation
 
 assets / scene-model / render-api / audio-api /
-network-api / gameplay-api / extension-api -------------> foundation
+network-api / navigation-api / gameplay-api /
+extension-api ------------------------------------------> foundation
 
 physics / audio-runtime / network-runtime /
-render-frontend / pipeline ------------------------------> neutral APIs and models
+navigation-runtime / render-frontend / pipeline --------> neutral APIs and models
 
 runtime-scene -------------------------------------------> runtime + assets + foundation
 
 audio-platform / audio-null /
 network-transport-null / network-transport-enet /
+navigation-recast-detour / navigation-null /
 render-opengl / render-null / render-vulkan ------------> platform + owning API
 
 application / editor-model / editor-services -----------> neutral APIs,
