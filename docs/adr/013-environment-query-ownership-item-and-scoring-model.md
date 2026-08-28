@@ -1,4 +1,4 @@
-# ADR-011: Environment Query Ownership, Item and Scoring Model
+# ADR-013: Environment Query Ownership, Item and Scoring Model
 
 - **Status**: Proposed
 - **Date**: 2026-08-28
