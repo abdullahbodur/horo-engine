@@ -864,7 +864,7 @@ budget; any resulting LOS, overlap, or spatial lookup consumes one admitted quer
 
 ## Related Documents
 
-- [ADR-011: Gameplay AI Ownership, Scheduling and Behavior Boundary](../../adr/011-gameplay-ai-ownership-scheduling-and-behavior-boundary.md)
+- [ADR-021: Gameplay AI Ownership, Scheduling and Behavior Boundary](../../adr/021-gameplay-ai-ownership-scheduling-and-behavior-boundary.md)
 - [ADR-022: AI Fixed-Tick Order, Authority and Simulation Budget](../../adr/022-ai-fixed-tick-order-authority-and-simulation-budget.md)
 - [ADR-024: Perception Ownership, Sense Policy and Budget Decision](../../adr/024-perception-ownership-sense-policy-and-budget.md)
 - [ADR-025: AI Decision Assets and Shared Gameplay Behavior Boundary](../../adr/025-ai-decision-assets-and-gameplay-behavior-boundary.md)

@@ -5,6 +5,7 @@
 - **Supersedes**: None
 - **Scope**: Gameplay AI runtime (`HoroAI`), agent brain state, blackboard storage and transactions, perception memory, simulation fixed-tick phases, task scheduler sharing, and separation from editor AI tooling.
 - **Issue**: [#1309](https://github.com/abdullahbodur/horo-engine/issues/1309) ([GAI-001.1])
+- **JIRA**: HORO-1309
 - **Normative documents**:
   - [Navigation And AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md)
   - [Gameplay Behavior Authoring](../architecture/extensions/gameplay-behavior-authoring.md)
