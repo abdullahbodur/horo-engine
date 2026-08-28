@@ -1398,7 +1398,7 @@ These are required downstream runtime/CI tests, not tests implemented by this AD
 
 ## Related Documents
 
-- [ADR-011: Environment Query Ownership, Item and Scoring Model](../../adr/011-environment-query-ownership-item-and-scoring-model.md)
+- [ADR-013: Environment Query Ownership, Item and Scoring Model](../../adr/013-environment-query-ownership-item-and-scoring-model.md)
 
 - [ADR-010: Job Waiting and Operation Store Ownership](../../adr/010-job-waiting-and-operation-store-ownership.md)
 - [ADR-017: Prefab Asset and Spawn Contracts](../../adr/017-prefab-role-ownership-and-capability-tiers.md)

@@ -5,7 +5,7 @@
 - **Supersedes**: None
 - **Scope**: Environment Query System (EQS), query templates/plans, item types, contexts, generators, tests, score normalization, subsystem provider boundaries, time-budgeted execution, caching, determinism, and cancellation
 - **Issue**: [#1346](https://github.com/abdullahbodur/horo-engine/issues/1346) ([GAI-004.1])
-- **JIRA**: HORO-1785
+- **JIRA**: HORO-1346
 - **Normative document**: [Navigation And AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md)
 
 ## Context
