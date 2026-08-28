@@ -125,10 +125,13 @@ consumption.
 | 6 | `ModalChild` | `EditorModalHost::PushChild()` | Until child is removed from stack |
 | 7 (highest) | `NativeDialog` | Caller wrapping a native OS dialog | Duration of native dialog |
 
-Only one context token is active per level unless two distinct logical contexts
-share the same `InputContextKind` (for example, two `FocusedGuiWidget` tokens
-from different ImGui frames). In that case `IsContextActive()` returns `true`
-only for the most-recently pushed token at that kind.
+Only one context token is active per level in the standard editor composition.
+If two distinct logical contexts ever hold the same `InputContextKind`
+simultaneously (for example, two viewports each pushing an `EditorToolCapture`
+token), `IsContextActive()` returns `true` only for the most-recently pushed
+token at that kind. In the current host, `FocusedGuiWidget` is always held by a
+single member field; there is never more than one token of that kind live at a
+time.
 
 ## `EditorInteractionScope` ↔ `InputContextKind` Mapping
 
@@ -146,16 +149,26 @@ enum class EditorInteractionScopeKind {
 
 The mapping is:
 
-| `EditorInteractionScopeKind` | Router context(s) held |
-|---|---|
-| `Workspace` | No modal tokens; `EditorWorkspace` (and lower levels) active |
-| `Modal` | `ModalRoot` token for the root modal; `ModalChild` token(s) for each child |
-| `NativeDialog` | `NativeDialog` token held by the dialog RAII wrapper |
+| `EditorInteractionScopeKind` | Router context(s) held | `InteractionScope()` return value |
+|---|---|---|
+| `Workspace` | No modal tokens; `EditorWorkspace` (and lower levels) active | `{kind = Workspace}` |
+| `Modal` | `ModalRoot` token for the root modal; `ModalChild` token(s) for each child | `{kind = Modal, modalId = top-of-stack}` |
+| `NativeDialog` | Caller-pushed `NativeDialog` token plus any underlying modal tokens | _not returned by `EditorModalHost::InteractionScope()`_ |
 
-`EditorModalHost::InteractionScope()` reflects the current stack state
-synchronously. A pending accepted root-open request is reported as `Modal` even
-before its first draw. This means the router enforces modal exclusivity before
-the modal renders for the first time.
+> **Important:** `EditorModalHost::InteractionScope()` reads only the modal
+> stack (`m_stack`). It returns `Workspace` when the stack is empty and `Modal`
+> when the stack is non-empty — regardless of whether a `NativeDialog`
+> `InputContextToken` is also live in the router. The `NativeDialog` kind in
+> `EditorInteractionScopeKind` is a router-level priority concept; callers that
+> need to detect an open native dialog must track that state themselves (for
+> example, by wrapping the dialog in a RAII struct that sets a local flag).
+
+`EditorModalHost::InteractionScope()` reflects the modal stack state
+synchronously. Before any modal is opened — including during the first frame
+before `OnUpdate` runs — `m_stack` is empty and `InteractionScope()` returns
+`{kind = Workspace}`. A pending accepted root-open request is reported as
+`Modal` even before its first draw. This means the router enforces modal
+exclusivity before the modal renders for the first time.
 
 When `EditorModalHost::OpenRoot()` pushes a `ModalRoot` context:
 
@@ -248,23 +261,27 @@ Within one editor frame the following order is enforced:
 4. inputRouter.BeginFrame(snapshot)
    - install snapshot, clear per-frame consumption map
 
-5. (modal host reads interaction scope; no stack mutations yet)
+5. (modal host reads interaction scope; stack is stable at this point)
 
 6. UpdatePresentation()
    - focusedWidgetInputContext_.Reset()  ← destroy previous frame token
    - ImGui::NewFrame()
    - push FocusedGuiWidget context if WantTextInput
-   - modalHost.OnUpdate(dt)             ← modal logic, no stack mutations yet
+   - modalHost.OnUpdate(dt)
+       CommitPendingOpens(): promote any deferred child entries to m_stack,
+                             then call OnOpen() for each newly added entry
+       [modal OnUpdate() calls]
+       CommitPendingCloses(): call RemoveTop() for each pending close reason
+                              (destroys Entry and its InputContextToken)
    - screenHost.OnUpdate(dt)
 
 7. ExtractFrame() / Draw()
    - screenHost.Draw()                  ← workspace draws, reads actions
-   - modalHost.Draw()                   ← modal draws, reads actions
+   - modalHost.Draw()
+       CommitPendingOpens()             ← same as above, in case Draw() queued more
+       [top modal Draw(); may call RequestClose() → enqueues pending close]
+       CommitPendingCloses()
    - ImGui::Render()
-
-8. modalHost: CommitPendingOpens()
-   modalHost: CommitPendingCloses()
-   (context tokens pushed/destroyed here; input gate rules enforced)
 
 9. Present frame
 ```
@@ -274,14 +291,24 @@ Within one editor frame the following order is enforced:
 - `inputRouter.BeginFrame()` is called exactly once per frame, before any
   context pushes that frame and before any `ReadAction()` or `ConsumeKey()`
   calls
-- stack mutations from `Draw()` are deferred to step 8; the stack is never
-  mutated while it is being drawn
-- a modal-open request accepted in step 8 activates its `ModalRoot` token at
-  the next `BeginFrame()` call, so the workspace cannot receive input on the
-  same frame the modal opens
-- a modal-close request accepted in step 8 keeps the old `ModalRoot` token
-  until it is destroyed, so the workspace cannot receive input on the same frame
-  the modal closes
+- `OpenRoot()` pushes the `ModalRoot` `InputContextToken` **immediately and
+  synchronously** when called (inside `OnUpdate` or `Draw`). The router
+  enforces modal exclusivity from that point within the same frame.
+- Child modal tokens are also pushed immediately when `PushChild()` is called;
+  however, the `Entry` is placed in `m_pendingChildOpens` and promoted to
+  `m_stack` at the next `CommitPendingOpens()` call (at the start of `OnUpdate`
+  or `Draw`).
+- `OnOpen()` is called inside `CommitPendingOpens()`, not at the push site.
+  An `OnOpen()` failure removes the entry and its token from the stack in the
+  same call.
+- `RequestClose()` enqueues a close reason; `RemoveTop()` — which destroys the
+  `Entry` and its `InputContextToken` — runs inside `CommitPendingCloses()`.
+  The token is live until `CommitPendingCloses()` runs.
+- Draw code reads action state from the snapshot installed at step 4 only.
+  It must not re-query the router after a stack mutation mid-draw; the
+  `CommitPendingOpens` / `CommitPendingCloses` pattern at the boundaries of
+  `OnUpdate` and `Draw` exists precisely to make this safe.
+
 
 ## `InputService` Composition Helper
 
@@ -339,9 +366,13 @@ If a platform dialog blocks the GUI thread (synchronous modal dialog API), the
 `NativeDialog` token is still held for the duration. The input gate remains
 correct when the blocking call returns and the GUI thread resumes.
 
-A native dialog opened from inside a modal keeps the editor modal interaction
-scope active throughout. When the native dialog closes, focus is restored inside
-that modal, not to the workspace.
+A native dialog opened from inside a modal does not pop the `ModalRoot` or
+`ModalChild` tokens from the router. Both the `NativeDialog` token and the
+underlying modal token(s) remain live simultaneously. `EditorModalHost::InteractionScope()`
+continues to return `{kind = Modal}` because `m_stack` is non-empty. When the
+native dialog closes and its RAII token is destroyed, the `NativeDialog` router
+context is removed and only the modal context(s) remain. Focus is then restored
+inside the top modal, not to the workspace.
 
 ## Normative Invariants
 
@@ -365,10 +396,11 @@ preserve them:
    highest-priority context. Callers check `IsContextActive()` before attempting
    capture when unsure.
 
-5. **Modal open cancels capture first.** `EditorModalHost::OpenRoot()` cancels
-   any active pointer capture with `ModalOpened` before pushing the `ModalRoot`
-   context. The capture owner's `OnInputCaptureCancelled()` is called
-   synchronously before the modal's first `BeginFrame()`.
+5. **Modal open cancels capture first.** The router cancels any active pointer
+   capture with `ModalOpened` synchronously when the `ModalRoot` token is
+   pushed inside `OpenRoot()`. The capture owner's `OnInputCaptureCancelled()`
+   is called before the modal's first `OnOpen()` and before the modal draws for
+   the first time.
 
 6. **Dim layer is not a barrier.** The dim layer drawn by `EditorModalHost` is a
    visual affordance only. Input exclusivity is enforced by the router through
@@ -400,7 +432,12 @@ preserve them:
 - `Commit()` seals the snapshot; mutations after commit do not affect the sealed
   value
 - `Neutralize()` zeroes all held state and produces `released` transitions for
-  every previously held control
+  every previously held control when called directly
+- setting `WindowInputState::focused = false` in the next snapshot causes the
+  router's `BeginFrame()` to neutralize capture; no key, button, or axis remains
+  held after that snapshot commits (Invariant #9 auto-trigger path)
+- setting `WindowInputState::pointerDeviceAvailable = false` produces the same
+  neutralization for the pointer-device-unavailable path
 - gamepad `ConnectGamepad` / `DisconnectGamepad` round-trips produce valid and
   invalid `GamepadDeviceId`s respectively
 - stale `GamepadDeviceId` (from a previous session generation) is rejected by
@@ -426,11 +463,17 @@ preserve them:
 - all seven `CaptureCancellationReason`s trigger correctly and call
   `OnInputCaptureCancelled()` exactly once
 - `CaptureBusy` returned when capture already held
-- `CaptureInactiveContext` returned for non-active context
+- `CaptureInactiveContext` returned by `CapturePointer()` when the supplied
+  token is not the highest-eligible active context (not only after
+  `ModalOpened`; any call with a non-active token produces this error)
 - `NativeDialog` context outranks `ModalRoot` and `ModalChild`
 - context token destruction removes context without leaving dangling references
 - `InputService` headless path: `BeginFrame` → `Commit` → `ReadAction` round-trip
   produces correct values without a platform backend
+- `SetProfile()` with an invalid profile returns an error and leaves the
+  previously active profile unchanged (Invariant #8 — atomic profile application)
+- `SetActionMap()` with conflicting or invalid descriptors returns an error and
+  leaves the router in its previous valid state
 
 ## Related Documents
 
