@@ -22,7 +22,7 @@ to the replacement.
 | [008](008-error-model-exception-boundary-and-registry.md) | Error Model, Exception Boundary and Registry Ownership | proposed | 2026-08-27 |
 | [009](009-configuration-schema-precedence-and-secret-boundary.md) | Configuration Schema, Precedence and Secret Boundary | proposed | 2026-08-28 |
 | [010](010-job-waiting-and-operation-store-ownership.md) | Job Waiting and Operation Store Ownership | proposed | 2026-08-28 |
-| [011](011-world-index-and-cell-format-architecture-decision.md) | World Index and Cell Format Architecture Decision | proposed | 2026-08-28 |
+| [011](023-world-index-and-cell-format-architecture-decision.md) | World Index and Cell Format Architecture Decision | proposed | 2026-08-28 |
 
 ## Conventions
 
