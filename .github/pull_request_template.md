@@ -2,6 +2,12 @@
 - What problem does this PR solve?
 - What changed at a high level?
 
+<!--
+Required PR title format:
+<type>(<scope>): <imperative summary> <JIRA_ID> #<GITHUB_ISSUE> [<DOMAIN_ALIAS>]
+Example: docs(jobs): ratify waiting boundaries HORO-1784 #1828 [JOB-001.1]
+-->
+
 ## Motivation
 - Why was this change needed?
 
@@ -25,7 +31,15 @@ Commands run:
 - Areas not fully validated
 
 ## Issue Links
-Closes #
+- Jira: HORO-
+- GitHub: Closes #
+- Domain alias: [AREA-000]
+
+<!--
+Keep the Jira key, GitHub issue and bracketed domain alias aligned with the PR
+title. Jira Smart Commit commands (#comment, #time, #transition) mutate Jira and
+belong in an authorized commit message, not in this PR body by default.
+-->
 
 ## Reviewer Notes
 - Best review order
