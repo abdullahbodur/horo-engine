@@ -381,7 +381,7 @@ group share avoidance data; groups are independent.
 
 ## Related Documents
 
-- [ADR-011: Perception Ownership, Sense Policy and Budget Decision](../../adr/011-perception-ownership-sense-policy-and-budget.md)
+- [ADR-024: Perception Ownership, Sense Policy and Budget Decision](../../adr/024-perception-ownership-sense-policy-and-budget.md)
 - [Navigation Bake UI Reference](./navigation-bake.html)
 
 - [Gameplay Behavior Authoring](../extensions/gameplay-behavior-authoring.md): behavior tree and state machine authoring
