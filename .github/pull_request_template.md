@@ -31,14 +31,15 @@ Commands run:
 - Areas not fully validated
 
 ## Issue Links
+
 - Jira: HORO-
 - GitHub: Closes #
 
 <!--
 Keep the Jira key and GitHub issue aligned with the PR title. The bracketed domain
 alias belongs in the title and does not need a separate PR-body field. Jira Smart
-Commit commands (#comment, #time, #transition) mutate Jira and belong in an
-authorized commit message, not in this PR body by default.
+Commit commands (`#comment`, `#time`, and workflow transitions) mutate Jira and
+belong in an authorized commit body, not in this PR body by default.
 -->
 
 ## Reviewer Notes

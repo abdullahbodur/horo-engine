@@ -316,20 +316,21 @@ Parent acceptance criteria describe integrated capability behavior; parent
 validation records the evidence required to prove it. Sub-ticket bodies stay
 limited to goal, scope, and acceptance criteria.
 
-Use Conventional Commits with a truthful narrow type and scope. Every delivery
+Use Conventional Commits with a truthful narrow type and scope. Normal delivery
 must remain traceable in both Jira and GitHub; GitHub is not the sole issue
-authority.
+authority. The bounded emergency exception below is the only bypass.
 
 ### Jira Smart Commits And Delivery Identity
 
-Before creating a delivery branch, resolve and preserve all three identifiers:
+Before creating a normal delivery branch, resolve and preserve all three
+identifiers:
 
 - the Jira issue key, for example `HORO-1784`;
 - the GitHub issue number, for example `#1828`;
 - the repository domain ticket alias from the GitHub issue title, for example
   `[JOB-001.1]` or `[REND-001.2]`.
 
-Commit subjects and pull-request titles must use this order:
+Normal commit subjects and pull-request titles must use this order:
 
 ```text
 <type>(<scope>): <imperative summary> <JIRA_ID> #<GITHUB_ISSUE> [<DOMAIN_ALIAS>]
@@ -356,29 +357,31 @@ for commands, which may follow that key when the task explicitly requires them:
 ```text
 HORO-1784 #comment <text>
 HORO-1784 #time <value> <worklog comment>
-HORO-1784 #transition <transition name>
+HORO-1784 #in-review
 ```
 
-Do not add `#comment`, `#time` or `#transition` merely to create a link: those
-commands mutate Jira. Use them only when the user or workflow explicitly
-authorizes the corresponding comment, worklog or transition, and verify that the
-commit author email maps to a Jira user allowed to perform it. A Smart Commit
-command belongs after the required subject identifiers or in the commit body;
-never make the command the subject's human-readable summary.
+Do not add `#comment`, `#time` or a workflow transition command merely to create
+a link: those commands mutate Jira. Use them only when the user or workflow
+explicitly authorizes the corresponding comment, worklog or transition, and
+verify that the commit author email maps to a Jira user allowed to perform it.
+Put each Smart Commit command on a single line in the commit body; never put one
+in the subject.
 
 Preferred examples:
+
 - `feat(editor): add asset viewport drag placement HORO-1902 #1870 [EDT-004B.1]`
 - `fix(core): handle empty ProjectPath init HORO-1911 #1884 [CORE-002.3]`
 - `test(mcp): normalize deleted asset assertions HORO-1920 #1893 [MCP-003.2]`
 
 Rules:
+
 - write the subject in imperative mood
 - keep one commit focused on one coherent intent
 - avoid placeholder subjects such as `wip`, `misc`, `tmp`, `update`, or `fix stuff`
 
 ### Branch Naming
 
-Branches must follow the pattern `<type>/<JIRA_ID>_<short_topic>`.
+Normal branches must follow the pattern `<type>/<JIRA_ID>_<short_topic>`.
 
 - `<type>` is the Conventional Commit type: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `ci`, `build`
 - `<JIRA_ID>` is the exact uppercase Jira issue key and is fixed before branch
@@ -386,12 +389,32 @@ Branches must follow the pattern `<type>/<JIRA_ID>_<short_topic>`.
 - `<short_topic>` is a lowercase snake_case slug summarising the change
 
 Examples:
+
 - `feat/HORO-1902_asset_guid_registry`
 - `fix/HORO-1911_gizmo_hidpi_picking`
 - `chore/HORO-1920_clang_tidy_pass`
 
 Use one topic slug exactly once per branch; do not append suffixes such as `_v2`
 or `_final`. If the scope changes materially, open a new focused branch.
+
+### Emergency Traceability Exception
+
+Only the project lead may authorize this exception, and only for an active
+production incident or a confirmed Jira outage that makes normal Jira identity
+resolution impossible. Agents must not infer authorization. Record the approver,
+reason and missing Jira link in the GitHub pull-request body before delivery.
+
+Keep the Conventional Commit type/scope, GitHub issue and known domain alias.
+Use `<type>/emergency_<short_topic>` when no Jira key can be resolved; never invent
+a placeholder key. Keep the pull request unmerged until normal traceability is
+restored unless the project lead explicitly authorizes an emergency merge because
+delay would increase incident impact.
+
+After Jira recovers, create or identify the Jira work item, link it from the pull
+request and restore the normal title metadata within one business day. Do not
+rewrite published commits solely to backfill Smart Commit commands, because Jira
+may execute repeated commands after history changes. Record the completed
+reconciliation in the pull-request body.
 
 Agents must not commit, push, force-push, rewrite history, merge, or change branches
 unless the user explicitly requests that operation. Never discard unrelated

@@ -85,7 +85,20 @@ Every blocking API accepts a `JoinOptions`/`WaitPolicy` value and checks the cal
 | I/O service | Cannot wait for work that requires the same I/O service slot; other waits remain bounded and cancellation-aware. |
 | External/unknown | Blocking wait is rejected unless an explicitly registered test/shutdown scope supplies a bounded policy. |
 
-A forbidden or deadlock-prone wait returns a stable typed error in release builds and may also assert in developer builds. Permitted waits publish a bounded wait reason before blocking, clear it after completion and emit thresholded timing/telemetry. The wait reason is projected through the coordinator into `OperationStore`; it is not stored in a log-only side channel.
+Every public wait primitive, including `JobHandle::Wait()` and
+`TaskGroup::Join()`, returns a `Result<WaitOutcome, WaitError>` (or the
+project-standard equivalent) and is `[[nodiscard]]`. `WaitOutcome` is produced
+only after the awaited job or group reaches its defined terminal condition.
+`WaitError` distinguishes at least forbidden thread role, dependency cycle,
+capacity deadlock risk and timeout. Rejecting a wait must therefore never return
+the same value as successful completion or allow a caller to observe an
+unfinished job as complete.
+
+A forbidden or deadlock-prone wait returns the stable typed error in release
+builds and may also assert in developer builds. Permitted waits publish a bounded
+wait reason before blocking, clear it after completion and emit thresholded
+timing/telemetry. The wait reason is projected through the coordinator into
+`OperationStore`; it is not stored in a log-only side channel.
 
 `TaskGroup` destruction remains a last-resort lifetime safety net: it closes admission, requests cancellation and accounts for every child. Normal owner-thread code must arrange asynchronous completion or explicitly join from an allowed executor before destruction. Destroying a group with unfinished children on a forbidden role is an invariant violation. Shutdown uses the separately ordered and bounded [JOB-001.5] drain path rather than pretending to be an ordinary permitted wait.
 
