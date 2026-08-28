@@ -461,7 +461,7 @@ All accessibility options are declared under the `accessibility.*` namespace in
 
 ## Related Documents
 
-- [ADR-011: Accessibility Ownership, Typed Transport and Non-Gating Policy](../../adr/011-accessibility-ownership-typed-transport-and-non-gating-policy.md)
+- [ADR-015: Accessibility Ownership, Typed Transport and Non-Gating Policy](../../adr/015-accessibility-ownership-typed-transport-and-non-gating-policy.md)
 - [Audio Architecture](./audio-architecture.md): `AudioEventSnapshot` generation
 - [Post-Processing And Effects Architecture](./post-processing-and-effects-architecture.md): Color grading and post-process passes
 - [Input Architecture](./input-architecture.md): Input context and rebinding

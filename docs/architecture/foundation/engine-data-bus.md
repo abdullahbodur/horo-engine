@@ -591,7 +591,7 @@ input affordances extend `RawInputCollector`/`InputMapping`, and screen reader s
 crosses `PlatformAccessibilityBridge`. The general DataBus is not a universal
 dumping ground or authoritative state store for all accessibility (see
 [Accessibility Architecture](../runtime/accessibility-architecture.md) and
-[ADR-011](../../adr/011-accessibility-ownership-typed-transport-and-non-gating-policy.md)).
+[ADR-015](../../adr/015-accessibility-ownership-typed-transport-and-non-gating-policy.md)).
 
 Editor-scoped events such as selection, scene-document changes, and viewport
 navigation live in `editor/events/` and remain on the independent,
