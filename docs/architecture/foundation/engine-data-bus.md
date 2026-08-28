@@ -566,7 +566,32 @@ struct AssetImportedEvent {
     std::string assetId;
     std::string assetType;
 };
+
+// application/events/AccessibilityEvents.h
+struct GameplayAccessibilityStateEvent {
+    static constexpr std::string_view HoroEventTypeName =
+        "horo::GameplayAccessibilityStateEvent";
+
+    bool  aimAssistEnabled;
+    float aimAssistStrength;
+    bool  autoAimSnap;
+    bool  reducedEnemyAggression;
+    float reactionTimeMultiplier;
+    bool  skipQuickTimeEvents;
+    bool  invincibilityAfterHit;
+    float incomingDamageMultiplier;
+    float puzzleTimerMultiplier;
+};
 ```
+
+Gameplay difficulty assists are the **only** accessibility feature family published
+through `EngineDataBus`. Captions consume typed audio event queues directly,
+colorblind state is owned by post-processing and queried via `IColorAccessibilityQuery`,
+input affordances extend `RawInputCollector`/`InputMapping`, and screen reader state
+crosses `PlatformAccessibilityBridge`. The general DataBus is not a universal
+dumping ground or authoritative state store for all accessibility (see
+[Accessibility Architecture](../runtime/accessibility-architecture.md) and
+[ADR-011](../../adr/011-accessibility-ownership-typed-transport-and-non-gating-policy.md)).
 
 Editor-scoped events such as selection, scene-document changes, and viewport
 navigation live in `editor/events/` and remain on the independent,

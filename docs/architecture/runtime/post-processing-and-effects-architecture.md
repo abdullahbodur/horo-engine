@@ -166,6 +166,35 @@ struct ColorGradingSettings {
 
 A 3D LUT texture can be applied for full creative grading.
 
+### Accessibility Color Transforms
+
+Colorblind filters (Protanopia, Deuteranopia, Tritanopia, Achromatopsia, and custom
+matrices) are applied after creative grading as a 3×3 color transformation matrix:
+
+```cpp
+enum class ColorblindMode : uint8_t {
+    None,
+    Protanopia,
+    Deuteranopia,
+    Tritanopia,
+    Achromatopsia,
+    CustomMatrix
+};
+
+class IColorAccessibilityQuery {
+public:
+    virtual ~IColorAccessibilityQuery() = default;
+    [[nodiscard]] virtual ColorblindMode GetActiveColorblindMode() const noexcept = 0;
+    [[nodiscard]] virtual float GetColorblindSeverity() const noexcept = 0;
+    [[nodiscard]] virtual bool IsHighContrastEnabled() const noexcept = 0;
+};
+```
+
+This pass runs across all tiers (`es3` through `high_end`) without tier gating.
+Gameplay and HUD query `IColorAccessibilityQuery` synchronously to provide
+alternative non-color visual cues (icons, patterns, text). See
+[Accessibility Architecture](./accessibility-architecture.md).
+
 ## Performance And Feature Tiers
 
 | Feature              | `es3`           | `dx11`           | `dx12_vulkan`    | `high_end`       |
