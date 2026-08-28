@@ -3,45 +3,137 @@
 ## Purpose
 
 This document defines command discovery, parsing, application use-case
-integration, output, exit codes, progress, cancellation, configuration, and
-testing for the `horo-engine` and `horopak` command-line hosts.
+integration, output, exit codes, progress, cancellation, configuration,
+executable composition, adapter equivalence, and testing for the `horo-engine`
+and `horopak` command-line hosts.
+
+Normative decision: [ADR-013: CLI Host, Command Ownership, Adapter Equivalence and horopak Boundary Decision](../../adr/013-cli-host-command-ownership-adapter-equivalence-and-horopak-boundary.md).
 
 ## Core Decisions
 
-- CLI commands are host adapters over shared application use cases.
+- `HoroEngine::CliHost` owns option parsing, command registry, help formatting,
+  execution dispatch, structured presentation, and exit-code mapping.
+- CLI commands are host presentation adapters over shared application use cases
+  via `ICliCommandAdapter`.
 - Parsing, execution, and presentation are separate stages.
 - Every command declares human and machine-readable output contracts.
 - Machine-readable stdout never contains logs, progress decoration, or prompts.
 - Exit codes represent stable categories.
 - Long-running commands expose cancellation and progress without requiring GUI.
 - Interactive prompting is explicit and disabled in non-interactive mode.
-- CLI execution can run headless without window, ImGui, or GPU dependencies
-  unless the command declares them.
+- Headless execution runs without window, ImGui, or GPU dependencies unless the
+  command explicitly declares them.
+- CLI registry, in-game Debug Console (`DBG-001`), and AI agent MCP tools (`MCP-001`)
+  maintain distinct registries with explicit delegation seams (`console exec`, `mcp serve`).
+- `horopak` is strictly limited to asset cooking, archive packing, verification, and
+  extraction, and cannot instantiate the engine GUI or rendering pipeline.
 
-## Host Model
+## Executable Composition and Responsibilities
+
+Horo Engine partitions command-line and automation tasks across three dedicated
+composition roots:
 
 ```text
-argv / environment
-        |
-        v
-CLI Parser
-        |
-        v
-Typed Command Request
-        |
-        v
-Application Use Case / Job Service
-        |
-        v
-Typed Result
-        |
-        v
-Human or Structured Presenter
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                 Horo Engine                                 │
+├───────────────────────────┬───────────────────────────┬─────────────────────┤
+│        horo-engine        │        HoroEditor         │       horopak       │
+│                           │                           │                     │
+│ - Headless host & CLI     │ - Graphical Editor IDE    │ - Standalone pack   │
+│ - Project / Asset / Test  │ - ImGui screen host       │   and cook utility  │
+│ - Headless MCP server     │ - Viewport rendering      │ - Archive format    │
+│ - Zero GUI / GPU default  │ - Embedded MCP server     │ - Zero GUI/Renderer │
+└───────────────────────────┴───────────────────────────┴─────────────────────┘
+```
+
+### 1. `horo-engine` (Primary Host & Terminal CLI)
+
+- **Binary**: `apps/horo-engine`
+- **Ownership**: The primary terminal executable, batch automation host, test runner,
+  and headless MCP server.
+- **Dependencies**: Links `HoroEngine::Application`, `HoroEngine::CliHost`,
+  `HoroEngine::Platform`, `HoroEngine::Foundation`, `HostObservability`, and domain
+  service libraries (`HoroEngine::Assets`, `HoroEngine::Testing`,
+  `HoroEngine::ProjectMigrations`).
+- **Invariants**:
+  - Compiles and runs in headless environments (CI runners, containers, servers)
+    without display servers (X11, Wayland, Cocoa) or GPU hardware contexts.
+  - Does NOT link `HoroEngine::Gui`, ImGui, or concrete viewport renderers
+    (`HoroEngine::EditorViewportOpenGL`, `HoroEngine::EditorViewportMetal`).
+  - Commands requiring GPU acceleration (e.g. GPU baking) declare explicit
+    capabilities and select null/headless backends when run without display hardware.
+
+### 2. `HoroEditor` (Graphical IDE & Embedded MCP Host)
+
+- **Binary**: `apps/HoroEditor`
+- **Ownership**: The graphical authoring environment, document workspace, docked
+  panel host, and live viewport render extractor.
+- **Dependencies**: Links `HoroEngine::Gui`, `HoroEngine::EditorServices`,
+  `HoroEngine::EditorRenderExtraction`, `HoroEngine::RenderFrontend`,
+  `HoroEngine::Runtime`, concrete render viewports (`OpenGL` / `Metal`), and
+  `HoroEngine::Mcp`.
+- **Invariants**:
+  - Owns window creation, OS presentation loops, ImGui frame rendering, and
+    viewport picking.
+  - Can host `McpServer` over stdio or local HTTP/SSE while the editor runs,
+    dispatching agent tool calls directly to the main editor thread.
+
+### 3. `horopak` (Specialized Asset Packaging & Cook Utility)
+
+- **Binary**: `apps/horopak`
+- **Ownership**: Standalone, lightweight CLI utility for `.horo` asset pak creation,
+  table of contents (TOC) inspection, integrity verification, compression, encryption,
+  and extraction.
+- **Dependencies**: Links ONLY `HoroEngine::Archive` (pak format, SHA-256/CRC32
+  verification, AES-128-CTR crypto), `HoroEngine::Foundation`, `HoroEngine::Platform`,
+  and minimal asset compilation adapters.
+- **Invariants**:
+  - Strictly forbidden from linking `HoroEngine::Gui`, `HoroEngine::RenderFrontend`,
+    `HoroEngine::RenderApi`, `HoroEngine::RuntimeScene`, `HoroEngine::GameplayRuntime`,
+    `HoroEngine::Physics`, `HoroEngine::Audio`, or `HoroEngine::Networking`.
+  - Cannot instantiate full scene pipelines or launch game runtime loops.
+  - Fast cold-start time (<10ms) and minimal memory footprint suitable for
+    high-throughput containerized asset packaging.
+
+## Host Model and Execution Pipeline
+
+```text
+argv / environment / stdin
+          │
+          ▼
+┌──────────────────┐
+│  CliOptionParser │ ──> Syntax diagnostics (Exit Code 2)
+└─────────┬────────┘
+          │ Typed Request
+          ▼
+┌──────────────────┐
+│ CliCommandRegistry│ <── Validated Descriptors from built-in & domain modules
+└─────────┬────────┘
+          │ Resolved Descriptor & Adapter
+          ▼
+┌──────────────────┐
+│  CliDispatcher   │ ──> Binds CliExecutionContext (Jobs, Config, Token, Redaction)
+└─────────┬────────┘
+          │ Dispatches request
+          ▼
+┌──────────────────┐
+│ICliCommandAdapter│ ──> Calls Application Services / Domain Use Cases
+└─────────┬────────┘
+          │ Typed Result
+          ▼
+┌──────────────────┐
+│CliOutputPresenter│ ──> Formats stdout (Pure Human/JSON/JSONL) & stderr (Logs/Progress)
+└─────────┬────────┘
+          │
+          ▼
+     OS Exit Code (0, 2..8, 10)
 ```
 
 The CLI does not invoke GUI code or synthesize editor widget actions.
 
 ## Command Registry
+
+Every CLI command is declared through a validated `CliCommandDescriptor`:
 
 ```cpp
 struct CliCommandDescriptor {
@@ -85,32 +177,107 @@ horopak verify
 Duplicate command paths and option names are startup errors. Help is generated
 from the typed registry.
 
-## Command Contributions
+## Command Contributions & Adapter Equivalence
 
-CLI commands are contributed through validated command descriptors. Built-in
-modules, first-party tools, and approved extension packages may contribute
-commands only through the host-owned command registry.
+CLI commands are contributed through validated command descriptors and typed
+command adapters (`ICliCommandAdapter`). Built-in modules, first-party tools,
+and approved extension packages may contribute commands only through the
+host-owned command registry.
 
-A command contribution declares:
+```cpp
+namespace Horo::Cli {
 
-- command path
-- option schema
-- output schema
-- required capabilities
-- supported hosts
-- side-effect policy
-- interactive policy
-- cancellation and timeout policy
-- stdin policy
-- contract version
+    /**
+     * @brief Context provided to a CLI command adapter during execution.
+     */
+    struct CliExecutionContext {
+        ApplicationServices& application;
+        JobSystem& jobs;
+        const ConfigurationSnapshot& configuration;
+        const CancellationToken& cancellation;
+        ICliOutputWriter& output;
+        InvocationId invocationId;
+    };
 
-The host validates all command descriptors before exposing them in help,
-completion, or execution. Duplicate command paths, incompatible option schemas,
-unauthorized capability requirements, or unsupported hosts fail activation.
+    /**
+     * @brief Interface implemented by domain modules to contribute CLI behavior.
+     */
+    class ICliCommandAdapter {
+    public:
+        virtual ~ICliCommandAdapter() = default;
 
-Built-in commands and contributed commands use the same descriptor shape. The
-host rejects contributions that conflict with existing commands or that attempt
-to introduce commands without declaring their hosts and side effects.
+        [[nodiscard]] virtual const CliCommandDescriptor& GetDescriptor() const noexcept = 0;
+
+        [[nodiscard]] virtual Result<CliCommandResult> Execute(
+            const CliCommandRequest& request,
+            CliExecutionContext& context) = 0;
+    };
+
+}  // namespace Horo::Cli
+```
+
+### Adapter Equivalence Contract
+
+GUI, CLI, and MCP adapters must call the same application use cases for the same
+business operation. Differences are limited to:
+
+- input parsing and validation envelope
+- presentation format
+- transport/protocol error envelope
+- interactive prompting policy
+- progress delivery mechanism
+
+Domain modules (`AssetCooker`, `ProjectService`, `TestRunner`, `ReleasePipeline`)
+own use-case logic, transactions, and state invariants. They must never place
+business logic, scene mutation paths, asset import logic, or build algorithms
+inside CLI handlers.
+
+## Separation of Concerns: CLI, Debug Console, and MCP
+
+CLI commands, Runtime Debug Console commands (`DBG-001`), and MCP tools (`MCP-001`)
+address different interaction paradigms and maintain distinct registries:
+
+```text
+                  ┌──────────────────────────────────────────────┐
+                  │            Shared Domain Services            │
+                  │  (AssetCooker, ProjectService, TestRunner,   │
+                  │   ReleasePipeline, DebugConsoleService)      │
+                  └──────▲────────────────▲──────────────▲───────┘
+                         │                │              │
+                         │                │              │
+          ┌──────────────┴──────┐  ┌──────┴──────┐  ┌────┴─────────────┐
+          │ ICliCommandAdapter  │  │ IDebugCmd   │  │ McpToolAdapter   │
+          └──────────────▲──────┘  └──────▲──────┘  └────▲─────────────┘
+                         │                │              │
+     ┌───────────────────┴──────┐  ┌──────┴──────┐  ┌────┴─────────────┐
+     │   CliCommandRegistry     │  │ DebugConsole│  │ McpController    │
+     │   (HoroEngine::CliHost)  │  │ (Runtime)   │  │ (HoroEngine::Mcp)│
+     └───────────────────▲──────┘  └──────▲──────┘  └────▲─────────────┘
+                         │                │              │
+                    Terminal argv    In-Game Console   AI JSON-RPC
+```
+
+1. **CLI Registry (`CliCommandRegistry`)**:
+   - Shell argument syntax (`--flag`, positional arguments, `--` termination).
+   - Stdin streaming policies, human vs JSON/JSONL output formatting, and OS exit codes.
+2. **Debug Console (`DebugConsole`)**:
+   - In-game console syntax, cvar read/write, autocomplete, in-game terminal overlay,
+     game pause/step integration, product-profile gating (shipping vs dev).
+3. **MCP (`McpController`)**:
+   - JSON-RPC 2.0 protocol over stdio/SSE with JSON Schema parameter definitions,
+     structured tool responses, and LLM context payloads.
+
+### Delegation Seams
+
+- **Debug Console Delegation**:
+  The CLI does not duplicate runtime console commands. `horo-engine console exec "<cmd>"`
+  (or `--exec-console="<cmd>"`) delegates execution to `DebugConsoleService` /
+  `IDebugConsoleHost` on an initialized headless or connected instance, respecting
+  console permissions and product profiles.
+- **Headless MCP Serve**:
+  `horo-engine mcp serve` initializes the headless `McpServer` over stdio or SSE.
+  The CLI ensures strict stream isolation: JSON-RPC communication on `stdout` is
+  isolated from engine diagnostic logging (routed to `stderr`).
 
 ## Parsing
 
@@ -139,26 +306,6 @@ allowed to control.
 
 The effective safe configuration and its provenance may be shown with a
 diagnostic command. Secret values are never printed.
-
-## Execution Context
-
-```cpp
-struct CliExecutionContext {
-    ApplicationServices& application;
-    JobSystem& jobs;
-    ConfigurationSnapshot configuration;
-    CancellationToken cancellation;
-    CliOutput& output;
-};
-```
-
-Concrete commands receive the narrow application capabilities they require
-rather than an omnibus mutable engine object.
-
-Runtime console commands exposed through CLI, such as `horo-engine console exec`,
-use the same descriptor registry, product-profile policy, and permission checks
-as the in-game console. The CLI adapter may submit commands to a running process
-only through an explicitly enabled local or remote console endpoint.
 
 ## Output Modes
 
@@ -276,17 +423,18 @@ ordinary command arguments.
 
 Stable categories:
 
-| Code | Category                                      |
-| ---: | --------------------------------------------- |
-|  `0` | Success                                       |
-|  `2` | Usage or command-line validation error        |
-|  `3` | Project or input validation failure           |
-|  `4` | Required capability or dependency unavailable |
-|  `5` | Operation failed                              |
-|  `6` | Security or permission failure                |
-|  `7` | Cancelled or interrupted                      |
-|  `8` | Timeout                                       |
-| `10` | Internal invariant or unexpected host failure |
+| Code | Category | Description |
+|:---:|:---|:---|
+| `0` | **Success** | Command completed successfully. |
+| `1` | **Host Failure** | Uncaught host-level exception or pre-initialization runtime failure. |
+| `2` | **Usage Error** | CLI syntax error, unknown flag, missing required argument, or invalid option value. |
+| `3` | **Input Validation Failure** | Target project, file path, scene, or input payload failed domain validation. |
+| `4` | **Capability Unavailable** | Required engine capability, host environment, or dependency is missing. |
+| `5` | **Operation Failed** | The requested domain operation encountered a functional error (e.g. compilation error, build failure). |
+| `6` | **Security / Permission Error** | Access denied, untrusted script execution, or unauthorized cvar/command execution. |
+| `7` | **Cancelled / Interrupted** | Operation was cancelled cooperatively via `SIGINT`/`SIGTERM` or cancellation token. |
+| `8` | **Timeout** | Operation exceeded its declared execution timeout. |
+| `10` | **Internal Invariant Failure** | Engine bug, unhandled internal invariant violation, or memory corruption. |
 
 Code `1` is reserved for legacy or host-adapter failures that occur before the
 Horo error mapping layer is available, such as an uncaught host exception or a
@@ -305,15 +453,6 @@ publish command requests through `EngineDataBus`.
 
 One-shot commands stop subscriptions before application services shut down.
 
-## MCP Serve Mode
-
-`horo-engine mcp serve` composes the documented headless MCP host. CLI parsing
-configures the service; MCP requests still execute through shared application
-operations and follow [MCP Architecture](./mcp-architecture.md).
-
-Protocol output and ordinary CLI presentation use separate channels so logs
-cannot corrupt framing.
-
 ## Observability
 
 CLI logs use stderr and the common structured schema. Each command establishes
@@ -324,38 +463,42 @@ Arguments are redacted before logging. Diagnostic bundles may include the safe
 effective command configuration but not credentials or arbitrary environment
 variables.
 
+## Migration from Legacy Ad-Hoc Parsing
+
+The migration path removes legacy ad-hoc parsing in `apps/horo-engine/main.cpp`
+without maintaining competing sources of truth:
+
+1. **Foundation**: Implement `HoroEngine::CliHost` with `CliCommandDescriptor`,
+   `CliCommandRegistry`, and `CliOptionParser`.
+2. **Dispatch & Adapters**: Introduce `CliDispatcher`, `CliExecutionContext`, and
+   migrate built-in commands (`--emit-observability-smoke`, `--diagnostic-bundle`)
+   into typed `ICliCommandAdapter` registrations (`observability.smoke`, `diagnostics.bundle`).
+3. **Structured Streams & MCP Serve**: Implement JSON/JSONL output presenters,
+   cancellation hooks, and headless `horo-engine mcp serve` composition.
+4. **Host Switchover**: Replace `apps/horo-engine/main.cpp` entry point with
+   `Horo::Cli::CliHost::Run(argc, argv)` and delete legacy `ParseOptions`.
+
 ## Testing
 
 Required tests cover:
 
-- registry uniqueness and generated help
-- parser success and diagnostic failures
-- option/configuration precedence
-- stdout purity in JSON and JSONL modes
-- stable exit-code mapping
+- registry uniqueness, conflict rejection, and generated help
+- parser success, enum/range validation, and diagnostic failures
+- option/configuration precedence and provenance
+- stdout purity in JSON and JSONL modes (zero logs or control sequences)
+- stable exit-code mapping across all 10 categories
 - TTY and non-TTY progress behavior
-- cancellation and subprocess termination
-- non-interactive prompt failure
-- redaction of arguments and credentials
-- headless commands without GUI or renderer
+- cancellation, signals, and subprocess termination
+- non-interactive prompt failure and fallback
+- redaction of arguments and credentials in logs and diagnostics
+- headless commands executing without GUI or renderer targets
 - equivalence of GUI, CLI, and MCP use-case results
-
-## Adapter Equivalence
-
-GUI, CLI, and MCP adapters must call the same application use cases for the same
-business operation. Differences are limited to:
-
-- input parsing and validation envelope
-- presentation format
-- transport/protocol error envelope
-- interactive prompting policy
-- progress delivery mechanism
-
-They must not implement separate business rules, scene mutation paths, asset
-import logic, build behavior, or release policy.
+- `horopak` isolation (absence of GUI/RenderApi linkage)
 
 ## Related Documents
 
+- [ADR-013: CLI Host, Command Ownership, Adapter Equivalence and horopak Boundary Decision](../../adr/013-cli-host-command-ownership-adapter-equivalence-and-horopak-boundary.md)
+- [ADR-004: CLI / Core / GUI Boundary](../../adr/004-cli-core-gui-boundary.md)
 - [System Design](../foundation/system-design.md)
 - [Error And Diagnostics](../foundation/error-and-diagnostics.md)
 - [Configuration System](../foundation/configuration-system.md)
