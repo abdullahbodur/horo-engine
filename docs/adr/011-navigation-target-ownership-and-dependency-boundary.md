@@ -70,6 +70,7 @@
 ```
 
 #### 1. `HoroEngine::NavigationApi` (`include/Horo/Navigation/`)
+
 - **Type**: Interface / Model library.
 - **Dependencies**: `HoroEngine::Foundation` only.
 - **Responsibilities**:
@@ -79,6 +80,7 @@
 - **Encapsulation Invariant**: No header in `include/Horo/Navigation/` may include `<Recast.h>`, `<DetourNavMesh.h>`, `<DetourCrowd.h>`, or any third-party symbol.
 
 #### 2. `HoroEngine::NavigationRuntime` (`src/runtime/navigation/runtime/`)
+
 - **Type**: Static / Shared library.
 - **Public Surface**: `Horo/Navigation/NavigationCoordinator.h`.
 - **Dependencies**: `HoroEngine::NavigationApi`, `HoroEngine::Foundation`.
@@ -91,6 +93,7 @@
   - Observability contributions: Navigation query latency histograms, cache hit/miss counters, obstacle carving metrics, and profiler zones.
 
 #### 3. `HoroEngine::NavigationRecastDetour` (`src/runtime/navigation/backends/recast_detour/`)
+
 - **Type**: Module / Concrete Provider library.
 - **Dependencies**: `HoroEngine::NavigationApi`, `HoroEngine::Foundation`, private third-party `recastnavigation`.
 - **Responsibilities**:
@@ -101,6 +104,7 @@
   - Encapsulates all third-party memory allocators, ensuring allocations route through Horo's foundation memory domains where applicable.
 
 #### 4. `HoroEngine::NavigationNull` (`src/runtime/navigation/backends/null/`)
+
 - **Type**: Module / Deterministic Stub library.
 - **Dependencies**: `HoroEngine::NavigationApi`, `HoroEngine::Foundation`.
 - **Responsibilities**:
@@ -110,11 +114,13 @@
 ### Strict Decoupling Rules
 
 #### Viewport Camera Navigation vs. Runtime Agent Navigation
+
 - **Domain Separation**: "Viewport Navigation" refers strictly to the interactive editor camera controls (first-person fly-through, turntable orbit, pan, focus, gizmo framing) located in `HoroEngine::Gui` (`src/editor/screens/workspace/panels/viewport/navigation/`).
 - **Dependency Ban**: Viewport camera navigation code must never depend on `NavigationApi` or `NavigationRuntime`.
 - **Debug Visualization Boundary**: When the editor visualizes the NavMesh overlay in the viewport, it extracts debug geometry (triangles, boundaries, off-mesh links) as transient render-debug primitives via the editor render extraction pipeline. Navigation never touches editor camera matrices or UI state.
 
 #### Gameplay AI vs. Navigation Runtime
+
 - **Domain Separation**: Gameplay AI owns decision making (Behavior Trees, Hierarchical Finite State Machines, Utility AI, Blackboard data storage) and Sensory Perception (sight cones, auditory stimuli, memory duration, Environment Query System candidate scoring).
 - **Communication Direction**: AI behaviors and controllers consume navigation services exclusively by issuing typed requests (`PathfindingRequest`, `RaycastNavMeshRequest`, `FindNearestPolyRequest`) to `NavigationCoordinator` or async task interfaces.
 - **Invariance**: Navigation targets have zero dependency on behavior tree nodes, blackboard entries, or gameplay script bindings.
@@ -122,6 +128,7 @@
 ### Headless and Dedicated Server Support
 
 Navigation is a CPU/memory spatial service and operates entirely independently of presentation:
+
 - Navigation modules have zero dependencies on `HoroEngine::RenderApi`, `HoroEngine::RenderFrontend`, OpenGL, Metal, Vulkan, Direct3D, or ImGui.
 - Dedicated game servers link `HoroEngine::NavigationRuntime` + `HoroEngine::NavigationRecastDetour` to perform authoritative server-side pathfinding, dynamic obstacle carving, and crowd avoidance.
 - Build configurations for headless servers or batch simulation tools compile cleanly without any graphics toolchain prerequisites.
@@ -140,6 +147,7 @@ Navigation limits scale with CPU execution resources and memory budgets, not GPU
 ## Consequences
 
 ### Positive
+
 - **No Third-Party Pollution**: Projects, gameplay modules, and editor tools compile against narrow, stable Horo headers without exposure to Recast or Detour details.
 - **Provider Interchangeability**: The navigation backend can be updated, patched, or replaced (e.g. custom voxelizers, hardware-accelerated BVH queries) without modifying public APIs or gameplay code.
 - **Testability**: Automated regression tests can run with `NavigationNull` for fast, zero-dependency validation, or with `NavigationRecastDetour` for integration tests.
@@ -147,6 +155,7 @@ Navigation limits scale with CPU execution resources and memory budgets, not GPU
 - **Clean Subsystem Architecture**: Clear boundaries between viewport UI navigation, runtime agent pathfinding, and AI decision graphs.
 
 ### Negative / Trade-offs
+
 - **Translation Layer**: Small CPU overhead for translating internal Detour vertex/polygon buffers into Horo value structs during path reconstruction (measured at negligible sub-microsecond latency).
 - **Multiple Targets to Maintain**: Four distinct targets in CMake instead of a single monolithic library.
 

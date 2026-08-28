@@ -44,6 +44,7 @@ Navigation in Horo Engine is structured into four distinct CMake targets with st
 ```
 
 ### 1. `HoroEngine::NavigationApi`
+
 - **Target Category**: Public interface and typed model library.
 - **Public Header Path**: `include/Horo/Navigation/`.
 - **Dependencies**: `HoroEngine::Foundation` only.
@@ -60,6 +61,7 @@ Navigation in Horo Engine is structured into four distinct CMake targets with st
 - **Encapsulation Invariant**: Public headers must expose **ZERO** third-party symbols (no Recast `rc*`, no Detour `dt*`, and no third-party includes).
 
 ### 2. `HoroEngine::NavigationRuntime`
+
 - **Target Category**: Core runtime execution library.
 - **Implementation Path**: `src/runtime/navigation/runtime/`.
 - **Public Header**: `include/Horo/Navigation/NavigationCoordinator.h`.
@@ -73,6 +75,7 @@ Navigation in Horo Engine is structured into four distinct CMake targets with st
   - Observability & Telemetry: Query latency histograms, cache hit/miss rates, dynamic obstacle carving durations, and profiler zones.
 
 ### 3. `HoroEngine::NavigationRecastDetour`
+
 - **Target Category**: Target-private provider module.
 - **Implementation Path**: `src/runtime/navigation/backends/recast_detour/`.
 - **Public Interface**: Registers with `NavigationCoordinator` or exports factory conforming to `INavigationBackend`.
@@ -84,6 +87,7 @@ Navigation in Horo Engine is structured into four distinct CMake targets with st
   - Routes third-party memory allocations through Horo foundation memory domains.
 
 ### 4. `HoroEngine::NavigationNull`
+
 - **Target Category**: Deterministic mock / stub module.
 - **Implementation Path**: `src/runtime/navigation/backends/null/`.
 - **Dependencies**: `HoroEngine::NavigationApi`, `HoroEngine::Foundation`.
@@ -103,11 +107,13 @@ To ensure strict ABI stability, modularity, and vendor independence:
 ## Subsystem Decoupling
 
 ### Decoupling from Editor Viewport Camera Navigation
+
 - **Domain Separation**: "Viewport Navigation" refers exclusively to the interactive editor camera controls (first-person fly-through, turntable orbit, pan, focus, gizmo framing) located in `HoroEngine::Gui` (`src/editor/screens/workspace/panels/viewport/navigation/`).
 - **Dependency Ban**: Viewport camera navigation code must never depend on `NavigationApi` or `NavigationRuntime`.
 - **Debug Visualization Boundary**: When the editor visualizes the NavMesh overlay in the viewport, it extracts debug geometry (triangles, boundaries, off-mesh links) as transient render-debug primitives via the editor render extraction pipeline. Navigation never touches editor camera matrices or UI state.
 
 ### Decoupling from Gameplay AI Decision Graphs
+
 - **Domain Separation**: High-level decision graphs (Behavior Trees, State Machines, Utility AI, Blackboard), Sensory Perception (`AIPerceptionConfig`, `PerceivedStimulus`), and Tactical Spatial Queries (Environment Query System) belong to `HoroEngine::GameplayApi` and `HoroEngine::GameplayRuntime`.
 - **Communication Direction**: AI behaviors and controllers consume navigation services exclusively by issuing typed requests (`PathfindingRequest`, `RaycastNavMeshRequest`, `FindNearestPolyRequest`) to `NavigationCoordinator` or async task interfaces.
 - **Invariance**: Navigation targets have zero dependency on behavior tree nodes, blackboard entries, or gameplay script bindings.
@@ -115,6 +121,7 @@ To ensure strict ABI stability, modularity, and vendor independence:
 ## Headless And Dedicated Server Support
 
 Navigation is a pure spatial service operating on geometry, spatial graphs, and agent properties. It is entirely decoupled from presentation:
+
 - Navigation modules have zero dependencies on `HoroEngine::RenderApi`, `HoroEngine::RenderFrontend`, OpenGL, Metal, Vulkan, Direct3D, or ImGui.
 - Dedicated game servers link `HoroEngine::NavigationRuntime` + `HoroEngine::NavigationRecastDetour` to perform authoritative server-side pathfinding, dynamic obstacle carving, and crowd avoidance.
 - Headless server builds compile cleanly without any graphics toolchain prerequisites.
