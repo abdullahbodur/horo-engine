@@ -83,6 +83,7 @@ Horo Engine defines three distinct executable composition roots:
 ```
 
 #### A. `horo-engine` (Primary Host & Terminal CLI)
+
 - **Role**: Headless engine host, terminal automation CLI, batch processor, and headless MCP server.
 - **Composition**: Links `HoroEngine::Application`, `HoroEngine::CliHost`, `HoroEngine::Platform`, `HoroEngine::Foundation`, `HostObservability`, and domain service libraries (`HoroEngine::Assets`, `HoroEngine::Testing`, `HoroEngine::ProjectMigrations`).
 - **Invariants**:
@@ -91,6 +92,7 @@ Horo Engine defines three distinct executable composition roots:
   - Commands requiring GPU acceleration (e.g., GPU asset baking) declare explicit capability requirements and select null/headless backends when run without display hardware.
 
 #### B. `HoroEditor` (Graphical IDE & Embedded MCP Host)
+
 - **Role**: Visual authoring environment, document workspace, docked panel host, and interactive debug session.
 - **Composition**: Links `HoroEngine::Gui`, `HoroEngine::EditorServices`, `HoroEngine::EditorRenderExtraction`, `HoroEngine::RenderFrontend`, `HoroEngine::Runtime`, concrete render viewports (`OpenGL` / `Metal`), and `HoroEngine::Mcp`.
 - **Invariants**:
@@ -98,6 +100,7 @@ Horo Engine defines three distinct executable composition roots:
   - Can host `McpServer` over stdio or local HTTP/SSE while the editor runs, dispatching agent tool calls directly to the main editor thread.
 
 #### C. `horopak` (Specialized Asset Packaging & Cook Utility)
+
 - **Role**: Standalone, lightweight CLI utility for `.horo` asset pak creation, table of contents (TOC) inspection, integrity verification, compression, encryption, and extraction.
 - **Composition**: Links ONLY `HoroEngine::Archive` (pak format, SHA-256/CRC32 verification, AES-128-CTR crypto), `HoroEngine::Foundation`, `HoroEngine::Platform`, and minimal asset compilation adapters.
 - **Invariants**:
@@ -188,6 +191,7 @@ namespace Horo::Cli {
 
 **Adapter Equivalence Rule**:
 For any shared operation (e.g., `project.create`, `project.validate`, `asset.cook`, `build.release`, `package.restore`):
+
 - GUI (Editor modal/wizard)
 - CLI (`horo-engine <command>`)
 - MCP (`tools/call`)
@@ -199,6 +203,7 @@ must invoke the exact same underlying domain use-case service (`IProjectService`
 ### 5. Output Purity & Exit Code Contract
 
 #### A. Strict Channel Separation
+
 - **`stdout`**: Reserved exclusively for command payload.
   - In `human` mode: clean, human-readable prose and interactive tables.
   - In `json` / `jsonl` mode: strictly schema-valid JSON envelopes. Zero logs, warnings, progress bars, or ANSI escape codes.
@@ -248,6 +253,7 @@ The migration path removes legacy ad-hoc parsing in `apps/horo-engine/main.cpp` 
 ## Consequences
 
 ### Positive
+
 - **Architectural Clarity**: Clear separation of responsibilities between CLI, GUI, Debug Console, and MCP interfaces.
 - **Headless & CI Readiness**: `horo-engine` and `horopak` can be built and run in lightweight headless environments without graphics drivers or display servers.
 - **Maintainability & Robustness**: Standardized descriptor validation prevents flag collisions, invalid option values, and command drift.
@@ -255,6 +261,7 @@ The migration path removes legacy ad-hoc parsing in `apps/horo-engine/main.cpp` 
 - **Single Source of Domain Truth**: Shared application use cases guarantee that builds, cooks, package restores, and project validations behave identically across GUI, CLI, and MCP.
 
 ### Negative / Trade-offs
+
 - **Descriptor Boilerplate**: Each new CLI command requires authoring a typed `CliCommandDescriptor` and implementing `ICliCommandAdapter` rather than writing a quick handler function.
 - **Multiple Executable Targets**: Requires maintaining distinct CMake compositions for `horo-engine`, `HoroEditor`, and `horopak`.
 
