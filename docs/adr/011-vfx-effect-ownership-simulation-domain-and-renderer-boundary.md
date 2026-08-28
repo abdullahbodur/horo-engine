@@ -10,12 +10,14 @@
 ## Context
 
 Visual effects (particle systems, ribbon emitters, mesh particles, decals, and volumetric effects) span gameplay simulation, physics interaction, compute dispatching, and graphics presentation. Without explicit architectural boundaries, effects tend to introduce severe architectural debt:
+
 1. **Immediate-mode rendering anti-patterns**: Gameplay or effect scripts issuing immediate-mode draw calls directly into graphics contexts, breaking render graph scheduling, pass reordering, and multi-threaded rendering.
 2. **Ambiguous subsystem ownership**: Effects persisting across scene transitions or living in global singletons, leading to memory leaks, dangling scene references, and non-deterministic state.
 3. **Ad hoc simulation domains**: Simulation code branching dynamically on loose flags at call sites, making CPU versus GPU particle behavior non-reproducible and error-prone across hardware tiers.
 4. **Backend-leaking abstractions**: Exposing native GPU buffer handles or API-specific compute shaders directly to gameplay and scene systems.
 
 Ticket [#1749](https://github.com/abdullahbodur/horo-engine/issues/1749) ([VFX-001.1]) requires a definitive architecture decision that establishes:
+
 - The authoritative owner and deterministic lifecycle of `VfxWorld` and its subsystem components.
 - A policy-driven, reproducible simulation domain selection model with explicit hardware/platform fallback matrices.
 - A backend-neutral render-extraction contract that integrates with the standard material and Render Graph pass system.
