@@ -388,7 +388,7 @@ struct BlackboardState {
 
 ## Fixed-Tick Simulation Scheduling And Safe Points
 
-Gameplay AI execution is partitioned into discrete, deterministic phases within the fixed simulation tick:
+Gameplay AI execution is partitioned into discrete, deterministic phases within the fixed simulation tick. This five-phase sequence is the **AI scheduling contract** (perception through gameplay behavior step). It is not the full engine simulation tick: character locomotion commit, animation, and render extraction belong to that broader tick and are specified separately in [Simulation Lifecycle And Fixed-Tick Phase Ordering](#simulation-lifecycle-and-fixed-tick-phase-ordering).
 
 ```text
 Fixed Simulation Tick
@@ -668,11 +668,14 @@ Asynchronous AI workloads—such as NavMesh pathfinding, perception visibility r
 
 ## Simulation Lifecycle And Fixed-Tick Phase Ordering
 
+The engine's **full simulation tick** is a seven-phase sequence spanning AI, physics locomotion, animation, and presentation. It is not a second AI scheduler and does not replace the five-phase AI scheduling contract above: the early phases of this tick are where that AI contract runs, and phases after navigation intent are the rest of the sim tick (locomotion, animation, render extraction).
+
+AI simulation executes as a fixed-timestep pipeline within the engine's fixed update loop, defined by [Runtime Lifecycle Architecture](./runtime-lifecycle.md). To guarantee determinism, eliminate data races, and maintain strict ownership boundaries between perception, gameplay logic, physics, and rendering, simulation ticks execute across an explicit seven-phase sequence:
+
 AI simulation executes as a fixed-timestep pipeline within the engine's fixed
 update loop, defined by [Runtime Lifecycle Architecture](./runtime-lifecycle.md).
 Six ordered phases execute in each simulation tick. A variable-rate presentation
 bridge runs afterward and consumes the committed snapshots:
-
 ```text
 PerceptionSensePoll
         |  (Raw sensory stimuli buffers)
@@ -707,7 +710,7 @@ variable-rate presentation bridge, not a seventh fixed-tick phase.
    - Operates as a read-only pass over physics spatial structures and audio event queues.
    - Invariant: Does NOT mutate agent blackboard state, behavior tree node states, or world transforms.
 2. **`BlackboardSync`**:
-   - Ingests staged stimulus buffers into each agent's `AIBlackboard`.
+   - Ingests staged stimulus buffers into each agent's `BlackboardState`.
    - Evaluates stimulus decay over time, updates last known target locations, adjusts agent alert levels, and processes incoming team/squad broadcast events.
    - Invariant: All blackboard mutations are completed within this phase; blackboards become read-only during subsequent decision evaluation.
 3. **`AiDecisionEvaluate`**:
@@ -768,7 +771,7 @@ The execution of AI simulation phases is strictly governed by the host process's
 ### Authority, Privacy, And Security Boundaries
 
 - **Clients Never Run Authoritative AI**: Connected clients NEVER run `PerceptionSensePoll`, `BlackboardSync`, `AiDecisionEvaluate`, or `NavIntentCommit` for server-owned AI agents. Clients receive replicated transform, velocity, and state tags from the server.
-- **Server State Privacy**: Agent perception memories (e.g. sight awareness meters, target tracking scores) and `AIBlackboard` internal representations (behavior tree execution nodes, patrol indices, threat scoring matrices) are **server-private**.
+- **Server State Privacy**: Agent perception memories (e.g. sight awareness meters, target tracking scores) and `BlackboardState` internal representations (behavior tree execution nodes, patrol indices, threat scoring matrices) are **server-private**.
 - **No Private State Serialization**: Network replication protocols MUST NOT synchronize private perception data or blackboard state to clients. Only publicly observable gameplay attributes (positions, rotations, locomotion speeds, equip states, public audio cues) are sent over the wire. This prevents client-side wallhacks, radar exploits, and unnecessary bandwidth consumption.
 
 ## Simulation Execution Modes
