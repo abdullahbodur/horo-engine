@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <format>
 #include <fstream>
 #include <limits>
 #include <nlohmann/json.hpp>
@@ -103,6 +104,19 @@ namespace Horo::Input {
                 });
             };
             return contains(left, right) || contains(right, left);
+        }
+
+        bool SameAnalogAxis(const InputBinding &left, const InputBinding &right) noexcept {
+            if (left.kind != right.kind || left.requiredModifiers != right.requiredModifiers || left.chordSize != 0 || right.chordSize != 0)
+                return false;
+            using enum BindingControlKind;
+            if (left.kind == GamepadAxis)
+                return left.gamepadAxis == right.gamepadAxis;
+            if (left.kind == RawGamepadAxis)
+                return left.rawControl == right.rawControl;
+            if (left.kind == PointerWheelX || left.kind == PointerWheelY)
+                return true;
+            return false;
         }
 
         struct BindingEvaluationResult {
@@ -418,7 +432,7 @@ namespace Horo::Input {
 
         template <typename Bindings>
         void ReportDuplicateTransitions(BindingValidationReport &report, const ActionId &action, const Bindings &bindings,
-                                        const char *message) {
+                                        const std::string &message) {
             for (std::size_t i = 0; i + 1 < bindings.size(); ++i)
                 for (std::size_t j = i + 1; j < bindings.size(); ++j)
                     if (SameTransition(bindings[i], bindings[j]))
@@ -431,17 +445,21 @@ namespace Horo::Input {
             std::unordered_set<std::string, StringViewHash, std::equal_to<>> overriddenActions;
             for (const BindingOverride &overrideValue : profile.overrides) {
                 if (const auto action = std::ranges::find(actions, overrideValue.action, &ActionDescriptor::id); action == actions.end()) {
-                    report.diagnostics.emplace_back(InvalidAction, overrideValue.action, "Binding override references an unknown action.");
+                    report.diagnostics.emplace_back(InvalidAction, overrideValue.action,
+                                                    std::format("Binding override references unknown action '{}'.",
+                                                                overrideValue.action.Value()));
                     continue;
                 }
                 if (!overriddenActions.insert(overrideValue.action.Value()).second)
                     report.diagnostics.emplace_back(DuplicateBinding, overrideValue.action,
-                                                    "The profile contains more than one override for the action.");
+                                                    std::format("The profile contains more than one override for action '{}'.",
+                                                                overrideValue.action.Value()));
                 for (const InputBinding &binding : overrideValue.bindings)
                     ValidateBinding(report, overrideValue.action, binding, "Binding deadzone must be in [0, 1).",
                                     "Binding references an unsupported control.", "Binding is reserved by the operating system.");
                 ReportDuplicateTransitions(report, overrideValue.action, overrideValue.bindings,
-                                           "The action contains a duplicate binding.");
+                                           std::format("Action '{}' override contains a duplicate binding on the same trigger.",
+                                                       overrideValue.action.Value()));
             }
         }
 
@@ -455,15 +473,33 @@ namespace Horo::Input {
             using enum BindingDiagnosticCode;
             std::vector<EffectiveBinding> effective;
             for (const ActionDescriptor &action : actions) {
+                if (!action.id.IsValid()) {
+                    report.diagnostics.emplace_back(InvalidAction, action.id, "Action descriptor contains an empty action ID.");
+                    continue;
+                }
+                if (!action.context.IsValid())
+                    report.diagnostics.emplace_back(AmbiguousContext, action.id,
+                                                    std::format("Action '{}' has an invalid or empty context ID.", action.id.Value()));
+
                 const auto overrideValue = std::ranges::find(profile.overrides, action.id, &BindingOverride::action);
                 const std::vector<InputBinding> &bindings =
                     overrideValue == profile.overrides.end() ? action.defaultBindings : overrideValue->bindings;
                 if (action.required && bindings.empty())
-                    report.diagnostics.emplace_back(RequiredActionUnbound, action.id, "A required action has no binding.");
-                for (const InputBinding &binding : bindings)
+                    report.diagnostics.emplace_back(RequiredActionUnbound, action.id,
+                                                    std::format("Required action '{}' has no binding in context '{}'.", action.id.Value(),
+                                                                action.context.Value()));
+                for (const InputBinding &binding : bindings) {
                     ValidateBinding(report, action.id, binding, "Action binding deadzone must be in [0, 1).",
                                     "Action references an unsupported control.", "Action uses an operating-system-reserved shortcut.");
-                ReportDuplicateTransitions(report, action.id, bindings, "Action contains a duplicate binding.");
+                    if ((action.valueType == ActionValueType::Digital || action.valueType == ActionValueType::Axis1D) &&
+                        binding.component != 0)
+                        report.diagnostics.emplace_back(DeviceExclusivityViolation, action.id,
+                                                        std::format("Binding on action '{}' specifies component {}, but digital and 1D "
+                                                                    "actions require component 0.",
+                                                                    action.id.Value(), binding.component));
+                }
+                ReportDuplicateTransitions(report, action.id, bindings,
+                                           std::format("Action '{}' contains a duplicate binding on the same trigger.", action.id.Value()));
                 effective.reserve(bindings.size());
                 for (const InputBinding &binding : bindings)
                     effective.push_back({&action, &binding});
@@ -472,12 +508,29 @@ namespace Horo::Input {
                 for (std::size_t j = i + 1; j < effective.size(); ++j) {
                     if (effective[i].action->id == effective[j].action->id || effective[i].action->context != effective[j].action->context)
                         continue;
-                    if (SameTransition(*effective[i].binding, *effective[j].binding))
-                        report.diagnostics.emplace_back(DuplicateBinding, effective[j].action->id,
-                                                        "Binding conflicts with another action in the same context.");
-                    else if (ChordsOverlap(*effective[i].binding, *effective[j].binding))
+                    if (effective[i].binding->kind == BindingControlKind::GamepadAxis ||
+                        effective[i].binding->kind == BindingControlKind::RawGamepadAxis ||
+                        effective[i].binding->kind == BindingControlKind::PointerWheelX ||
+                        effective[i].binding->kind == BindingControlKind::PointerWheelY) {
+                        if (SameAnalogAxis(*effective[i].binding, *effective[j].binding)) {
+                            report.diagnostics.emplace_back(DeviceExclusivityViolation, effective[j].action->id,
+                                                            std::format("Action '{}' and action '{}' in context '{}' have an exclusive "
+                                                                        "device binding conflict on the same axis.",
+                                                                        effective[j].action->id.Value(), effective[i].action->id.Value(),
+                                                                        effective[j].action->context.Value()));
+                        }
+                    } else if (SameTransition(*effective[i].binding, *effective[j].binding)) {
+                        report.diagnostics
+                            .emplace_back(DuplicateBinding, effective[j].action->id,
+                                          std::format("Action '{}' conflicts with action '{}' in context '{}' on the same trigger.",
+                                                      effective[j].action->id.Value(), effective[i].action->id.Value(),
+                                                      effective[j].action->context.Value()));
+                    } else if (ChordsOverlap(*effective[i].binding, *effective[j].binding)) {
                         report.diagnostics.emplace_back(AmbiguousChord, effective[j].action->id,
-                                                        "Chord overlaps another action in the same context.");
+                                                        std::format("Action '{}' chord overlaps action '{}' in context '{}'.",
+                                                                    effective[j].action->id.Value(), effective[i].action->id.Value(),
+                                                                    effective[j].action->context.Value()));
+                    }
                 }
             }
         }

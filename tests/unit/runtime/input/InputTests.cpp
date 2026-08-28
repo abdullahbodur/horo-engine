@@ -221,6 +221,98 @@ namespace {
         REQUIRE((merged.Value().overrides.front().bindings.front().key == Key::D));
     }
 
+    TEST_CASE("Conflict Validation Detects Declared Conflict Classes With Source Context", "[unit][runtime][input]") {
+        const InputContextId workspace{"workspace"};
+        const InputContextId gameplay{"gameplay"};
+
+        // 1. Same trigger in different contexts does not conflict
+        const std::array crossContextActions{ActionDescriptor{ActionId{"editor.interact"},
+                                                              ActionValueType::Digital,
+                                                              workspace,
+                                                              false,
+                                                              {KeyBinding(Key::E)}},
+                                             ActionDescriptor{ActionId{"gameplay.use"},
+                                                              ActionValueType::Digital,
+                                                              gameplay,
+                                                              false,
+                                                              {KeyBinding(Key::E)}}};
+        const BindingValidationReport crossContextReport = ValidateBindingProfile(crossContextActions, InputBindingProfile{});
+        REQUIRE((crossContextReport.IsValid()));
+
+        // 2. Same trigger in same context produces DuplicateBinding with actionable message
+        const std::array
+            sameContextActions{ActionDescriptor{ActionId{"action.first"}, ActionValueType::Digital, workspace, false, {KeyBinding(Key::E)}},
+                               ActionDescriptor{ActionId{"action.second"},
+                                                ActionValueType::Digital,
+                                                workspace,
+                                                false,
+                                                {KeyBinding(Key::E)}}};
+        const BindingValidationReport sameContextReport = ValidateBindingProfile(sameContextActions, InputBindingProfile{});
+        REQUIRE((!sameContextReport.IsValid()));
+        const auto dupDiag =
+            std::ranges::find(sameContextReport.diagnostics, BindingDiagnosticCode::DuplicateBinding, &BindingDiagnostic::code);
+        REQUIRE((dupDiag != sameContextReport.diagnostics.end()));
+        REQUIRE((dupDiag->message.find("action.second") != std::string::npos));
+        REQUIRE((dupDiag->message.find("action.first") != std::string::npos));
+        REQUIRE((dupDiag->message.find("workspace") != std::string::npos));
+
+        // 3. Chord overlap in same context produces AmbiguousChord with actionable message
+        InputBinding baseChord = KeyBinding(Key::K);
+        InputBinding subChord = KeyBinding(Key::K);
+        subChord.chord[0] = Key::L;
+        subChord.chordSize = 1;
+        const std::array chordActions{ActionDescriptor{ActionId{"chord.base"}, ActionValueType::Digital, workspace, false, {baseChord}},
+                                      ActionDescriptor{ActionId{"chord.sub"}, ActionValueType::Digital, workspace, false, {subChord}}};
+        const BindingValidationReport chordReport = ValidateBindingProfile(chordActions, InputBindingProfile{});
+        REQUIRE((!chordReport.IsValid()));
+        const auto chordDiag = std::ranges::find(chordReport.diagnostics, BindingDiagnosticCode::AmbiguousChord, &BindingDiagnostic::code);
+        REQUIRE((chordDiag != chordReport.diagnostics.end()));
+        REQUIRE((chordDiag->message.find("chord.sub") != std::string::npos));
+        REQUIRE((chordDiag->message.find("chord.base") != std::string::npos));
+
+        // 4. Device exclusivity violation: analog axis conflict in same context
+        InputBinding axisA{.kind = BindingControlKind::GamepadAxis, .gamepadAxis = GamepadAxis::LeftX, .scale = 1.0F};
+        InputBinding axisB{.kind = BindingControlKind::GamepadAxis, .gamepadAxis = GamepadAxis::LeftX, .scale = -1.0F};
+        const std::array axisActions{ActionDescriptor{ActionId{"steer.left"}, ActionValueType::Axis1D, gameplay, false, {axisA}},
+                                     ActionDescriptor{ActionId{"steer.right"}, ActionValueType::Axis1D, gameplay, false, {axisB}}};
+        const BindingValidationReport axisReport = ValidateBindingProfile(axisActions, InputBindingProfile{});
+        REQUIRE((!axisReport.IsValid()));
+        const auto axisDiag =
+            std::ranges::find(axisReport.diagnostics, BindingDiagnosticCode::DeviceExclusivityViolation, &BindingDiagnostic::code);
+        REQUIRE((axisDiag != axisReport.diagnostics.end()));
+        REQUIRE((axisDiag->message.find("gameplay") != std::string::npos));
+
+        // 5. Device exclusivity violation: invalid component index on 1D/Digital action
+        InputBinding invalidComponent = KeyBinding(Key::Space);
+        invalidComponent.component = 1;
+        const std::array componentActions{
+            ActionDescriptor{ActionId{"jump"}, ActionValueType::Digital, gameplay, false, {invalidComponent}}};
+        const BindingValidationReport componentReport = ValidateBindingProfile(componentActions, InputBindingProfile{});
+        REQUIRE((!componentReport.IsValid()));
+        REQUIRE((std::ranges::any_of(componentReport.diagnostics, [](const BindingDiagnostic &d) {
+            return d.code == BindingDiagnosticCode::DeviceExclusivityViolation;
+        })));
+
+        // 6. Ambiguous context detection
+        const std::array invalidContextActions{
+            ActionDescriptor{ActionId{"valid.action"}, ActionValueType::Digital, InputContextId{""}, false, {KeyBinding(Key::Space)}}};
+        const BindingValidationReport contextReport = ValidateBindingProfile(invalidContextActions, InputBindingProfile{});
+        REQUIRE((!contextReport.IsValid()));
+        REQUIRE((std::ranges::any_of(contextReport.diagnostics, [](const BindingDiagnostic &d) {
+            return d.code == BindingDiagnosticCode::AmbiguousContext;
+        })));
+
+        // 7. InputRouter atomic rejection on invalid profile
+        InputRouter router;
+        REQUIRE(
+            (router.SetActionMap({ActionDescriptor{ActionId{"test.act"}, ActionValueType::Digital, workspace, false, {KeyBinding(Key::Z)}}})
+                 .HasValue()));
+        InputBindingProfile badProfile{.profileId = "bad", .overrides = {BindingOverride{ActionId{"unknown.act"}, {KeyBinding(Key::X)}}}};
+        const Horo::Result<void> setRes = router.SetProfile(badProfile);
+        REQUIRE((setRes.HasError()));
+        REQUIRE((router.Profile().profileId == "default"));
+    }
+
     TEST_CASE("Action Transitions Are Consumed And Gamepad Axes Have Edges", "[unit][runtime][input]") {
         RawInputCollector collector;
         collector.BeginFrame(1);
