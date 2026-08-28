@@ -1,4 +1,4 @@
-# ADR-011: World Streaming Partition Authority and Subsystem Boundaries
+# ADR-012: World Streaming Partition Authority and Subsystem Boundaries
 
 - **Status**: Proposed
 - **Date**: 2026-08-28
