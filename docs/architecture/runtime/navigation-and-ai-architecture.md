@@ -794,8 +794,11 @@ enum class QueryResultStatus : uint8_t {
 
 struct ScoredItem {
     EnvQueryItemType itemType;
-    WorldCoordinate  position;
-    EntityId         entity;
+    WorldCoordinate  position;        // Point / Actor location
+    EntityId         entity;          // valid when itemType == Actor
+    Vec3             direction;       // valid when itemType == DirectionalRay
+    uint32_t         customTypeId{0}; // valid when itemType == Custom
+    std::array<uint8_t, 16> customPayload{};
     float            totalScore;      // Normalized [0.0, 1.0]
     uint32_t         itemIndex;       // Stable generation index
 };
@@ -819,7 +822,7 @@ struct QueryResult {
    guarantee deterministic tactical decisions in replay and automated tests.
 4. **Caching And Invalidation**:
    - Query results may be cached using a composite key:
-     `CacheKey(QueryTemplateId, ContextSnapshotHash, NavMeshRevision, PhysicsRevision)`.
+     `CacheKey(QueryTemplateId, ContextSnapshotHash, NavMeshRevision, PhysicsRevision)` where `ContextSnapshotHash` quantizes querier/target `WorldCoordinate` to integer millimeters (raw floats would miss every moving-agent tick).
    - Results are retained in a bounded LRU cache with time-to-live (TTL).
    - Cache eviction never invalidates caller-owned immutable `QueryResult` copies.
 5. **Lifecycle Safety And Cancellation**:

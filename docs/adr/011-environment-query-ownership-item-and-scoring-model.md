@@ -130,7 +130,7 @@ Tactical AI agents require spatial reasoning to select positions in the world (s
    - Result callbacks and decision nodes observe typed failure rather than executing against invalid entities.
 4. **Caching and Invalidation**:
    - Immutable query results may be cached using a composite key:
-     $$\text{CacheKey} = (\text{QueryTemplateId}, \text{ContextSnapshotHash}, \text{NavMeshRevision}, \text{PhysicsRevision})$$
+     $$\text{CacheKey} = (\text{QueryTemplateId}, \text{ContextSnapshotHash (querier/target positions quantized to integer millimeters)}, \text{NavMeshRevision}, \text{PhysicsRevision})$$
    - Bounded LRU cache with time-to-live (TTL).
    - Cache eviction never invalidates caller-owned `QueryResult` snapshots.
 
