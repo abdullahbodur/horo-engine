@@ -1,4 +1,4 @@
-# ADR-011: Navigation Target Ownership and Dependency Boundary
+# ADR-016: Navigation Target Ownership and Dependency Boundary
 
 - **Status**: Proposed
 - **Date**: 2026-08-28
