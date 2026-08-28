@@ -325,9 +325,11 @@ authority. The bounded emergency exception below is the only bypass.
 Before creating a normal delivery branch, resolve and preserve all three
 identifiers:
 
-- the Jira issue key, for example `HORO-1784`;
+- the Jira issue key (`HORO` is this site's Jira project key), for example
+  `HORO-1784`;
 - the GitHub issue number, for example `#1828`;
-- the repository domain ticket alias from the GitHub issue title, for example
+- the repository domain ticket alias from the GitHub issue title (`JOB` denotes
+  the Jobs workstream and `REND` the Renderer workstream), for example
   `[JOB-001.1]` or `[REND-001.2]`.
 
 Normal commit subjects and pull-request titles must use this order:
@@ -364,8 +366,10 @@ Do not add `#comment`, `#time` or a workflow transition command merely to create
 a link: those commands mutate Jira. Use them only when the user or workflow
 explicitly authorizes the corresponding comment, worklog or transition, and
 verify that the commit author email maps to a Jira user allowed to perform it.
-Put each Smart Commit command on a single line in the commit body; never put one
-in the subject.
+For normal delivery, put each Smart Commit command on a single line in the commit
+body. The subject remains reserved for its human-readable summary and traceability
+identifiers. The emergency exception may omit a Smart Commit command until Jira
+recovers; it does not move the command into the subject.
 
 Preferred examples:
 
@@ -381,7 +385,8 @@ Rules:
 
 ### Branch Naming
 
-Normal branches must follow the pattern `<type>/<JIRA_ID>_<short_topic>`.
+The standard normal branch pattern is `<type>/<JIRA_ID>_<short_topic>`; the
+emergency exception below defines the only alternate pattern.
 
 - `<type>` is the Conventional Commit type: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `ci`, `build`
 - `<JIRA_ID>` is the exact uppercase Jira issue key and is fixed before branch
@@ -399,10 +404,11 @@ or `_final`. If the scope changes materially, open a new focused branch.
 
 ### Emergency Traceability Exception
 
-Only the project lead may authorize this exception, and only for an active
-production incident or a confirmed Jira outage that makes normal Jira identity
-resolution impossible. Agents must not infer authorization. Record the approver,
-reason and missing Jira link in the GitHub pull-request body before delivery.
+This exception requires explicit project-lead authorization and applies only to
+an active production incident or a confirmed Jira outage that makes normal Jira
+identity resolution impossible. Authorization is recorded rather than inferred:
+record the approver, reason and missing Jira link in the GitHub pull-request body
+before delivery.
 
 Keep the Conventional Commit type/scope, GitHub issue and known domain alias.
 Use `<type>/emergency_<short_topic>` when no Jira key can be resolved; never invent
