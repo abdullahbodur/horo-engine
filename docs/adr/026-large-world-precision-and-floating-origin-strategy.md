@@ -1,4 +1,4 @@
-# ADR-014: Large-World Precision and Floating Origin Strategy
+# ADR-026: Large-World Precision and Floating Origin Strategy
 
 - **Status**: Proposed
 - **Date**: 2026-08-28
