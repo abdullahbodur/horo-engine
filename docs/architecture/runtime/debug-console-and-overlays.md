@@ -375,7 +375,7 @@ the product profile already permits.
 
 ## Security And Permissions
 
-Console access is a capability decision governed by [ADR-011](../../adr/011-command-registration-permissions-threading-and-packaged-build-policy.md):
+Console access is a capability decision governed by [ADR-018](../../adr/018-command-registration-permissions-threading-and-packaged-build-policy.md):
 
 - Profile controls which commands and variables exist.
 - Project policy controls which project commands are exposed.
@@ -493,7 +493,7 @@ Required tests cover:
 
 ## Related Documents
 
-- [ADR-011: Command Registration, Permissions, Threading and Packaged-Build Policy](../../adr/011-command-registration-permissions-threading-and-packaged-build-policy.md)
+- [ADR-018: Command Registration, Permissions, Threading and Packaged-Build Policy](../../adr/018-command-registration-permissions-threading-and-packaged-build-policy.md)
 - [ADR-010: Job Waiting and Operation Store Ownership](../../adr/010-job-waiting-and-operation-store-ownership.md)
 - [Console Panel](./console-panel.html): HTML reference design for the editor
   console tab, command input, log filtering, and record details.

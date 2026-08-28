@@ -5,6 +5,7 @@
 - **Supersedes**: None
 - **Scope**: Runtime debug console command registration, `DebugCommandDescriptor`, `CommandPermission` access levels, execution threading rules, packaged-build retail gating, and reconciliation with network administration and world streaming diagnostics
 - **Issue**: [#1842](https://github.com/abdullahbodur/horo-engine/issues/1842) ([DBG-001.1])
+- **JIRA**: HORO-1798
 - **Normative document**: [Runtime Debug Console And Development Overlays](../architecture/runtime/debug-console-and-overlays.md)
 
 ## Context
