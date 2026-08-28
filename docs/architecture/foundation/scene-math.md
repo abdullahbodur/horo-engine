@@ -23,10 +23,11 @@ rotation, and scale. Quaternion Euler conversion preserves the engine's existing
 X/Y/Z authored rotation order.
 
 `IntVector3` stores discrete integer 3D spatial cell coordinates. `WorldCoordinate64`
-is the composite 64-bit global world coordinate (`IntVector3 cellIndex` + `Vec3 cellOffset`),
-which converts losslessly to/from fixed-point millimeter `int64_t[3]` and double-precision
-`dvec3`. `CameraRelativeFloat3` (`Vec3`) represents high-precision localized coordinates
-relative to the active camera or floating origin.
+is the composite 64-bit global world coordinate (`IntVector3 cellIndex` +
+`IntVector3 cellOffsetMm` in integer millimeters). Round-trip to world-space
+fixed-point millimeter `int64_t[3]` is exact; `dvec3` is a derived view after
+1 mm quantization. `CameraRelativeFloat3` (`Vec3`) represents high-precision
+localized coordinates relative to the active camera or floating origin.
 
 The default comparison epsilon is `1e-6`. Callers may select a larger epsilon for
 accumulated or presentation-space computations. Inputs crossing an authoring,

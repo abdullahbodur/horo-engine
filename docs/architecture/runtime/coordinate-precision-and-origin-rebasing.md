@@ -8,7 +8,7 @@ This document defines the normative coordinate precision strategy, floating orig
 
 ## Core Decisions
 
-- **Hybrid Global Coordinates (`WorldCoordinate64`)**: The authoritative coordinate system for global world space, spatial partitioning, save serialization, and multiplayer replication is a 64-bit composite coordinate (`IntVector3 cellIndex` + `Vec3 cellOffset`), lossless convertible to/from fixed-point integer millimeters (`int64_t[3]`) and double-precision meters (`dvec3`).
+- **Hybrid Global Coordinates (`WorldCoordinate64`)**: The authoritative coordinate system for global world space, spatial partitioning, save serialization, and multiplayer replication is a 64-bit composite coordinate (`IntVector3 cellIndex` + `IntVector3 cellOffsetMm`). The stored offset is integer millimeters in the half-open range `[0, cellSizeMm)`, so round-trip conversion to/from world-space `int64_t[3]` millimeters is exact. Conversion to `dvec3` meters is a derived view (exact after 1 mm quantization wherever double ULP is finer than 0.5 mm). fp32 `Vec3` is not a storage field of `WorldCoordinate64`; it is reserved for camera-relative / floating-origin local frames.
 - **Floating Origin Rebasing (`CameraRelativeFloat3`)**: Active runtime rendering, physics simulation, audio spatialization, and VFX run in localized 32-bit single-precision floating-point coordinates relative to a dynamic floating origin $C_{\text{origin}}$.
 - **Universal GPU 32-bit Shading**: GPU shaders execute exclusively in 32-bit single precision (`fp32`) / half precision (`fp16`). Camera-relative subtraction $(P_{\text{world}} - C_{\text{camera}})$ is evaluated on the CPU or constant-buffer generation during render extraction; shaders receive pre-translated model-view matrices $M_{\text{view\_rel}}$.
 - **Zero Velocity Discontinuity**: Origin shifts are discrete coordinate frame translations ($\vec{x}' = \vec{x} - \Delta_{\text{origin}}$), not physical movements over time $\Delta t$. Spatial proxies and transforms are updated without modifying linear/angular velocities, forces, audio pitches (Doppler), or particle lifetimes.
@@ -22,7 +22,7 @@ This document defines the normative coordinate precision strategy, floating orig
 ```text
 +-------------------------------------------------------------------------+
 |                  Global World Space (Canonical Authority)               |
-|   WorldCoordinate64 = { IntVector3 cellIndex, Vec3 cellOffset }         |
+|   WorldCoordinate64 = { IntVector3 cellIndex, IntVector3 cellOffsetMm } |
 |   - Spatial partitioning grids & world composition                      |
 |   - Save-game serialization & level persistence                         |
 |   - Multiplayer network position authority                              |
@@ -79,46 +79,60 @@ struct IntVector3 {
 
 /**
  * @brief Authoritative 64-bit composite global world coordinate.
- * 
- * Combines an integer cell index with a localized single-precision float offset.
- * Default standard grid cell size is 1024.0 meters per side.
+ *
+ * Combines an integer cell index with an integer-millimeter offset from the
+ * cell minimum corner. Default standard grid cell size is 1024 m = 1,024,000 mm
+ * per side. fp32 is not used for stored world authority: at a 1024 m cell edge
+ * a 32-bit `Vec3` offset has ULP ≈ 2^-13 m ≈ 0.12 mm, which cannot satisfy a
+ * 1 mm exact millimeter round-trip.
  */
 struct WorldCoordinate64 {
-    static constexpr float DefaultCellSize = 1024.0F; // Meters per cell edge
+    static constexpr float   DefaultCellSizeMeters      = 1024.0F;
+    static constexpr int32_t DefaultCellSizeMillimeters = 1'024'000;
+    static constexpr float   DefaultCellSize            = DefaultCellSizeMeters; // meters; alias for call sites
 
     IntVector3 cellIndex{0, 0, 0};
-    Vec3       cellOffset{0.0F, 0.0F, 0.0F}; // [0.0, CellSize) relative to cell minimum corner
+    IntVector3 cellOffsetMm{0, 0, 0}; // [0, cellSizeMm) relative to cell minimum corner
 
     [[nodiscard]] bool IsFinite() const noexcept;
-    
-    /**
-     * @brief Normalizes cellOffset into [0, cellSize) and updates cellIndex.
-     */
-    [[nodiscard]] Result<WorldCoordinate64> Normalize(float cellSize = DefaultCellSize) const noexcept;
 
     /**
-     * @brief Lossless conversion to fixed-point integer millimeters (1 unit = 1 mm).
+     * @brief Normalizes cellOffsetMm into [0, cellSizeMm) and updates cellIndex.
      */
-    [[nodiscard]] Result<std::array<int64_t, 3>> ToMillimeters(float cellSize = DefaultCellSize) const noexcept;
+    [[nodiscard]] Result<WorldCoordinate64> Normalize(int32_t cellSizeMm = DefaultCellSizeMillimeters) const noexcept;
+
+    /**
+     * @brief Exact conversion to world-space fixed-point millimeters (1 unit = 1 mm).
+     */
+    [[nodiscard]] Result<std::array<int64_t, 3>> ToMillimeters(int32_t cellSizeMm = DefaultCellSizeMillimeters) const noexcept;
 
     /**
      * @brief Constructs WorldCoordinate64 from fixed-point integer millimeters.
      */
     [[nodiscard]] static Result<WorldCoordinate64> FromMillimeters(
         const std::array<int64_t, 3> &mm,
-        float cellSize = DefaultCellSize) noexcept;
+        int32_t cellSizeMm = DefaultCellSizeMillimeters) noexcept;
 
     /**
-     * @brief Converts to double-precision metric vector (meters from origin).
+     * @brief Derived conversion to double-precision meters. Quantizes to 1 mm.
+     * Not a bit-exact inverse of FromDoubleMeters for sub-millimeter inputs.
      */
-    [[nodiscard]] Result<std::array<double, 3>> ToDoubleMeters(float cellSize = DefaultCellSize) const noexcept;
+    [[nodiscard]] Result<std::array<double, 3>> ToDoubleMeters(int32_t cellSizeMm = DefaultCellSizeMillimeters) const noexcept;
 
     /**
-     * @brief Constructs WorldCoordinate64 from double-precision metric vector.
+     * @brief Constructs WorldCoordinate64 from double-precision meters.
+     * Sub-millimeter fractions round to nearest millimeter (half away from zero
+     * is implementation-defined at the 0.5 mm boundary and must be tested).
      */
     [[nodiscard]] static Result<WorldCoordinate64> FromDoubleMeters(
         const std::array<double, 3> &meters,
-        float cellSize = DefaultCellSize) noexcept;
+        int32_t cellSizeMm = DefaultCellSizeMillimeters) noexcept;
+
+    /**
+     * @brief Derived fp32 offset in meters for local cluster math. Lossy:
+     * worst-case ULP near a 1024 m cell edge is ≈ 0.12 mm.
+     */
+    [[nodiscard]] Result<Vec3> ToCellOffsetMeters() const noexcept;
 
     /**
      * @brief Computes high-precision vector delta (lhs - rhs) in meters.
@@ -126,7 +140,7 @@ struct WorldCoordinate64 {
     [[nodiscard]] friend Result<Vec3> SubtractToLocal(
         const WorldCoordinate64 &lhs,
         const WorldCoordinate64 &rhs,
-        float cellSize = DefaultCellSize) noexcept;
+        int32_t cellSizeMm = DefaultCellSizeMillimeters) noexcept;
 };
 
 /**
@@ -141,7 +155,7 @@ using CameraRelativeFloat3 = Vec3;
 
 | Coordinate Format | Storage Size | Effective Range | Precision at Origin | Precision at $1000\,\text{km}$ |
 |---|---|---|---|---|
-| `WorldCoordinate64` (Standard Grid) | $12\,\text{bytes} + 12\,\text{bytes} = 24\,\text{bytes}$ | $\pm 2 \times 10^9\,\text{cells} \approx \pm 2 \times 10^{12}\,\text{m}$ | $< 0.0001\,\text{mm}$ | $< 0.0001\,\text{mm}$ |
+| `WorldCoordinate64` (Standard Grid) | $12\,\text{bytes} + 12\,\text{bytes} = 24\,\text{bytes}$ | $\pm 2 \times 10^9\,\text{cells} \approx \pm 2 \times 10^{12}\,\text{m}$ | $1.0\,\text{mm}$ constant | $1.0\,\text{mm}$ constant |
 | Fixed-point Millimeter (`int64_t[3]`) | $24\,\text{bytes}$ | $\pm 9.22 \times 10^{12}\,\text{m}$ | $1.0\,\text{mm}$ constant | $1.0\,\text{mm}$ constant |
 | Double Precision (`dvec3` / `double[3]`) | $24\,\text{bytes}$ | $\pm 1.79 \times 10^{308}\,\text{m}$ | $10^{-16}\,\text{m}$ | $\approx 0.0001\,\text{mm}$ |
 | Camera-Relative `Vec3` (`fp32`) | $12\,\text{bytes}$ | Local cluster ($\pm 10\,\text{km}$ around camera) | $0.0001\,\text{mm}$ (at $1\,\text{m}$) | $\approx 0.1\,\text{mm}$ (within $1\,\text{km}$ of viewer) |
@@ -356,7 +370,7 @@ enum class PrecisionErrorCode {
 
 Automated and integration test suites must cover:
 
-- **Mathematical Conversion Precision**: Lossless round-trip conversions between `WorldCoordinate64`, `int64_t[3]` millimeters, and `dvec3` double meters across extreme ranges ($\pm 10^7\,\text{km}$).
+- **Mathematical Conversion Precision**: Exact round-trip conversions between `WorldCoordinate64` and `int64_t[3]` millimeters across extreme ranges ($\pm 10^7\,\text{km}$), including cell-edge values (`cellOffsetMm = cellSizeMm - 1`). `dvec3` round-trip is required only after 1 mm quantization, and only in ranges where double ULP is finer than 0.5 mm. Derived `ToCellOffsetMeters()` must document fp32 ULP growth toward the cell edge (≈ 0.12 mm at 1024 m) and must not be treated as canonical storage.
 - **Non-Finite and Boundary Rejection**: Proper error return when passing NaN, $\pm\infty$, or out-of-range integer coordinates.
 - **Two-Phase Transaction Robustness**: Simulating participant failure during `PrepareRebase` and validating clean rollback with zero partial state drift.
 - **Velocity and Momentum Preservation in Physics**: Spawning rigid bodies with linear/angular velocity, triggering repeated origin shifts, and verifying that velocities, trajectory curvatures, and sleep states match unshifted baselines within floating-point tolerance ($< 10^{-5}$).

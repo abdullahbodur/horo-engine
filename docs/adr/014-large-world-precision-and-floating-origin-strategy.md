@@ -42,8 +42,8 @@ Key design constraints:
 **Horo Engine adopts a Hybrid Hierarchical Global Coordinate representation (`WorldCoordinate64`) paired with Floating Origin Rebasing (`CameraRelativeFloat3`) for runtime rendering and local simulation clusters:**
 
 1. **Global World Coordinates (`WorldCoordinate64`)**:
-   - The authoritative representation for global world space, spatial partitioning, persistent save state, and multiplayer network replication is a 64-bit composite coordinate: an `IntVector3` grid cell coordinate (`int32_t[3]` or `int64_t[3]`) defining discrete spatial grid blocks (e.g., $1024\,\text{m}$ cell size) combined with a 32-bit `Vec3` local offset within the cell $[0, \text{CellSize})$.
-   - Alternatively convertible losslessly to/from fixed-point 64-bit integer millimeters (`int64_t[3]`, providing $\pm 9.22 \times 10^{12}\,\text{m}$ range with $1\,\text{mm}$ resolution) and double-precision floating point (`dvec3` / `DVec3`, providing 53 bits of significand for world tooling).
+   - The authoritative representation for global world space, spatial partitioning, persistent save state, and multiplayer network replication is a 64-bit composite coordinate: an `IntVector3` grid cell index plus an `IntVector3 cellOffsetMm` stored in integer millimeters in the half-open range `[0, cellSizeMm)` (default cell $1024\,\text{m} = 1\,024\,000\,\text{mm}$).
+   - Round-trip conversion to/from world-space fixed-point 64-bit integer millimeters (`int64_t[3]`, $\pm 9.22 \times 10^{12}\,\text{m}$ range with $1\,\text{mm}$ resolution) is exact. `dvec3` / `DVec3` is a derived tooling view (53-bit significand), not canonical storage. A 32-bit `Vec3` cell offset is rejected: near a 1024 m cell edge fp32 ULP is ≈ 0.12 mm, so it cannot satisfy an exact millimeter round-trip.
 2. **Floating Origin Rebasing (`CameraRelativeFloat3`)**:
    - The active runtime view and local simulation operate in a localized single-precision floating-point frame relative to a dynamic floating origin $C_{\text{origin}}$.
    - When the active camera or focal entity traverses beyond a configured rebasing threshold distance ($R_{\text{threshold}}$, default $1000\,\text{m}$) from $C_{\text{origin}}$, the engine executes a coordinated, atomic Origin Rebase Transaction.
@@ -65,7 +65,7 @@ Key design constraints:
 
 | Area | Prior Architecture State | Ratified / Revised Decision |
 |---|---|---|
-| Global World Coordinates | Implicit 32-bit `WorldCoordinate` (`Vec3`) in early sketches | **Revised.** Replaced with `WorldCoordinate64` (`IntVector3 cellIndex` + `Vec3 cellOffset`) and fixed-point `int64_t` millimeter representation. |
+| Global World Coordinates | Implicit 32-bit `WorldCoordinate` (`Vec3`) in early sketches | **Revised.** Replaced with `WorldCoordinate64` (`IntVector3 cellIndex` + `IntVector3 cellOffsetMm`) and exact `int64_t` millimeter round-trip. fp32 offsets are local-frame only. |
 | GPU Shader Precision | Undefined; potential risk of requiring `double` vertex attributes | **Ratified.** GPU shaders remain strictly `fp32`/`fp16`. Camera-relative transformation $(P_{\text{world}} - C_{\text{camera}})$ is computed on CPU during render extraction. |
 | Physics Coordinate Frame | Single global scene coordinate system | **Revised.** Physics runs in a local rebased coordinate frame. Position translation during rebasing preserves velocities and sleeping states. |
 | Origin Shift Notification | Informal event on generic bus | **Revised.** Formalized as a transactional two-phase protocol (`PrepareRebase` -> `CommitRebase`) with monotonic generation fencing via `OriginRebaseCoordinator`. |
