@@ -156,7 +156,7 @@ Navigation limits scale with CPU execution resources and memory budgets, not GPU
 
 ### Negative / Trade-offs
 
-- **Translation Layer**: Small CPU overhead for translating internal Detour vertex/polygon buffers into Horo value structs during path reconstruction (measured at negligible sub-microsecond latency).
+- **Translation Layer**: Translating internal provider vertex/polygon buffers into Horo value structs adds CPU work during path reconstruction. Implementations must measure that cost under representative path lengths, build modes, and target platforms before making a performance claim.
 - **Multiple Targets to Maintain**: Four distinct targets in CMake instead of a single monolithic library.
 
 ## Rejected Alternatives
