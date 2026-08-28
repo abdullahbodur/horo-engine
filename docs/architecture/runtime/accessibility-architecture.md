@@ -201,6 +201,7 @@ struct VisualAccessibilitySettings {
 
 
 #### Typed Transport (Remapping)
+
 Accessibility controls extend the existing `RawInputCollector` and `InputMapping`
 contracts without publishing raw keypress events to the DataBus.
 
@@ -238,6 +239,7 @@ struct AccessibilityControls {
 - **Consumers**: Runtime Game UI, HUD, and Editor shared components.
 
 #### Typed Transport (Screen Reader)
+
 UI elements register structured metadata with the `PlatformAccessibilityBridge`. The bridge
 dispatches focus changes and announcements to the host OS accessibility APIs
 (macOS NSAccessibility, Windows UI Automation, Linux AT-SPI).
@@ -310,6 +312,7 @@ public:
 - **Transport**: `GameplayAccessibilityStateEvent` on the `EngineDataBus`.
 
 #### Typed Transport (Gameplay Assists)
+
 Gameplay assists cross the boundary between host settings and decoupled gameplay logic.
 This is the **only** accessibility feature family permitted to publish through the
 `EngineDataBus`.
