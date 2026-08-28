@@ -24,12 +24,12 @@ Horo Engine uses a cell-based world-streaming model:
 
 ```cpp
 struct StreamingCell {
-    StreamingCellId   id;
-    WorldCoordinate   origin;          // world-space cell origin
-    float             cellSize;        // meters per side
-    StreamingCellState state;          // Unloaded, Loading, Loaded, Unloading, Failed
-    AssetId           cellAsset;       // baked scene asset for this cell
-    StreamingPriority priority;        // cached computed priority, updated each frame
+    StreamingCellId         id;
+    Math::WorldCoordinate64 origin;          // canonical 64-bit world-space cell origin
+    float                   cellSize;        // meters per side (default 1024m)
+    StreamingCellState      state;          // Unloaded, Loading, Loaded, Unloading, Failed
+    AssetId                 cellAsset;       // baked scene asset for this cell
+    StreamingPriority       priority;        // cached computed priority, updated each frame
 };
 ```
 
@@ -50,11 +50,11 @@ Streaming volumes define which cells should be loaded:
 
 ```cpp
 struct StreamingVolume {
-    StreamingVolumeType type;
-    WorldCoordinate     origin;
-    float               radius;
-    StreamingPriority   priority;
-    bool                unloadOutside;
+    StreamingVolumeType     type;
+    Math::WorldCoordinate64 origin;
+    float                   radius;
+    StreamingPriority       priority;
+    bool                    unloadOutside;
 };
 ```
 
@@ -259,10 +259,29 @@ Editor streaming tools register through the `EditorPanelHost` system:
 - **Streaming Budget HUD**: A bottom-dock panel showing real-time budget
   usage, load queue depth, and frame-time impact.
 
+## Large-World Coordinate Precision and Floating Origin Rebasing
+
+World streaming in Horo Engine operates on a global coordinate grid backed by 64-bit precision, avoiding single-precision float truncation over vast distances:
+
+- **Canonical Global Coordinates**: `Math::WorldCoordinate64` (`IntVector3 cellIndex` + `Vec3 cellOffset`) serves as the immutable coordinate authority for spatial cell boundaries, streaming volume queries, persistent level saves, and server multiplayer replication.
+- **Floating Origin Rebasing**: When the active player/camera exceeds a configured threshold from the active floating origin ($R_{\text{threshold}} = 1000\,\text{m}$), `OriginRebaseCoordinator` executes an atomic two-phase rebase (`PrepareRebase` -> `CommitRebase`).
+- **Subsystem Synchronization**: The resulting `OriginRebaseEvent` translates local simulation frames across Physics, Audio, VFX, Camera, and Navigation without velocity spikes, particle destruction, or Doppler glitching.
+- **GPU Compatibility**: GPU shaders remain 32-bit `fp32` across all backends. Camera-relative transformations $(P_{\text{world}} - C_{\text{camera}})$ are computed on the CPU during render extraction.
+
+See [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin-rebasing.md) and [ADR-014](../../adr/014-large-world-precision-and-floating-origin-strategy.md) for the complete normative specification.
+
 ## Related Documents
 
+- [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin-rebasing.md):
+  canonical 64-bit world coordinates, floating origin rebasing, and subsystem adapters
+- [ADR-014: Large-World Precision and Floating Origin Strategy](../../adr/014-large-world-precision-and-floating-origin-strategy.md):
+  ratified architectural decision and platform cost analysis
 - [Scene Runtime](./scene-runtime.md): cell loading integrates with the scene
   model
+- [Rendering Architecture](./rendering-architecture.md): camera-relative rendering
+  matrices and universal 32-bit shader pipeline
+- [Physics Architecture](./physics-architecture.md): local rebased physics clusters
+  and velocity-invariant origin shift handling
 - [Asset Pipeline](./asset-pipeline.md): streaming cell assets, `CancellationToken`,
   and async I/O contract
 - [Terrain And Foliage Architecture](./terrain-and-foliage-architecture.md):
@@ -275,3 +294,4 @@ Editor streaming tools register through the `EditorPanelHost` system:
   registration, `StreamingCellStateChangedEvent` on `EditorDataBus`
 - [Editor Document Model](../editor/editor-document-model.md): cell baking as
   editor commands
+

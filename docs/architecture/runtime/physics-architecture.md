@@ -10,6 +10,8 @@ debugging for Horo Engine.
 
 - Each active runtime scene owns or explicitly references one physics world.
 - Physics advances only during fixed simulation ticks.
+- Physics simulation operates in local cluster coordinates relative to the active floating origin.
+- Origin shifts translate spatial proxies without altering velocities, momentum, contact caches, or waking sleeping bodies.
 - Runtime components store typed body or shape handles, not owning pointers.
 - Transform synchronization has one declared authority per body mode.
 - Structural physics changes are deferred to safe points.
@@ -173,6 +175,19 @@ definition. Stopping play destroys it without modifying authoring transforms.
 Reload rebuilds physics state by default. Preservation of velocity or sleep
 state requires a typed policy keyed by stable object ID.
 
+## Floating Origin Rebasing
+
+The active `PhysicsWorld` executes in local rebased cluster coordinates relative to the dynamic floating origin:
+
+- **Two-Phase Protocol**: As a registered `IOriginRebaseParticipant`, the physics adapter validates solver lock state during `PrepareRebase` and shifts spatial data during `CommitRebase`.
+- **Position Updates**: Bodies, colliders, broadphase bounding volumes, and raycast caches have $\Delta_{\text{origin}}$ subtracted:
+  $$\vec{x}_{\text{new}} = \vec{x}_{\text{old}} - \Delta_{\text{origin}}$$
+- **Velocity Invariance**: Because origin shifting is an instantaneous coordinate re-indexing, linear velocity $\vec{v}$, angular velocity $\vec{\omega}$, and applied forces $\vec{F}$ remain strictly unchanged ($\Delta \vec{v} = 0, \Delta \vec{\omega} = 0$).
+- **Solver State Continuity**: Contact manifolds retain relative contact points and penetration normals. Sleeping rigid bodies and deactivated islands remain asleep without triggering wake-up spikes or momentum shocks.
+- **Timing Safe Point**: Origin shifts are forbidden while `PhysicsWorld::Step` is executing. Shifts execute only at the declared pre-render frame synchronization safe point.
+
+See [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin-rebasing.md) and [ADR-014](../../adr/014-large-world-precision-and-floating-origin-strategy.md).
+
 ## Debugging And Metrics
 
 Physics exposes:
@@ -212,13 +227,18 @@ Required tests cover:
 - reload preservation policy
 - non-finite state detection
 - core collider shape primitives resolve correctly from the primitive catalog
+- origin shift position translation without velocity or momentum alterations
+- sleeping island preservation across origin rebasing transactions
 
 ## Related Documents
 
 - [Physics Debugger UI Reference](./physics-debugger.html): collision layers, contact pairs, rigidbody inspection, and solver diagnostics panel.
 
+- [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin-rebasing.md)
+- [ADR-014: Large-World Precision and Floating Origin Strategy](../../adr/014-large-world-precision-and-floating-origin-strategy.md)
 - [Runtime Lifecycle](./runtime-lifecycle.md)
 - [Scene Runtime](./scene-runtime.md)
+- [World Streaming Architecture](./world-streaming-architecture.md)
 - [Input Architecture](./input-architecture.md)
 - [Built-In Scene Primitives](./built-in-scene-primitives.md)
 - [Ownership And Resource Lifetime](../foundation/ownership-and-resource-lifetime.md)
