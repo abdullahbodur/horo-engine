@@ -322,31 +322,17 @@ authority. The bounded emergency exception below is the only bypass.
 
 ### Jira Smart Commits And Delivery Identity
 
-Identifier glossary:
-
-- `HORO`: the Horo Engine Jira project key;
-- `JOB`: the Jobs workstream domain-alias prefix;
-- `REND`: the Rendering workstream domain-alias prefix.
-
 Before creating a normal delivery branch, resolve and preserve all three
 identifiers:
 
-- the Jira issue key, for example `HORO-1784`;
-- the GitHub issue number, for example `#1828`;
-- the repository domain ticket alias from the GitHub issue title, such as
-  `[JOB-001.1]` or `[REND-001.2]`.
+- the exact Jira issue key shown on the Jira work item;
+- the GitHub issue number with its `#` prefix;
+- the bracketed repository domain ticket alias from the GitHub issue title.
 
 The normal commit-subject and pull-request-title order is:
 
 ```text
 <type>(<scope>): <imperative summary> <JIRA_ID> #<GITHUB_ISSUE> [<DOMAIN_ALIAS>]
-```
-
-For example:
-
-```text
-docs(jobs): ratify waiting and operation ownership HORO-1784 #1828 [JOB-001.1]
-feat(renderer): add frame graph barriers HORO-2041 #1960 [REND-001.2]
 ```
 
 The Conventional Commit prefix is the semantic change classification; do not
@@ -361,9 +347,9 @@ when the repository integration is connected. Follow Atlassian's
 for commands, which may follow that key when the task explicitly requires them:
 
 ```text
-HORO-1784 #comment <text>
-HORO-1784 #time <value> <worklog comment>
-HORO-1784 #in-review
+<JIRA_ID> #comment <text>
+<JIRA_ID> #time <value> <worklog comment>
+<JIRA_ID> #<workflow-transition>
 ```
 
 Do not add `#comment`, `#time` or a workflow transition command merely to create
@@ -374,12 +360,6 @@ For normal delivery, put each Smart Commit command on a single line in the commi
 body. The subject remains reserved for its human-readable summary and traceability
 identifiers. The emergency exception may omit a Smart Commit command until Jira
 recovers; it does not move the command into the subject.
-
-Preferred examples:
-
-- `feat(editor): add asset viewport drag placement HORO-1902 #1870 [EDT-004B.1]`
-- `fix(core): handle empty ProjectPath init HORO-1911 #1884 [CORE-002.3]`
-- `test(mcp): normalize deleted asset assertions HORO-1920 #1893 [MCP-003.2]`
 
 Rules:
 
@@ -396,12 +376,6 @@ emergency exception below defines the only alternate pattern.
 - `<JIRA_ID>` is the exact uppercase Jira issue key and is fixed before branch
   creation
 - `<short_topic>` is a lowercase snake_case slug summarising the change
-
-Examples:
-
-- `feat/HORO-1902_asset_guid_registry`
-- `fix/HORO-1911_gizmo_hidpi_picking`
-- `chore/HORO-1920_clang_tidy_pass`
 
 Use one topic slug exactly once per branch; do not append suffixes such as `_v2`
 or `_final`. If the scope changes materially, open a new focused branch.
