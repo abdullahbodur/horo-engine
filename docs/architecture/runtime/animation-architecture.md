@@ -375,7 +375,8 @@ steps and is not re-sampled inside a physics step.
 
 ```text
 Frame Update
-  Gameplay sets animation parameters
+  Gameplay sets animation parameters & behavior state
+  Cinematic sequencer evaluates (overriding transforms/properties if active)
   Animation graph evaluates -> pose
   IK applied -> modified pose
   Root motion delta produced
@@ -490,6 +491,8 @@ Animation-to-physics handoff is explicit and event-driven.
 
 - [Rendering Architecture](./rendering-architecture.md): skinned mesh render
   extraction and joint palette binding.
+- [Cinematic Sequencer Architecture](./cinematic-sequencer-architecture.md): timeline,
+  tracks, clock authority, and evaluation phase integration.
 - [Physics Architecture](./physics-architecture.md): ragdoll, hit detection, and
   animation/physics handoff.
 - [Asset Pipeline](./asset-pipeline.md): clip import, compression, and cook.

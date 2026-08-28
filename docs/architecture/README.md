@@ -155,8 +155,8 @@ dependency direction in [System Design](./foundation/system-design.md).
   and editor bake tooling.
 
 - [Cinematic Sequencer Architecture](./runtime/cinematic-sequencer-architecture.md):
-  timeline, tracks, typed bindings, playback, events, and external control
-  security.
+  timeline, tracks, clock authority, typed property bindings, evaluation phase,
+  and playback integration.
 - [Post-Processing And Effects Architecture](./runtime/post-processing-and-effects-architecture.md):
   screen-space effects, HDR post chain, tonemapping, color grading, and
   accessibility pass ordering.

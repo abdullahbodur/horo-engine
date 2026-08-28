@@ -22,6 +22,7 @@ to the replacement.
 | [008](008-error-model-exception-boundary-and-registry.md) | Error Model, Exception Boundary and Registry Ownership | proposed | 2026-08-27 |
 | [009](009-configuration-schema-precedence-and-secret-boundary.md) | Configuration Schema, Precedence and Secret Boundary | proposed | 2026-08-28 |
 | [010](010-job-waiting-and-operation-store-ownership.md) | Job Waiting and Operation Store Ownership | proposed | 2026-08-28 |
+| [011](011-sequencer-ownership-clock-authority-and-binding-boundary.md) | Sequencer Ownership, Clock Authority and Binding Boundary | proposed | 2026-08-28 |
 | [015](015-accessibility-ownership-typed-transport-and-non-gating-policy.md) | Accessibility Ownership, Typed Transport and Non-Gating Policy | proposed | 2026-08-28 |
 | [016](016-navigation-target-ownership-and-dependency-boundary.md) | Navigation Target Ownership and Dependency Boundary | proposed | 2026-08-28 |
 | [017](017-prefab-role-ownership-and-capability-tiers.md) | Prefab Role, Ownership and Capability-Tier Decision | proposed | 2026-08-28 |
@@ -34,6 +35,7 @@ to the replacement.
 | [024](024-perception-ownership-sense-policy-and-budget.md) | Perception Ownership, Sense Policy and Budget Decision | proposed | 2026-08-28 |
 | [025](025-ai-decision-assets-and-gameplay-behavior-boundary.md) | AI Decision Assets and Shared Gameplay Behavior Boundary | proposed | 2026-08-28 |
 | [026](026-large-world-precision-and-floating-origin-strategy.md) | Large-World Precision and Floating Origin Strategy | proposed | 2026-08-28 |
+
 
 ## Conventions
 

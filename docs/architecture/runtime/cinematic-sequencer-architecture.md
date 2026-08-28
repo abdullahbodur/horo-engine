@@ -2,216 +2,439 @@
 
 ## Purpose
 
-This document defines the cinematic sequencer (timeline) subsystem for Horo
-Engine. It covers timeline editing, keyframe animation of scene objects and
-properties, camera cuts, event tracks, audio tracks, cinematic playback, and
-editor authoring.
+This document defines Horo Engine's cinematic sequencer runtime and authoring architecture. It specifies timeline data structures, track evaluation models, clock authority, frame evaluation scheduling, object and property binding resolution, camera cut coordination, event dispatching, and editor integration.
 
-## Sequencer Model
+The goal is to provide a deterministic, data-oriented cinematic runtime capable of driving in-game cutscenes, interactive timelines, UI animations, and complex scene staging while maintaining strict architectural boundaries and zero heap allocations on frame-hot evaluation paths.
 
-A cinematic sequence is a timeline that animates scene objects and triggers
-events over time:
+## Normative Decision Reference
+
+This subsystem is governed by [ADR-011: Sequencer Ownership, Clock Authority and Binding Boundary Decision](../../adr/011-sequencer-ownership-clock-authority-and-binding-boundary.md).
+
+## Core Decisions
+
+- **Dedicated Clock Authority**: Every sequence player owns a `SequencePlaybackClock` governed by an explicit `SequenceClockPolicy` (`SimulationTime`, `UnscaledWallClock`, or `ExternalSync`). It handles pause, time-dilation, and reverse playback deterministically without drifting from engine time.
+- **Explicit Evaluation Phase**: Sequence evaluation executes in an explicit frame phase **after** gameplay state updates and **before** animation graphs, IK solvers, and character controller root-motion extraction.
+- **Durable Object Binding**: Authored sequence assets reference scene entities exclusively by durable `StableObjectId`s. `SequenceBindingAuthority` resolves these to generation-checked runtime `EntityRef`s at activation and orchestrates rebinding across scene transitions.
+- **Shared Typed Property Registry**: Property tracks resolve target properties through `PropertyBindingRegistry` owned by `HoroEngine::SceneModel`. The Sequencer runtime and Inspector authoring surfaces share this registry without reverse dependencies on Editor UI.
+- **Stateless Random-Access Sampling**: Keyframe curves evaluate statelessly at any time $T$. Reverse playback and seeks do not accumulate state or replay history from frame zero.
+- **Local-Space Coordinate Invariance**: Transform tracks evaluate in local/parent-relative space, ensuring that large-world origin rebasing leaves keyframe curves invariant and preserves world transform consistency.
+
+## System Boundaries and Target Topology
+
+```text
+[HoroEngine::Foundation]
+       ^
+       |
+[HoroEngine::SceneModel] <---------------+
+       ^                                 |
+       |                                 |
+[HoroEngine::CinematicModel]             | (Shared PropertyBindingRegistry)
+       ^                                 |
+       |                                 |
+[HoroEngine::CinematicRuntime]           |
+       ^                                 |
+       |                                 |
+[HoroEngine::EditorServices] ------------+
+       ^
+       |
+[HoroEngine::Gui] (Timeline UI / Inspector)
+```
+
+| Target | Layer | Responsibilities | Dependencies |
+|---|---|---|---|
+| `HoroEngine::CinematicModel` | Model / Asset | `SequenceAsset`, tracks, keyframes, curves, interpolation math, playback settings, schemas, and bounded asset parsers. | `Foundation`, `SceneModel`, `Assets` |
+| `HoroEngine::CinematicRuntime` | Runtime | `SequencePlayer`, `SequencePlaybackClock`, `SequenceBindingAuthority`, `SequenceEvaluationSystem`, camera blending, and event queues. | `CinematicModel`, `RuntimeScene`, `Runtime` |
+| `HoroEngine::EditorServices` | Presentation / Tooling | Timeline workspace controllers, property recording, curve editing services, track solo/mute adapters, and Problems panel integration. | `CinematicRuntime`, `CinematicModel`, `SceneModel`, `EditorModel` |
+
+`HoroEngine::CinematicRuntime` contains zero dependencies on `HoroEngine::EditorServices`, `HoroEngine::Gui`, or ImGui.
+
+## Sequencer Data Model
+
+### Sequence Asset
+
+A sequence asset is an immutable, cookable project asset defining tracks, timeline parameters, and playback configuration:
 
 ```cpp
 struct SequenceAsset {
-    SequenceId      id;
-    std::string     name;
-    Duration        duration;
-    float           frameRate;          // timeline frame rate (e.g., 30 fps)
-    std::vector<SequenceTrack> tracks;
-    SequencePlaybackSettings playback;
+    SequenceId                  id;
+    std::string                 name;
+    Duration                    duration;
+    FrameRate                   frameRate;          // Authoring frame rate (e.g. 24, 30, 60 fps)
+    std::vector<SequenceTrack>  tracks;
+    SequencePlaybackSettings    defaultSettings;
 };
 ```
 
-Each track targets a specific object and property or fires events:
+### Track Structure
+
+Each track animates an object transform, component property, camera cut, audio source, sub-sequence, or event timeline:
 
 ```cpp
+enum class TrackType : uint8_t {
+    Transform,
+    Property,
+    CameraCut,
+    Event,
+    Audio,
+    SubSequence
+};
+
 struct SequenceTrack {
-    TrackId         id;
-    std::string     displayName;
-    TrackType       type;
-    StableObjectId  targetObject;       // resolved to runtime EntityId during binding
-    ComponentId     targetComponent;    // or empty
-    PropertyBindingId targetProperty;   // typed binding registry id
-    std::vector<Keyframe> keyframes;
-    TrackBlendSettings blend;
+    TrackId                     id;
+    std::string                 displayName;
+    TrackType                   type;
+    StableObjectId              targetObject;       // Durable UUID resolved to EntityId at activation
+    ComponentTypeId             targetComponent;    // Target component type when applicable
+    PropertyBindingId           targetProperty;     // Resolved via PropertyBindingRegistry
+    std::vector<Keyframe>       keyframes;
+    TrackBlendSettings          blend;
+    bool                        muted;
+    bool                        solo;
+};
+```
+
+### Keyframe and Curve Interpolation
+
+Keyframes define discrete control points with configurable interpolation modes:
+
+```cpp
+enum class InterpolationType : uint8_t {
+    Constant,       ///< Step / hold value until next keyframe
+    Linear,         ///< Direct linear interpolation (LERP / SLERP)
+    CubicBezier,    ///< Cubic Bezier with explicit tangents
+    HermiteSpline   ///< Smooth cubic Hermite spline
+};
+
+struct Tangent {
+    float timeOffset;
+    float valueOffset;
+};
+
+struct Keyframe {
+    KeyframeId          id;
+    float               time;               // Seconds from sequence start
+    PropertyValue       value;              // Strongly typed variant (float, Vec3, Quat, Color, etc.)
+    InterpolationType   interpolation;
+    Tangent             tangentIn;
+    Tangent             tangentOut;
 };
 ```
 
 ## Track Types
 
-### Transform Track
+### 1. Transform Track
 
-Animates an object's position, rotation, and scale:
+Animates local position, rotation, and scale of a scene object:
 
 ```cpp
 struct TransformKeyframe {
-    float         time;
-    WorldTransform value;
-    InterpolationType interpolation;   // Linear, Cubic, Constant
-    Tangent       tangentIn;
-    Tangent       tangentOut;
+    float               time;
+    Vec3                position;           // Local position
+    Quat                rotation;           // Local orientation
+    Vec3                scale;              // Local scale
+    InterpolationType   interpolation;
+    Tangent             tangentIn;
+    Tangent             tangentOut;
 };
 ```
 
-### Property Track
+- **Hierarchy-Aware Evaluation**: Evaluated top-down in topological parent-to-child order to guarantee valid model-to-world transform hierarchies.
+- **Local-Space Authoring**: Always stores local-space coordinates. World transform updates absorb parent motion and large-world origin shifts naturally.
 
-Animates any numeric or vector component property:
+### 2. Property Track
 
-- Float properties (light intensity, field of view, material parameter)
-- Vector properties (color, post-process weight)
-- Bool properties (visibility, enabled state)
+Animates typed component properties registered in `PropertyBindingRegistry`:
 
-### Camera Cut Track
+- **Numeric**: `float`, `int32_t`, `double` (e.g. light intensity, camera FOV, post-process bloom threshold)
+- **Vector**: `Vec2`, `Vec3`, `Vec4` (e.g. material tint, particle spawn velocity, UI offset)
+- **Color**: `Color` (linear RGBA with HDR support)
+- **Boolean**: `bool` (e.g. visibility, mesh renderer enable, light enable; evaluated as step function)
+- **Asset References**: `AssetId` (e.g. material swap, mesh swap; step interpolation)
 
-Switches the active camera at specific times:
+### 3. Camera Cut Track
+
+Coordinates the active rendering camera and cinematic camera transitions:
 
 ```cpp
 struct CameraCutKeyframe {
-    float       time;
-    StableObjectId cameraObject;
-    float       blendDuration;      // cross-fade between cameras
+    float               time;
+    StableObjectId      cameraObject;       // Target camera entity
+    float               blendDuration;      // Cross-fade duration into next camera
+    CameraBlendCurve    blendCurve;         // Linear, EaseIn, EaseOut, EaseInOut
 };
 ```
 
-### Event Track
+### 4. Event Track
 
-Fires named events at specific times for gameplay scripts to handle:
+Dispatches named events with typed payloads at discrete timeline markers:
 
 ```cpp
 struct EventKeyframe {
-    float           time;
-    std::string     eventName;
-    VariantMap      payload;
+    float               time;
+    EventName           eventName;
+    VariantMap          payload;            // Typed parameter bundle
+    bool                fireInReverse;      // Policy when playback runs in reverse
 };
 ```
 
-Events trigger gameplay module callbacks, audio cues, VFX spawns, and
-dialogue triggers.
+Events are queued during the evaluation phase and dispatched to registered gameplay behavior scripts, audio cues, or VFX triggers at the phase boundary.
 
-### Audio Track
+### 5. Audio Track
 
-Plays audio clips synchronized to the timeline:
+Coordinates timeline-synchronized audio playback:
 
 ```cpp
 struct AudioTrackKeyframe {
-    float       startTime;
-    float       duration;
-    AssetId     audioClip;
-    float       volume;
-    float       pitch;
-    bool        loop;
+    float               startTime;
+    float               duration;
+    AssetId             audioClip;
+    float               volume;
+    float               pitch;
+    bool                loop;
 };
 ```
 
-### Sub-Sequence Track
+### 6. Sub-Sequence Track
 
-Nests another sequence as a track, enabling modular cinematic composition:
+Nests child sequence assets to enable modular cutscene assembly and multi-shot composition:
 
 ```cpp
 struct SubSequenceKeyframe {
-    float       startTime;
-    AssetId     sequenceAsset;
-    float       playbackSpeed;
-    bool        syncToParent;       // stretch to fit parent duration
+    float               startTime;
+    AssetId             sequenceAsset;
+    float               playbackSpeed;
+    bool                syncToParent;
 };
 ```
 
-## Playback
+## Clock Authority: `SequencePlaybackClock`
 
-### Playback Controller
+Every `SequencePlayer` owns an isolated, deterministic `SequencePlaybackClock`.
 
 ```cpp
-class SequencePlayer {
+enum class SequenceClockPolicy : uint8_t {
+    SimulationTime,     ///< Advances with fixed/interpolated engine simulation time; respects gameplay pause and time dilation.
+    UnscaledWallClock,  ///< Advances with monotonic real time; ignores simulation pause and gameplay time dilation (UI/intro).
+    ExternalSync        ///< Slaved to external provider (e.g. audio device playhead or media stream).
+};
+
+class SequencePlaybackClock {
 public:
-    void Play();
-    void Pause();
-    void Stop();
-    void Seek(float time);
-    float GetCurrentTime() const;
-    SequencePlaybackState GetState() const;
+    void Advance(float deltaSeconds, float gameplayTimeDilation);
+    void Seek(float targetTime);
     void SetPlaybackSpeed(float speed);
+    void SetPolicy(SequenceClockPolicy policy);
 
-    // Events
-    Signal<void(std::string_view eventName, const VariantMap& payload)> OnEvent;
-    Signal<void()> OnFinished;
+    float GetCurrentTime() const;
+    float GetPlaybackSpeed() const;
+    SequenceClockPolicy GetPolicy() const;
+    bool IsReverse() const;
+
+private:
+    float               m_currentTime{0.0f};
+    float               m_playbackSpeed{1.0f};
+    SequenceClockPolicy m_policy{SequenceClockPolicy::SimulationTime};
 };
 ```
 
-### Evaluation
+### Time Progression Formulation
 
-Sequence evaluation runs each frame:
+1. **`SimulationTime` (Default for in-game cutscenes)**:
+   $$\Delta t_{\text{eff}} = \Delta t_{\text{sim}} \times \text{playbackSpeed} \times \text{gameplayTimeDilation}$$
+   When gameplay simulation pauses, $\Delta t_{\text{sim}} = 0$, deterministically pausing the sequence.
+2. **`UnscaledWallClock` (UI animations, intro sequences, pause menus)**:
+   $$\Delta t_{\text{eff}} = \Delta t_{\text{real}} \times \text{playbackSpeed}$$
+   Decoupled from gameplay simulation pause and dilation. Advances continuously during gameplay pause.
+3. **`ExternalSync` (Audio / Media Master)**:
+   Playhead time is locked to an authoritative external device clock (e.g., audio playback buffer position).
 
-1. Advance time by `deltaTime * playbackSpeed`
-2. For each active track, sample the interpolated value at current time
-3. Apply sampled values to target properties
-4. Fire events whose keyframe time was crossed this frame
-5. Handle camera cuts (blend between outgoing and incoming camera)
-6. At sequence end, apply `SequenceEndBehavior` (stop, loop, ping-pong)
+### Reverse Playback and Stateless Scrubbing
 
-Evaluation order respects track dependencies (parent-child transform
-hierarchies are evaluated top-down).
+- `playbackSpeed < 0` triggers reverse playback.
+- **Stateless Sampling Invariant**: Sampling the sequence at time $T$ yields identical values regardless of whether $T$ was reached through forward playback, reverse playback, or an instantaneous `Seek(T)` call. Keyframe curve sampling maintains zero forward-only state.
 
-### Blending
+## Frame Evaluation Phase
 
-Sequences can blend into and out of gameplay:
+Sequence evaluation runs in an explicit frame phase within the runtime lifecycle.
+
+### Execution Ordering
+
+```text
+1. Poll Platform Events & Input Snapshot
+2. Pre-Physics Gameplay Systems
+3. Physics Fixed Step & Collision Resolution
+4. Physics Transform Publish (Scene Transform Update)
+5. Post-Physics Gameplay Systems & Behavior Scripts (OnUpdate)
+6. === [Cinematic Sequencer Evaluation Phase] ===
+   - Topological hierarchy evaluation of TransformTracks
+   - PropertyTrack evaluation via PropertyBindingRegistry
+   - CameraCutTrack & EventTrack queue evaluation
+7. === [Animation & Character Controller Phase] ===
+   - Animation Graph & Blend Tree sampling
+   - Skeletal IK & Additive Pose Layer evaluation
+   - Character Controller root-motion resolution & displacement
+8. Render Snapshot Extraction (Joint palettes, world matrices, camera state)
+9. Render Execution & GUI Presentation
+```
+
+```mermaid
+flowchart TD
+    A[5. Gameplay Scripts & Behaviors] -->|Initial Transform/State Writes| B[6. Cinematic Sequencer Evaluation Phase]
+    B -->|Overrides Transforms & Component Properties| C[7. Animation Graphs & Blend Trees]
+    C -->|Evaluates Skeletal Poses & IK| D[Character Controller Root Motion]
+    D -->|Final World Transforms & Joint Palettes| E[8. Render Extraction]
+```
+
+### Rationale
+
+- **Post-Gameplay Placement**: Gameplay AI, script updates, and player controls run in Phase 5. The sequencer evaluates in Phase 6, allowing cinematic tracks to override entity positions, rotations, and component properties with definitive authority.
+- **Pre-Animation Placement**: Skeletal animation graphs, IK solvers (look-at, foot-placement), and character controllers evaluate in Phase 7. They consume the cinematic-driven root transforms and parameters, allowing character rigs to perform dynamic IK and additive blending on top of cinematic staging.
+- **Editor Preview Placement**: In `EditorIdle` mode, `SequenceEvaluationSystem` runs in `VariableUpdate` before `RenderExtraction`, ensuring responsive viewport scrubbing without executing fixed-step physics.
+
+## Object Binding Resolution: `SequenceBindingAuthority`
+
+### Identity Mapping
+
+Authored sequence assets identify scene objects using durable 128-bit `StableObjectId`s. At runtime, entities are referenced via generation-checked `EntityRef { SceneRuntimeId, EntityId }`.
 
 ```cpp
-struct SequencePlaybackSettings {
-    float           blendInDuration;
-    float           blendOutDuration;
-    PlaybackRestoreBehavior restore;   // RestoreToPreSequence or KeepFinalState
-    bool            pauseGameplay;
-    bool            hideHUD;
+class SequenceBindingAuthority {
+public:
+    Result<void> ResolveBindings(const SequenceAsset& asset, const RuntimeSceneView& sceneView);
+    Result<void> Rebind(const RuntimeSceneView& newSceneView);
+    void Invalidate();
+
+    std::optional<EntityRef> GetBoundEntity(TrackId trackId) const;
+    BindingState GetBindingState(TrackId trackId) const;
+
+private:
+    struct TrackBinding {
+        StableObjectId  targetObjectId;
+        EntityRef       boundEntity;
+        BindingState    state;
+    };
+    std::unordered_map<TrackId, TrackBinding> m_bindings;
 };
 ```
+
+### Scene Transitions and Rebinding Lifecycle
+
+```text
+Sequence Activation (Play / Preview Mount)
+  -> SequenceBindingAuthority queries RuntimeSceneView::FindByStableObjectId()
+  -> Match: Store EntityRef { SceneRuntimeId, EntityId }, state = Bound
+  -> Missing: Record state = Unbound, emit non-fatal diagnostic warning
+
+Scene Transition / Replacement
+  -> SceneRuntimeId changes; existing EntityRefs become stale
+  -> SequenceBindingAuthority::Rebind() executed at CommitDeferredLifecycleChanges
+  -> Re-resolves StableObjectIds against new scene authored index
+```
+
+### Error Containment
+
+- If a target entity is missing, destroyed, or invalid:
+  - **Runtime**: Produces a structured `BindingResolutionResult::MissingTarget` diagnostic event; the track is safely skipped without throwing exceptions or asserting.
+  - **Editor**: Generates an actionable warning in the Problems panel with navigation to the affected sequence asset and track.
+
+## Typed Property Binding Registry
+
+### Architecture and Access Contracts
+
+`PropertyBindingRegistry` lives in `HoroEngine::SceneModel` and provides reflection metadata and fast accessors:
+
+```cpp
+struct PropertyBindingDescriptor {
+    PropertyBindingId       id;
+    ComponentTypeId         componentType;
+    std::string             propertyName;
+    PropertyType            type;           // Float, Vec2, Vec3, Vec4, Quat, Color, Bool, Int32, AssetRef
+    size_t                  byteOffset;     // Direct component struct offset when contiguous
+    PropertyGetterFn        getter;         // Type-erased fast getter
+    PropertySetterFn        setter;         // Type-erased fast setter
+    PropertyRangeConstraint range;
+};
+
+class PropertyBindingRegistry {
+public:
+    void Register(PropertyBindingDescriptor descriptor);
+    const PropertyBindingDescriptor* Find(PropertyBindingId id) const;
+    const PropertyBindingDescriptor* FindByName(ComponentTypeId comp, std::string_view name) const;
+};
+```
+
+### Dependency Flow
+
+Both `HoroEngine::CinematicRuntime` and `HoroEngine::EditorServices` depend downward on `HoroEngine::SceneModel`:
+
+- Sequencer tracks store `PropertyBindingId` and sample values matching `PropertyBindingDescriptor::type`.
+- Inspector UI queries `PropertyBindingRegistry` to enumerate animatable properties and render UI widgets.
+- No reverse dependencies exist from runtime or scene layers to editor UI.
+
+## Origin-Rebase, Pause, and Time-Scale Interactions
+
+### Large-World Origin Rebase
+
+1. **Local-Space Storage**: Keyframes store local transforms ($T_{\text{local}}, R_{\text{local}}, S_{\text{local}}$).
+2. **Rebase Invariance**: World origin translations ($\mathbf{x}_{\text{world}}' = \mathbf{x}_{\text{world}} - \Delta \mathbf{x}_{\text{origin}}$) do not alter local-space coordinates. Keyframe curves remain invariant.
+3. **World Transform Recomputation**: Top-down hierarchy evaluation automatically incorporates the active `WorldOriginOffset`.
+4. **Spatial Cameras**: Camera tracks authored in absolute world coordinates apply the active `WorldOriginOffset` at evaluation time.
+
+### Interaction Matrix
+
+| Condition | `SimulationTime` Policy | `UnscaledWallClock` Policy |
+|---|---|---|
+| Gameplay Paused | Playback frozen ($\Delta t_{\text{eff}} = 0$) | Continues advancing |
+| Sequence Player Paused | Playback frozen; holds current values | Playback frozen; holds current values |
+| Gameplay Time Dilation ($0.5\times$) | Advances at $0.5 \times \text{playbackSpeed}$ | Advances at $1.0 \times \text{playbackSpeed}$ |
+| Host Suspended | Suspended; clock baseline reset on resume | Suspended; clock baseline reset on resume |
+| Negative Speed ($-1.0\times$) | Stateless reverse curve evaluation | Stateless reverse curve evaluation |
+| Seek / Scrubbing (`Seek(t)`) | Instantaneous bit-identical evaluation | Instantaneous bit-identical evaluation |
 
 ## Editor Authoring
 
-### Timeline View
+### Timeline and Curve Editor
 
-The cinematic editor provides a timeline-based editing surface:
+The cinematic editor provides:
 
-- Multi-track timeline with zoom and scroll
-- Keyframe creation, deletion, and drag manipulation
-- Property recording (record object manipulation as keyframes)
-- Track solo/mute for focused editing
-- Playback with scrubbing in the editor viewport
-- Curve editor for fine-tuning keyframe interpolation
+- **Multi-Track Timeline**: Keyframe creation, deletion, box selection, and dragging with frame snapping.
+- **Curve Editor**: Bezier tangent manipulation with smooth, linear, and broken tangent handles.
+- **Property Recording**: Captures manual viewport object transformations as timeline keyframes.
+- **Track Solo / Mute**: Isolate or bypass individual tracks during editing.
+- **Viewport Scrubbing**: Direct playhead scrubbing with real-time preview in the active editor viewport.
 
-### Integration
+### Document and Asset Workflow
 
-Sequences are editor-authorable assets stored in the project's asset tree.
-They reference scene objects by entity ID. The cinematic editor opens as a
-separate editor tab (or modal for focused editing).
-
-## Runtime Integration
-
-Cinematics can be triggered from:
-
-- Gameplay scripts (`SequencePlayer::Play`)
-- Scene loading (auto-play intro cinematic)
-- Gameplay events (dialogue, boss fight intro, level transition)
-- Authorized editor/runtime control adapters (MCP or remote tooling must pass capability checks)
+Sequence assets are stored in the project's asset tree. Sequences reference scene objects by durable `StableObjectId`s, ensuring scene edits, renames, and reordering do not break sequence bindings.
 
 ## Feature Tiers
 
-| Feature              | `es3`     | `dx11` / `dx12_vulkan` | `high_end` |
-| -------------------- | ---------- | ------------- | ------------ |
-| Timeline tracks      | 16         | 128           | 512          |
-| Simultaneous players | 1          | 4             | 16           |
-| Property recording   | No         | Yes           | Yes          |
-| Sub-sequences        | 1 level    | 4 levels      | 8 levels     |
-| Curve editor         | Linear only| Full curves   | Full curves  |
-| Camera cut blending  | Hard cut   | Linear blend  | Smooth blend |
+| Capability | `es3` | `dx11` / `dx12_vulkan` | `high_end` |
+|---|---|---|---|
+| Max Tracks per Sequence | 32 | 256 | 1024 |
+| Simultaneous Active Players | 2 | 8 | 32 |
+| Sub-Sequence Nesting Depth | 1 level | 4 levels | 8 levels |
+| Curve Interpolation Modes | Constant, Linear | Constant, Linear, Cubic | Constant, Linear, Cubic, Hermite |
+| Property Recording | No | Yes | Yes |
+| Camera Cut Blending | Hard Cut, Linear | Smooth Hermite Blend | Multi-Camera Spline Blend |
+
+## Testing and Verification Requirements
+
+- **Determinism**: Verify bit-identical track evaluation results at time $T$ under variable framerates (30 Hz, 60 Hz, 144 Hz).
+- **Reverse Seek Correctness**: Regression test proving `Seek(T)` produces identical values without forward history replay.
+- **Allocation Budget**: Zero heap allocations during steady-state track sampling and evaluation in `SequenceEvaluationPhase`.
+- **Rebinding on Scene Replacement**: Verify that sequence tracks gracefully rebind when `SceneRuntimeId` changes and report typed outcomes for missing entities.
+- **Origin Rebase Consistency**: Verify world transform consistency when large-world origin rebasing occurs during sequence playback.
+- **Hostile Asset Parsing**: Verify that malformed, corrupted, circular sub-sequence, or oversized sequence assets produce typed validation errors without crashes.
 
 ## Related Documents
 
+- [ADR-011: Sequencer Ownership, Clock Authority and Binding Boundary Decision](../../adr/011-sequencer-ownership-clock-authority-and-binding-boundary.md)
 - [Cinematic Sequencer UI Reference](./cinematic-sequencer.html)
-
-- [Scene Runtime](./scene-runtime.md): scene object model and property paths
-- [Animation Architecture](./animation-architecture.md): skeletal animation integration
-- [Audio Architecture](./audio-architecture.md): audio track playback
-- [Gameplay Behavior Authoring](../extensions/gameplay-behavior-authoring.md): event handling in behaviors
-- [Editor Document Model](../editor/editor-document-model.md): sequence asset editing
-- [VFX And Particles Architecture](./vfx-and-particles-architecture.md): VFX spawn events
+- [Scene Runtime Architecture](./scene-runtime.md)
+- [Animation Architecture](./animation-architecture.md)
+- [Character Controller Architecture](./character-controller-architecture.md)
+- [Runtime Lifecycle Architecture](./runtime-lifecycle.md)
+- [Scene Math Architecture](../foundation/scene-math.md)
+- [Audio Architecture](./audio-architecture.md)
+- [VFX And Particles Architecture](./vfx-and-particles-architecture.md)
