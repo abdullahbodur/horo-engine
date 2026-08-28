@@ -353,7 +353,7 @@ struct GameplayAiProfile {
 
 ## Related Documents
 
-- [ADR-011: AI Fixed-Tick Order, Authority and Simulation Budget](../../adr/011-ai-fixed-tick-order-authority-and-simulation-budget.md)
+- [ADR-022: AI Fixed-Tick Order, Authority and Simulation Budget](../../adr/022-ai-fixed-tick-order-authority-and-simulation-budget.md)
 - [Runtime Lifecycle Architecture](./runtime-lifecycle.md): Fixed-tick simulation loop and interpolation model
 - [Multiplayer Replication Architecture](./multiplayer-replication-architecture.md): Server authority, RPCs, and property replication
 - [Networking Architecture](./networking-architecture.md): Network transport and I/O threading
