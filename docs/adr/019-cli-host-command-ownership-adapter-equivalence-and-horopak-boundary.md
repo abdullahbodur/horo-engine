@@ -1,4 +1,4 @@
-# ADR-013: CLI Host, Command Ownership, Adapter Equivalence and horopak Boundary Decision
+# ADR-019: CLI Host, Command Ownership, Adapter Equivalence and horopak Boundary Decision
 
 - **Status**: Proposed
 - **Date**: 2026-08-28
