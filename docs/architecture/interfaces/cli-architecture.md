@@ -7,7 +7,7 @@ integration, output, exit codes, progress, cancellation, configuration,
 executable composition, adapter equivalence, and testing for the `horo-engine`
 and `horopak` command-line hosts.
 
-Normative decision: [ADR-013: CLI Host, Command Ownership, Adapter Equivalence and horopak Boundary Decision](../../adr/013-cli-host-command-ownership-adapter-equivalence-and-horopak-boundary.md).
+Normative decision: [ADR-019: CLI Host, Command Ownership, Adapter Equivalence and horopak Boundary Decision](../../adr/019-cli-host-command-ownership-adapter-equivalence-and-horopak-boundary.md).
 
 ## Core Decisions
 
@@ -497,7 +497,7 @@ Required tests cover:
 
 ## Related Documents
 
-- [ADR-013: CLI Host, Command Ownership, Adapter Equivalence and horopak Boundary Decision](../../adr/013-cli-host-command-ownership-adapter-equivalence-and-horopak-boundary.md)
+- [ADR-019: CLI Host, Command Ownership, Adapter Equivalence and horopak Boundary Decision](../../adr/019-cli-host-command-ownership-adapter-equivalence-and-horopak-boundary.md)
 - [ADR-004: CLI / Core / GUI Boundary](../../adr/004-cli-core-gui-boundary.md)
 - [System Design](../foundation/system-design.md)
 - [Error And Diagnostics](../foundation/error-and-diagnostics.md)
