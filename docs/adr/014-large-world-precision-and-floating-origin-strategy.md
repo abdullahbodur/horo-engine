@@ -30,6 +30,7 @@ Standard 32-bit single-precision IEEE 754 floating-point coordinates (`fp32`) pr
 To support large-scale open worlds, flight/space simulations, and seamless multi-region environments without compromising cross-platform compatibility (e.g., Mobile OpenGL ES / Metal / Vulkan and WebGL), Horo Engine requires an explicit, normative coordinate precision and origin rebasing strategy.
 
 Key design constraints:
+
 1. **Universal GPU Compatibility**: Mobile GPUs (Apple Silicon mobile tiers, ARM Mali, Qualcomm Adreno) and entry-level graphics hardware lack hardware FP64 arithmetic or incur severe ALU throughput penalties (16x–32x slowdown). GPU shaders must remain 32-bit single precision (`fp32`) / half precision (`fp16`).
 2. **Physics Engine Stability**: Commercial and open-source physics engines (e.g., Jolt, PhysX, Box2D) rely on 32-bit floating point calculations for collision detection, EPA/GJK, island solving, and sleeping. Physics clusters must remain localized within low-magnitude coordinate frames.
 3. **Deterministic Persistence & Replication**: Authoring tools, spatial partitioning grids, save games, and multiplayer state replication require a stable, absolute global frame of reference that never drifts when the local rendering origin shifts.
@@ -150,12 +151,14 @@ enum class PrecisionErrorCode {
 ## Consequences
 
 ### Positive
+
 - **Limitless World Scale**: Allows worlds spanning millions of kilometers (solar systems, flight sims, continuous landscapes) with sub-millimeter precision near the viewer.
 - **Universal Hardware Parity**: Shaders execute standard 32-bit single precision on iOS, Android, macOS (Metal), Linux/Windows (Vulkan/OpenGL/D3D12), and consoles.
 - **Stable Multi-User Sync & Saves**: Canonical `WorldCoordinate64` ensures world persistence and network packets never suffer from floating-origin drift or precision loss.
 - **Zero Simulation Artifacts**: Physics, audio, VFX, and AI navigate origin shifts seamlessly without momentum glitches, audio pops, or visual hitching.
 
 ### Negative / Trade-offs
+
 - **Extraction Discipline**: Render extraction code must always calculate camera-relative matrices rather than concatenating raw absolute coordinates.
 - **Subsystem Registration**: Every spatial subsystem must implement an `IOriginRebaseParticipant` adapter and register with `OriginRebaseCoordinator`.
 
