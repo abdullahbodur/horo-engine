@@ -124,8 +124,8 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Game UI And HUD](./runtime/game-ui-and-hud.md): runtime game menus, HUDs,
   canvases, UI primitives, focus/navigation, and UI rendering.
 - [Networking Architecture](./runtime/networking-architecture.md): optional
-  transports, typed protocols, bounded I/O, runtime integration, and remote
-  security.
+  handle-based transports, session/authentication runtime, bounded I/O, and
+  remote security.
 - [Asset Pipeline](./runtime/asset-pipeline.md): import, cook, package, runtime
   loading, cache, and hot reload.
 - [Prefab Architecture](./runtime/prefab-architecture.md): authored prefab
@@ -144,6 +144,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [World Streaming Architecture](./runtime/world-streaming-architecture.md):
   streaming cells, volumes, priority, budgets, server authority, and editor
   world-composition tools.
+- [Coordinate Precision And Origin Rebasing](./runtime/coordinate-precision-and-origin-rebasing.md):
+  canonical 64-bit world coordinates, floating origin rebasing, camera-relative
+  rendering, and subsystem synchronizations.
 - [Save Game And Persistence](./runtime/save-game-and-persistence.md): runtime
   save state, slot format, migration, cloud save, integrity, and secure archive
   loading.

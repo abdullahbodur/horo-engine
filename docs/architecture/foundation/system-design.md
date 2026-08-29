@@ -294,7 +294,8 @@ HoroEngine::AudioPlatform
 HoroEngine::AudioNull
 HoroEngine::NetworkApi
 HoroEngine::NetworkRuntime
-HoroEngine::NetworkSockets
+HoroEngine::NetworkTransportNull
+HoroEngine::NetworkTransportENet
 HoroEngine::RenderApi
 HoroEngine::RenderFrontend
 HoroEngine::RenderModuleAbi
@@ -338,9 +339,10 @@ horopak
 ```
 
 `AudioPlatform` selects only the native implementation for the target platform;
-native audio headers remain private to that target. `NetworkSockets` owns the
-optional native socket and TLS implementation and remains separate from typed
-session/protocol coordination in `NetworkRuntime`. `GameplayApi` owns the public
+native audio headers remain private to that target. `NetworkTransportENet` owns the
+optional native UDP socket and ENet implementation and remains separate from typed
+session/protocol/authentication coordination in `NetworkRuntime`. `NetworkTransportNull` provides
+deterministic in-memory/null transport for headless runs, mock testing, and offline modes; it depends on `NetworkApi` and `Foundation` only, not `Platform`. The host composition root transfers unique `INetworkTransport` ownership into `NetworkRuntime`. `GameplayApi` owns the public
 registration, descriptor, behavior, and runtime-capability contracts used by
 project gameplay modules. Generated project modules link this API rather than
 `ExtensionApi` or editor internals.
@@ -381,7 +383,8 @@ render-frontend / pipeline ------------------------------> neutral APIs and mode
 
 runtime-scene -------------------------------------------> runtime + assets + foundation
 
-audio-platform / audio-null / network-sockets /
+audio-platform / audio-null /
+network-transport-null / network-transport-enet /
 render-opengl / render-null / render-vulkan ------------> platform + owning API
 
 application / editor-model / editor-services -----------> neutral APIs,
