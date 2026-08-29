@@ -341,6 +341,103 @@ struct AIPerceptionMemory {
      stale handles and discard the record immediately, preventing use-after-free
      and stale target locking.
 
+## AI Architecture And Runtime Ownership
+
+### Subsystem Boundaries And Decoupling From Editor AI
+
+Horo Engine strictly isolates runtime gameplay AI (`HoroAI` / `HoroEngine::AI`) from Editor LLM / Agent tooling (`AIA-001` / `HoroEditor` AI):
+
+- **Gameplay AI Runtime (`HoroAI`)**: A high-performance, deterministic C++20 runtime linked into game clients and dedicated servers. It executes local decision graphs (Behavior Trees, Hierarchical State Machines, Utility AI, HTN/GOAP planners), spatial perception queries, pathfinding, and crowd simulation under strict per-frame CPU and memory budgets with zero unbudgeted heap allocations.
+- **Editor AI Agent Tooling (`AIA-001`)**: An authoring and development assistant embedded in `HoroEditor` using external or local large language models (LLMs) and the Model Context Protocol (MCP). It operates asynchronously on human authoring requests (code generation, scene inspection, asset imports) and is never compiled into runtime game packages or dedicated servers.
+- **Optional NPC LLM Dialogue Seam (`GAI-007.4`)**: Generative AI dialogue or narrative agents exist strictly as bounded, asynchronous gameplay service providers (`INpcDialogueService`). They communicate through network/async jobs with explicit fallback behaviors and never block the fixed simulation tick or hold raw pointers to ECS memory.
+
+### AI Runtime Ownership And Scene Generation Safety
+
+All gameplay AI runtime state is owned strictly by the active `SceneRuntime` generation:
+
+```cpp
+struct AiBrainState {
+    DecisionTreeInstanceId  instanceId;
+    DecisionGraphAssetId    assetId;
+    ExecutionNodeIndex      currentNode;
+    ExecutionStatus         status;
+    TickTimestamp           lastEvaluationTick;
+};
+
+struct PerceptionMemory {
+    std::vector<PerceivedStimulus> stimuli;  // bounded capacity reserved at scene activation
+    std::optional<EntityId>        primaryTarget;
+    WorldCoordinate                lastKnownTargetLocation;
+    TickTimestamp                  lastSeenTimestamp;
+};
+
+struct BlackboardState {
+    BlackboardSchemaId             schemaId;
+    uint32_t                       schemaVersion;
+    std::vector<BlackboardValue>   values;   // schema-sized once at scene activation
+    BlackboardRevision             revision;
+};
+```
+
+`PerceptionMemory` is the scene-owned agent record. Its stimulus buffer is the
+bounded `AIPerceptionMemory` store from ADR-024 (`maxTrackedStimuli` default 16,
+compile-time hard cap 32). `PerceptionMemory::stimuli` reserves that cap during
+scene activation and never grows during simulation; overflow follows the configured
+oldest/lowest-significance eviction policy. `BlackboardState::values` is sized
+exactly once from its immutable schema. Neither container allocates on fixed-tick
+paths. `AIBlackboardView` is the typed access view over `BlackboardState`; example
+layouts named `AIBlackboard` describe keys, not a second store.
+
+1. **Generation Validation**: AI components (`AiAgentComponent`, `AiControllerComponent`), blackboard instances, perception memories, and task execution contexts reference entities using generation-checked `EntityId` (or `EntityRef { SceneRuntimeId, EntityId }`). Any stale handle referencing an entity destroyed in an earlier frame or previous scene generation is rejected.
+2. **Scene Lifecycle Binding**:
+   - Scene activation instantiates AI brains, blackboards, and perception memories from immutable schema assets.
+   - Scene transition, replacement, or unload immediately cancels all pending AI background jobs and destroys all AI runtime state.
+   - Play-In-Editor (PIE) executes AI logic exclusively within the isolated runtime scene clone; AI state is never written back to the authoring scene document.
+3. **No Process-Global AI Singletons**: AI systems do not maintain ambient or process-global agent registries. All state queries are scoped to `SceneRuntimeAccess`.
+
+## Fixed-Tick Simulation Scheduling And Safe Points
+
+Gameplay AI execution is partitioned into discrete, deterministic **coarse groups** within the fixed simulation tick (ADR-021). They are not a second scheduler. ADR-022 names the fine-grained mutation phases that implement them; character locomotion commit, animation, and render extraction belong to that broader tick in [Simulation Lifecycle And Fixed-Tick Phase Ordering](#simulation-lifecycle-and-fixed-tick-phase-ordering).
+
+```text
+ADR-021 coarse group               ADR-022 fine phase
+1. SystemPhase::Perception      -> PerceptionSensePoll
+2. SystemPhase::BlackboardSync  -> BlackboardSync
+3. SystemPhase::AiDecision      -> AiDecisionEvaluate
+4. SystemPhase::AiIntentDispatch-> NavIntentCommit
+                                   + typed combat/animation intent enqueue
+5. SystemPhase::Gameplay        -> CharacterControllerLocomotion
+                                   + IBehaviorInstance::OnFixedUpdate
+                               then AnimationRigUpdate
+                               then variable-rate RenderExtraction (not a fixed phase)
+```
+
+### Phase Contracts
+
+1. **`SystemPhase::Perception` (Perception Update)**:
+   - Performs spatial candidate broadphase queries and line-of-sight raycasts against physics and scene geometry.
+   - Ingests sensory stimuli (sight, hearing, proximity, damage, team communication) and applies decay in `PerceptionMemory`.
+   - Read-only with respect to scene ECS transforms; writes only to agent-private perception memory.
+2. **`SystemPhase::BlackboardSync` (Blackboard Mutation Safe Point)**:
+   - Commits batched external blackboard writes and perception stimulus reflections into blackboard keys.
+   - Enforces schema validation against `BlackboardSchema`.
+   - Fires registered blackboard change observers at a deterministic safe point.
+   - Freezes blackboard state for the upcoming decision phase.
+3. **`SystemPhase::AiDecision` (Decision Evaluation)**:
+   - Evaluates high-level decision graphs (Behavior Trees, State Machines, Utility AI, Planners) using frozen blackboard and perception state.
+   - Emits high-level action and navigation intents (e.g. move-to destination, attack intent, cover request).
+   - Does not step physics or mutate scene topology directly.
+4. **`SystemPhase::AiIntentDispatch` (Action/Navigation Intent Dispatch)**:
+   - Translates decision outputs into typed intents. Navigation and steering commit in `NavIntentCommit`.
+   - Combat actions and animation triggers enqueue as typed intents consumed later; they are not absorbed into `NavIntentCommit`.
+5. **`SystemPhase::Gameplay` (Behavior Script Step & Locomotion)**:
+   - Generic object-attached gameplay behaviors (`IBehaviorInstance::OnFixedUpdate`) and character controllers step **after** AI decision evaluation.
+   - This group is not the AI decision phase.
+
+### Scene Mutation Safe Points
+
+AI decision nodes, behavior trees, and background tasks are strictly forbidden from mutating Scene ECS topology (creating/destroying entities, adding/removing components) directly during decision evaluation or worker job execution. All structural changes must be recorded into the `SceneCommandBuffer` and committed at the standard Scene Runtime synchronization point (`CommitDeferredLifecycleChanges`).
+
 ## Behavior Integration And AI Decision Graphs
 
 AI decision making is authored as dedicated graph assets that compile into flat, immutable runtime execution plans and execute within the standard scene behavior lifecycle without introducing a secondary task manager or visual scripting engine.
@@ -471,7 +568,7 @@ These paradigms will integrate via dedicated provider extension seams without br
 
 1. **Standard Execution Context**:
    - AI tasks evaluate through `BehaviorExecutionContext` (extending `BehaviorContext`), granting controlled access to scene resources, typed blackboard views, input, command buffers, and cancellation tokens.
-   - `AIDecisionSystem` is the sole scheduling authority in `SystemPhase::Gameplay`. `AiControllerComponent` and eligible `BehaviorComponent` attachments are inert plan bindings discovered by that system; components do not own runners.
+   - `AIDecisionSystem` is the sole scheduling authority in `AiDecisionEvaluate` (ADR-021 `AiDecision`). `AiControllerComponent` and eligible `BehaviorComponent` attachments are inert plan bindings discovered by that system; components do not own runners. Generic `OnFixedUpdate` behaviors still run later in `Gameplay` / `CharacterControllerLocomotion`.
    - `GameplayInputAccess` is inherited for task parity with generic gameplay behaviors. It exposes only read-only semantic actions for possessed/player-controlled entities, never raw device state; NPC-only contexts receive a deterministic empty snapshot.
 
 ```cpp
@@ -566,6 +663,14 @@ struct CrowdAgentConfig {
 Crowd simulation runs as a parallel job over agent groups. Agents within a
 group share avoidance data; groups are independent.
 
+## Asynchronous AI Tasks And Job System Integration
+
+Asynchronous AI workloads—such as NavMesh pathfinding, perception visibility raycasts, and tactical environment queries—must execute through the Foundation `JobSystem`:
+
+- **Single Task Scheduler**: AI subsystems must not instantiate private worker thread pools or bespoke background task runners.
+- **Scene-Scoped Cancellation**: Every async AI job captures a `CancellationToken` bound to the active `SceneRuntime` generation. When a scene unloads or transitions, all active AI jobs are cancelled immediately.
+- **Worker Thread Invariant**: Background AI jobs never mutate scene ECS components or live blackboard instances directly. Completed results (e.g. `PathfindingResult`, visibility test results) are queued into thread-safe result buffers and applied to agent memory on the main simulation thread at designated phase safe points.
+
 ## Debugging And Visualization
 
 - NavMesh visualization overlay (walkable areas, obstacles, off-mesh links)
@@ -578,7 +683,8 @@ group share avoidance data; groups are independent.
 
 AI simulation executes as a fixed-timestep pipeline within the engine's fixed
 update loop, defined by [Runtime Lifecycle Architecture](./runtime-lifecycle.md).
-Six ordered phases execute in each simulation tick. A variable-rate presentation
+Six ordered phases execute in each simulation tick; they implement the ADR-021
+coarse groups. A variable-rate presentation
 bridge runs afterward and consumes the committed snapshots:
 
 ```text
@@ -615,7 +721,7 @@ variable-rate presentation bridge, not a seventh fixed-tick phase.
    - Operates as a read-only pass over physics spatial structures and audio event queues.
    - Invariant: Does NOT mutate agent blackboard state, behavior tree node states, or world transforms.
 2. **`BlackboardSync`**:
-   - Ingests staged stimulus buffers into each agent's `AIBlackboard`.
+   - Ingests staged stimulus buffers into each agent's `BlackboardState`.
    - Evaluates stimulus decay over time, updates last known target locations, adjusts agent alert levels, and processes incoming team/squad broadcast events.
    - Invariant: All blackboard mutations are completed within this phase; blackboards become read-only during subsequent decision evaluation.
 3. **`AiDecisionEvaluate`**:
@@ -676,7 +782,7 @@ The execution of AI simulation phases is strictly governed by the host process's
 ### Authority, Privacy, And Security Boundaries
 
 - **Clients Never Run Authoritative AI**: Connected clients NEVER run `PerceptionSensePoll`, `BlackboardSync`, `AiDecisionEvaluate`, or `NavIntentCommit` for server-owned AI agents. Clients receive replicated transform, velocity, and state tags from the server.
-- **Server State Privacy**: Agent perception memories (e.g. sight awareness meters, target tracking scores) and `AIBlackboard` internal representations (behavior tree execution nodes, patrol indices, threat scoring matrices) are **server-private**.
+- **Server State Privacy**: Agent perception memories (e.g. sight awareness meters, target tracking scores) and `BlackboardState` internal representations (behavior tree execution nodes, patrol indices, threat scoring matrices) are **server-private**.
 - **No Private State Serialization**: Network replication protocols MUST NOT synchronize private perception data or blackboard state to clients. Only publicly observable gameplay attributes (positions, rotations, locomotion speeds, equip states, public audio cues) are sent over the wire. This prevents client-side wallhacks, radar exploits, and unnecessary bandwidth consumption.
 
 ## Simulation Execution Modes
@@ -769,6 +875,7 @@ budget; any resulting LOS, overlap, or spatial lookup consumes one admitted quer
 
 ## Related Documents
 
+- [ADR-021: Gameplay AI Ownership, Scheduling and Behavior Boundary](../../adr/021-gameplay-ai-ownership-scheduling-and-behavior-boundary.md)
 - [ADR-022: AI Fixed-Tick Order, Authority and Simulation Budget](../../adr/022-ai-fixed-tick-order-authority-and-simulation-budget.md)
 - [ADR-024: Perception Ownership, Sense Policy and Budget Decision](../../adr/024-perception-ownership-sense-policy-and-budget.md)
 - [ADR-025: AI Decision Assets and Shared Gameplay Behavior Boundary](../../adr/025-ai-decision-assets-and-gameplay-behavior-boundary.md)
