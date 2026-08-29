@@ -168,7 +168,7 @@ query seam:
 | **Hearing** | Periodic time-sliced / stimulus queue drain | `PerceptionManager` + `AudioStimulusEmitter` | Distance attenuation + optional `PhysicsWorld` acoustic obstruction raycast | Acoustic detection of footsteps, gunshots, explosions, and environmental noise |
 | **Damage** | Event-driven (immediate on hit) | `HealthSystem` / `CombatSystem` | Direct gameplay event carrying instigator entity, damage amount, and hit direction | Detection of inflicted harm, alerting agent to attacker identity/direction |
 | **Touch** | Event-driven (fixed physics tick) | `PhysicsWorld` collision dispatcher | Contact manifolds and trigger overlap events | Immediate awareness of physical contact, collisions, and proximity penetration |
-| **Team** | Event-driven / periodic broadcast | `TeamPerceptionRelay` | Squad/faction registry and communication radius or radio channel | Shared squad awareness, target spotting distribution, and distress alerts |
+| **Team** | Event-driven affiliation/distress updates plus periodic awareness broadcast | `TeamPerceptionRelay` | Squad/faction registry and communication radius or radio channel | Shared squad awareness, target spotting distribution, and distress alerts |
 
 ```cpp
 enum class AISense : uint8_t {
@@ -230,6 +230,12 @@ struct StimulusEvent {
    - Candidate emitter gathering queries `SceneRuntime` spatial acceleration
      structures (octree / BVH) to discover potential emitters within sensory
      range before issuing detailed LOS physics traces, eliminating $O(N^2)$ scaling.
+3. **Team Dispatch Split**:
+   - Membership, faction, direct distress, and explicit target-spot events wake or
+     invalidate affected agents immediately.
+   - Periodic relay ticks share selected, already-committed perception facts among
+     eligible teammates under bounded range/fan-out budgets. They do not read
+     another agent's mutable in-progress sense evaluation.
 
 ### Update Policies And Time-Sliced Budgets
 
@@ -237,39 +243,55 @@ Perception uses a hybrid execution model balancing immediate reactivity and
 bounded compute cost:
 
 1. **Hybrid Execution Model**:
-   - **Event-Driven Senses (`Damage`, `Touch`, `Team`)**: Dispatched immediately
-     when gameplay events occur or collected during the fixed simulation tick.
-     Work is $O(E)$ where $E$ is the small number of emitted events.
-   - **Continuous Periodic Senses (`Sight`, `Hearing`)**: Evaluated at scheduled
-     intervals across frames, distributed evenly via time-slicing.
+   - **Event-Driven Inputs (`Damage`, `Touch`, team affiliation/distress)**:
+     Dispatched immediately when gameplay events occur or collected during the
+     fixed simulation tick. Work is $O(E)$ where $E$ is the emitted event count.
+   - **Continuous Periodic Inputs (`Sight`, `Hearing`, team awareness relay)**:
+     Evaluated at scheduled intervals across frames and distributed evenly via
+     time-slicing.
 2. **Time-Sliced Raycast Budgets**:
    - The engine enforces hard limits per frame/tick:
      - `maxSightRaycastsPerTick`: Maximum physics LOS raycasts allowed across all
        agents in a single frame (e.g. 128 raycasts).
      - `maxPerceptionExecutionTime`: CPU budget cap per tick (e.g. 1.0 ms).
      - `maxAgentsEvaluatedPerTick`: Maximum agent sight sweeps per tick.
-   - Agents are partitioned into interleaved tick buckets (round-robin or
-     priority-scheduled).
+   - Agents use weighted fair round-robin queues. Deadline aging promotes agents
+     as their LOD service interval approaches; overdue agents run
+     oldest-deadline-first before normal weighted slots, preventing a sustained
+     near-agent workload from starving distant queues.
+   - Scene activation validates the admitted population against the configured
+     service intervals and budgets. Runtime over-capacity preserves hard CPU and
+     raycast limits, emits `PerceptionBudgetUnsatisfied`, and applies the configured
+     deterministic admission/degradation policy rather than silently starving work.
 3. **Sensory Level of Detail (LOD)**:
-   - Evaluation frequency dynamically scales with distance from active player
-     characters or high-priority gameplay cameras:
-     - **LOD 0 (Near, < 25m)**: Full evaluation rate (e.g. 10 Hz / every 6 ticks at 60Hz).
-     - **LOD 1 (Medium, 25m - 60m)**: Halved evaluation rate (e.g. 5 Hz / every 12 ticks).
-     - **LOD 2 (Far, > 60m)**: Throttled evaluation rate (e.g. 1-2 Hz / every 30-60 ticks).
-     - **LOD 3 (Culled / Dormant)**: Completely paused or background sweep only.
+   - Evaluation frequency scales with distance from simulation relevance anchors
+     such as active player characters and gameplay objectives. Rendering camera or
+     frustum state never controls authoritative LOD on network hosts or headless
+     servers:
+     - **LOD 0 (Near, $[0, 25\text{m})$)**: Full evaluation rate (e.g. 10 Hz / every 6 ticks at 60Hz).
+     - **LOD 1 (Medium, $[25\text{m}, 60\text{m})$)**: Halved evaluation rate (e.g. 5 Hz / every 12 ticks).
+     - **LOD 2 (Far/Active, $[60\text{m}, \text{dormancyDistance})$, default endpoint 150m)**: Throttled evaluation rate (e.g. 1-2 Hz / every 30-60 ticks). Agents beyond the endpoint remain LOD2 while gameplay-pinned, inside active simulation/streaming relevance, or retaining a high-priority active stimulus.
+     - **LOD 3 (Dormant)**: Entered only outside active simulation relevance (for example, an inactive streaming cell), or beyond `dormancyDistance` with no gameplay pin or high-priority stimulus. Continuous senses pause except for a bounded recheck (default 120 ticks); event-driven stimuli wake the agent immediately and recompute LOD.
 
 ### Memory Model And Linear Decay
 
 ```cpp
+enum class PerceptionPersistencePolicy : uint8_t {
+    PreserveMemory, // Persist durable knowledge and resume simulation-time decay
+    ResetOnRestore  // Start with empty perception memory after restore
+};
+
 struct AIPerceptionConfig {
     float          sightRadius;
     float          sightAngle;           // Peripheral vision cone half-angle
     float          hearingRadius;
     float          touchRadius;          // Contact/proximity range
-    float          memoryDuration;       // Max memory lifetime in seconds
-    float          decayRate;            // Linear decay rate per second
-    float          forgetThreshold;      // Strength threshold for eviction
-    uint32_t       maxTrackedStimuli;    // Runtime cap, <= kMaxTrackedStimuli
+    float          dormancyDistance{150.0F}; // LOD2-to-LOD3 distance candidate
+    float          memoryDuration{10.0F};    // Max lifetime in simulation seconds
+    float          decayRate{0.1F};          // Linear decay rate, inverse seconds
+    float          forgetThreshold{0.0F};    // Strength threshold for eviction
+    uint32_t       maxTrackedStimuli{16};    // Runtime cap, <= kMaxTrackedStimuli
+    PerceptionPersistencePolicy persistencePolicy{PerceptionPersistencePolicy::PreserveMemory};
     PerceptionMask senseMask;            // Active sense bitmask
 };
 
@@ -300,10 +322,13 @@ struct AIPerceptionMemory {
      `strength` ($[0.0, 1.0]$).
    - While actively observed, `strength` is refreshed to $1.0$ and `age` resets
      to $0.0$.
-   - When sight/sound is lost, `strength` decays linearly:
-     $$\text{intensity}(t) = 1.0 - \text{decayRate} \cdot \text{age}$$
-   - When $\text{intensity} \le \text{forgetThreshold}$ (default $0.0$) or
-     $\text{age} \ge \text{memoryDuration}$, the stimulus is purged.
+   - `decayRate` is measured in inverse simulation seconds ($s^{-1}$), with a
+     default of $0.1\,s^{-1}$.
+   - When sight/sound is lost, `strength` decays linearly and is clamped:
+     $$\text{strength}(t) = \max(0, 1.0 - \text{decayRate} \cdot \text{ageSeconds})$$
+   - When $\text{strength} \le \text{forgetThreshold}$ (default $0.0$) or
+     $\text{ageSeconds} \ge \text{memoryDuration}$ (default 10 simulation
+     seconds), the stimulus is purged.
 3. **Last Known Position & Velocity Tracking**:
    - Perception records store `lastKnownLocation` and `lastKnownVelocity`.
    - Behavior trees and blackboards query last known location rather than live
@@ -323,6 +348,13 @@ AI behavior is authored through the gameplay behavior system:
 - Utility-based AI evaluates multiple options and selects the best action
 - Blackboard stores agent knowledge (target, last known position, patrol path)
 
+`PerceptionManager` does not write `AIBlackboardView` directly. At the end of the
+Perception phase it publishes immutable staged `PerceptionDelta` records.
+`AIBlackboardSyncSystem` alone maps those deltas and last-known facts into
+schema-approved keys during `SystemPhase::BlackboardSync`. Decision tasks and
+Service nodes consume the committed view and are not alternate writers for this
+seam.
+
 ```cpp
 struct AIBlackboard {
     std::optional<EntityId>  target;
@@ -336,6 +368,19 @@ struct AIBlackboard {
 
 Navigation commands (move-to, follow, patrol) are issued from behavior nodes
 and executed by the navigation system.
+
+### Perception Save And Restore
+
+The AI subsystem contributes a versioned perception chunk through
+`IGameplayStateProvider`. `PreserveMemory` captures durable sense/tag data,
+stable source references where available, last-known position/velocity, strength,
+and simulation age; `ResetOnRestore` explicitly opts ambient agents out.
+
+Raycast queues, scheduler buckets/deadlines, raw entity generations, and in-flight
+event buffers are transient. Restore resolves stable sources during staging,
+retains last-known facts when a source no longer exists, republishes restored
+deltas at the first `BlackboardSync`, and resumes decay from saved simulation age
+without applying wall-clock offline time.
 
 ## Crowd Simulation
 
@@ -382,6 +427,8 @@ group share avoidance data; groups are independent.
 ## Related Documents
 
 - [ADR-024: Perception Ownership, Sense Policy and Budget Decision](../../adr/024-perception-ownership-sense-policy-and-budget.md)
+- [GAI-003.1 AI Decision Assets And Shared Gameplay Behavior Boundary](https://github.com/abdullahbodur/horo-engine/issues/1333): blackboard consumer and decision execution contract
+- [Save Game And Persistence](./save-game-and-persistence.md): durable perception-memory capture and staged restore
 - [Navigation Bake UI Reference](./navigation-bake.html)
 
 - [Gameplay Behavior Authoring](../extensions/gameplay-behavior-authoring.md): behavior tree and state machine authoring
