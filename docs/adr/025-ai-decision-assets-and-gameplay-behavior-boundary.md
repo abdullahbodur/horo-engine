@@ -6,7 +6,7 @@
 - **Scope**: AI decision graph assets (`BehaviorTreeAsset`, `StateMachineAsset`, `UtilityAiAsset`), runtime execution plan compilation, node hierarchy, UI separation, 1.0 paradigms vs post-1.0 extensions, task execution and lifecycle alignment
 - **Issue**: [#1333](https://github.com/abdullahbodur/horo-engine/issues/1333) ([GAI-003.1])
 - **JIRA**: HORO-1333
-- **Normative documents**: [Navigation And AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md), [Gameplay Behavior Authoring](../architecture/extensions/gameplay-behavior-authoring.md)
+- **Normative documents**: [Navigation And AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md), [Gameplay Behavior Authoring](../architecture/extensions/gameplay-behavior-authoring.md), [Save Game And Persistence](../architecture/runtime/save-game-and-persistence.md)
 
 ## Context
 
@@ -31,18 +31,19 @@ Prior to this decision, the boundary between AI decision graphs, generic visual 
 
 1. **Persistent Identity**:
    - Persisted graph assets (`.horo_bt`, `.horo_sm`, `.horo_utility`) store pure semantic graph topology: stable `GraphId`, `NodeId`, `PinId`, `PropertyId`, schema versions, node type identifiers, typed properties, and blackboard key bindings.
-   - Editor layout data (node position $(x, y)$, visual routing points, comments, zoom/pan, expansion state) is stored exclusively in sidecar authoring metadata (`.meta` / `.editor_meta`) or discarded during asset cooking.
+   - Editor layout data (node position $(x, y)$, visual routing points, comments, zoom/pan, expansion state) is stored exclusively in the asset's canonical `.meta` sidecar (for example, `Guard.horo_bt.meta`) or discarded during asset cooking. `.editor_meta` is not a second supported convention.
    - Runtime modules and cooked assets have **zero dependency** on `imgui-node-editor`, ImGui, or any visual layout types.
 
 2. **Compilation to Flat Runtime Plans**:
    - Graph assets are not directly evaluated as pointer-chasing graph object hierarchies at runtime.
    - The `DecisionGraphCompiler` validates and compiles the source asset into an immutable `CookedDecisionPlan` (e.g., `CookedBehaviorTreePlan`, `CookedStateMachinePlan`, `CookedUtilityPlan`).
    - The compiled plan is a flat, contiguous array of node descriptors with precomputed integer offsets, child ranges, decorator masks, and blackboard index bindings.
+   - Cross-paradigm calls remain asset references rather than pointers or nested plan copies. A call node stores an index into the owning plan's cooked dependency table; each entry contains a stable `DecisionGraphAssetId`, expected plan kind, and required schema version. The cook validates referenced assets, rejects dependency cycles, and enforces a bounded nesting depth.
    - Evaluation is cache-coherent and allocation-free in steady-state operation.
 
 3. **Instance State vs Static Plan**:
    - `CookedDecisionPlan` is shared and read-only across all agent instances executing that asset.
-   - Per-agent execution state is encapsulated in an allocation-conscious `DecisionInstanceState` (bounded active-node set for Parallel composites, running task handle, decorator memory, state timers, and blackboard view). Hot-reload maps that state by stable `DecisionNodeId` on each cooked node.
+   - Per-agent execution state is encapsulated in an allocation-conscious `DecisionInstanceState`. Each active Parallel branch owns a bounded execution-frame stack of `(DecisionGraphAssetId, DecisionNodeId)` pairs, so an HSM state can invoke a Behavior Tree without merging their flat plans. Decorator memory and timers are keyed by the same pair. Hot-reload and restore never identify state by transient array index.
 
 ---
 
@@ -72,6 +73,7 @@ Horo 1.0 implements three complementary decision paradigms:
 
 #### B. Hierarchical State Machines (HSM)
 
+- `StateMachineAsset` is the canonical persisted asset family name; it supports both flat and hierarchical state topology. “Hierarchical State Machine” names the supported execution paradigm, not a separate `HierarchicalStateMachineAsset` type.
 - Hierarchical states with nested sub-state machines.
 - Explicit entry actions, update actions, and exit actions.
 - Event-triggered and condition-triggered transitions with guard expressions evaluated against the blackboard.
@@ -100,7 +102,7 @@ These post-1.0 capabilities will plug in via dedicated provider interfaces witho
 
 1. **Evaluation Phase & Concurrency**:
    - AI decision plans evaluate strictly within `SystemPhase::Gameplay` during the deterministic fixed-step simulation tick.
-   - Evaluation is coordinated by the `AIDecisionSystem` (or attached `BehaviorComponent` runner).
+   - `AIDecisionSystem` is the sole scheduling and evaluation authority. `AiControllerComponent` and eligible `BehaviorComponent` attachments are inert bindings that identify an entity, plan asset, and configuration; the system discovers those bindings and evaluates them. Components do not own runners or private update loops.
    - Tasks execute sequentially or in parallel batches per agent; task code does not spawn uncoordinated OS threads or ambient background jobs.
 
 2. **Standard Execution Context**:
@@ -111,6 +113,7 @@ These post-1.0 capabilities will plug in via dedicated provider interfaces witho
      - `SceneCommandBuffer&` (deferred structural ECS changes)
      - `CancellationToken` (for aborting long-running asynchronous tasks)
    - Tasks do not perform direct raw pointer mutations on foreign entities or bypass ECS synchronization points.
+   - `GameplayInputAccess` exposes read-only, semantic gameplay actions for shared tasks used by possessed/player-controlled entities; it never exposes raw device state. NPC-only contexts receive a deterministic empty action snapshot, so AI decisions cannot observe another player's input implicitly.
 
 3. **Task Return Statuses & Cooperative Abort**:
    - Standard task statuses: `Success`, `Failure`, `Running`, `Aborted`.
@@ -124,6 +127,11 @@ These post-1.0 capabilities will plug in via dedicated provider interfaces witho
      - If the plan is incompatible, the running subtree is gracefully aborted (`OnAbort()`), instance memory is reset, and evaluation restarts from the root node.
    - A malformed or failing graph edit leaves the previous valid cooked plan active, logging a typed compiler diagnostic.
 
+5. **Save And Restore Boundary**:
+   - The AI subsystem contributes an `IGameplayStateProvider` to `RuntimeSaveService`. Capture occurs at the save snapshot safe point and records only durable logical state: plan asset IDs and schema versions, bounded execution-frame stacks identified by stable `DecisionNodeId`, serializable decorator/timer state, and schema-approved blackboard values.
+   - Runtime-only handles (`JobHandle`, cancellation tokens, path/query handles, pointers, and cached array indices) are never serialized. Restore resolves the cooked plans in staging, migrates compatible stable IDs, and restarts or reissues asynchronous tasks after atomic state application.
+   - Missing or incompatible plans produce typed diagnostics and reset the affected agent to its plan root according to project policy; they do not partially apply an invalid execution stack or prevent unrelated gameplay providers from restoring.
+
 ---
 
 ## Ratify-or-Revise Summary
@@ -136,6 +144,21 @@ These post-1.0 capabilities will plug in via dedicated provider interfaces witho
 | Task Scheduling | Risk of separate AI task runner / thread pool | **Unified in `BehaviorExecutionContext`.** Evaluates in `SystemPhase::Gameplay` fixed tick with cooperative async cancellation. |
 | Blackboard Access | Generic property maps | **Typed `AIBlackboardView` with schema validation and change notifications.** |
 | Hot Reload Policy | Unspecified | **Safe-point plan swap with graceful abort and fallback preservation.** |
+| Save / Restore | Decision runtime state not connected to persistence | **Durable logical state captured through `IGameplayStateProvider`; transient jobs and handles are rebuilt after restore.** |
+
+## Verification Requirements
+
+- Cook validation rejects missing subplans, plan-kind/schema mismatches,
+  dependency cycles, and nesting beyond the configured bound.
+- An HSM state can invoke a Behavior Tree while Parallel branches preserve
+  independent bounded execution-frame stacks.
+- `AIDecisionSystem` is the only evaluator; component attachments remain inert
+  bindings and cannot create private update loops.
+- NPC contexts observe an empty gameplay-action snapshot, while a possessed
+  entity may consume its own semantic action snapshot without raw device access.
+- Save/restore round-trips compatible stable plan/node state, excludes transient
+  handles, restarts asynchronous work after commit, and resets only the affected
+  agent when plan migration is incompatible.
 
 ## Consequences
 

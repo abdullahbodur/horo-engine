@@ -783,7 +783,7 @@ schedulers or divergent blackboard structures:
 2. **Core 1.0 AI Paradigms vs Post-1.0 Extensions**:
    - **1.0 Core**:
      - *Behavior Trees*: Composites (`Selector`, `Sequence`, `Parallel`), Decorators (`Inverter`, `Cooldown`, `Loop`, `BlackboardCheck`, `TimeLimit`), Tasks (`MoveTo`, `Wait`, `PlayAnim`, `CustomTask`), and Services.
-     - *Hierarchical State Machines (HSM)*: Nested states, transitions, guard conditions, entry/exit/update actions.
+     - *Hierarchical State Machines (HSM)*: Nested states, transitions, guard conditions, entry/exit/update actions. `StateMachineAsset` is the canonical asset family for both flat and hierarchical state topology; HSM does not introduce a second persisted asset type.
      - *Simple Utility Scoring*: Considerations, response curves, normalized $[0.0, 1.0]$ score aggregation, utility selector.
    - **Post-1.0 Extensions**:
      - Hierarchical Task Networks (HTN), Goal-Oriented Action Planning (GOAP), Reinforcement Learning (RL) / learned policy inference, and Generative LLM NPC decision providers are explicitly categorized as post-1.0 extensions and integrate via dedicated provider seams without altering the 1.0 decision core.
@@ -800,7 +800,10 @@ schedulers or divergent blackboard structures:
 4. **Single Task Scheduler & Lifecycle Alignment**:
    - Gameplay behaviors and AI systems must not create competing thread pools or
      private background task loops.
-   - AI tasks evaluate through `BehaviorExecutionContext` (extending `BehaviorContext`) in fixed-step `SystemPhase::Gameplay`.
+   - `AIDecisionSystem` is the sole AI evaluation authority in fixed-step
+     `SystemPhase::Gameplay`. AI/controller and eligible behavior components are
+     inert bindings discovered by the system, not component-owned runners.
+   - AI tasks evaluate through `BehaviorExecutionContext` (extending `BehaviorContext`).
    - Long-running asynchronous operations (such as pathfinding requests, animation playback, or spatial queries) capture a `CancellationToken` bound to the active `SceneRuntime` generation. On abort, `IDecisionTask::OnAbort()` cancels downstream subsystem work cleanly.
 
 5. **Execution Context Parity**:
@@ -808,6 +811,17 @@ schedulers or divergent blackboard structures:
      `SceneRuntimeAccess`, `EntityId`, `AssetAccess`, `GameplayInputAccess`,
      `SceneCommandBuffer`, and `RuntimeDiagnostics`, preventing direct unbuffered
      scene mutations.
+   - In AI tasks, `GameplayInputAccess` exposes only semantic action snapshots for
+     possessed/player-controlled entities. NPC-only contexts receive a deterministic
+     empty snapshot and cannot inspect raw device input or another player's actions.
+
+6. **Decision State Persistence**:
+   - The AI subsystem participates in runtime save/restore through
+     `IGameplayStateProvider`. It serializes stable plan/node identity, compatible
+     execution frames, timers, and schema-approved blackboard values.
+   - Runtime jobs, cancellation tokens, query handles, pointers, and cooked array
+     indices are never persistent state; they are re-resolved or restarted after
+     the restore transaction commits.
 
 ## Play-In-Editor And Live Preview
 
@@ -878,6 +892,7 @@ play-session or process restart rather than attempting unsafe live mutation.
 - [Gameplay Module Overview](./gameplay-module.md)
 - [Gameplay Module Boundary](./gameplay-module-boundary.md)
 - [Gameplay Runtime Integration](./gameplay-runtime-integration.md)
+- [Save Game And Persistence](../runtime/save-game-and-persistence.md): durable behavior and AI state capture
 - [Editor Document Model](../editor/editor-document-model.md)
 - [Extension System](./plugin-system.md)
 - [Horo Package System](../packages/package-system.md): library-provided behaviors
