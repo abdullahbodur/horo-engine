@@ -37,11 +37,11 @@ Ticket #1564 ([WST-004.1]) requires ratifying the normative specification for:
 | **World Index Manifest (`world.index`)** | High-level conceptual descriptions only | **Ratified as a binary and JSON-mirrored manifest** specifying global bounding box, partition grid dimensions, spatial cell hierarchy (multi-LOD grid/quadtree), layer definitions with explicit ownership, pre-authored streaming volumes, and a cryptographic cell checksum table. |
 | **Cell Container Magic & Header** | Undefined format | **Ratified as `HOROCELL` (8-byte ASCII: `0x48, 0x4F, 0x52, 0x4F, 0x43, 0x45, 0x4C, 0x4C`)** with a 96-byte fixed-size little-endian header containing schema version, flags, compression codec, uncompressed/compressed sizes, CRC32, SHA-256, and feature-provider TOC offsets. |
 | **Endianness** | Native/implicit | **Ratified as strict Little-Endian (LE)** across all platforms and architectures (ARM64, x86_64). Big-endian host platforms (if ever supported) must swap on read/write. |
-| **Integrity & Hashing** | General `.horo` archive TOC hash | **Ratified dual-tier integrity verification**: SHA-256 of the exact on-disk cell body (TOC, zero padding, and independently compressed blocks) first, per-entry CRC32 after each block is decompressed, then aggregate CRC32 over the canonical concatenation of all decoded blocks. |
+| **Integrity & Hashing** | General `.horo` archive TOC hash | **Ratified dual-tier integrity verification**: SHA-256 of the fixed header (with its hash field zeroed) plus the exact on-disk cell body first, per-entry CRC32 after each block is decompressed, then aggregate CRC32 over the canonical concatenation of all decoded blocks. |
 | **Payload Decomposition** | Monolithic baked scene asset | **Ratified modular TOC layout**: Core ECS is exactly one required TOC entry; Terrain, Foliage, Physics Mesh, Audio, Navigation Mesh, Destruction, and custom providers are independent entries compressed with the cell codec. |
 | **Versioning & Compatibility** | Monotonic version bump | **Ratified major/minor schema versioning with capability flags**: Minor revisions allow optional feature payload skipping (`FeaturePayloadFlags::Optional`); major revisions or missing required providers trigger typed rejection. |
 | **Error Handling** | Generic exception or boolean failure | **Ratified Foundation-compliant typed errors**: `Result<LoadedCellPayload, StreamingCellError>` utilizing the `StreamingCellErrorDomain` with stable error codes. |
-| **Decode Lifecycle & Cancellation** | Single-step load | **Ratified 5-phase staged pipeline**: (1) Async I/O, (2) cell-body SHA-256 and TOC validation, (3) independent block decompression and CRC32 checks, (4) provider staging including Core ECS, and (5) owner-thread atomic commit. Cooperative cancellation is evaluated between and within phases with zero residual state. |
+| **Decode Lifecycle & Cancellation** | Single-step load | **Ratified 5-phase staged pipeline**: (1) Async I/O, (2) cell-artifact SHA-256 and TOC validation, (3) independent block decompression and CRC32 checks, (4) provider staging including Core ECS, and (5) owner-thread atomic commit. Cooperative cancellation is evaluated between and within phases with zero residual state. |
 
 ---
 
@@ -212,7 +212,7 @@ Section entry layouts are fixed:
   `0x0E`, 16-byte `chunkAssetId` at `0x10`, aggregate `uint64
   uncompressedSize`/`compressedSize` at `0x20`/`0x28`, aggregate `uint32
   payloadCrc32` at `0x30`, zero `uint32 reserved` at `0x34`, 32-byte body
-  `sha256Hash` at `0x38`, and eight zero reserved bytes at `0x58`.
+  artifact `sha256Hash` at `0x38`, and eight zero reserved bytes at `0x58`.
 
 Tables are ordered by ascending `layerId`, ascending `volumeId`, and cell key
 `(layerId, lodLevel, gridZ, gridY, gridX)` respectively; duplicate keys are
@@ -261,7 +261,7 @@ Offset | Type     | Field                     | Description
  0x30  | uint64   | compressedSize            | Cell-body bytes from featureTableOffset through final block, including TOC and zero padding
  0x38  | uint32   | featureTableOffset        | Byte offset to Feature Payload TOC from file start (must be 0x60 in v1)
  0x3C  | uint32   | featureTableCount         | Number of entries in Feature Payload TOC
- 0x40  | uint8[32]| sha256Hash                | SHA-256 of exact on-disk cell body
+ 0x40  | uint8[32]| sha256Hash                | Canonical SHA-256 of fixed header and cell body
 ```
 
 The header occupies bytes `0x00`–`0x5F` inclusive (96 bytes). Fields after `0x3C` continue through the 32-byte `sha256Hash` at `0x40`, so the first byte after the header is `0x60`.
@@ -345,7 +345,10 @@ Compression is per entry, not whole-cell:
 The **cell body** is the contiguous byte range
 `[featureTableOffset, featureTableOffset + compressedSize)`. It includes the TOC,
 all zero padding, and every compressed entry block. `sha256Hash` is SHA-256 over
-that exact on-disk range and therefore protects the TOC as well as the blocks.
+the complete cell artifact range `[0x00, 0x60 + compressedSize)`, with header
+bytes `0x40`–`0x5F` replaced by 32 zero bytes during hashing. This protects all
+fixed-header control fields, the TOC, padding, and compressed blocks. A standalone
+file or package chunk has exactly that length; trailing bytes are invalid.
 
 CRC fields use CRC-32/ISO-HDLC (IEEE polynomial `0x04C11DB7`, reflected
 `0xEDB88320`, initial/final XOR `0xFFFFFFFF`). After an entry is decoded, its
@@ -449,7 +452,7 @@ Streaming cell decode executes as an asynchronous job pipeline over `HoroFoundat
 #### Lifecycle Phase Guarantees
 
 1. **Async I/O Phase**: Reads raw bytes from the archive into a linear buffer allocated from the streaming scratch pool. If `cancelToken.IsCancelled()` is signaled, the read is aborted and the buffer returned to the pool immediately.
-2. **Integrity & Validation Phase**: Verifies magic bytes `HOROCELL`, version compatibility, exact v1 TOC position/size, canonical provider ordering, required single `CoreEcs`, zero padding, non-overlapping aligned entry ranges, aggregate sizes, and containment within the file/chunk. It compares SHA-256 over the exact cell body against both the cell header and `world.index` before trusting TOC contents. It then recomputes aggregate uncompressed size and aggregate CRC via `crc32_combine` over TOC metadata and compares both with the header/index before decompression.
+2. **Integrity & Validation Phase**: Verifies artifact length, computes SHA-256 over the fixed header with its hash field zeroed plus the exact cell body, and compares it with both the header and `world.index` before trusting header control fields or TOC contents. It then validates magic bytes `HOROCELL`, version compatibility, exact v1 TOC position/size, canonical provider ordering, required single `CoreEcs`, zero padding, non-overlapping aligned entry ranges, aggregate sizes, and containment within the file/chunk. Finally, it recomputes aggregate uncompressed size and aggregate CRC via `crc32_combine` over TOC metadata and compares both with the header/index before decompression.
 3. **Independent Block Decode Phase**: Iterates canonical TOC order. Each required or supported optional entry is decrypted if required, independently decompressed with the header codec into bounded staging memory, checked for exact decoded size, and verified against its entry CRC32. Unsupported optional entries may remain compressed and are not staged. Budget failure returns `AllocationLimitExceeded`; any size/hash/CRC mismatch returns `CorruptedIntegrity`.
 4. **Provider Staging Phase**: Decoded entries are dispatched to registered `IFeatureStreamingProvider` instances. The required built-in Core ECS provider constructs entities in detached `RuntimeSceneStorage`; Terrain, Foliage, Physics Mesh, Audio, Navigation Mesh, Destruction, and custom providers construct resources in private candidate containers.
 5. **Atomic Synchronization & Commit**: On the owner thread during `CommitDeferredLifecycleChanges`, the detached candidate is merged into the active `RuntimeScene` in a single structural transaction. If an error or cancellation occurred in phases 1–4, the candidate is discarded, feature providers drop their staged allocations, and the active scene remains completely untouched.
@@ -461,7 +464,7 @@ Streaming cell decode executes as an asynchronous job pipeline over `HoroFoundat
 ### Positive
 
 - **Deterministic & Portable**: Fixed little-endian layout ensures bit-identical behavior across ARM64 macOS, x86_64 Linux, and x64 Windows.
-- **Fail-Fast Integrity**: SHA-256 of the complete on-disk cell body catches TOC/block corruption and package truncation before decompression. Per-entry and aggregate CRC32 then validate each decompressor output and canonical decoded cell content.
+- **Fail-Fast Integrity**: SHA-256 of the canonical fixed header and complete on-disk cell body catches control-field, TOC, block, and truncation corruption before decompression. Per-entry and aggregate CRC32 then validate each decompressor output and canonical decoded cell content.
 - **Subsystem Decoupling**: Modular feature-provider TOC allows terrain, foliage, physics, navigation, audio, and destruction to evolve payload schemas independently without breaking core ECS layout.
 - **Leak-Free Cancellation**: Cooperative cancellation and transactional candidate swapping guarantee zero partial entities or orphaned GPU/physics handles when volumes move rapidly.
 - **Foundation Alignment**: Typed `StreamingResult<T>` and `StreamingCellErrorCode` integrate cleanly with Horo's error registry and diagnostic observation.
@@ -479,9 +482,10 @@ Streaming cell decode executes as an asynchronous job pipeline over `HoroFoundat
 - Cell fixtures validate the 96-byte header, 40-byte TOC entries, exactly one
   required first `CoreEcs` entry, Destruction/custom entries, and uint16 layer IDs
   without truncation.
-- Integrity tests mutate the TOC, padding, compressed blocks, decoded blocks, and
-  aggregate fields independently and assert failure at the specified SHA/per-entry
-  CRC/aggregate CRC stage.
+- Integrity tests mutate fixed-header control fields, the header hash field, TOC,
+  padding, compressed blocks, decoded blocks, and aggregate fields independently
+  and assert failure at the specified artifact-SHA/per-entry-CRC/aggregate-CRC
+  stage.
 - Codec tests prove one decompressor invocation per selected entry and identical
   aggregate CRC results for compressed and uncompressed cells.
 - Bounds tests cover overflow, overlap, misalignment, duplicate provider types,

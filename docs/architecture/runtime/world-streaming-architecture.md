@@ -211,7 +211,7 @@ Fixed section entries are:
   `uint8 lodLevel` at `0x0C`; zero byte at `0x0D`; `uint16 layerId` at `0x0E`;
   16-byte `chunkAssetId` at `0x10`; aggregate `uint64 uncompressedSize` and
   `compressedSize` at `0x20`/`0x28`; aggregate `uint32 payloadCrc32` at `0x30`;
-  zero `uint32` at `0x34`; 32-byte body SHA-256 at `0x38`; eight zero bytes at
+  zero `uint32` at `0x34`; 32-byte artifact SHA-256 at `0x38`; eight zero bytes at
   `0x58`.
 
 Layer, volume, and cell tables sort by `layerId`, `volumeId`, and
@@ -262,7 +262,7 @@ All scalar types and headers are explicitly encoded in **Little-Endian (LE)**.
 | `0x30` | `uint64` | `compressedSize` | Cell-body bytes including TOC, zero padding, and compressed blocks |
 | `0x38` | `uint32` | `featureTableOffset` | Must be `0x60` in version 1 |
 | `0x3C` | `uint32` | `featureTableCount` | Number of entries in Feature Payload TOC |
-| `0x40` | `uint8[32]` | `sha256Hash` | SHA-256 of exact on-disk cell body |
+| `0x40` | `uint8[32]` | `sha256Hash` | Canonical SHA-256 of fixed header and cell body |
 
 The header occupies bytes `0x00`–`0x5F` inclusive (96 bytes). Fields after `0x3C` continue through the 32-byte `sha256Hash` at `0x40`, so the first byte after the header is `0x60`.
 
@@ -338,9 +338,12 @@ envelope yields the codec input bytes.
 
 The cell body is
 `[featureTableOffset, featureTableOffset + compressedSize)`, including TOC,
-zero padding, and compressed blocks. Header SHA-256 covers exactly this range.
-The matching `world.index` cell entry must match header compressed size,
-uncompressed size, CRC32, and SHA-256 before block decode.
+zero padding, and compressed blocks. Header SHA-256 covers the complete artifact
+range `[0x00, 0x60 + compressedSize)`, replacing header bytes `0x40`–`0x5F`
+with 32 zeros while hashing. A standalone file or package chunk has exactly that
+length, so the hash protects every fixed-header control field, the TOC, padding,
+and blocks. The matching `world.index` cell entry must match header compressed
+size, uncompressed size, CRC32, and SHA-256 before block decode.
 
 CRC uses CRC-32/ISO-HDLC (IEEE polynomial `0x04C11DB7`, reflected
 `0xEDB88320`, initial/final XOR `0xFFFFFFFF`). Each entry CRC covers exactly its
@@ -433,7 +436,7 @@ Streaming cell decode executes as an asynchronous job pipeline over `HoroFoundat
 ### Decode Phase Guarantees
 
 1. **Async I/O Phase**: Reads raw bytes from the archive into a scratch buffer. If `cancelToken.IsCancelled()` is signaled, the read is aborted and the buffer returned to the pool immediately.
-2. **Integrity & Validation Phase**: Validates magic/version, the exact v1 TOC location, canonical provider ordering, exactly one required first `CoreEcs`, zero padding, aligned non-overlapping block ranges, aggregate sizes, and file containment. SHA-256 over the exact cell body must match both header and `world.index` before the TOC is trusted. Aggregate uncompressed size and CRC are then recomputed from TOC metadata with `crc32_combine` and compared before decompression.
+2. **Integrity & Validation Phase**: Validates artifact length, computes SHA-256 over the fixed header with its hash field zeroed plus the exact cell body, and compares it with both header and `world.index` before trusting header controls or TOC contents. It then validates magic/version, the exact v1 TOC location, canonical provider ordering, exactly one required first `CoreEcs`, zero padding, aligned non-overlapping block ranges, aggregate sizes, and file containment. Aggregate uncompressed size and CRC are then recomputed from TOC metadata with `crc32_combine` and compared before decompression.
 3. **Independent Block Decode Phase**: In canonical order, each required or supported optional entry is decrypted if needed, independently decompressed with the header codec, checked for exact decoded size, and verified against its entry CRC32. Unsupported optional entries may remain compressed and unstaged. Budget failure returns `AllocationLimitExceeded`; size/hash/CRC mismatch returns `CorruptedIntegrity`.
 4. **Provider Staging Phase**: The built-in Core ECS provider creates detached `RuntimeSceneStorage`. Terrain, Foliage, Physics Mesh, Audio, Navigation Mesh, Destruction, and custom `IFeatureStreamingProvider` implementations construct resources in private candidate containers.
 5. **Atomic Synchronization & Commit**: On the owner thread during `CommitDeferredLifecycleChanges`, the detached candidate is merged into the active `RuntimeScene` in a single structural transaction. If an error or cancellation occurred in phases 1–4, the candidate is discarded, feature providers drop their staged allocations, and the active scene remains completely untouched.
@@ -447,8 +450,9 @@ Streaming cell decode executes as an asynchronous job pipeline over `HoroFoundat
 - Cell fixtures cover required first `CoreEcs`, every built-in type including
   Destruction, custom IDs, uint16 layers, independent codec calls, optional-block
   skipping, and aggregate CRC combination.
-- Corruption tests independently mutate TOC bytes, padding, compressed bytes,
-  decoded bytes, and aggregate fields and assert the specified failure phase.
+- Corruption tests independently mutate fixed-header control fields, the header
+  hash field, TOC bytes, padding, compressed bytes, decoded bytes, and aggregate
+  fields and assert the specified artifact-SHA/per-entry-CRC/aggregate-CRC phase.
 
 ## Streaming Volumes
 
