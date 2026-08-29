@@ -106,7 +106,9 @@ Perception evaluation uses a hybrid execution model to maximize responsiveness w
      distributed evenly via time-slicing.
 2. **Time-Sliced Scheduling & Per-Tick Budgets**:
    - The engine enforces hard limits per fixed simulation tick:
-     - `maxSightRaycastsPerTick`: Maximum physics LOS raycasts allowed across all agents in one fixed simulation tick (e.g. 128 raycasts).
+     - `maxSightRaycastsPerTick`: Maximum physics LOS raycasts allowed across all
+       agents in one fixed simulation tick. It is profile-bounded (for example,
+       at most 16 for `LowCpu` and 128 for `MediumCpu`).
      - `maxPerceptionExecutionTime`: Hard execution budget cap (e.g. 1.0 ms per simulation tick).
      - `maxAgentsEvaluatedPerTick`: Maximum number of agent sight sweeps per tick.
    - ADR-022's `GameplayAiProfile::maxPerceptionQueriesPerTick` is the aggregate

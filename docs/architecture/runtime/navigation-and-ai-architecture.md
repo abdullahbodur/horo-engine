@@ -253,7 +253,8 @@ bounded compute cost:
 2. **Time-Sliced Raycast Budgets**:
    - The engine enforces hard limits per fixed simulation tick:
      - `maxSightRaycastsPerTick`: Maximum physics LOS raycasts allowed across all
-       agents in one fixed simulation tick (e.g. 128 raycasts).
+       agents in one fixed simulation tick. It is profile-bounded (for example,
+       at most 16 for `LowCpu` and 128 for `MediumCpu`).
      - `maxPerceptionExecutionTime`: CPU budget cap per tick (e.g. 1.0 ms).
      - `maxAgentsEvaluatedPerTick`: Maximum agent sight sweeps per tick.
    - Agents use weighted fair round-robin queues. Deadline aging promotes agents
@@ -780,5 +781,6 @@ budget; any resulting LOS, overlap, or spatial lookup consumes one admitted quer
 - [Scene Runtime](./scene-runtime.md): Agent entity and component model
 - [Concurrency And Jobs](../foundation/concurrency-and-jobs.md): Parallel crowd and perception jobs
 - [Save Game And Persistence](./save-game-and-persistence.md): durable perception-memory capture and staged restore
-- [Navigation Bake UI Reference](./navigation-bake.html)
+- [Navigation Bake UI HTML Reference](./navigation-bake.html): non-normative
+  static UI reference
 - [Debug Console And Overlays](./debug-console-and-overlays.md): AI debug visualization
