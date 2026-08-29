@@ -124,8 +124,8 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Game UI And HUD](./runtime/game-ui-and-hud.md): runtime game menus, HUDs,
   canvases, UI primitives, focus/navigation, and UI rendering.
 - [Networking Architecture](./runtime/networking-architecture.md): optional
-  transports, typed protocols, bounded I/O, runtime integration, and remote
-  security.
+  handle-based transports, session/authentication runtime, bounded I/O, and
+  remote security.
 - [Asset Pipeline](./runtime/asset-pipeline.md): import, cook, package, runtime
   loading, cache, and hot reload.
 - [Prefab Architecture](./runtime/prefab-architecture.md): authored prefab

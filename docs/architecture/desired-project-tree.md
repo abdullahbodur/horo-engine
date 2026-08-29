@@ -414,7 +414,7 @@ horo-engine/
 │   │   │   ├── runtime/
 │   │   │   │   ├── NetworkRuntime.cpp
 │   │   │   │   ├── NetworkSession.cpp
-│   │   │   │   ├── ConnectionStateMachine.cpp
+│   │   │   │   ├── SessionStateMachine.cpp
 │   │   │   │   └── ReplicationManager.cpp
 │   │   │   └── backends/
 │   │   │       ├── null/
@@ -628,8 +628,10 @@ horo-engine/
 │   │   │   ├── networking/
 │   │   │   │   ├── NetworkAddressTests.cpp
 │   │   │   │   ├── NetworkApiTests.cpp
-│   │   │   │   ├── ConnectionStateMachineTests.cpp
-│   │   │   │   ├── BoundedMessageQueueTests.cpp
+│   │   │   │   ├── TransportConnectionStateTests.cpp
+│   │   │   │   ├── SessionStateMachineTests.cpp
+│   │   │   │   ├── NetworkHandleTests.cpp
+│   │   │   │   ├── SendPayloadLifetimeTests.cpp
 │   │   │   │   ├── ReplicationManagerTests.cpp
 │   │   │   │   ├── NetworkTransportNullTests.cpp
 │   │   │   │   ├── NetworkTransportENetTests.cpp

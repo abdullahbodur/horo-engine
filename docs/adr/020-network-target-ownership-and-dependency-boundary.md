@@ -22,7 +22,7 @@ In addition, networking implementations typically depend on platform-specific so
 
 ## Decision
 
-**The network subsystem is structured into four distinct target tiers with strict compile-time boundaries: `HoroEngine::NetworkApi` (public backend-neutral interfaces and value types), `HoroEngine::NetworkRuntime` (session coordination, message queues, and replication runtime), and private concrete transports (`HoroEngine::NetworkTransportENet`, `HoroEngine::NetworkTransportNull`). Public headers strictly encapsulate all native socket descriptors, TLS contexts, event loops, and third-party transport types. Networking is fully optional; applications and tools may link without network targets or compose `NetworkTransportNull`. All network ticking executes in dedicated frame phases (`NetworkPoll` and `NetworkFlush`), isolating background I/O threads from gameplay and editor state via bounded, thread-safe message queues.**
+**The network subsystem is structured into four distinct target tiers with strict compile-time boundaries: `HoroEngine::NetworkApi` (public backend-neutral interfaces and value types), `HoroEngine::NetworkRuntime` (session, authentication, and replication runtime), and private concrete transports (`HoroEngine::NetworkTransportENet`, `HoroEngine::NetworkTransportNull`). `INetworkTransport` is a handle-based packet-transport abstraction; protocol negotiation and authentication belong to `NetworkRuntime`. The host injects a unique `INetworkTransport` into the runtime. Public headers strictly encapsulate all native socket descriptors, TLS contexts, event loops, and third-party transport types. Networking is fully optional; applications and tools may link without network targets or compose `NetworkTransportNull`. Transports own cross-thread queues. Runtime observes inbound events only through `PollEvents()` during `NetworkPoll`, and submits outbound payloads during `NetworkFlush`.**
 
 ### 1. Target Topology and Allowed Dependencies
 
@@ -30,10 +30,10 @@ The network subsystem is decomposed into four discrete CMake targets:
 
 | Target | Role | Allowed Direct First-Party Dependencies | Public Surface |
 |---|---|---|---|
-| `HoroEngine::NetworkApi` | Backend-neutral public types, handles, traits, interfaces | `HoroEngine::Foundation` | Value types (`NetworkId`, `NetworkAddress`, `DeliveryPolicy`), generation handles (`ConnectionHandle`, `ListenerHandle`), error codes, message views, abstract `INetworkTransport` interfaces, replication traits |
-| `HoroEngine::NetworkRuntime` | Session management, replication engine, packet queueing | `HoroEngine::NetworkApi`, `HoroEngine::Foundation`, `HoroEngine::Runtime` | `NetworkRuntimeCoordinator`, `ConnectionStateMachine`, `ReplicationManager`, `NetworkSession`, channel multiplexing, bounded buffer policies |
-| `HoroEngine::NetworkTransportNull` | Deterministic in-memory/loopback/null transport | `HoroEngine::NetworkApi`, `HoroEngine::Foundation`, `HoroEngine::Platform` | `NullTransportBackend` factory / descriptor for testing, headless simulation, and network-disabled fallback |
-| `HoroEngine::NetworkTransportENet` | Concrete UDP transport implementation | `HoroEngine::NetworkApi`, `HoroEngine::Foundation`, `HoroEngine::Platform` | `ENetTransportBackend` factory / descriptor. All ENet headers, sockets, and platform dependencies are `PRIVATE` |
+| `HoroEngine::NetworkApi` | Backend-neutral public types, handles, traits, interfaces | `HoroEngine::Foundation` | Value types (`NetworkId`, `NetworkAddress`, `DeliveryPolicy`), generation handles (`ConnectionHandle`, `ListenerHandle`), error codes, message views, `INetworkTransport`, `TransportEvent`, replication traits |
+| `HoroEngine::NetworkRuntime` | Session management, protocol negotiation, authentication, replication | `HoroEngine::NetworkApi`, `HoroEngine::Foundation`, `HoroEngine::Runtime` | `NetworkRuntimeCoordinator`, `NetworkSession`, `SessionStateMachine`, `ReplicationManager`. Owns the injected `unique_ptr<INetworkTransport>` |
+| `HoroEngine::NetworkTransportNull` | Deterministic in-memory/loopback/null transport | `HoroEngine::NetworkApi`, `HoroEngine::Foundation` | `NullTransportBackend` factory / descriptor for testing, headless simulation, and network-disabled fallback. No Platform, sockets, or I/O thread |
+| `HoroEngine::NetworkTransportENet` | Concrete UDP transport implementation | `HoroEngine::NetworkApi`, `HoroEngine::Foundation`, `HoroEngine::Platform` | `ENetTransportBackend` factory / descriptor. Owns I/O thread and queues. All ENet headers, sockets, and platform dependencies are `PRIVATE` |
 
 ```text
                +---------------------------+
@@ -56,9 +56,10 @@ The network subsystem is decomposed into four discrete CMake targets:
 Rules:
 
 1. `HoroEngine::NetworkApi` depends **only** on `HoroEngine::Foundation`. It contains zero runtime logic, background threads, or socket code.
-2. `HoroEngine::NetworkRuntime` depends on `NetworkApi`, `Foundation`, and `Runtime`. It never links a concrete transport backend directly.
-3. Concrete transports (`NetworkTransportNull`, `NetworkTransportENet`) depend on `NetworkApi`, `Foundation`, and `Platform` (plus private third-party libraries). They do not depend on `NetworkRuntime` or `HoroEngine::Runtime`.
+2. `HoroEngine::NetworkRuntime` depends on `NetworkApi`, `Foundation`, and `Runtime`. It never links a concrete transport backend directly. The composition root instantiates the backend and transfers `std::unique_ptr<INetworkTransport>` into the runtime.
+3. `NetworkTransportNull` depends only on `NetworkApi` and `Foundation`. It does not depend on `Platform`, open OS sockets, or create I/O threads. `NetworkTransportENet` depends on `NetworkApi`, `Foundation`, and `Platform` (plus private third-party libraries). Transports do not depend on `NetworkRuntime` or `HoroEngine::Runtime`.
 4. Feature modules, gameplay modules, and editor panels consume `NetworkApi` and `NetworkRuntime` interfaces; they **never** depend on concrete transport targets.
+5. Public `NetworkApi` exposes handle-based `INetworkTransport` only. `ITransportConnection` and `ITransportListener` are not public types.
 
 ### 2. Encapsulation and Native Type Shielding
 
@@ -78,61 +79,70 @@ Networking is an optional engine capability.
 
 - **Offline / Non-Networked Products**: Products (such as single-player offline games, command-line utilities like `horopak`, asset compilers, or headless tools) do not link `NetworkRuntime` or concrete transports. Core engine composition, ECS, asset loading, and renderer pipelines operate normally without networking libraries present in the link graph.
 - **Single-Player / Headless Simulation**: If a game project uses replication interfaces or network components locally, the host composition root injects `HoroEngine::NetworkTransportNull`. `NetworkTransportNull` simulates loopback transport in memory without opening OS sockets or creating network I/O threads.
-- **Multiplayer Desktop & Dedicated Server**: Composition roots (`HoroEditor`, `horo-engine server`, game client) explicitly instantiate the chosen transport (`NetworkTransportENet` or platform backend) during startup and register it with `NetworkRuntime`. No static discovery or global registry side effects are allowed.
+- **Multiplayer Desktop & Dedicated Server**: Composition roots (`HoroEditor`, `horo-engine server`, game client) explicitly instantiate the chosen transport (`NetworkTransportENet` or platform backend) during startup and transfer unique ownership into `NetworkRuntime`. No static discovery, shared_ptr sharing, or global registry side effects are allowed.
 
 ### 4. Threading Model and Frame Lifecycle
 
 Network processing is cleanly partitioned between asynchronous I/O and frame-synchronized gameplay execution:
 
 ```text
-[ Background I/O Thread ]
-  Socket poll / recv / decrypt / frame
-         |
-         v (Push to bounded thread-safe queue)
-  +----------------------------------------------------+
-  | Inbound Message Queue (Bounded Ring / Mutex Queue) |
-  +----------------------------------------------------+
-         |
-         v (Drain during NetworkPoll phase)
-[ Simulation / Game Main Thread ]
-  1. FrameScheduler -> NetworkPoll phase:
-     - Drain inbound queues
-     - Update ConnectionStateMachine
-     - Dispatch received messages & snapshots to ReplicationManager / Game
-  2. FrameScheduler -> Simulation / Physics / Behaviors
-  3. FrameScheduler -> NetworkFlush phase:
-     - Collect dirty replicated properties
-     - Serialize outbound replication snapshots and RPCs
-     - Push to outbound queues
+[ Background I/O Thread ]                 // ENet; Null has none
+  Socket poll / recv / frame
          |
          v
-  +-----------------------------------------------------+
-  | Outbound Message Queue (Bounded Ring / Mutex Queue) |
-  +-----------------------------------------------------+
+  +--------------------------------------+
+  | Transport-owned inbound event queue  |
+  | (bounded, thread-safe)               |
+  +--------------------------------------+
          |
-         v (Drain, encrypt, socket send)
+         v transport.PollEvents() during NetworkPoll
+[ Simulation / Game Main Thread ]
+  1. FrameScheduler -> NetworkPoll:
+     - Drain transport events
+     - Advance transport connection state
+     - Create/advance NetworkSession (negotiate, authenticate)
+     - Dispatch Active-session messages
+  2. FrameScheduler -> Simulation / Physics / Behaviors
+  3. FrameScheduler -> NetworkFlush:
+     - Collect dirty replicated properties
+     - Serialize outbound snapshots and RPCs
+     - transport.Send() copies into the outbound queue
+  4. FrameScheduler -> RenderExtraction / Render
+         |
+         v
+  +--------------------------------------+
+  | Transport-owned outbound send queue  |
+  | (bounded, thread-safe)               |
+  +--------------------------------------+
+         |
+         v
 [ Background I/O Thread ]
 ```
+
+The transport owns the inbound event queue and outbound send queue. `NetworkRuntime` does not implement transport-specific synchronization. Queue implementation (mutex, ring buffer, or otherwise) is a backend detail; the contract is a bounded thread-safe queue.
 
 Key concurrency and lifecycle rules:
 
 - **Zero I/O Mutation**: Network I/O threads MUST NEVER mutate Scene, ECS, Entity, Component, Editor, or Gameplay state directly.
-- **Dedicated Frame Phases**: Frame execution includes explicit `NetworkPoll` (pre-simulation) and `NetworkFlush` (post-simulation) stages in `FrameScheduler`.
-- **Bounded Queues & Backpressure**: Inbound and outbound message queues have strict, configurable capacity limits. Queue overflow triggers explicit message-class policies (e.g. drop oldest unreliable state snapshot, reject send, or disconnect failing peer) rather than unbounded heap growth.
-- **Continuations**: State transitions (e.g. peer connected, disconnected, auth failed) are marshaled to the owner thread via lightweight continuations executed during `NetworkPoll`.
+- **Async Connect**: `INetworkTransport::Connect()` validates the request, allocates a generation-checked handle, and returns immediately. Establishment (`Resolving` / `Connecting` / `Connected`) is reported through `PollEvents()`. Callers must not treat `Connect()` as a blocking connected-session API.
+- **Copy-On-Send**: `Send()` copies payload bytes before returning and does not retain the caller span.
+- **Dedicated Frame Phases**: Frame execution includes explicit `NetworkPoll` (pre-simulation) and `NetworkFlush` (post-simulation, before render extraction) stages in `FrameScheduler`. `NetworkFlush` does not depend on render command extraction.
+- **Bounded Queues & Backpressure**: Transport queues have strict, configurable capacity limits. Queue overflow triggers explicit message-class policies (e.g. drop oldest unreliable state snapshot, reject send, or disconnect failing peer) rather than unbounded heap growth.
+- **Split Lifecycles**: Transport states are `Created -> Resolving -> Connecting -> Connected -> Closing -> Closed`. Session states are `Created -> Negotiating -> Authenticating -> Active -> Closing -> Closed`. Authentication is a runtime/session concern, not a transport backend concern.
+- **Continuations**: Transport and session state transitions are observed on the owner thread during `NetworkPoll`.
 
 ### 5. Deterministic Cancellation and Shutdown
 
 Network shutdown is deterministic, bounded, and resource-safe:
 
-- **Connection Teardown**: Transition through `Active -> Closing -> Closed`. A graceful disconnect sends a final disconnect packet with a reason code within a configurable bounded deadline derived from measured RTT and clamped by the host policy (default 2 seconds). If the peer does not acknowledge within the deadline, the local connection is forcefully terminated.
+- **Connection Teardown**: The session transitions `Active -> Closing -> Closed` and then requests transport `Close()`. A graceful disconnect sends a final disconnect packet with a reason code within a configurable bounded deadline derived from measured RTT and clamped by the host policy (default 2 seconds). If the peer does not acknowledge within the deadline, the local transport connection is forcefully terminated. Duplicate `Close()` on a generation-matching terminal handle is success; stale handles return `InvalidHandle`.
 - **Cancellation**: Asynchronous operations (resolving DNS, connecting, transferring large assets) accept a `CancellationToken`. Triggering cancellation immediately halts processing and reclaims temporary resources without blocking caller threads.
 - **Host Teardown Order**: During engine shutdown, the composition root shuts down `NetworkRuntime` before `Runtime` and `Foundation`:
   1. Stop accepting new connections on all listeners.
   2. Flush critical pending reliable disconnect notices within a bounded grace period.
   3. Signal I/O threads to stop and join all network worker threads.
   4. Release sockets, cryptographic contexts, and transport buffers.
-  5. Destroy `NetworkRuntime` and transport instances in reverse dependency order.
+  5. `NetworkRuntime` destroys the unique transport, then the host destroys `NetworkRuntime`.
 
 ## Consequences
 
@@ -154,3 +164,6 @@ Network shutdown is deterministic, bounded, and resource-safe:
 - **Direct Sockets in Public APIs**: Exposing `SOCKET` handles, `<sys/socket.h>`, or `ENetHost*` in public headers was rejected as it violates Horo Engine's backend-neutral architecture and leaks third-party dependencies.
 - **Direct Callback Invocation on I/O Threads**: Allowing network read callbacks to invoke gameplay code directly was rejected because it introduces widespread concurrency bugs, thread-safety overhead across ECS components, and non-deterministic frame execution.
 - **Global / Ambient Network Service Locator**: Using a global singleton `GetNetworkService()` was rejected; network instances must be composed explicitly by the host application.
+- **Runtime-Owned Inbound I/O Queue**: Pushing transport receive callbacks directly into a runtime-owned queue was rejected. The transport owns inbound/outbound queues; runtime drains them only through `PollEvents()`.
+- **Object-Based Public Connection API**: Public `ITransportConnection` / `ITransportListener` objects were rejected in favor of generation-checked handles on `INetworkTransport`.
+- **Transport-Level Application Authentication**: Embedding session tokens or auth state machines in ENet/Null backends was rejected so future transports (SteamNetworkingSockets, WebRTC) can replace packet transport without inheriting game authentication.

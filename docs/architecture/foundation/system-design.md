@@ -341,8 +341,8 @@ horopak
 `AudioPlatform` selects only the native implementation for the target platform;
 native audio headers remain private to that target. `NetworkTransportENet` owns the
 optional native UDP socket and ENet implementation and remains separate from typed
-session/protocol coordination in `NetworkRuntime`. `NetworkTransportNull` provides
-deterministic in-memory/null transport for headless runs, mock testing, and offline modes. `GameplayApi` owns the public
+session/protocol/authentication coordination in `NetworkRuntime`. `NetworkTransportNull` provides
+deterministic in-memory/null transport for headless runs, mock testing, and offline modes; it depends on `NetworkApi` and `Foundation` only, not `Platform`. The host composition root transfers unique `INetworkTransport` ownership into `NetworkRuntime`. `GameplayApi` owns the public
 registration, descriptor, behavior, and runtime-capability contracts used by
 project gameplay modules. Generated project modules link this API rather than
 `ExtensionApi` or editor internals.
