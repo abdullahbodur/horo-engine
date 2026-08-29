@@ -10,7 +10,7 @@
 
 ## Context
 
-`docs/architecture/runtime/prefab-architecture.md` initially defined a prefab strictly as an authoring-time template expanded into the containing scene's `RuntimeSceneDefinition` prior to runtime initialization, stating that release packages never ship `.prefab` files. However, Gameplay behavior authoring (`docs/architecture/extensions/gameplay-behavior-authoring.md`), the cinematic sequencer (`docs/architecture/runtime/cinematic-sequencer.html`), and dynamic VFX/projectile systems require dynamic runtime instantiation of entity templates during active gameplay.
+`docs/architecture/runtime/prefab-architecture.md` initially defined a prefab strictly as an authoring-time template expanded into the containing scene's `RuntimeSceneDefinition` prior to runtime initialization, stating that release packages never ship `.prefab` files. However, Gameplay behavior authoring (`docs/architecture/extensions/gameplay-behavior-authoring.md`), the cinematic sequencer (`docs/architecture/runtime/cinematic-sequencer-architecture.md`), and dynamic VFX/projectile systems require dynamic runtime instantiation of entity templates during active gameplay.
 
 This discrepancy created an architectural contradiction:
 

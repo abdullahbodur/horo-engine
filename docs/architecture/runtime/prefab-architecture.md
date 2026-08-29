@@ -302,8 +302,8 @@ To support modular gameplay packages and project-specific C++ plugins:
    the base editor binary, the data is preserved in `RawComponentPayload` verbatim. Saving, cloning,
    or expanding the prefab preserves these components without truncation.
 3. **Runtime Spawning Safety**: If an unregistered component type is encountered during runtime
-   spawn, the runtime skips the unrecognized component, records a structured diagnostic warning,
-   and completes valid entity and behavior instantiation without aborting.
+   spawn, the transaction aborts before publishing entities or invoking behavior lifecycle hooks.
+   The runtime discards all staged entities and returns `PrefabError::ComponentTypeUnregistered`.
 
 ---
 
@@ -321,6 +321,7 @@ enum class PrefabError : std::uint32_t {
     ObjectCountExceeded,        // Template exceeds MaximumPrefabObjectCount (256)
     CyclicReferenceDetected,    // Nested prefab inclusion contains a cycle
     EntityAllocationExhausted,  // Scene runtime ran out of available EntityIds
+    ComponentTypeUnregistered,  // Cooked template references an unavailable component type
     ComponentAllocationFailed   // Memory allocation failed for component pool
 };
 ```
