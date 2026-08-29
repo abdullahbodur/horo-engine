@@ -177,7 +177,11 @@ struct EventKeyframe {
 };
 ```
 
-Events are queued during the evaluation phase and dispatched to registered gameplay behavior scripts, audio cues, or VFX triggers at the phase boundary.
+Event payload storage is cooked with the sequence asset and remains immutable for
+the asset lifetime. Evaluation enqueues lightweight views into a fixed-capacity,
+pre-allocated event queue; it neither constructs `VariantMap` entries nor grows
+the queue on the frame-hot path. Events are dispatched to registered gameplay
+behavior scripts, audio cues, or VFX triggers at the phase boundary.
 
 ### 5. Audio Track
 
