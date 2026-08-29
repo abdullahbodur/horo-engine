@@ -6,6 +6,10 @@
 - **Scope**: Gameplay AI runtime (`HoroAI`), agent brain state, blackboard storage and transactions, perception memory, simulation fixed-tick phases, task scheduler sharing, and separation from editor AI tooling.
 - **Issue**: [#1309](https://github.com/abdullahbodur/horo-engine/issues/1309) ([GAI-001.1])
 - **JIRA**: HORO-1309
+- **Related**:
+  - [ADR-022: AI Fixed-Tick Order, Authority and Simulation Budget](022-ai-fixed-tick-order-authority-and-simulation-budget.md) (fine-grained tick, host authority, profiles)
+  - [ADR-024: Perception Ownership, Sense Policy and Budget](024-perception-ownership-sense-policy-and-budget.md)
+  - [ADR-025: AI Decision Assets and Shared Gameplay Behavior Boundary](025-ai-decision-assets-and-gameplay-behavior-boundary.md)
 - **Normative documents**:
   - [Navigation And AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md)
   - [Gameplay Behavior Authoring](../architecture/extensions/gameplay-behavior-authoring.md)
@@ -37,7 +41,7 @@ Without explicit boundaries, gameplay AI risks several common architectural pitf
 | Area | Current state | Outcome |
 |---|---|---|
 | AI State Ownership | Informally described as scene-associated | **Ratified and enforced.** All AI state (`AiBrainState`, `BlackboardState`, `PerceptionMemory`, `AiTaskState`) is strictly owned by the active `SceneRuntime` generation. Entities are referenced via generation-checked `EntityId`s. |
-| Fixed-Tick Scheduling | High-level update during behavior pass | **Revised into explicit fixed-tick phases.** Discrete phases: `Perception Update` -> `Blackboard Mutation Safe Point` -> `Decision Evaluation` -> `Action/Navigation Intent Dispatch` -> `Behavior Script Step`. |
+| Fixed-Tick Scheduling | High-level update during behavior pass | **Revised into explicit coarse groups implemented by ADR-022.** `Perception` -> `BlackboardSync` -> `AiDecision` -> `AiIntentDispatch` -> `Gameplay` map onto `PerceptionSensePoll` -> `BlackboardSync` -> `AiDecisionEvaluate` -> `NavIntentCommit` -> `CharacterControllerLocomotion` (+ generic behavior step), then `AnimationRigUpdate`. |
 | Blackboard Mutation | Ad-hoc property writes | **Revised with transactional safe points.** Blackboard mutations are batched and committed at deterministic synchronization safe points; observers fire only at safe points. |
 | Scene ECS Mutation | Direct modification possible | **Restricted.** AI decisions and tasks never mutate ECS topology directly; mutations are queued into `SceneCommandBuffer` and committed at Scene synchronization points. |
 | Editor AI / LLM Separation | Separate documents exist | **Ratified and strictly isolated.** `HoroAI` (runtime gameplay AI) is fully decoupled from `HoroEditor` AI agent (`AIA-001`). Packaged games and servers never link Editor LLM / MCP tooling. |
@@ -71,17 +75,19 @@ SceneRuntime (Generation N)
 
 ### 2. Fixed-Tick Execution Phases and Mutation Safe Points
 
-To guarantee determinism, avoid race conditions, and support parallel execution across independent agents, the simulation fixed tick is partitioned into discrete, ordered phases:
+To guarantee determinism, avoid race conditions, and support parallel execution across independent agents, the simulation fixed tick is partitioned into discrete, ordered **coarse groups**. These groups are the GAI-001 scheduling contract. ADR-022 names the fine-grained mutation phases that implement them; this ADR does not define a second tick.
 
-```mermaid
-flowchart TD
-    subgraph Fixed Simulation Tick
-        P1["1. SystemPhase::Perception\n(Sensory queries, LOS raycasts, stimuli decay)"]
-        --> P2["2. SystemPhase::BlackboardSync\n(Blackboard Mutation Safe Point & Observer Notifications)"]
-        --> P3["3. SystemPhase::AiDecision\n(Behavior Trees, State Machines, Utility AI, Planners)"]
-        --> P4["4. SystemPhase::AiIntentDispatch\n(Movement, Pathfinding Requests, Action Intents)"]
-        --> P5["5. SystemPhase::Gameplay\n(Generic Gameplay Behaviors, Script Steps, Locomotion)"]
-    end
+```text
+ADR-021 coarse groups              ADR-022 fine phases
+1. Perception                   -> PerceptionSensePoll
+2. BlackboardSync               -> BlackboardSync
+3. AiDecision                   -> AiDecisionEvaluate
+4. AiIntentDispatch             -> NavIntentCommit
+                                   + typed combat/animation intent enqueue
+5. Gameplay                     -> CharacterControllerLocomotion
+                                   + generic IBehaviorInstance::OnFixedUpdate
+                               then AnimationRigUpdate
+                               then variable-rate RenderExtraction (not a fixed phase)
 ```
 
 #### Phase Breakdown
@@ -104,13 +110,14 @@ flowchart TD
    - Generates action and navigation intents; does **not** directly step physical movement or mutate scene hierarchy.
 
 4. **`SystemPhase::AiIntentDispatch` (Action/Navigation Intent Dispatch)**:
-   - Translates decision outputs into actionable requests: pathfinding requests (`PathfindingRequest`), steering intents, combat actions, or animation triggers.
-   - Submits pathfinding and spatial analysis requests to scene navigation services.
+   - Translates decision outputs into typed intents. Navigation and steering commit in ADR-022 `NavIntentCommit` (`PathfindingRequest`, RVO/crowd velocity).
+   - Combat actions and animation triggers are **not** absorbed into `NavIntentCommit`. They enqueue as typed intents consumed later by combat/gameplay systems and `AnimationRigUpdate`.
+   - Does not step physics, play clips, or mutate scene hierarchy.
 
 5. **`SystemPhase::Gameplay` (Behavior Script Step & Integration)**:
-   - General gameplay behaviors (`IBehaviorInstance::OnFixedUpdate`), script behaviors, and character controllers step.
-   - Consumes action/navigation intents, updates kinematics, triggers gameplay events.
-   - Writes deferred structural changes to `SceneCommandBuffer`.
+   - Generic gameplay behaviors (`IBehaviorInstance::OnFixedUpdate`) and character-controller locomotion step after AI intents exist.
+   - This group is **not** the AI decision phase. Decision graphs evaluate in `AiDecision` / `AiDecisionEvaluate` (ADR-025).
+   - Consumes navigation, combat, and animation intents; updates kinematics; writes deferred structural changes to `SceneCommandBuffer`.
 
 #### Mutation Safe Point Invariant
 
@@ -161,7 +168,10 @@ Gameplay AI and generic gameplay behavior authoring share common foundational pr
    - All AI background jobs capture a `CancellationToken` tied to the active scene generation and submit completion payloads back to the owner thread via bounded queues to be applied at designated phase safe points.
 
 4. **Execution Context Parity**:
-   - `AiExecutionContext` is modeled consistently with `BehaviorContext`: providing `SceneRuntimeAccess`, `EntityId`, `AssetAccess`, `GameplayInputAccess`, `SceneCommandBuffer`, and `RuntimeDiagnostics`, without exposing raw renderer, GUI, or editor internals.
+   - AI nodes and tasks receive `BehaviorExecutionContext`, which extends `BehaviorContext`. There is no second `AiExecutionContext` type.
+   - Shared fields: `SceneRuntimeAccess&`, `EntityId`, `AssetAccess&`, `GameplayInputAccess&`, `SceneCommandBuffer&`, `RuntimeDiagnostics&`.
+   - AI-only additions on the derived context: `AIBlackboardView&` (typed view over scene-owned `BlackboardState`) and `CancellationToken` for cooperative abort of long-running jobs.
+   - `GameplayInputAccess` exists so possessed/player-controlled entities can reuse the same task types as NPCs (`MoveTo`, `PlayAnim`, interact). It exposes read-only semantic action snapshots, never raw device state. NPC-only contexts receive a deterministic empty snapshot and cannot observe another player's input.
 
 ---
 

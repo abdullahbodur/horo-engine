@@ -379,11 +379,14 @@ struct BlackboardState {
 };
 ```
 
-`PerceptionMemory::stimuli` reserves the capability-tier limit during scene
-activation and never grows during simulation; overflow follows the configured
+`PerceptionMemory` is the scene-owned agent record. Its stimulus buffer is the
+bounded `AIPerceptionMemory` store from ADR-024 (`maxTrackedStimuli` default 16,
+compile-time hard cap 32). `PerceptionMemory::stimuli` reserves that cap during
+scene activation and never grows during simulation; overflow follows the configured
 oldest/lowest-significance eviction policy. `BlackboardState::values` is sized
 exactly once from its immutable schema. Neither container allocates on fixed-tick
-paths.
+paths. `AIBlackboardView` is the typed access view over `BlackboardState`; example
+layouts named `AIBlackboard` describe keys, not a second store.
 
 1. **Generation Validation**: AI components (`AiAgentComponent`, `AiControllerComponent`), blackboard instances, perception memories, and task execution contexts reference entities using generation-checked `EntityId` (or `EntityRef { SceneRuntimeId, EntityId }`). Any stale handle referencing an entity destroyed in an earlier frame or previous scene generation is rejected.
 2. **Scene Lifecycle Binding**:
@@ -394,15 +397,19 @@ paths.
 
 ## Fixed-Tick Simulation Scheduling And Safe Points
 
-Gameplay AI execution is partitioned into discrete, deterministic phases within the fixed simulation tick. This five-phase sequence is the **AI scheduling contract** (perception through gameplay behavior step). It is not the full engine simulation tick: character locomotion commit, animation, and render extraction belong to that broader tick and are specified separately in [Simulation Lifecycle And Fixed-Tick Phase Ordering](#simulation-lifecycle-and-fixed-tick-phase-ordering).
+Gameplay AI execution is partitioned into discrete, deterministic **coarse groups** within the fixed simulation tick (ADR-021). They are not a second scheduler. ADR-022 names the fine-grained mutation phases that implement them; character locomotion commit, animation, and render extraction belong to that broader tick in [Simulation Lifecycle And Fixed-Tick Phase Ordering](#simulation-lifecycle-and-fixed-tick-phase-ordering).
 
 ```text
-Fixed Simulation Tick
-  ├── 1. SystemPhase::Perception       (Spatial queries, LOS raycasts, sensory stimulus decay)
-  ├── 2. SystemPhase::BlackboardSync   (Blackboard Mutation Safe Point & Observer Notifications)
-  ├── 3. SystemPhase::AiDecision       (Behavior Trees, State Machines, Utility AI, Planners)
-  ├── 4. SystemPhase::AiIntentDispatch (Movement, Pathfinding Requests, Action Intents)
-  └── 5. SystemPhase::Gameplay         (Generic Gameplay Behaviors, Script Steps, Locomotion)
+ADR-021 coarse group               ADR-022 fine phase
+1. SystemPhase::Perception      -> PerceptionSensePoll
+2. SystemPhase::BlackboardSync  -> BlackboardSync
+3. SystemPhase::AiDecision      -> AiDecisionEvaluate
+4. SystemPhase::AiIntentDispatch-> NavIntentCommit
+                                   + typed combat/animation intent enqueue
+5. SystemPhase::Gameplay        -> CharacterControllerLocomotion
+                                   + IBehaviorInstance::OnFixedUpdate
+                               then AnimationRigUpdate
+                               then variable-rate RenderExtraction (not a fixed phase)
 ```
 
 ### Phase Contracts
@@ -421,11 +428,11 @@ Fixed Simulation Tick
    - Emits high-level action and navigation intents (e.g. move-to destination, attack intent, cover request).
    - Does not step physics or mutate scene topology directly.
 4. **`SystemPhase::AiIntentDispatch` (Action/Navigation Intent Dispatch)**:
-   - Translates decision outputs into concrete pathfinding requests (`PathfindingRequest`), steering commands, and combat action triggers.
-   - Dispatches requests to the navigation system and character controllers.
+   - Translates decision outputs into typed intents. Navigation and steering commit in `NavIntentCommit`.
+   - Combat actions and animation triggers enqueue as typed intents consumed later; they are not absorbed into `NavIntentCommit`.
 5. **`SystemPhase::Gameplay` (Behavior Script Step & Locomotion)**:
-   - Generic object-attached gameplay behaviors (`IBehaviorInstance::OnFixedUpdate`), script behaviors, and character controllers step.
-   - Consumes navigation and action intents, integrates locomotion, and evaluates gameplay rules.
+   - Generic object-attached gameplay behaviors (`IBehaviorInstance::OnFixedUpdate`) and character controllers step **after** AI decision evaluation.
+   - This group is not the AI decision phase.
 
 ### Scene Mutation Safe Points
 
@@ -561,7 +568,7 @@ These paradigms will integrate via dedicated provider extension seams without br
 
 1. **Standard Execution Context**:
    - AI tasks evaluate through `BehaviorExecutionContext` (extending `BehaviorContext`), granting controlled access to scene resources, typed blackboard views, input, command buffers, and cancellation tokens.
-   - `AIDecisionSystem` is the sole scheduling authority in `SystemPhase::Gameplay`. `AiControllerComponent` and eligible `BehaviorComponent` attachments are inert plan bindings discovered by that system; components do not own runners.
+   - `AIDecisionSystem` is the sole scheduling authority in `AiDecisionEvaluate` (ADR-021 `AiDecision`). `AiControllerComponent` and eligible `BehaviorComponent` attachments are inert plan bindings discovered by that system; components do not own runners. Generic `OnFixedUpdate` behaviors still run later in `Gameplay` / `CharacterControllerLocomotion`.
    - `GameplayInputAccess` is inherited for task parity with generic gameplay behaviors. It exposes only read-only semantic actions for possessed/player-controlled entities, never raw device state; NPC-only contexts receive a deterministic empty snapshot.
 
 ```cpp
@@ -674,22 +681,12 @@ Asynchronous AI workloads—such as NavMesh pathfinding, perception visibility r
 
 ## Simulation Lifecycle And Fixed-Tick Phase Ordering
 
-The engine's **full simulation tick** has six fixed-tick phases spanning AI,
-physics locomotion, and animation. A variable-rate render-extraction bridge then
-consumes the committed simulation snapshots for presentation. This is not a
-second AI scheduler and does not replace the five-phase AI scheduling contract
-above.
-
 AI simulation executes as a fixed-timestep pipeline within the engine's fixed
 update loop, defined by [Runtime Lifecycle Architecture](./runtime-lifecycle.md).
-To guarantee determinism, eliminate data races, and maintain strict ownership
-boundaries, simulation ticks execute six ordered phases followed by the
-variable-rate presentation bridge:
-
-AI simulation executes as a fixed-timestep pipeline within the engine's fixed
-update loop, defined by [Runtime Lifecycle Architecture](./runtime-lifecycle.md).
-Six ordered phases execute in each simulation tick. A variable-rate presentation
+Six ordered phases execute in each simulation tick; they implement the ADR-021
+coarse groups. A variable-rate presentation
 bridge runs afterward and consumes the committed snapshots:
+
 ```text
 PerceptionSensePoll
         |  (Raw sensory stimuli buffers)

@@ -6,6 +6,7 @@
 - **Scope**: AI decision graph assets (`BehaviorTreeAsset`, `StateMachineAsset`, `UtilityAiAsset`), runtime execution plan compilation, node hierarchy, UI separation, 1.0 paradigms vs post-1.0 extensions, task execution and lifecycle alignment
 - **Issue**: [#1333](https://github.com/abdullahbodur/horo-engine/issues/1333) ([GAI-003.1])
 - **JIRA**: HORO-1333
+- **Related**: [ADR-021: Gameplay AI Ownership, Scheduling and Behavior Boundary](021-gameplay-ai-ownership-scheduling-and-behavior-boundary.md)
 - **Normative documents**: [Navigation And AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md), [Gameplay Behavior Authoring](../architecture/extensions/gameplay-behavior-authoring.md), [Save Game And Persistence](../architecture/runtime/save-game-and-persistence.md)
 
 ## Context
@@ -16,7 +17,7 @@ Prior to this decision, the boundary between AI decision graphs, generic visual 
 
 - **UI Coupling Risk**: Graph authoring tools often couple persisted asset schemas with editor UI state (such as `imgui-node-editor` node positions, canvas zoom/pan, pin layout coordinates, or visual styling). This bloats runtime assets, introduces editor dependencies into runtime modules, and makes headless/server builds fragile.
 - **Generic Visual Scripting vs Focused Decision Graphs**: Attempting to make AI decision graphs a universal, Turing-complete visual programming language creates unnecessary complexity, poor performance, and difficult debugging. AI decision graphs require specialized evaluation semantics (ticks, reactive aborts, decorator conditions, utility curves) rather than generic imperative dataflow.
-- **Task Lifecycle Duplication**: There was a risk of creating an isolated AI task manager, thread scheduler, or redundant component lifecycle that bypasses the deterministic `SystemPhase::Gameplay` fixed-step scheduling, scene command buffers, and standard `BehaviorContext`.
+- **Task Lifecycle Duplication**: There was a risk of creating an isolated AI task manager, thread scheduler, or redundant component lifecycle that bypasses the deterministic `AiDecisionEvaluate` phase, scene command buffers, and standard `BehaviorExecutionContext`.
 - **Scope Creep (HTN, GOAP, RL)**: Advanced AI paradigms such as Hierarchical Task Networks (HTN), Goal-Oriented Action Planning (GOAP), and Reinforcement Learning / LLM agents were undefined in terms of delivery phase, creating ambiguity for 1.0 deliverables.
 
 [GAI-003.1] establishes the authoritative architectural boundary, asset model, compiler pipeline, 1.0 core paradigms, and runtime execution contract.
@@ -101,19 +102,17 @@ These post-1.0 capabilities will plug in via dedicated provider interfaces witho
 ### 3. Runtime Task & Lifecycle Alignment
 
 1. **Evaluation Phase & Concurrency**:
-   - AI decision plans evaluate strictly within `SystemPhase::Gameplay` during the deterministic fixed-step simulation tick.
-   - `AIDecisionSystem` is the sole scheduling and evaluation authority. `AiControllerComponent` and eligible `BehaviorComponent` attachments are inert bindings that identify an entity, plan asset, and configuration; the system discovers those bindings and evaluates them. Components do not own runners or private update loops.
+   - AI decision plans evaluate strictly within ADR-022 `AiDecisionEvaluate` (ADR-021 coarse group `SystemPhase::AiDecision`) during the deterministic fixed-step simulation tick. They do **not** evaluate inside `SystemPhase::Gameplay`.
+   - `AIDecisionSystem` is the sole scheduling and evaluation authority in that phase. `AiControllerComponent` and eligible `BehaviorComponent` attachments are inert bindings that identify an entity, plan asset, and configuration; the system discovers those bindings and evaluates them. Components do not own runners or private update loops.
+   - Generic object-attached behaviors (`IBehaviorInstance::OnFixedUpdate`) still run in the later `Gameplay` / `CharacterControllerLocomotion` window.
    - Tasks execute sequentially or in parallel batches per agent; task code does not spawn uncoordinated OS threads or ambient background jobs.
 
 2. **Standard Execution Context**:
-   - AI nodes and tasks receive `BehaviorExecutionContext` (extending `BehaviorContext`), granting controlled access to:
-     - `SceneRuntimeAccess&` / `EntityId`
-     - `AIBlackboardView&` (typed blackboard read/write)
-     - `GameplayInputAccess&`
-     - `SceneCommandBuffer&` (deferred structural ECS changes)
-     - `CancellationToken` (for aborting long-running asynchronous tasks)
+   - AI nodes and tasks receive `BehaviorExecutionContext` (extending `BehaviorContext`). `AiExecutionContext` is not a separate type.
+   - Shared `BehaviorContext` fields: `SceneRuntimeAccess&` / `EntityId`, `AssetAccess&`, `GameplayInputAccess&`, `SceneCommandBuffer&`, `RuntimeDiagnostics&`.
+   - AI-only additions: `AIBlackboardView&` (typed view over scene-owned `BlackboardState`) and `CancellationToken` (for aborting long-running asynchronous tasks).
    - Tasks do not perform direct raw pointer mutations on foreign entities or bypass ECS synchronization points.
-   - `GameplayInputAccess` exposes read-only, semantic gameplay actions for shared tasks used by possessed/player-controlled entities; it never exposes raw device state. NPC-only contexts receive a deterministic empty action snapshot, so AI decisions cannot observe another player's input implicitly.
+   - `GameplayInputAccess` exposes read-only, semantic gameplay actions so possessed/player-controlled entities can share task types with NPCs; it never exposes raw device state. NPC-only contexts receive a deterministic empty action snapshot, so AI decisions cannot observe another player's input implicitly.
 
 3. **Task Return Statuses & Cooperative Abort**:
    - Standard task statuses: `Success`, `Failure`, `Running`, `Aborted`.
@@ -141,7 +140,7 @@ These post-1.0 capabilities will plug in via dedicated provider interfaces witho
 | Graph Asset Schema | Undefined separation between visual node editor and asset data | **Decoupled.** Graph assets store pure semantic data. Node coordinates/visual properties are editor-only sidecars. |
 | Runtime Plan Representation | Unspecified (risk of deep runtime node pointer trees) | **Compiled flat plan.** Read-only contiguous plan bytecode/records, separate per-agent execution state. |
 | 1.0 AI Paradigms | Loosely listed BT, HSM, Utility, GOAP, HTN | **1.0 frozen to BT, HSM, Simple Utility.** HTN, GOAP, RL, and LLM reasoning are strictly post-1.0 extensions. |
-| Task Scheduling | Risk of separate AI task runner / thread pool | **Unified in `BehaviorExecutionContext`.** Evaluates in `SystemPhase::Gameplay` fixed tick with cooperative async cancellation. |
+| Task Scheduling | Risk of separate AI task runner / thread pool | **Unified in `BehaviorExecutionContext`.** Evaluates in `AiDecisionEvaluate` (ADR-021 `AiDecision`) with cooperative async cancellation. Generic behaviors still step later in `Gameplay`. |
 | Blackboard Access | Generic property maps | **Typed `AIBlackboardView` with schema validation and change notifications.** |
 | Hot Reload Policy | Unspecified | **Safe-point plan swap with graceful abort and fallback preservation.** |
 | Save / Restore | Decision runtime state not connected to persistence | **Durable logical state captured through `IGameplayStateProvider`; transient jobs and handles are rebuilt after restore.** |
@@ -164,7 +163,7 @@ These post-1.0 capabilities will plug in via dedicated provider interfaces witho
 
 - **Performance**: Contiguous compiled execution plans eliminate runtime pointer chasing and per-frame heap allocations during AI evaluation.
 - **Maintainability**: Editor UI changes in `imgui-node-editor` cannot break runtime decision asset schemas, binary serialization, or network replication.
-- **Safety**: Strict adherence to `SystemPhase::Gameplay` and `SceneCommandBuffer` prevents race conditions, memory corruption, and non-deterministic simulation divergence.
+- **Safety**: Strict adherence to `AiDecisionEvaluate` / later `Gameplay` ordering and `SceneCommandBuffer` prevents race conditions, memory corruption, and non-deterministic simulation divergence.
 - **Extensibility**: Custom tasks, decorators, and considerations can be authored in native C++ or scripts through standard descriptor registration macros without modifying engine core.
 - **Clarity**: Future advanced planning architectures (GOAP/HTN/RL) have clear non-blocking extension seams without complicating the 1.0 release milestone.
 

@@ -795,27 +795,39 @@ schedulers or divergent blackboard structures:
      instances. A generic gameplay behavior can read blackboard keys written by AI
      decisions or write blackboard state to trigger AI reactions.
    - Blackboard mutations are committed at deterministic synchronization safe points
-     before decision evaluation runs.
+     (`SystemPhase::BlackboardSync`) before decision evaluation runs.
 
-4. **Single Task Scheduler & Lifecycle Alignment**:
+4. **Unified Scheduling and Execution Phases**:
+   - Both systems declare scheduling dependencies via `ScheduleNodeId` within the
+     scene phase scheduler.
+   - ADR-021 coarse groups (`Perception` -> `BlackboardSync` -> `AiDecision` ->
+     `AiIntentDispatch` -> `Gameplay`) map onto the ADR-022 fine-grained tick
+     (`PerceptionSensePoll` -> `BlackboardSync` -> `AiDecisionEvaluate` ->
+     `NavIntentCommit` -> `CharacterControllerLocomotion` -> `AnimationRigUpdate`).
+   - AI perception, decision evaluation, and intent dispatch run in those earlier
+     phases. Generic gameplay behaviors (`IBehaviorInstance::OnFixedUpdate`) step
+     in the `Gameplay` / `CharacterControllerLocomotion` window after intents commit.
+   - `AIDecisionSystem` is the sole AI evaluation authority in
+     `AiDecisionEvaluate`. Controller and eligible behavior components are inert
+     bindings discovered by that system, not component-owned runners.
+
+5. **Single Task Scheduler & Lifecycle Alignment**:
    - Gameplay behaviors and AI systems must not create competing thread pools or
      private background task loops.
-   - `AIDecisionSystem` is the sole AI evaluation authority in fixed-step
-     `SystemPhase::Gameplay`. AI/controller and eligible behavior components are
-     inert bindings discovered by the system, not component-owned runners.
    - AI tasks evaluate through `BehaviorExecutionContext` (extending `BehaviorContext`).
    - Long-running asynchronous operations (such as pathfinding requests, animation playback, or spatial queries) capture a `CancellationToken` bound to the active `SceneRuntime` generation. On abort, `IDecisionTask::OnAbort()` cancels downstream subsystem work cleanly.
 
-5. **Execution Context Parity**:
+6. **Execution Context Parity**:
    - `BehaviorContext` and `BehaviorExecutionContext` provide consistent, bounded access to
      `SceneRuntimeAccess`, `EntityId`, `AssetAccess`, `GameplayInputAccess`,
      `SceneCommandBuffer`, and `RuntimeDiagnostics`, preventing direct unbuffered
      scene mutations.
-   - In AI tasks, `GameplayInputAccess` exposes only semantic action snapshots for
-     possessed/player-controlled entities. NPC-only contexts receive a deterministic
-     empty snapshot and cannot inspect raw device input or another player's actions.
+   - In AI tasks, `GameplayInputAccess` exists for possessed/player-controlled
+     entities that share the same task types as NPCs. It exposes only semantic
+     action snapshots, never raw device state. NPC-only contexts receive a
+     deterministic empty snapshot and cannot inspect another player's actions.
 
-6. **Decision State Persistence**:
+7. **Decision State Persistence**:
    - The AI subsystem participates in runtime save/restore through
      `IGameplayStateProvider`. It serializes stable plan/node identity, compatible
      execution frames, timers, and schema-approved blackboard values.
@@ -896,5 +908,3 @@ play-session or process restart rather than attempting unsafe live mutation.
 - [Editor Document Model](../editor/editor-document-model.md)
 - [Extension System](./plugin-system.md)
 - [Horo Package System](../packages/package-system.md): library-provided behaviors
-- [Navigation And AI Architecture](../runtime/navigation-and-ai-architecture.md): NavMesh, perception, and AI decision runtime
-- [ADR-021: Gameplay AI Ownership, Scheduling and Behavior Boundary](../../adr/021-gameplay-ai-ownership-scheduling-and-behavior-boundary.md)
