@@ -144,6 +144,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [World Streaming Architecture](./runtime/world-streaming-architecture.md):
   streaming cells, volumes, priority, budgets, server authority, and editor
   world-composition tools.
+- [Coordinate Precision And Origin Rebasing](./runtime/coordinate-precision-and-origin-rebasing.md):
+  canonical 64-bit world coordinates, floating origin rebasing, camera-relative
+  rendering, and subsystem synchronizations.
 - [Save Game And Persistence](./runtime/save-game-and-persistence.md): runtime
   save state, slot format, migration, cloud save, integrity, and secure archive
   loading.
