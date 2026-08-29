@@ -84,9 +84,11 @@ composition roots:
 - **Ownership**: Standalone, lightweight CLI utility for `.horo` asset pak creation,
   table of contents (TOC) inspection, integrity verification, compression, encryption,
   and extraction.
-- **Dependencies**: Links ONLY `HoroEngine::Archive` (pak format, SHA-256/CRC32
-  verification, AES-128-CTR crypto), `HoroEngine::Foundation`, `HoroEngine::Platform`,
-  and minimal asset compilation adapters.
+- **Dependencies**: Links `HoroEngine::CliHost`, `HoroEngine::CliApi`,
+  `HoroEngine::Archive` (pak format, SHA-256/CRC32 verification, AES-128-CTR crypto),
+  `HoroEngine::Foundation`, `HoroEngine::Platform`, and minimal asset compilation
+  adapters. **`CliHost` is the sole argv parser for `horopak`; no second CLI
+  implementation exists.**
 - **Invariants**:
   - Strictly forbidden from linking `HoroEngine::Gui`, `HoroEngine::RenderFrontend`,
     `HoroEngine::RenderApi`, `HoroEngine::RuntimeScene`, `HoroEngine::GameplayRuntime`,
@@ -189,15 +191,31 @@ host-owned command registry.
 namespace Horo::Cli {
 
     /**
-     * @brief Context provided to a CLI command adapter during execution.
+     * @brief Presentation-independent progress/event sink exposed to adapters.
+     *
+     * `CliOutputPresenter` implements this interface and converts events to the
+     * active output mode (progress bar for human, JSONL record for jsonl).
+     * Adapters must not write stdout or stderr directly.
+     */
+    class ICliProgressSink {
+    public:
+        virtual ~ICliProgressSink() = default;
+        virtual void Report(const CliProgressEvent& event) = 0;
+    };
+
+    /**
+     * @brief Invocation-scoped context provided to a CLI command adapter during execution.
+     *
+     * Adapters receive their domain-service dependencies by constructor injection at
+     * registration time. This context carries only the values scoped to a single
+     * command invocation: cancellation, identity, and progress reporting.
      */
     struct CliExecutionContext {
-        ApplicationServices& application;
-        JobSystem& jobs;
-        const ConfigurationSnapshot& configuration;
         const CancellationToken& cancellation;
-        ICliOutputWriter& output;
-        InvocationId invocationId;
+        InvocationId             invocationId;
+        ICliProgressSink&        progress;
+        // ApplicationServices, JobSystem, ConfigurationSnapshot, and output writers
+        // are not exposed here. Domain services are injected via the adapter constructor.
     };
 
     /**
@@ -211,10 +229,28 @@ namespace Horo::Cli {
 
         [[nodiscard]] virtual Result<CliCommandResult> Execute(
             const CliCommandRequest& request,
-            CliExecutionContext& context) = 0;
+            CliExecutionContext&     context) = 0;
     };
 
 }  // namespace Horo::Cli
+```
+
+**Constructor injection** is the only approved mechanism for adapters to access domain
+services:
+
+```cpp
+// Correct: domain services injected at construction, not discovered at invoke time.
+class AssetCookCliAdapter final : public ICliCommandAdapter {
+public:
+    explicit AssetCookCliAdapter(IAssetCooker& cooker);
+
+    Result<CliCommandResult> Execute(
+        const CliCommandRequest& request,
+        CliExecutionContext&     context) override;
+
+private:
+    IAssetCooker& m_cooker; // injected, not fetched from ApplicationServices
+};
 ```
 
 ### Adapter Equivalence Contract
@@ -327,6 +363,34 @@ In structured modes:
 Commands do not silently change schema based on TTY presence. TTY detection may
 change presentation only in human mode.
 
+### Output Mode Contract
+
+| Mode | `stdout` | Progress / events |
+|:---|:---|:---|
+| `human` | Final human-readable payload | TTY: live progress bar on `stderr`. Non-TTY: rate-limited phase updates on `stderr`. |
+| `json` | **Single** final JSON envelope only. Never emits partial or streaming records. | Not emitted on `stdout`. Optional human-readable progress on `stderr`; machine consumers must ignore `stderr`. |
+| `jsonl` | One JSON object per line: zero or more progress/event records, then one terminal result record. | Events appear on `stdout` as JSONL; no ANSI sequences. |
+
+`--output=json` on a long-running operation (e.g. `horo-engine asset cook --output=json`)
+yields **one** envelope at completion. Machine consumers that need incremental progress must
+use `--output=jsonl`.
+
+### Output Ownership
+
+Final result and streaming progress have distinct owners. `CliOutputPresenter` is
+the only component that writes to `stdout` or `stderr`:
+
+```text
+Final payload:
+  adapter -> CliCommandResult -> CliOutputPresenter -> stdout
+
+Streaming progress/events:
+  adapter -> ICliProgressSink -> CliOutputPresenter -> stdout (jsonl) or stderr (human)
+```
+
+Adapters never write `stdout` or `stderr` directly. `ICliOutputWriter` is not
+part of the adapter contract.
+
 ## Structured Output Envelope
 
 Structured output modes use a stable top-level envelope unless a command
@@ -371,7 +435,26 @@ records only when requested.
 
 Progress is bounded and never delays the operation because a consumer is slow.
 
+
 ## Cancellation And Signals
+
+### Signal Ownership Chain
+
+```text
+OS SIGINT / SIGTERM
+   -> Platform signal bridge (HoroEngine::Platform)
+   -> CancellationSource.cancel()
+   -> CancellationToken
+   -> adapter / domain use case
+```
+
+- **`HoroEngine::Platform`** owns signal registration and the typed bridge. Domain
+  operations and adapters never install OS signal handlers.
+- **`CliHost`** owns orchestration: it subscribes to the process `CancellationSource`,
+  aborts in-flight dispatch, and maps cooperative cancellation to exit code `7`.
+- Domain operations observe `CancellationToken` and stop at safe checkpoints.
+
+### Cancellation Semantics
 
 The first interrupt requests cooperative cancellation. A second interrupt within
 a configured period may request forced host termination after emergency
@@ -385,6 +468,7 @@ Cancellation:
 - returns the cancellation exit category
 
 The CLI does not leave background jobs running after process exit.
+
 
 ## Input Sources
 
@@ -435,7 +519,7 @@ Stable categories:
 | `6` | **Security / Permission Error** | Access denied, untrusted script execution, or unauthorized cvar/command execution. |
 | `7` | **Cancelled / Interrupted** | Operation was cancelled cooperatively via `SIGINT`/`SIGTERM` or cancellation token. |
 | `8` | **Timeout** | Operation exceeded its declared execution timeout. |
-| `10` | **Internal Invariant Failure** | Engine bug, unhandled internal invariant violation, or memory corruption. |
+| `10` | **Internal Invariant Failure** | Engine bug or unexpected internal invariant violation detected in-process. Not a crash mapping — `SIGSEGV`, `SIGABRT`, and other fatal signals keep OS-native termination semantics and are not rewritten into `10`. |
 
 Code `1` is reserved for legacy or host-adapter failures that occur before the
 Horo error mapping layer is available, such as an uncaught host exception or a
@@ -473,7 +557,9 @@ without maintaining competing sources of truth:
    `CliCommandRegistry`, and `CliOptionParser`.
 2. **Dispatch & Adapters**: Introduce `CliDispatcher`, `CliExecutionContext`, and
    migrate built-in commands (`--emit-observability-smoke`, `--diagnostic-bundle`)
-   into typed `ICliCommandAdapter` registrations (`observability.smoke`, `diagnostics.bundle`).
+   into typed `ICliCommandAdapter` registrations:
+   `CommandPath{{"observability","smoke"}}`, `CommandPath{{"diagnostics","bundle"}}`.
+   User-facing syntax: `horo-engine observability smoke`, `horo-engine diagnostics bundle`.
 3. **Structured Streams & MCP Serve**: Implement JSON/JSONL output presenters,
    cancellation hooks, and headless `horo-engine mcp serve` composition.
 4. **Host Switchover**: Replace `apps/horo-engine/main.cpp` entry point with
