@@ -330,7 +330,7 @@ struct AIPerceptionMemory {
      $\text{ageSeconds} \ge \text{memoryDuration}$ (default 10 simulation
      seconds), the stimulus is purged.
 3. **Last Known Position & Velocity Tracking**:
-   - Perception records store `lastKnownLocation` and `lastKnownVelocity`.
+   - Perception records store `lastKnownPosition` and `lastKnownVelocity`.
    - Behavior trees and blackboards query last known location rather than live
      target transforms, preventing AI agents from cheating through walls.
 4. **Lifecycle And Weak Entity Safety**:
@@ -339,14 +339,173 @@ struct AIPerceptionMemory {
      stale handles and discard the record immediately, preventing use-after-free
      and stale target locking.
 
-## Behavior Integration
+## Behavior Integration And AI Decision Graphs
 
-AI behavior is authored through the gameplay behavior system:
+AI decision making is authored as dedicated graph assets that compile into flat, immutable runtime execution plans and execute within the standard scene behavior lifecycle without introducing a secondary task manager or visual scripting engine.
 
-- Behavior trees drive high-level AI decision making
-- State machines manage agent states (idle, patrol, combat, flee)
-- Utility-based AI evaluates multiple options and selects the best action
-- Blackboard stores agent knowledge (target, last known position, patrol path)
+### Graph Asset Model And UI Independence
+
+1. **Pure Semantic Graph Assets**:
+   - Persisted graph identity is established by typed assets: `BehaviorTreeAsset` (`.horo_bt`), `StateMachineAsset` (`.horo_sm`), and `UtilityAiAsset` (`.horo_utility`).
+   - Assets contain only semantic topology: stable `GraphId`, `NodeId`, `PinId`, `PropertyId`, schema versions, node type identifiers, property bindings, and blackboard key bindings.
+   - Visual presentation data (node layout $(x, y)$, routing bends, comments, zoom/pan) is stored exclusively in the asset's canonical `.meta` sidecar (for example, `Guard.horo_bt.meta`) or stripped during asset cooking. `.editor_meta` is not supported.
+   - Runtime modules and cooked assets have **zero dependency** on `imgui-node-editor` or editor widget libraries.
+
+2. **Compilation To Flat Runtime Plans**:
+   - Source graph assets are compiled by `DecisionGraphCompiler` into immutable runtime execution plans:
+     - `CookedBehaviorTreePlan`
+     - `CookedStateMachinePlan`
+     - `CookedUtilityPlan`
+   - A cooked plan is a contiguous array of node descriptors with precomputed integer jump offsets, child ranges, decorator masks, and blackboard index offsets.
+   - Cross-paradigm call nodes reference an entry in the cooked plan's dependency table. Entries use stable asset identity and expected plan kind; they never contain runtime pointers or inline copies of another plan. Cooking rejects missing references, kind/schema mismatches, dependency cycles, and nesting beyond the configured bound.
+   - Static plans are shared and read-only across all agent instances executing the asset, eliminating per-agent plan duplication and pointer chasing.
+   - Per-agent dynamic state is stored in an allocation-conscious `DecisionInstanceState`. Parallel composites own bounded active branches, and each branch owns a bounded stack of cross-plan execution frames. Hot-reload and restore map state by `(DecisionGraphAssetId, DecisionNodeId)`, never by transient array index.
+
+```cpp
+struct CookedDecisionNode {
+    DecisionNodeId           stableId; // persisted identity; survives recompile index shifts
+    DecisionNodeTypeId       typeId;
+    uint16_t                 parentIndex;
+    uint16_t                 firstChildIndex;
+    uint16_t                 childCount;
+    uint16_t                 decoratorMask;
+    DecisionNodeKind         nodeKind; // Composite, Decorator, Task, Service
+    std::span<const uint8_t> staticPayload; // includes Wait duration range and other static params
+};
+
+struct DecisionSubplanRef {
+    DecisionGraphAssetId assetId;
+    DecisionPlanKind expectedKind;
+    uint32_t requiredSchemaVersion;
+};
+
+struct DecisionExecutionFrame {
+    DecisionGraphAssetId planAssetId;
+    DecisionNodeId activeNodeId;
+};
+
+struct ActiveDecisionBranch {
+    static constexpr uint16_t kMaxSubplanDepth = 8;
+    std::array<DecisionExecutionFrame, kMaxSubplanDepth> frames{};
+    uint16_t frameCount{0};
+    JobHandle runningTask{};
+};
+
+struct DecisionInstanceState {
+    static constexpr uint16_t kMaxActiveBranches = 8; // Parallel fan-out bound
+    std::array<ActiveDecisionBranch, kMaxActiveBranches> activeBranches{};
+    uint16_t activeBranchCount{0};
+    // decorator memory and timers use (planAssetId, activeNodeId), never array indices
+};
+
+struct CookedDecisionPlanHeader {
+    DecisionGraphAssetId                assetId;
+    uint32_t                            schemaVersion;
+    BlackboardSchemaId                  requiredBlackboardSchema;
+    std::vector<DecisionSubplanRef>      subplanDependencies;
+};
+
+struct CookedBehaviorTreePlan {
+    CookedDecisionPlanHeader             header;
+    std::vector<CookedDecisionNode>     nodes;
+    std::vector<uint16_t>               serviceIndices;
+};
+```
+
+`CookedBehaviorTreePlan`, `CookedStateMachinePlan`, and `CookedUtilityPlan` all
+begin with the same `CookedDecisionPlanHeader`; therefore any paradigm can own
+validated subplan dependencies without merging or copying the referenced plan.
+
+### Core 1.0 AI Paradigms
+
+Horo 1.0 standardizes on three complementary decision paradigms:
+
+#### 1. Behavior Trees (BT)
+
+- **Composites**:
+  - `Selector`: Evaluates children sequentially until one succeeds or runs.
+  - `Sequence`: Evaluates children sequentially until one fails or runs.
+  - `Parallel`: Evaluates all children concurrently with configurable completion policies (`RequireOneSuccess`, `RequireAllSuccess`, `RequireAllComplete`, `StopOthersOnFailure`).
+- **Decorators (Conditions & Flow Control)**:
+  - `Inverter`: Inverts child result (`Success` $\leftrightarrow$ `Failure`).
+  - `Cooldown`: Enforces a mandatory cooldown duration between child executions.
+  - `Loop`: Repeats child execution for a fixed count or while a condition is satisfied.
+  - `BlackboardCheck`: Compares blackboard keys against constants, ranges, or other keys with reactive abort policies (`None`, `Self`, `LowerPriority`, `Both`).
+  - `TimeLimit`: Aborts child task if execution exceeds a specified duration.
+- **Tasks (Leaf Action Nodes)**:
+  - `MoveTo`: Issues asynchronous pathfinding and movement requests to `NavigationSystem`.
+  - `Wait`: Pauses branch execution for a fixed or randomized duration.
+  - `PlayAnim`: Triggers an animation montage or clip and waits for completion.
+  - `CustomTask`: User-defined native C++ or script tasks conforming to the decision task contract.
+- **Services**:
+  - Periodic background evaluations attached to composite or subtree nodes, updating blackboard values or environment queries while the subtree remains active.
+
+#### 2. Hierarchical State Machines (HSM)
+
+- `StateMachineAsset` is the canonical asset family for both flat and hierarchical state topology. HSM is the execution paradigm, not a separate persisted asset type.
+- Hierarchical states with nested sub-state machines.
+- Explicit entry actions, update actions, and exit actions.
+- Event-triggered and condition-triggered transitions evaluated against blackboard state.
+- State machines can host Behavior Trees as nested sub-state behaviors.
+
+#### 3. Simple Utility Scoring
+
+- Evaluates competing actions using consideration response curves (Linear, Polynomial, Logistic, Step).
+- Normalized scoring $[0.0, 1.0]$ with priority weighting and multiplier aggregation.
+- Utility selector selects the top-scoring action or samples from a top-tier bucketed probability distribution.
+
+#### 4. Explicit Post-1.0 Extension Paradigms
+
+Advanced planning and learning models are explicitly classified as **Post-1.0 Extensions**:
+
+- **Hierarchical Task Networks (HTN)**: Domain planning with methods and compound tasks.
+- **Goal-Oriented Action Planning (GOAP)**: Dynamic action graphs resolved via regression over world-state preconditions and effects.
+- **Reinforcement Learning (RL) & Learned Policies**: On-device neural network inference / ML-agent decision models.
+- **Conversational / Large Language Model (LLM) Decision Providers**: External generative AI NPC reasoning seams.
+
+These paradigms will integrate via dedicated provider extension seams without breaking or modifying the 1.0 decision core.
+
+### Runtime Task & Lifecycle Alignment
+
+1. **Standard Execution Context**:
+   - AI tasks evaluate through `BehaviorExecutionContext` (extending `BehaviorContext`), granting controlled access to scene resources, typed blackboard views, input, command buffers, and cancellation tokens.
+   - `AIDecisionSystem` is the sole scheduling authority in `SystemPhase::Gameplay`. `AiControllerComponent` and eligible `BehaviorComponent` attachments are inert plan bindings discovered by that system; components do not own runners.
+   - `GameplayInputAccess` is inherited for task parity with generic gameplay behaviors. It exposes only read-only semantic actions for possessed/player-controlled entities, never raw device state; NPC-only contexts receive a deterministic empty snapshot.
+
+```cpp
+enum class DecisionTaskStatus : uint8_t {
+    Success = 0,
+    Failure = 1,
+    Running = 2,
+    Aborted = 3,
+};
+
+class IDecisionTask {
+public:
+    virtual ~IDecisionTask() = default;
+    virtual DecisionTaskStatus OnEnter(BehaviorExecutionContext&) = 0;
+    virtual DecisionTaskStatus OnUpdate(BehaviorExecutionContext&, FixedDeltaTime) { return DecisionTaskStatus::Success; }
+    virtual void               OnAbort(BehaviorExecutionContext&) {}
+    virtual void               OnExit(BehaviorExecutionContext&, DecisionTaskStatus) {}
+};
+```
+
+1. **Cooperative Asynchronous Task Execution**:
+   - When a task returns `DecisionTaskStatus::Running`, it receives recurring update ticks until completion or abort.
+   - Long-running async requests (e.g. `MoveTo` navigation or animation playback) capture a `CancellationToken`. On abort, the task's `OnAbort()` cancels downstream subsystem requests cleanly.
+
+1. **Safe-Point Hot Reload And Plan Replacement**:
+   - Asset compilation produces a new `CookedDecisionPlan`.
+   - Running instances migrate at tick boundaries: compatible active paths retain state; incompatible edits trigger `OnAbort()` on active tasks and restart evaluation from the root node.
+   - Stale or invalid plans never replace the active runtime plan and log typed compiler diagnostics.
+
+1. **Save And Restore**:
+   - The AI subsystem contributes an `IGameplayStateProvider` to `RuntimeSaveService` and captures state only at the save snapshot safe point.
+   - Durable state includes plan asset/schema identity, bounded execution-frame stacks keyed by stable `DecisionNodeId`, serializable decorator/timer memory, and schema-approved blackboard values.
+   - `JobHandle`, cancellation tokens, path/query handles, pointers, and cooked array indices are transient and never serialized. Restore resolves plans in staging and restarts asynchronous work only after atomic state application. Missing or incompatible plans reset the affected agent to its root with a typed diagnostic.
+
+1. **Blackboard Storage And Typed Keys**:
+   - Blackboard state is shared between behaviors and AI nodes:
 
 `PerceptionManager` does not write `AIBlackboardView` directly. At the end of the
 Perception phase it publishes immutable staged `PerceptionDelta` records.
@@ -357,12 +516,12 @@ seam.
 
 ```cpp
 struct AIBlackboard {
-    std::optional<EntityId>  target;
+    std::optional<EntityId>        target;
     std::optional<WorldCoordinate> lastKnownTargetPosition;
-    std::vector<WorldCoordinate> patrolPath;
-    uint32_t                 patrolIndex;
-    float                    alertLevel;
-    AIState                  currentState;
+    std::vector<WorldCoordinate>   patrolPath;
+    uint32_t                       patrolIndex;
+    float                          alertLevel;
+    AIState                        currentState;
 };
 ```
 
@@ -431,9 +590,11 @@ group share avoidance data; groups are independent.
 - [Save Game And Persistence](./save-game-and-persistence.md): durable perception-memory capture and staged restore
 - [Navigation Bake UI Reference](./navigation-bake.html)
 
+- [ADR-025: AI Decision Assets and Shared Gameplay Behavior Boundary](../../adr/025-ai-decision-assets-and-gameplay-behavior-boundary.md)
 - [Gameplay Behavior Authoring](../extensions/gameplay-behavior-authoring.md): behavior tree and state machine authoring
 - [Physics Architecture](./physics-architecture.md): collision geometry for NavMesh generation
 - [World Streaming Architecture](./world-streaming-architecture.md): NavMesh tile streaming
 - [Scene Runtime](./scene-runtime.md): agent entity and component model
 - [Concurrency And Jobs](../foundation/concurrency-and-jobs.md): parallel crowd and perception jobs
+- [Save Game And Persistence](./save-game-and-persistence.md): durable decision-state capture and staged restore
 - [Debug Console And Overlays](./debug-console-and-overlays.md): AI debug visualization
