@@ -92,17 +92,33 @@ Domain selection is **policy-driven, asset-declared, and feature-tier constraine
 
 #### Domain Selection Criteria
 
+Domain resolution applies constraints in the following order. A CPU-mandatory
+criterion always takes precedence over an explicit or automatically selected GPU
+domain, including for systems above the particle-count threshold.
+
 1. **`SimulationDomain::CPU`** is mandatory when:
-   - Particles require two-way gameplay interaction (e.g., triggering game logic, modifying gameplay physics bodies, collecting pickup items).
+   - Particles require two-way gameplay interaction (e.g., triggering game logic,
+     modifying gameplay physics bodies, collecting pickup items).
    - High-precision CPU raycast/geometry collision response is required.
-   - System particle count is low-to-medium (≤ 2,048 particles).
-   - Running on low-spec hardware tiers (e.g., `es3`) or in headless/null environments.
-2. **`SimulationDomain::GPU`** is selected when:
-   - System particle count is high (> 2,048 particles).
-   - Complex vector fields, curl noise, or GPU depth-buffer collisions are utilized.
-   - Effects are purely cosmetic (visual-only, no synchronous gameplay CPU readback).
-3. **`SimulationDomain::Automatic`** (Asset Default):
-   - Resolved at asset cook/load time. High-count visual-only systems select GPU compute when supported by the active feature tier; otherwise, they degrade to CPU simulation.
+   - Running on low-spec hardware tiers (e.g., `es3`) or in headless/null
+     environments.
+2. **Explicit domain requests** are considered after mandatory constraints:
+   - Explicit `CPU` remains on CPU, subject to the active tier's capacity budget.
+   - Explicit `GPU` is valid only for visual-only effects on a
+     GPU-compute-capable tier. Otherwise, resolution falls back deterministically
+     to CPU and records a typed cook/load diagnostic.
+3. **`SimulationDomain::Automatic`** (Asset Default) uses the particle-count
+   heuristic:
+   - Visual-only systems with `maxParticles > 2,048` select GPU when the active
+     tier supports GPU compute.
+   - Systems with `maxParticles <= 2,048`, or systems on tiers without GPU
+     compute, select CPU.
+   - Complex vector fields, curl noise, or GPU depth-buffer collision may prefer
+     GPU only after the CPU-mandatory checks above pass.
+
+The `2,048` value is a domain-selection heuristic, not a universal capacity
+limit. Feature-tier capacity limits are applied after domain resolution and may
+clamp a system below this threshold.
 
 #### Coexistence Rules
 
@@ -115,7 +131,7 @@ Domain selection is **policy-driven, asset-declared, and feature-tier constraine
 | Feature Tier / Platform | Primary Domain | GPU Compute Particles | GPU Radix / Bitonic Sort | Volumetrics & Curl Noise | Fallback Behavior |
 |---|---|---|---|---|---|
 | **Headless / Null** (`null`) | `CPU` (Null Simulator) | Disabled | Disabled | Disabled | Full deterministic CPU dummy simulation; no GPU allocations or draw dispatches. |
-| **Mobile / Low-Spec** (`es3`) | `CPU` | Disabled | Disabled | Disabled | GPU particle assets automatically fall back to CPU simulation with clamped particle caps (e.g., max 512). Complex noise disabled. |
+| **Mobile / Low-Spec** (`es3`) | `CPU` | Disabled | Disabled | Disabled | GPU requests fall back to CPU. The tier clamps each system to its configured CPU cap (`512` by default), overriding the general `2,048` domain heuristic. Complex noise is disabled. |
 | **Desktop Baseline** (`dx11` / `opengl4`) | `CPU` & `GPU` | Supported (Compute) | Supported (Bitonic) | Basic 3D Textures | Over-budget GPU systems throttle spawn rates or drop lowest-priority sub-emitters. |
 | **High-End Desktop / Console** (`dx12_vulkan` / `metal`) | `CPU` & `GPU` | Full Compute | Full Radix/Bitonic | Full Curl Noise & Vector Fields | Unrestricted simulation with GPU indirect draw and GPU culling. |
 
