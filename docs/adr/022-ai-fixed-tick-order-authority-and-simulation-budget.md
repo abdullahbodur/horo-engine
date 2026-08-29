@@ -21,7 +21,7 @@ Early documentation drafts introduced two architectural defects that require rat
 
 ## Decision
 
-**AI simulation is strictly decoupled from graphics backends and executes six mutation phases inside each fixed simulation tick, plus a seventh presentation extract (`RenderExtraction`) on the variable-rate frame (`PerceptionSensePoll -> BlackboardSync -> AiDecisionEvaluate -> NavIntentCommit -> CharacterControllerLocomotion -> AnimationRigUpdate -> RenderExtraction`). In networked topologies, dedicated servers retain exclusive authority over AI decisions, perception, and blackboards, while clients receive replicated transforms and animation targets for presentation-only interpolation. AI simulation budgets are governed exclusively by typed `GameplayAiProfile` specifications based on available CPU worker threads and memory constraints.**
+**AI simulation is strictly decoupled from graphics backends and executes six mutation phases inside each fixed simulation tick (`PerceptionSensePoll -> BlackboardSync -> AiDecisionEvaluate -> NavIntentCommit -> CharacterControllerLocomotion -> AnimationRigUpdate`). After the tick commits, a variable-rate `RenderExtraction` presentation bridge consumes immutable snapshots. In networked topologies, dedicated servers retain exclusive authority over AI decisions, perception, and blackboards, while clients receive replicated transforms and animation targets for presentation-only interpolation. AI simulation budgets are governed exclusively by typed `GameplayAiProfile` specifications based on available CPU worker threads and memory constraints.**
 
 ### 1. Simulation Tick Phase Order
 
@@ -46,11 +46,12 @@ Fixed-tick AI simulation executes in a strict, deterministic sequence within the
 6. AnimationRigUpdate
      | (skeletal pose evaluation)
      v
-7. RenderExtraction
+Presentation bridge (variable-rate): RenderExtraction
      | (immutable presentation snapshot)
 ```
 
-Each phase operates under explicit ownership, input/output contracts, and phase invariants:
+Each fixed-tick phase and the following presentation bridge operate under explicit
+ownership, input/output contracts, and invariants:
 
 | Phase | Phase Responsibility | Inputs | Outputs | Phase Invariants & Constraints |
 |---|---|---|---|---|

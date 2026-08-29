@@ -204,7 +204,10 @@ group share avoidance data; groups are independent.
 
 ## Simulation Lifecycle And Fixed-Tick Phase Ordering
 
-AI simulation executes as a fixed-timestep pipeline within the engine's fixed update loop, defined by [Runtime Lifecycle Architecture](./runtime-lifecycle.md). To guarantee determinism, eliminate data races, and maintain strict ownership boundaries between perception, gameplay logic, physics, and rendering, simulation ticks execute across an explicit seven-phase sequence:
+AI simulation executes as a fixed-timestep pipeline within the engine's fixed
+update loop, defined by [Runtime Lifecycle Architecture](./runtime-lifecycle.md).
+Six ordered phases execute in each simulation tick. A variable-rate presentation
+bridge runs afterward and consumes the committed snapshots:
 
 ```text
 PerceptionSensePoll
@@ -231,7 +234,9 @@ CharacterControllerLocomotion  (Physics Integration)
 
 ### Phase Contracts And Invariants
 
-Phases 1-6 run inside the fixed simulation tick and may mutate simulation state under the phase contracts below. Phase 7 (`RenderExtraction`) is listed for ordering completeness but executes on the variable-rate frame; it is not a seventh fixed-tick mutation phase.
+Phases 1-6 run inside the fixed simulation tick and may mutate simulation state
+under the phase contracts below. `RenderExtraction` is the following
+variable-rate presentation bridge, not a seventh fixed-tick phase.
 
 1. **`PerceptionSensePoll`**:
    - Gathers sensory stimuli (sight cone line-of-sight traces, hearing sound events, damage triggers, proximity overlaps) into staged per-agent stimulus buffers.
@@ -257,7 +262,7 @@ Phases 1-6 run inside the fixed simulation tick and may mutate simulation state 
    - Evaluates animation blend trees, locomotion state machines, and procedural IK based on committed locomotion velocity and active action tags.
    - Computes skeletal bone transform matrices.
    - Invariant: Evaluates presentation pose from committed simulation data; animation updates do not retroactively alter physics locomotion within the same tick.
-7. **`RenderExtraction`**:
+**Variable-rate presentation bridge — `RenderExtraction`**:
    - Extracts immutable presentation snapshots from previous and current simulation ticks using interpolation factor $\alpha$.
    - Executed during variable-rate frame updates, completely decoupled from fixed-tick simulation loops.
    - Invariant: Strictly read-only presentation extraction.
