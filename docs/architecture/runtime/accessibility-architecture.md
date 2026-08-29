@@ -87,8 +87,9 @@ struct CaptionEvent {
 };
 
 struct AudioEventSnapshot {
-    FrameNumber                frame;
-    std::vector<CaptionEvent>  captionEvents;  // fixed capacity; reserved at AudioSystem init
+    FrameNumber                                             frame;
+    std::array<CaptionEvent, kMaxCaptionEventsPerSnapshot>  captionEvents;
+    std::size_t                                             captionEventCount{0};
 };
 
 struct ClosedCaptionSettings {
@@ -111,10 +112,9 @@ struct ClosedCaptionSettings {
   interned process-stable string ids). They must not be `std::string_view` into mixer
   scratch, stack, localization temporaries, or any buffer that dies before the UI
   drain. A published caption outlives the producer callback.
-- `AudioEventSnapshot::captionEvents` is a fixed-capacity, preallocated container.
-  Capacity is reserved at `AudioSystem` initialization (`kMaxCaptionEventsPerSnapshot`)
-  and must not grow on the mixer thread. Overflow drops the newest event and records
-  a diagnostic.
+- `AudioEventSnapshot::captionEvents` is fixed-capacity inline storage and cannot grow
+  on the mixer thread. `captionEventCount` identifies the populated prefix. Overflow
+  drops the newest event and records a diagnostic.
 - The real-time audio mixer thread pushes `CaptionEvent` objects into that preallocated
   ring/snapshot storage; it never heap-allocates, reallocates the vector, or performs
   font layout. String members are interned or reserved before the callback so assignment
