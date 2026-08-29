@@ -29,6 +29,7 @@ to the replacement.
 | [024](024-perception-ownership-sense-policy-and-budget.md) | Perception Ownership, Sense Policy and Budget Decision | proposed | 2026-08-28 |
 | [025](025-ai-decision-assets-and-gameplay-behavior-boundary.md) | AI Decision Assets and Shared Gameplay Behavior Boundary | proposed | 2026-08-28 |
 | [026](026-large-world-precision-and-floating-origin-strategy.md) | Large-World Precision and Floating Origin Strategy | proposed | 2026-08-28 |
+| [019](019-cli-host-command-ownership-adapter-equivalence-and-horopak-boundary.md) | CLI Host, Command Ownership, Adapter Equivalence and horopak Boundary Decision | proposed | 2026-08-28 |
 
 ## Conventions
 
