@@ -50,7 +50,7 @@ enum class CommandThreadPolicy : uint8_t {
 };
 
 enum class CommandAvailability : uint8_t {
-    AllProfiles,       ///< Available across all product profiles.
+    NonShipping,       ///< Available in every non-shipping product profile.
     DevelopmentOnly,   ///< Compiled/registered only in Editor and Development builds.
     DiagnosticsOnly,   ///< Available in Editor, Development, and Diagnostics builds.
     ShippingAllowlist  ///< Only registered in Shipping if explicitly allowlisted by project configuration.
@@ -90,7 +90,7 @@ using DebugCommandHandler = Result<DebugCommandOutput, Error> (*)(
 );
 ```
 
-- `DebugCommandContext` provides read-only execution metadata: calling host profile, authenticated caller identity/permission bitmask, cancellation token, submission timestamp, output sink, and immutable `ConfigurationSnapshotRef`.
+- `DebugCommandContext` provides read-only execution metadata: calling host profile, authenticated caller identity/permission bitmask, cancellation token, submission timestamp, output sink, immutable `ConfigurationSnapshotRef`, and a host-composed `IDebugCommandCapabilities` reference. The capability interface exposes only the typed subsystem operations registered for this host and preserves owner-thread checks; it is not a service locator and handlers never discover concrete backends.
 - `DebugParsedArguments` provides strongly-typed, schema-validated positional and keyword arguments. Type validation, range checks, and required-argument verification are completed by the console framework before handler invocation.
 
 #### Registration Seam and Validation
@@ -126,7 +126,7 @@ Command access is evaluated against the caller's active security context prior t
 
 ### 3. Threading, Execution Rules, and Safe Points
 
-All console command adapters (In-Game UI, Editor Panel, CLI, MCP, Remote WebSocket/TCP) accept command strings asynchronously from any thread. However, command execution strictly respects declared thread policies:
+All console command adapters (In-Game UI, Editor Panel, CLI, MCP, Remote WebSocket/TCP) may submit command strings from any thread. Submission dispatch follows the declared thread policy: immediate pure commands execute synchronously on the submitting thread, while every other policy enqueues work for its owning safe point or worker.
 
 ```text
 [Console Input Sources] (UI / CLI / MCP / Remote)
@@ -170,13 +170,14 @@ To ensure security, minimize binary footprint, and eliminate cheat vectors in co
 | **Editor** (`HORO_PROFILE_EDITOR`) | Full command tables and debug UI compiled in. | `Public`, `Developer`, `AdminCheat`, `Restricted` (local). | Local MCP / Editor loopback. |
 | **Game Development** (`HORO_PROFILE_DEVELOPMENT`) | Full command tables compiled in. In-game console UI active. | `Public`, `Developer`, `AdminCheat` (if cheats enabled). | Localhost diagnostics only. |
 | **Game Profile** (`HORO_PROFILE_PROFILE`) | Diagnostic commands compiled in; cheat handlers stripped. | `Public`, read-only `Developer` (metrics, profiler). | Localhost profiling only. |
-| **Game Shipping / Retail** (`HORO_PROFILE_SHIPPING`) | **`Developer` and `AdminCheat` descriptors stripped at compile time.** Debug symbols/strings removed. Console UI compiled out or disabled. | `Public` allowlist only (`help`, `version`, `screenshot`). `support_bundle` remains `CommandPermission::Restricted` and is not a Shipping Public command. | **Disabled completely.** |
+| **Game Shipping / Retail** (`HORO_PROFILE_SHIPPING`) | Only descriptors marked `ShippingAllowlist` and approved by project configuration are compiled. Debug symbols/strings removed. Console UI compiled out or disabled. | `Public` allowlist only (`help`, `version`, `screenshot`). `support_bundle` remains `CommandPermission::Restricted` and is not a Shipping Public command. | **Disabled completely.** |
 | **Dedicated Server** (`HORO_PROFILE_SERVER`) | Headless CLI / Remote console compiled in. Visual debug UI omitted. | `Public`, server `Developer`, and authenticated `Restricted` admin. | Authenticated TLS/Token remote admin only. |
 
 #### Compile-Time Stripping Mechanism
 
-- Descriptors with `CommandAvailability::DevelopmentOnly` are enclosed in preprocessor guards (`#if HORO_DEBUG_COMMANDS_ENABLED`) or registered through translation units conditionally linked only in non-shipping configurations.
-- In Retail Shipping builds, `HORO_DEBUG_COMMANDS_ENABLED` evaluates to `0`. Stripped command handler functions are dead-code eliminated by the compiler/linker, ensuring that internal identifiers, string literals, and cheat logic cannot be extracted from shipping binaries.
+- `CommandAvailability` is the sole compile-time inclusion authority. `CommandPermission` is evaluated only at runtime for commands present in the selected profile; it never causes a descriptor to be compiled into a build.
+- Descriptors marked `DevelopmentOnly` or `DiagnosticsOnly` are enclosed in profile guards or registered through translation units linked only into their declared profiles. `ShippingAllowlist` descriptors additionally require an explicit project allowlist entry.
+- In Retail Shipping builds, only approved `ShippingAllowlist` translation units are linked. All other handler functions and descriptor strings are absent rather than relying on dead-code elimination.
 
 ---
 
