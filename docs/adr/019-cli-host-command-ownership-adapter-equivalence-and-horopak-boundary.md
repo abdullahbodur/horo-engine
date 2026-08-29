@@ -161,15 +161,30 @@ CLI handlers must not contain domain business logic. Domain modules own use-case
 namespace Horo::Cli {
 
     /**
-     * @brief Context provided to a CLI command adapter during execution.
+     * @brief Presentation-independent progress/event sink exposed to adapters.
+     *
+     * `CliOutputPresenter` implements this interface. Adapters must not write
+     * stdout or stderr directly.
+     */
+    class ICliProgressSink {
+    public:
+        virtual ~ICliProgressSink() = default;
+        virtual void Report(const CliProgressEvent& event) = 0;
+    };
+
+    /**
+     * @brief Invocation-scoped context provided to a CLI command adapter during execution.
+     *
+     * Domain-service dependencies are provided to adapters by constructor injection
+     * at registration time. This context carries only values scoped to a single
+     * command invocation.
      */
     struct CliExecutionContext {
-        ApplicationServices& application;
-        JobSystem& jobs;
-        const ConfigurationSnapshot& configuration;
         const CancellationToken& cancellation;
-        ICliOutputWriter& output;
-        InvocationId invocationId;
+        InvocationId             invocationId;
+        ICliProgressSink&        progress;
+        // ApplicationServices, JobSystem, ConfigurationSnapshot, and output writers
+        // are NOT exposed here. Inject domain services via the adapter constructor.
     };
 
     /**
@@ -183,11 +198,30 @@ namespace Horo::Cli {
 
         [[nodiscard]] virtual Result<CliCommandResult> Execute(
             const CliCommandRequest& request,
-            CliExecutionContext& context) = 0;
+            CliExecutionContext&     context) = 0;
     };
 
 }  // namespace Horo::Cli
 ```
+
+**Constructor injection** is the only approved mechanism for adapters to access domain
+services:
+
+```cpp
+// Correct: domain services injected at construction, not discovered at invoke time.
+class AssetCookCliAdapter final : public ICliCommandAdapter {
+public:
+    explicit AssetCookCliAdapter(IAssetCooker& cooker);
+
+    Result<CliCommandResult> Execute(
+        const CliCommandRequest& request,
+        CliExecutionContext&     context) override;
+
+private:
+    IAssetCooker& m_cooker; // injected, never fetched from ApplicationServices
+};
+```
+
 
 **Adapter Equivalence Rule**:
 For any shared operation (e.g., `project.create`, `project.validate`, `asset.cook`, `build.release`, `package.restore`):
@@ -231,7 +265,7 @@ must invoke the exact same underlying domain use-case service (`IProjectService`
 The migration path removes legacy ad-hoc parsing in `apps/horo-engine/main.cpp` without maintaining competing sources of truth:
 
 1. **Step 1 ([CLI-001.2] & [CLI-001.3])**: Implement `HoroEngine::CliHost` library with `CliCommandDescriptor`, `CliCommandRegistry`, `CliOptionParser`, and unit test suite.
-2. **Step 2 ([CLI-001.5])**: Introduce `CliDispatcher`, `CliExecutionContext`, and migrate smoke tests (`--emit-observability-smoke`, `--diagnostic-bundle`) into first-class `ICliCommandAdapter` registrations (`observability.smoke`, `diagnostics.bundle`).
+2. **Step 2 ([CLI-001.5])**: Introduce `CliDispatcher`, `CliExecutionContext`, and migrate smoke tests (`--emit-observability-smoke`, `--diagnostic-bundle`) into first-class `ICliCommandAdapter` registrations: `CommandPath{{"observability","smoke"}}`, `CommandPath{{"diagnostics","bundle"}}`. User-facing syntax: `horo-engine observability smoke`, `horo-engine diagnostics bundle`.
 3. **Step 3 ([CLI-001.6] & [CLI-001.7])**: Implement structured JSON/JSONL output presenters, cooperative cancellation handlers, and headless MCP serve composition (`horo-engine mcp serve`).
 4. **Step 4 (Phase-out)**: Replace `apps/horo-engine/main.cpp` entry point with `Horo::Cli::CliHost::Run(argc, argv)`. Remove all legacy `ParseOptions` code.
 
