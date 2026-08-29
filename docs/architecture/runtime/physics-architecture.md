@@ -179,6 +179,7 @@ state requires a typed policy keyed by stable object ID.
 
 The active `PhysicsWorld` executes in local rebased cluster coordinates relative to the dynamic floating origin:
 
+- **Local Half-Extent**: Simulation is bounded by $[-R_{\text{physics}}, +R_{\text{physics}}]$ (default $8192\,\text{m}$). This is independent of the rebase trigger $R_{\text{threshold}}$ (default $1000\,\text{m}$). See [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin-rebasing.md).
 - **Two-Phase Protocol**: As a registered `IOriginRebaseParticipant`, the physics adapter validates solver lock state during `PrepareRebase` and shifts spatial data during `CommitRebase`.
 - **Position Updates**: Bodies, colliders, broadphase bounding volumes, and raycast caches have $\Delta_{\text{origin}}$ subtracted:
   $$\vec{x}_{\text{new}} = \vec{x}_{\text{old}} - \Delta_{\text{origin}}$$

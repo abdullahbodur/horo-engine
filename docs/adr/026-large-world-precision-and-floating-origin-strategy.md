@@ -22,11 +22,13 @@ Standard 32-bit single-precision IEEE 754 floating-point coordinates (`fp32`) pr
 
 | Distance from Origin | Spatial Resolution ($\text{ulp}$) | Visual & Physical Artifacts |
 |---|---|---|
-| $1\,\text{km}$ ($10^3\,\text{m}$) | $\approx 0.00012\,\text{m}$ ($0.12\,\text{mm}$) | Imperceptible |
+| $1\,\text{km}$ ($10^3\,\text{m}$) | $\approx 0.000061\,\text{m}$ ($0.061\,\text{mm}$) | Imperceptible |
 | $10\,\text{km}$ ($10^4\,\text{m}$) | $\approx 0.00098\,\text{m}$ ($0.98\,\text{mm}$) | Sub-millimeter jitter in close-up geometry |
 | $100\,\text{km}$ ($10^5\,\text{m}$) | $\approx 0.0078\,\text{m}$ ($7.8\,\text{mm}$) | Noticeable vertex shaking, Z-fighting, physics contact instability |
 | $1,000\,\text{km}$ ($10^6\,\text{m}$) | $\approx 0.0625\,\text{m}$ ($6.25\,\text{cm}$) | Unusable physics simulation, massive mesh jitter, broken camera controls |
-| $10,000\,\text{km}$ ($10^7\,\text{m}$) | $\approx 0.5\,\text{m}$ ($50\,\text{cm}$) | Total collapse of spatial coherence |
+| $10,000\,\text{km}$ ($10^7\,\text{m}$) | $\approx 1.0\,\text{m}$ | Total collapse of spatial coherence |
+
+ULP values are IEEE-754 binary32 unit-in-the-last-place at the exact listed distance: $\mathrm{ULP}(x) = 2^{\lfloor \log_2 |x| \rfloor - 23}$ for normal numbers.
 
 To support large-scale open worlds, flight/space simulations, and seamless multi-region environments without compromising cross-platform compatibility (e.g., Mobile OpenGL ES / Metal / Vulkan and WebGL), Horo Engine requires an explicit, normative coordinate precision and origin rebasing strategy.
 
@@ -45,7 +47,7 @@ Key design constraints:
 
 1. **Global World Coordinates (`WorldCoordinate64`)**:
    - The authoritative representation for global world space, spatial partitioning, persistent save state, and multiplayer network replication is a 64-bit composite coordinate: an `IntVector3` grid cell index plus an `IntVector3 cellOffsetMm` stored in integer millimeters in the half-open range `[0, cellSizeMm)` (default cell $1024\,\text{m} = 1\,024\,000\,\text{mm}$).
-   - Round-trip conversion to/from world-space fixed-point 64-bit integer millimeters (`int64_t[3]`, $\pm 9.22 \times 10^{12}\,\text{m}$ range with $1\,\text{mm}$ resolution) is exact. `dvec3` / `DVec3` is a derived tooling view (53-bit significand), not canonical storage. A 32-bit `Vec3` cell offset is rejected: near a 1024 m cell edge fp32 ULP is ≈ 0.12 mm, so it cannot satisfy an exact millimeter round-trip.
+   - Round-trip conversion to/from world-space fixed-point 64-bit integer millimeters (`int64_t[3]`, $\pm 9.22 \times 10^{15}\,\text{m}$ range with $1\,\text{mm}$ resolution) is exact. `dvec3` / `DVec3` is a derived tooling view (53-bit significand), not canonical storage. A 32-bit `Vec3` cell offset is rejected: near a 1024 m cell edge fp32 ULP is ≈ 0.12 mm, so it cannot satisfy an exact millimeter round-trip.
 2. **Floating Origin Rebasing (`CameraRelativeFloat3`)**:
    - The active runtime view and local simulation operate in a localized single-precision floating-point frame relative to a dynamic floating origin $C_{\text{origin}}$.
    - When the active camera or focal entity traverses beyond a configured rebasing threshold distance ($R_{\text{threshold}}$, default $1000\,\text{m}$) from $C_{\text{origin}}$, the engine executes a coordinated, atomic Origin Rebase Transaction.
@@ -55,7 +57,7 @@ Key design constraints:
    - High-precision world-to-view subtractions $(P_{\text{world}} - C_{\text{camera}})$ are evaluated on the CPU or during constant-buffer generation.
    - Vertex transformations in vertex shaders consume pre-translated camera-relative model matrices $M_{\text{view\_rel}} = V_{\text{rel}} \cdot M_{\text{rel}}$, eliminating vertex jitter and z-fighting without requiring 64-bit GPU vertex attributes or shader emulation.
 4. **Local Physics and Subsystem Clusters**:
-   - The active `PhysicsWorld` resides entirely in local rebased cluster coordinates.
+   - The active `PhysicsWorld` resides entirely in local rebased cluster coordinates within $[-R_{\text{physics}}, +R_{\text{physics}}]$ (default $8192\,\text{m}$). $R_{\text{physics}}$ is independent of $R_{\text{threshold}}$ (default $1000\,\text{m}$); see the normative document.
    - On `OriginRebaseEvent`, the physics adapter shifts body spatial structures by $-\Delta_{\text{origin}}$ without modifying linear or angular velocities, contact manifold caches, or sleeping states.
    - Audio listeners/emitters, VFX particle buffers, navigation agent waypoints, and camera rigs apply $-\Delta_{\text{origin}}$ cleanly without timing or derivative artifacts.
 5. **Fallible Boundaries and Typed Errors**:
@@ -71,7 +73,7 @@ Key design constraints:
 | GPU Shader Precision | Undefined; potential risk of requiring `double` vertex attributes | **Ratified.** GPU shaders remain strictly `fp32`/`fp16`. Camera-relative transformation $(P_{\text{world}} - C_{\text{camera}})$ is computed on CPU during render extraction. |
 | Physics Coordinate Frame | Single global scene coordinate system | **Revised.** Physics runs in a local rebased coordinate frame. Position translation during rebasing preserves velocities and sleeping states. |
 | Origin Shift Notification | Informal event on generic bus | **Revised.** Formalized as a transactional two-phase protocol (`PrepareRebase` -> `CommitRebase`) with monotonic generation fencing via `OriginRebaseCoordinator`. |
-| Subsystem Synchronization | Subsystems handle origin drift independently | **Revised.** Synchronized broadcast at pre-physics frame safe point; unsupported or failing adapters abort the transaction with typed `Horo::Error`. |
+| Subsystem Synchronization | Subsystems handle origin drift independently | **Revised.** Synchronized broadcast at the post-simulation / pre-render safe point; unsupported or failing adapters abort the transaction with typed `Horo::Error`. |
 | Networking & Saves | Transmit local floats | **Ratified.** Saves and network authority serialize canonical `WorldCoordinate64`, decoupled from client-local floating origin states. |
 
 ---
@@ -122,7 +124,7 @@ Key design constraints:
    - Fixed-step physics integration ticks (`PhysicsWorld::Step`).
    - Active GPU command buffer recording / render pass execution.
    - Asynchronous job execution mutating spatial components.
-   Rebasing occurs exclusively at the **Post-Simulation / Pre-Render Synchronization Point** on the main thread (`MainEditor` role).
+   Rebasing occurs exclusively at the **Post-Simulation / Pre-Render Synchronization Point** on the host thread that ticks `SceneRuntime` (editor, game, and dedicated-server hosts). This is not an editor-type dependency.
 
 ---
 

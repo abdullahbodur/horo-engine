@@ -94,7 +94,13 @@ struct WorldCoordinate64 {
     IntVector3 cellIndex{0, 0, 0};
     IntVector3 cellOffsetMm{0, 0, 0}; // [0, cellSizeMm) relative to cell minimum corner
 
-    [[nodiscard]] bool IsFinite() const noexcept;
+    /**
+     * @brief True iff cellOffsetMm is in [0, cellSizeMm) on every axis.
+     *
+     * Integer fields cannot be NaN or Inf. IEEE-754 finiteness is checked only
+     * at floating-point conversion boundaries (`FromDoubleMeters`, `Vec3` deltas).
+     */
+    [[nodiscard]] bool IsNormalized(int32_t cellSizeMm = DefaultCellSizeMillimeters) const noexcept;
 
     /**
      * @brief Normalizes cellOffsetMm into [0, cellSizeMm) and updates cellIndex.
@@ -135,7 +141,12 @@ struct WorldCoordinate64 {
     [[nodiscard]] Result<Vec3> ToCellOffsetMeters() const noexcept;
 
     /**
-     * @brief Computes high-precision vector delta (lhs - rhs) in meters.
+     * @brief Local-cluster delta (lhs - rhs) in meters as fp32 `Vec3`.
+     *
+     * Not a globally precise subtraction. Rejects non-finite results and deltas
+     * whose magnitude exceeds the local physics half-extent R_physics
+     * (`PrecisionErrorCode::InvalidRebaseDelta`). Callers that need an exact
+     * global delta must use `ToMillimeters()`.
      */
     [[nodiscard]] friend Result<Vec3> SubtractToLocal(
         const WorldCoordinate64 &lhs,
@@ -156,9 +167,11 @@ using CameraRelativeFloat3 = Vec3;
 | Coordinate Format | Storage Size | Effective Range | Precision at Origin | Precision at $1000\,\text{km}$ |
 |---|---|---|---|---|
 | `WorldCoordinate64` (Standard Grid) | $12\,\text{bytes} + 12\,\text{bytes} = 24\,\text{bytes}$ | $\pm 2 \times 10^9\,\text{cells} \approx \pm 2 \times 10^{12}\,\text{m}$ | $1.0\,\text{mm}$ constant | $1.0\,\text{mm}$ constant |
-| Fixed-point Millimeter (`int64_t[3]`) | $24\,\text{bytes}$ | $\pm 9.22 \times 10^{12}\,\text{m}$ | $1.0\,\text{mm}$ constant | $1.0\,\text{mm}$ constant |
-| Double Precision (`dvec3` / `double[3]`) | $24\,\text{bytes}$ | $\pm 1.79 \times 10^{308}\,\text{m}$ | $10^{-16}\,\text{m}$ | $\approx 0.0001\,\text{mm}$ |
-| Camera-Relative `Vec3` (`fp32`) | $12\,\text{bytes}$ | Local cluster ($\pm 10\,\text{km}$ around camera) | $0.0001\,\text{mm}$ (at $1\,\text{m}$) | $\approx 0.1\,\text{mm}$ (within $1\,\text{km}$ of viewer) |
+| Fixed-point Millimeter (`int64_t[3]`) | $24\,\text{bytes}$ | $\pm 9.22 \times 10^{15}\,\text{m}$ | $1.0\,\text{mm}$ constant | $1.0\,\text{mm}$ constant |
+| Double Precision (`dvec3` / `double[3]`) | $24\,\text{bytes}$ | $\pm 1.79 \times 10^{308}\,\text{m}$ | $\approx 2.2 \times 10^{-16}\,\text{m}$ | $\approx 1.2 \times 10^{-7}\,\text{mm}$ |
+| Camera-Relative `Vec3` (`fp32`) | $12\,\text{bytes}$ | Local cluster (typically $\le R_{\text{threshold}}$ after rebase; fp32 ULP $\le 1\,\text{mm}$ out to $8192\,\text{m}$) | $\approx 0.00012\,\text{mm}$ (at $1\,\text{m}$) | $\approx 0.061\,\text{mm}$ (within $1\,\text{km}$ of viewer) |
+
+`int64_t` millimeters span $\lfloor \texttt{INT64\_MAX} / 1000 \rfloor \approx \pm 9.22 \times 10^{15}\,\text{m}$. `WorldCoordinate64` is narrower (`cellIndex` is `int32_t`): $2^{31} \times 1024\,\text{m} \approx \pm 2.2 \times 10^{12}\,\text{m}$. Double ULP at $10^{6}\,\text{m}$ is $2^{19-52} = 2^{-33} \approx 1.16 \times 10^{-10}\,\text{m}$ ($\approx 1.2 \times 10^{-7}\,\text{mm}$). Camera-relative fp32 ULP at $1\,\text{m}$ is $2^{-23} \approx 1.19 \times 10^{-7}\,\text{m}$; at $10^{3}\,\text{m}$ it is $2^{-14} \approx 6.1 \times 10^{-5}\,\text{m}$.
 
 ---
 
@@ -166,7 +179,7 @@ using CameraRelativeFloat3 = Vec3;
 
 ### 1. Origin Rebase Coordinator
 
-The `OriginRebaseCoordinator` is owned by `SceneRuntime` and updated during the pre-render frame phase on the main thread (`MainEditor` role).
+The `OriginRebaseCoordinator` is owned by `SceneRuntime` and updated during the pre-render frame phase on the host thread that ticks `SceneRuntime` (editor, game, and dedicated-server hosts). It is a runtime type and must not depend on editor types.
 
 ```cpp
 namespace Horo::Runtime::Precision {
@@ -180,7 +193,7 @@ struct OriginRebaseConfig {
 struct OriginRebaseEvent {
     Math::WorldCoordinate64 oldOrigin;
     Math::WorldCoordinate64 newOrigin;
-    Math::Vec3              shiftDelta;      // (newOrigin - oldOrigin) expressed in local meters
+    Math::Vec3              shiftDelta;      // fp32 local-frame view of (newOrigin - oldOrigin); exact mm via old/new Origin
     uint64_t                originGeneration; // Monotonically increasing origin revision
 };
 
@@ -286,6 +299,10 @@ public:
 ### 2. Physics Subsystem
 
 - **Local Physics World**: The `PhysicsWorld` simulation operates within $[-R_{\text{physics}}, +R_{\text{physics}}]$ centered around the floating origin.
+  - $R_{\text{physics}}$ is a `PhysicsWorld` configuration (`localHalfExtentMeters`). It is **not** an alias of $R_{\text{threshold}}$ (`OriginRebaseConfig::rebasingThresholdMeters`, default $1000\,\text{m}$).
+  - $R_{\text{threshold}}$ triggers a rebase of the floating origin. $R_{\text{physics}}$ is the half-extent of the local physics AABB after that rebase.
+  - Invariant: $\mathrm{ULP}_{\text{fp32}}(R_{\text{physics}}) \le 1\,\text{mm}$, which requires $R_{\text{physics}} < 2^{14}\,\text{m} = 16384\,\text{m}$. Default $R_{\text{physics}} = 8192\,\text{m}$ (eight default $1024\,\text{m}$ cells; ULP $= 2^{13-23} = 2^{-10}\,\text{m} \approx 0.98\,\text{mm}$).
+  - Constraint: $R_{\text{physics}} \ge R_{\text{threshold}}$. After a successful rebase every simulated body must satisfy $|\vec{x}_{\text{local}}| \le R_{\text{physics}}$; a body outside this bound is not in the local physics cluster.
 - **Coordinate Translation**:
   When `OriginRebaseEvent` commits:
   $$\vec{x}_{\text{body}} \leftarrow \vec{x}_{\text{body}} - \Delta_{\text{origin}}$$
@@ -346,8 +363,8 @@ enum class PrecisionErrorCode {
 
 ### Invariant Checks and Assertions
 
-1. **Finite Inputs**: Any coordinate entering a math function is validated via `Math::WorldCoordinate64::IsFinite()`. Non-finite coordinates return `PrecisionErrorCode::NonFiniteCoordinate` and emit structured diagnostics.
-2. **Bounds Checking**: Cell indices outside $[\text{INT32\_MIN} + 1, \text{INT32\_MAX} - 1]$ return `PrecisionErrorCode::CoordinateOverflow`.
+1. **Finite floating-point inputs**: IEEE-754 NaN/$\pm\infty$ is checked at conversion boundaries that accept floats (`FromDoubleMeters`, camera-relative `Vec3`, `shiftDelta`) via `Vec3::IsFinite` / `Math::IsFinite`. Failures return `PrecisionErrorCode::NonFiniteCoordinate`. `WorldCoordinate64` stores only integers; it has no `IsFinite()` predicate.
+2. **Normalized integer coordinates**: Authority values must satisfy `IsNormalized()` (`cellOffsetMm` in `[0, cellSizeMm)`). Unnormalized offsets are repaired by `Normalize()` or rejected. Cell indices outside $[\text{INT32\_MIN} + 1, \text{INT32\_MAX} - 1]$ return `PrecisionErrorCode::CoordinateOverflow`.
 3. **Rebase Safe Point Verification**: `OriginRebaseCoordinator::EvaluateAndRebase` verifies that neither `PhysicsWorld::IsStepping()` nor `RenderFrontend::IsRecording()` is true. Calling rebasing during a step immediately returns `PrecisionErrorCode::RebaseDuringSimulationStep`.
 
 ---
@@ -355,7 +372,7 @@ enum class PrecisionErrorCode {
 ## Concurrency, Lifecycle, and Replacement
 
 1. **Thread Role Affinity**:
-   - `EvaluateAndRebase` runs strictly on the main thread (`MainEditor` role).
+   - `EvaluateAndRebase` runs strictly on the host thread that ticks `SceneRuntime`. That affinity applies to editor, game, and dedicated-server hosts. It is forbidden on worker, render-owner, transport, and I/O threads. Do not name this an editor `MainEditor` dependency: ADR-010's `MainEditor` wait-policy role is the editor host's main thread only.
    - Subsystem adapters may dispatch parallel workers to update large particle buffers or broadphase structures using `TaskGroup` during `CommitRebase`, joining before `CommitRebase` returns.
 2. **Scene Replacement & Reload**:
    - When loading a new scene or unloading the world, `OriginRebaseCoordinator` resets `activeOrigin` to $(0, 0, 0)$ with cell index $(0, 0, 0)$.
@@ -371,7 +388,7 @@ enum class PrecisionErrorCode {
 Automated and integration test suites must cover:
 
 - **Mathematical Conversion Precision**: Exact round-trip conversions between `WorldCoordinate64` and `int64_t[3]` millimeters across extreme ranges ($\pm 10^7\,\text{km}$), including cell-edge values (`cellOffsetMm = cellSizeMm - 1`). `dvec3` round-trip is required only after 1 mm quantization, and only in ranges where double ULP is finer than 0.5 mm. Derived `ToCellOffsetMeters()` must document fp32 ULP growth toward the cell edge (≈ 0.12 mm at 1024 m) and must not be treated as canonical storage.
-- **Non-Finite and Boundary Rejection**: Proper error return when passing NaN, $\pm\infty$, or out-of-range integer coordinates.
+- **Non-Finite and Boundary Rejection**: `FromDoubleMeters` and other float ingress paths return `NonFiniteCoordinate` for NaN/$\pm\infty$. Integer overflow and unnormalized `cellOffsetMm` return `CoordinateOverflow` or are normalized via `Normalize()` as specified.
 - **Two-Phase Transaction Robustness**: Simulating participant failure during `PrepareRebase` and validating clean rollback with zero partial state drift.
 - **Velocity and Momentum Preservation in Physics**: Spawning rigid bodies with linear/angular velocity, triggering repeated origin shifts, and verifying that velocities, trajectory curvatures, and sleep states match unshifted baselines within floating-point tolerance ($< 10^{-5}$).
 - **Camera-Relative Rendering Accuracy**: Rendering distant meshes ($1000\,\text{km}$ from world origin) using camera-relative vertex shaders and verifying zero vertex jitter or visual artifacting compared to origin-centered renders.
