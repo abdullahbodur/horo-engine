@@ -6,7 +6,7 @@
 - **Scope**: AI perception subsystem, sensory stimulus emission, line-of-sight query seams, update policies, time-sliced budgets, and bounded memory decay
 - **Issue**: [#1321](https://github.com/abdullahbodur/horo-engine/issues/1321) ([GAI-002.1])
 - **JIRA**: HORO-1321
-- **Normative documents**: [Navigation And AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md), [Save Game And Persistence](../architecture/runtime/save-game-and-persistence.md)
+- **Normative documents**: [Navigation And AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md), [AI Fixed-Tick Order, Authority and Simulation Budget](022-ai-fixed-tick-order-authority-and-simulation-budget.md), [Save Game And Persistence](../architecture/runtime/save-game-and-persistence.md)
 - **Companion decision**: [GAI-003.1 AI Decision Assets and Shared Gameplay Behavior Boundary](https://github.com/abdullahbodur/horo-engine/issues/1333) (ADR-025)
 
 ## Context
@@ -102,13 +102,20 @@ Perception evaluation uses a hybrid execution model to maximize responsiveness w
      Handled immediately or collected in a bounded queue during fixed simulation
      ticks. Processing is $O(E)$ where $E$ is the number of events.
    - **Continuous Periodic Inputs (`Sight`, `Hearing`, team awareness relay)**:
-     Evaluated at scheduled intervals across multiple simulation frames and
+     Evaluated at scheduled intervals across multiple simulation ticks and
      distributed evenly via time-slicing.
 2. **Time-Sliced Scheduling & Per-Tick Budgets**:
-   - The engine enforces hard limits per frame/tick:
-     - `maxSightRaycastsPerTick`: Maximum physics LOS raycasts allowed across all agents per frame (e.g. 128 raycasts).
+   - The engine enforces hard limits per fixed simulation tick:
+     - `maxSightRaycastsPerTick`: Maximum physics LOS raycasts allowed across all
+       agents in one fixed simulation tick. It is profile-bounded (for example,
+       at most 16 for `LowCpu` and 128 for `MediumCpu`).
      - `maxPerceptionExecutionTime`: Hard execution budget cap (e.g. 1.0 ms per simulation tick).
      - `maxAgentsEvaluatedPerTick`: Maximum number of agent sight sweeps per tick.
+   - ADR-022's `GameplayAiProfile::maxPerceptionQueriesPerTick` is the aggregate
+     admission cap for costly spatial and physics queries across all senses.
+     `maxSightRaycastsPerTick` is its LOS-raycast subset and must not exceed it.
+     Event receipt does not consume a query; a resulting LOS, overlap, or spatial
+     lookup does.
    - Agents are scheduled with weighted fair round-robin queues. Deadline aging promotes an agent as its LOD service interval approaches, so continuously busy near-agent queues cannot starve distant queues. Overdue agents are serviced oldest-deadline-first before normal weighted slots.
    - Scene activation validates that configured budgets can satisfy the admitted population's maximum service intervals. If runtime population exceeds that envelope, the scheduler preserves the hard CPU/raycast limits, emits `PerceptionBudgetUnsatisfied`, and applies the configured deterministic admission/degradation policy rather than silently starving agents.
 3. **Distance-Based Sensory LOD (Level of Detail)**:

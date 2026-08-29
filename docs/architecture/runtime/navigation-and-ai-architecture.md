@@ -4,8 +4,9 @@
 
 This document defines the navigation (NavMesh), pathfinding, and AI subsystems
 for Horo Engine. It covers navigation mesh generation, runtime pathfinding,
-dynamic obstacle avoidance, AI perception, behavior integration, and crowd
-simulation.
+dynamic obstacle avoidance, AI perception, behavior integration, crowd
+simulation, fixed-tick simulation phase ordering, network authority roles,
+and hardware-driven simulation budget profiles.
 
 ## Navigation Mesh
 
@@ -247,12 +248,13 @@ bounded compute cost:
      Dispatched immediately when gameplay events occur or collected during the
      fixed simulation tick. Work is $O(E)$ where $E$ is the emitted event count.
    - **Continuous Periodic Inputs (`Sight`, `Hearing`, team awareness relay)**:
-     Evaluated at scheduled intervals across frames and distributed evenly via
+     Evaluated at scheduled intervals across fixed simulation ticks and distributed evenly via
      time-slicing.
 2. **Time-Sliced Raycast Budgets**:
-   - The engine enforces hard limits per frame/tick:
+   - The engine enforces hard limits per fixed simulation tick:
      - `maxSightRaycastsPerTick`: Maximum physics LOS raycasts allowed across all
-       agents in a single frame (e.g. 128 raycasts).
+       agents in one fixed simulation tick. It is profile-bounded (for example,
+       at most 16 for `LowCpu` and 128 for `MediumCpu`).
      - `maxPerceptionExecutionTime`: CPU budget cap per tick (e.g. 1.0 ms).
      - `maxAgentsEvaluatedPerTick`: Maximum agent sight sweeps per tick.
    - Agents use weighted fair round-robin queues. Deadline aging promotes agents
@@ -572,29 +574,213 @@ group share avoidance data; groups are independent.
 - AI debug panel (blackboard inspector, behavior tree state, active path)
 - NavMesh generation diagnostics (build time, coverage percentage)
 
-## Feature Tiers
+## Simulation Lifecycle And Fixed-Tick Phase Ordering
 
-| Feature              | `es3`     | `dx11`      | `dx12_vulkan` | `high_end` |
-| -------------------- | ---------- | ------------ | ------------- | ------------ |
-| NavMesh agents       | 32         | 256          | 1K            | 5K+          |
-| Pathfinding          | Async      | Async        | Job system    | Job system   |
-| Hierarchical paths   | No         | Yes          | Yes           | Yes          |
-| Dynamic obstacles    | 16         | 64           | 256           | 1K           |
-| Crowd simulation     | No         | Simple       | Full          | Full         |
-| Perception queries   | Sync       | Sync         | Parallel      | Parallel     |
+AI simulation executes as a fixed-timestep pipeline within the engine's fixed
+update loop, defined by [Runtime Lifecycle Architecture](./runtime-lifecycle.md).
+Six ordered phases execute in each simulation tick. A variable-rate presentation
+bridge runs afterward and consumes the committed snapshots:
+
+```text
+PerceptionSensePoll
+        |  (Raw sensory stimuli buffers)
+        v
+  BlackboardSync
+        |  (Committed agent knowledge & alerts)
+        v
+AiDecisionEvaluate
+        |  (High-level action & movement intent)
+        v
+ NavIntentCommit
+        |  (Pathfinding queries, steering & avoidance velocity)
+        v
+CharacterControllerLocomotion  (Physics Integration)
+        |  (Committed world transforms & collision contacts)
+        v
+ AnimationRigUpdate
+        |  (Skeletal pose evaluation)
+        v
+  RenderExtraction  (variable-rate presentation bridge; not a numbered phase)
+        |  (Immutable presentation snapshot)
+```
+
+### Phase Contracts And Invariants
+
+Phases 1-6 run inside the fixed simulation tick and may mutate simulation state
+under the phase contracts below. `RenderExtraction` is the following
+variable-rate presentation bridge, not a seventh fixed-tick phase.
+
+1. **`PerceptionSensePoll`**:
+   - Gathers all ADR-024 sensory stimuli (Sight line-of-sight candidates, Hearing events, Damage dispatches, Touch/Proximity overlaps, and Team/Affiliation events or bounded relays) into staged per-agent stimulus buffers.
+   - Operates as a read-only pass over physics spatial structures and audio event queues.
+   - Invariant: Does NOT mutate agent blackboard state, behavior tree node states, or world transforms.
+2. **`BlackboardSync`**:
+   - Ingests staged stimulus buffers into each agent's `AIBlackboard`.
+   - Evaluates stimulus decay over time, updates last known target locations, adjusts agent alert levels, and processes incoming team/squad broadcast events.
+   - Invariant: All blackboard mutations are completed within this phase; blackboards become read-only during subsequent decision evaluation.
+3. **`AiDecisionEvaluate`**:
+   - Evaluates behavior trees, finite state machines, or utility AI models against current blackboard state.
+   - Selects agent actions, targets, and tactical states.
+   - Invariant: Pure decision evaluation. Does NOT directly manipulate physics bodies, apply forces, or invoke rendering commands. Emits high-level movement/action intent.
+4. **`NavIntentCommit`**:
+   - Translates movement intent into concrete navigation actions: submits asynchronous pathfinding requests, follows active waypoints, and evaluates crowd/dynamic obstacle avoidance (RVO).
+   - Computes desired kinematic horizontal/vertical velocity vectors for character locomotion.
+   - Invariant: Submits desired velocity to character controllers without stepping the physics world directly.
+5. **`CharacterControllerLocomotion`**:
+   - Executes character controller updates within the physics tick step. Resolves collisions, ground support, slope limits, stepping, and external forces.
+   - Commits authoritative entity world positions, orientations, and velocities.
+   - Invariant: Transforms and velocities committed in this phase represent the authoritative simulation state for the tick.
+6. **`AnimationRigUpdate`**:
+   - Evaluates animation blend trees, locomotion state machines, and procedural IK based on committed locomotion velocity and active action tags.
+   - Computes skeletal bone transform matrices.
+   - Invariant: Evaluates presentation pose from committed simulation data; animation updates do not retroactively alter physics locomotion within the same tick.
+
+### Variable-Rate Presentation Bridge — `RenderExtraction`
+
+This bridge is not a fixed-tick phase.
+
+- Extracts immutable presentation snapshots from previous and current simulation ticks using interpolation factor $\alpha$.
+- Executed during variable-rate frame updates, completely decoupled from fixed-tick simulation loops.
+- Invariant: Strictly read-only presentation extraction.
+
+## Network Authority And Host Roles
+
+The execution of AI simulation phases is strictly governed by the host process's network role:
+
+```text
+[ Dedicated Server (Authoritative Host) ]
+  ├── Phase 1: PerceptionSensePoll
+  ├── Phase 2: BlackboardSync (SERVER-PRIVATE)
+  ├── Phase 3: AiDecisionEvaluate (SERVER-PRIVATE)
+  ├── Phase 4: NavIntentCommit & Avoidance
+  └── Phase 5: CharacterControllerLocomotion (Physics Authority)
+           │
+           │ (Replicated Public Transforms, Velocities, Action Tags)
+           ▼ [ Network Transport Layer ]
+[ Client Host (Presentation-Only Peer) ]
+  ├── Network Jitter Buffer & Snapshot Ingestion
+  ├── Transform Interpolation (alpha)
+  ├── Client AnimationRigUpdate (Visual Blending)
+  └── RenderExtraction Bridge -> Viewport Presentation
+  (NO perception queries, NO blackboards, NO decision trees)
+```
+
+### Host Role Matrix
+
+| Host Role | Authority Scope | Executed Phases | Network Replication Output |
+|---|---|---|---|
+| **Standalone** | Full local simulation and presentation authority. | Fixed phases 1–6, then the variable-rate extraction bridge. | None (local single process). |
+| **Dedicated Server** | Authoritative simulation owner for all AI agents. | Fixed phases 1–5; phase 6 only when authoritative skeletal hitboxes require it; no presentation bridge. | Replicates entity `NetworkId`, transform, velocity, and public animation tags. |
+| **Client** | Presentation-only consumer for server-replicated AI. | Client animation update plus the variable-rate extraction bridge; no authoritative AI phases for server-owned agents. | Receives replication; submits no AI authority. |
+
+### Authority, Privacy, And Security Boundaries
+
+- **Clients Never Run Authoritative AI**: Connected clients NEVER run `PerceptionSensePoll`, `BlackboardSync`, `AiDecisionEvaluate`, or `NavIntentCommit` for server-owned AI agents. Clients receive replicated transform, velocity, and state tags from the server.
+- **Server State Privacy**: Agent perception memories (e.g. sight awareness meters, target tracking scores) and `AIBlackboard` internal representations (behavior tree execution nodes, patrol indices, threat scoring matrices) are **server-private**.
+- **No Private State Serialization**: Network replication protocols MUST NOT synchronize private perception data or blackboard state to clients. Only publicly observable gameplay attributes (positions, rotations, locomotion speeds, equip states, public audio cues) are sent over the wire. This prevents client-side wallhacks, radar exploits, and unnecessary bandwidth consumption.
+
+## Simulation Execution Modes
+
+The engine supports two explicit simulation scheduling modes for AI:
+
+| Simulation Mode | Scheduling Contract | Primary Use Cases | Allowed Host Roles |
+|---|---|---|---|
+| **Deterministic Fixed-Tick** | Strict lockstep execution. Every active agent is evaluated on every fixed tick in deterministic entity-ID order. Time-slicing skips, frame-rate dependent heuristics, and random job interleavings are forbidden. | Lockstep multiplayer, replay recording and bit-identical playback, automated AI regression testing. | Standalone, Dedicated Server, Headless Test Harness |
+| **Best-Effort Bounded Time-Slicing** | Distance- and significance-based Level of Detail (Simulation LOD). Agents near players update at full frequency; distant agents update at fractional rates (e.g. 1/2, 1/4 rate) with bounded maximum latency guarantees. Job queues are amortized across workers within fixed per-tick execution budgets. | High-density open-world scenes, large-scale RTS/RPG titles, single-player games exceeding per-tick CPU budgets. | Standalone, Dedicated Server |
+
+Client hosts in networked multiplayer run neither mode for remote AI; they perform presentation-only state interpolation.
+
+## Gameplay AI Profiles And Simulation Budgets
+
+AI agent capacity, perception query fidelity, and pathfinding job allocations are configured through typed `GameplayAiProfile` definitions.
+
+```cpp
+enum class AiLodSchedulingPolicy : uint8_t {
+    FullRate,
+    DistanceBands,
+    PriorityAged,
+};
+
+struct GameplayAiProfile {
+    std::string_view profileName;
+    uint32_t         maxActiveNavMeshAgents;
+    uint32_t         maxDynamicObstacles;
+    uint32_t         maxPerceptionQueriesPerTick;
+    uint32_t         pathfindingWorkerThreads;
+    uint32_t         perceptionWorkerThreads;
+    bool             enableCrowdSimulation;
+    bool             enableHierarchicalPathfinding;
+    AiLodSchedulingPolicy lodSchedulingPolicy;
+    float            highFrequencyRadius;      // Distance (m) for full-rate evaluation
+    float            mediumFrequencyRadius;    // Distance (m) for 1/2 rate evaluation
+    float            lowFrequencyRadius;       // Distance (m) for 1/4 rate evaluation
+};
+```
+
+### Standard Engine Profiles
+
+| Feature / Budget Parameter | `LowCpu` | `MediumCpu` | `HighCpu` | `DedicatedServer` |
+|---|---|---|---|---|
+| **Target CPU Threads** | 2–4 | 6–8 | 12+ | 16+ |
+| **Max Active NavMesh Agents** | 64 | 512 | 2,048 | 4,096 |
+| **Max Dynamic Obstacles** | 16 | 128 | 512 | 1,024 |
+| **Perception Queries / Tick** | 16 | 128 | 512 | 1,024 |
+| **Pathfinding Workers** | 1 | 2 | 4 | 8 |
+| **Perception Workers** | 1 | 2 | 4 | 4 |
+| **Crowd Simulation** | Enabled | Enabled | Enabled | Enabled |
+| **Hierarchical Pathfinding** | Disabled | Enabled | Enabled | Enabled |
+| **LOD Scheduling Policy** | `DistanceBands` | `DistanceBands` | `DistanceBands` | `PriorityAged` |
+| **High-Frequency Radius** | 15 m | 25 m | 35 m | 0 (unused) |
+| **Medium-Frequency Radius** | 35 m | 60 m | 90 m | 0 (unused) |
+| **Low-Frequency Radius** | 60 m | 120 m | 180 m | 0 (unused) |
+
+These values fully initialize every `GameplayAiProfile` field; each column name
+is its `profileName`. Built-in profiles are exact defaults; larger hosts use
+validated project-defined profiles rather than interpreting `+` as an unbounded
+runtime value. `FullRate` disables time-slicing and ignores zero-valued radii.
+`DistanceBands` requires strictly increasing positive radii. `PriorityAged`
+requires zero radii and uses the weighted fair queue plus deadline aging defined
+by ADR-024.
+
+`maxPerceptionQueriesPerTick` caps all costly spatial and physics queries admitted
+by `PerceptionSensePoll`. ADR-024's `maxSightRaycastsPerTick` is the LOS-raycast
+subset and must not exceed the aggregate cap. Event receipt is free of this query
+budget; any resulting LOS, overlap, or spatial lookup consumes one admitted query.
+
+### AI Schedule And Profile Verification
+
+- Lifecycle tests assert exactly six ordered fixed-tick phases and a read-only
+  post-commit `RenderExtraction` bridge.
+- Host-role tests prove that dedicated servers do not depend on extraction and
+  that clients cannot submit authoritative AI work for server-owned agents.
+- Profile fixtures initialize every field from the canonical table and reject
+  invalid worker counts, radius/policy combinations, and sight-raycast budgets
+  above the aggregate perception-query cap.
+- Shipping replication schema tests reject private blackboard and perception
+  memory fields.
+
+### Graphics Decoupling Invariant
+
+**Architectural Rule**: Graphics backends (`OpenGL`, `Metal`, `Vulkan`, `NullRenderer`) grant **zero** AI capacity, perception query fidelity, or gameplay authority.
+
+- Selecting a higher-end graphics API (e.g. Vulkan vs OpenGL) does NOT increase AI agent limits or perception budgets.
+- Headless dedicated servers running with `NullRenderer` operate with full CPU/memory capacity and are not artificially throttled by presentation-tier checks.
+- AI budgets scale exclusively with host CPU core counts, worker thread availability, and project-configured memory limits.
 
 ## Related Documents
 
+- [ADR-022: AI Fixed-Tick Order, Authority and Simulation Budget](../../adr/022-ai-fixed-tick-order-authority-and-simulation-budget.md)
 - [ADR-024: Perception Ownership, Sense Policy and Budget Decision](../../adr/024-perception-ownership-sense-policy-and-budget.md)
-- [GAI-003.1 AI Decision Assets And Shared Gameplay Behavior Boundary](https://github.com/abdullahbodur/horo-engine/issues/1333): blackboard consumer and decision execution contract
-- [Save Game And Persistence](./save-game-and-persistence.md): durable perception-memory capture and staged restore
-- [Navigation Bake UI Reference](./navigation-bake.html)
-
 - [ADR-025: AI Decision Assets and Shared Gameplay Behavior Boundary](../../adr/025-ai-decision-assets-and-gameplay-behavior-boundary.md)
-- [Gameplay Behavior Authoring](../extensions/gameplay-behavior-authoring.md): behavior tree and state machine authoring
-- [Physics Architecture](./physics-architecture.md): collision geometry for NavMesh generation
+- [Runtime Lifecycle Architecture](./runtime-lifecycle.md): Fixed-tick simulation loop and interpolation model
+- [Multiplayer Replication Architecture](./multiplayer-replication-architecture.md): Server authority, RPCs, and property replication
+- [Networking Architecture](./networking-architecture.md): Network transport and I/O threading
+- [Gameplay Behavior Authoring](../extensions/gameplay-behavior-authoring.md): Behavior tree and state machine authoring
+- [Physics Architecture](./physics-architecture.md): Collision geometry and character controller locomotion
 - [World Streaming Architecture](./world-streaming-architecture.md): NavMesh tile streaming
-- [Scene Runtime](./scene-runtime.md): agent entity and component model
-- [Concurrency And Jobs](../foundation/concurrency-and-jobs.md): parallel crowd and perception jobs
-- [Save Game And Persistence](./save-game-and-persistence.md): durable decision-state capture and staged restore
+- [Scene Runtime](./scene-runtime.md): Agent entity and component model
+- [Concurrency And Jobs](../foundation/concurrency-and-jobs.md): Parallel crowd and perception jobs
+- [Save Game And Persistence](./save-game-and-persistence.md): durable perception-memory capture and staged restore
+- [Navigation Bake UI HTML Reference](./navigation-bake.html): non-normative
+  static UI reference
 - [Debug Console And Overlays](./debug-console-and-overlays.md): AI debug visualization
