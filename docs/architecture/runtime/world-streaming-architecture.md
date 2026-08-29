@@ -95,7 +95,7 @@ enum class WorldLayerOwnership : uint8_t {
 };
 
 struct WorldLayerDefinition {
-    uint32_t layerId;
+    uint16_t layerId;
     std::string layerName;
     WorldLayerOwnership ownership;
     WorldLayerFlags flags;
@@ -123,7 +123,7 @@ struct WorldStreamingVolumeDefinition {
     Vec3 extents;                  // radius (Sphere) or half-extents (Box)
     float priority;                // base priority weight
     bool unloadOutside;            // true = release outside; false = pin
-    uint32_t layerMask;            // bitmask of layers affected by this volume
+    uint32_t layerMask;            // bitmask of layer-table ordinals 0-31
 };
 
 struct StreamingCellChecksumEntry {
@@ -137,7 +137,8 @@ struct StreamingCellChecksumEntry {
 
 struct WorldIndexManifest {
     uint32_t magic;                // 0x58444E49 ("INDX")
-    uint32_t schemaVersion;        // kWorldIndexCurrentVersion = 1
+    uint16_t versionMajor;         // kWorldIndexVersionMajor = 1
+    uint16_t versionMinor;         // kWorldIndexVersionMinor = 0
     Guid worldGuid;                // unique world asset identifier
     std::string worldName;
     WorldBoundingVolume boundingVolume;
@@ -145,11 +146,92 @@ struct WorldIndexManifest {
     std::vector<WorldLayerDefinition> layers;
     std::vector<WorldStreamingVolumeDefinition> staticVolumes;
     std::vector<StreamingCellChecksumEntry> cellEntries;
-    std::array<uint8_t, 32> manifestHash; // SHA-256 of all preceding fields
+    std::array<uint8_t, 32> manifestHash; // SHA-256 of canonical binary manifest
 };
 
 } // namespace Horo::WorldStreaming
 ```
+
+These are logical models, not serialized native C++ object layouts.
+`std::string`, `std::vector`, pointer size, padding, and host ABI never enter the
+wire format.
+
+### Canonical `world.index` Binary Layout (Version 1)
+
+The binary manifest starts with this 192-byte (`0xC0`) little-endian header:
+
+| Offset | Type | Field | Description |
+|:---|:---|:---|:---|
+| `0x00` | `uint32` | `magic` | `0x58444E49` (`I`,`N`,`D`,`X` bytes on disk) |
+| `0x04` | `uint16` | `versionMajor` | Breaking schema version (`1`) |
+| `0x06` | `uint16` | `versionMinor` | Backwards-compatible version (`0`) |
+| `0x08` | `uint32` | `headerFlags` | Reserved in v1; zero |
+| `0x0C` | `uint32` | `headerSize` | `0x000000C0` |
+| `0x10` | `uint8[16]` | `worldGuid` | Canonical Guid bytes |
+| `0x20` | `uint32` | `worldNameOffset` | String-table-relative offset |
+| `0x24` | `uint32` | `worldNameSize` | UTF-8 bytes; no terminator |
+| `0x28` | `float32[3]` | `minBounds` | Finite world-space meters |
+| `0x34` | `float32[3]` | `maxBounds` | Finite world-space meters |
+| `0x40` | `float32` | `cellSize` | Finite meters per side |
+| `0x44` | `float32[3]` | `gridOrigin` | Finite world-space meters |
+| `0x50` | `int32` | `minGridX` | Inclusive grid bound |
+| `0x54` | `int32` | `maxGridX` | Inclusive grid bound |
+| `0x58` | `int32` | `minGridY` | Inclusive grid bound |
+| `0x5C` | `int32` | `maxGridY` | Inclusive grid bound |
+| `0x60` | `int32` | `minGridZ` | Inclusive grid bound |
+| `0x64` | `int32` | `maxGridZ` | Inclusive grid bound |
+| `0x68` | `uint8` | `coordinateSystem` | `CoordinateSystem` enum |
+| `0x69` | `uint8` | `lodLevels` | Hierarchy-level count |
+| `0x6A` | `uint16` | `reserved0` | Zero |
+| `0x6C` | `uint32` | `layerTableOffset` | Absolute, 8-byte aligned |
+| `0x70` | `uint32` | `layerCount` | 32-byte entry count |
+| `0x74` | `uint32` | `volumeTableOffset` | Absolute, 8-byte aligned |
+| `0x78` | `uint32` | `volumeCount` | 64-byte entry count |
+| `0x7C` | `uint32` | `cellTableOffset` | Absolute, 8-byte aligned |
+| `0x80` | `uint32` | `cellEntryCount` | 96-byte entry count |
+| `0x84` | `uint32` | `stringTableOffset` | Absolute, 8-byte aligned |
+| `0x88` | `uint32` | `stringTableSize` | Exact UTF-8 byte count |
+| `0x8C` | `uint32` | `reserved1` | Zero |
+| `0x90` | `uint64` | `fileSize` | Exact manifest byte count |
+| `0x98` | `uint8[32]` | `manifestHash` | Canonical SHA-256 |
+| `0xB8` | `uint8[8]` | `reserved2` | Zero |
+
+Fixed section entries are:
+
+- **Layer (32 bytes):** `uint16 layerId` at `0x00`, `uint8 ownership` at
+  `0x02`, zero byte at `0x03`, `uint32 flags` at `0x04`, `float32
+  priorityMultiplier` at `0x08`, string-relative `uint32 layerNameOffset` and
+  `layerNameSize` at `0x0C`/`0x10`, then twelve zero bytes.
+- **Volume (64 bytes):** `uint32 volumeId` at `0x00`; `uint8 type`, `shape`,
+  `unloadOutside`, and zero byte at `0x04`–`0x07`; `float32 origin[3]` at
+  `0x08`; `float32 extents[3]` at `0x14`; `float32 priority` at `0x20`;
+  `uint32 layerMask` at `0x24`; then 24 zero bytes. Mask bits address layer-table
+  ordinals 0–31, not `layerId` values.
+- **Cell checksum (96 bytes):** `int32 gridX/Y/Z` at `0x00`/`0x04`/`0x08`;
+  `uint8 lodLevel` at `0x0C`; zero byte at `0x0D`; `uint16 layerId` at `0x0E`;
+  16-byte `chunkAssetId` at `0x10`; aggregate `uint64 uncompressedSize` and
+  `compressedSize` at `0x20`/`0x28`; aggregate `uint32 payloadCrc32` at `0x30`;
+  zero `uint32` at `0x34`; 32-byte body SHA-256 at `0x38`; eight zero bytes at
+  `0x58`.
+
+Layer, volume, and cell tables sort by `layerId`, `volumeId`, and
+`(layerId, lodLevel, gridZ, gridY, gridX)`; duplicates are invalid. The string
+table stores NFC-normalized UTF-8 `worldName` first and layer names in layer
+order, with no terminators. All section padding is zero and ranges stay within
+`fileSize`.
+
+Version 1 packs sections without discretionary gaps. `layerTableOffset = 0xC0`;
+`volumeTableOffset = AlignUp(layerTableOffset + layerCount * 32, 8)`;
+`cellTableOffset = AlignUp(volumeTableOffset + volumeCount * 64, 8)`; and
+`stringTableOffset = AlignUp(cellTableOffset + cellEntryCount * 96, 8)`.
+`fileSize` is exactly `stringTableOffset + stringTableSize`; trailing bytes are
+invalid. Floats must be finite and zero uses positive-zero encoding. Guid/AssetId
+fields use the Horo value type's persistent 16-byte sequence with no
+platform-native GUID field swapping.
+
+`manifestHash` is SHA-256 over exactly `fileSize` bytes after replacing bytes
+`0x98`–`0xB7` with 32 zeros. A JSON mirror is a non-authoritative tooling
+projection and does not participate in the hash.
 
 ---
 
@@ -175,19 +257,20 @@ All scalar types and headers are explicitly encoded in **Little-Endian (LE)**.
 | `0x1D` | `uint8` | `coordinateSystem` | `CoordinateSystem` enum |
 | `0x1E` | `uint16` | `layerId` | World layer identifier |
 | `0x20` | `uint32` | `compressionCodec` | `0` = None, `1` = LZ4, `2` = Zstandard |
-| `0x24` | `uint32` | `payloadCrc32` | CRC32 checksum of uncompressed payload |
-| `0x28` | `uint64` | `uncompressedSize` | Total uncompressed payload byte count |
-| `0x30` | `uint64` | `compressedSize` | Total compressed payload byte count on disk |
-| `0x38` | `uint32` | `featureTableOffset` | Byte offset to Feature Payload TOC from file start (`0x60` when TOC immediately follows this header) |
+| `0x24` | `uint32` | `payloadCrc32` | Aggregate CRC32 of decoded blocks in TOC order |
+| `0x28` | `uint64` | `uncompressedSize` | Sum of entry uncompressed sizes |
+| `0x30` | `uint64` | `compressedSize` | Cell-body bytes including TOC, zero padding, and compressed blocks |
+| `0x38` | `uint32` | `featureTableOffset` | Must be `0x60` in version 1 |
 | `0x3C` | `uint32` | `featureTableCount` | Number of entries in Feature Payload TOC |
-| `0x40` | `uint8[32]` | `sha256Hash` | SHA-256 cryptographic hash of compressed payload |
+| `0x40` | `uint8[32]` | `sha256Hash` | SHA-256 of exact on-disk cell body |
 
 The header occupies bytes `0x00`–`0x5F` inclusive (96 bytes). Fields after `0x3C` continue through the 32-byte `sha256Hash` at `0x40`, so the first byte after the header is `0x60`.
 
 ### Feature Provider Table of Contents (TOC)
 
-Immediately following the 96-byte fixed header (offset `0x60`, or another location named by `featureTableOffset`), an
-array of `featureTableCount` entries defines the sub-payload slices:
+Version 1 places the TOC immediately after the header at `0x60`. An array of
+`featureTableCount` fixed 40-byte entries defines independently compressed
+payload blocks:
 
 ```cpp
 namespace Horo::WorldStreaming {
@@ -224,6 +307,48 @@ struct FeaturePayloadEntry {
 } // namespace Horo::WorldStreaming
 ```
 
+### Canonical Cell Body And Decode Units
+
+Every cell contains exactly one required `CoreEcs` entry as the first TOC row;
+there is no separate core block outside the table. Even an entity-empty cell
+contains a valid empty-core schema block. The built-in Core ECS provider stages
+it into detached `RuntimeSceneStorage`. Terrain, Foliage, Physics Mesh, Audio,
+Navigation Mesh, Destruction, and custom providers use the same entry contract.
+
+Entries sort by raw `providerType`; duplicates are invalid. Custom extensions
+allocate unique IDs in `0x8000`–`0xFFFF`. Payload offsets are absolute,
+non-overlapping, 8-byte aligned, and after the TOC. Inter-range padding is zero.
+`WorldLayerDefinition`, `StreamingCellId`, index entries, and cell headers all
+use `uint16 layerId`; cooking rejects more than 65,536 unique IDs instead of
+truncating.
+
+Exactly one of `Required` or `Optional` is set per entry and `CoreEcs` is always
+required. The first block begins at
+`AlignUp(0x60 + featureTableCount * 40, 8)`; each next block begins at
+`AlignUp(previous.payloadOffset + previous.compressedSize, 8)`. The final block
+ends exactly at `0x60 + header.compressedSize`, with no trailing body bytes.
+
+Compression is independent per entry. With `headerFlags.Compressed`, each block
+uses the header `compressionCodec` and requires one decompressor invocation.
+Without it, the codec is `None` and entry compressed/uncompressed sizes match.
+Entry `Encrypted` flags apply per block; the header Encrypted bit is their OR and
+decryption precedes decompression. For encrypted entries, `compressedSize` is the
+complete on-disk authenticated-envelope size; decrypting the security-versioned
+envelope yields the codec input bytes.
+
+The cell body is
+`[featureTableOffset, featureTableOffset + compressedSize)`, including TOC,
+zero padding, and compressed blocks. Header SHA-256 covers exactly this range.
+The matching `world.index` cell entry must match header compressed size,
+uncompressed size, CRC32, and SHA-256 before block decode.
+
+CRC uses CRC-32/ISO-HDLC (IEEE polynomial `0x04C11DB7`, reflected
+`0xEDB88320`, initial/final XOR `0xFFFFFFFF`). Each entry CRC covers exactly its
+decoded bytes. Header CRC is equivalent to CRC over all decoded blocks
+concatenated in TOC order without padding. The decoder may verify this aggregate
+without inflating unsupported optional blocks by applying standard GF(2)
+`crc32_combine` to each entry CRC and uncompressed size in TOC order.
+
 ---
 
 ## Versioning, Compatibility, and Error Handling
@@ -256,6 +381,8 @@ enum class StreamingCellErrorCode : uint32_t {
     TruncatedData             = 9, // Unexpected end-of-stream during read
     Cancelled                 = 10,// Decode operation aborted by CancellationToken
     IoReadError               = 11,// Underlying storage or package stream I/O failure
+    RequiredPayloadMissing    = 12,// CoreEcs or another format-required entry is absent
+    InvalidManifest           = 13,// world.index layout, ordering, or hash is invalid
 };
 
 struct StreamingCellError {
@@ -306,10 +433,22 @@ Streaming cell decode executes as an asynchronous job pipeline over `HoroFoundat
 ### Decode Phase Guarantees
 
 1. **Async I/O Phase**: Reads raw bytes from the archive into a scratch buffer. If `cancelToken.IsCancelled()` is signaled, the read is aborted and the buffer returned to the pool immediately.
-2. **Integrity & Validation Phase**: Verifies magic bytes `HOROCELL`, endianness, schema version compatibility, and validates that all TOC offsets and sizes are strictly contained within the on-disk bounds. Compares SHA-256 of the **compressed** payload against the cell header and `WorldIndexManifest`. Any compressed-integrity mismatch immediately returns `StreamingCellErrorCode::CorruptedIntegrity` without executing decompression. Uncompressed `payloadCrc32` is **not** compared in this phase.
-3. **Decompression & Slice Extraction Phase**: Decompresses the core ECS block and feature payload slices into bounded staging memory. Memory allocation is verified against the available `StreamingBudget`. If over-budget, returns `AllocationLimitExceeded`. After successful decompression, compares CRC32 of the **uncompressed** payload against `payloadCrc32` in the cell header and `WorldIndexManifest`. Each `FeaturePayloadEntry::payloadCrc32` is compared after that provider slice is decompressed. CRC mismatch returns `StreamingCellErrorCode::CorruptedIntegrity`.
-4. **Feature Provider & ECS Staging Phase**: Staged memory slices are dispatched to registered `IFeatureStreamingProvider` instances (Terrain, Foliage, Physics Mesh, Audio, NavMesh). Providers construct runtime-ready resources in private candidate containers. ECS entities are constructed in a detached `RuntimeSceneStorage` candidate.
+2. **Integrity & Validation Phase**: Validates magic/version, the exact v1 TOC location, canonical provider ordering, exactly one required first `CoreEcs`, zero padding, aligned non-overlapping block ranges, aggregate sizes, and file containment. SHA-256 over the exact cell body must match both header and `world.index` before the TOC is trusted. Aggregate uncompressed size and CRC are then recomputed from TOC metadata with `crc32_combine` and compared before decompression.
+3. **Independent Block Decode Phase**: In canonical order, each required or supported optional entry is decrypted if needed, independently decompressed with the header codec, checked for exact decoded size, and verified against its entry CRC32. Unsupported optional entries may remain compressed and unstaged. Budget failure returns `AllocationLimitExceeded`; size/hash/CRC mismatch returns `CorruptedIntegrity`.
+4. **Provider Staging Phase**: The built-in Core ECS provider creates detached `RuntimeSceneStorage`. Terrain, Foliage, Physics Mesh, Audio, Navigation Mesh, Destruction, and custom `IFeatureStreamingProvider` implementations construct resources in private candidate containers.
 5. **Atomic Synchronization & Commit**: On the owner thread during `CommitDeferredLifecycleChanges`, the detached candidate is merged into the active `RuntimeScene` in a single structural transaction. If an error or cancellation occurred in phases 1–4, the candidate is discarded, feature providers drop their staged allocations, and the active scene remains completely untouched.
+
+### Binary Format Verification Requirements
+
+- Golden-byte fixtures verify the 192-byte index header; 32/64/96-byte index
+  entries; the 96-byte cell header; and 40-byte cell TOC entries.
+- Manifest fixtures cover canonical ordering, NFC strings, zero padding, hash-field
+  zeroing, malformed ranges, duplicate IDs, and binary/JSON logical equivalence.
+- Cell fixtures cover required first `CoreEcs`, every built-in type including
+  Destruction, custom IDs, uint16 layers, independent codec calls, optional-block
+  skipping, and aggregate CRC combination.
+- Corruption tests independently mutate TOC bytes, padding, compressed bytes,
+  decoded bytes, and aggregate fields and assert the specified failure phase.
 
 ## Streaming Volumes
 
