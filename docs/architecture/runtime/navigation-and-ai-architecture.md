@@ -365,7 +365,7 @@ struct AiBrainState {
 };
 
 struct PerceptionMemory {
-    std::vector<PerceivedStimulus> stimuli;
+    std::vector<PerceivedStimulus> stimuli;  // bounded capacity reserved at scene activation
     std::optional<EntityId>        primaryTarget;
     WorldCoordinate                lastKnownTargetLocation;
     TickTimestamp                  lastSeenTimestamp;
@@ -374,10 +374,16 @@ struct PerceptionMemory {
 struct BlackboardState {
     BlackboardSchemaId             schemaId;
     uint32_t                       schemaVersion;
-    std::vector<BlackboardValue>   values;
+    std::vector<BlackboardValue>   values;   // schema-sized once at scene activation
     BlackboardRevision             revision;
 };
 ```
+
+`PerceptionMemory::stimuli` reserves the capability-tier limit during scene
+activation and never grows during simulation; overflow follows the configured
+oldest/lowest-significance eviction policy. `BlackboardState::values` is sized
+exactly once from its immutable schema. Neither container allocates on fixed-tick
+paths.
 
 1. **Generation Validation**: AI components (`AiAgentComponent`, `AiControllerComponent`), blackboard instances, perception memories, and task execution contexts reference entities using generation-checked `EntityId` (or `EntityRef { SceneRuntimeId, EntityId }`). Any stale handle referencing an entity destroyed in an earlier frame or previous scene generation is rejected.
 2. **Scene Lifecycle Binding**:
@@ -668,9 +674,17 @@ Asynchronous AI workloads—such as NavMesh pathfinding, perception visibility r
 
 ## Simulation Lifecycle And Fixed-Tick Phase Ordering
 
-The engine's **full simulation tick** is a seven-phase sequence spanning AI, physics locomotion, animation, and presentation. It is not a second AI scheduler and does not replace the five-phase AI scheduling contract above: the early phases of this tick are where that AI contract runs, and phases after navigation intent are the rest of the sim tick (locomotion, animation, render extraction).
+The engine's **full simulation tick** has six fixed-tick phases spanning AI,
+physics locomotion, and animation. A variable-rate render-extraction bridge then
+consumes the committed simulation snapshots for presentation. This is not a
+second AI scheduler and does not replace the five-phase AI scheduling contract
+above.
 
-AI simulation executes as a fixed-timestep pipeline within the engine's fixed update loop, defined by [Runtime Lifecycle Architecture](./runtime-lifecycle.md). To guarantee determinism, eliminate data races, and maintain strict ownership boundaries between perception, gameplay logic, physics, and rendering, simulation ticks execute across an explicit seven-phase sequence:
+AI simulation executes as a fixed-timestep pipeline within the engine's fixed
+update loop, defined by [Runtime Lifecycle Architecture](./runtime-lifecycle.md).
+To guarantee determinism, eliminate data races, and maintain strict ownership
+boundaries, simulation ticks execute six ordered phases followed by the
+variable-rate presentation bridge:
 
 AI simulation executes as a fixed-timestep pipeline within the engine's fixed
 update loop, defined by [Runtime Lifecycle Architecture](./runtime-lifecycle.md).
