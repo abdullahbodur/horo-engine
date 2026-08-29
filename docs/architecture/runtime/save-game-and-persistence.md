@@ -65,7 +65,7 @@ Horo Engine strictly isolates authoring persistence from dynamic runtime persist
 |   | SceneDocument  ===>  SceneDocumentPersistence  ===>  assets/scenes/*.horo     |   |
 |   | (Authored AST)       (Atomic File Writer)            (Canonical Authoring)    |   |
 |   |       |                                                                       |   |
-|   |       +------------> WriteProjectSceneRecovery ===> .horo/recovery/*.recovery |   |
+|   |       +------------> WriteProjectSceneRecovery ===> .horo/recovery/*.horo_recovery |   |
 |   |                      (Autosave / Crash Guard)        (Transient Recovery)     |   |
 |   +-------------------------------------------------------------------------------+   |
 |           |                                                                           |
@@ -110,12 +110,13 @@ namespace Horo::Runtime {
 
     /** @brief Current operational phase of the runtime save authority. */
     enum class SaveOperationPhase : std::uint8_t {
-        Idle,
+        Idle,                 // no in-flight work; last result already superseded
         CapturingSnapshot,
         Serializing,
         WritingDurableArchive,
         RestoringSnapshot,
         ApplyingState,
+        Completed,            // last request succeeded; progress == 1.0f
         Failed,
         Cancelled
     };
@@ -157,7 +158,7 @@ namespace Horo::Runtime {
         /** @brief Durably deletes a save slot. */
         [[nodiscard]] Result<void> DeleteSlot(const SaveGameSlotId &slotId);
 
-        /** @brief Pumps owner-thread safe points for transactional commits. */
+        /** @brief Called every owner-thread frame after CommitDeferredLifecycleChanges. */
         void PumpOwnerThread();
 
         /** @brief Cancels pending work and stops the save service safely. */
@@ -182,6 +183,15 @@ namespace Horo::Runtime {
   background worker threads via the `JobSystem`, preventing frame hitches on the main thread.
 - **Transactional Commit**: Final state application during a load operation occurs strictly on
   the runtime owner thread at a verified lifecycle commit boundary.
+- **Terminal Phases**: `Completed` means the last save or restore succeeded (`progress == 1.0f`).
+  `Failed` and `Cancelled` are sticky terminal failures. All three remain until the next
+  `SaveSlotAsync` / `LoadSlotAsync` / `DeleteSlot` call or service teardown. `Idle` is only the
+  never-started or post-teardown state; success is never implied by returning to `Idle`.
+- **Owner-Thread Pump**: The host frame loop calls `PumpOwnerThread()` every frame on the
+  runtime owner thread, after `CommitDeferredLifecycleChanges` and before the next simulation
+  tick. The pump never runs on a worker. Snapshot capture remains gated to the
+  `CommitDeferredLifecycleChanges` safe point; the pump only retires finished `JobSystem`
+  work, performs `AtomicReplace`, and applies restore commits at that same commit boundary.
 
 ## Save Game Archive Model
 
@@ -227,10 +237,23 @@ namespace Horo::Runtime {
         std::string engineVersion;
         std::string projectBuildId;
         std::unordered_map<std::string, std::uint32_t> moduleSchemaVersions;
-        std::unordered_map<std::string, std::string> chunkChecksums;
+        std::unordered_map<std::string, std::string> chunkChecksums; // SHA-256 hex of each named chunk
+        std::string archiveSignature; // empty when unsigned; server-only signature over archive hash
     };
 }
 ```
+
+Checksum layering:
+
+- `SaveGameManifest::chunkChecksums[name]` is SHA-256 of that chunk's raw bytes
+  (`runtime_ecs.bin`, `gameplay_state.bin`, `player_profile.bin`, `thumbnail.png`).
+- `SaveGameHeader::checksumSha256` is SHA-256 of the **complete durable archive bytes**
+  after all chunks and `manifest.json` are written. It is not a hash of the header itself
+  and is not a substitute for per-chunk hashes.
+- Preflight verifies the archive hash first, then each `chunkChecksums` entry. A chunk
+  mismatch fails with `save.corrupt_chunk` without applying state.
+- `archiveSignature`, when non-empty, signs `checksumSha256`. Clients never hold the
+  signing key. Local single-player archives leave `archiveSignature` empty.
 
 ## Save & Restore Workflows
 
@@ -250,7 +273,9 @@ namespace Horo::Runtime {
    - Serialize runtime ECS binary chunk
    - Serialize gameplay module chunks
    - Serialize player profile chunk
-   - Write header.json and manifest.json with SHA-256 hashes
+   - Compute per-chunk SHA-256 into manifest.chunkChecksums
+   - Write header.json and unsigned manifest.json
+   - Compute header.checksumSha256 over the assembled archive bytes
        |
        v (Worker Thread)
 3. Write Sibling Temporary File
@@ -263,8 +288,14 @@ namespace Horo::Runtime {
    - Update in-memory save slot catalog
    - Notify PlatformServices for background cloud synchronization
        |
+       v (Dedicated server / signed-title hosts only)
+5. Optional Manifest Signature
+   - Out of scope for local single-player and PIE
+   - Host signs header.checksumSha256 with the server private key and writes archiveSignature
+   - No client network round-trip; clients only verify on load preflight
+       |
        v
-[ Save Complete Event Published ]
+[ Save Complete Event Published; phase = Completed ]
 ```
 
 ### Restore Pipeline & Two-Phase Transaction
@@ -275,7 +306,9 @@ namespace Horo::Runtime {
        v (Worker Thread - Preflight Phase)
 1. Preflight & Verification
    - Read and validate header.json and manifest.json
-   - Verify chunk checksums (SHA-256)
+   - Verify header.checksumSha256 against the durable archive bytes
+   - Verify chunkChecksums (SHA-256) for each named chunk
+   - If archiveSignature is non-empty, verify it against checksumSha256; unsigned local/PIE saves skip this
    - Verify engine and schema compatibility; run migration chain if older
    - Validate base scene asset availability via AssetLoadService
        |
@@ -356,6 +389,7 @@ namespace Horo::Runtime {
    - The engine does not instantiate a half-loaded, corrupted world.
 3. **Migration Failure**: If an older save fails to step through a schema migration function:
    - The migration transaction aborts; the original save file on disk is preserved unchanged.
+   - The sibling `.horosave.migrate.tmp` is unlinked immediately.
 
 ## Schema Versioning & Migration Chains
 
@@ -393,7 +427,13 @@ namespace Horo::Runtime {
 
 - **Forward Migration**: Older saves are migrated sequentially step-by-step to the current engine version.
 - **No Backward Downgrade**: Saves created by newer engine builds are rejected cleanly when opened in older builds.
-- **Non-Destructive Upgrade**: Migrated archives are written to a new temporary container and only replace the disk file upon explicit user confirmation or policy.
+- **Non-Destructive Upgrade**: Migrated archives are written to a sibling temporary
+  container (`<slot>.horosave.migrate.tmp` next to the source file, never inside the
+  live `.horosave`). The source file is replaced only after explicit user confirmation
+  or an auto-upgrade policy. On confirm, `AtomicReplace` swaps the migrated tmp over
+  the original. On cancel, teardown, or process crash, the `.migrate.tmp` is unlinked
+  and is never enumerated as a loadable slot. Startup / `EnumerateSaveSlots` sweeps
+  leftover `*.horosave.migrate.tmp` with the same rule as failed `.tmp` archives.
 
 ## Cloud Save & Conflict Policy
 
@@ -418,7 +458,10 @@ Save game architecture is verified by the following test suites:
 
 - **Integrity Checksums**: Manifest contains SHA-256 hashes for all binary chunks.
 - **Bounds Checking**: Binary archive readers enforce strict bounds checking on array lengths, string lengths, and payload allocations to prevent buffer overflow attacks.
-- **Cryptographic Signatures**: Online multiplayer servers and secure titles may sign save manifests with a server private key; clients validate signatures before loading state.
+- **Cryptographic Signatures**: Signing is not part of the client save worker. Dedicated
+  servers and secure titles may attach `archiveSignature` after local `AtomicReplace`.
+  Clients validate a non-empty signature during load preflight and reject the archive
+  on mismatch. Unsigned local/PIE saves are valid.
 - **No Embedded Credentials**: Save games never store authentication tokens, encryption private keys, user passwords, or account secrets.
 
 ## Related Documents
@@ -429,5 +472,8 @@ Save game architecture is verified by the following test suites:
 - [Project Model](../editor/project-model.md): Project workspace and scene persistence
 - [Platform Services Architecture](./platform-services-architecture.md): Cloud save synchronization and storage locations
 - [Gameplay Module Boundary](../extensions/gameplay-module-boundary.md): Dynamic gameplay state serialization contracts
+- [Concurrency And Jobs](../foundation/concurrency-and-jobs.md): `JobSystem` worker offload for serialize/I/O
+- [ADR-010 Job Waiting And Operation Store Ownership](../../adr/010-job-waiting-and-operation-store-ownership.md): Non-blocking completion; owner thread does not block on jobs
 - [Error And Diagnostics](../foundation/error-and-diagnostics.md): Structured error handling and diagnostic reporting
+- [ADR-008 Error Model](../../adr/008-error-model-exception-boundary-and-registry.md): `Result<T>` / `Error` contract
 - [Application Security](../security/application-security.md): Save file validation, checksums, and signing
