@@ -6,7 +6,7 @@
 - **Scope**: AI perception subsystem, sensory stimulus emission, line-of-sight query seams, update policies, time-sliced budgets, and bounded memory decay
 - **Issue**: [#1321](https://github.com/abdullahbodur/horo-engine/issues/1321) ([GAI-002.1])
 - **JIRA**: HORO-1321
-- **Normative documents**: [Navigation And AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md), [AI Fixed-Tick Order, Authority and Simulation Budget](022-ai-fixed-tick-order-authority-and-simulation-budget.md), [Gameplay AI Ownership, Scheduling and Behavior Boundary](021-gameplay-ai-ownership-scheduling-and-behavior-boundary.md), [Save Game And Persistence](../architecture/runtime/save-game-and-persistence.md)
+- **Normative documents**: [Navigation And AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md), [AI Fixed-Tick Order, Authority and Simulation Budget](022-ai-fixed-tick-order-authority-and-simulation-budget.md), [Save Game And Persistence](../architecture/runtime/save-game-and-persistence.md)
 - **Companion decision**: [GAI-003.1 AI Decision Assets and Shared Gameplay Behavior Boundary](https://github.com/abdullahbodur/horo-engine/issues/1333) (ADR-025)
 
 ## Context

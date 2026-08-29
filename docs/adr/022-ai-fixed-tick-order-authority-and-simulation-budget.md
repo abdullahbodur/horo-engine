@@ -3,7 +3,6 @@
 - **Status**: Proposed
 - **Date**: 2026-08-28
 - **Supersedes**: None
-- **Related**: [ADR-021: Gameplay AI Ownership, Scheduling and Behavior Boundary](021-gameplay-ai-ownership-scheduling-and-behavior-boundary.md) (coarse scheduling groups and ownership)
 - **Scope**: AI simulation tick scheduling, perception-decision-navigation pipeline ordering, multiplayer host authority boundaries, simulation profiles and CPU budget allocation
 - **Issue**: [#1358](https://github.com/abdullahbodur/horo-engine/issues/1358) ([GAI-005.1])
 - **JIRA**: HORO-1358
@@ -60,9 +59,9 @@ ownership, input/output contracts, and invariants:
 | Stage | Responsibility | Inputs | Outputs | Invariants & Constraints |
 |---|---|---|---|---|
 | Fixed phase 1 — `PerceptionSensePoll` | Polls sensory listeners defined by ADR-024 against event queues and spatial-query seams. | Sight line-of-sight candidates, hearing events, damage dispatches, touch/proximity overlaps, and team/affiliation events or bounded relay inputs | Staged `PerceivedStimulus` buffers per agent | Read-only with respect to blackboard and world transform states. Does not mutate behavior trees or blackboards. |
-| Fixed phase 2 — `BlackboardSync` | Ingests staged stimuli, applies memory decay, updates target references, adjusts alert levels, and synchronizes external gameplay events into agent knowledge. | Staged `PerceivedStimulus` buffers, agent configuration | Updated `BlackboardState` | Agent blackboard mutation is isolated to this phase; prevents mid-decision race conditions. |
-| Fixed phase 3 — `AiDecisionEvaluate` | Evaluates behavior trees, state machines, or utility AI against current blackboard state under ADR-025. This is ADR-021 `AiDecision`, not `Gameplay`. | `BlackboardState` via `AIBlackboardView`, agent behavior definitions | High-level movement intent, combat action intents, animation intents, state transitions | Pure decision logic. Does not directly mutate physics bodies, move collision capsules, or perform rendering calls. |
-| Fixed phase 4 — `NavIntentCommit` | Dispatches pathfinding requests, evaluates path-following waypoints, resolves local dynamic obstacle avoidance (RVO/crowd), and computes kinematic movement vectors. Combat and animation intents are **not** committed here. | Movement intent, NavMesh spatial queries, dynamic obstacles | Kinematic velocity & direction vectors for character controllers | Submits steering commands to the character locomotion layer; does not step physics simulation directly. |
+| Fixed phase 2 — `BlackboardSync` | Ingests staged stimuli, applies memory decay, updates target references, adjusts alert levels, and synchronizes external gameplay events into agent knowledge. | Staged `PerceivedStimulus` buffers, agent configuration | Updated `AIBlackboard` state | Agent blackboard mutation is isolated to this phase; prevents mid-decision race conditions. |
+| Fixed phase 3 — `AiDecisionEvaluate` | Evaluates behavior trees, state machines, or utility AI against current blackboard state under ADR-025. | `AIBlackboard`, agent behavior definitions | High-level movement intent, combat actions, state transitions | Pure decision logic. Does not directly mutate physics bodies, move collision capsules, or perform rendering calls. |
+| Fixed phase 4 — `NavIntentCommit` | Dispatches pathfinding requests, evaluates path-following waypoints, resolves local dynamic obstacle avoidance (RVO/crowd), and computes kinematic movement vectors. | Movement intent, NavMesh spatial queries, dynamic obstacles | Kinematic velocity & direction vectors for character controllers | Submits steering commands to the character locomotion layer; does not step physics simulation directly. |
 | Fixed phase 5 — `CharacterControllerLocomotion` | Executes kinematic character controller updates within the physics tick. Resolves terrain contact, collisions, stepping, and slope limits. | Kinematic velocity vectors, physics collision geometry | Committed world transforms, contact normals, linear/angular velocities | Physics collision and transform updates become authoritative for the current simulation tick. |
 | Fixed phase 6 — `AnimationRigUpdate` | Evaluates skeletal animation blend trees, locomotion state machines, and procedural IK based on committed locomotion velocity and action states. | Committed transforms, locomotion velocities, action state tags | Final bone pose transforms and animation curves | Operates on committed simulation output. Does not feed back into physics locomotion within the same tick. |
 | Variable-rate bridge — `RenderExtraction` | Extracts immutable presentation snapshots of interpolated transforms and bone matrices for presentation rendering. | Previous and current committed simulation poses, interpolation $\alpha$ | Immutable `RenderSceneSnapshot` | Not a fixed-tick phase. Read-only and completely decoupled from fixed-tick mutation. |
@@ -107,9 +106,9 @@ AI execution and knowledge ownership vary strictly by host role:
 
 #### Privacy and Security Boundary
 
-Server perception data (sight frustums, hearing memory, target tracking weights) and `BlackboardState` internals (internal state machine states, tactical threat scores, patrol index) are **server-private**.
+Server perception data (sight frustums, hearing memory, target tracking weights) and `AIBlackboard` internals (internal state machine states, tactical threat scores, patrol index) are **server-private**.
 
-- Network replication protocols MUST NOT serialize `BlackboardState` or `PerceivedStimulus` structures to clients. Authenticated developer diagnostics may expose a separately redacted projection, but that tooling channel is not gameplay replication and is unavailable in shipping clients.
+- Network replication protocols MUST NOT serialize `AIBlackboard` or `PerceivedStimulus` structures to clients. Authenticated developer diagnostics may expose a separately redacted projection, but that tooling channel is not gameplay replication and is unavailable in shipping clients.
 - Only observable gameplay properties (position, rotation, locomotion speed, visible equip state, public audio triggers) are replicated.
 - This prevents client-side information leakage (e.g., radar/wallhacks revealing enemy AI awareness and stealth detection states).
 
@@ -194,7 +193,7 @@ Client hosts running in networked multiplayer execute neither mode for remote AI
 - Profile fixtures initialize every field to the table values and reject invalid
   worker counts, non-canonical radius/policy combinations, and perception budgets
   where `maxSightRaycastsPerTick > maxPerceptionQueriesPerTick`.
-- Replication schema tests reject `BlackboardState` and `PerceivedStimulus` fields in
+- Replication schema tests reject `AIBlackboard` and `PerceivedStimulus` fields in
   shipping client payloads.
 
 ## Consequences
