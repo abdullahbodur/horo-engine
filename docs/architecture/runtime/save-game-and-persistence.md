@@ -129,6 +129,12 @@ namespace Horo::Runtime {
         std::optional<Error> diagnostic;
     };
 
+    /** @brief Caller-owned metadata for a new runtime save. */
+    struct SaveRequest {
+        std::string displayName;
+        bool isAutosave{false};
+    };
+
     /** @brief Single runtime authority orchestrating save and restore transactions. */
     class RuntimeSaveService final {
     public:
@@ -145,7 +151,7 @@ namespace Horo::Runtime {
 
         /** @brief Starts an asynchronous save operation to the specified slot. */
         [[nodiscard]] Result<SaveOperationHandle> SaveSlotAsync(SaveGameSlotId slotId,
-                                                               SaveGameHeader headerMetadata,
+                                                               SaveRequest request,
                                                                const CancellationToken &cancellation);
 
         /** @brief Starts an asynchronous restore transaction from the specified slot. */
@@ -273,6 +279,7 @@ Checksum layering:
    - Serialize runtime ECS binary chunk
    - Serialize gameplay module chunks
    - Serialize player profile chunk
+   - Populate engine-authoritative header fields, including schemaVersion and archiveByteSize
    - Compute per-chunk SHA-256 into manifest.chunkChecksums
    - Write header.json and unsigned manifest.json
    - Compute header.checksumSha256 over the assembled archive bytes
@@ -312,11 +319,12 @@ Checksum layering:
    - Verify engine and schema compatibility; run migration chain if older
    - Validate base scene asset availability via AssetLoadService
        |
-       v (Runtime Owner Thread - Staging Phase)
+       v (Worker Thread - Staging Phase)
 2. Prepare Candidate Restore Snapshot
    - Instantiate candidate RuntimeSceneDefinition for base level
    - Load required asset leases
    - Deserialize dynamic entity records & gameplay state blobs into candidate staging
+   - Keep candidate data isolated from the active SceneRuntime and owner-thread state
        |
        v (Runtime Owner Thread - Commit Safe Point)
 3. Atomic State Application
