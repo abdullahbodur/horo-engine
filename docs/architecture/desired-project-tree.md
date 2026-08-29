@@ -208,6 +208,14 @@ horo-engine/
 │       │   ├── ProjectSession.h
 │       │   ├── RecentProject.h
 │       │   └── RecentProjectInspectionService.h
+│       ├── Network/
+│       │   ├── NetworkApi.h
+│       │   ├── NetworkHandles.h
+│       │   ├── NetworkTypes.h
+│       │   ├── NetworkAddress.h
+│       │   ├── NetworkMessage.h
+│       │   ├── NetworkErrors.h
+│       │   └── INetworkTransport.h
 │       ├── Runtime/
 │       │   ├── Runtime.h
 │       │   ├── RuntimeLifecycle.h
@@ -234,13 +242,6 @@ horo-engine/
 │       │   │   ├── RenderBackendRegistry.h
 │       │   │   ├── RenderFrontend.h
 │       │   ├── Network/
-│       │   │   ├── NetworkApi.h
-│       │   │   ├── NetworkHandles.h
-│       │   │   ├── NetworkTypes.h
-│       │   │   ├── NetworkAddress.h
-│       │   │   ├── NetworkMessage.h
-│       │   │   ├── NetworkErrors.h
-│       │   │   ├── INetworkTransport.h
 │       │   │   ├── NetworkRuntime.h
 │       │   │   ├── NetworkSession.h
 │       │   │   ├── ReplicationManager.h

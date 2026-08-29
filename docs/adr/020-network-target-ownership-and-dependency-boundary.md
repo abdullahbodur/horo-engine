@@ -32,8 +32,8 @@ The network subsystem is decomposed into four discrete CMake targets:
 |---|---|---|---|
 | `HoroEngine::NetworkApi` | Backend-neutral public types, handles, traits, interfaces | `HoroEngine::Foundation` | Value types (`NetworkId`, `NetworkAddress`, `DeliveryPolicy`), generation handles (`ConnectionHandle`, `ListenerHandle`), error codes, message views, abstract `INetworkTransport` interfaces, replication traits |
 | `HoroEngine::NetworkRuntime` | Session management, replication engine, packet queueing | `HoroEngine::NetworkApi`, `HoroEngine::Foundation`, `HoroEngine::Runtime` | `NetworkRuntimeCoordinator`, `ConnectionStateMachine`, `ReplicationManager`, `NetworkSession`, channel multiplexing, bounded buffer policies |
-| `HoroEngine::NetworkTransportNull` | Deterministic in-memory/loopback/null transport | `HoroEngine::NetworkApi`, `HoroEngine::Foundation` | `NullTransportBackend` factory / descriptor for testing, headless simulation, and network-disabled fallback |
-| `HoroEngine::NetworkTransportENet` | Concrete UDP transport implementation | `HoroEngine::NetworkApi`, `HoroEngine::Foundation` | `ENetTransportBackend` factory / descriptor. All ENet headers, sockets, and platform dependencies are `PRIVATE` |
+| `HoroEngine::NetworkTransportNull` | Deterministic in-memory/loopback/null transport | `HoroEngine::NetworkApi`, `HoroEngine::Foundation`, `HoroEngine::Platform` | `NullTransportBackend` factory / descriptor for testing, headless simulation, and network-disabled fallback |
+| `HoroEngine::NetworkTransportENet` | Concrete UDP transport implementation | `HoroEngine::NetworkApi`, `HoroEngine::Foundation`, `HoroEngine::Platform` | `ENetTransportBackend` factory / descriptor. All ENet headers, sockets, and platform dependencies are `PRIVATE` |
 
 ```text
                +---------------------------+
@@ -57,7 +57,7 @@ Rules:
 
 1. `HoroEngine::NetworkApi` depends **only** on `HoroEngine::Foundation`. It contains zero runtime logic, background threads, or socket code.
 2. `HoroEngine::NetworkRuntime` depends on `NetworkApi`, `Foundation`, and `Runtime`. It never links a concrete transport backend directly.
-3. Concrete transports (`NetworkTransportNull`, `NetworkTransportENet`) depend on `NetworkApi` and `Foundation` (plus private third-party libraries). They do not depend on `NetworkRuntime` or `HoroEngine::Runtime`.
+3. Concrete transports (`NetworkTransportNull`, `NetworkTransportENet`) depend on `NetworkApi`, `Foundation`, and `Platform` (plus private third-party libraries). They do not depend on `NetworkRuntime` or `HoroEngine::Runtime`.
 4. Feature modules, gameplay modules, and editor panels consume `NetworkApi` and `NetworkRuntime` interfaces; they **never** depend on concrete transport targets.
 
 ### 2. Encapsulation and Native Type Shielding
@@ -125,7 +125,7 @@ Key concurrency and lifecycle rules:
 
 Network shutdown is deterministic, bounded, and resource-safe:
 
-- **Connection Teardown**: Transition through `Active -> Closing -> Closed`. A graceful disconnect sends a final disconnect packet with a reason code within a bounded timeout deadline (e.g., 200 ms). If the peer does not acknowledge within the timeout, the local connection is forcefully terminated.
+- **Connection Teardown**: Transition through `Active -> Closing -> Closed`. A graceful disconnect sends a final disconnect packet with a reason code within a configurable bounded deadline derived from measured RTT and clamped by the host policy (default 2 seconds). If the peer does not acknowledge within the deadline, the local connection is forcefully terminated.
 - **Cancellation**: Asynchronous operations (resolving DNS, connecting, transferring large assets) accept a `CancellationToken`. Triggering cancellation immediately halts processing and reclaims temporary resources without blocking caller threads.
 - **Host Teardown Order**: During engine shutdown, the composition root shuts down `NetworkRuntime` before `Runtime` and `Foundation`:
   1. Stop accepting new connections on all listeners.
