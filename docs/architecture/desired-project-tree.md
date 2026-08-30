@@ -268,8 +268,11 @@ horo-engine/
 │       │   ├── NavAgentProperties.h
 │       │   ├── DynamicObstacle.h
 │       │   ├── NavigationBackend.h
-│       │   ├── NavigationCoordinator.h
-│       │   └── NavigationErrors.h
+│       │   ├── NavigationCoordinator.h  # NavigationRuntime-owned
+│       │   ├── NavigationErrors.h
+│       │   └── Backends/
+│       │       ├── RecastDetourProvider.h  # provider-owned Horo-only factory
+│       │       └── NullProvider.h         # provider-owned Horo-only factory
 │       ├── Gameplay/
 │       │   ├── GameModule.h
 │       │   ├── GameRegistrationContext.h
@@ -436,13 +439,16 @@ horo-engine/
 │   │   │           └── ENetTransportBackend.cpp
 │   │   ├── navigation/
 │   │   │   ├── api/
-│   │   │   ├── coordinator/
-│   │   │   ├── cache/
-│   │   │   ├── crowd/
-│   │   │   ├── hierarchical/
-│   │   │   ├── obstacles/
+│   │   │   ├── runtime/
+│   │   │   │   ├── coordinator/
+│   │   │   │   ├── cache/
+│   │   │   │   ├── crowd/
+│   │   │   │   ├── hierarchical/
+│   │   │   │   └── obstacles/
 │   │   │   └── backends/
 │   │   │       ├── recast_detour/
+│   │   │       │   ├── runtime/
+│   │   │       │   └── build/  # omitted from runtime-only provider composition
 │   │   │       └── null/
 │   │   ├── debug/
 │   │   └── platform_services/
