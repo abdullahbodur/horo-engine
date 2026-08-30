@@ -26,7 +26,7 @@ This discrepancy created an architectural contradiction:
 
 **Horo Engine adopts a dual-role prefab architecture spanning two explicit lifecycles: an Authoring-Time Nested Template (`PrefabDocument` / `.prefab` source asset) in the Editor/Asset Pipeline, and an immutable Runtime-Spawnable Cooked Template (`CookedPrefab` binary asset) in SceneRuntime and Gameplay. The engine structures prefab capabilities into three sequential tiers (Tier 0: Authoring Expansion, Tier 1: Runtime Dynamic Spawn, Tier 2: Live Variant Inheritance). Prefab identity reuses Asset Registry `AssetId` and project versioning. Unknown project-owned component data is preserved verbatim across authoring workflows, and runtime dynamic spawning enforces fail-safe error handling.**
 
-Milestone numbering in this ADR is the *product delivery* ladder for prefab capability, not a second architecture-baseline clock. [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md) and [ADR-010](010-job-waiting-and-operation-store-ownership.md) describe the M0 architecture baseline (console, jobs, safe points). Prefab Tier 0 / 1 / 2 map to M1 / M2 / M3+ *after* that baseline. M0 does not block T0 authoring work in editor/tools; T1 runtime spawn must conform to the M0 threading and `OperationStore` contracts.
+Milestone numbering in this ADR is the *product delivery* ladder for prefab capability, not a second architecture-baseline clock. [ADR-018](https://github.com/abdullahbodur/horo-engine/pull/2347) (companion PR; not in this tree until it lands) and [ADR-010](010-job-waiting-and-operation-store-ownership.md) describe the M0 architecture baseline (console, jobs, safe points). Prefab Tier 0 / 1 / 2 map to M1 / M2 / M3+ *after* that baseline. M0 does not block T0 authoring work in editor/tools; T1 runtime spawn must conform to the M0 threading and `OperationStore` contracts.
 
 ### Ratify-or-revise outcomes
 
@@ -91,7 +91,7 @@ Capability delivery is partitioned into three discrete tiers:
 
 - Asset Pipeline cooks `.prefab` source assets into platform-optimized, immutable binary `CookedPrefab` artifacts (`core.prefab` asset type).
 - Cooked prefabs participate in the standard `AssetRegistry` and `CookCatalog`, loaded via `IAssetProvider`.
-- Two APIs, one contract, reconciled with [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md):
+- Two APIs, one contract, reconciled with [ADR-018](https://github.com/abdullahbodur/horo-engine/pull/2347) (threading policy) and [ADR-010](010-job-waiting-and-operation-store-ownership.md) (`OperationStore`):
   ```cpp
   // Any thread. Enqueue only. Never mutates SceneRuntime.
   // Returns an OperationId immediately (ADR-010 OperationStore).
@@ -104,7 +104,7 @@ Capability delivery is partitioned into three discrete tiers:
   ```
   `SceneCommandBuffer::RequestSpawnPrefab` is the public gameplay seam. It records a spawn operation and returns. `SceneRuntimeAccess::SpawnPrefab` is the owner-thread drain of that queue. The access function does not wrap the buffer; the buffer wraps the access function.
 - Spawn commit (owner thread) allocates fresh monotonic `EntityId`s from the scene pool, copies component data, establishes hierarchy, then **commits**. `OnCreate` runs only after commit; `OnStart` runs at the following scene synchronization point.
-- Fail-safe: missing catalog entries, corrupted or version-mismatched cooked blobs, allocation failure, or spawn recursion return typed `PrefabError` without publishing entities or invoking behavior hooks.
+- Fail-safe: missing catalog entries, corrupted or version-mismatched cooked blobs, unregistered component types, component allocation failure, or spawn recursion return typed `PrefabError` without publishing entities or invoking behavior hooks.
 
 #### Tier 2: Live Variant Inheritance & Dynamic Override Tracking (Deferred / M3+)
 
@@ -134,7 +134,8 @@ Capability delivery is partitioned into three discrete tiers:
      - `PrefabError::AssetNotLoaded`: Direct `SceneRuntimeAccess::SpawnPrefab` was invoked while the blob was not resident. This is a programming error on the owner-thread path. The supported gameplay path (`RequestSpawnPrefab`) never returns this to the caller; it records an `OperationStore` load-then-spawn job instead (see below).
      - `PrefabError::UnsupportedCookedVersion`: Header `cookedFormatVersion` is newer or older than this runtime understands. Distinct from corruption.
      - `PrefabError::CorruptedPayload`: Magic header or cryptographic digest failed.
-     - `PrefabError::ComponentInstantiationFailed`: Unregistered component type or resource exhaustion.
+     - `PrefabError::ComponentTypeUnregistered`: Cooked template references a component type not registered in this runtime. Distinct from allocation failure.
+     - `PrefabError::ComponentAllocationFailed`: Component pool or heap allocation failed while staging. Distinct from `ComponentTypeUnregistered`.
      - `PrefabError::SpawnRecursionDetected`: `SpawnPrefab` of an `AssetId` already on the owner-thread spawn call stack.
      - `PrefabError::HierarchyDepthExceeded` / `ObjectCountExceeded` / `PayloadTooLarge`: Bounds failed at authoring, cook, or runtime defense-in-depth.
    - Staging vs commit: entity handles and component bytes are staged first with **no** behavior hooks, bus events, or network emits. If staging fails, staged memory and handles are discarded. `OnCreate` has not run, so `OnDestroy` is not invoked. `OnCreate` / `OnStart` run only after commit; spawn rollback therefore never has to unwind subsystem registrations or unsend events. If `OnCreate` itself fails, the entities are already committed and later teardown uses the normal `OnDestroy` path; `OnCreate` must not be treated as part of the spawn transaction.

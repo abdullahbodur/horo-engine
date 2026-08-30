@@ -28,7 +28,7 @@ architecture spanning two lifecycles:
    - Registered in the `AssetRegistry` and `CookCatalog` with a stable 128-bit `AssetId`.
    - Gameplay requests spawn via `SceneCommandBuffer::RequestSpawnPrefab` (any thread,
      `OperationId`). `SceneRuntimeAccess::SpawnPrefab` commits on the scene owner thread
-     (`OwnerThreadNextFrame`, [ADR-018](../../adr/018-command-registration-permissions-threading-and-packaged-build-policy.md)).
+     (`OwnerThreadNextFrame`, [ADR-018](https://github.com/abdullahbodur/horo-engine/pull/2347); job wait in [ADR-010](../../adr/010-job-waiting-and-operation-store-ownership.md)).
    - Commit allocates fresh `EntityId`s, copies components, and parents the hierarchy, then
      publishes. `OnCreate` / `OnStart` run only after commit.
 
@@ -269,8 +269,9 @@ namespace Horo::Runtime {
 
 ## Dynamic Runtime Spawning Contract
 
-This contract conforms to [ADR-018](../../adr/018-command-registration-permissions-threading-and-packaged-build-policy.md)
-and [ADR-010](../../adr/010-job-waiting-and-operation-store-ownership.md). Spawn *commit* is
+This contract conforms to [ADR-018](https://github.com/abdullahbodur/horo-engine/pull/2347)
+(companion PR) and [ADR-010](../../adr/010-job-waiting-and-operation-store-ownership.md)
+(in this tree). Spawn *commit* is
 `CommandThreadPolicy::OwnerThreadNextFrame`. The main/editor thread never `Wait()`s a worker
 for spawn completion.
 
@@ -421,7 +422,7 @@ enum class PrefabError : std::uint32_t {
 ## Related Documents
 
 - [ADR-017: Prefab Role, Ownership and Capability-Tier Decision](../../adr/017-prefab-role-ownership-and-capability-tiers.md)
-- [ADR-018: Command Registration, Permissions, Threading and Packaged-Build Policy](../../adr/018-command-registration-permissions-threading-and-packaged-build-policy.md)
+- [ADR-018: Command Registration, Permissions, Threading and Packaged-Build Policy](https://github.com/abdullahbodur/horo-engine/pull/2347) (companion PR; file is not in this branch until #2347 lands)
 - [ADR-010: Job Waiting and Operation Store Ownership](../../adr/010-job-waiting-and-operation-store-ownership.md)
 - [Scene Runtime Architecture](./scene-runtime.md)
 - [Asset Pipeline Architecture](./asset-pipeline.md)
