@@ -128,8 +128,8 @@ dependency direction in [System Design](./foundation/system-design.md).
   remote security.
 - [Asset Pipeline](./runtime/asset-pipeline.md): import, cook, package, runtime
   loading, cache, and hot reload.
-- [Prefab Architecture](./runtime/prefab-architecture.md): authored prefab
-  assets, scene instance references, expansion, and cook-time inlining.
+- [Prefab Architecture](./runtime/prefab-architecture.md): dual-role authoring
+  templates, runtime dynamic spawning (`CookedPrefab`), and capability tiers.
 - [Built-In Scene Primitives](./runtime/built-in-scene-primitives.md): core
   procedural meshes, collider shapes, and scene object primitives available
   without external packages.
