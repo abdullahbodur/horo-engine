@@ -8,6 +8,267 @@ dynamic obstacle avoidance, AI perception, behavior integration, crowd
 simulation, fixed-tick simulation phase ordering, network authority roles,
 and hardware-driven simulation budget profiles.
 
+## Target Ownership And Architecture Boundaries
+
+Navigation has four planned CMake targets. They are target contracts for downstream
+implementation, not a claim that all four already exist in the current CMake tree.
+Arrows below denote compile/link dependencies; runtime dispatch uses injected interfaces.
+
+```text
+NavigationRuntime -------> NavigationApi -------> Foundation (includes SceneMath)
+NavigationRecastDetour ---> NavigationApi
+NavigationNull ----------> NavigationApi
+
+Game / Server host ------> NavigationRuntime + selected runtime provider
+Cook / Bake host --------> selected mesh builder + Asset Pipeline
+
+Host creates provider(s), then injects typed interfaces into coordinators.
+NavigationRuntime never links or includes a concrete provider.
+```
+
+| Target | Direct Horo dependencies | Private vendor dependency | Public-header owner |
+|---|---|---|---|
+| `HoroEngine::NavigationApi` | `HoroEngine::Foundation` | None | Neutral types, requests, handles, provider interfaces |
+| `HoroEngine::NavigationRuntime` | `NavigationApi`, `Foundation` | None | `NavigationCoordinator.h` |
+| `HoroEngine::NavigationRecastDetour` | `NavigationApi`, `Foundation` | Selected Recast/Detour components only | Horo-only `Backends/RecastDetourProvider.h` factory/descriptor |
+| `HoroEngine::NavigationNull` | `NavigationApi`, `Foundation` | None | Horo-only `Backends/NullProvider.h` factory/descriptor |
+
+`SceneMath` is a Foundation-owned contract (`Horo/Math/SceneMath.h`), not a separate
+CMake target. These dependencies provide `WorldCoordinate64`, `Vec3`, `Aabb`, and
+`Quaternion`; navigation does not invent another math library. Asset, world-streaming,
+and scene adapters are composed by the host; they do not add reverse dependencies
+from these four navigation targets to application, Gameplay, Rendering, or GUI.
+
+### NavigationApi: Consumer Contracts
+
+`include/Horo/Navigation/` contains neutral queries/paths, build settings, immutable
+`NavMeshData` views, obstacle descriptions, navigation identities, typed
+`NavigationErrorCode` / `Result<T>` results, and `CrowdAgentConfig` / `CrowdAgentHandle`.
+Crowd types belong here because gameplay consumers need them to request agent creation
+and movement. Scheduler queues, logical agent storage, and vendor crowd state do not.
+
+Separate provider capabilities in `NavigationBackend.h`:
+
+- `INavigationQueryBackend`: bounded spatial queries over pinned immutable topology.
+- `INavigationTopologyBackend`: staged tile installation/removal and obstacle carving;
+  produces a candidate topology without mutating data being queried.
+- `INavigationCrowdBackend`: optional bounded crowd/avoidance batch computation.
+- `INavigationMeshBuilder`: offline/background bake from owned geometry and settings.
+
+There is no monolithic `INavigationBackend` combining all four lifecycles. A provider
+may implement several capabilities, but hosts inject only those required by the use case.
+Missing required capabilities fail composition; optional capabilities return `Unsupported`.
+A runtime-only server composes query/topology and optionally crowd, without the builder.
+
+### NavigationRuntime: Policy, State, And Scheduling
+
+`src/runtime/navigation/runtime/` owns `NavigationCoordinator`, logical obstacle/agent
+state, query admission/cache policy, hierarchical search policy, and
+`CrowdSimulationCoordinator`. It schedules Foundation jobs and publishes validated
+results at the owning simulation phase. It never discovers concrete providers, registers
+itself through a global singleton, performs vendor carving, or chooses cell residency.
+
+`DynamicObstacleOverlay` records logical Horo obstacle changes; the topology backend
+owns concrete carving and private tile-cache mutation. The crowd coordinator selects
+agents, stable ordering, budgets, and target ticks; the crowd backend owns provider-specific
+avoidance state and kernels. Typed snapshots/commands cross this boundary, never `dt*`
+pointers. Navigation requests velocities; character locomotion owns transform/physics writes.
+
+### NavigationRecastDetour: Private Execution
+
+`src/runtime/navigation/backends/recast_detour/` owns all `rc*` / `dt*` objects,
+including mesh/query instances, tile caches, crowd instances, and build scratch. It
+translates Horo values and typed errors at the interface boundary. Query instances/scratch
+are exclusively leased per job; mutable crowd/tile-cache instances have one writer and
+are never concurrently queried while being mutated.
+
+Private runtime and build source groups are separate. A runtime-only provider composition
+excludes Recast voxelization/build objects and their private link dependencies; enabling
+the bake capability adds them for tools. Runtime topology/crowd support retains only its
+required Detour components. This is an implementation gate, not reliance on linker dead
+stripping to hide an always-linked builder.
+
+The host activates inert provider descriptors or calls Horo-only factories and injects
+owned query/topology/crowd interfaces into the coordinator. Selection happens before scene
+activation. Stop admission, cancel/drain outstanding work under ADR-010, release snapshots,
+then destroy providers before unloading their module; no callback or lease may outlive it.
+
+### NavigationNull: Feature Absent, Not Fake Navigation
+
+`src/runtime/navigation/backends/null/` implements neutral capability absence.
+
+| Operation | Null result |
+|---|---|
+| Path, projection/nearest-point, or navigation raycast | `NoNavigationData` |
+| Build, install/carve topology, or create/update crowd agent | `Unsupported` |
+
+Null never reports a successful straight-line route or pretends to evaluate geometry.
+The same coordinator admits requests and publishes terminal results at the same scheduled
+phase as a real provider; a cheap internal result does not invoke a caller inline. Cancellation,
+capacity, stale-handle, and shutdown validation are shared. Tests needing successful paths or
+scripted delays inject a separate test-only fake, not different production Null semantics.
+
+Headless describes presentation, not navigation capability. Dedicated/headless hosts may
+select Recast/Detour for real navigation, deliberately select Null for feature absence, or
+omit navigation entirely. `NullRenderer` does not select `NavigationNull`.
+
+## Subsystem Decoupling
+
+Editor viewport camera navigation remains in Gui; orbit/pan/fly/focus code never depends
+on NavigationApi or NavigationRuntime. A separate editor adapter may extract Horo debug
+geometry for a NavMesh overlay, but navigation never reads camera/UI state or links rendering.
+Gameplay owns decision graphs, perception, blackboards, and tactical scoring; navigation owns
+spatial evaluation. Gameplay consumes typed admission/query interfaces, and navigation never
+includes behavior nodes or script bindings. Host adapters bridge Assets, World Streaming,
+and scene lifetime without making them providers' dependencies.
+
+## Navigation Integration Contracts
+
+### Submission, Jobs, And Publication
+
+`NavigationCoordinator` admits owned typed requests with captured navigation-world/scene
+incarnation, caller authority, cancellation, configuration, topology/obstacle revision, target
+tick, and bounded output/node-expansion budgets. Admission returns `Result<NavRequestHandle>`;
+closed admission or exhausted queue/result capacity returns `AdmissionRejected` with no
+accepted job. The generation-checked request handle identifies a bounded result record and
+correlates with a Foundation `JobId`; it is not a second task scheduler.
+
+All background query/crowd/build work uses Foundation `JobSystem`, with exclusive scratch and
+immutable input leases. Completion enqueues data, never a callback that writes live scene
+state. Owner-thread `NavIntentCommit` consumes eligible results in stable request/agent order,
+rechecks incarnation, handle generation, authority, cancellation, and relevant revisions, and
+publishes paths/desired velocities before character locomotion. Stale results return
+`StaleTopology` or `InvalidHandle` and may be resubmitted within budget; they are never applied
+to replacement agents or tiles. A held path/corridor must be revalidated before later use too.
+
+ADR-018 `OwnerThreadNextFrame` console handlers submit typed navigation commands for this
+phase; they do not introduce a second mutation phase in `PreUpdate` / `DebugPhase`. Heavy
+bake/export commands use asynchronous `OperationId` progress per ADR-010. The application
+operation coordinator alone mutates the shared `OperationStore`; it may aggregate multiple
+jobs. Per-agent tick jobs need no user-visible operation record. Main/editor/transport owners
+never `Wait()`/`Join()` navigation jobs; allowed teardown waits follow ADR-010. No second
+thread pool, per-backend executor, or independent OperationStore is permitted.
+
+Deterministic fixed-tick mode cannot select results according to which worker happened to
+finish. It runs bounded deterministic navigation kernels in stable agent/request order at the
+declared tick, on the owning executor, without waiting on jobs. The request still completes
+through scheduled publication, never inline at submission. Required topology must already be
+pinned; unavailable data has a deterministic typed outcome. A provider unable to meet the
+bounded deterministic kernel contract fails mode selection explicitly. Best-effort mode may
+run the same kernels as jobs; pending work retains its prior valid intent or a configured safe
+stop, never an incomplete new result. Completion timing is not an authority override.
+
+Scene teardown closes admission, cancels pending work, rejects late results, then retires
+resources after readers finish. Query cancellation before publication prevents result
+application; cancellation after publication does not retroactively undo an applied intent.
+
+### Obstacle And Provider State Synchronization
+
+The owner applies bounded obstacle command batches at `NavIntentCommit` to logical
+`DynamicObstacleOverlay` state and publishes an immutable obstacle revision. Carving occurs
+only in the injected topology backend, on an isolated candidate. Readers pin an immutable
+pair of topology and overlay revisions; no worker reads a container concurrently modified
+by gameplay or by another job. Candidate topology is installed at a later safe point only
+if its base revisions still match. Until ready, newly blocking obstacle intent uses a
+conservative avoidance/stop overlay so agents cannot follow newly obstructed corridors.
+
+Each mutable `dtCrowd`/tile-cache instance is exclusively owned for its batch; sharing an
+instance between parallel updates is forbidden. Parallel queries lease separate query/scratch
+objects against read-only mesh snapshots. Old snapshots and backend storage are retired only
+after all readers release them. No blocking writer wait is introduced on the frame path.
+
+`NavQueryCache` is bounded and thread-safe. Keys include query/filter/agent configuration and
+all contributing tile/obstacle-region generations, including explored regions for negative
+or partial answers. If exact dependency coverage is unavailable, a whole-navigation-world
+revision is the conservative fallback. A change invalidates all affected entries; it need
+not invalidate unrelated regions. Cache hits and late worker results both revalidate their
+revision coverage before publication; external path users cannot bypass that check.
+
+### Generation-Safe Navigation Identities
+
+`CrowdAgentHandle` contains `NavigationWorldId` (a unique incarnation bound by the host to
+one scene generation), slot index, and slot generation. Removing an agent increments its
+generation; a generation that cannot advance retires the slot permanently. Worlds/incarnations
+are never reused while references may survive. Stale, removed, or cross-world handles fail
+with `NavigationErrorCode::InvalidHandle`, without modifying another agent. Request and
+obstacle handles use the same lifetime rule. Provider polygon/tile references are translated
+to Horo handles with topology-generation validation; a raw vendor bit pattern is not a stable
+public identity. Queued operations revalidate handles on apply, not just at submission.
+
+### World Streaming And Tile Lifetime
+
+World Streaming is the authority for cell residency, load/eviction decisions, and global
+resident-memory limits. A host-composed `IFeatureStreamingProvider` adapter decodes/stages the
+ADR-023 NavigationMesh cell payload into private provider resources. Cell tile publication
+or logical removal occurs with the existing `CommitDeferredLifecycleChanges` cell transaction;
+`NavIntentCommit` consumes the committed topology revision and never sees partially installed
+cell state. The adapter participates in rollback if any required cell provider fails.
+
+Navigation tile streaming means requesting needed content and installing/releasing navigation
+resources under that contract; it is not another cell loader. Missing tiles generate bounded
+residency requests through the adapter. Denied/unavailable content produces a typed
+`NoNavigationData` or explicitly partial path, not a direct I/O bypass. In-flight queries hold
+leases; eviction first removes tiles from the active topology and invalidates affected paths,
+then reclaims private bytes after readers retire. Results from logically evicted tiles cannot
+be committed merely because a lease still keeps their memory alive.
+
+The shared world budget accounts for cell-backed navigation resources and their retired but
+still-pinned storage until actually freed. Navigation caches/scratch use explicit host-assigned
+sub-budgets and do not independently charge the same allocation again. `wst.*` residency and
+forced-eviction commands (ADR-018 / WST-010.8) enter the same world state machine. Standalone
+scenes without World Streaming use a host asset-lifetime adapter with the same snapshot and
+lease rules; neither case adds a concrete WorldStreaming dependency to NavigationRuntime.
+
+Global locations use `WorldCoordinate64`; provider-local coordinates use SceneMath conversions
+with a captured origin epoch. ADR-026 rebases translate dynamic paths/obstacles consistently.
+A late result from an old origin is converted or rejected before application; rebasing alone
+does not invalidate static tile topology or its stable world identity.
+
+### Complete Third-Party Encapsulation And Allocation
+
+The no-leak rule covers all public Horo navigation headers and all consumers outside
+`NavigationRecastDetour`, including transitive includes, forward declarations, aliases,
+macros, inline/template bodies, factory signatures, and exported ABI types. It covers the
+entire vendor include tree (`Recast*.h`, `Detour*.h`, debug helpers, and future headers), not
+an allowlist of forbidden examples such as `DetourTileCache.h` or `RecastAlloc.h`.
+
+Required enforcement when the navigation targets are introduced:
+
+1. Register each header under exactly one target in `cmake/HoroPublicHeaderOwnership.cmake`
+   and use `horo_configure_target_header_boundary`; `NavigationCoordinator.h` belongs to
+   Runtime, provider factories to their providers, and neutral contracts to Api. Reject
+   unowned/duplicate headers and broad repository include roots at configure time.
+2. Build the existing generated isolated public-header consumers, including Api-only and
+   Null/runtime-only compositions without vendor include paths. Vendor usage requirements
+   must remain PRIVATE; static-library link closure may carry implementation archives but
+   must not propagate vendor headers, definitions, or options to consumers.
+3. Add a CI include-boundary check over compiler dependency/include traces and compile
+   commands for every non-provider translation unit. Reject any resolved path under the
+   pinned vendor tree, even if reached through a renamed wrapper header. Scan public AST
+   declarations/inline bodies and exported symbols for vendor declarations; vendor symbol
+   visibility is private in shared builds.
+4. Negative fixtures deliberately inject direct and transitive vendor headers, forward
+   declarations, public aliases, and leaked include directories; each must fail the relevant
+   gate. Run them with real-provider, runtime-only/no-builder, Null, and navigation-omitted
+   configurations. Passing an empty scan before targets exist is not enforcement evidence.
+
+These are implementation acceptance gates; this documentation-only ADR does not claim the
+navigation-specific trace/AST/export fixtures already run in CI. Existing header ownership
+and isolated consumer machinery is reused rather than replaced.
+
+All provider allocations (persistent meshes, query scratch, crowd, tile cache, and bake
+scratch) route through bounded, tracked Foundation memory domains. Install the vendor
+[Recast allocation hooks](https://github.com/recastnavigation/recastnavigation/blob/main/Recast/Include/RecastAlloc.h)
+and [Detour allocation hooks](https://github.com/recastnavigation/recastnavigation/blob/main/Detour/Include/DetourAlloc.h)
+once per linked vendor-library instance during host activation, before any vendor allocation
+or concurrent work. Additional hosts share the established routing and cannot replace it.
+Their routing must be thread-safe and retain the allocating domain for cross-thread frees; hooks/domain
+lifetime outlasts every allocation. Never swap hooks per scene or job. Explicit tile-cache
+allocators and provider-owned C++ buffers follow the same rule. A path that cannot be routed
+must be adapted or rejected during provider validation, not silently exempted. Allocation
+failure returns a typed bounded failure, with no partial state publication or fallback to
+untracked malloc. Failure-injection/accounting tests cover shutdown and concurrent queries.
+
 ## Navigation Mesh
 
 ### NavMesh Generation
@@ -15,8 +276,8 @@ and hardware-driven simulation budget profiles.
 NavMesh is generated from scene collision geometry:
 
 - Static mesh colliders are voxelized and used to build a navigation mesh
-- NavMesh generation runs as an offline asset cook step
-- Generated NavMesh is stored as a `NavMeshAsset` referenced by the scene
+- NavMesh generation runs as an offline asset cook step or background tooling job
+- Generated NavMesh is stored as an immutable cooked `NavMeshData` asset referenced by AssetId
 
 ```cpp
 struct NavMeshBuildSettings {
@@ -30,8 +291,37 @@ struct NavMeshBuildSettings {
 };
 ```
 
-Multiple NavMesh surfaces can exist for different agent types (human, large
-creature, flying).
+Multiple NavMesh surfaces can exist for different agent types (human, large creature, flying).
+
+### NavMesh Asset And Cook Contract
+
+`NavMeshData` is the immutable cooked payload/view. An authoring NavMesh definition contains
+build settings, agent profiles, source geometry references, areas/off-mesh links, and a stable
+Asset Registry `AssetId` assigned in its sidecar. Moving/renaming source preserves that ID.
+The host's Asset Pipeline adapter registers the canonical `core.navmesh` type and its cooker,
+writes immutable artifacts to `CookCatalog`, and loads them through `IAssetProvider` /
+`AssetLoadService`. NavMeshData itself does not import the registry/provider implementation;
+the adapter associates AssetId/type with the neutral payload and pins its lifetime.
+
+Source definitions/settings follow `HoroProjectVersion` migration. Cooked bytes carry an
+independent `navMeshFormatVersion` and the standard artifact envelope, including actual-byte
+digest, sizes, and validated table ranges. Runtime rejects unsupported versions, malformed
+indices/links, non-finite coordinates, bounds violations, or corrupt digests before installing
+any tile. It never parses authoring JSON, migrates source, or recooks at runtime.
+
+Cook uses the complete canonical Asset Pipeline key plus its explicit dependency-aware
+extension: asset identity/type, source and metadata digests, settings/schema (including agent
+profile and coordinate conventions), source/dependency geometry artifact digests in canonical
+order, cooker identity/version, typed target/profile, and envelope/navmesh-format versions.
+Project migration and provider/cooker format changes invalidate affected outputs. The current
+dependency-free CacheKeyV1 cannot silently bake dependency-bearing meshes; this capability
+requires the versioned dependency-aware extension also required by ADR-017.
+
+Provider-specific optimized bytes, if emitted, carry an explicit provider-format version and
+are private cooked sections decoded by that provider, never exposed as public vendor structs.
+The host chooses a compatible payload/provider pairing or returns `UnsupportedCookedVersion`.
+Cell packaging reuses the same cooked content through ADR-023's NavigationMesh payload; it
+must not create competing AssetIds or an independent residency/cook authority.
 
 ### NavMesh Data
 
@@ -47,7 +337,8 @@ struct NavMeshData {
 };
 ```
 
-NavMesh tiles support streaming: only tiles near active agents are loaded.
+NavMesh tile requests are driven by active-agent demand, but cell residency remains
+World Streaming policy as defined above; nearby agents do not authorize a second loader.
 
 ## Pathfinding
 
@@ -57,15 +348,15 @@ Pathfinding uses A* on the NavMesh polygon graph:
 
 ```cpp
 struct PathfindingRequest {
-    WorldCoordinate    start;
-    WorldCoordinate    end;
+    WorldCoordinate64  start;
+    WorldCoordinate64  end;
     NavMeshQueryFilter filter;
     float              straighteningThreshold;
     CancellationToken  cancelToken;
 };
 
 struct PathfindingResult {
-    std::vector<WorldCoordinate> waypoints;
+    std::vector<WorldCoordinate64> waypoints;
     PathfindingStatus            status;      // Complete, Partial, Failed
     float                        pathLength;
 };
@@ -89,14 +380,14 @@ For large worlds, hierarchical pathfinding is used:
 
 Moving obstacles (other agents, vehicles, doors) affect navigation:
 
-- Dynamic obstacles are applied as a scene-scoped runtime avoidance overlay; cooked `NavMeshAsset` data is not mutated
+- Dynamic obstacles are applied as a scene-scoped runtime avoidance overlay; cooked `NavMeshData` is not mutated
 - Carving uses cylindrical or box-shaped cutouts
 - Carving is local to the affected NavMesh tiles
 - Paths are re-computed when an agent's path intersects a new obstacle
 
 ```cpp
 struct DynamicObstacle {
-    WorldCoordinate    center;
+    WorldCoordinate64  center;
     float              radius;
     float              height;
     bool               isMoving;
@@ -367,7 +658,7 @@ struct AiBrainState {
 struct PerceptionMemory {
     std::vector<PerceivedStimulus> stimuli;  // bounded capacity reserved at scene activation
     std::optional<EntityId>        primaryTarget;
-    WorldCoordinate                lastKnownTargetLocation;
+    WorldCoordinate64              lastKnownTargetLocation;
     TickTimestamp                  lastSeenTimestamp;
 };
 
@@ -617,7 +908,7 @@ seam.
 struct AIBlackboard {
     std::optional<EntityId>        target;
     std::optional<WorldCoordinate> lastKnownTargetPosition;
-    std::vector<WorldCoordinate>   patrolPath;
+    std::vector<WorldCoordinate64>   patrolPath;
     uint32_t                       patrolIndex;
     float                          alertLevel;
     AIState                        currentState;
@@ -873,7 +1164,50 @@ budget; any resulting LOS, overlap, or spatial lookup consumes one admitted quer
 - Headless dedicated servers running with `NullRenderer` operate with full CPU/memory capacity and are not artificially throttled by presentation-tier checks.
 - AI budgets scale exclusively with host CPU core counts, worker thread availability, and project-configured memory limits.
 
+## Navigation Resource Guidance
+
+Navigation scaling depends on CPU/worker capacity and measured memory costs, not graphics
+features. The canonical `GameplayAiProfile` defaults above remain the authority for AI agent
+and obstacle limits. Earlier navigation-only 64/1,024/5,000+ agent and 1/8/32 MB cache figures
+were illustrative, not a second set of defaults. Navigation cache, scratch, worker, and queue
+limits must be finite validated host/project settings within the shared budgets; tuning
+changes require workload, platform, and measurement evidence, not a new ADR.
+
+## Navigation Boundary And Integration Verification
+
+| Case | Required result |
+|---|---|
+| Api-only consumer uses SceneMath | Builds through Foundation without invented SceneMath target |
+| Runtime linked without a concrete provider | Builds; host injection supplies capabilities |
+| Runtime-only server without builder/graphics | Real queries/crowd work; no bake or graphics link requirement |
+| Direct/transitive vendor include or public vendor type | Boundary negative fixture fails; no ABI leak |
+| Concurrent queries, obstacle edits, and carving | Immutable revisions; no shared mutable vendor instance races |
+| Unrelated region changes / contributing tile changes | Unrelated cache entries may survive; affected entries and late paths cannot publish stale topology |
+| Agent removed, slot reused, or scene replaced during query | InvalidHandle; no mutation of replacement agent |
+| Cell eviction while a query holds a lease | Logical removal immediately prevents new/late use; bytes freed only after readers retire and remain budgeted until then |
+| World-cell staging fails or wst forced eviction occurs | Shared transaction/rollback and residency authority preserved |
+| Null versus real-provider admission, cancellation, publication | Same phase/order contract; Null never returns fake geometry success |
+| Different worker completion orders in deterministic mode | Same declared-tick output; no timing-dependent result selection |
+| Queue/result capacity exhausted or shutdown begins | Typed admission rejection/cancellation; no orphan job or operation |
+| Authoring geometry/settings/dependency/target changes | Correct versioned cook-key invalidation and stable AssetId |
+| Cooked version/digest/indices invalid | Typed failure before tile installation |
+| Provider allocation failure / destruction | Tracked bounded failure; no leaks, partial publication, or hook-lifetime violation |
+| Origin rebase with a query in flight | Dynamic coordinates converted/rejected consistently; static topology identity unchanged |
+
+These are required downstream runtime/CI tests, not tests implemented by this ADR-only change.
+
 ## Related Documents
+
+- [ADR-010: Job Waiting and Operation Store Ownership](../../adr/010-job-waiting-and-operation-store-ownership.md)
+- [ADR-017: Prefab Asset and Spawn Contracts](../../adr/017-prefab-role-ownership-and-capability-tiers.md)
+- [ADR-018: Command Dispatch and World Streaming Diagnostics](../../adr/018-command-registration-permissions-threading-and-packaged-build-policy.md)
+- [ADR-023: World Index and Cell Format](../../adr/023-world-index-and-cell-format-architecture-decision.md)
+- [ADR-026: Large-World Precision](../../adr/026-large-world-precision-and-floating-origin-strategy.md)
+- [Asset Pipeline](./asset-pipeline.md)
+- [World Streaming](./world-streaming-architecture.md)
+- [Header Visibility and Ownership](../foundation/header-visibility-and-ownership.md)
+- [ADR-016: Navigation Target Ownership and Dependency Boundary](../../adr/016-navigation-target-ownership-and-dependency-boundary.md)
+- [Navigation Bake UI Reference](./navigation-bake.html)
 
 - [ADR-021: Gameplay AI Ownership, Scheduling and Behavior Boundary](../../adr/021-gameplay-ai-ownership-scheduling-and-behavior-boundary.md)
 - [ADR-022: AI Fixed-Tick Order, Authority and Simulation Budget](../../adr/022-ai-fixed-tick-order-authority-and-simulation-budget.md)
