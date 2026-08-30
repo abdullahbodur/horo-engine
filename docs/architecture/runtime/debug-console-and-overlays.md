@@ -60,12 +60,12 @@ tools are only adapters.
 |  .                                                    +------------------+  .  |
 |  ............................................................................  |
 |                                                                                |
-|  +----------------------------------------------------------------------------+ |
-|  | > help renderer                                                             | |
-|  | > log_level renderer debug                                                  | |
-|  | > profile_capture start --seconds 20 --channels cpu,gpu,jobs                | |
-|  | result: capture started: cap_42                                             | |
-|  +----------------------------------------------------------------------------+ |
+|  +---------------------------------------------------------------------------+ |
+|  | > help renderer                                                           | |
+|  | > log.level renderer debug                                                | |
+|  | > sys.profile_capture start --seconds 20 --channels cpu,gpu,jobs          | |
+|  | result: capture started: cap_42                                           | |
+|  +---------------------------------------------------------------------------+ |
 +--------------------------------------------------------------------------------+
 ```
 
@@ -87,35 +87,127 @@ refreshed.
 | Game Shipping     | Hidden by default                   | Allowlisted safe commands only                | Read-only or player-safe variables only | Disabled by default | Disabled                                 |
 | Diagnostics build | Available by policy                 | Expanded diagnostics set                      | Expanded diagnostics set                | Available           | Explicit authenticated endpoint only     |
 
+Diagnostics is a standalone non-shipping product profile selected by
+`HORO_PROFILE_DIAGNOSTICS`, not a runtime mode of Profile, Server, or Shipping.
+Exactly one product-profile macro is active per build. Diagnostics includes
+`Public`, diagnostic `Developer`, and authenticated `Restricted` support
+commands; `DevelopmentOnly` translation units and `AdminCheat` handlers are
+omitted. Remote access is disabled by default and requires explicit opt-in to
+an authenticated TLS/token or authenticated host-session endpoint with rate
+limits and audit logging. The complete profile and compile-time inclusion
+contract, including Dedicated Server, is specified in
+[ADR-018 Section 4](../../adr/018-command-registration-permissions-threading-and-packaged-build-policy.md#4-packaged-build-retail-gating-policy).
+These macros describe the required build contract rather than existing CMake
+implementation; enabling Diagnostics requires a separate build.
+
 Shipping builds must not contain arbitrary file commands, unrestricted scene
 mutation, unauthenticated remote execution, source-path disclosure, or commands
 that bypass gameplay/security policy. A shipping console may still expose safe
-commands such as `help`, `version`, `log_level`, `screenshot`, accessibility
-toggles, or player-support diagnostics when the product opts in.
+commands such as `help`, `version`, `screenshot`, accessibility
+toggles, or other `Public` + `ShippingAllowlist` commands when the product
+opts in. `diag.support_bundle` is `Restricted` / `DiagnosticsOnly` and is
+not a shipping public command.
+
+Shipping command inclusion does not require console UI inclusion: approved
+local startup/CLI options, player-facing actions (such as a screenshot key),
+or an explicitly enabled local console UI may invoke allowlisted commands.
+Every surface uses the same registry, permission gate, and thread-policy
+dispatch; no surface exposes commands absent from the Shipping allowlist.
+The console UI is compiled out or disabled by default, and remote command
+access remains disabled even when a local surface is enabled.
 
 ## Core Concepts
 
 ### Console Command
 
-A command is an explicitly registered operation:
+A command is an explicitly registered, inert operation descriptor:
 
 ```cpp
-struct ConsoleCommandDescriptor {
-    ConsoleCommandId id;
-    std::string_view name;
-    std::string_view summary;
-    ConsoleArgumentSchema arguments;
-    ConsoleCommandAvailability availability;
-    ConsoleCommandPermissions permissions;
-    ConsoleCommandThread thread;
-    ConsoleCommandFlags flags;
+enum class CommandPermission : uint32_t {
+    Public     = 1 << 0, ///< Safe for all users and players; allowed in shipping builds.
+    Developer  = 1 << 1, ///< Internal diagnostics and inspection; non-shipping builds.
+    AdminCheat = 1 << 2, ///< State-mutating cheat/debug actions; dev/editor only, server authority.
+    Restricted = 1 << 3  ///< Sensitive ops (remote admin, support dumps); requires explicit token/auth.
 };
+
+constexpr CommandPermission operator|(CommandPermission lhs, CommandPermission rhs) noexcept {
+    return static_cast<CommandPermission>(static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs));
+}
+
+constexpr CommandPermission operator&(CommandPermission lhs, CommandPermission rhs) noexcept {
+    return static_cast<CommandPermission>(static_cast<uint32_t>(lhs) & static_cast<uint32_t>(rhs));
+}
+
+enum class CommandThreadPolicy : uint8_t {
+    ImmediateConsoleThread, ///< Synchronous pure operations (help, history, parsing).
+    OwnerThreadNextFrame,   ///< Main/Editor thread deterministic frame safe point.
+    RenderSafePoint,        ///< Render thread execution at frame synchronization point.
+    WorkerJob               ///< Asynchronous dispatch via Foundation JobSystem.
+};
+
+enum class CommandAvailability : uint8_t {
+    NonShipping,       ///< Available in every non-shipping product profile.
+    DevelopmentOnly,   ///< Compiled/registered only in Editor and Development builds.
+    DiagnosticsOnly,   ///< Available in Editor, Development, and Diagnostics builds.
+    ShippingAllowlist  ///< Only registered in Shipping if explicitly allowlisted by project configuration.
+};
+
+enum class CommandFlags : uint32_t {
+    None            = 0,
+    AuditLogged     = 1 << 0, ///< Emit structured security audit records through HostObservability.
+    RedactArguments = 1 << 1, ///< Redact every argument in history, logs, and telemetry (in addition to per-argument `sensitive`).
+};
+
+constexpr CommandFlags operator|(CommandFlags lhs, CommandFlags rhs) noexcept {
+    return static_cast<CommandFlags>(static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs));
+}
+
+struct DebugArgumentDescriptor {
+    std::string_view name;
+    std::string_view description;
+    DebugArgumentType type;       ///< String, Int32, Int64, Float, Bool, Enum, EntityId.
+    bool required{true};
+    std::string_view defaultValue{};
+    bool sensitive{false};        ///< Redacted from history, logs, and telemetry if true.
+};
+
+struct DebugCommandDescriptor {
+    DebugCommandId id;
+    std::string_view name;        ///< Canonical command identifier (e.g. "log.level", "net.disconnect").
+    std::string_view summary;     ///< Short human-readable summary for help and autocomplete.
+    std::string_view syntax;      ///< Usage pattern (e.g. "log.level <category> <level>").
+    std::span<const DebugArgumentDescriptor> arguments;
+    CommandPermission permissions{CommandPermission::Developer};
+    CommandThreadPolicy threadPolicy{CommandThreadPolicy::OwnerThreadNextFrame};
+    CommandAvailability availability{CommandAvailability::DevelopmentOnly};
+    CommandFlags flags{CommandFlags::None};
+    DebugCommandHandler handler;  ///< Typed function pointer: Result<DebugCommandOutput, Error>(*)(const DebugCommandContext&, const DebugParsedArguments&)
+};
+
+using ConsoleCommandDescriptor = DebugCommandDescriptor;
 ```
 
+`CommandPermission` is a bitflag so a caller session can hold a grant mask.
+A descriptor declares exactly one of the four named permissions; zero,
+unknown bits, and combinations on the descriptor are composition failures.
+The shared enum intentionally relies on composition validation rather than
+separate required-permission and session-mask types. The check is
+`(context.permissionMask & descriptor.permissions) == descriptor.permissions`,
+not an ordinal comparison. Granting `Developer` composes `Public | Developer`;
+granting `AdminCheat` composes `Public | Developer | AdminCheat`. `Restricted`
+is an orthogonal capability and is never implied by the other three.
+`CommandFlags` values may be OR'd (`AuditLogged | RedactArguments`).
+`ShippingAllowlist` is valid only with `CommandPermission::Public`;
+`AdminCheat` / `Restricted` paired with `ShippingAllowlist` is rejected at
+composition. Canonical names use registered prefixes (`sys.*`, `log.*`,
+`net.*`, `wst.*`, `rnd.*`, `phys.*`, `game.*`, `diag.*`); the only un-namespaced
+canonical names are `help`, `find`, `version`, `clear`, and `screenshot`.
+
 Commands do not expose raw function pointers to arbitrary callers. Execution
-produces a typed result, diagnostics, and structured console output. Commands
-that mutate runtime state run through the owning application or runtime service
-and respect lifecycle safe points.
+produces a typed result, diagnostics, and structured console output. Handlers
+receive a read-only `DebugCommandContext` and strongly-typed `DebugParsedArguments`.
+Commands that mutate runtime state run through the owning application or runtime
+service and respect lifecycle safe points.
 
 ### Console Variable
 
@@ -247,7 +339,7 @@ Recommended project configuration:
     "toggleChord": "Grave",
     "historyLimit": 500,
     "allowStartupExec": true,
-    "shippingAllowlist": ["help", "version", "screenshot", "support_bundle"]
+    "shippingAllowlist": ["help", "version", "screenshot"]
   },
   "developmentOverlays": {
     "enabledByDefault": false,
@@ -288,14 +380,14 @@ Minimum command set:
 | `find <text>`                   | all enabled profiles                             | Search descriptors.                                        |
 | `version`                       | all enabled profiles                             | Print engine, game, build, platform, and profile identity. |
 | `clear`                         | all enabled profiles                             | Clear visible console buffer, not persistent logs.         |
-| `log_level <category> <level>`  | development/profile, optionally shipping support | Change session log level through observability policy.     |
-| `metrics`                       | development/profile                              | Show available metric channels.                            |
-| `profile_capture <start\|stop>` | development/profile                              | Control bounded profiler captures.                         |
+| `log.level <category> <level>`  | development/profile                              | Change session log level through observability policy.     |
+| `sys.metrics`                   | development/profile                              | Show available metric channels.                            |
+| `sys.profile_capture <start\|stop>` | development/profile                          | Control bounded profiler captures.                         |
 | `screenshot`                    | development/profile, optionally shipping support | Capture the current frame through platform policy.         |
-| `scene_tree`                    | development only                                 | Print runtime scene hierarchy or ECS debug view.           |
-| `inspect <entity>`              | development only                                 | Inspect safe public entity/component state.                |
-| `teleport`, `give`, `god`, etc. | project-defined, cheat-gated                     | Gameplay-specific commands controlled by project policy.   |
-| `support_bundle`                | diagnostics/shipping opt-in                      | Create user-approved diagnostic bundle.                    |
+| `game.scene_tree`               | development only                                 | Print runtime scene hierarchy or ECS debug view.           |
+| `game.inspect <entity>`         | development only                                 | Inspect safe public entity/component state.                |
+| `game.teleport`, `game.give`, `game.god` | project-defined, cheat-gated              | Gameplay-specific commands; un-namespaced aliases optional.|
+| `diag.support_bundle`           | diagnostics only                                 | Create user-approved diagnostic bundle (`Restricted`).     |
 
 Minimum variable groups:
 
@@ -340,7 +432,7 @@ the product profile already permits.
 
 ## Security And Permissions
 
-Console access is a capability decision:
+Console access is a capability decision governed by [ADR-018](../../adr/018-command-registration-permissions-threading-and-packaged-build-policy.md):
 
 - Profile controls which commands and variables exist.
 - Project policy controls which project commands are exposed.
@@ -349,41 +441,70 @@ Console access is a capability decision:
 - Remote console requires authentication, local opt-in, rate limits, audit logs,
   and a separate threat model.
 
-Commands declare permissions such as:
+Commands declare permissions via `CommandPermission`:
 
-```text
-ReadDiagnostics
-ChangeSessionDiagnostics
-MutateRuntimeScene
-MutateGameplayState
-AccessFilesystem
-ControlProfiler
-CreateSupportBundle
-RemoteOnlyDenied
-ShippingDenied
-CheatGated
-ServerAuthorityRequired
-```
+| Permission Level | Meaning | Profile Availability |
+|---|---|---|
+| `CommandPermission::Public` | Non-mutating queries, information discovery, and player-safe utilities (`help`, `version`, `screenshot`, `clear`). | All profiles; Shipping only through project-approved local surfaces for allowlisted commands. |
+| `CommandPermission::Developer` | Inspection, logging control, performance monitoring, scene tree inspection (`log.level`, `sys.metrics`, `game.scene_tree`, `game.inspect`, `rnd.debug_draw.*`). | Editor, Game Development, Game Profile, Diagnostics, Dedicated Server. Stripped in Retail Shipping. |
+| `CommandPermission::AdminCheat` | State-mutating debug actions (`game.teleport`, `game.god`, `game.give`, `net.simulate_loss`, `wst.evict_cell`). | Editor, Game Development (cheat mode). Requires server authority in multiplayer. Stripped in Retail Shipping. |
+| `CommandPermission::Restricted` | High-privilege operations, remote server administration, sensitive diagnostic export (`net.server_shutdown`, `net.remote_admin.*`, `diag.support_bundle`). | Dedicated Server (token-authenticated), Diagnostics builds. Requires token/auth session. |
 
 The command registry refuses to register commands whose permissions are
 incompatible with the active product profile unless the command is compiled out
-or hidden by policy. Hidden commands must not be discoverable through `help` or
-autocomplete.
+or hidden by policy. `AdminCheat` and `Restricted` descriptors cannot declare
+`ShippingAllowlist`; composition fails. Hidden or unauthorized commands must not
+be discoverable through `help` or autocomplete and return typed
+`CommandError::PermissionDenied` with zero handler side effects.
+
+`AdminCheat` additionally requires `DebugCommandContext::hasServerAuthority`,
+which is independent of `permissionMask`. Dedicated server, PIE listen-server
+hosts, and single-player authority set it; connected game clients never do.
+`Restricted` commands authenticate via token/session rather than this flag.
+
+Sensitive arguments (passwords, auth tokens, player PII) set `sensitive = true` in their `DebugArgumentDescriptor`
+and are automatically redacted (`[REDACTED]`) from console history, structured logs, and telemetry.
 
 ## Threading And Lifecycle
 
-Command handlers declare where they execute:
+Command handlers declare where they execute via `CommandThreadPolicy`:
 
-| Thread policy            | Use                                                       |
-| ------------------------ | --------------------------------------------------------- |
-| `ImmediateConsoleThread` | Pure parsing/help/history operations only.                |
-| `OwnerThreadNextFrame`   | Scene/runtime/editor mutations.                           |
-| `WorkerJob`              | Long-running diagnostics or support bundle generation.    |
-| `RenderSafePoint`        | Renderer debug toggles requiring render-thread ownership. |
+| Thread policy            | Use                                                                 |
+| ------------------------ | ------------------------------------------------------------------- |
+| `ImmediateConsoleThread` | Pure parsing/help/history operations only. Algorithmic, synchronous.|
+| `OwnerThreadNextFrame`   | Scene/runtime/editor mutations queued to deterministic frame phase. |
+| `RenderSafePoint`        | Renderer debug toggles requiring render-thread frame boundary sync. |
+| `WorkerJob`              | Long-running diagnostics, reports, or support bundle generation.    |
 
-The console UI may accept input at any frame, but mutable commands are queued to
-the owning safe point. Shutdown rejects new commands, cancels pending long
-operations, and preserves command history only after sinks are still valid.
+The console UI and external adapters (CLI, MCP, remote socket) accept input at any frame/thread,
+queuing mutable commands to the owning safe point:
+
+- **Main Thread Safe Point**: Handlers with `OwnerThreadNextFrame` are drained on the **Main Thread** during a deterministic frame phase (`PreUpdate` / `DebugPhase`) before gameplay simulation ticks.
+- **Asynchronous Worker Jobs**: Heavy diagnostics and dumps dispatch background jobs via the Foundation `JobSystem`. In compliance with [ADR-010](../../adr/010-job-waiting-and-operation-store-ownership.md), the **Main Thread never synchronously blocks waiting for worker jobs**. Handlers return an `OperationId` / `JobId` immediately, and progress is projected through `OperationStore`.
+- **Shutdown**: Shutdown rejects new commands, cancels pending background operations, and preserves command history only while sinks remain valid.
+
+## Subsystem Reconciliation
+
+Console expectations across dependent subsystems are unified under this policy:
+
+### Dedicated Server Administration (NET-007.9)
+
+- Server management commands (`net.kick`, `net.ban`, `net.change_map`, `net.server_status`) declare `CommandPermission::Restricted` and `CommandThreadPolicy::OwnerThreadNextFrame`.
+- Remote administration requires cryptographic token authentication before opening an admin session.
+- Execution occurs at server tick safe points without bypassing network admission or gameplay authority. Sensitive arguments are marked `sensitive` and redacted from logs.
+
+### Authorized Network Debug Controls (NET-008.12)
+
+- Network simulation commands (`net.simulate_latency`, `net.simulate_packet_loss`, `net.disconnect`, `net.request_resync`) declare `CommandPermission::AdminCheat` or `Developer`.
+- Editor debug panels invoke these typed console commands rather than calling transport internals directly.
+- Commands target sessions using generation-safe `SessionHandle` identifiers, failing safely if stale.
+- Descriptors are compiled out of Retail Shipping client builds.
+
+### World Streaming Diagnostics (WST-010.8)
+
+- Streaming inspection commands (`wst.snapshot`, `wst.cell_status`) declare `CommandPermission::Developer`.
+- Snapshots capture immutable scene/cell state on `OwnerThreadNextFrame`, then dispatch report serialization to a non-blocking `WorkerJob` reporting to `OperationStore`.
+- Mutating commands (`wst.force_evict`, `wst.force_load`) declare `CommandPermission::AdminCheat`.
 
 ## Relationship To Observability
 
@@ -436,6 +557,8 @@ Required tests cover:
 
 ## Related Documents
 
+- [ADR-018: Command Registration, Permissions, Threading and Packaged-Build Policy](../../adr/018-command-registration-permissions-threading-and-packaged-build-policy.md)
+- [ADR-010: Job Waiting and Operation Store Ownership](../../adr/010-job-waiting-and-operation-store-ownership.md)
 - [Console Panel](./console-panel.html): HTML reference design for the editor
   console tab, command input, log filtering, and record details.
 - [Runtime Lifecycle](./runtime-lifecycle.md)
