@@ -32,7 +32,6 @@ to the replacement.
 | [026](026-large-world-precision-and-floating-origin-strategy.md) | Large-World Precision and Floating Origin Strategy | proposed | 2026-08-28 |
 | [019](019-cli-host-command-ownership-adapter-equivalence-and-horopak-boundary.md) | CLI Host, Command Ownership, Adapter Equivalence and horopak Boundary Decision | proposed | 2026-08-28 |
 
-
 ## Conventions
 
 - **Status**: `proposed`, `accepted`, `deprecated`, `superseded`
