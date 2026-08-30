@@ -37,10 +37,18 @@ Debug commands are declared as inert metadata using `DebugCommandDescriptor` (al
 ```cpp
 enum class CommandPermission : uint32_t {
     Public     = 1 << 0, ///< Safe for all users and players; allowed in shipping builds.
-    Developer  = 1 << 1, ///< Internal diagnostics and inspection; dev/editor/profile builds.
+    Developer  = 1 << 1, ///< Internal diagnostics and inspection; non-shipping builds.
     AdminCheat = 1 << 2, ///< State-mutating cheat/debug actions; dev/editor only, server authority.
     Restricted = 1 << 3  ///< Sensitive ops (remote admin, support dumps); requires explicit token/auth.
 };
+
+constexpr CommandPermission operator|(CommandPermission lhs, CommandPermission rhs) noexcept {
+    return static_cast<CommandPermission>(static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs));
+}
+
+constexpr CommandPermission operator&(CommandPermission lhs, CommandPermission rhs) noexcept {
+    return static_cast<CommandPermission>(static_cast<uint32_t>(lhs) & static_cast<uint32_t>(rhs));
+}
 
 enum class CommandThreadPolicy : uint8_t {
     ImmediateConsoleThread, ///< Synchronous pure operations (help, history, parsing).
@@ -117,7 +125,9 @@ using DebugCommandHandler = Result<DebugCommandOutput, Error> (*)(
 
 ### 2. Permissions, Access Levels, and Security Model
 
-`CommandPermission` is a bitflag type so a *caller session* can hold a grant mask. A *descriptor* declares exactly one required permission; OR-ing flags on `DebugCommandDescriptor::permissions` is a composition failure.
+`CommandPermission` is a bitflag type so a *caller session* can hold a grant mask. A *descriptor* declares exactly one of the four named permissions; zero, unknown bits, and OR-ed combinations on `DebugCommandDescriptor::permissions` are composition failures.
+
+The shared enum deliberately keeps the descriptor and session contracts small; it does not make invalid descriptor values unrepresentable in C++. The bitwise operators support session grants and enforcement, while composition validation enforces the single-permission descriptor invariant. A future separation into a required-permission type and a session `PermissionMask` may encode that distinction statically; this ADR retains the validator-based contract.
 
 The pre-execution check is a bit test, not an ordinal comparison:
 
@@ -132,14 +142,14 @@ Tiers are not automatically hierarchical at check time. Session composition may 
 - Granting `AdminCheat` composes `Public | Developer | AdminCheat`.
 - `Restricted` is an orthogonal capability (ops / sensitive dumps), not a rung above `AdminCheat`. It is granted independently and is never implied by developer or cheat grants. A server operator may hold `Public | Restricted` without `AdminCheat`.
 
-`CommandFlags` *are* combinable on the descriptor (`AuditLogged | RedactArguments`). That is the only flags field that uses bitwise OR as a public contract.
+`CommandFlags` *are* combinable on the descriptor (`AuditLogged | RedactArguments`). They are the only descriptor flags field that permits bitwise OR; session `permissionMask` grants also permit OR as described above.
 
 Command access is evaluated against the caller's active security context prior to execution:
 
 | Permission Level | Description | Target Audiences | Default Profile Availability |
 |---|---|---|---|
-| `CommandPermission::Public` | Non-mutating queries, information discovery, and player-safe utilities (`help`, `version`, `screenshot`, `clear`). | Players, external users, developers, automated testing. | Editor, Game Development, Game Profile, Game Shipping (if console enabled), Dedicated Server. |
-| `CommandPermission::Developer` | Inspection, logging control, performance monitoring, scene tree inspection (`log.level`, `sys.metrics`, `game.scene_tree`, `game.inspect`, `rnd.debug_draw.*`). | Internal developers, QA, automated test suites. | Editor, Game Development, Game Profile, Dedicated Server. **Excluded from Retail Shipping.** |
+| `CommandPermission::Public` | Non-mutating queries, information discovery, and player-safe utilities (`help`, `version`, `screenshot`, `clear`). | Players, external users, developers, automated testing. | Editor, Game Development, Game Profile, Diagnostics, Dedicated Server; Game Shipping only through project-approved local surfaces for allowlisted commands (Section 4). |
+| `CommandPermission::Developer` | Inspection, logging control, performance monitoring, scene tree inspection (`log.level`, `sys.metrics`, `game.scene_tree`, `game.inspect`, `rnd.debug_draw.*`). | Internal developers, QA, automated test suites. | Editor, Game Development, Game Profile, Diagnostics, Dedicated Server. **Excluded from Retail Shipping.** |
 | `CommandPermission::AdminCheat` | State-mutating debug actions (`game.teleport`, `game.god`, `game.give`, `net.simulate_loss`, `wst.evict_cell`). | Gameplay developers, internal playtesting. | Editor, Game Development (when cheat mode enabled). **Forbidden in multiplayer without server authority. Excluded from Retail Shipping.** |
 | `CommandPermission::Restricted` | High-privilege operations, remote server administration, sensitive diagnostic export (`net.server_shutdown`, `net.remote_admin.*`, `diag.support_bundle`). | Server operators, authorized engineers. | Dedicated Server (with auth token), Diagnostics builds. Requires cryptographic token or host session authentication. |
 
@@ -205,14 +215,20 @@ To ensure security, minimize binary footprint, and eliminate cheat vectors in co
 | **Editor** (`HORO_PROFILE_EDITOR`) | Full command tables and debug UI compiled in. | `Public`, `Developer`, `AdminCheat`, `Restricted` (local). | Local MCP / Editor loopback. |
 | **Game Development** (`HORO_PROFILE_DEVELOPMENT`) | Full command tables compiled in. In-game console UI active. | `Public`, `Developer`, `AdminCheat` (if cheats enabled). | Localhost diagnostics only. |
 | **Game Profile** (`HORO_PROFILE_PROFILE`) | Diagnostic commands compiled in; cheat handlers stripped. | `Public`, read-only `Developer` (metrics, profiler). | Localhost profiling only. |
-| **Game Shipping / Retail** (`HORO_PROFILE_SHIPPING`) | Only descriptors marked `ShippingAllowlist` and approved by project configuration are compiled. Debug symbols/strings removed. Console UI compiled out or disabled. | `Public` allowlist only (`help`, `version`, `screenshot`). `diag.support_bundle` remains `CommandPermission::Restricted` with `CommandAvailability::DiagnosticsOnly` and is rejected at composition if marked `ShippingAllowlist`. | **Disabled completely.** |
+| **Diagnostics** (`HORO_PROFILE_DIAGNOSTICS`) | Non-shipping diagnostics and support handlers compiled in; `DevelopmentOnly` TUs and cheat handlers omitted. Console UI and overlays available by product policy. | `Public`, diagnostic `Developer`, and authenticated `Restricted` support operations (`diag.support_bundle`); no `AdminCheat`. | Disabled by default; explicit opt-in to an authenticated TLS/token or authenticated host-session endpoint with rate limits and audit logging. |
+| **Game Shipping / Retail** (`HORO_PROFILE_SHIPPING`) | Only descriptors marked `ShippingAllowlist` and approved by project configuration are compiled. Internal debug symbols/strings removed. Console UI compiled out or disabled by default; an optional local UI exposes only the allowlist. | `Public` allowlist only (`help`, `version`, `screenshot`). `diag.support_bundle` remains `CommandPermission::Restricted` with `CommandAvailability::DiagnosticsOnly` and is rejected at composition if marked `ShippingAllowlist`. | **Disabled completely.** |
 | **Dedicated Server** (`HORO_PROFILE_SERVER`) | Headless CLI / Remote console compiled in. Visual debug UI omitted. | `Public`, server `Developer`, and authenticated `Restricted` admin. | Authenticated TLS/Token remote admin only. |
+
+Diagnostics is a standalone non-shipping product profile for controlled support and investigation builds, selected with `HORO_PROFILE_DIAGNOSTICS`; it is not a runtime mode of Profile, Server, or Shipping. Exactly one product-profile macro is active for a build. These macros specify the required build contract, not existing CMake implementation. Switching profiles requires a separate build; a Shipping launch flag cannot enable Diagnostics handlers.
+
+Shipping command inclusion is independent of console UI inclusion. An approved local startup/CLI option, player-facing action (such as a screenshot key), or explicitly enabled local console UI may invoke an allowlisted command through the same registry, permission gate, and thread-policy dispatch. No surface may bypass those checks or expose commands absent from the Shipping allowlist; remote command access remains disabled even when a local surface is enabled.
 
 #### Compile-Time Stripping Mechanism
 
 - `CommandAvailability` is the sole compile-time inclusion authority. `CommandPermission` is evaluated only at runtime for commands present in the selected profile; it never causes a descriptor to be compiled into a build.
 - `HORO_DEBUG_COMMANDS_ENABLED` is the profile-level preprocessor umbrella for non-shipping command translation units. It is defined when the active `HORO_PROFILE_*` is Editor, Development, Profile, Diagnostics, or Server, and is undefined under `HORO_PROFILE_SHIPPING`.
 - Descriptors whose `CommandAvailability` is `NonShipping`, `DevelopmentOnly`, or `DiagnosticsOnly` live in translation units gated by `#if HORO_DEBUG_COMMANDS_ENABLED` (further narrowed by profile as needed). `ShippingAllowlist` descriptors live in separately linked translation units that do **not** use this macro; they additionally require an explicit project allowlist entry.
+- The availability profile sets are exact: `NonShipping` includes Editor, Development, Profile, Diagnostics, and Server; `DevelopmentOnly` includes only Editor and Development; `DiagnosticsOnly` includes only Editor, Development, and Diagnostics. In particular, Profile and Server do not gain `DiagnosticsOnly` handlers from the umbrella macro. Cheat handlers use `DevelopmentOnly`, so they are absent from Diagnostics as well as Profile, Server, and Shipping.
 - In Retail Shipping builds, only approved `ShippingAllowlist` translation units are linked. All other handler functions and descriptor strings are absent rather than relying on dead-code elimination.
 
 ---
@@ -233,8 +249,8 @@ This decision explicitly ratifies and reconciles the console command requirement
 | NET-008.12                         | AdminCheat /     | OwnerThreadNextFrame          |
 | Authorized Network Debug Controls  | Developer        | Generation-safe session IDs   |
 +------------------------------------+------------------+-------------------------------+
-| WST-010.8                          | Developer        | WorkerJob for heavy dumps     |
-| World Streaming Diagnostics        | (Read-Only)      | Non-blocking OperationStore   |
+| WST-010.8                          | AdminCheat /     | WorkerJob for heavy dumps     |
+| World Streaming Diagnostics        | Developer        | Non-blocking OperationStore   |
 +------------------------------------+------------------+-------------------------------+
 ```
 
