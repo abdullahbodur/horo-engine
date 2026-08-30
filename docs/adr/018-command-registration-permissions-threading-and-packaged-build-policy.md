@@ -94,7 +94,7 @@ struct DebugCommandDescriptor {
 Commands never expose raw untyped function pointers (`void*`, `void (*)(int, char**)`), arbitrary parameter packs, or direct lambdas capturing transient host references. Handlers conform strictly to:
 
 ```cpp
-using DebugCommandHandler = Result<DebugCommandOutput, Error> (*(
+using DebugCommandHandler = Result<DebugCommandOutput, Error> (*)(
     const DebugCommandContext& context,
     const DebugParsedArguments& arguments
 );
@@ -177,7 +177,7 @@ All console command adapters (In-Game UI, Editor Panel, CLI, MCP, Remote WebSock
             │                              - Frontend/backend stable
             │                              - rnd.* debug toggles
             │
-            └─── WorkerJob ───────────────► [JobSystem Dispatch]
+            └── WorkerJob ───────────────► [JobSystem Dispatch]
                                            - Snapshot / export / dump
                                            - Async OperationStore record
                                            - NON-BLOCKING main thread
@@ -223,19 +223,19 @@ This decision explicitly ratifies and reconciles the console command requirement
 
 ```text
 +---------------------------------------------------------------------------------------+
-|| Subsystem Console Reconciliation                                                      |
-|+------------------------------------+------------------+-------------------------------+
-|| Subsystem & Ticket                 | Permission Tier  | Threading & Gating Contract   |
-|+------------------------------------+------------------+-------------------------------+
-|| NET-007.9                          | Restricted       | OwnerThreadNextFrame (Tick)   |
-|| Dedicated Server Administration    |                  | Token-auth / Redacted args    |
-|+------------------------------------+------------------+-------------------------------+
-|| NET-008.12                         | AdminCheat /     | OwnerThreadNextFrame          |
-|| Authorized Network Debug Controls  | Developer        | Generation-safe session IDs   |
-|+------------------------------------+------------------+-------------------------------+
-|| WST-010.8                          | Developer        | WorkerJob for heavy dumps     |
-|| World Streaming Diagnostics        | (Read-Only)      | Non-blocking OperationStore   |
-|+------------------------------------+------------------+-------------------------------+
+| Subsystem Console Reconciliation                                                      |
++------------------------------------+------------------+-------------------------------+
+| Subsystem & Ticket                 | Permission Tier  | Threading & Gating Contract   |
++------------------------------------+------------------+-------------------------------+
+| NET-007.9                          | Restricted       | OwnerThreadNextFrame (Tick)   |
+| Dedicated Server Administration    |                  | Token-auth / Redacted args    |
++------------------------------------+------------------+-------------------------------+
+| NET-008.12                         | AdminCheat /     | OwnerThreadNextFrame          |
+| Authorized Network Debug Controls  | Developer        | Generation-safe session IDs   |
++------------------------------------+------------------+-------------------------------+
+| WST-010.8                          | Developer        | WorkerJob for heavy dumps     |
+| World Streaming Diagnostics        | (Read-Only)      | Non-blocking OperationStore   |
++------------------------------------+------------------+-------------------------------+
 ```
 
 #### A. Dedicated Server Administration ([NET-007.9](https://github.com/abdullahbodur/horo-engine/issues/1169))

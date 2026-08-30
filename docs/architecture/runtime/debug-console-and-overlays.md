@@ -36,37 +36,37 @@ tools are only adapters.
 
 ```text
 +--------------------------------------------------------------------------------+
-|| Horo Game Window                                                               |
-||                                                                                |
-||  Fullscreen Game View                                                          |
-||                                                                                |
-||       player camera / gameplay / debug.draw.physics / debug.draw.nav           |
-||                                                                                |
-||  ............................................................................  |
-||  . Dimmed game background while runtime debug UI owns focus                 .  |
-||  .                                                                          .  |
-||  .                                                    +------------------+  .  |
-||  .                                                    | Logs             |  .  |
-||  .                                                    | warn/error       |  .  |
-||  .                                                    | filter: ai.*     |  .  |
-||  .                                                    +------------------+  .  |
-||  .                                                    +------------------+  .  |
-||  .                                                    | Frame            |  .  |
-||  .                                                    | cpu/gpu p95      |  .  |
-||  .                                                    +------------------+  .  |
-||  .                                                    +------------------+  .  |
-||  .                                                    | Memory/Jobs      |  .  |
-||  .                                                    | rss/assets       |  .  |
-||  .                                                    +------------------+  .  |
-||  ............................................................................  |
-||                                                                                |
-||  +----------------------------------------------------------------------------+ |
-||  | > help renderer                                                             | |
-||  | > log.level renderer debug                                                   | |
-||  | > sys.profile_capture start --seconds 20 --channels cpu,gpu,jobs                | |
-||  | result: capture started: cap_42                                             | |
-||  +----------------------------------------------------------------------------+ |
-|+--------------------------------------------------------------------------------+
+| Horo Game Window                                                               |
+|                                                                                |
+|  Fullscreen Game View                                                          |
+|                                                                                |
+|       player camera / gameplay / debug.draw.physics / debug.draw.nav           |
+|                                                                                |
+|  ............................................................................  |
+|  . Dimmed game background while runtime debug UI owns focus                 .  |
+|  .                                                                          .  |
+|  .                                                    +------------------+  .  |
+|  .                                                    | Logs             |  .  |
+|  .                                                    | warn/error       |  .  |
+|  .                                                    | filter: ai.*     |  .  |
+|  .                                                    +------------------+  .  |
+|  .                                                    +------------------+  .  |
+|  .                                                    | Frame            |  .  |
+|  .                                                    | cpu/gpu p95      |  .  |
+|  .                                                    +------------------+  .  |
+|  .                                                    +------------------+  .  |
+|  .                                                    | Memory/Jobs      |  .  |
+|  .                                                    | rss/assets       |  .  |
+|  .                                                    +------------------+  .  |
+|  ............................................................................  |
+|                                                                                |
+|  +----------------------------------------------------------------------------+ |
+|  | > help renderer                                                             | |
+|  | > log.level renderer debug                                                   | |
+|  | > sys.profile_capture start --seconds 20 --channels cpu,gpu,jobs                | |
+|  | result: capture started: cap_42                                             | |
+|  +----------------------------------------------------------------------------+ |
++--------------------------------------------------------------------------------+
 ```
 
 The game view remains fullscreen and continues to render behind the debug UI.
