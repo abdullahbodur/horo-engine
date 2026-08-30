@@ -36,37 +36,37 @@ tools are only adapters.
 
 ```text
 +--------------------------------------------------------------------------------+
-| Horo Game Window                                                               |
-|                                                                                |
-|  Fullscreen Game View                                                          |
-|                                                                                |
-|       player camera / gameplay / debug.draw.physics / debug.draw.nav           |
-|                                                                                |
-|  ............................................................................  |
-|  . Dimmed game background while runtime debug UI owns focus                 .  |
-|  .                                                                          .  |
-|  .                                                    +------------------+  .  |
-|  .                                                    | Logs             |  .  |
-|  .                                                    | warn/error       |  .  |
-|  .                                                    | filter: ai.*     |  .  |
-|  .                                                    +------------------+  .  |
-|  .                                                    +------------------+  .  |
-|  .                                                    | Frame            |  .  |
-|  .                                                    | cpu/gpu p95      |  .  |
-|  .                                                    +------------------+  .  |
-|  .                                                    +------------------+  .  |
-|  .                                                    | Memory/Jobs      |  .  |
-|  .                                                    | rss/assets       |  .  |
-|  .                                                    +------------------+  .  |
-|  ............................................................................  |
-|                                                                                |
-|  +----------------------------------------------------------------------------+ |
-|  | > help renderer                                                             | |
-|  | > log_level renderer debug                                                  | |
-|  | > profile_capture start --seconds 20 --channels cpu,gpu,jobs                | |
-|  | result: capture started: cap_42                                             | |
-|  +----------------------------------------------------------------------------+ |
-+--------------------------------------------------------------------------------+
+|| Horo Game Window                                                               |
+||                                                                                |
+||  Fullscreen Game View                                                          |
+||                                                                                |
+||       player camera / gameplay / debug.draw.physics / debug.draw.nav           |
+||                                                                                |
+||  ............................................................................  |
+||  . Dimmed game background while runtime debug UI owns focus                 .  |
+||  .                                                                          .  |
+||  .                                                    +------------------+  .  |
+||  .                                                    | Logs             |  .  |
+||  .                                                    | warn/error       |  .  |
+||  .                                                    | filter: ai.*     |  .  |
+||  .                                                    +------------------+  .  |
+||  .                                                    +------------------+  .  |
+||  .                                                    | Frame            |  .  |
+||  .                                                    | cpu/gpu p95      |  .  |
+||  .                                                    +------------------+  .  |
+||  .                                                    +------------------+  .  |
+||  .                                                    | Memory/Jobs      |  .  |
+||  .                                                    | rss/assets       |  .  |
+||  .                                                    +------------------+  .  |
+||  ............................................................................  |
+||                                                                                |
+||  +----------------------------------------------------------------------------+ |
+||  | > help renderer                                                             | |
+||  | > log.level renderer debug                                                   | |
+||  | > sys.profile_capture start --seconds 20 --channels cpu,gpu,jobs                | |
+||  | result: capture started: cap_42                                             | |
+||  +----------------------------------------------------------------------------+ |
+|+--------------------------------------------------------------------------------+
 ```
 
 The game view remains fullscreen and continues to render behind the debug UI.
@@ -90,8 +90,10 @@ refreshed.
 Shipping builds must not contain arbitrary file commands, unrestricted scene
 mutation, unauthenticated remote execution, source-path disclosure, or commands
 that bypass gameplay/security policy. A shipping console may still expose safe
-commands such as `help`, `version`, `log_level`, `screenshot`, accessibility
-toggles, or player-support diagnostics when the product opts in.
+commands such as `help`, `version`, `screenshot`, accessibility
+toggles, or other `Public` + `ShippingAllowlist` commands when the product
+opts in. `diag.support_bundle` is `Restricted` / `DiagnosticsOnly` and is
+not a shipping public command.
 
 ## Core Concepts
 
@@ -115,10 +117,16 @@ enum class CommandThreadPolicy : uint8_t {
 };
 
 enum class CommandAvailability : uint8_t {
-    AllProfiles,       ///< Available across all product profiles.
+    NonShipping,       ///< Available in every non-shipping product profile.
     DevelopmentOnly,   ///< Compiled/registered only in Editor and Development builds.
     DiagnosticsOnly,   ///< Available in Editor, Development, and Diagnostics builds.
     ShippingAllowlist  ///< Only registered in Shipping if explicitly allowlisted by project configuration.
+};
+
+enum class CommandFlags : uint32_t {
+    None            = 0,
+    AuditLogged     = 1 << 0, ///< Emit structured security audit records through HostObservability.
+    RedactArguments = 1 << 1, ///< Redact every argument in history, logs, and telemetry (in addition to per-argument `sensitive`).
 };
 
 struct DebugArgumentDescriptor {
@@ -132,9 +140,9 @@ struct DebugArgumentDescriptor {
 
 struct DebugCommandDescriptor {
     DebugCommandId id;
-    std::string_view name;        ///< Canonical command identifier (e.g. "log_level", "net.disconnect").
+    std::string_view name;        ///< Canonical command identifier (e.g. "log.level", "net.disconnect").
     std::string_view summary;     ///< Short human-readable summary for help and autocomplete.
-    std::string_view syntax;      ///< Usage pattern (e.g. "log_level <category> <level>").
+    std::string_view syntax;      ///< Usage pattern (e.g. "log.level <category> <level>").
     std::span<const DebugArgumentDescriptor> arguments;
     CommandPermission permissions{CommandPermission::Developer};
     CommandThreadPolicy threadPolicy{CommandThreadPolicy::OwnerThreadNextFrame};
@@ -145,6 +153,20 @@ struct DebugCommandDescriptor {
 
 using ConsoleCommandDescriptor = DebugCommandDescriptor;
 ```
+
+`CommandPermission` is a bitflag so a caller session can hold a grant mask.
+A descriptor declares exactly one required permission; combining permission
+bits on the descriptor is a composition failure. The check is
+`(context.permissionMask & descriptor.permissions) == descriptor.permissions`,
+not an ordinal comparison. Granting `Developer` composes `Public | Developer`;
+granting `AdminCheat` composes `Public | Developer | AdminCheat`. `Restricted`
+is an orthogonal capability and is never implied by the other three.
+`CommandFlags` values may be OR'd (`AuditLogged | RedactArguments`).
+`ShippingAllowlist` is valid only with `CommandPermission::Public`;
+`AdminCheat` / `Restricted` paired with `ShippingAllowlist` is rejected at
+composition. Canonical names use registered prefixes (`sys.*`, `log.*`,
+`net.*`, `wst.*`, `rnd.*`, `phys.*`, `game.*`, `diag.*`); the only un-namespaced
+canonical names are `help`, `find`, `version`, `clear`, and `screenshot`.
 
 Commands do not expose raw function pointers to arbitrary callers. Execution
 produces a typed result, diagnostics, and structured console output. Handlers
@@ -323,14 +345,14 @@ Minimum command set:
 | `find <text>`                   | all enabled profiles                             | Search descriptors.                                        |
 | `version`                       | all enabled profiles                             | Print engine, game, build, platform, and profile identity. |
 | `clear`                         | all enabled profiles                             | Clear visible console buffer, not persistent logs.         |
-| `log_level <category> <level>`  | development/profile, optionally shipping support | Change session log level through observability policy.     |
-| `metrics`                       | development/profile                              | Show available metric channels.                            |
-| `profile_capture <start\|stop>` | development/profile                              | Control bounded profiler captures.                         |
+| `log.level <category> <level>`  | development/profile                              | Change session log level through observability policy.     |
+| `sys.metrics`                   | development/profile                              | Show available metric channels.                            |
+| `sys.profile_capture <start\|stop>` | development/profile                          | Control bounded profiler captures.                         |
 | `screenshot`                    | development/profile, optionally shipping support | Capture the current frame through platform policy.         |
-| `scene_tree`                    | development only                                 | Print runtime scene hierarchy or ECS debug view.           |
-| `inspect <entity>`              | development only                                 | Inspect safe public entity/component state.                |
-| `teleport`, `give`, `god`, etc. | project-defined, cheat-gated                     | Gameplay-specific commands controlled by project policy.   |
-| `support_bundle`                | diagnostics/shipping opt-in                      | Create user-approved diagnostic bundle.                    |
+| `game.scene_tree`               | development only                                 | Print runtime scene hierarchy or ECS debug view.           |
+| `game.inspect <entity>`         | development only                                 | Inspect safe public entity/component state.                |
+| `game.teleport`, `game.give`, `game.god` | project-defined, cheat-gated              | Gameplay-specific commands; un-namespaced aliases optional.|
+| `diag.support_bundle`           | diagnostics only                                 | Create user-approved diagnostic bundle (`Restricted`).     |
 
 Minimum variable groups:
 
@@ -389,14 +411,21 @@ Commands declare permissions via `CommandPermission`:
 | Permission Level | Meaning | Profile Availability |
 |---|---|---|
 | `CommandPermission::Public` | Non-mutating queries, information discovery, and player-safe utilities (`help`, `version`, `screenshot`, `clear`). | All profiles (including shipping when console enabled). |
-| `CommandPermission::Developer` | Inspection, logging control, performance monitoring, scene tree inspection (`log_level`, `metrics`, `scene_tree`, `inspect`, `debug_draw.*`). | Editor, Game Development, Game Profile, Dedicated Server. Stripped in Retail Shipping. |
-| `CommandPermission::AdminCheat` | State-mutating debug actions (`teleport`, `god`, `give`, `net.simulate_loss`, `wst.evict_cell`). | Editor, Game Development (cheat mode). Requires server authority in multiplayer. Stripped in Retail Shipping. |
-| `CommandPermission::Restricted` | High-privilege operations, remote server administration, sensitive diagnostic export (`net.server_shutdown`, `remote_admin.*`, `support_bundle`). | Dedicated Server (token-authenticated), Diagnostics builds. Requires token/auth session. |
+| `CommandPermission::Developer` | Inspection, logging control, performance monitoring, scene tree inspection (`log.level`, `sys.metrics`, `game.scene_tree`, `game.inspect`, `rnd.debug_draw.*`). | Editor, Game Development, Game Profile, Dedicated Server. Stripped in Retail Shipping. |
+| `CommandPermission::AdminCheat` | State-mutating debug actions (`game.teleport`, `game.god`, `game.give`, `net.simulate_loss`, `wst.evict_cell`). | Editor, Game Development (cheat mode). Requires server authority in multiplayer. Stripped in Retail Shipping. |
+| `CommandPermission::Restricted` | High-privilege operations, remote server administration, sensitive diagnostic export (`net.server_shutdown`, `net.remote_admin.*`, `diag.support_bundle`). | Dedicated Server (token-authenticated), Diagnostics builds. Requires token/auth session. |
 
 The command registry refuses to register commands whose permissions are
 incompatible with the active product profile unless the command is compiled out
-or hidden by policy. Hidden or unauthorized commands must not be discoverable through `help` or
-autocomplete and return typed `CommandError::PermissionDenied` with zero handler side effects.
+or hidden by policy. `AdminCheat` and `Restricted` descriptors cannot declare
+`ShippingAllowlist`; composition fails. Hidden or unauthorized commands must not
+be discoverable through `help` or autocomplete and return typed
+`CommandError::PermissionDenied` with zero handler side effects.
+
+`AdminCheat` additionally requires `DebugCommandContext::hasServerAuthority`,
+which is independent of `permissionMask`. Dedicated server, PIE listen-server
+hosts, and single-player authority set it; connected game clients never do.
+`Restricted` commands authenticate via token/session rather than this flag.
 
 Sensitive arguments (passwords, auth tokens, player PII) set `sensitive = true` in their `DebugArgumentDescriptor`
 and are automatically redacted (`[REDACTED]`) from console history, structured logs, and telemetry.
