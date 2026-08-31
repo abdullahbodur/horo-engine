@@ -572,26 +572,25 @@ struct GameplayAccessibilityStateEvent {
     static constexpr std::string_view HoroEventTypeName =
         "horo::GameplayAccessibilityStateEvent";
 
-    bool  aimAssistEnabled;
-    float aimAssistStrength;
-    bool  autoAimSnap;
-    bool  reducedEnemyAggression;
-    float reactionTimeMultiplier;
-    bool  skipQuickTimeEvents;
-    bool  invincibilityAfterHit;
-    float incomingDamageMultiplier;
-    float puzzleTimerMultiplier;
+    ConfigurationRevision revision;  // notification only; values stay in the snapshot
 };
 ```
 
-Gameplay difficulty assists are the **only** accessibility feature family published
-through `EngineDataBus`. Captions consume typed audio event queues directly,
-colorblind state is owned by post-processing and queried via `IColorAccessibilityQuery`,
-input affordances extend `RawInputCollector`/`InputMapping`, and screen reader state
-crosses `PlatformAccessibilityBridge`. The general DataBus is not a universal
-dumping ground or authoritative state store for all accessibility (see
+`GameplayAccessibilityStateEvent` is the sole currently approved accessibility
+notification. Its gameplay-owned adapter publishes a committed configuration
+revision, never duplicate assist values. At every tick start, gameplay acquires the
+authoritative `ConfigurationSnapshot` and compares revisions even if a notification
+was lost, coalesced, delayed or never received. One snapshot governs the entire tick.
+
+The admission principle is coarse asynchronous cross-domain notification; adding
+another accessibility event requires explicit architecture review. Captions use
+semantic cue queues independently of audio playback; UI/gameplay/render read
+backend-neutral visual-setting snapshots. Input affordances belong to semantic
+mapping above raw collection, and native metadata crosses the platform bridge.
+DataBus is never an authoritative settings store or a transport for captions,
+UI trees, raw input or frame data. See
 [Accessibility Architecture](../runtime/accessibility-architecture.md) and
-[ADR-015](../../adr/015-accessibility-ownership-typed-transport-and-non-gating-policy.md)).
+[ADR-015](../../adr/015-accessibility-ownership-typed-transport-and-non-gating-policy.md).
 
 Editor-scoped events such as selection, scene-document changes, and viewport
 navigation live in `editor/events/` and remain on the independent,

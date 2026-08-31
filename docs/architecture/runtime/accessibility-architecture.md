@@ -14,38 +14,48 @@ colorblind viewport simulation, screen reader logging, control scheme validation
 
 ## Architecture Principles
 
-1. **Domain Subsystem Ownership**: Accessibility features are owned directly by their
-   respective domain subsystems (Audio, Post-Processing/Render, Input, UI/Platform,
-   Simulation). There is no monolithic `AccessibilityManager` God-class.
-2. **Narrow Typed Transports**: Producers and consumers interact across explicit,
-   strongly typed interfaces rather than untyped message dictionaries.
-3. **Strict DataBus Boundary**: The general `EngineDataBus` is **not** a universal
-   accessibility dumping ground. It is reserved exclusively for gameplay difficulty
-   assist notifications (`GameplayAccessibilityStateEvent`). All other features use direct
-   typed subsystem transports.
-4. **Non-Gating Policy**: Accessibility features never gate core engine loops, must be
-   available across all product tiers and platforms without tier restrictions, and must
-   never introduce consumer-to-consumer circular dependencies.
-5. **Immutable Configuration Snapshots**: Accessibility preferences are registered under
-   the `accessibility.*` configuration schema and consumed via immutable snapshots,
-   guaranteeing tear-free frame updates.
+1. **Authority per datum and behavior**: Each setting key, semantic event, and
+   runtime behavior has one owner. Feature families can span producers, consumers
+   and presenters; they do not imply joint mutable ownership. There is no global
+   `AccessibilityManager`.
+2. **Typed transports**: Domain data uses narrow typed interfaces. DataBus carries
+   coarse asynchronous cross-domain notifications, never authoritative state,
+   captions, raw input, UI trees or frame data. The only currently approved
+   accessibility event is `GameplayAccessibilityStateEvent`; additional events
+   require an explicit architecture review of their owner and transport needs.
+3. **Configuration authority**: Domains provide inert typed descriptors; Foundation
+   provides generic schema/snapshot infrastructure. Host composition registers and
+   validates unique setting owners. Immutable snapshots own desired preferences;
+   consumers own only derived behavior at their frame/tick boundary.
+4. **Availability and budgets**: Accessibility semantics are independent of graphics
+   quality. Native integration reports actual platform capability. Accessibility
+   work cannot introduce unbounded waits into core loops or reverse dependencies.
 
 ```mermaid
 graph TD
-    Config[ConfigurationSnapshot\nnamespace: accessibility.*] --> Audio[AudioSystem]
-    Config --> PostProc[Post-Processing Pipeline]
-    Config --> Input[Input Collector & Router]
-    Config --> UIBridge[PlatformAccessibilityBridge]
-    Config --> GameCoord[Gameplay Accessibility Coordinator]
-    Config --> VFX[Camera & VFX Subsystem]
-
-    Audio -- "Typed AudioEventSnapshot / CaptionEvent" --> Captions[CaptionRenderer\nUI/HUD Layer]
-    PostProc -- "ColorGradingSettings & IColorAccessibilityQuery" --> Viewport[Scene Render & Non-Color Cues]
-    Input -- "RawInputCollector & InputMapping Affordances" --> SemanticInput[Semantic Action Frames]
-    UIBridge -- "Platform Accessibility APIs (NSAccessibility, UIA, AT-SPI)" --> OSBridge[Screen Reader / Assistive Tech]
-    GameCoord -- "EngineDataBus: GameplayAccessibilityStateEvent" --> GameSim[Gameplay Simulation Systems]
-    VFX -- "Motion & Flash Suppression Hooks" --> Effects[Particle & Camera Systems]
+    Config[Immutable configuration snapshot] --> Visual[Backend-neutral visual settings]
+    Config --> Mapping[InputMapping and router]
+    Config --> Adapter[GameplayAssistSettingsAdapter]
+    Config --> Sim[Gameplay simulation]
+    Config --> Captions[CaptionRenderer]
+    Config --> Bridge[Platform accessibility bridge]
+    Visual --> Render[Render pipeline]
+    Visual --> Cues[Gameplay and HUD cues]
+    Visual --> Effects[UI camera and VFX]
+    Raw[Physical raw input snapshot] --> Mapping
+    Semantic[Dialogue and semantic cue producers] --> Captions
+    Semantic --> Audio[AudioSystem]
+    Audio -- Audio-only cue metadata --> Captions
+    Adapter -- GameplayAccessibilityStateEvent revision hint --> Sim
+    Nodes[UI metadata and focus] --> Bridge
+    Bridge -- Bounded platform-affine dispatch --> OS[Native assistive technology]
 ```
+
+`GameplayAssistSettingsAdapter` is a gameplay-owned instance composed by the host.
+It observes committed configuration revisions and publishes revision hints only;
+it is not a global coordinator and does not own another settings store. Gameplay
+also receives a read-only configuration provider to acquire the authoritative
+snapshot at tick start.
 
 ## Subsystem Feature Families And Typed Transports
 
@@ -53,13 +63,23 @@ graph TD
 
 #### Ownership (Captions)
 
-- **Producer**: `AudioRuntime` / `AudioSystem` emits dialogue and sound event metadata.
-- **Consumer**: `CaptionRenderer` in the Game UI / HUD layer formats and displays text.
+- **Semantic producer**: Dialogue/gameplay owns cue identity, content key and
+  intended timing. Its typed cue is delivered independently to Audio and caption
+  presentation, so muting, playback failure or missing audio hardware cannot
+  suppress subtitles. Non-audio gameplay/environment cues use the same contract.
+- **Audio producer**: Audio owns metadata for genuinely audio-only cues and optional
+  timing observations for existing semantic cues; it does not recreate dialogue.
+- **Presenter**: UI `CaptionRenderer` owns localization, layout and display state.
 
 #### Typed Transport (Captions)
 
-Captions consume typed `AudioEventSnapshot` and `CaptionEvent` queues directly from the
-audio system. They are **not** routed through the general process data bus.
+Semantic producers enqueue `CaptionEvent` directly through a bounded domain queue.
+Audio-only cues use `AudioEventSnapshot`; neither uses DataBus. A stable cue ID is
+assigned before fan-out and retained by any audio timing observation. The presenter
+merges observations by that ID rather than displaying a second caption. Cue timing
+uses the simulation clock (explicit start and duration), not device playback state.
+Localization resolves stable keys using a locale snapshot captured by the UI for
+that frame; audio callbacks never format or own localized strings.
 
 ```cpp
 enum class CaptionEventType : uint8_t {
@@ -76,20 +96,29 @@ enum class CaptionPosition : uint8_t {
 
 inline constexpr std::size_t kMaxCaptionEventsPerSnapshot = 32;
 
+// Schematic fixed-size domain IDs; speakerKey value zero means "no speaker".
+// Content-key storage is retained by the cue queue until consumers release it.
+struct CaptionCueId {
+    uint64_t sessionGeneration;
+    uint64_t sequence;
+};
+struct CaptionTextKey { uint64_t value; };
+
 struct CaptionEvent {
-    uint64_t         sequenceId;
+    CaptionCueId     cueId;             // unique within the host session
     CaptionEventType type;
-    std::string      speakerName;       // owned; never a view into mixer/transient storage
-    std::string      text;              // owned localized caption; independent of producer lifetime
-    Vector3          sourceWorldPos;    // 3D position for directional cues / projection
-    float            durationSeconds;   // Display duration
-    float            loudness;          // Relative volume for visual emphasis
+    CaptionTextKey   speakerKey;
+    CaptionTextKey   textKey;
+    Vector3         sourceWorldPos;
+    uint64_t        startSimulationTick;
+    float           durationSeconds;
+    float           emphasis;          // semantic importance, independent of mute
 };
 
 struct AudioEventSnapshot {
-    FrameNumber                                             frame;
-    std::array<CaptionEvent, kMaxCaptionEventsPerSnapshot>  captionEvents;
-    std::size_t                                             captionEventCount{0};
+    FrameNumber frame;
+    std::array<CaptionEvent, kMaxCaptionEventsPerSnapshot> captionEvents;
+    std::size_t captionEventCount{0};
 };
 
 struct ClosedCaptionSettings {
@@ -108,19 +137,22 @@ struct ClosedCaptionSettings {
 
 #### Invariants (Captions)
 
-- `CaptionEvent::speakerName` and `CaptionEvent::text` are owned `std::string` (or
-  interned process-stable string ids). They must not be `std::string_view` into mixer
-  scratch, stack, localization temporaries, or any buffer that dies before the UI
-  drain. A published caption outlives the producer callback.
-- `AudioEventSnapshot::captionEvents` is fixed-capacity inline storage and cannot grow
-  on the mixer thread. `captionEventCount` identifies the populated prefix. Overflow
-  drops the newest event and records a diagnostic.
-- The real-time audio mixer thread pushes `CaptionEvent` objects into that preallocated
-  ring/snapshot storage; it never heap-allocates, reallocates the vector, or performs
-  font layout. String members are interned or reserved before the callback so assignment
-  on the mixer thread does not allocate.
-- The UI layer drains `AudioEventSnapshot` on the main thread during HUD rendering.
-- Captions respect screen safe-area margins across all display aspect ratios.
+- Queued payloads contain values and stable IDs, never views into stack, mixer,
+  localization or widget storage. The queue retains the associated content catalog
+  until drain/cancellation, so delayed localization cannot read released assets.
+- Mixer publication uses preallocated storage with fixed-size payloads. No string
+  allocation/deallocation, reference-count destruction of assets, blocking lock,
+  I/O or font layout may occur inside the real-time callback. Catalog pinning and
+  reclamation happen on the control/consumer side outside that callback.
+- Each producer uses a bounded queue; the presenter merges at the HUD frame
+  boundary. Ordering is by start tick then cue ID. Audio observation updates cannot
+  restart a semantic cue. Producer IDs include a host-session generation so stale
+  observations from a previous session are rejected.
+- A full queue drops the newest cue, increments a bounded diagnostic counter, and
+  never blocks. Capacity and overflow are exposed for testing; this contract does
+  not promise lossless captions under overload. UI layout is bounded per frame.
+- `captionEventCount` identifies the populated prefix and cannot exceed capacity.
+  Captions respect display safe areas and remain eligible when audio is muted.
 
 ---
 
@@ -128,14 +160,22 @@ struct ClosedCaptionSettings {
 
 #### Ownership (Colorblind)
 
-- **Owner**: Post-Processing & Effects Subsystem / Render Pipeline.
-- **Consumers**: Render Graph post-process pass, Gameplay/HUD visual styling.
+- **Settings authority**: The backend-neutral visual-settings domain declares
+  desired colorblind settings; UI visual settings declare contrast preferences.
+- **Behavior owners**: Render owns shader application; UI/gameplay owns palettes,
+  patterns, icons and other non-color cues. Camera/VFX owns safety suppression.
 
 #### Typed Transport (Colorblind)
 
-Colorblind modes are implemented as 3×3 color transformation matrices applied in the
-post-processing pipeline immediately after tonemapping via `ColorGradingSettings`.
-Gameplay and HUD systems query the active mode synchronously via `IColorAccessibilityQuery`.
+The render pipeline applies color transforms after creative grading and tonemapping.
+Gameplay and HUD read desired settings from `IColorAccessibilityQuery`, a narrow
+backend-neutral settings contract, without depending on rendering or UI implementation
+modules. Its implementation retains one `ConfigurationSnapshotRef` and never
+queries live render state. All getters refer to that same immutable revision.
+Main, UI and worker consumers can read their captured view concurrently without
+cross-thread dispatch or waits; acquisition/replacement happens at each consumer's
+owned frame/tick boundary. Render independently captures the settings for its pass.
+The query reports desired preferences, not whether a GPU pass has completed.
 
 ```cpp
 enum class ColorblindMode : uint8_t {
@@ -184,7 +224,7 @@ struct VisualAccessibilitySettings {
 - Colorblind transformations are applied in the shader post-process chain without CPU-GPU
   synchronization stalls or readbacks.
 - Games must provide non-color visual indicators (patterns, icons, shapes, text tags)
-  accessible via `IColorAccessibilityQuery`.
+  selected using the snapshot-backed `IColorAccessibilityQuery`.
 - Motion and flash suppression settings provide explicit hooks in camera and particle
   systems to clamp or skip strobe effects.
 
@@ -194,15 +234,18 @@ struct VisualAccessibilitySettings {
 
 #### Ownership (Remapping)
 
-- **Layer 1 (`RawInputCollector`)**: Owns sticky keys, hold duration thresholds, and raw
-  device accumulation.
-- **Layer 3 (`InputRouter` / `InputMapping`)**: Owns semantic action remapping, toggle
-  action semantics, and gyro aim resolution.
+- **Layer 1 (`RawInputCollector`)**: Owns physical device state and transitions,
+  preserving facts in immutable `RawInputSnapshot` without synthesizing sticky or
+  toggle state.
+- **Layer 3 (`InputMapping` / `InputRouter`)**: Owns remapping, sticky modifiers,
+  hold/repeat thresholds, toggle action state, and gyro interpretation after raw
+  collection and before semantic action-frame publication.
 
 #### Typed Transport (Remapping)
 
-Accessibility controls extend the existing `RawInputCollector` and `InputMapping`
-contracts without publishing raw keypress events to the DataBus.
+Accessibility controls extend semantic mapping, following
+[Input Layer Ownership](./input-layer-ownership.md). No per-key DataBus events are
+published and no raw snapshot is rewritten by an accessibility consumer.
 
 ```cpp
 struct AccessibilityControls {
@@ -222,9 +265,13 @@ struct AccessibilityControls {
 #### Invariants (Remapping)
 
 - Sticky keys permit sequential activation of modifiers (`Shift`, `Ctrl`, `Alt`)
-  followed by an action key, resolved deterministically in `RawInputCollector`.
+  followed by an action key, resolved deterministically in `InputMapping`.
 - Toggle actions maintain active semantic state in `InputRouter` until a subsequent
   press triggers release.
+- Focus loss, device disconnect, binding replacement and context removal clear
+  synthetic held/toggle state, emitting releases before another context receives
+  actions. Physical key facts remain unchanged. Processing has no per-event heap
+  allocation or unbounded waits; setup may allocate bounded mapping storage.
 - Remapping validations detect conflicting or missing essential bindings before sealing
   binding profiles.
 
@@ -234,7 +281,9 @@ struct AccessibilityControls {
 
 #### Ownership (Screen Reader)
 
-- **Owner**: Platform & UI Subsystem (`PlatformAccessibilityBridge`).
+- **Metadata owner**: UI owns node identity, focus and accessible text.
+- **Dispatch owner**: Platform owns `PlatformAccessibilityBridge`, native capabilities
+  and OS thread/run-loop affinity; it does not own widget state.
 - **Consumers**: Runtime Game UI, HUD, and Editor shared components.
 
 #### Typed Transport (Screen Reader)
@@ -244,6 +293,20 @@ dispatches focus changes and announcements to the host OS accessibility APIs
 (macOS NSAccessibility, Windows UI Automation, Linux AT-SPI).
 
 ```cpp
+enum class AccessibilityBridgeCapability : uint8_t {
+    Supported,      // native integration is available
+    Unavailable,    // supported integration is temporarily unavailable
+    Unsupported     // no native integration for this host/backend
+};
+
+enum class AccessibilityEnqueueResult : uint8_t {
+    Accepted,
+    QueueFull,
+    Unavailable,
+    Unsupported,
+    ShuttingDown
+};
+
 enum class AccessibilityRole : uint8_t {
     Button,
     Checkbox,
@@ -278,10 +341,11 @@ struct AccessibilityNodeDescriptor {
 class IScreenReader {
 public:
     virtual ~IScreenReader() = default;
-    virtual void Announce(std::string_view text, AnnouncePriority priority) = 0;
-    virtual void SetFocus(std::string_view elementId) = 0;
-    virtual void UpdateNode(const AccessibilityNodeDescriptor& descriptor) = 0;
-    virtual void RemoveNode(std::string_view elementId) = 0;
+    [[nodiscard]] virtual AccessibilityBridgeCapability Capability() const noexcept = 0;
+    [[nodiscard]] virtual AccessibilityEnqueueResult Announce(std::string_view text, AnnouncePriority priority) = 0;
+    [[nodiscard]] virtual AccessibilityEnqueueResult SetFocus(std::string_view elementId) = 0;
+    [[nodiscard]] virtual AccessibilityEnqueueResult UpdateNode(const AccessibilityNodeDescriptor& descriptor) = 0;
+    [[nodiscard]] virtual AccessibilityEnqueueResult RemoveNode(std::string_view elementId) = 0;
 };
 ```
 
@@ -293,12 +357,45 @@ public:
   and across asynchronous platform dispatch.
 - `IScreenReader` `std::string_view` parameters are call-duration only. Implementations
   copy into owned storage before returning if dispatch is asynchronous.
-- `IScreenReader::Announce()` and node updates must never block the main rendering thread.
-  Platform bridge implementations enqueue updates for asynchronous dispatch to native APIs.
-- Headless and test environments compose `NullPlatformAccessibilityBridge`, which maintains
-  a bounded circular log of announcements for QA and automated test assertions.
-- Editor shared controls must emit accessibility metadata by default; raw Dear ImGui
-  bypasses are detectable in CI verification.
+- Submission is bounded and non-blocking. Admission checks message count and byte
+  limits before copying; oversize/full messages return `QueueFull`, never wait.
+  FIFO order preserves accepted node/focus/removal sequences. Rejected updates
+  leave the UI authoritative; it retries a bounded node resynchronization at a
+  later frame. Announcements are not automatically replayed on overflow.
+- Node identity includes the UI session and a generation; removals retire that
+  generation so stale queued focus/updates cannot target a reused widget ID.
+- Native calls run on the OS-required thread/run loop, outside audio, input and
+  render work. When the OS requires the main thread, a bounded platform event-loop
+  phase performs submission without waiting for native acknowledgement; such
+  calls cannot be moved arbitrarily onto a worker. A native API requiring blocking
+  work on an engine-critical phase is not eligible for that adapter.
+- This contract bridges existing screen readers/assistive technology. Engine-owned
+  dialogue TTS synthesis is outside scope and requires an Audio speech-service
+  decision; screen-reader availability is not a claim of a TTS synthesizer.
+- `NullPlatformAccessibilityBridge` performs no OS effects, stores no diagnostic
+  log, and returns `Unsupported`. A separate test-only
+  `RecordingPlatformAccessibilityBridge` captures bounded messages and capabilities
+  under an explicit test scheduler; it never invokes native APIs.
+- Shared controls must produce metadata. CI coverage described below is a required
+  implementation follow-up, not an existing detector claimed by this ADR.
+
+#### Async, Cancellation And Shutdown (Screen Reader)
+
+[ADR-010](../../adr/010-job-waiting-and-operation-store-ownership.md) and
+[ADR-018](../../adr/018-command-registration-permissions-threading-and-packaged-build-policy.md)
+apply. CPU preparation may dispatch to `JobSystem` and return `JobId`; native calls
+still use the platform-affine dispatcher. Ordinary node/focus/announcement messages
+are bounded notifications, not tracked user operations. If a long-running tool
+exposes status/cancellation, its authorized application/feature coordinator creates
+an `OperationId` in the application-owned `OperationStore`. Workers and native
+callbacks post typed completions to that owner and never mutate a separate store.
+No ordinary main/render/transport path waits on jobs or native acknowledgement.
+
+Shutdown stops admission (`ShuttingDown`), invalidates the UI session, cancels
+pending notifications and retires their owned payloads on the dispatcher owner.
+The host retains dispatcher resources until in-flight native callbacks finish or
+are detached through an owner-lifetime token. Any permitted bounded shutdown drain
+runs only in an ADR-010 allowed shutdown phase; ordinary frames never join it.
 
 ---
 
@@ -306,39 +403,38 @@ public:
 
 #### Ownership (Gameplay Assists)
 
-- **Owner**: Gameplay Simulation Subsystem.
-- **Publisher**: Application Accessibility Coordinator.
-- **Transport**: `GameplayAccessibilityStateEvent` on the `EngineDataBus`.
+- **Preference authority**: Immutable `ConfigurationSnapshot`.
+- **Behavior owner**: Gameplay Simulation applies supported assists under its normal
+  authority rules.
+- **Publisher**: Host-composed, gameplay-owned `GameplayAssistSettingsAdapter`.
+- **Transport**: `GameplayAccessibilityStateEvent` is a coarse revision hint only.
 
 #### Typed Transport (Gameplay Assists)
-
-Gameplay assists cross the boundary between host settings and decoupled gameplay logic.
-This is the **only** accessibility feature family permitted to publish through the
-`EngineDataBus`.
 
 ```cpp
 struct GameplayAccessibilityStateEvent {
     static constexpr std::string_view HoroEventTypeName =
         "horo::GameplayAccessibilityStateEvent";
-
-    bool  aimAssistEnabled;
-    float aimAssistStrength;           // [0.0, 1.0] magnetic target pulling
-    bool  autoAimSnap;                 // Instant lock-on to nearest target
-    bool  reducedEnemyAggression;      // AI reaction delays / spacing
-    float reactionTimeMultiplier;      // Slows enemy animations and reaction windows
-    bool  skipQuickTimeEvents;         // Auto-completes QTE sequences
-    bool  invincibilityAfterHit;       // Extended post-hit invulnerability window
-    float incomingDamageMultiplier;    // Damage scaling [0.0, 2.0]
-    float puzzleTimerMultiplier;       // Extends timed challenge clocks
+    ConfigurationRevision revision;
 };
 ```
 
+The adapter observes successfully published configuration revisions and notifies
+consumers. No assist values are copied into this event. It is the only currently
+approved accessibility event on `EngineDataBus`, whose purpose is asynchronous
+cross-domain notification rather than state storage.
+
 #### Invariants (Gameplay Assists)
 
-- Gameplay systems subscribe to `GameplayAccessibilityStateEvent` and cache the state at
-  simulation tick boundaries. State transitions never tear across a single simulation tick.
-- Difficulty assists are accessibility features, not cheats; they are recorded as user
-  profile accessibility preferences and persisted in user settings.
+- At every simulation tick start, gameplay acquires the authoritative snapshot,
+  compares its revision to the retained one, and captures updated values when
+  needed. Notifications only hint that a revision changed; coalescing, loss, late
+  subscription or stale/out-of-order notifications cannot prevent refresh.
+- One snapshot governs the entire tick. No settings callback mutates gameplay
+  mid-tick. All local consumers share the tick's captured revision.
+- Desired preferences persist in user settings. Applying an assist still respects
+  game/server authority and supported capabilities; accessibility labeling cannot
+  bypass configuration or ADR-018 command authorization.
 
 ---
 
@@ -361,54 +457,83 @@ struct GameplayAccessibilityStateEvent {
 
 ## Non-Gating Policy And Parity
 
-### 1. Zero Tier-Gating
+### 1. Semantic Availability And Native Capability
 
-Accessibility features are **never gated** behind graphics tiers, product editions, or
-platform capabilities.
+Accessibility semantics are not gated by product editions or graphics quality.
+The existing `es3`, `dx11`, `dx12_vulkan`, and `high_end` labels in
+[Post-Processing And Effects](./post-processing-and-effects-architecture.md#performance-and-feature-tiers)
+are rendering quality labels, not accessibility or navigation compute tiers. This
+policy applies to every backend regardless of those labels. Algorithms may vary
+(e.g. a compact shader transform), but reducing quality must not disable configured
+caption, remapping, color-cue or safety behavior. Headless hosts evaluate settings
+and logic without claiming visible output.
 
-| Feature Family | `es3` (Mobile) | `dx11` (Standard) | `dx12_vulkan` (Modern) | `high_end` (Console/PC) |
-|---|---|---|---|---|
-| Closed Captions & Subtitles | Yes | Yes | Yes | Yes |
-| Colorblind Color Transforms | Yes (ALU shader) | Yes | Yes | Yes |
-| Control Remapping & Sticky Keys | Yes | Yes | Yes | Yes |
-| Screen Reader Platform Bridge | Yes | Yes | Yes | Yes |
-| Gameplay Difficulty Assists | Yes | Yes | Yes | Yes |
-| UI Scaling & High Contrast | Yes | Yes | Yes | Yes |
-| Reduce Motion & Flash Suppression | Yes | Yes | Yes | Yes |
+Native screen-reader integration reports `Supported`, `Unavailable`, or
+`Unsupported` separately from the user's enabled preference. Adapters use the
+strongest supported integration and expose limitations; they do not silently
+claim success on a platform with no native support.
 
 ### 2. Core Loop Non-Blocking Invariant
 
-- **Audio Mixer Callback**: Zero heap allocations, zero blocking locks, zero text layout.
-  Caption events are transferred via bounded queues.
-- **Render Submission**: Colorblind matrices and high-contrast palettes are constant-buffer
-  parameters in post-process shaders; no pipeline stalls or readbacks.
-- **Simulation Step**: Difficulty assists are sampled at the start of the tick.
-- **Input Collection**: Sticky key state is evaluated in Layer 1 with zero bus publication.
+- **Audio callback**: No heap allocation/deallocation, blocking locks, I/O or text
+  layout; only fixed-size metadata enters preallocated queues.
+- **Input**: Accessibility mapping adds no per-event allocation or unbounded wait.
+  Raw collection preserves physical state without semantic transforms.
+- **Render**: Accessibility shader parameters add no synchronous CPU/GPU readback.
+- **UI**: Bounded queue admission never waits for native acknowledgement.
+- **Simulation**: Snapshot capture occurs at tick start, never mid-tick.
+
+These are path-specific guarantees, not a claim that all engine rendering/input
+work is universally lock-free or allocation-free. Setup may allocate.
 
 ### 3. Headless And Test Parity
 
-Headless hosts (`horo-engine`, CI pipelines) and test harnesses use null/mock bridges:
-
-- `NullPlatformAccessibilityBridge`: Captures structured announcements for assertion.
-- `NullAudioDevice`: Generates deterministic audio event snapshots for caption tests.
-- CI pipelines execute automated WCAG AA contrast calculations and control scheme checks
-  headlessly without requiring physical display hardware.
+- `NullPlatformAccessibilityBridge` is a deterministic no-op with explicit
+  `Unsupported` results. It is not a recording mock or proof of native integration.
+- Test-only `RecordingPlatformAccessibilityBridge` records owned metadata under a
+  deterministic dispatcher with the same admission/order/cancellation contract.
+- Semantic caption tests inject cues directly and do not require an audio device.
+  `NullAudioDevice` tests missing-device behavior, not invented playback events.
+- Headless tests can validate configuration, layout inputs, contrast calculations,
+  remapping and cue identity; native accessibility needs platform-specific tests.
 
 ### 4. Dependency Direction Discipline
 
-The dependency graph between subsystems remains strictly acyclic (DAG):
-
-- `GameUI` depends on `Audio` types (`AudioEventSnapshot`) for captions, but `Audio`
-  has zero knowledge of `GameUI`.
-- `Gameplay` queries `PostProcessing` via `IColorAccessibilityQuery`, but `PostProcessing`
-  has zero knowledge of `Gameplay`.
+- Semantic cue contracts are backend-neutral; dialogue feeds Audio and caption UI
+  independently. Audio never depends on UI. Audio-only metadata has a typed queue.
+- Gameplay, render and UI consume the backend-neutral visual-settings contract.
+  Gameplay has no dependency on PostProcessing or renderer-owned live state.
+- Platform dispatch and operation tracking are host-composed; domains do not
+  discover global accessibility services.
 
 ---
 
 ## Configuration Schema And Provenance
 
-All accessibility options are declared under the `accessibility.*` namespace in
-`ConfigurationSchema`.
+Domain-owned inert descriptors declare accessibility options under
+`accessibility.*` (editor diagnostics under `editor.accessibility.*`). Foundation
+owns `ConfigurationSchema` infrastructure, not these feature keys. Host composition
+validates types, defaults, value ranges, reload policies and a unique owner for each
+key before publication, following [ADR-009](../../adr/009-configuration-schema-precedence-and-secret-boundary.md).
+Consumers of a shared preference never register another descriptor for it.
+
+| Namespace | Descriptor authority | Read-only consumers |
+|---|---|---|
+| `accessibility.captions.*` | Caption presentation domain | UI/HUD |
+| `accessibility.colorblind.*` | Backend-neutral visual-settings domain | Render, UI, gameplay |
+| `accessibility.visual.ui.*` | UI visual-settings domain | UI/HUD, semantic contrast query |
+| `accessibility.visual.safety.*` | Backend-neutral visual-settings domain | UI animation, Camera, VFX |
+| `accessibility.input.*` | Input mapping domain | Router/action resolution |
+| `accessibility.screen_reader.*` | Platform accessibility domain | Bridge and UI settings |
+| `accessibility.gameplay.*` | Gameplay domain | Tick-boundary assist consumers |
+| `editor.accessibility.*` | Editor diagnostics | Editor tools |
+
+Subnamespace ownership is exclusive; composition rejects duplicate keys or a key
+outside its declared owner's namespace. Broad `accessibility.visual.*` registration
+is forbidden. The previously proposed flat `visual.ui_scale`, `visual.high_contrast`,
+`visual.reduce_motion` and `visual.flash_suppression` keys move to the subnamespaces
+below. No dual live aliases remain; if a prototype persisted the old keys, import
+migrates them once before validation (an explicitly supplied new key wins).
 
 | Setting Key | Type | Default | Scope | Description |
 |---|---|---|---|---|
@@ -421,10 +546,10 @@ All accessibility options are declared under the `accessibility.*` namespace in
 | `accessibility.input.toggle_actions` | `bool` | `false` | `User` | Enable toggle mode for held actions |
 | `accessibility.input.hold_duration` | `float` | `0.4` | `User` | Hold action duration threshold (seconds) |
 | `accessibility.screen_reader.enabled` | `bool` | `false` | `User` | Master screen reader bridge toggle |
-| `accessibility.visual.ui_scale` | `float` | `1.0` | `User` | Global UI scaling factor |
-| `accessibility.visual.high_contrast` | `bool` | `false` | `User` | High contrast UI mode |
-| `accessibility.visual.reduce_motion` | `bool` | `false` | `User` | Suppress non-essential motion/shake |
-| `accessibility.visual.flash_suppression`| `bool`| `false` | `User` | Clamp high-frequency flashes |
+| `accessibility.visual.ui.ui_scale` | `float` | `1.0` | `User` | Global UI scaling factor |
+| `accessibility.visual.ui.high_contrast` | `bool` | `false` | `User` | High contrast UI mode |
+| `accessibility.visual.safety.reduce_motion` | `bool` | `false` | `User` | Suppress non-essential motion/shake |
+| `accessibility.visual.safety.flash_suppression`| `bool`| `false` | `User` | Clamp high-frequency flashes |
 | `accessibility.gameplay.aim_assist` | `float` | `0.0` | `User` | Aim assist strength |
 | `accessibility.gameplay.skip_qte` | `bool` | `false` | `User` | Automatically pass QTE events |
 
@@ -437,32 +562,45 @@ All accessibility options are declared under the `accessibility.*` namespace in
 
 ---
 
-## Developer Tooling And Compliance
+## Developer Tooling And Conformance
 
-### 1. Developer Validation Tools
+Editor tools should provide colorblind viewport previews, contrast measurement,
+control-scheme validation and a bounded optional screen-reader diagnostic recorder.
+That recorder is a decorator/test facility, not behavior of the null bridge.
+Product/platform compliance targets and legal applicability require separate
+assessment; this architecture alone neither certifies compliance nor promises
+native features that a platform cannot provide.
 
-- **Colorblind Viewport Preview**: Renders the active editor viewport through selected
-  colorblind simulation matrices in real time.
-- **W3C WCAG AA/AAA Contrast Checker**: Inspects UI text and background colors against
-  WCAG 2.2 contrast formulas ($4.5:1$ for normal text, $3.0:1$ for large text).
-- **Screen Reader Diagnostic Log**: Records all node mutations and announcement events in
-  a bounded in-memory buffer.
-- **Control Scheme Validator**: Analyzes active input binding profiles to detect missing
-  essential actions or inaccessible modifier combinations.
+### Required Implementation Validation
 
-### 2. Compliance Targets
+The following are acceptance obligations for implementation work, not tests or CI
+checks implemented by this documentation-only decision:
 
-- **Editor IDE**: Targets **WCAG 2.2 Level AA** compliance.
-- **Game Runtime**: Provides foundational infrastructure to satisfy **CVAA**
-  (47 U.S.C. §§ 609, 613, 617 and 47 CFR Parts 14 and 79),
-  the **European Accessibility Act (EAA)**, and console platform accessibility TRCs.
+- Schema composition rejects duplicate owners, invalid values and overlapping
+  visual namespaces; migration of legacy flat keys preserves explicit new values.
+- Captions remain eligible with mute, failed playback and no device; semantic and
+  audio observations of the same cue do not duplicate or restart text. Test stale
+  session IDs, catalog lifetime, localization, bounded ordering and queue overflow.
+- Instrument callback/mapping allocations and wait paths; no mixer string lifetime
+  cleanup or render readback is introduced by accessibility code.
+- Gameplay and color queries retain a consistent snapshot across a tick/frame;
+  missing/coalesced/stale bus hints still converge at the next boundary. An isolated
+  consumer of the visual-settings contract must not link rendering/UI implementations.
+- Input tests preserve raw snapshots and verify sticky/hold/toggle behavior plus
+  releases on focus loss, context removal, disconnect and binding replacement.
+- Native adapters test thread affinity and capability reporting. Recording tests
+  exercise bounded message/byte capacity, node generations, order, resynchronization,
+  cancellation and shutdown. Null tests assert no output and `Unsupported`.
+- Visual checks cover semantic parity at each supported quality configuration;
+  headless checks validate logic, while actual assistive-technology interoperability
+  is validated separately on each supported platform.
 
 ---
 
 ## Related Documents
 
 - [ADR-015: Accessibility Ownership, Typed Transport and Non-Gating Policy](../../adr/015-accessibility-ownership-typed-transport-and-non-gating-policy.md)
-- [Audio Architecture](./audio-architecture.md): `AudioEventSnapshot` generation
+- [Audio Architecture](./audio-architecture.md): Audio-only cue metadata and independent semantic captions
 - [Post-Processing And Effects Architecture](./post-processing-and-effects-architecture.md): Color grading and post-process passes
 - [Input Architecture](./input-architecture.md): Input context and rebinding
 - [Input Layer Ownership](./input-layer-ownership.md): `RawInputCollector` and `InputRouter` contracts

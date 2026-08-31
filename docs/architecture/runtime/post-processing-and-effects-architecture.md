@@ -168,32 +168,28 @@ A 3D LUT texture can be applied for full creative grading.
 
 ### Accessibility Color Transforms
 
-Colorblind filters (Protanopia, Deuteranopia, Tritanopia, Achromatopsia, and custom
-matrices) are applied after creative grading as a 3×3 color transformation matrix:
+Colorblind filters use backend-neutral desired settings captured from an immutable
+`ConfigurationSnapshotRef` at render-frame setup. The renderer owns applying the
+3×3 transform after creative grading and tonemapping; it does not own gameplay's
+accessibility preferences or expose live renderer state to gameplay.
 
-```cpp
-enum class ColorblindMode : uint8_t {
-    None,
-    Protanopia,
-    Deuteranopia,
-    Tritanopia,
-    Achromatopsia,
-    CustomMatrix
-};
+`IColorAccessibilityQuery` is defined by the backend-neutral visual-settings
+contract in [Accessibility Architecture](./accessibility-architecture.md), not by
+PostProcessing. Each query instance retains one snapshot revision. UI, gameplay
+and worker consumers read their own captured revision synchronously without a
+render-thread call, wait or dependency on the renderer implementation. The query
+reports desired mode/severity/contrast, not GPU application status. Non-color cues
+(icons, patterns, text) are produced independently by gameplay/HUD.
 
-class IColorAccessibilityQuery {
-public:
-    virtual ~IColorAccessibilityQuery() = default;
-    [[nodiscard]] virtual ColorblindMode GetActiveColorblindMode() const noexcept = 0;
-    [[nodiscard]] virtual float GetColorblindSeverity() const noexcept = 0;
-    [[nodiscard]] virtual bool IsHighContrastEnabled() const noexcept = 0;
-};
-```
+Colorblind keys belong to the visual-settings domain under
+`accessibility.colorblind.*`; UI contrast belongs to `accessibility.visual.ui.*`.
+Motion/flash policy belongs to `accessibility.visual.safety.*`. Render consumes
+these keys without re-registering or maintaining a competing mutable preference.
 
-This pass runs across all tiers (`es3` through `high_end`) without tier gating.
-Gameplay and HUD query `IColorAccessibilityQuery` synchronously to provide
-alternative non-color visual cues (icons, patterns, text). See
-[Accessibility Architecture](./accessibility-architecture.md).
+All quality configurations preserve accessibility semantics, including compact
+ALU implementations on lower-cost backends. The quality labels in the table below
+do not gate accessibility or define navigation compute tiers. Accessibility passes
+must not introduce synchronous CPU/GPU readback.
 
 ## Performance And Feature Tiers
 
