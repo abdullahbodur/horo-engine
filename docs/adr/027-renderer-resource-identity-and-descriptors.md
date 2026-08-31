@@ -1,7 +1,7 @@
 # ADR-027: Renderer Resource Identity and Descriptors
 
-- **Status**: Accepted
-- **Date**: 2026-08-26
+- **Status**: Proposed
+- **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: Backend-neutral resident renderer resources
 - **Issue**: [#290](https://github.com/abdullahbodur/horo-engine/issues/290) ([RND-001.1])
