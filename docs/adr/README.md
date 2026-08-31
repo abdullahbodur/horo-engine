@@ -40,6 +40,7 @@ to the replacement.
 | [026](026-large-world-precision-and-floating-origin-strategy.md) | Large-World Precision and Floating Origin Strategy | proposed | 2026-08-28 |
 | [027](027-renderer-resource-identity-and-descriptors.md) | Renderer Resource Identity and Descriptors | proposed | 2026-08-31 |
 | [028](028-renderer-capability-limits-and-product-profiles.md) | Renderer Capability, Limits and Product Profiles | proposed | 2026-08-31 |
+| [029](029-opengl-compatibility-profile-and-platform-policy.md) | OpenGL Core Profile and Platform Policy | proposed | 2026-08-31 |
 
 ## Conventions
 

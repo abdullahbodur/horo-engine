@@ -231,6 +231,13 @@ Required rules:
 OpenGL context behavior and Metal command-buffer behavior are implementation
 details beneath these rules.
 
+[ADR-029](../../adr/029-opengl-compatibility-profile-and-platform-policy.md)
+defines OpenGL's desktop 4.1 Core admission policy. The selected private adapter
+must apply complete context requirements before window creation, and the backend
+must validate the actual context and required entry points before publishing
+readiness. Its compatibility product role does not allow legacy GL contexts,
+weaken parity, or make it another backend's implicit fallback.
+
 ## Required Editor Rendering Lifecycle
 
 The editor uses one backend-neutral ordering regardless of the selected API:
@@ -339,6 +346,13 @@ Platform-specific tests may verify GL state restoration or Metal resource and
 command-buffer lifetime, but those tests do not weaken the shared contract.
 
 ## Build Matrix
+
+These are qualification obligations, not claims that every lane is already
+passing. For OpenGL, ADR-029 requires a published OS/architecture/window-system
+and GPU/driver matrix backed by actual Core-context and parity/smoke evidence.
+X11 and Wayland qualify separately; software GL test results do not qualify
+hardware. macOS OpenGL remains conditional on a qualified system 4.1 Core path
+and carries the platform deprecation warning without an automatic backend switch.
 
 The intended matrix is:
 
