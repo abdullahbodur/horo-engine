@@ -1,300 +1,428 @@
 # VFX And Particles Architecture
 
-## Purpose
+## Purpose And Scope
 
-This document defines Horo Engine's visual effects runtime: particle systems,
-ribbons, mesh particles, decals, GPU compute particles, VFX graphs, and
-volumetric effects. It specifies how effects are authored, simulated, rendered,
-and integrated with scene lifecycles, gameplay, audio, and the render graph.
+This document defines runtime particles, ribbons, mesh particles, decals and
+volumetric VFX: scene ownership, emitter domain policy, bounded admission, immutable
+extraction and renderer scheduling. [ADR-011](../../adr/011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md)
+records the proposed decision. These are implementation contracts, not claims that
+all paths or qualification tests already exist.
 
-The goal is to provide a scalable, deterministic, and modular visual effects
-architecture that supports everything from simple one-shot gameplay bursts to
-large GPU-driven environmental volumes, without allowing immediate-mode rendering
-leaks or coupling scene simulation to concrete graphics backends.
+DCC workflows, full fluid solvers, atmospheric scattering and screen-space
+post-processing remain outside this subsystem; see
+[Advanced Rendering Architecture](./advanced-rendering-architecture.md).
 
-## Scope
+## Ownership And Renderer Boundary
 
-Covered:
-
-- runtime subsystem ownership, component hierarchy, and deterministic lifecycle
-- simulation domain selection policy (CPU, GPU Compute, Headless/Null)
-- platform and feature tier fallback matrix
-- decoupled renderer boundary and typed render extraction contracts
-- pass placement, standard material pipeline integration, and camera-relative sorting
-- particle system data model and emitter stages
-- VFX graph asset compilation and runtime evaluation
-- decal projection, lifetime, and atlas management
-- event-driven spawning, pooling, and audio routing
-- performance budgets, diagnostics, and regression test requirements
-
-Not covered:
-
-- DCC tools and texture authoring workflows
-- full fluid dynamics / Navier-Stokes solvers (future subsystem)
-- atmospheric scattering and sky atmosphere simulation (see
-  [Advanced Rendering Architecture](./advanced-rendering-architecture.md))
-- screen-space post-processing effects (see
-  [Advanced Rendering Architecture](./advanced-rendering-architecture.md))
-
-## Core Decisions
-
-- **Subsystem Ownership**: `VfxWorld` is owned strictly by the active `SceneRuntime`.
-  It is initialized at scene startup and torn down/reset deterministically on scene
-  replacement or unload. No effect instances or GPU resources outlive their scene.
-- **Zero Immediate-Mode Rendering**: Effects are strictly prohibited from issuing
-  immediate-mode draw calls or touching graphics contexts directly. `VfxWorld`
-  extracts backend-neutral render primitives during the Render Extraction phase.
-- **Policy-Driven Simulation Domain**: Particle simulation domain (CPU vs. GPU Compute)
-  is determined by asset configuration, gameplay interaction requirements, and active
-  hardware feature tiers. Call-site ad hoc branching is forbidden.
-- **Deterministic Headless Execution**: Headless servers and CI test suites use
-  `NullParticleSimulator` / deterministic CPU simulation without GPU allocations or
-  graphics dependencies.
-- **Standard Material & Pass Integration**: Particles and decals use the standard
-  PBR and unlit material model compiled via the shared material pipeline, executing
-  in standard Render Graph passes (G-Buffer, Decal, Translucent Forward, Additive).
-- **Camera-Relative Sorting**: Translucent particles are sorted back-to-front
-  (CPU radix sort for CPU particles, GPU bitonic/radix compute for GPU particles);
-  additive particles skip sorting.
-- **Zero Allocation Steady State**: All particle buffers, emitter states, and effect
-  instances are preallocated in pools during scene initialization, guaranteeing zero
-  heap allocations during active gameplay.
-
-## Subsystem Ownership and Lifecycle
-
-```text
-SceneRuntime
-  └── VfxWorld
-        ├── EffectSystem
-        ├── CpuParticleSimulator
-        ├── GpuParticleSimulator
-        ├── NullParticleSimulator
-        ├── DecalManager
-        ├── EffectInstancePool
-        ├── VfxEventQueue
-        └── VfxRenderExtractor
-```
-
-### Component Breakdown
-
-Every component within the runtime effects ecosystem has a single, unambiguous owner:
+VfxWorld belongs to one SceneRuntime incarnation. It owns logical effect state,
+CPU particle storage and bounded requests; it never owns a native graphics context,
+encodes a command buffer, writes mapped GPU memory or submits Render Graph passes.
+Host composition selects capabilities/adapters explicitly; inert descriptors do not
+register services or discover a backend. No immediate-mode drawing is permitted.
 
 | Component | Owner | Responsibility |
 |---|---|---|
-| `SceneRuntime` | Application / Host | Owns `VfxWorld` as a major scene subsystem. Controls creation, fixed/variable simulation ticking, and destruction. |
-| `VfxWorld` | `SceneRuntime` | Subsystem composition root. Coordinates simulators, decal manager, instance pools, event queues, and render extraction. |
-| `EffectSystem` | `VfxWorld` | Manages effect instance life cycles, template instantiation, parameter bindings, and spatial hierarchy tracking. |
-| `CpuParticleSimulator` | `VfxWorld` | Flat Structure-of-Arrays (SoA) SIMD-accelerated particle updater for gameplay-interactive, collision-coupled, or CPU-bound effects. |
-| `GpuParticleSimulator` | `VfxWorld` | Manages compute dispatch generation, indirect draw arguments, and compute buffer references for high-density particle volumes. |
-| `NullParticleSimulator` | `VfxWorld` | Deterministic, allocation-free simulation path for headless testing, CI, and server execution where GPU rendering is disabled. |
-| `DecalManager` | `VfxWorld` | Manages active decal projection volumes, fading envelopes, dynamic bounds, and decal atlas allocations. |
-| `EffectInstancePool` | `VfxWorld` | Preallocated memory pools for particle buffers, emitter states, and effect instances to guarantee zero frame-time allocations. |
-| `VfxEventQueue` | `VfxWorld` | Bounded FIFO queue capturing gameplay and animation spawn events (e.g., footsteps, impacts, explosions). |
-| `VfxRenderExtractor` | `VfxWorld` | Extracts immutable, backend-neutral render primitives (`VfxRenderBatch`) and submits them to the Render Graph during extraction. |
+| VfxWorld | SceneRuntime | Coordinates effect state and admitted work for this scene incarnation |
+| EffectSystem | VfxWorld | Instance lifecycle, compiled emitter descriptors, parameter bindings and ownership |
+| SimulationDomainResolver | VfxWorld | Resolves each compiled emitter using validated asset intent and host policy |
+| CpuParticleSimulator | VfxWorld | CPU SoA updates, including real gameplay-coupled simulation in headless hosts |
+| GpuParticleSimulator | VfxWorld | Produces backend-neutral GpuVfxSimulationWork; tracks logical step/resource identities, never dispatches |
+| NullParticleSimulator | VfxWorld | Visual-only suppression with normal admission, tick and lifecycle timing; no gameplay simulation substitute |
+| DecalManager | VfxWorld | Logical projection volumes, fades and atlas requests; renderer owns physical atlas storage |
+| EffectInstancePool | VfxWorld | Preallocated instance/emitter/CPU storage and explicit capacity admission |
+| VfxEventQueue | VfxWorld | Bounded FIFO of admitted typed requests with deterministic drain and overflow outcomes |
+| VfxRenderExtractor | VfxWorld | Writes immutable simulation/render descriptors into RenderWorldSnapshot; no graph submission |
+| RenderFrontend / resource manager | Renderer | Validates snapshots, admits renderer storage, schedules compute/sort/cull/draw and retires resources |
+| Concrete render backend | Renderer composition | Native allocation, upload, command encoding, barriers and completion fences |
 
-### Lifecycle and Scene Transition Invariants
+Physical renderer allocations and retained snapshot leases may outlive logical
+scene shutdown while retiring. They cannot retain raw VfxWorld/ECS pointers or gain
+access to the replacement scene. This is deferred ownership, not a live old effect.
 
-1. **Initialization**: `VfxWorld` is instantiated synchronously when `SceneRuntime`
-   activates. Buffer pools, emitter slots, and decal capacities are allocated based on
-   the active project and feature tier settings.
-2. **Simulation Phase (`Update`)**: `VfxWorld::Update(DeltaTime)` executes within
-   the scene simulation loop:
-   - Drains and processes pending spawn requests from `VfxEventQueue`.
-   - Advances active CPU particle systems and updates decal lifetimes.
-   - Generates GPU compute simulation dispatches for compute-backed systems.
-3. **Extraction Phase (`ExtractRenderData`)**: Called by the renderer frontend
-   strictly during the Render Extraction phase. Generates immutable snapshots of
-   visible particle batches, decal volumes, and instance transforms. Simulation
-   state is never modified during this phase.
-4. **Teardown & Scene Replacement**: When a scene is unloaded or replaced:
-   - All active effect instances, emitters, and decals are stopped immediately.
-   - All pooled CPU buffers and GPU compute buffers are deterministically reset or released.
-   - No effect instance, GPU handle, or callback reference may leak across the scene boundary.
+## Frame, Thread And Timing Contract
 
-## Simulation Domain Selection Policy
+Scene composition declares VFX access/dependency edges in the existing scheduler.
+Gameplay-coupled CPU emitters use the owning fixed simulation tick after their
+required physics results, with typed gameplay results consumed at a declared later
+safe point. Cosmetic updates use Presentation before RenderExtraction. A compiled
+emitter selects one clock/tick schedule; it is not advanced on both schedules.
+Scene time/seed policy controls pause, delta and replay; VFX does not read wall time
+or independently tick gameplay when presentation runs. Each VfxEventQueue belongs
+to one clock domain; fixed and presentation queues have separate cutoffs and share
+the admitted aggregate budget. FIFO is defined within that queue, never by draining
+the same request once for each emitter or clock.
 
-Domain selection is **policy-driven, asset-declared, and feature-tier constrained**.
-Individual gameplay call sites cannot arbitrarily override simulation rules via raw
-backend branching.
+1. On the scene simulation owner, freeze each queue cutoff once at the start of
+   its declared clock update. Drain at most maxEventsPerTick accepted requests in
+   FIFO order; requests produced during the drain/update become eligible next tick.
+   No backend invokes a spawn completion inline from submission.
+2. Advance CPU state and logical decal/effect timers. CPU work may use Foundation
+   JobSystem/JobId over exclusive staging slices. Completion records are applied
+   on the declared owner phase, never by worker callbacks mutating live ECS.
+3. GPU emitters produce bounded GpuVfxSimulationWork with scene/effect/emitter
+   generation, step ID, delta/seed, parameters and typed input/output resource IDs.
+   They do not encode GPU dispatches during VfxWorld::Update.
+4. Extract immutable CPU frame data, GPU work and render descriptors into a
+   frame-owned RenderWorldSnapshot. Extraction reads stable state; no particle
+   lifetime, simulation order, seed or emitter state is modified.
+5. At render frame synchronization, RenderFrontend consumes that snapshot, uploads
+   bounded CPU data, and builds the graph: VFX Compute -> per-view Sort/Cull ->
+   consuming depth/shadow/opaque/decal/volume/translucent passes. Backend encoding
+   and native synchronization stay on the renderer's permitted execution roles.
+
+[ADR-010](../../adr/010-job-waiting-and-operation-store-ownership.md) governs jobs,
+operation tracking and allowed teardown drains. No ordinary owner/render/transport
+path waits on workers or GPU completion, and workers do not wait on nested jobs.
+A pending required CPU update holds dependent simulation progress through the host's
+non-blocking scheduling/loading policy; it cannot silently use stale gameplay
+results. Cosmetic work may use a documented skip/reset outcome under budget.
+
+[ADR-018](../../adr/018-command-registration-permissions-threading-and-packaged-build-policy.md)
+WorkerJob is for CPU preparation, not permission to encode native GPU commands.
+RenderSafePoint debug mutations enter the same render frame synchronization seam;
+normal simulation descriptors are renderer inputs, not console commands. Long
+user-visible preload/export tasks use the application-owned OperationStore; per-tick
+VFX work does not create a second operation service.
+
+GPU step submission is keyed by scene incarnation, emitter generation and step ID.
+A snapshot may be used by multiple views/frames, but a GPU step is submitted once,
+not once per view. The frontend tracks ordered submitted steps and returns bounded
+admission/submission status records to the scene owner. Submission acknowledgement
+is not GPU retirement. Pending work and frames in flight stay leased and charged.
+A failed/uncertain submission follows renderer recovery, never blind step replay.
+When the pending-work cap is reached, stop accepting cosmetic GPU steps/spawns and
+report backpressure; no unbounded catch-up queue or automatic huge CPU migration.
+Resume using the authored bounded restart/reset policy, not a giant accumulated delta.
+
+GPU depth collision uses one explicitly selected cosmetic collision view and its
+previous completed depth snapshot (with matching scene/view/origin generation).
+Missing or stale depth uses the authored no-collision/substitute/disable policy.
+It cannot require the current depth pass that itself depends on VFX Compute, or
+advance the same emitter separately for each eye/view. No GPU particle readback
+may drive authoritative gameplay in the ordinary frame loop.
+
+## Domain Selection And Asset Intent
+
+Resolution is **per compiled emitter simulation unit**, not per composite graph.
+A unit has one particle state and one resolved domain. Any gameplay interaction or
+CPU geometry-query requirement makes the whole unit CPU-mandatory, even above the
+count heuristic. It cannot be partly CPU and partly GPU. Graphs may contain separate
+CPU and GPU units only with explicit typed boundaries. A dependency requiring
+synchronous particle state or gameplay results propagates CPU requirements through
+that connected dependency; unsupported cycles/contracts fail cook. A CPU event may
+trigger a visual GPU child through a bounded next-tick request. A GPU child cannot
+feed synchronous authoritative state back to the CPU parent.
 
 ```cpp
-enum class SimulationDomain : uint8_t {
-    Automatic,  ///< Resolved at cook/load time based on emitter parameters and tier
-    CPU,        ///< Guaranteed CPU execution; supports gameplay queries and collisions
-    GPU         ///< GPU compute execution; visual-only high-density particle simulation
+enum class SimulationPreference : uint8_t {
+    Automatic, RequireCPU, PreferCPU, PreferGPU, RequireGPU
 };
+enum class ResolvedSimulationDomain : uint8_t { CPU, GPU, Null };
 ```
 
-### Domain Selection Criteria
+Cook records supported kernels, gameplay dependencies, authored fallback assets,
+required capabilities and cost bounds. Load/admission resolves against a captured
+host capability/quality-policy revision. Call sites do not select concrete backends.
+Changing policy requires re-admission/restart at a safe point, not live CPU/GPU state
+migration. Migrate the previous proposed SimulationDomain field in cooked descriptor
+versioning: Automatic -> Automatic, CPU -> RequireCPU, GPU -> PreferGPU, with a
+migration diagnostic. There are not two parallel domain selectors.
 
-Domain resolution applies constraints in the following order. A CPU-mandatory
-criterion always takes precedence over an explicit or automatically selected GPU
-domain, including for systems above the particle-count threshold.
+Resolution order:
 
-1. **`SimulationDomain::CPU`** is mandatory when:
-   - Particles require two-way gameplay interaction (e.g., triggering game logic,
-     modifying gameplay physics bodies, collecting pickup items).
-   - High-precision CPU raycast or complex geometry collision response is required.
-   - Running on low-spec hardware tiers (e.g., `es3`) or in headless/null environments.
-2. **Explicit domain requests** are considered after mandatory constraints:
-   - Explicit `CPU` remains on CPU, subject to the active tier's capacity budget.
-   - Explicit `GPU` is valid only for visual-only effects on a GPU-compute-capable
-     tier. Otherwise, resolution falls back deterministically to CPU and records a
-     typed cook/load diagnostic.
-3. **`SimulationDomain::Automatic`** (Asset Default) uses the particle-count heuristic:
-   - Visual-only systems with `maxParticles > 2,048` select GPU when the active tier
-     supports GPU compute.
-   - Systems with `maxParticles <= 2,048`, or systems on tiers without GPU compute,
-     select CPU.
-   - Complex vector fields, curl noise, or GPU depth-buffer collision may prefer GPU
-     only after the CPU-mandatory checks above pass.
+1. Validate CPU-mandatory dependencies. RequireGPU plus a CPU-mandatory unit is a
+   typed incompatible-asset error; all other preferences resolve that unit to real
+   CPU simulation. A missing CPU kernel is an error, never dummy gameplay.
+2. Apply host mode and explicit intent. Headless visual-only units may use Null only
+   when their authored policy permits visual suppression; gameplay units still use
+   CpuParticleSimulator. RequireGPU needs its capabilities or a separately authored
+   fallback effect; otherwise the effect is unavailable. Null suppression is an
+   explicit authored headless fallback, never an implicit override of RequireGPU.
+   RequireCPU never becomes GPU.
+3. PreferCPU selects a supported admitted CPU path, then an explicitly permitted GPU
+   path; PreferGPU does the reverse. A CPU fallback requires a compatible cooked CPU
+   kernel and admitted CPU work/memory. GPU-only noise/depth features are substituted
+   only by an authored fallback, never silently deleted from required behavior.
+4. Automatic prefers GPU for eligible visual units above
+   VfxQualityPolicy.autoGpuParticleThreshold (desktop default 2048), CPU at/below it.
+   Authored cost/kernel requirements may prefer GPU even below it, after step 1.
+   It uses the same supported, budget-admitted fallback rules as a preference.
 
-The `2,048` value is a domain-selection heuristic, not a universal capacity
-limit. Feature-tier capacity limits are applied after domain resolution and may
-clamp a system below this threshold.
+The threshold is a configurable heuristic, not a capacity limit. Per-emitter caps
+and aggregate CPU/GPU/memory/work budgets apply to **every** profile. Cosmetic counts
+may be clamped only where the asset declares a valid reduced-count result. Required
+gameplay counts are never silently clamped: reject admission and let the gameplay
+owner use its explicit safe fallback/loading/failure policy. A 500k-particle GPU
+asset is not automatically run as 500k CPU particles when GPU support is missing.
 
-### Coexistence and Synchronization Rules
+### Capabilities And Fallback Matrix
 
-- CPU and GPU particle systems can coexist seamlessly within the same scene and within
-  the same composite VFX graph asset.
-- Synchronization is governed by shared scene simulation time and camera transforms.
-- CPU particles write to CPU-mapped dynamic vertex/instance buffers. GPU particles simulate
-  in GPU compute buffers and emit indirect draw calls.
-- Readback from GPU particles to CPU is prohibited in standard frame loops; gameplay
-  requiring particle positional data must use CPU simulation.
+VfxCapabilities is a typed snapshot of actual selected-device capabilities, including
+compute, indirectDraw, gpuSorting, volumeTextures, vectorFields and resource/work
+limits. VfxQualityPolicy adds validated positive finite budgets, CPU fallback caps,
+autoGpuParticleThreshold and permitted cosmetic degradation. Backend names do not
+imply any capability. The renderer parity/availability contracts remain authoritative;
+VFX fallback never silently switches the selected renderer or an interactive host to
+RenderNull.
 
-### Platform & Feature Tier Fallback Matrix
+| Host policy profile | Domain behavior | Unsupported/budget outcome |
+|---|---|---|
+| Headless/test | Real CPU for gameplay; permitted visual suppression through Null | Same queue/tick/lifecycle contract; no GPU allocations; incompatible required visuals reported unavailable |
+| Low visual budget | Admitted CPU, GPU only if actual capabilities and policy permit | Default cosmetic CPU fallback cap 512 per emitter; authored substitute or typed rejection for unsupported kernels/RequireGPU |
+| Desktop baseline | CPU/GPU according to intent, actual capabilities and costs | Finite per-emitter and aggregate caps; reject new work or apply authored cosmetic reduction |
+| High visual budget | Larger admitted CPU/GPU budgets and optional sort/volume/field paths | Still bounded; missing capabilities use authored fallback or typed unavailability, never unrestricted simulation |
 
-| Feature Tier / Platform | Primary Domain | GPU Compute Particles | GPU Radix / Bitonic Sort | Volumetrics & Curl Noise | Fallback Behavior |
-|---|---|---|---|---|---|
-| **Headless / Null** (`null`) | `CPU` (Null Simulator) | Disabled | Disabled | Disabled | Full deterministic CPU dummy simulation; no GPU allocations or draw dispatches. |
-| **Mobile / Low-Spec** (`es3`) | `CPU` | Disabled | Disabled | Disabled | GPU requests fall back to CPU. The tier clamps each system to its configured CPU cap (`512` by default), overriding the general `2,048` domain heuristic. Complex noise is disabled. |
-| **Desktop Baseline** (`dx11` / `opengl4`) | `CPU` & `GPU` | Supported (Compute) | Supported (Bitonic) | Basic 3D Textures | Over-budget GPU systems throttle spawn rates or drop lowest-priority sub-emitters. |
-| **High-End Desktop / Console** (`dx12_vulkan` / `metal`) | `CPU` & `GPU` | Full Compute | Full Radix/Bitonic | Full Curl Noise & Vector Fields | Unrestricted simulation with GPU indirect draw and GPU culling. |
+Legacy labels es3, dx11/opengl4 and dx12_vulkan/metal are not VFX capability enums.
+They may identify external product presets, but must resolve through typed capability
+facts and quality policy. Identical inputs resolve deterministically; this does not
+promise bitwise-identical visual CPU/GPU algorithms across devices.
 
-## Renderer Boundary & Render Extraction Contract
+### Null Timing And Gameplay Parity
 
-Visual effects adhere strictly to Horo Engine's decoupled rendering architecture.
-**VFX code is strictly prohibited from invoking immediate-mode draw calls or holding
-backend graphics contexts.**
+Null suppresses visual particle kernels/draws, not scheduler semantics. It obeys the
+same submission cutoff, FIFO drain limit, next-tick spawn/result delivery, owner phase,
+logical lifetime and cancellation rules as the real paths. Completion is queued,
+never inline merely because there is no GPU. Device timing is not simulated: tests
+requiring delayed completion/retirement use controllable bounded fake completions.
 
-### Extraction Pipeline
+Particle collision/death-derived gameplay, audio or other externally observable
+nonvisual events cannot rely on Null dummy particles. Such dependencies require the
+real CPU implementation or a separately authored deterministic CPU event source.
+Visual-only Null units emit only declared logical lifecycle outcomes and do not
+fabricate per-particle collisions. Headless gameplay uses the same CPU kernels,
+seeds, fixed ticks and admission requirements as graphical execution.
+
+## Capacity, Pool Exhaustion And Event Overflow
+
+Pool sizes, particle slices, scratch, packed frame data, per-view sort indices,
+pending GPU work, completion records and retirement entries are preallocated or
+admitted during bounded preparation before activation. No pool grows on Update,
+spawn, queue drain or extraction. Resizing is an explicit asynchronous preparation
+transaction with peak old/new memory admitted; old readers/fences must retire before
+reuse. Zero steady-state heap allocation is a requirement to verify for these paths,
+not an unlimited-capacity or measured performance claim.
+
+TryEnqueueSpawn returns Result<VfxRequestId> and copies a bounded typed parameter
+block, never an arbitrary heap-allocating VariantMap. The scene owner serializes
+accepted requests; external producers submit typed commands through declared owner
+seams. Authoritative producers have stable tick/producer/sequence ordering before
+admission, so OS worker arrival races are not gameplay order. FIFO means this
+accepted owner order. Retrying failed submission is explicit, not hidden recursion.
+
+- Queue full: reject the **incoming/newest** request with EventQueueFull. Never
+  overwrite accepted entries or silently drop the oldest. Preserve reserved gameplay
+  capacity; cosmetic requests cannot consume the configured gameplay reserve.
+- Pool/particle/renderer reservation exhausted: reject the new request with
+  EffectCapacityExceeded or ResourceBudgetExceeded; existing effects are not evicted
+  implicitly. A queued request that fails later receives a next-phase typed result
+  from reserved result capacity. Failed admission leaves no partial live effect.
+- An admitted emitter reaching its particle cap drops **new cosmetic births**, not
+  existing particles, and records a counter. Gameplay emitters must reserve their
+  authored worst case; inability to satisfy it reports a gameplay failure rather
+  than silently changing the simulation.
+- Rejections/degradation increment structured counters and rate-limited diagnostics.
+  Callers may discard a cosmetic request only after receiving that outcome. A required
+  caller must handle rejection with its declared safe policy; it may not block/spin.
+
+Drain work is bounded by maxEventsPerTick and admitted per-request cost. Remaining
+entries retain FIFO order for later ticks. Results, cancellation and retirement have
+reserved capacity so overload cannot prevent cleanup. Configuration validates queue,
+result and gameplay-reserve limits together. Null follows the same capacity policy;
+a separate reduced visual resource budget cannot consume the gameplay reserve.
+
+## Scene And Cell Teardown
+
+Effect/request handles include scene incarnation, slot generation and owner identity.
+Zero is invalid; checked exhaustion retires a slot/incarnation rather than wrapping.
+Scene replacement closes admission, invalidates the old incarnation and logically
+stops effects at the owner safe point. It cancels pending requests and detaches
+bindings before destroying entities they depend on. CPU jobs, frame-data readers,
+asset leases and GPU submissions retain their own immutable retirement records.
+
+The renderer resource manager owns deferred GPU destruction after all frame readers
+and completion fences release resources. Snapshot/job-owned CPU slices also cannot
+be reused early. Old allocations remain charged; no normal-frame device-idle wait,
+forced free or raw pointer callback into a destroyed VfxWorld is permitted. Only
+logical deactivation is immediate; physical retirement can span frames.
+
+Cell-bound effects additionally capture ADR-012 StreamingFence (partition identity,
+PartitionEpoch, cell and StreamingGeneration). An IFeatureStreamingProvider adapter
+participates in estimate/reserve, Ready/Prepared publication and Retired barriers.
+Its prepared publication attaches already admitted effects without allocation or
+recoverable work. Required/Optional/Degradable behavior follows that cell's validated
+policy; ambient visuals are not automatically Required or automatically Optional.
+
+On partial cell eviction, reject late spawns/publication for that fence and retire
+only the cell-owned effects. Retired is acknowledged after CPU readers/jobs and
+renderer fences release all cell-owned resources, not when the stop command is queued.
+Shared asset caches keep separate charged leases. Persistent or network-owned effects
+are not removed merely because their positions lie within the cell. Normal cell
+eviction, whole-scene replacement and shutdown use the same registered dependency
+DAG and Scene safe points; whole-scene shutdown retires all remaining ownership scopes.
+
+ADR-010's bounded teardown drain and ADR-012's timeout safety apply: on timeout return
+a typed incomplete-retirement diagnostic and retain outstanding resource/module/
+asset dependencies in a retirement owner. Never detach work referencing freed state
+or report a clean unload before retirement. New scene admission accounts for retained
+old resources. Cancellation fences publication but cannot promise physical I/O/GPU abort.
+
+## Immutable Extraction And Typed Contracts
 
 ```text
-  [ VfxWorld (Scene Simulation) ]
-                 │
-                 ▼
-  [ VfxRenderExtractor ]  (ExtractRenderData phase)
-                 │
-                 ├─► VfxRenderBatch (Translucent Billboard / Ribbon / Mesh)
-                 ├─► VfxRenderBatch (Opaque / Masked Mesh Particles)
-                 ├─► DecalRenderBatch (Deferred / Clustered Decals)
-                 └─► ParticleBufferView & DynamicInstanceTransforms
-                 │
-                 ▼
-  [ Render Graph Execution ]
-         ├── G-Buffer / Depth Pre-Pass (Opaque Mesh Particles)
-         ├── Decal Pass (Projected Decals)
-         ├── Forward / Translucent Pass (Sorted Particles & Ribbons)
-         └── Volumetric Accumulation Pass
+Scene simulation: CPU SoA + logical GPU work
+    -> VfxRenderExtractor
+    -> RenderWorldSnapshot (frame-owned immutable values and leases)
+    -> RenderFrontend (validation, bounded CPU upload, graph construction)
+    -> VFX Compute (once per step)
+    -> per-view Sort/Cull
+    -> standard Shadow/Depth/Opaque/Decal/Volume/Translucent passes
+    -> renderer deferred retirement
 ```
 
-### Typed Backend-Neutral Render Primitives
+CPU simulation writes only its private SoA. Extraction copies/packs CPU data into
+frame-owned slices; only the renderer uploads those slices to GPU buffers. GPU
+identities below are Horo-owned generation-safe logical resource leases resolved by
+the renderer, not native handles. Every slice is bounds/layout checked against its
+retained storage, with checked offset/count/stride arithmetic. GPU buffers and
+indirect arguments require correct admitted usage/size and current resource generation.
+
+The shapes below are schematic contracts, not installed public headers. FrameSlice
+refers to immutable frame-owned storage, not an unowned span into simulation memory.
+GpuVfxStateHandle identifies a renderer-owned state bundle (particle ping-pong,
+count/indirect and scratch resources); it exposes no allocation or encoding API.
+Each work/output step pins its resource version until all consumers retire. Later
+steps cannot overwrite storage still referenced by an older snapshot; a full version
+ring causes the documented backpressure. Reusing a snapshot renders its retained
+output version, not whichever mutable GPU buffer happens to be current.
 
 ```cpp
-enum class VfxPassKind : uint8_t {
-    OpaqueMesh,
-    MaskedMesh,
-    TranslucentForward,
-    AdditiveForward,
-    DeferredDecal,
-    ForwardDecal,
-    VolumetricAccumulation
-};
-
-enum class VfxPrimitiveTopology : uint8_t {
-    CameraFacingBillboard,
-    RibbonStrip,
-    InstancedMesh,
-    DecalBox
-};
-
-struct ParticleBufferView {
-    BufferHandle bufferHandle;
-    uint32_t byteOffset;
+struct CpuParticleView {
+    FrameSlice packedParticles;
+    ParticleLayoutId layout;
     uint32_t particleCount;
-    uint32_t stride;
+};
+struct GpuParticleView {
+    GpuVfxStateHandle state;
+    VfxStepKey step;                // retained output version consumed by this view
+    ParticleLayoutId layout;
+    uint32_t maxParticles;
+};
+using ParticleDataSource = std::variant<CpuParticleView, GpuParticleView>;
+
+struct GpuVfxSimulationWork {
+    VfxStepKey key;                 // scene + effect/emitter generations + step
+    GpuVfxStateHandle state;
+    VfxKernelId kernel;
+    FrameSlice parameters;         // delta, seed, bounded typed kernel inputs
+    OptionalDepthSnapshot collisionDepth;
 };
 
+enum class VfxParticlePass : uint8_t {
+    Opaque, Masked, Translucent, Additive
+};
+enum class VfxPrimitiveTopology : uint8_t {
+    CameraFacingBillboard, RibbonStrip, InstancedMesh
+};
+enum class VfxShadowPolicy : uint8_t { Disabled, OpaqueMaskedCaster };
+struct DynamicInstanceTransform {
+    Mat4 localToRenderOrigin;
+};
 struct VfxRenderBatch {
-    VfxPassKind passKind;
+    VfxBatchId id;
+    VfxParticlePass pass;
     VfxPrimitiveTopology topology;
     MaterialId material;
-    MeshHandle mesh;                      // Valid for InstancedMesh topology
-    ParticleBufferView instanceData;      // Position, size, rotation, color, UV
-    BufferHandle indirectArgsBuffer;       // Optional, for GPU indirect draw dispatches
-    uint32_t indirectArgsOffset;
-    AABB worldBounds;
-    float sortDistance;                   // Key for translucent back-to-front sorting
-    bool isCastShadowEnabled;
+    OptionalMeshHandle mesh;        // required for InstancedMesh
+    ParticleDataSource instances;
+    FrameSlice instanceTransforms;  // DynamicInstanceTransform layout
+    RenderRelativeBounds bounds;
+    VfxShadowPolicy shadows;
 };
-
 struct DecalRenderBatch {
+    DecalId id;
     MaterialId material;
-    Transform worldTransform;
+    DecalProjectionPath path;       // deferred or forward, validated capability
+    DynamicInstanceTransform transform;
     Vec3 halfSize;
     float fadeFactor;
-    AABB worldBounds;
+    RenderRelativeBounds bounds;
+};
+struct VolumetricVfxBatch {
+    VfxBatchId id;
+    MaterialId material;
+    VolumeGridView density;         // typed retained volume resource + dimensions
+    DynamicInstanceTransform transform;
+    RenderRelativeBounds bounds;
+};
+struct VfxViewSortKey {
+    RenderViewId view;
+    VfxBatchId batch;
+    float sortDistance;             // render-origin-relative key, never particle state
 };
 ```
 
-## Pass Placement, Material Integration, and Sorting
+VolumetricVfxBatch is a separate volume-grid contract, not a DecalBox particle topology.
+Density dimensions/format, sample usage and lifetime are validated; unsupported volumes
+use authored fallback/unavailability. Light outputs use the renderer's existing typed
+LightData contract and admitted light budget. Shading/layout/pass combinations,
+transform count and topology are validated before publication, not inferred from
+optional native pointers. The proposed ParticleBufferView-only model is replaced by
+ParticleDataSource; renderer-owned upload makes CPU/GPU storage roles explicit.
 
-### Material & Shader Pipeline Integration
+Spatial extraction follows ADR-026 canonical world coordinates and a captured render
+origin/revision. Per-view keys and packed transforms use that same origin; rebasing
+cannot change durable emitter identity or race extraction. RenderWorldSnapshot carries
+bounded arrays of GPU work, particle batches, decals and volumes alongside scene data,
+with scene/origin revision and all leases needed until the final consumer retires.
 
-Particles and decals use the standard material system (see
-[Material And Shader Model](./material-and-shader-model.md)):
+## Pass Placement, Materials And Per-View Sorting
 
-- **Shading Models**: `Unlit`, `DefaultPBR` (lit particles/mesh particles), and
-  `DecalPBR` / `DecalEmissive`.
-- **Blend Modes**: `Opaque`, `Masked`, `Translucent` (alpha blend), and `Additive`.
-- **Soft Particles**: Translucent particle shaders consume the scene depth buffer
-  texture to evaluate soft-intersection depth fading against background geometry.
-- **Flipbook Animation**: Packed sub-UV grids animated by normalized particle age.
+[Material And Shader Model](./material-and-shader-model.md) owns shared PBR/unlit
+compilation. Particles/decals use Unlit, DefaultPBR, DecalPBR or DecalEmissive with
+validated opaque/masked/translucent/additive blend modes. Flipbooks use normalized
+particle age. Soft-particle fading samples declared scene depth in the draw pass.
 
-### Pass Placement
+| Output | Graph placement |
+|---|---|
+| CPU particle data | Bounded renderer upload before consuming passes |
+| GPU particle state | Compute update before every dependent sort/cull/draw; graph declares read/write and queue barriers |
+| Opaque/masked mesh particles | Depth prepass and G-Buffer or opaque forward path; depth writes enabled |
+| OpaqueMaskedCaster | Standard shadow caster pass with matching material alpha test; consumes the same completed simulation state |
+| Deferred/forward decals | Supported decal/G-Buffer or forward-lighting path; no particle topology workaround |
+| VolumetricVfxBatch | Volume injection/accumulation and composite with declared depth/light dependencies |
+| Translucent/ribbons | Per-view sort then translucent forward; depth test, no depth write |
+| Additive | Additive forward; depth test, no depth write, no distance sort |
 
-| Primitive Type | Target Pass | Blend Mode | Depth Write | Depth Test |
-|---|---|---|---|---|
-| **Opaque Mesh Particles** | G-Buffer / Opaque Forward | `Opaque` | Yes | Yes |
-| **Masked Mesh Particles** | Depth Pre-Pass + G-Buffer | `Masked` | Yes | Yes |
-| **Deferred Decals** | Decal Pass (G-Buffer) | `Translucent` / `Decal` | No | Yes (Read-Only) |
-| **Forward Decals** | Forward Lighting Pass | `Translucent` | No | Yes (Read-Only) |
-| **Translucent Particles** | Translucent Forward Pass | `Translucent` | No | Yes (Read-Only) |
-| **Additive Particles** | Additive Forward Pass | `Additive` | No | Yes (Read-Only) |
-| **Volumetric VFX** | Volumetric Accumulation Pass | Custom Blend | No | Yes (Read-Only) |
+Shadow casting is supported here only for opaque/masked mesh particles. Requesting
+OpaqueMaskedCaster on ribbons, translucent/additive particles, decals or volumes is
+an unsupported combination requiring authored substitute or typed rejection. It is
+not a bool that silently inserts arbitrary shadow passes.
 
-### Camera-Relative Sorting Policy
+Each RenderViewId (game, editor, split screen, XR or reflection) gets its own sort/cull
+indices and keys over compatible immutable data. CPU radix sorting operates on packed
+frame data or an index copy in extraction/render preparation, never reorders the
+simulation SoA or writes particle distance fields. sortDistance lives only in
+VfxViewSortKey. Equal distances use stable batch/particle identity; reject nonfinite
+keys. GPU sort likewise writes separate per-view index buffers after simulation.
+Sorting one view cannot change another view or advance the emitter again.
 
-- **Translucent Systems**: Sorted strictly back-to-front relative to the active camera.
-  - **CPU Simulated**: Sorted on the CPU using multi-threaded radix sort over camera
-    distance keys before writing into the extraction buffer.
-  - **GPU Simulated**: Sorted via GPU bitonic or radix sort compute passes prior to
-    indirect draw submission.
-- **Additive Systems**: Sorting is skipped entirely, eliminating sorting overhead
-  for additive glows, sparks, and energy beams.
-- **Opaque Systems**: Sorted front-to-back by the Render Frontend alongside standard
-  static/dynamic scene meshes to maximize early-Z rejection.
+CPU sorting may use JobSystem staging with completion published before consuming the
+view. It cannot block extraction/render on a pending worker. If its bounded work is
+not ready, the declared cosmetic view fallback omits that batch and reports it; it
+does not submit unsorted alpha as though sorting succeeded. The frontend sorts opaque
+batches front-to-back alongside ordinary meshes. Additive sorting is skipped.
 
 ## Particle System Data Model
 
 A particle system is a template that describes how particles are spawned,
-simulated, rendered, and destroyed.
+simulated, rendered, and destroyed. The sortMode is validated against its output
+material: None/OldestFirst cannot override required back-to-front alpha ordering.
+Authored age order is allowed only for an output whose blend contract permits it.
 
 ```cpp
 struct ParticleSystemDescriptor {
     ParticleSystemId id;
-    SimulationDomain domain;      // CPU or GPU
+    SimulationPreference preference; // resolved once per admitted emitter unit
     uint32_t maxParticles;
     EmitterShape shape;
     SpawnRate spawnRate;
@@ -312,17 +440,21 @@ struct ParticleSystemDescriptor {
 ### CPU Simulation Layout (Structure of Arrays)
 
 To maximize SIMD vectorization and cache locality, CPU particle memory is stored
-as flat arrays:
+as aligned slices of one pool-owned allocation. The spans below are mutable only
+by the owning simulation/staging job; extraction never retains them. Capacity is
+fixed at admission, and activeCount never exceeds it. Float positions are bounded
+emitter-local coordinates with a canonical WorldCoordinate64 origin; large-world
+rebasing uses versioned staging rather than treating floats as durable world identity:
 
 ```cpp
 struct CpuParticleBufferSoA {
-    std::vector<float> posX, posY, posZ;
-    std::vector<float> velX, velY, velZ;
-    std::vector<float> scaleX, scaleY;
-    std::vector<float> rotZ, rotVelZ;
-    std::vector<uint32_t> packedColor;
-    std::vector<float> age, maxAge;
-    std::vector<uint32_t> customFlags;
+    std::span<float> posX, posY, posZ;
+    std::span<float> velX, velY, velZ;
+    std::span<float> scaleX, scaleY;
+    std::span<float> rotZ, rotVelZ;
+    std::span<uint32_t> packedColor;
+    std::span<float> age, maxAge;
+    std::span<uint32_t> customFlags;
     uint32_t activeCount{0};
     uint32_t capacity{0};
 };
@@ -330,7 +462,9 @@ struct CpuParticleBufferSoA {
 
 ### GPU Compute Simulation Layout
 
-GPU particles reside in device compute buffers and are updated via compute kernels:
+The renderer owns GPU device buffers and runs the cooked kernels in declared graph
+passes. This shader example is backend-private, not a public VFX API or permission
+for VfxWorld to allocate/dispatch:
 
 ```hlsl
 struct GpuParticleData {
@@ -378,8 +512,11 @@ Graph nodes:
 | `Audio` | Triggers an audio event on spawn or collision. |
 
 Graphs compile ahead-of-time (or at asset cook time) into runtime descriptors and
-optimized compute/CPU kernels. The graph runtime never interprets arbitrary scripts
-per particle.
+optimized compute/CPU kernels. Compilation validates emitter dependency closure,
+CPU-mandatory conflicts, fallback compatibility, bounded parameters and peak cost.
+Asset versions migrate the previous domain field explicitly; cook diagnoses required
+unsupported nodes rather than silently dropping gameplay behavior. The graph runtime
+never interprets arbitrary scripts per particle.
 
 ## Decals
 
@@ -402,12 +539,13 @@ struct DecalDescriptor {
   Forward decals use clustered/tiled decal lists on forward feature tiers.
 - **Lifetime**: Supports permanent environmental decals, timed fading decals
   (e.g., bullet holes, blood splatters), and event-driven removal.
-- **Atlas Management**: `DecalManager` pools and batches decal textures to minimize
-  descriptor and texture switches.
+- **Atlas Management**: `DecalManager` groups logical atlas requests; the renderer
+  owns texture packing/upload and deferred atlas retirement under the admitted budget.
 
 ## Event-Driven Spawning & Audio Coupling
 
-Gameplay spawns effects by submitting requests to `VfxEventQueue`:
+Gameplay requests effects through fallible bounded admission to VfxEventQueue;
+this schematic payload is copied into queue-owned storage:
 
 ```cpp
 struct VfxSpawnRequest {
@@ -415,57 +553,88 @@ struct VfxSpawnRequest {
     Transform worldTransform;
     std::optional<Vec3> impactNormal;
     float scale{1.0f};
-    VariantMap parameters;
+    VfxParameterBlock parameters; // fixed-capacity, schema-typed values
+    VfxOwnershipScope ownership;  // scene, cell fence, or explicit persistent owner
+    VfxRequestClass requestClass; // gameplay-required or cosmetic
 };
 ```
 
 ### Audio Routing
 
 VFX graphs trigger audio events on spawn, collision, or sub-emitter creation. Audio
-events are dispatched to `AudioWorld` via typed IDs and world positions; the VFX
-subsystem never plays sounds directly, preserving the mixing and spatialization
-pipeline.
+events are bounded typed requests to AudioWorld with asset/event IDs, owner fence
+and world position; VFX never plays sounds directly. Queue rejection remains visible
+and follows the same required/cosmetic failure distinction. Gameplay-relevant or
+headless-required audio is driven by CPU/logical events, not GPU readback or Null
+fabricated collisions. Renderer completion never calls audio from a native GPU thread.
 
-## Performance Budgets and Diagnostics
+## Performance Budgets And Diagnostics
 
-### Per-Effect Budgets
+Budgets cover maximum particles per emitter, concurrent instances per asset, emitter
+slots, decals, pending events/results, worker scratch, per-view packing/sorting,
+GPU work and every frame/retirement lease. Baseline configurable defaults remain
+16,384 aggregate CPU particles, 1,000,000 GPU particles, 256 decals and four transient
+lights per effect. They are ceilings, not guaranteed allocations. Device byte/work
+limits, host aggregate budgets and required gameplay reservations may lower usable
+capacity. Every count/byte product is checked before allocation or admission.
 
-- Maximum particle count per emitter.
-- Maximum concurrent active instances per effect asset.
-- Maximum transient point lights spawned (e.g., max 4 lights per scene effect).
-- Maximum active decals per volume.
+Admission includes all simultaneous CPU/GPU/upload/sort copies and frames in flight;
+old scene/cell retirement stays charged. Streaming cell reservations are slices of
+ADR-012's aggregate ledger, not an extra VFX allowance. Resource growth needs prior
+reservation; GPU completion, not logical release, returns credits. Bounded extraction
+work prevents starting excess work, not preempts native calls or guarantees frame time.
 
-### Global World Budgets
+The single overflow policy above rejects incoming requests/new cosmetic births.
+There is no separate implicit oldest/farthest eviction policy. Authored quality
+reductions are selected during admission/restart and reported with the resolved
+cap, capability/policy revision, emitter identity and reason. Diagnostics expose
+queue/pool use, rejected requests, deferred steps, gameplay failures, sort omissions,
+retired bytes and timeout causes through the observability system.
 
-- Total active CPU particles (default limit: 16,384 across all CPU systems).
-- Total active GPU particles (default limit: 1,000,000 across all GPU systems).
-- Total active decals (default limit: 256).
-- Maximum render extraction time budget per frame.
+## Typed Failure Contract
 
-Over-budget conditions drop oldest/farthest cosmetic particles, clamp spawn counts,
-and emit structured diagnostics according to the observability system.
+Follow [ADR-008](../../adr/008-error-model-exception-boundary-and-registry.md) Result/Error.
+Failures retain scene/emitter/request identity, policy/capability revision and the
+underlying asset/renderer/job cause. DomainConflict, UnsupportedCapability or
+MissingKernel rejects incompatible admission. EventQueueFull, EffectCapacityExceeded
+and ResourceBudgetExceeded preserve existing state and require explicit caller
+handling. Cancelled/StaleGeneration suppress publication but still route matching
+retirement acknowledgements. RetirementIncomplete keeps resources/dependencies
+charged and alive; it is never translated into successful shutdown.
 
-## Testing and Verification Requirements
+## Testing And Verification Requirements
 
-- **Ownership & Lifecycle Tests**: Verify `VfxWorld` construction, tick, and complete
-  destruction on `SceneRuntime` unload without leaking memory or GPU handles.
-- **Domain Selection Policy Tests**: Verify deterministic domain resolution across
-  all feature tiers (`null`, `es3`, `dx11`, `dx12_vulkan`, `metal`), including a
-  gameplay-interactive system above 2,048 particles, both sides of the Automatic
-  threshold, and the `es3` tier-cap override.
-- **Null / Headless Simulation Tests**: Verify `NullParticleSimulator` produces
-  deterministic, zero-graphics simulation ticks in headless test environments.
-- **Render Extraction Tests**: Verify `VfxRenderExtractor` emits valid, typed
-  `VfxRenderBatch` primitives with correct sort distances and bounding boxes.
-- **Sorting Correctness Tests**: Verify translucent particle back-to-front sorting
-  and additive sort-skipping invariants.
-- **Memory Pooling Invariants**: Assert zero heap allocations during steady-state
-  particle updates and burst spawning.
+These are qualification scenarios for implementation, not tests delivered by this
+architecture-only change:
+
+- Resolve a mixed CPU/GPU graph per emitter; force a high-count gameplay emitter to
+  CPU; reject RequireGPU conflicts and invalid synchronous cross-domain dependencies.
+- Exercise 2048/2049 default heuristic, configured thresholds, 512 cosmetic fallback,
+  missing kernels/capabilities, RequireGPU authored fallback/unavailability, and no
+  silent gameplay count clamp or concrete renderer switch.
+- Run gameplay CPU kernels with identical seed/tick inputs in graphical and headless
+  hosts; verify Null's accepted FIFO, next-tick results, pause/cancel/lifetime timing.
+  Fake delayed submission/fences rather than assuming Null matches device latency.
+- Fill instance/particle/event/result/frame pools. Verify incoming rejection, gameplay
+  reserve, stable ordering, no old-entry overwrite, cleanup progress and zero hot-path
+  heap growth, including bounded typed parameter copying and diagnostics.
+- Verify extraction never submits passes, writes mapped GPU buffers or mutates SoA;
+  validate CPU/GPU source layouts, slice bounds, generations and retained ownership.
+- Render one snapshot in multiple views/frames: submit each GPU step once; sort each
+  view independently; preserve SoA and stable ties; reject nonfinite keys and invalid
+  shadow/volume/decal combinations. Exercise a missing previous-depth snapshot.
+- Verify graph compute/read/write/sort/draw dependencies and native affinity on each
+  supported backend/capability profile, including an explicit no-compute composition.
+- Delay workers, GPU fences and snapshot readers across cell eviction and scene
+  replacement. No early free/slot reuse, stale publication or lost accounting;
+  Retired remains pending and teardown timeout retains dependencies safely.
+- Verify provider Ready/Prepared/Retired barriers, authored optional/fallback behavior,
+  typed failures, and partial cell eviction without stopping unrelated effects.
 
 ## Related Documents
 
 - [ADR-011: Effect Ownership, Simulation Domain Policy and Renderer Boundary](../../adr/011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md):
-  Authoritative M0 architecture decision.
+  Proposed ownership, simulation and renderer-boundary decision.
 - [Particle Editor UI Reference](./particle-editor.html): Emitter stack, curve editing,
   and live preview panel.
 - [Material And Shader Model](./material-and-shader-model.md): Particle and decal materials.
@@ -474,3 +643,6 @@ and emit structured diagnostics according to the observability system.
 - [Advanced Rendering Architecture](./advanced-rendering-architecture.md): Volumetrics and post-processing.
 - [Audio Architecture](./audio-architecture.md): Audio event routing.
 - [Asset Pipeline](./asset-pipeline.md): Effect compilation and cooking.
+- [World Streaming Architecture](./world-streaming-architecture.md): Provider barriers and cell ownership.
+- [Render Backend Parity Contract](./render-backend-parity-contract.md): Typed capabilities and equal backends.
+- [Renderer Distribution And Availability](./renderer-distribution-and-availability.md): Explicit renderer selection.
