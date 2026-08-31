@@ -537,25 +537,43 @@ manually order backend commands around hidden global state.
 
 ## Resource Model
 
-Supported resource classes include:
+The canonical identity, descriptor, validation, and lifetime policy is
+[ADR-027: Renderer Resource Identity and Descriptors](../../adr/027-renderer-resource-identity-and-descriptors.md).
+Supported resident resource classes are buffers, textures and texture views,
+samplers, shader modules and pipelines, render targets, and meshes. Leaf,
+derived, and composite classes share that model. Material bindings are typed
+render data over those resources; scene `MaterialId` is a material-table key,
+not a resident GPU handle. Backend framebuffer and binding-allocation objects
+remain private.
 
-- buffers
-- textures
-- samplers
-- shaders and pipelines
-- framebuffers and render targets
-- meshes and material bindings
-
-Creation is described by immutable descriptors. Public handles are typed and
-generation checked.
+Creation is described by immutable Horo-owned descriptors. Every public resource
+class has a distinct typed handle whose identity contains the creating frontend
+owner, registry slot, and non-wrapping generation. Handles are process-local
+references rather than ownership, native values, or persistent identities.
+Creation that reserves a slot returns a pending handle plus a
+`ResourceOperationId`; only `Ready` generations may be submitted.
 
 ```cpp
-Result<TextureHandle> CreateTexture(const TextureDescriptor&, InitialData);
+ResourceCreation<TextureHandle> CreateTexture(const TextureDescriptor&, InitialData);
 Result<void> DestroyTexture(TextureHandle);
 ```
 
-Asset IDs and render handles remain distinct. The asset system owns logical
-asset identity; the renderer owns resident GPU representation.
+The frontend validates structure, owner, generation, registry state, referenced
+resources, and reported capabilities before native execution. A resident
+generation retains the exact dependency generations named by its descriptor.
+Release prevents new direct use of that handle immediately. Native destruction
+waits until dependents drop their pins and prior GPU work completes on the
+host-declared render-capable thread. Replacement never retargets existing
+dependents. Handle state is validated when the frontend accepts a queued
+request, not when a producer constructs it.
+
+Asset IDs and render handles remain distinct. The asset system owns persistent
+logical asset identity; the renderer owns one resident realization. Reload,
+resize, replacement, and backend recreation publish new generations instead of
+mutating an existing descriptor or preserving a process-local handle. Automatic
+recovery requires a reconstruction source on the residency record
+(`RecreateFromAsset`, `RecreateFromRetainedCpuData`, `RebuildByOwner`, or
+`NonRecoverable`).
 
 ## Upload And Streaming
 
@@ -594,7 +612,10 @@ defaults; arbitrary string lookup in the draw loop is avoided.
 
 ## Threading And Synchronization
 
-The host declares the render-capable thread. Backend calls occur only there
+The host declares the render-capable thread. That thread is the graphics-affine
+thread for registry mutation and native create/destroy. ADR-018
+`CommandThreadPolicy::RenderSafePoint` runs on it at the frame-synchronization
+boundary; it is not a second render thread. Backend calls occur only there
 unless a backend method explicitly documents thread safety.
 
 Worker threads may:
@@ -630,9 +651,11 @@ Backends classify failure as:
 - device/context recreation required
 - fatal unsupported or corrupted state
 
-Recovery tears down and recreates backend-owned resources from frontend
-descriptors and asset identities. Backend handles are never assumed stable
-across recreation.
+Recovery tears down the old registry and recreates resources from each
+residency record's reconstruction source (asset identity, retained CPU data, or
+owner rebuild). Resources without a source are `NonRecoverable` and their
+owners are notified. Backend handles are never assumed stable across
+recreation.
 
 ## Null Renderer
 

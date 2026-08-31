@@ -247,6 +247,13 @@ The editor integration may coordinate private native state required to encode
 GUI work, but it cannot expose that state to editor screens, panels, settings,
 scene code, or the public Render API.
 
+All interactive backends implement the resource identity, immutable descriptor,
+validation, readiness, replacement, and deferred-retirement rules from
+[ADR-027](../../adr/027-renderer-resource-identity-and-descriptors.md). A backend
+may reject unsupported descriptor values through its typed capability/error
+contract; it may not reinterpret them, silently choose a fallback, or weaken
+owner and generation validation.
+
 In particular:
 
 - OpenGL global state is private to the OpenGL integration.
