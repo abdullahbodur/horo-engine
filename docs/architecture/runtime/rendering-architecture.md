@@ -156,6 +156,32 @@ capability or platform reason. A fallback to `null` is allowed only for tools,
 tests, and explicitly headless workflows; interactive editor/game hosts must not
 silently switch to `null`.
 
+## Capabilities, Limits And Product Profiles
+
+[ADR-028](../../adr/028-renderer-capability-limits-and-product-profiles.md) owns
+the renderer capability and profile policy. Backend-reported device facts,
+implemented backend operations, driver-adjusted effective support, and requested
+product quality are distinct contracts. The frontend owns the immutable effective
+snapshot; resource and plan admission use it, never a raw report or profile rank.
+
+`Baseline`, `Standard`, `High`, and `Ultra` select rendering recipe preferences.
+They are not graphics APIs, build profiles, hardware guarantees, or gameplay
+budgets. Optional features use declared, implemented and cooked fallback recipes;
+missing required features return typed failures. Limits have explicit units and
+format checks validate the complete usage/sample/view combination. No resource
+API silently substitutes formats or lowers quality.
+
+Final support is established after device initialization, before resource work
+is admitted; module metadata and probe results do not replace that validation.
+Snapshots carry frontend/device/revision identity. Worker plans are revalidated
+on admission, quality changes publish a new policy at a frame boundary, and
+device recreation invalidates old snapshots and resolves policy again before
+resource reconstruction. Profile changes never silently switch a backend.
+
+The existing `RenderBackendCapabilities` booleans are a transitional implementation.
+The richer value contracts, driver-policy provider and profile resolver are
+downstream implementation work; this M0 decision does not claim them as available.
+
 ## Backend Module Registry
 
 Renderer backends are engine-internal modules with separate CMake targets,
@@ -559,7 +585,7 @@ Result<void> DestroyTexture(TextureHandle);
 ```
 
 The frontend validates structure, owner, generation, registry state, referenced
-resources, and reported capabilities before native execution. A resident
+resources, and effective capabilities before native execution. A resident
 generation retains the exact dependency generations named by its descriptor.
 Release prevents new direct use of that handle immediately. Native destruction
 waits until dependents drop their pins and prior GPU work completes on the
@@ -715,6 +741,8 @@ Required tests cover:
 - frontend rejection and cleanup of invalid successful frame tokens
 - frontend resize propagation and exception containment
 - capability-incompatible and malformed execution plans being rejected
+- reported/implemented/driver-adjusted support separation and profile resolution
+  following ADR-028, including stale snapshots and missing required fallback variants
 - installed editor composition loading only the selected verified component while
   development/headless profiles may register explicit static/null modules
 - render graph cycle and invalid-resource rejection

@@ -42,9 +42,10 @@ Not covered:
   renderer backend.
 - Shader variants are produced from explicit permutation keys, not from runtime
   string substitution.
-- Feature tiers declare hardware capability sets. Materials and shaders declare
-  which tiers they require; the runtime selects the best available tier and
-  records fallback decisions.
+- Product profiles express quality preferences, not hardware capability sets.
+  Materials and shader variants declare explicit feature, format and limit
+  requirements. The frontend selects an admitted recipe and records every fallback
+  under [ADR-028](../../adr/028-renderer-capability-limits-and-product-profiles.md).
 - Pipeline state objects are cached and reused. Shader compilation may happen
   offline during cook or lazily at runtime, but the cache key format is the same.
 - No gameplay code queries raw shader handles. Gameplay sees only material names,
@@ -177,10 +178,10 @@ shader graph `.horoshadergraph`.
     "depthTest": "LessEqual",
     "depthWrite": true
   },
-  "minTier": "es3",
-  "preferredTier": "dx12_vulkan",
-  "tierOverrides": {
-    "es3": {
+  "minProfile": "baseline",
+  "preferredProfile": "high",
+  "profileOverrides": {
+    "baseline": {
       "features": { "normalMap": false },
       "parameters": { "roughness": 1.0 }
     }
@@ -189,7 +190,10 @@ shader graph `.horoshadergraph`.
 ```
 
 The asset pipeline cooks this into a runtime material descriptor plus a set of
-shader variant requests.
+shader variant requests. The profile fields show the target contract; existing
+`minTier`/`preferredTier`/`tierOverrides` assets require the staged ProjectVersion
+migration in ADR-028 before a parser or writer adopts it. The example does not
+announce a schema implementation or bypass the existing project-version authority.
 
 ## Material Instances
 
@@ -237,13 +241,18 @@ struct ShaderPermutationKey {
     RenderPassId passId;
     VertexLayoutId vertexLayoutId;
     TargetPlatformId platform;
-    QualityTier tier;
+    RenderProductProfile profile;
 };
 ```
 
 Feature flags that participate in the key must be declared explicitly in the
 shader manifest. Implicit feature detection from material parameters is not
 allowed.
+
+The complete cook/cache identity also includes backend shader format, versioned
+profile/recipe policy and shader layout. Runtime plan caches include effective
+capability and settings revisions. A profile name alone cannot select a variant
+whose requirements have not passed admission.
 
 ### Variant Compilation Policy
 
@@ -263,33 +272,28 @@ compilation is disabled.
 - Materials that request unsupported feature combinations produce errors during
   import, not at runtime.
 
-## Feature Tiers
+## Product Profiles And Variant Admission
 
-Feature tiers group renderer capabilities.
+[ADR-028](../../adr/028-renderer-capability-limits-and-product-profiles.md) is the
+single authority for `baseline`, `standard`, `high`, `ultra`, their resolution
+order and migration from API-named tiers. There is no material-local GPU tier
+classifier. The frontend supplies a resolved policy based on effective features,
+typed limits, complete format/usage/sample predicates and allowed cooked variants.
 
-| Tier | Representative capabilities |
-|---|---|
-| `es3` | Forward rendering, limited lights, no compute, no bindless. |
-| `dx11` | Forward+/limited deferred, compute, texture arrays. |
-| `dx12_vulkan` | Full deferred, bindless, compute, ray-tracing optional. |
-| `high_end` | Mesh shaders, hardware ray tracing, virtual texturing, Nanite-style virtual geometry if implemented. |
+A material's `minProfile` restricts profile eligibility; `preferredProfile` records
+author intent without overriding host/user policy. Neither proves hardware support.
+`profileOverrides` patch declared feature choices and parameters for an eligible
+selected profile, with keys restricted to the canonical profile names. A missing
+override retains the base values only when that exact variant passes admission.
+Required features are never silently removed. Optional feature fallbacks must be
+declared and cooked; missing required variants or incompatible requirements produce
+typed errors instead of successful degraded conversion.
 
-Tier selection order:
-
-1. Target platform declares maximum tier.
-2. Cook profile may lower the tier for release builds.
-3. Runtime GPU caps clamp the tier.
-4. User settings may lower the tier further.
-
-A material declares `minTier` and `preferredTier`. The runtime records the
-selected tier and any disabled features.
-
-`minTier` is the lowest tier the material can run on. `preferredTier` is the
-tier the author optimized for. `tierOverrides` patch features and parameters
-when the selected tier is below `preferredTier`; each key in `tierOverrides`
-must match a declared tier name (`es3`, `dx11`, `dx12_vulkan`, `high_end`). If a
-tier lacks an override, the material runs with the base parameters and feature
-set, possibly with degraded quality but without failing conversion.
+Cooking uses versioned target requirement manifests, not the cook host's GPU.
+Runtime rechecks every selected recipe against the active effective snapshot.
+Profile fallback follows only the product's explicit ordered list and cannot
+relax material minimums or required content features. Resolution records selected
+variants and reasons even when quality degrades within the same profile name.
 
 ## Pipeline Cache
 
@@ -391,7 +395,8 @@ Material validation rules:
 - all referenced textures must exist and match expected usage
 - parameter types must match the shader manifest
 - feature flag combinations must be legal
-- `minTier` must not exceed any target platform tier
+- `minProfile` and required variant predicates must be satisfiable by every
+  declared target requirement manifest
 - translucent materials must not request opaque-only passes
 - masked materials must explicitly provide `opacityMaskThreshold`
 
@@ -406,7 +411,8 @@ Cook-time diagnostics:
 - Unit tests for permutation key equality and hash stability.
 - Tests for material instance override inheritance.
 - Cook tests that verify variant emission for each standard feature flag.
-- Runtime tests that verify fallback tier disables features without crashing.
+- Runtime tests for explicit optional-feature fallback, missing required variants,
+  driver restrictions, stale capability revisions and profile-policy rejection.
 - Visual regression tests for standard material spheres under representative
   lighting.
 

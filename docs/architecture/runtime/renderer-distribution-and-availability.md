@@ -246,6 +246,16 @@ A successful probe is scoped to module version, editor ABI, host OS build,
 architecture, and relevant driver/runtime identity. Changes to those inputs
 invalidate cached availability and require a new probe.
 
+Probe availability is not final project capability admission. Following
+[ADR-028](../../adr/028-renderer-capability-limits-and-product-profiles.md), the
+frontend resolves reported device facts, implemented backend support and driver
+restrictions after the selected device is initialized. Required project/profile
+features and format/limit predicates must pass before scene/GUI resource creation.
+Probe cache identity also includes adapter identity and driver-policy version;
+changed inputs require revalidation. A final mismatch rolls back initialization
+and returns a typed failure, even after a successful helper probe. Only the host's
+explicit fallback list can select another backend; a quality profile cannot.
+
 ## No-Renderer Flow
 
 A graphical editor workspace requires an interactive renderer. `RenderNull`
