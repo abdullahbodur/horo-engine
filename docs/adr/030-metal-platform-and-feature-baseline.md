@@ -72,6 +72,14 @@ compilation. Apple exposes [MSL 2.4](https://developer.apple.com/documentation/m
 from macOS 12; the Horo runtime floor remains 14.0. Using a newer SDK must not
 silently raise the language or deployment target.
 
+RND-005.6 enforces this through one validated shader-target descriptor shared by
+offline cooking and editor compilation. Both compiler adapters must consume its
+explicit MSL/deployment options, reject absent or conflicting baseline options,
+and include them in artifact/cache identity. Adapter tests inspect the emitted
+compiler arguments or native compile options; native qualification compiles and
+loads a baseline fixture on the minimum runtime. These checks prevent toolchain
+defaults from silently becoming the policy.
+
 Newer language/API paths are separately declared optional variants. They require
 OS availability checks, native support, backend implementation, and ADR-028
 effective admission before use. Optional variants need an implemented and
@@ -133,6 +141,16 @@ default device. It does not search for a more capable adapter behind the user's
 back. An explicit adapter request, when implemented by RND-005.2, must match the
 requested machine-local identity or fail; adapter identities are not portable
 project settings. This does not add a new public selection API in M0.
+
+This default deliberately follows the OS's device choice rather than forcing a
+discrete GPU and its power/display trade-offs on dual-GPU Macs. Functional parity
+does not promise equal frame rates across devices. Qualification records which
+GPU was selected and measures that configuration; diagnostics expose the
+selected adapter and admission failure so an explicit adapter choice can be
+offered. A failing default device is not silently replaced by another candidate.
+A future high-performance or low-power preference must be an explicit host
+selection policy, tested by RND-005.2, rather than a model-name heuristic hidden
+inside Metal initialization.
 
 After acquiring the matching presentation attachment, initialization requires:
 
