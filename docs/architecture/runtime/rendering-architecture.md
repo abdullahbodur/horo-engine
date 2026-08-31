@@ -691,6 +691,13 @@ completion. The renderer owns that queue.
 
 ## Resize And Surface Changes
 
+[ADR-033](../../adr/033-presentation-and-display-ownership.md) owns presentation
+and display boundaries. Platform owns native windows/display snapshots; the
+matching private adapter owns the surface attachment; the backend owns graphics
+presentation resources. Host policy supplies intent, and the frontend publishes
+the resolved output contract after checking platform, surface, and effective
+device support. Requested settings and active output are separate values.
+
 Logical window size, framebuffer extent, DPI scale, and render target extent are
 distinct values.
 
@@ -700,6 +707,14 @@ minimized surfaces suspend presentation without creating invalid resources.
 
 Viewport render targets are recreated transactionally. Consumers observe either
 the previous valid target or the new valid target.
+
+Native surface reconfiguration has a stricter physical limitation: an OS-invalid
+old surface cannot be promised as a rollback target. Publish a new configuration
+only after success; retain the old one only if still usable, otherwise report
+Suspended/Lost output. Coalesce revisioned platform events, commit native changes
+before backend-frame acquisition, and retire prior surface generations safely.
+Native window size, offscreen editor viewport resolution, and scene dynamic
+resolution must not share a resize authority.
 
 ## Device Or Context Failure
 

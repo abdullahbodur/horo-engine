@@ -195,6 +195,14 @@ surface rather than creating a fallback RenderApi graphics window.
 
 ## Required Interactive Lifecycle
 
+[ADR-033](../../adr/033-presentation-and-display-ownership.md) defines the separate
+surface state and ownership model around this backend lifecycle. Platform/window
+events enqueue bounded revisioned requests; they do not call resize or present
+directly. Surface generation, display revision, and device identity are distinct.
+The existing single-primary-output API must be deliberately extended before
+multi-window presentation is advertised; offscreen viewport targets are not
+additional native surfaces.
+
 Every interactive backend must obey the existing `IRenderBackend` lifecycle:
 
 ```text

@@ -110,6 +110,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [D3D12 Baseline and Agility SDK Policy](../adr/032-d3d12-baseline-and-agility-sdk-policy.md):
   Windows/feature-level/Shader Model admission, pinned Agility dependencies,
   executable-owned activation, redistribution, and driver qualification.
+- [Presentation and Display Ownership](../adr/033-presentation-and-display-ownership.md):
+  platform windows/display facts, renderer surface lifetime, host intent,
+  resolved output, transition safe points, and multi-surface boundaries.
 - [Renderer Distribution And Availability](./runtime/renderer-distribution-and-availability.md):
   optional renderer components, install/repair/probe states, launcher recovery,
   and selection policy.

@@ -235,6 +235,14 @@ Post-processing is a chain of render graph passes operating on the HDR image.
 
 ### HDR Pipeline
 
+Scene-linear HDR and HDR/EDR display output are separate contracts.
+[ADR-033](../../adr/033-presentation-and-display-ownership.md) assigns OS/display
+facts to Platform and resolved surface output to the render frontend. The graph
+owns final conversion/composition against that contract; native attachment
+encoding and metadata must agree so conversion occurs exactly once. A float
+scene target alone does not prove HDR display support. Scene color policy stays
+with RND-013; output capability modeling belongs to RND-008.2.
+
 - scene is rendered to a high-precision floating-point target
 - exposure is applied before tone mapping
 - tone mapping uses a configurable curve (ACES, Reinhard, etc.)
