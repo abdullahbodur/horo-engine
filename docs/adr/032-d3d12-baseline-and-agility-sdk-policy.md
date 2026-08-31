@@ -112,8 +112,9 @@ integration obtains and verifies the pinned artifact before distribution.
 
 The **process host** owns Agility activation. Windows executables that support
 D3D12 export `D3D12SDKVersion` and a fixed application-relative `D3D12SDKPath`
-pointing to a dedicated `D3D12/` directory with a trailing separator. Generate
-these values from the same pinned release contract used for packaging. The
+pointing to the dedicated application-relative directory with a trailing
+backslash: `D3D12SDKPath` uses the C++ string literal `".\\D3D12\\"`.
+Generate these values from the same pinned release contract used for packaging. The
 renderer DLL and extensions must not provide competing activation settings,
 change the SDK path/version at runtime, or activate another device factory as
 an implicit workaround. Activation policy is fixed before the first D3D12 use.
