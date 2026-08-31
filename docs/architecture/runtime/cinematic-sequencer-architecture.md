@@ -407,7 +407,8 @@ No dependent sequence action assumes a request completed in that same tick.
 ### Presentation And Editor Path
 
 The existing non-AI frame pose path in [Animation Architecture](./animation-architecture.md)
-remains: gameplay prepares parameters, cinematic presentation values are sampled,
+remains: gameplay prepares parameters, owner-admitted non-interpolated cinematic
+parameters apply,
 animation/IK produces pose and root motion, character movement resolves under its
 owner, physics runs, and rendering extracts committed state. This path is not a
 claim of render-rate-independent simulation. Optional interpolated cinematic

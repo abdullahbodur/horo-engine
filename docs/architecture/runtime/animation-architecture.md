@@ -382,7 +382,7 @@ steps and is not re-sampled inside a physics step.
 ```text
 Frame Update
   Gameplay sets animation parameters & behavior state
-  Cinematic presentation values sample through admitted owner bindings
+  Cinematic owner-admitted parameters apply (no presentation interpolation)
   Animation graph evaluates -> pose
   IK applied -> modified pose
   Root motion delta produced
@@ -390,6 +390,11 @@ Frame Update
   Physics fixed-step(s)
   Render extraction reads final pose and joint palette
 ```
+
+Interpolated cinematic presentation overlays are applied only to the render/preview
+snapshot after movement authority resolves. They do not feed this path's root-motion
+output or write animation parameters consumed by physics. Only owner-admitted
+non-interpolated inputs participate in the movement-producing pose evaluation.
 
 The character controller runs during the gameplay movement phase, before the
 physics world is stepped. This matches the ordering described in
