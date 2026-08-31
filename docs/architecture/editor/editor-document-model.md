@@ -388,3 +388,4 @@ Required tests cover:
 - [Scene Runtime](../runtime/scene-runtime.md)
 - [Asset Pipeline](../runtime/asset-pipeline.md)
 - [Prefab Architecture](../runtime/prefab-architecture.md)
+- [Save Game And Persistence](../runtime/save-game-and-persistence.md)

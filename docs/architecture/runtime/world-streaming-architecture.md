@@ -352,6 +352,20 @@ cell loader. Standalone navigation without World Streaming keeps its existing ho
 asset-lifetime adapter. This introduces no concrete WorldStreaming dependency into
 NavigationRuntime. The two ADRs describe the same authority boundary.
 
+## Runtime Save And Dormant Cell State
+
+[Runtime persistence](./save-game-and-persistence.md) captures a coherent revision of
+active ECS plus session-owned persistent cell deltas/tombstones, including Unloaded
+cells. That ledger is not another residency authority. Before releasing the last live
+copy during eviction, providers publish dirty state under the same owner safe point
+and registered retirement DAG. Failed delta capture/admission retains the source and
+keeps retirement charged; it cannot silently discard a dropped item or deletion.
+Restore stages the ledger with the candidate runtime, activates required initial cells
+through Ready/Prepared barriers and applies other deltas on later normal admission.
+Persisted keys use stable world/dataset/cell/entity identity; PartitionEpoch and cell
+attempt generations are freshly issued, never restored from disk. Bounded spill
+chunks are leased through capture; save archives cannot depend on temporary spill paths.
+
 ## Multiplayer Authority And Editor Isolation
 
 Server authority decides gameplay cell relevance and replicated entity lifecycle.
