@@ -347,6 +347,13 @@ command-buffer lifetime, but those tests do not weaken the shared contract.
 
 ## Build Matrix
 
+[ADR-030](../../adr/030-metal-platform-and-feature-baseline.md) limits the initial
+Metal product component to macOS 14.0+ with separately qualified native arm64
+Apple7 and x86_64 Mac2 devices. The macOS row below does not certify every Mac,
+other Apple operating systems, translated processes, or simulator environments.
+Its MSL 2.4/deployment and actual-device admission obligations supplement the
+shared lifecycle; they do not waive parity or enable optional features.
+
 These are qualification obligations, not claims that every lane is already
 passing. For OpenGL, ADR-029 requires a published OS/architecture/window-system
 and GPU/driver matrix backed by actual Core-context and parity/smoke evidence.

@@ -41,6 +41,7 @@ to the replacement.
 | [027](027-renderer-resource-identity-and-descriptors.md) | Renderer Resource Identity and Descriptors | proposed | 2026-08-31 |
 | [028](028-renderer-capability-limits-and-product-profiles.md) | Renderer Capability, Limits and Product Profiles | proposed | 2026-08-31 |
 | [029](029-opengl-compatibility-profile-and-platform-policy.md) | OpenGL Core Profile and Platform Policy | proposed | 2026-08-31 |
+| [030](030-metal-platform-and-feature-baseline.md) | Metal Platform and Feature Baseline | proposed | 2026-08-31 |
 
 ## Conventions
 
