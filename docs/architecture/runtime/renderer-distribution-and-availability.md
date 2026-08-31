@@ -2,6 +2,14 @@
 
 ## Purpose
 
+For the `opengl` component,
+[ADR-029](../../adr/029-opengl-compatibility-profile-and-platform-policy.md)
+owns native admission and platform deprecation: desktop OpenGL 4.1 Core minimum,
+actual-context verification, and release qualification. A packaged component or
+system GL loader alone does not establish availability. The macOS deprecation
+warning is separate from an availability failure and uses the explicit migration
+workflow below; showing it never changes project settings or selects Metal.
+
 This document defines how HoroEditor discovers, installs, verifies, probes,
 selects, repairs, updates, and activates renderer backend components.
 

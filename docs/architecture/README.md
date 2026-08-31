@@ -98,6 +98,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Renderer Capability, Limits and Product Profiles](../adr/028-renderer-capability-limits-and-product-profiles.md):
   reported versus effective support, driver restrictions, typed format/limit
   admission, and Baseline through Ultra quality policy.
+- [OpenGL Compatibility Profile and Platform Policy](../adr/029-opengl-compatibility-profile-and-platform-policy.md):
+  desktop 4.1 Core admission, platform qualification, context negotiation,
+  and explicit macOS deprecation/migration behavior.
 - [Renderer Distribution And Availability](./runtime/renderer-distribution-and-availability.md):
   optional renderer components, install/repair/probe states, launcher recovery,
   and selection policy.
