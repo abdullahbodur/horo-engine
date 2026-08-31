@@ -114,6 +114,15 @@ required by fixed simulation is committed before fixed steps begin. Destructive
 scene and renderer lifecycle changes are committed only at their documented
 safe points.
 
+[ADR-033](../../adr/033-presentation-and-display-ownership.md) specializes these
+safe points for presentation: apply host/window intent and publish a revisioned
+pending output candidate through owner-thread commands before layout/extraction.
+Realize that candidate and commit active surface state at `RenderExecution`
+entry before native frame acquisition; mismatched or unrealized candidates skip
+that output. Commit final destruction through deferred lifecycle work after
+retirement. Minimized/zero-pixel output suspends presentation, not the simulation
+clock. No additional runtime phase is introduced.
+
 ## Time Model
 
 The host tracks:
@@ -381,4 +390,3 @@ Required tests cover:
 - [Asset Pipeline](./asset-pipeline.md)
 - [Runtime Debug Console And Development Overlays](./debug-console-and-overlays.md)
 - [Concurrency And Job System](../foundation/concurrency-and-jobs.md)
-

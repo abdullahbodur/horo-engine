@@ -44,6 +44,7 @@ to the replacement.
 | [030](030-metal-platform-and-feature-baseline.md) | Metal Platform and Feature Baseline | proposed | 2026-08-31 |
 | [031](031-vulkan-loader-platform-and-version-baseline.md) | Vulkan Loader, Platform and Version Baseline | proposed | 2026-08-31 |
 | [032](032-d3d12-baseline-and-agility-sdk-policy.md) | D3D12 Baseline and Agility SDK Policy | proposed | 2026-08-31 |
+| [033](033-presentation-and-display-ownership.md) | Presentation and Display Ownership | proposed | 2026-08-31 |
 
 ## Conventions
 
