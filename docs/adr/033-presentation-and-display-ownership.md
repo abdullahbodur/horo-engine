@@ -147,6 +147,24 @@ threads, transfer typed revisioned requests/results through a bounded handoff;
 never synchronously block one owner waiting for the other in normal frames.
 The surface remains pending/suspended until the required owner acknowledges it.
 
+Logical observability must not wait until render execution: during
+`ApplyQueuedOwnerThreadCommands`, publish current window/display facts and the
+negotiated **pending output candidate** with a revision and explicit pending
+status. Freeze that candidate for this frame. UI layout and CPU extraction use
+its current logical/pixel extents, so they do not lag a successful resize by one
+frame. Keep the last successfully realized **active output** separately visible;
+publishing a candidate does not claim that native reconfiguration has succeeded.
+
+Extraction that depends on output extent/configuration carries the candidate
+revision. At `RenderExecution` entry, realize that same candidate and publish
+active output only on success; compile/admit the output plan against its realized
+surface generation. If realization fails, remains pending, or the revision no
+longer matches, skip that surface's frame rather than submit new-size extraction
+to the old surface. Ordinary later events wait for the next candidate; close or
+loss still invalidates acquisition immediately. This separates early logical
+layout from transactional native publication without silently accepting a stale
+plan or performing an extra extraction pass in the same frame.
+
 Present remains after `RenderExecution` and `RenderGui`, as defined by the
 runtime lifecycle. A runtime `BeginFrame` phase is not permission to acquire a
 native drawable before presentation admission. Failed execution or cancellation
@@ -226,6 +244,9 @@ resize, unsupported explicit modes, Auto fallback reporting, HDR loss on monitor
 change, and frames-in-flight rejection without silent clamping. Verify failed
 reconfiguration does not publish partial state, active-frame resize is rejected,
 and close invalidates borrowed access before native window destruction.
+Also verify that phase-4 candidate extents reach same-frame layout/extraction,
+that native failure never marks the candidate active, and that revision mismatch
+skips output instead of executing an extent-dependent plan on the wrong surface.
 
 Native qualification covers minimize/restore, DPI/monitor moves, hotplug,
 fullscreen transitions, repeated resize/close, unavailable drawables, and

@@ -698,6 +698,12 @@ presentation resources. Host policy supplies intent, and the frontend publishes
 the resolved output contract after checking platform, surface, and effective
 device support. Requested settings and active output are separate values.
 
+Publish revisioned logical output candidates with owner-thread commands before
+layout/extraction; commit active output only after realizing the same candidate
+before native frame acquisition. Output-dependent extraction retains that
+revision. A failed, pending, or mismatched realization skips its output instead
+of executing a new-size plan on the previous surface.
+
 Logical window size, framebuffer extent, DPI scale, and render target extent are
 distinct values.
 

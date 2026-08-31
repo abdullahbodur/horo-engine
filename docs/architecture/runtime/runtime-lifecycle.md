@@ -115,11 +115,13 @@ scene and renderer lifecycle changes are committed only at their documented
 safe points.
 
 [ADR-033](../../adr/033-presentation-and-display-ownership.md) specializes these
-safe points for presentation: apply host/window intent through owner-thread
-commands, commit surface reconfiguration at `RenderExecution` entry before native
-frame acquisition, and commit final destruction through deferred lifecycle work
-after retirement. Minimized/zero-pixel output suspends presentation, not the
-simulation clock. No additional runtime phase is introduced.
+safe points for presentation: apply host/window intent and publish a revisioned
+pending output candidate through owner-thread commands before layout/extraction.
+Realize that candidate and commit active surface state at `RenderExecution`
+entry before native frame acquisition; mismatched or unrealized candidates skip
+that output. Commit final destruction through deferred lifecycle work after
+retirement. Minimized/zero-pixel output suspends presentation, not the simulation
+clock. No additional runtime phase is introduced.
 
 ## Time Model
 
