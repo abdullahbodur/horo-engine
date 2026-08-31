@@ -241,9 +241,16 @@ struct ShaderPermutationKey {
     RenderPassId passId;
     VertexLayoutId vertexLayoutId;
     TargetPlatformId platform;
-    RenderProductProfile profile;
 };
 ```
+
+`RenderProductProfile` is an admission and recipe-selection axis, not a compile
+axis of its own. Profile resolution chooses which declared permutation to bind.
+Compile-time differences that a profile would otherwise imply must appear as
+declared feature flags or as a distinct shader/pass identity. Profile-only
+parameter or uniform overrides stay out of the key and do not duplicate binaries.
+Two admitted profiles that resolve to the same `FeatureMask`, pass, vertex layout
+and platform share the compiled variant.
 
 Feature flags that participate in the key must be declared explicitly in the
 shader manifest. Implicit feature detection from material parameters is not
@@ -291,9 +298,11 @@ typed errors instead of successful degraded conversion.
 
 Cooking uses versioned target requirement manifests, not the cook host's GPU.
 Runtime rechecks every selected recipe against the active effective snapshot.
-Profile fallback follows only the product's explicit ordered list and cannot
-relax material minimums or required content features. Resolution records selected
-variants and reasons even when quality degrades within the same profile name.
+Profile fallback follows ADR-028: an omitted product fallback list uses the
+canonical descending allowed chain; an explicit list is used as written. Fallback
+cannot relax material minimums or required content features. Resolution records
+selected variants and reasons even when quality degrades within the same profile
+name.
 
 ## Pipeline Cache
 

@@ -150,8 +150,10 @@ Resolution is deterministic for the same inputs:
 1. Resolve backend selection through existing host precedence and explicit
    backend fallback rules; never select a different API from a profile name.
 2. Validate the product's allowed profile set, maximum profile, required features,
-   finite budgets and ordered allowed fallback profiles. Reject an empty set,
-   unknown values, duplicate fallback entries or contradictory policy.
+   finite budgets and ordered allowed fallback profiles. Reject an empty allowed
+   set, unknown values, duplicate fallback entries or contradictory policy. An
+   omitted fallback list is not empty: it selects the default descending chain
+   below. An explicitly declared empty fallback list is invalid.
 3. Select the requested profile from explicit host override, user/project
    preference, then the product default (Baseline when omitted). Overrides cannot
    widen product/cook policy. A request outside the allowed set/ceiling returns a
@@ -161,9 +163,16 @@ Resolution is deterministic for the same inputs:
    and cooked variants.
    Required content never becomes optional because a lower profile was requested.
 5. Resolve optional features using their declared ordered fallbacks. If the
-   requested profile cannot satisfy required content, evaluate only the declared
-   fallback profile list in order, applying the same requirements to each. No
-   viable result returns `ProfileUnsupported`; no partial plan becomes active.
+   requested profile cannot satisfy required content, evaluate the profile fallback
+   list in order, applying the same requirements to each. When the product omits
+   `fallbackProfiles`, use the canonical descending chain `Ultra` → `High` →
+   `Standard` → `Baseline`, keeping only profiles that are strictly below the
+   requested profile, inside the allowed set, at or below the ceiling, and at or
+   above every material `minProfile`. When the product declares the list, use that
+   order as written and do not inject omitted lower profiles. No viable result
+   returns `ProfileUnsupported`; no partial plan becomes active. Defaulting the
+   omitted chain never strips a required feature or admits a recipe that failed
+   its predicates.
 6. Publish requested and selected profile, selected feature/variant recipes,
    effective-snapshot revision, budget/settings revision and bounded diagnostics.
    Successful degradation is observable even when the selected profile name is
