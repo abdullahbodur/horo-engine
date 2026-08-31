@@ -450,6 +450,16 @@ component pools, editor widgets, or backend objects.
 Multiple views, including game, scene viewport, thumbnails, and previews, use
 separate `RenderView` descriptors over compatible snapshots.
 
+The [VFX contract](./vfx-and-particles-architecture.md) extends the snapshot with
+bounded immutable GPU simulation work, CPU/GPU particle sources, decals and volume
+batches. VfxRenderExtractor never submits graph passes or writes mapped GPU buffers.
+RenderFrontend admits/uploads CPU frame slices, schedules VFX Compute once per
+scene/emitter step, then per-view Sort/Cull and dependent rendering passes. Multiple
+views or reusing a snapshot cannot advance the same simulation step twice. Native
+encoding, graph resource barriers and fence-based deferred retirement remain renderer
+responsibilities. Retained snapshot and GPU leases may outlive logical scene teardown
+but cannot reference destroyed scene storage or publish into a new incarnation.
+
 ## XR Views And External Presentation Targets
 
 XR supplies a bounded runtime-driven set of view descriptors and
