@@ -384,6 +384,8 @@ namespace Horo::Input {
         InvalidDeadzone,
         InvalidSchema,
         MalformedProfile,
+        DeviceExclusivityViolation,
+        AmbiguousContext,
     };
 
     /** @brief One actionable profile validation diagnostic. */
