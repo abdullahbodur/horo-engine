@@ -263,6 +263,16 @@ charged owner and explicit leases; a cell may reference them without charging th
 same allocation twice. Configuration uses checked byte arithmetic (MiB conversion
 is explicit); reservation sums cannot underflow the general pool.
 
+GPU reservation realization follows
+[ADR-034](../../adr/034-gpu-memory-and-residency-ownership.md): the host-composed
+provider adapter obtains a renderer claim against the host GPU envelope before
+native work starts. The cell ledger and renderer record project the same charge
+identity, not two additive physical allocations. Whole backing blocks, padding,
+overlap and copies remain accounted; mapped UMA backing is not counted twice.
+Renderer pools shared across cells require a separately admitted owner and leases.
+Renderer pressure requests enter this authority's existing fallback/eviction path;
+the renderer does not acquire world-cell policy ownership.
+
 1. EstimateCellCost reads validated metadata and returns bounded CPU/GPU/staging
    peak costs. It performs no allocation, I/O or live-world mutation. Where v1
    metadata lacks a provider estimate, use its validated descriptor upper bound or
