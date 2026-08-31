@@ -363,11 +363,16 @@ and carries the platform deprecation warning without an automatic backend switch
 
 The intended matrix is:
 
-| Host | OpenGL | Metal | Vulkan | Null |
-|---|---|---|---|---|
-| macOS | Build + parity + GPU smoke | Build + parity + GPU smoke | Portability deferred | Build + headless tests |
-| Linux | Build + parity; GPU smoke on display-capable CI | Not compiled | Planned: build + parity + GPU smoke per shipped X11/Wayland path | Build + headless tests |
-| Windows | Build + parity; GPU smoke on display-capable CI | Not compiled | Planned: build + parity + Win32 GPU smoke | Build + headless tests |
+| Host | OpenGL | Metal | Vulkan | D3D12 | Null |
+|---|---|---|---|---|---|
+| macOS | Build + parity + GPU smoke | Build + parity + GPU smoke | Portability deferred | Outside initial scope | Build + headless tests |
+| Linux | Build + parity; GPU smoke on display-capable CI | Not compiled | Planned: build + parity + GPU smoke per shipped X11/Wayland path | Outside initial scope | Build + headless tests |
+| Windows | Build + parity; GPU smoke on display-capable CI | Not compiled | Planned: build + parity + Win32 GPU smoke | Planned: build + parity + hardware GPU smoke | Build + headless tests |
+
+[ADR-032](../../adr/032-d3d12-baseline-and-agility-sdk-policy.md) defines D3D12's
+Windows 11 x86_64, FL12_0, SM6.0 and Agility baseline. Its planned lane also
+requires packaged executable/runtime compatibility checks. WARP tests do not
+qualify hardware, and the M0 decision does not add a D3D12 target to the build.
 
 [ADR-031](../../adr/031-vulkan-loader-platform-and-version-baseline.md) defines
 Vulkan's initial Windows 11/Linux x86_64 scope and independent loader, device,

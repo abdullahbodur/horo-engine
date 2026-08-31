@@ -29,6 +29,7 @@ Canonical package IDs use reverse-domain-style lowercase segments:
 horo.renderer.opengl
 horo.renderer.metal
 horo.renderer.vulkan
+horo.renderer.d3d12
 ```
 
 The backend identity remains the shorter stable `RenderBackendId`:
@@ -37,6 +38,7 @@ The backend identity remains the shorter stable `RenderBackendId`:
 opengl
 metal
 vulkan
+d3d12
 ```
 
 Package identity, backend identity, package version, and renderer ABI are
@@ -257,6 +259,16 @@ If multiple variants match with equal priority, the manifest is ambiguous and
 validation fails.
 
 ## Runtime Requirements
+
+For D3D12, [ADR-032](../../adr/032-d3d12-baseline-and-agility-sdk-policy.md)
+requires compatibility with the executable-owned Agility release contract.
+The signed component compatibility record must identify the exact package pin,
+SDK integer, architecture, and dependency digest from that contract; a minimum
+SDK integer alone cannot distinguish patch payloads. Delivery owns the shared
+application-local runtime, while component installation verifies/stages it before
+launch. A mismatching renderer requires a compatible host update, not new SDK
+exports from its DLL or replacement of System32 files. This extends the future
+compatibility-record realization; it is not a claim that a parser exists today.
 
 For Vulkan, [ADR-031](../../adr/031-vulkan-loader-platform-and-version-baseline.md)
 requires the system loader plus separately validated Vulkan 1.3 device/features

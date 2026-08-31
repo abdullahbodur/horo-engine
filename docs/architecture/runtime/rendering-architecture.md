@@ -158,6 +158,13 @@ silently switch to `null`.
 
 ## Capabilities, Limits And Product Profiles
 
+[ADR-032](../../adr/032-d3d12-baseline-and-agility-sdk-policy.md) owns the planned
+`d3d12` component's native baseline: Windows 11 x86_64, feature level 12_0,
+Shader Model 6.0, and host-owned Agility activation. The SDK package pin, runtime
+selection, feature queries, and effective engine paths remain distinct. Legacy
+barriers and root signature 1.0 provide the baseline; advanced paths are optional.
+This policy does not implement the backend or change the Windows host default.
+
 [ADR-031](../../adr/031-vulkan-loader-platform-and-version-baseline.md) owns the
 planned `vulkan` component's native baseline: Vulkan 1.3 instance/device support,
 explicit dynamic-rendering/synchronization2/timeline feature enablement, a single
