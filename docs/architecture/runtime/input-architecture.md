@@ -44,6 +44,13 @@ Input Router + Action Maps
 The platform collector owns device state. Consumers receive immutable snapshots
 for one frame.
 
+Accessibility sticky modifiers, hold/repeat thresholds and toggle actions are
+semantic interpretation in `InputMapping`/router after collection; they never
+rewrite physical transitions in `RawInputSnapshot`. Focus loss, disconnect,
+binding replacement and context removal release synthetic action state before it
+can leak into another context. Mapping adds no per-event allocations or unbounded
+waits. See [Accessibility Architecture](./accessibility-architecture.md).
+
 ## Raw Snapshot
 
 ```cpp

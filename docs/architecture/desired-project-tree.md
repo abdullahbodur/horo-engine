@@ -208,6 +208,14 @@ horo-engine/
 │       │   ├── ProjectSession.h
 │       │   ├── RecentProject.h
 │       │   └── RecentProjectInspectionService.h
+│       ├── Network/
+│       │   ├── NetworkApi.h
+│       │   ├── NetworkHandles.h
+│       │   ├── NetworkTypes.h
+│       │   ├── NetworkAddress.h
+│       │   ├── NetworkMessage.h
+│       │   ├── NetworkErrors.h
+│       │   └── INetworkTransport.h
 │       ├── Runtime/
 │       │   ├── Runtime.h
 │       │   ├── RuntimeLifecycle.h
@@ -233,8 +241,11 @@ horo-engine/
 │       │   │   ├── RenderBackend.h
 │       │   │   ├── RenderBackendRegistry.h
 │       │   │   ├── RenderFrontend.h
-│       │   │   └── NullBackendModule.h
-│       │   ├── Networking.h
+│       │   ├── Network/
+│       │   │   ├── NetworkRuntime.h
+│       │   │   ├── NetworkSession.h
+│       │   │   ├── ReplicationManager.h
+│       │   │   └── ReplicationTraits.h
 │       │   ├── GameUI.h
 │       │   ├── DebugConsole.h
 │       │   ├── PlatformServices.h
@@ -248,6 +259,20 @@ horo-engine/
 │       │       ├── AudioOcclusionProvider.h
 │       │       ├── AudioMiddlewareBridge.h
 │       │       └── AudioDecoder.h
+│       ├── Navigation/
+│       │   ├── NavMeshTypes.h
+│       │   ├── NavMeshBuildSettings.h
+│       │   ├── NavMeshData.h
+│       │   ├── NavMeshPath.h
+│       │   ├── NavMeshQuery.h
+│       │   ├── NavAgentProperties.h
+│       │   ├── DynamicObstacle.h
+│       │   ├── NavigationBackend.h
+│       │   ├── NavigationCoordinator.h  # NavigationRuntime-owned
+│       │   ├── NavigationErrors.h
+│       │   └── Backends/
+│       │       ├── RecastDetourProvider.h  # provider-owned Horo-only factory
+│       │       └── NullProvider.h         # provider-owned Horo-only factory
 │       ├── Gameplay/
 │       │   ├── GameModule.h
 │       │   ├── GameRegistrationContext.h
@@ -396,6 +421,35 @@ horo-engine/
 │   │   │       ├── SdlInputBackend.h
 │   │   │       └── SdlInputBackend.cpp
 │   │   ├── networking/
+│   │   │   ├── api/
+│   │   │   │   ├── NetworkAddress.cpp
+│   │   │   │   ├── NetworkErrors.cpp
+│   │   │   │   └── NetworkMessage.cpp
+│   │   │   ├── runtime/
+│   │   │   │   ├── NetworkRuntime.cpp
+│   │   │   │   ├── NetworkSession.cpp
+│   │   │   │   ├── SessionStateMachine.cpp
+│   │   │   │   └── ReplicationManager.cpp
+│   │   │   └── backends/
+│   │   │       ├── null/
+│   │   │       │   ├── NullTransportBackend.h
+│   │   │       │   └── NullTransportBackend.cpp
+│   │   │       └── enet/
+│   │   │           ├── ENetTransportBackend.h
+│   │   │           └── ENetTransportBackend.cpp
+│   │   ├── navigation/
+│   │   │   ├── api/
+│   │   │   ├── runtime/
+│   │   │   │   ├── coordinator/
+│   │   │   │   ├── cache/
+│   │   │   │   ├── crowd/
+│   │   │   │   ├── hierarchical/
+│   │   │   │   └── obstacles/
+│   │   │   └── backends/
+│   │   │       ├── recast_detour/
+│   │   │       │   ├── runtime/
+│   │   │       │   └── build/  # omitted from runtime-only provider composition
+│   │   │       └── null/
 │   │   ├── debug/
 │   │   └── platform_services/
 │   │       ├── frontend/
@@ -599,6 +653,16 @@ horo-engine/
 │   │   │   │   └── middleware_bridge/
 │   │   │   ├── input/
 │   │   │   ├── networking/
+│   │   │   │   ├── NetworkAddressTests.cpp
+│   │   │   │   ├── NetworkApiTests.cpp
+│   │   │   │   ├── TransportConnectionStateTests.cpp
+│   │   │   │   ├── SessionStateMachineTests.cpp
+│   │   │   │   ├── NetworkHandleTests.cpp
+│   │   │   │   ├── SendPayloadLifetimeTests.cpp
+│   │   │   │   ├── ReplicationManagerTests.cpp
+│   │   │   │   ├── NetworkTransportNullTests.cpp
+│   │   │   │   ├── NetworkTransportENetTests.cpp
+│   │   │   │   └── NetworkLifecycleAndShutdownTests.cpp
 │   │   │   ├── game_ui/
 │   │   │   ├── debug/
 │   │   │   └── platform_services/

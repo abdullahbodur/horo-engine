@@ -246,6 +246,12 @@ src/
     runtime/            typed sessions, queues, protocol coordination
     backends/
       sockets/          optional native socket/TLS implementation
+  navigation/
+    api/                backend-neutral contracts, queries, paths, agent properties
+    runtime/            navigation coordinator, query cache, dynamic avoidance overlay, crowd
+    backends/
+      recast_detour/    target-private Recast & Detour implementation
+      null/             explicit capability absence, shared publication timing
   render/
     api/                backend-neutral contracts and value types
     frontend/           render submission and resource coordination
@@ -294,7 +300,12 @@ HoroEngine::AudioPlatform
 HoroEngine::AudioNull
 HoroEngine::NetworkApi
 HoroEngine::NetworkRuntime
-HoroEngine::NetworkSockets
+HoroEngine::NetworkTransportNull
+HoroEngine::NetworkTransportENet
+HoroEngine::NavigationApi
+HoroEngine::NavigationRuntime
+HoroEngine::NavigationRecastDetour
+HoroEngine::NavigationNull
 HoroEngine::RenderApi
 HoroEngine::RenderFrontend
 HoroEngine::RenderModuleAbi
@@ -338,9 +349,10 @@ horopak
 ```
 
 `AudioPlatform` selects only the native implementation for the target platform;
-native audio headers remain private to that target. `NetworkSockets` owns the
-optional native socket and TLS implementation and remains separate from typed
-session/protocol coordination in `NetworkRuntime`. `GameplayApi` owns the public
+native audio headers remain private to that target. `NetworkTransportENet` owns the
+optional native UDP socket and ENet implementation and remains separate from typed
+session/protocol/authentication coordination in `NetworkRuntime`. `NetworkTransportNull` provides
+deterministic in-memory/null transport for headless runs, mock testing, and offline modes; it depends on `NetworkApi` and `Foundation` only, not `Platform`. The host composition root transfers unique `INetworkTransport` ownership into `NetworkRuntime`. `GameplayApi` owns the public
 registration, descriptor, behavior, and runtime-capability contracts used by
 project gameplay modules. Generated project modules link this API rather than
 `ExtensionApi` or editor internals.
@@ -364,6 +376,25 @@ folded into Foundation or a renderer backend. `HoroEngine::RuntimeScene` consume
 Assets one-way for AST-001B snapshot-pinned scene preparation; Assets never
 depends on RuntimeScene.
 
+`HoroEngine::NavigationApi` owns backend-neutral query/topology/crowd/build
+capabilities and consumer types. Its Foundation dependency provides SceneMath;
+there is no separate SceneMath target. `NavigationCoordinator.h` belongs to
+`NavigationRuntime`, which owns logical policy/state, admission, caches, and
+scheduling. Concrete providers own vendor execution/state and never leak
+Recast/Detour types or includes. Runtime does not link concrete providers:
+application hosts select and inject them before scene activation. Provider
+factories expose Horo-only inert descriptors under provider-owned headers.
+
+`NavigationNull` means capability absence, not fake successful pathfinding or
+a headless default; it shares coordinator admission and publication timing.
+A headless server can use real Detour queries/crowd without Recast bake objects
+or any graphics/UI dependencies. Host-composed asset/streaming adapters own
+catalog integration and cell-residency transactions; navigation only installs
+leased resources and consumes committed revisions. Background jobs publish via
+`NavIntentCommit`, not worker callbacks into live scene state. Detailed boundaries
+and implementation gates are defined by
+[ADR-016](../../adr/016-navigation-target-ownership-and-dependency-boundary.md).
+
 ## Dependency Direction
 
 Arrows point from the dependent target to the target that defines the contract:
@@ -374,15 +405,19 @@ platform -----------------------------------------------> foundation
 runtime -----------------------------------------------> foundation
 
 assets / scene-model / render-api / audio-api /
-network-api / gameplay-api / extension-api -------------> foundation
+network-api / navigation-api / gameplay-api /
+extension-api ------------------------------------------> foundation
 
 physics / audio-runtime / network-runtime /
-render-frontend / pipeline ------------------------------> neutral APIs and models
+navigation-runtime / render-frontend / pipeline --------> neutral APIs and models
 
 runtime-scene -------------------------------------------> runtime + assets + foundation
 
-audio-platform / audio-null / network-sockets /
+audio-platform / audio-null /
+network-transport-null / network-transport-enet /
 render-opengl / render-null / render-vulkan ------------> platform + owning API
+
+navigation-recast-detour / navigation-null ------------> navigation-api + foundation
 
 application / editor-model / editor-services -----------> neutral APIs,
                                                           runtimes, and pipeline

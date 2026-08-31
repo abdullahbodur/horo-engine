@@ -124,12 +124,12 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Game UI And HUD](./runtime/game-ui-and-hud.md): runtime game menus, HUDs,
   canvases, UI primitives, focus/navigation, and UI rendering.
 - [Networking Architecture](./runtime/networking-architecture.md): optional
-  transports, typed protocols, bounded I/O, runtime integration, and remote
-  security.
+  handle-based transports, session/authentication runtime, bounded I/O, and
+  remote security.
 - [Asset Pipeline](./runtime/asset-pipeline.md): import, cook, package, runtime
   loading, cache, and hot reload.
-- [Prefab Architecture](./runtime/prefab-architecture.md): authored prefab
-  assets, scene instance references, expansion, and cook-time inlining.
+- [Prefab Architecture](./runtime/prefab-architecture.md): dual-role authoring
+  templates, runtime dynamic spawning (`CookedPrefab`), and capability tiers.
 - [Built-In Scene Primitives](./runtime/built-in-scene-primitives.md): core
   procedural meshes, collider shapes, and scene object primitives available
   without external packages.
@@ -144,6 +144,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [World Streaming Architecture](./runtime/world-streaming-architecture.md):
   streaming cells, volumes, priority, budgets, server authority, and editor
   world-composition tools.
+- [Coordinate Precision And Origin Rebasing](./runtime/coordinate-precision-and-origin-rebasing.md):
+  canonical 64-bit world coordinates, floating origin rebasing, camera-relative
+  rendering, and subsystem synchronizations.
 - [Save Game And Persistence](./runtime/save-game-and-persistence.md): runtime
   save state, slot format, migration, cloud save, integrity, and secure archive
   loading.
@@ -152,8 +155,8 @@ dependency direction in [System Design](./foundation/system-design.md).
   and editor bake tooling.
 
 - [Cinematic Sequencer Architecture](./runtime/cinematic-sequencer-architecture.md):
-  timeline, tracks, typed bindings, playback, events, and external control
-  security.
+  timeline, tracks, clock authority, typed property bindings, evaluation phase,
+  and playback integration.
 - [Post-Processing And Effects Architecture](./runtime/post-processing-and-effects-architecture.md):
   screen-space effects, HDR post chain, tonemapping, color grading, and
   accessibility pass ordering.

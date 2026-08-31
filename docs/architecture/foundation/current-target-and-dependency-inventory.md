@@ -185,7 +185,8 @@ conflicts are recorded rather than treated as additional implementations.
 | `HoroEngine::AudioNull` | Absent | No target or implementation path. |
 | `HoroEngine::NetworkApi` | Planned | Architecture exists; no production target. |
 | `HoroEngine::NetworkRuntime` | Planned | Architecture exists; no production target. |
-| `HoroEngine::NetworkSockets` | Absent | No target or implementation path. |
+| `HoroEngine::NetworkTransportNull` | Planned | Null transport peer behind `NetworkApi`; Foundation-only, no `Platform`; no production target yet. |
+| `HoroEngine::NetworkTransportENet` | Planned | ENet transport peer behind `NetworkApi`; no production target yet. |
 | `HoroEngine::RenderApi` | Implemented | `HoroRenderApi` |
 | `HoroEngine::RenderFrontend` | Implemented | `HoroRenderFrontend` |
 | `HoroEngine::RenderModuleAbi` | Planned | Renderer module manifest/distribution contracts exist; no target. |

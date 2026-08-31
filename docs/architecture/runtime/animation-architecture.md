@@ -369,13 +369,20 @@ scene conversion:
 
 ### Update Order
 
-Animation produces a pose once per rendered frame. Physics may step multiple
+For the non-AI frame-pose path, animation produces a pose once per rendered frame.
+This is distinct from ADR-022's fixed-tick AI locomotion/rig ordering: AI cinematic
+movement enters NavIntentCommit, physics authority remains in locomotion, and rig
+update follows committed movement. The sequencer does not move that fixed-tick
+work into VariableUpdate or permit presentation samples to mutate physics.
+
+On the frame-pose path, physics may step multiple
 times per frame at a fixed interval; the animation pose is sampled before those
 steps and is not re-sampled inside a physics step.
 
 ```text
 Frame Update
-  Gameplay sets animation parameters
+  Gameplay sets animation parameters & behavior state
+  Cinematic owner-admitted parameters apply (no presentation interpolation)
   Animation graph evaluates -> pose
   IK applied -> modified pose
   Root motion delta produced
@@ -383,6 +390,11 @@ Frame Update
   Physics fixed-step(s)
   Render extraction reads final pose and joint palette
 ```
+
+Interpolated cinematic presentation overlays are applied only to the render/preview
+snapshot after movement authority resolves. They do not feed this path's root-motion
+output or write animation parameters consumed by physics. Only owner-admitted
+non-interpolated inputs participate in the movement-producing pose evaluation.
 
 The character controller runs during the gameplay movement phase, before the
 physics world is stepped. This matches the ordering described in
@@ -490,6 +502,8 @@ Animation-to-physics handoff is explicit and event-driven.
 
 - [Rendering Architecture](./rendering-architecture.md): skinned mesh render
   extraction and joint palette binding.
+- [Cinematic Sequencer Architecture](./cinematic-sequencer-architecture.md): timeline,
+  tracks, clock authority, and evaluation phase integration.
 - [Physics Architecture](./physics-architecture.md): ragdoll, hit detection, and
   animation/physics handoff.
 - [Asset Pipeline](./asset-pipeline.md): clip import, compression, and cook.

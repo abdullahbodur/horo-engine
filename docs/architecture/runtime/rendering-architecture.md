@@ -68,6 +68,30 @@ use `[0, 1]`. Concrete backends may apply this projection adaptation, but must
 not independently redefine scene handedness, camera policy, transform order, or
 authoring units.
 
+### Camera-Relative Rendering And Universal Shader Precision
+
+To maintain sub-millimeter visual precision across worlds spanning thousands of
+kilometers while preserving universal GPU performance across Mobile (OpenGL ES /
+Metal iOS), WebGL, Desktop, and Consoles:
+
+- **Universal 32-bit GPU Shaders**: All vertex, geometry, and fragment shaders
+  execute standard 32-bit single-precision (`fp32`) / half-precision (`fp16`)
+  floating-point arithmetic. No GPU backend requires or relies on hardware `fp64`
+  vertex attributes or double-single emulation.
+- **CPU Camera-Relative Matrices**: The high-precision subtraction
+  $P_{\text{inst\_cam\_rel}} = P_{\text{inst\_world}} - C_{\text{camera}}$ is
+  evaluated on the CPU during Render Extraction. The Model-View matrix
+  $M_{\text{view\_rel}} = V_{\text{rel}} \cdot M_{\text{inst\_rel}}$ is passed
+  in 32-bit float uniform/constant buffers.
+- **Vertex Transformation**: Vertex shaders compute
+  $v_{\text{clip}} = P_{\text{projection}} \cdot M_{\text{view\_rel}} \cdot v_{\text{mesh\_local}}$,
+  eliminating floating-point vertex jitter and Z-fighting at extreme world distances.
+- **Shadow and Culling Precision**: Frustum culling and shadow cascade splits
+  operate in camera-relative space, maximizing depth precision near the camera.
+
+See [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin-rebasing.md)
+and [ADR-026](../../adr/026-large-world-precision-and-floating-origin-strategy.md).
+
 ## Backend Selection
 
 Renderer backend selection is host-owned startup policy. The application
@@ -426,6 +450,16 @@ component pools, editor widgets, or backend objects.
 Multiple views, including game, scene viewport, thumbnails, and previews, use
 separate `RenderView` descriptors over compatible snapshots.
 
+The [VFX contract](./vfx-and-particles-architecture.md) extends the snapshot with
+bounded immutable GPU simulation work, CPU/GPU particle sources, decals and volume
+batches. VfxRenderExtractor never submits graph passes or writes mapped GPU buffers.
+RenderFrontend admits/uploads CPU frame slices, schedules VFX Compute once per
+scene/emitter step, then per-view Sort/Cull and dependent rendering passes. Multiple
+views or reusing a snapshot cannot advance the same simulation step twice. Native
+encoding, graph resource barriers and fence-based deferred retirement remain renderer
+responsibilities. Retained snapshot and GPU leases may outlive logical scene teardown
+but cannot reference destroyed scene storage or publish into a new incarnation.
+
 ## XR Views And External Presentation Targets
 
 XR supplies a bounded runtime-driven set of view descriptors and
@@ -676,6 +710,8 @@ Required tests cover:
 
 ## Related Documents
 
+- [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin-rebasing.md)
+- [ADR-026: Large-World Precision and Floating Origin Strategy](../../adr/026-large-world-precision-and-floating-origin-strategy.md)
 - [Render Settings UI Reference](./render-settings.html): quality presets, render feature toggles, resolution, and GPU profiler panel.
 - [Render Backend Parity Contract](./render-backend-parity-contract.md)
 - [Renderer Distribution And Availability](./renderer-distribution-and-availability.md)

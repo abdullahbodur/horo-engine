@@ -22,6 +22,22 @@ to the replacement.
 | [008](008-error-model-exception-boundary-and-registry.md) | Error Model, Exception Boundary and Registry Ownership | proposed | 2026-08-27 |
 | [009](009-configuration-schema-precedence-and-secret-boundary.md) | Configuration Schema, Precedence and Secret Boundary | proposed | 2026-08-28 |
 | [010](010-job-waiting-and-operation-store-ownership.md) | Job Waiting and Operation Store Ownership | proposed | 2026-08-28 |
+| [011](011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md) | Effect Ownership, Simulation Domain Policy and Renderer Boundary | proposed | 2026-08-28 |
+| [012](012-world-streaming-partition-authority-and-subsystem-boundaries.md) | World Streaming Partition Authority and Subsystem Boundaries | proposed | 2026-08-28 |
+| [013](013-environment-query-ownership-item-and-scoring-model.md) | Environment Query Ownership, Item and Scoring Model | proposed | 2026-08-28 |
+| [014](014-sequencer-ownership-clock-authority-and-binding-boundary.md) | Sequencer Ownership, Clock Authority and Binding Boundary | proposed | 2026-08-28 |
+| [015](015-accessibility-ownership-typed-transport-and-non-gating-policy.md) | Accessibility Ownership, Typed Transport and Non-Gating Policy | proposed | 2026-08-28 |
+| [016](016-navigation-target-ownership-and-dependency-boundary.md) | Navigation Target Ownership and Dependency Boundary | proposed | 2026-08-28 |
+| [017](017-prefab-role-ownership-and-capability-tiers.md) | Prefab Role, Ownership and Capability-Tier Decision | proposed | 2026-08-28 |
+| [018](018-command-registration-permissions-threading-and-packaged-build-policy.md) | Command Registration, Permissions, Threading and Packaged-Build Policy | proposed | 2026-08-28 |
+| [019](019-cli-host-command-ownership-adapter-equivalence-and-horopak-boundary.md) | CLI Host, Command Ownership, Adapter Equivalence and horopak Boundary Decision | proposed | 2026-08-28 |
+| [020](020-network-target-ownership-and-dependency-boundary.md) | Network Target Ownership and Dependency Boundary | proposed | 2026-08-28 |
+| [021](021-gameplay-ai-ownership-scheduling-and-behavior-boundary.md) | Gameplay AI Ownership, Scheduling and Behavior Boundary | proposed | 2026-08-28 |
+| [022](022-ai-fixed-tick-order-authority-and-simulation-budget.md) | AI Fixed-Tick Order, Authority and Simulation Budget | proposed | 2026-08-28 |
+| [023](023-world-index-and-cell-format-architecture-decision.md) | World Index and Cell Format Architecture Decision | proposed | 2026-08-28 |
+| [024](024-perception-ownership-sense-policy-and-budget.md) | Perception Ownership, Sense Policy and Budget Decision | proposed | 2026-08-28 |
+| [025](025-ai-decision-assets-and-gameplay-behavior-boundary.md) | AI Decision Assets and Shared Gameplay Behavior Boundary | proposed | 2026-08-28 |
+| [026](026-large-world-precision-and-floating-origin-strategy.md) | Large-World Precision and Floating Origin Strategy | proposed | 2026-08-28 |
 
 ## Conventions
 

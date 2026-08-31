@@ -2,216 +2,688 @@
 
 ## Purpose
 
-This document defines the cinematic sequencer (timeline) subsystem for Horo
-Engine. It covers timeline editing, keyframe animation of scene objects and
-properties, camera cuts, event tracks, audio tracks, cinematic playback, and
-editor authoring.
+This document defines Horo Engine's cinematic sequencer runtime and authoring architecture. It specifies timeline data structures, track evaluation models, clock authority, frame evaluation scheduling, object and property binding resolution, camera cut coordination, event dispatching, and editor integration.
 
-## Sequencer Model
+The goal is to provide a bounded, data-oriented cinematic runtime capable of driving in-game cutscenes, interactive timelines, UI animations, and complex scene staging while maintaining strict architectural boundaries and zero heap allocations on frame-hot evaluation paths.
 
-A cinematic sequence is a timeline that animates scene objects and triggers
-events over time:
+## Normative Decision Reference
+
+This subsystem is governed by [ADR-014: Sequencer Ownership, Clock Authority and Binding Boundary Decision](../../adr/014-sequencer-ownership-clock-authority-and-binding-boundary.md).
+
+## Core Decisions
+
+- **Clock source and policy are separate**: Committed simulation time, unscaled
+  fixed control time, monotonic wall time and an external master have different
+  guarantees. Pause following and optional dilation are explicit validated settings.
+- **Two evaluation paths**: Fixed-tick authoritative sampling/events are separate
+  from optional interpolated presentation sampling. Rendering never fires gameplay
+  events or mutates physics-owned state.
+- **History-independent values, stateful events**: Value curves sample at time T
+  without replay. Event dispatch evaluates directed intervals with an explicit
+  cursor, loop identity and seek policy.
+- **Domain authority**: SceneModel binds scene/component-authored properties only.
+  Physics, camera and gameplay pause owners admit typed requests; sequencing does
+  not grant unrestricted writes or scheduler control.
+- **Durable bindings**: Stable authored identities resolve to generation-checked
+  runtime handles. Lifecycle invalidation and bounded rebind cover same-scene
+  destruction, respawn, component replacement and scene transitions.
+- **Coordinate and capacity contracts**: Local transform tracks use durable parent
+  or sequence anchors. Typed CPU/memory budgets bound players, nested tracks,
+  events, binding retries and per-boundary work independently of graphics APIs.
+
+## System Boundaries and Target Topology
+
+```text
+[HoroEngine::Foundation]
+       ^
+       |
+[HoroEngine::SceneModel] <---------------+
+       ^                                 |
+       |                                 |
+[HoroEngine::CinematicModel]             | (Shared PropertyBindingRegistry)
+       ^                                 |
+       |                                 |
+[HoroEngine::CinematicRuntime]           |
+       ^                                 |
+       |                                 |
+[HoroEngine::EditorServices] ------------+
+       ^
+       |
+[HoroEngine::Gui] (Timeline UI / Inspector)
+```
+
+| Target | Layer | Responsibilities | Dependencies |
+|---|---|---|---|
+| `HoroEngine::CinematicModel` | Model / Asset | `SequenceAsset`, tracks, keyframes, curves, interpolation math, playback settings, schemas, and bounded asset parsers. | `Foundation`, `SceneModel`, `Assets` |
+| `HoroEngine::CinematicRuntime` | Runtime | `SequencePlayer`, `SequencePlaybackClock`, `SequenceBindingAuthority`, `SequenceEvaluationSystem`, camera requests, and event queues. Host-injected domain adapters enforce authority. | `CinematicModel`, `RuntimeScene`, `Runtime` |
+| `HoroEngine::EditorServices` | Presentation / Tooling | Timeline workspace controllers, property recording, curve editing services, track solo/mute adapters, and Problems panel integration. | `CinematicRuntime`, `CinematicModel`, `SceneModel`, `EditorModel` |
+
+`HoroEngine::CinematicRuntime` contains zero dependencies on `HoroEngine::EditorServices`, `HoroEngine::Gui`, or ImGui.
+
+## Sequencer Data Model
+
+### Sequence Asset
+
+A sequence asset is an immutable, cookable project asset defining tracks, timeline parameters, and playback configuration:
 
 ```cpp
 struct SequenceAsset {
-    SequenceId      id;
-    std::string     name;
-    Duration        duration;
-    float           frameRate;          // timeline frame rate (e.g., 30 fps)
-    std::vector<SequenceTrack> tracks;
-    SequencePlaybackSettings playback;
+    SequenceId                  id;
+    std::string                 name;
+    Duration                    duration;
+    FrameRate                   frameRate;          // Authoring frame rate (e.g. 24, 30, 60 fps)
+    std::vector<SequenceTrack>  tracks;
+    SequencePlaybackSettings    defaultSettings;
 };
 ```
 
-Each track targets a specific object and property or fires events:
+### Track Structure
+
+Each track animates an object transform, component property, camera cut, audio source, sub-sequence, or event timeline:
 
 ```cpp
+enum class TrackType : uint8_t {
+    Transform,
+    Property,
+    CameraCut,
+    Event,
+    Audio,
+    SubSequence
+};
+
 struct SequenceTrack {
-    TrackId         id;
-    std::string     displayName;
-    TrackType       type;
-    StableObjectId  targetObject;       // resolved to runtime EntityId during binding
-    ComponentId     targetComponent;    // or empty
-    PropertyBindingId targetProperty;   // typed binding registry id
-    std::vector<Keyframe> keyframes;
-    TrackBlendSettings blend;
+    TrackId                     id;
+    std::string                 displayName;
+    TrackType                   type;
+    StableObjectId              targetObject;       // Durable UUID resolved to EntityId at activation
+    ComponentTypeId             targetComponent;    // Target component type when applicable
+    PropertyBindingId           targetProperty;     // Resolved via PropertyBindingRegistry
+    std::vector<Keyframe>       keyframes;
+    TrackBlendSettings          blend;
+    bool                        muted;
+    bool                        solo;
+};
+```
+
+### Keyframe and Curve Interpolation
+
+Keyframes define discrete control points with configurable interpolation modes:
+
+```cpp
+enum class InterpolationType : uint8_t {
+    Constant,       ///< Step / hold value until next keyframe
+    Linear,         ///< Direct linear interpolation (LERP / SLERP)
+    CubicBezier,    ///< Cubic Bezier with explicit tangents
+    HermiteSpline   ///< Smooth cubic Hermite spline
+};
+
+struct Tangent {
+    float timeOffset;
+    float valueOffset;
+};
+
+struct Keyframe {
+    KeyframeId          id;
+    SequenceTime        time;               // Canonical rational/fixed-point timeline position
+    PropertyValue       value;              // Strongly typed variant (float, Vec3, Quat, Color, etc.)
+    InterpolationType   interpolation;
+    Tangent             tangentIn;
+    Tangent             tangentOut;
 };
 ```
 
 ## Track Types
 
-### Transform Track
+### 1. Transform Track
 
-Animates an object's position, rotation, and scale:
+Animates local position, rotation, and scale of a scene object:
 
 ```cpp
 struct TransformKeyframe {
-    float         time;
-    WorldTransform value;
-    InterpolationType interpolation;   // Linear, Cubic, Constant
-    Tangent       tangentIn;
-    Tangent       tangentOut;
+    SequenceTime        time;
+    Vec3                position;           // Local position
+    Quat                rotation;           // Local orientation
+    Vec3                scale;              // Local scale
+    InterpolationType   interpolation;
+    Tangent             tangentIn;
+    Tangent             tangentOut;
 };
 ```
 
-### Property Track
+- **Hierarchy-Aware Evaluation**: Transform application uses parent-to-child order
+  within its semantic phase, not as a global ordering rule for all track types.
+- **Local-Space Authoring**: Stores offsets relative to a durable parent or sequence
+  anchor. Root tracks require an anchor in canonical world coordinates; they never
+  treat a rebased root transform as a permanently stable origin. See Origin Rebase.
 
-Animates any numeric or vector component property:
+### 2. Property Track
 
-- Float properties (light intensity, field of view, material parameter)
-- Vector properties (color, post-process weight)
-- Bool properties (visibility, enabled state)
+Animates typed component properties registered in `PropertyBindingRegistry`:
 
-### Camera Cut Track
+- **Numeric**: `float`, `int32_t`, `double` (e.g. light intensity, camera FOV, post-process bloom threshold)
+- **Vector**: `Vec2`, `Vec3`, `Vec4` (e.g. material tint, particle spawn velocity, UI offset)
+- **Color**: `Color` (linear RGBA with HDR support)
+- **Boolean**: `bool` (e.g. visibility, mesh renderer enable, light enable; evaluated as step function)
+- **Asset References**: `AssetId` (e.g. material swap, mesh swap; step interpolation)
 
-Switches the active camera at specific times:
+### 3. Camera Cut Track
+
+Coordinates the active rendering camera and cinematic camera transitions:
 
 ```cpp
 struct CameraCutKeyframe {
-    float       time;
-    StableObjectId cameraObject;
-    float       blendDuration;      // cross-fade between cameras
+    SequenceTime        time;
+    StableObjectId      cameraObject;       // Target camera entity
+    float               blendDuration;      // Cross-fade duration into next camera
+    CameraBlendCurve    blendCurve;         // Linear, EaseIn, EaseOut, EaseInOut
 };
 ```
 
-### Event Track
+Camera cuts carry camera identity and blend metadata, not world-space positions.
+A host-injected typed camera adapter requests an owner-issued, generation-safe
+cinematic override token. The Camera subsystem resolves the final active camera
+from gameplay proposals and admitted cinematic requests; the sequencer never writes
+a global active-camera pointer. Conflicts use explicit priority then stable player
+identity, independent of update order. Stop, cancellation, binding loss, scene
+replacement and failed activation release only this player's token. Restoring an
+older gameplay camera pointer is forbidden: the owner resolves the current proposal.
 
-Fires named events at specific times for gameplay scripts to handle:
+### 4. Event Track
+
+Cook resolves authoring event names into typed bindings and immutable payloads:
 
 ```cpp
 struct EventKeyframe {
-    float           time;
-    std::string     eventName;
-    VariantMap      payload;
+    SequenceTime        time;
+    EventBindingId      binding;
+    EventPayloadRef     payload;       // schema-validated immutable cooked data
+    bool                fireInReverse;
 };
 ```
 
-Events trigger gameplay module callbacks, audio cues, VFX spawns, and
-dialogue triggers.
+Host composition maps each binding to a narrow gameplay/audio/VFX adapter. Cook
+and activation reject missing adapters, incompatible payload schemas or insufficient
+capabilities. The evaluation queue contains fixed-size occurrence records and
+payload handles, with asset residency retained until drain/cancellation. Neither
+string lookup nor dynamic payload-map construction occurs during sampling.
 
-### Audio Track
+Camera and event requests use typed domain queues, not `EngineDataBus` dispatch.
+ADR-015 restricts accessibility traffic specifically; it does not reserve the whole
+bus for accessibility. The broader bus principle still forbids using it to establish
+per-tick ordering or carry high-frequency timeline data.
 
-Plays audio clips synchronized to the timeline:
+### 5. Audio Track
+
+Coordinates timeline-synchronized audio playback:
 
 ```cpp
 struct AudioTrackKeyframe {
-    float       startTime;
-    float       duration;
-    AssetId     audioClip;
-    float       volume;
-    float       pitch;
-    bool        loop;
+    SequenceTime        startTime;
+    float               duration;
+    AssetId             audioClip;
+    float               volume;
+    float               pitch;
+    bool                loop;
 };
 ```
 
-### Sub-Sequence Track
+### 6. Sub-Sequence Track
 
-Nests another sequence as a track, enabling modular cinematic composition:
+Nests child sequence assets to enable modular cutscene assembly and multi-shot composition:
 
 ```cpp
 struct SubSequenceKeyframe {
-    float       startTime;
-    AssetId     sequenceAsset;
-    float       playbackSpeed;
-    bool        syncToParent;       // stretch to fit parent duration
+    SequenceTime        startTime;
+    AssetId             sequenceAsset;
+    float               playbackSpeed;
+    bool                syncToParent;
 };
 ```
 
-## Playback
+## Clock Authority: `SequencePlaybackClock`
 
-### Playback Controller
+The following are schematic domain contracts, not implemented public headers.
+`SequenceTime` is a validated rational/fixed-point timeline position; cook converts
+finite authoring times to it once. Tick-derived advancement uses checked arithmetic
+and retained fractional remainder, not repeated accumulation of float frame deltas.
 
 ```cpp
-class SequencePlayer {
+enum class SequenceClockSource : uint8_t {
+    CommittedSimulation,
+    UnscaledFixedControl,
+    MonotonicWall,
+    External
+};
+
+enum class SequencePausePolicy : uint8_t {
+    FollowGameplay,
+    PlayerOnly
+};
+
+enum class SequenceDilationPolicy : uint8_t {
+    SourceNative,
+    ApplyGameplayScale
+};
+
+struct SequenceClockSettings {
+    SequenceClockSource source{SequenceClockSource::CommittedSimulation};
+    SequencePausePolicy pause{SequencePausePolicy::FollowGameplay};
+    SequenceDilationPolicy dilation{SequenceDilationPolicy::SourceNative};
+};
+```
+
+### Sources, Validation And Time Advancement
+
+- **CommittedSimulation** advances once per successfully committed fixed tick by
+  `fixedDelta * playbackSpeed`. The scheduler's simulation delta is consumed as
+  supplied, including any upstream dilation; it is never scaled again. Evaluation
+  stages the attempted tick's cursor/values/events and publishes them only on
+  success. Failed ticks discard staged output and do not advance the cursor.
+- **UnscaledFixedControl** uses a separate host Runtime-owned fixed control clock
+  for cutscenes that must advance while gameplay is paused. It does not invent
+  committed simulation ticks. Its positive quantum, catch-up cap and dropped-time
+  policy are explicit host configuration, using Runtime Lifecycle's bounded clock
+  rules. It runs in the host's service/variable-update phase, never inside a paused
+  physics loop. Control-tick input histories can be recorded/replayed.
+- **MonotonicWall** uses clamped monotonic elapsed time at a presentation/service
+  boundary. It supports UI/intro playback but makes no fixed-tick replay guarantee.
+- **External** consumes timestamped samples from a host-injected media provider.
+  The external timeline is authoritative, not the player's accumulated deltas.
+  Its guarantees are bounded synchronization and explicit discontinuity handling,
+  not deterministic simulation tick reproduction.
+
+`ApplyGameplayScale` is allowed only for UnscaledFixedControl and MonotonicWall;
+these multiply raw source delta by the captured gameplay scale exactly once, then
+by playback speed. CommittedSimulation must use SourceNative; External delegates
+rate changes to the provider. Non-finite speed/time values and unsupported settings
+combinations are rejected before activation or applied at an owned boundary.
+
+CommittedSimulation requires FollowGameplay. PlayerOnly cannot make absent
+simulation ticks advance. FollowGameplay freezes the player whenever the pause
+authority reports gameplay paused; PlayerOnly ignores gameplay pause but still
+honors explicit player pause and host suspension. A player requesting gameplay
+pause must use PlayerOnly with a non-simulation source, otherwise activation returns
+`InvalidClockSettings` rather than creating a self-pausing cutscene.
+
+### Gameplay Pause Authority
+
+`pauseGameplay` requests a scoped token from the host Runtime's gameplay pause
+authority; SequencePlayer never sets scheduler booleans directly. Tokens compose
+with menu/debugger/network pause reasons, and releasing one cannot release another.
+Denial returns a typed activation failure and unwinds previously acquired tokens.
+The pause takes effect at a host safe point before the next tick, never mid-tick.
+
+A granted gameplay token stops the entire simulation domain: AI, gameplay scripts,
+character-controller movement, physics integration and simulation-driven animation.
+Service updates, UI, rendering and permitted presentation-only cinematic sampling
+continue. Visual camera/pose playback while paused cannot move colliders, commit
+root motion or run arbitrary gameplay callbacks. Gameplay-mutating event bindings
+are rejected for pauseGameplay players; cinematic presentation bindings remain
+available. This prevents unbounded queued gameplay effects during a pause.
+
+### Pause, Dilation And External-Master Matrix
+
+| Scenario | CommittedSimulation | UnscaledFixedControl / MonotonicWall | External |
+|---|---|---|---|
+| Gameplay paused | Frozen: no committed tick | FollowGameplay freezes; PlayerOnly continues | FollowGameplay holds local playhead; PlayerOnly follows master |
+| Own pauseGameplay request | Rejected at activation | Requires PlayerOnly; presentation-only effects | Requires PlayerOnly and presentation-only effects |
+| Explicit player pause | Holds cursor and values | Holds cursor and values | Holds local output; provider pause requested only if supported |
+| Gameplay dilation | Already in supplied delta; never multiply twice | SourceNative ignores; ApplyGameplayScale multiplies once | Ignored; provider owns rate |
+| Host suspension | Frozen | Frozen; resume establishes zero-delta baseline | Freeze output; reacquire master epoch on resume |
+| Negative speed | Reverse interval advancement | Reverse interval advancement | Requires provider reverse/rate capability; otherwise typed Unsupported |
+| Seek / scrub | Random-access value sample, events suppressed by default | Same | Request provider seek if supported; otherwise typed Unsupported |
+
+External provider capability covers pause, rate/reverse and seek independently.
+External synchronization never silently pretends to control a master that cannot be controlled.
+During a local hold, master samples may continue but are not dispatched. Resume or
+a seek acknowledgement adopts the provider's new `(epoch, time)` baseline, clears
+drift history and suppresses skipped events. Provider calls are non-blocking typed
+requests; while awaiting acknowledgement, output is held. Timeout or provider loss
+enters `ClockUnavailable` with no guessed advancement.
+
+Within one continuous external epoch, bounded presentation correction may smooth
+small drift using configured maximum offset and correction rate. Event crossings
+use accepted master timestamps, never the smoothed presentation clock. A timestamp jump opposite the negotiated playback direction, epoch change or drift beyond the bound is a discontinuity: reset the baseline,
+suppress crossed events and report a typed diagnostic. No unbounded catch-up burst
+or synchronous hardware wait is permitted.
+
+### Value Sampling And Event Dispatch
+
+Value sampling is history-independent: `Sample(T)` does not depend on the prior
+sample. Interpolation may use binary key lookup (`O(log N)`) and constant work per
+segment; it does not promise generic O(1) lookup or cross-platform bit identity.
+Tests use declared numeric tolerances unless a separate deterministic-math contract
+establishes stricter guarantees. Same committed ticks, assets, settings and ordered
+inputs reproduce semantic samples and event order regardless of render cadence.
+Wall/external histories must be recorded explicitly to reproduce their inputs.
+
+Event dispatch is stateful directed-interval processing:
+
+- Forward advance crosses `(previous, current]`; reverse crosses `[current, previous)`
+  and emits only keys with fireInReverse. Equal endpoints emit nothing.
+- Stable order is crossing time in playback direction, then TrackId and KeyframeId.
+  Occurrence identity includes player generation, traversal/loop ordinal and direction.
+- Play from the start emits start-time keys once. Loop wrap splits intervals at the
+  endpoints and explicitly enters the next loop's start; ping-pong turning endpoints
+  belong to the arriving interval only. No endpoint is emitted twice at a turn.
+- Seek(T), editor scrub, rebind and external discontinuity sample values and reset
+  the event cursor without dispatching skipped markers. An explicit
+  `DispatchCrossedEvents` seek is available for local clocks only through a capable
+  runtime adapter outside editor scrub; it follows the same interval, authority and capacity rules.
+- Preflight the complete bounded interval before applying values or advancing the
+  cursor. If the event/loop work budget cannot admit it, return `EvaluationBudgetExceeded`
+  and hold the player without partial effects. Never silently drop authoritative events.
+
+## Frame Evaluation Phase
+
+### Authoritative Simulation Path
+
+Presentation frame order is not a replacement for the fixed-tick scheduler in
+[Runtime Lifecycle](./runtime-lifecycle.md) or ADR-022's AI phases. At each attempted
+fixed tick, sequence values/intervals are staged using that tick's timestamp.
+Pre-physics cinematic intents are resolved after the relevant gameplay proposals
+and before their owner consumes them. Properties whose owner updates post-physics
+use that owner's later commit seam; descriptors cannot request an impossible phase.
+
+For AI actors, cinematic movement is a typed intent admitted by `NavIntentCommit`;
+`CharacterControllerLocomotion` retains physics authority and `AnimationRigUpdate`
+still runs afterward. No extra AI mutation phase, same-tick animation feedback, or
+variable-rate transform write is introduced. Remote clients cannot use a sequence
+to gain authority over server-owned entities.
+
+Within each permitted evaluation seam, the compiled plan uses semantic ordering:
+validated property/animation-parameter intents, transform intents (parent-to-child
+within that group), then camera/event occurrence staging. Descriptor-declared
+dependencies are validated as a DAG at activation; unsupported cycles or writes
+without a compatible owner phase are rejected. Track type alone grants no override.
+Overlapping tracks/players use declared priority and stable IDs, or an explicitly
+registered blend rule; iteration order is never the conflict resolver.
+
+Gameplay event effects are released only after the originating tick commits and
+are consumed at the destination owner's next permitted boundary, not reentrantly
+inside sampling. Failed ticks cannot emit irreversible audio/VFX/spawn effects.
+No dependent sequence action assumes a request completed in that same tick.
+
+### Presentation And Editor Path
+
+The existing non-AI frame pose path in [Animation Architecture](./animation-architecture.md)
+remains: gameplay prepares parameters, owner-admitted non-interpolated cinematic
+parameters apply,
+animation/IK produces pose and root motion, character movement resolves under its
+owner, physics runs, and rendering extracts committed state. This path is not a
+claim of render-rate-independent simulation. Optional interpolated cinematic
+values affect only the render/preview snapshot, not authoritative property values,
+event cursors, gameplay state or physics transforms.
+
+```mermaid
+flowchart TD
+    Tick[Fixed tick gameplay proposals] --> Intent[Typed cinematic owner intents]
+    Intent --> Owner[Owner phases including physics]
+    Owner --> Commit[Commit tick and publish events]
+    Commit --> Snapshot[Immutable presentation snapshot]
+    Snapshot --> Sample[Optional interpolated value sample]
+    Sample --> Render[Animation presentation and render extraction]
+    Commit --> Queue[Bounded destination queues for later boundaries]
+```
+
+EditorIdle scrubs a separate preview scene in VariableUpdate before extraction.
+It samples values without gameplay callbacks, physics stepping or event replay.
+Unscaled/wall/external players similarly use presentation/service boundaries unless
+an authorized destination explicitly stages an effect for a later simulation tick.
+A physics-owned transform cannot be a presentation write target.
+
+## Object Binding Resolution: `SequenceBindingAuthority`
+
+### Identity Mapping
+
+Authored sequence assets identify scene objects using durable 128-bit `StableObjectId`s. At runtime, entities are referenced via generation-checked `EntityRef { SceneRuntimeId, EntityId }`.
+
+```cpp
+class SequenceBindingAuthority {
 public:
-    void Play();
-    void Pause();
-    void Stop();
-    void Seek(float time);
-    float GetCurrentTime() const;
-    SequencePlaybackState GetState() const;
-    void SetPlaybackSpeed(float speed);
+    Result<void> ResolveBindings(const SequenceAsset& asset, const RuntimeSceneView& sceneView);
+    Result<void> Rebind(const RuntimeSceneView& newSceneView);
+    void Invalidate();
 
-    // Events
-    Signal<void(std::string_view eventName, const VariantMap& payload)> OnEvent;
-    Signal<void()> OnFinished;
+    std::optional<EntityRef> GetBoundEntity(TrackId trackId) const;
+    BindingState GetBindingState(TrackId trackId) const;
+
+private:
+    struct TrackBinding {
+        StableObjectId  targetObjectId;
+        EntityRef       boundEntity;
+        BindingState    state;
+    };
+    std::unordered_map<TrackId, TrackBinding> m_bindings;
 };
 ```
 
-### Evaluation
+### Scene Transitions and Rebinding Lifecycle
 
-Sequence evaluation runs each frame:
+Bindings use `Bound`, `PendingTarget` and `Incompatible` states. Missing/destroyed
+entities become PendingTarget and are skipped, not disabled for the entire playback.
+Incompatible component/property types remain Incompatible until a relevant schema
+or target revision changes or the player is explicitly reactivated.
 
-1. Advance time by `deltaTime * playbackSpeed`
-2. For each active track, sample the interpolated value at current time
-3. Apply sampled values to target properties
-4. Fire events whose keyframe time was crossed this frame
-5. Handle camera cuts (blend between outgoing and incoming camera)
-6. At sequence end, apply `SequenceEndBehavior` (stop, loop, ping-pong)
+Every apply validates SceneRuntimeId, entity generation, authored StableObjectId
+identity, and component storage/schema revision before dereferencing an accessor.
+No component pointer survives storage relocation. Invalid handles immediately stop
+writes. RuntimeScene lifecycle notifications for destruction, spawn, component
+replacement and scene replacement schedule bounded rebind work at the next
+`CommitDeferredLifecycleChanges`, after the authored identity index is updated.
+Notifications coalesce by track; a lifecycle/index revision comparison also catches
+missed invalidation. Activation allocates bounded cache storage; rebind cannot grow
+it on the hot path. Exhausted retry budget leaves PendingTarget for a later boundary.
 
-Evaluation order respects track dependencies (parent-child transform
-hierarchies are evaluated top-down).
+A newly rebound track samples the current value but never replays missed events.
+Scene replacement invalidates all old references and owner tokens before resolving
+new targets. MissingTarget/IncompatibleProperty diagnostics are typed and deduplicated;
+Editor Problems entries point to the sequence/track without runtime UI dependencies.
 
-### Blending
+## Typed Property Binding Registry
 
-Sequences can blend into and out of gameplay:
+### Architecture and Access Contracts
+
+`PropertyBindingRegistry` lives in `HoroEngine::SceneModel` and provides reflection metadata and fast accessors:
 
 ```cpp
-struct SequencePlaybackSettings {
-    float           blendInDuration;
-    float           blendOutDuration;
-    PlaybackRestoreBehavior restore;   // RestoreToPreSequence or KeepFinalState
-    bool            pauseGameplay;
-    bool            hideHUD;
+struct PropertyBindingDescriptor {
+    PropertyBindingId       id;
+    ComponentTypeId         componentType;
+    std::string             propertyName;
+    PropertyType            type;           // Float, Vec2, Vec3, Vec4, Quat, Color, Bool, Int32, AssetRef
+    PropertyGetterFn        getter;         // Type-erased fast getter
+    PropertySetterFn        setter;         // Typed-result validating write/request accessor
+    PropertyRangeConstraint range;
+    PropertyWritePolicy     writePolicy;    // Owner phase, capability and conflict policy
+};
+
+class PropertyBindingRegistry {
+public:
+    Result<void> Register(PropertyBindingDescriptor descriptor);
+    const PropertyBindingDescriptor* Find(PropertyBindingId id) const;
+    const PropertyBindingDescriptor* FindByName(ComponentTypeId comp, std::string_view name) const;
 };
 ```
+
+The registry covers only scene/component-authored properties, not arbitrary global
+Audio, renderer material storage or gameplay services. Camera FOV or material/audio
+parameters qualify only when represented by an owned scene component whose accessor
+forwards a typed request to that domain. Other services require separate injected
+adapters; SceneModel does not become the engine-wide reflection owner.
+
+Descriptors are inert metadata composed/validated by the host and sealed before
+activation. Public and cooked binding contracts contain IDs, types, validating
+read/write functions and ownership policy, never memory-layout offsets. A component
+implementation may privately optimize an accessor with verified offsets, without
+exposing that metadata or bypassing validation, generation checks, non-trivial
+setters or future SoA storage. Names are authoring-only; runtime resolves stable IDs.
+
+Physics-owned transforms, velocity, collider state and controller position are
+forbidden direct-write bindings. An owner may expose an explicit cinematic kinematic
+or blend request with token lifetime, collision semantics and safe restoration.
+Otherwise activation returns `UnsupportedBinding`. Physics/controller results remain
+final; the sequencer cannot overwrite them afterward to force a desired pose.
+Stop/failure releases the token and lets the owner resolve its current valid state,
+not restore a stale captured component pointer/value. Implementation details belong
+to the authority decisions linked below.
+
+### Dependency Flow
+
+Both `HoroEngine::CinematicRuntime` and `HoroEngine::EditorServices` depend downward on `HoroEngine::SceneModel`:
+
+- Sequencer tracks store `PropertyBindingId` and sample values matching `PropertyBindingDescriptor::type`.
+- Inspector UI queries `PropertyBindingRegistry` to enumerate animatable properties and render UI widgets.
+- No reverse dependencies exist from runtime or scene layers to editor UI.
+
+## Origin Rebase
+
+TransformTrack always stores parent/anchor-relative translation, rotation and scale.
+A root track is explicitly bound to a durable sequence anchor represented by the
+canonical `WorldCoordinate64` contract from ADR-026. A root's current rebased float
+transform is not that anchor. At application/extraction, the scene spatial owner
+resolves anchor plus local offset against the active origin epoch exactly once.
+Rebase changes derived root coordinates, never authored curve data or child offsets.
+
+CameraCutTrack only selects a camera entity; its keyframes contain no position and
+are not a separate world-space transform track. Camera paths use ordinary anchored
+TransformTracks. Unsupported legacy absolute float paths must be rejected or
+converted to an explicit canonical anchor during import, not silently interpreted
+as local coordinates. Scene transition/rebase tests include both root and child
+cameras and prevent duplicate origin subtraction.
+
+## Migration From The Earlier Proposal
+
+Replace SequenceClockPolicy with validated SequenceClockSettings: SimulationTime
+maps to CommittedSimulation/FollowGameplay/SourceNative, UnscaledWallClock to
+MonotonicWall/PlayerOnly/SourceNative, and ExternalSync to an explicitly configured
+provider with declared pause/rate/seek capabilities. Do not silently migrate the
+contradictory SimulationTime + pauseGameplay combination: choose an unscaled source
+and presentation-only bindings explicitly or reject it for author correction.
+
+Convert float authoring times to canonical SequenceTime during validated cook;
+replace public offsets with validating accessors and resolve event names/payloads
+into typed cooked bindings. Existing consumers must adopt silent default seek and
+owner-token release rather than preserving a parallel legacy execution path.
 
 ## Editor Authoring
 
-### Timeline View
+### Timeline and Curve Editor
 
-The cinematic editor provides a timeline-based editing surface:
+The cinematic editor provides:
 
-- Multi-track timeline with zoom and scroll
-- Keyframe creation, deletion, and drag manipulation
-- Property recording (record object manipulation as keyframes)
-- Track solo/mute for focused editing
-- Playback with scrubbing in the editor viewport
-- Curve editor for fine-tuning keyframe interpolation
+- **Multi-Track Timeline**: Keyframe creation, deletion, box selection, and dragging with frame snapping.
+- **Curve Editor**: Bezier tangent manipulation with smooth, linear, and broken tangent handles.
+- **Property Recording**: Captures manual viewport object transformations as timeline keyframes.
+- **Track Solo / Mute**: Isolate or bypass individual tracks during editing.
+- **Viewport Scrubbing**: Direct playhead scrubbing with real-time preview in the active editor viewport.
 
-### Integration
+### Document and Asset Workflow
 
-Sequences are editor-authorable assets stored in the project's asset tree.
-They reference scene objects by entity ID. The cinematic editor opens as a
-separate editor tab (or modal for focused editing).
+Sequence assets are stored in the project's asset tree. Sequences reference scene objects by durable `StableObjectId`s, ensuring scene edits, renames, and reordering do not break sequence bindings.
 
-## Runtime Integration
+## Evaluation Capacity And Admission
 
-Cinematics can be triggered from:
+`SequenceEvaluationBudget` is a host-selected CPU/memory profile, independent of
+render backend and authoring UI features. The following baseline is explicit and
+may be replaced by a validated project profile; it is not a measured timing promise.
 
-- Gameplay scripts (`SequencePlayer::Play`)
-- Scene loading (auto-play intro cinematic)
-- Gameplay events (dialogue, boss fight intro, level transition)
-- Authorized editor/runtime control adapters (MCP or remote tooling must pass capability checks)
+| Budget field | Compact | Standard | Large |
+|---|---:|---:|---:|
+| Active players, including nested players | 2 | 8 | 32 |
+| Tracks per asset | 32 | 256 | 1024 |
+| Aggregate active tracks per evaluation boundary | 64 | 2048 | 32768 |
+| Keys per track | 4096 | 16384 | 65536 |
+| Nested depth | 1 | 4 | 8 |
+| Event occurrences per boundary | 64 | 512 | 2048 |
+| Loop/turn crossings per player advance | 4 | 8 | 16 |
+| Binding retries per boundary | 16 | 64 | 256 |
+| Total retained cooked payload and queue bytes | 1048576 | 8388608 | 33554432 |
 
-## Feature Tiers
+Activation recursively validates the reachable sub-sequence graph, rejects cycles,
+and reserves player/track, binding, event-queue and payload residency capacity before
+acquiring domain tokens. Nested players count against the same aggregate limits;
+independent clocks do not bypass them. Rejection returns CapacityExceeded without
+partially starting a player. Cook rejects assets exceeding key/track/depth limits.
+Binary key lookup bounds sample work by active tracks and keys per track. Cubic
+segments require monotonic time tangents and a fixed iteration limit, not an
+unbounded numeric solver. Event/loop preflight enforces runtime interval limits.
 
-| Feature              | `es3`     | `dx11` / `dx12_vulkan` | `high_end` |
-| -------------------- | ---------- | ------------- | ------------ |
-| Timeline tracks      | 16         | 128           | 512          |
-| Simultaneous players | 1          | 4             | 16           |
-| Property recording   | No         | Yes           | Yes          |
-| Sub-sequences        | 1 level    | 4 levels      | 8 levels     |
-| Curve editor         | Linear only| Full curves   | Full curves  |
-| Camera cut blending  | Hard cut   | Linear blend  | Smooth blend |
+Aggregate evaluation visits admitted players in priority then stable-ID order.
+Gameplay-authoritative sampling is never skipped according to elapsed wall time;
+if deterministic work cannot be admitted, reject/hold with a typed outcome. Optional
+presentation-only work may use an explicit lower sampling rate, without changing
+event crossings. Profiling reports sampled tracks, lookups, event/rebind counts,
+rejections, retained bytes and duration; duration is telemetry, not a deterministic
+scheduler input. Exhaustion and dispatch failures are observable, never hidden loss.
+
+## Async Event Effects And Failure Boundaries
+
+A typed event adapter may submit a prefab spawn or another asynchronous operation.
+Its request identity includes the event occurrence ID for idempotency. Following
+ADR-017, an unloaded prefab returns `PrefabError::AssetNotLoaded`; it does not force
+synchronous loading in evaluation. Content requiring tick-exact spawning must
+preload/admit assets before Play or explicitly handle that failure.
+
+Background preparation uses Foundation `JobId`. Only exposed long-running user
+operations receive `OperationId` in the application-owned OperationStore, mutated
+by its authorized coordinator per ADR-010/018. Sampling and worker callbacks never
+create competing stores or block waiting. Typed completion is posted to the owner
+and observed at a later boundary. The asset and payload remain retained until that
+request has consumed them or cancellation retires it safely.
+
+Default dispatch failure reports a typed track/player diagnostic and stops that
+track's future effects; no implicit retry or whole-tick rollback occurs after commit.
+An explicitly authored retry must be bounded and idempotent. Stop/cancellation stops
+admission, cancels owned requests and ignores late completions using player/session
+generations. Independent effects already committed are not promised to be reversible.
+Replays requiring asynchronous completion timing must record those outcomes.
+
+## Delivery Boundaries
+
+Existing repository tickets own the following work; this ADR does not claim it is
+implemented or create substitute tickets:
+
+| Contract | Delivery ticket |
+|---|---|
+| IDs, schema and curve sampling | [CIN-001.2 #1710](https://github.com/abdullahbodur/horo-engine/issues/1710), [CIN-001.3 #1711](https://github.com/abdullahbodur/horo-engine/issues/1711), [CIN-001.4 #1712](https://github.com/abdullahbodur/horo-engine/issues/1712) |
+| Transform/property bindings and qualification | [CIN-001.5 #1713](https://github.com/abdullahbodur/horo-engine/issues/1713), [CIN-001.6 #1714](https://github.com/abdullahbodur/horo-engine/issues/1714), [CIN-001.7 #1715](https://github.com/abdullahbodur/horo-engine/issues/1715) |
+| Clock/phase and domain-authority decisions | [CIN-002.1 #1698](https://github.com/abdullahbodur/horo-engine/issues/1698), [CIN-002.2 #1699](https://github.com/abdullahbodur/horo-engine/issues/1699) |
+| Evaluation, pause and concurrent budgets | [CIN-002.4 #1717](https://github.com/abdullahbodur/horo-engine/issues/1717), [CIN-002.7 #1720](https://github.com/abdullahbodur/horo-engine/issues/1720), [CIN-002.8 #1721](https://github.com/abdullahbodur/horo-engine/issues/1721) |
+| Camera authority and cut implementation | [CIN-003.1 #1700](https://github.com/abdullahbodur/horo-engine/issues/1700), [CIN-003.2 #1723](https://github.com/abdullahbodur/horo-engine/issues/1723) |
+| Camera blending, origin seam and qualification | [CIN-003.3 #1724](https://github.com/abdullahbodur/horo-engine/issues/1724), [CIN-003.4 #1725](https://github.com/abdullahbodur/horo-engine/issues/1725), [CIN-003.5 #1726](https://github.com/abdullahbodur/horo-engine/issues/1726) |
+| Event dispatch authority and EventTrack | [CIN-004.1 #1701](https://github.com/abdullahbodur/horo-engine/issues/1701), [CIN-004.2 #1727](https://github.com/abdullahbodur/horo-engine/issues/1727) |
+| Audio/VFX/sub-sequence integration | [CIN-004.3 #1728](https://github.com/abdullahbodur/horo-engine/issues/1728), [CIN-004.4 #1729](https://github.com/abdullahbodur/horo-engine/issues/1729), [CIN-004.6 #1731](https://github.com/abdullahbodur/horo-engine/issues/1731) |
+
+## Testing and Verification Requirements
+
+These are required implementation acceptance tests, not tests added by this ADR:
+
+- Compare identical committed tick/input histories under 30/60/144 Hz presentation;
+  authoritative values/event order match under documented numeric tolerances.
+- Validate all clock/pause/dilation combinations, nested pause-token release, menu
+  plus cinematic pause, host resume, provider capability/loss and discontinuities.
+- Value samples are history-independent; event tests cover forward/reverse endpoints,
+  loops, ping-pong, default silent seek, explicit crossing seek and failed tick commit.
+- Assert no allocation in steady-state sampling and queue admission; exercise every
+  aggregate budget, deep/cyclic nesting, adversarial keys, huge seeks and overload.
+- Same-scene respawn, component relocation/schema change and scene replacement never
+  use stale accessors; bounded rebind recovers without replaying missed events.
+- Reject direct physics/global-service bindings; test domain token priority, release,
+  authority denial and client attempts to control server-owned actors/cameras.
+- Test root/child/camera anchors across rebase and scene transitions without altering
+  keyframes or applying the origin offset twice.
+- Async spawn tests cover AssetNotLoaded, cancellation, late completion and duplicate
+  occurrence delivery without synchronous waits or unbounded retries.
 
 ## Related Documents
 
+- [ADR-014: Sequencer Ownership, Clock Authority and Binding Boundary Decision](../../adr/014-sequencer-ownership-clock-authority-and-binding-boundary.md)
 - [Cinematic Sequencer UI Reference](./cinematic-sequencer.html)
-
-- [Scene Runtime](./scene-runtime.md): scene object model and property paths
-- [Animation Architecture](./animation-architecture.md): skeletal animation integration
-- [Audio Architecture](./audio-architecture.md): audio track playback
-- [Gameplay Behavior Authoring](../extensions/gameplay-behavior-authoring.md): event handling in behaviors
-- [Editor Document Model](../editor/editor-document-model.md): sequence asset editing
-- [VFX And Particles Architecture](./vfx-and-particles-architecture.md): VFX spawn events
+- [Scene Runtime Architecture](./scene-runtime.md)
+- [Animation Architecture](./animation-architecture.md)
+- [Character Controller Architecture](./character-controller-architecture.md)
+- [Runtime Lifecycle Architecture](./runtime-lifecycle.md)
+- [Scene Math Architecture](../foundation/scene-math.md)
+- [Audio Architecture](./audio-architecture.md)
+- [VFX And Particles Architecture](./vfx-and-particles-architecture.md)
