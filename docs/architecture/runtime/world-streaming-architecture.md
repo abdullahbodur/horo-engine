@@ -2,49 +2,447 @@
 
 ## Purpose
 
-This document defines the world-streaming subsystem for Horo Engine. It covers
-spatial partitioning of large worlds, asynchronous cell loading and unloading,
-streaming volumes, priority calculation, budget coordination with terrain and
-foliage, cell lifecycle (including error and retry), world composition, editor
-integration, and networking authority.
+This document defines partition ownership, asynchronous provider staging, activation
+and retirement barriers, budget admission, generation fencing and host integration.
+[ADR-012](../../adr/012-world-streaming-partition-authority-and-subsystem-boundaries.md)
+records the decision. The ADR-023 binary formats below remain separate from runtime
+lifecycle handles; this change does not alter their wire layout.
 
-## Streaming Model
+## Subsystem Boundaries And Ownership
 
-Horo Engine uses a cell-based world-streaming model:
+StreamingPartitionAuthority owns canonical partition topology, cell state, epochs,
+generations, priority and the reservation ledger. WorldStreamingManager orchestrates
+host frame integration, queues and provider requests **through that authority**.
+They are distinct logical roles within one World Streaming subsystem, not alternate
+names for the same public type and not two independent residency state machines.
+A host may colocate their implementation, but only the authority commits state and
+budget changes; the manager never maintains a competing residency cache.
 
-- The world is divided into a grid of streaming cells
-- Each cell contains scene objects, terrain tiles, and foliage clusters
-- Foliage clusters are **cell-aligned**: a cluster's bounding box fits within
-  a single cell. Clusters that would span cell boundaries are split during
-  the foliage bake step, producing a cluster per cell. This ensures no
-  cluster is gated on two cells' load decisions.
-- Cells are loaded and unloaded based on streaming volumes (camera, gameplay
-  relevance, network relevance)
-- Streaming operations are asynchronous and cancellable
+| Domain | Owns | Does not own |
+|---|---|---|
+| StreamingPartitionAuthority | Grid/layers, volume policy, cell records, fencing, admission and total budget | ECS storage, provider kernels, raw disk/device calls |
+| WorldStreamingManager | Bounded queue draining, stage/retire orchestration, frame integration | Another partition model, scheduler or budget ledger |
+| Scene Runtime | Detached ECS candidates and transactional structural commit | Cell relevance, topology or load priority |
+| Asset Pipeline | Registry/catalog, cooked bytes, validation and bounded I/O | Camera/relevance policy or entity activation |
+| Feature providers | Domain-specific candidate resources, native affinity, readiness/retirement acknowledgement | Independent world-cell loads, residency decisions or budget expansion |
+| Editor | Authoring document, independent paging/pins, offline bake and isolated preview | Destructive coupling to runtime cell eviction |
+
+```mermaid
+flowchart TD
+    Host[Host composition and phase mapping] --> Manager[WorldStreamingManager orchestration]
+    Manager --> Authority[StreamingPartitionAuthority state and reservation ledger]
+    Manager --> Assets[Asset Pipeline bounded I/O]
+    Manager --> Providers[Typed provider stage and retirement requests]
+    Providers --> Completion[Owned readiness and retirement records]
+    Completion --> Manager
+    Authority --> Barrier[Activation or retirement barrier]
+    Barrier --> Scene[Scene Runtime transaction]
+    Scene --> Authority
+```
+
+## Spatial Identity And Fencing
+
+The manifest owns grid origin/size, bounds, layer definitions and LOD topology.
+Do not invent different runtime default grid sizes or drop the LOD dimension.
+Runtime spatial calculations use Math::WorldCoordinate64 and checked conversion
+from the validated manifest, following ADR-026. Rebase changes local provider frames,
+not cell identity or canonical volume positions. Cross-cell geometry is split or
+represented by explicit cooked dependencies; providers cannot infer hidden neighbors.
+
+Schematic runtime identities (not serialized native C++ layouts):
 
 ```cpp
+struct WorldPartitionId { Guid value; }; // WorldIndexManifest::worldGuid identity
+struct PartitionEpoch { uint64_t value; };
+struct StreamingGeneration { uint64_t value; }; // per-cell residency attempt
+struct StreamingLayerId { uint16_t value; };    // manifest layerId width
+struct StreamingVolumeId { uint64_t value; };   // runtime host identity
+
 struct StreamingCellId {
-    int32_t  x;
-    int32_t  y;
-    int32_t  z;
-    uint8_t  lod;     // 0 = base resolution
-    uint16_t layerId; // layer index from WorldIndexManifest
+    int32_t x, y, z;
+    uint8_t lod;
+    uint16_t layerId;
 };
 
-struct StreamingCell {
-    StreamingCellId         id;
-    Math::WorldCoordinate64 origin;          // canonical 64-bit world-space cell origin
-    float                   cellSize;        // meters per side (default 1024m)
-    StreamingCellState      state;          // Unloaded, Loading, Loaded, Unloading, Failed
-    AssetId                 cellAsset;       // baked scene asset or wcell package chunk for this cell
-    StreamingPriority       priority;        // cached computed priority, updated each frame
+struct StreamingFence {
+    WorldPartitionId partition;
+    PartitionEpoch epoch;
+    StreamingCellId cell;
+    StreamingGeneration generation;
 };
 ```
 
-`priority` is a **cached computed value** updated each frame during volume
-evaluation. It is stored in the cell struct to allow the streaming scheduler
-to sort the load queue without re-evaluating every volume for every cell
-every tick.
+The cell tuple is exactly the ADR-023 `(x,y,z,lod,layerId)` identity within a
+partition; WorldPartitionId scopes it in every runtime request. Layer validity is
+manifest membership, not a blanket nonzero rule. Runtime volume IDs map explicitly
+to cooked uint32 volume IDs where present; they do not widen the wire format.
+
+PartitionEpoch identifies a mounted partition incarnation. It changes on world
+replacement/reload, including replacement by the same worldGuid. StreamingGeneration
+changes on each new cell attempt and when an attempt is invalidated; it does not
+change between that attempt's Loading, Resident and Active phases. Both counters
+reserve zero and never wrap: checked increment failure closes admission with
+GenerationExhausted and retires the affected incarnation/slot. Epoch values cannot
+be reused within the lifetime of the host's completion routing domain.
+
+Every asset/provider/scene request also has a generation-checked request handle.
+Ordinary completions may publish only if partition identity, epoch, cell generation,
+request identity and expected phase all match. Cancellation invalidates the active
+attempt immediately but retains its old fence in a retirement record. Old Ready
+results cannot reactivate a cell; old completion/retirement acknowledgements still
+release the **matching retired attempt's** leases and reservations. Fencing means
+no stale state mutation, not dropping the information needed to reclaim resources.
+
+## Owner Role And Frame Integration
+
+StreamingAuthorityRole is a logical execution owner, not a new JobSystem thread
+pool or an alias that assumes MainEditor exists in every host. Host composition
+maps it to the scene mutation executor: editor preview main thread, game simulation
+owner, or headless/server simulation owner. It validates provider phase dependencies
+before mounting a partition.
+
+Manager admission, priority updates and non-blocking completion drains run in the
+host's declared PreUpdate service phase, including while gameplay is paused. ECS
+publication/removal runs only at CommitDeferredLifecycleChanges. Provider-native
+work runs on the provider's required render/physics/audio execution role, scheduled
+through its adapter; worker I/O never invokes live-world lifecycle callbacks.
+
+All entry points below are bounded admission/poll operations on StreamingAuthorityRole.
+CPU preparation may use Foundation JobSystem/JobId. Native GPU/physics/audio calls
+keep domain affinity. No ordinary main/editor/simulation/render/transport path waits
+for a stage or fence, and workers do not wait on nested worker jobs. ADR-010 governs
+allowed teardown drains. ADR-018 OwnerThreadNextFrame commands enqueue into these
+same owner seams; heavy user-visible operations use the application coordinator's
+OperationStore. Providers and manager workers do not create independent stores.
+
+## Provider Composition And Asynchronous Contract
+
+The canonical adapter is **IFeatureStreamingProvider**, already used by ADR-023
+and ADR-016. The earlier proposed IStreamingFeatureProvider callback-only spelling
+is replaced by this one contract, not a second provider hierarchy. Notifications
+such as OnCellActive, if offered to observers, occur after commit and are never
+entity-creation hooks or readiness acknowledgements.
+
+Host-composed inert provider descriptors declare stable provider/payload IDs,
+supported versions, native execution role, resource cost bounds, dependency DAG,
+activation policy, finite positive stage/prepare/retirement deadlines and teardown
+dependencies. Deadlines use host monotonic service time, including while gameplay
+is paused. Stage/prepare expiry applies criticality policy; retirement expiry only
+reports a stall and never proves cleanup. Composition rejects duplicate IDs,
+cycles, incompatible versions and impossible phase/criticality dependencies. The
+CoreEcs payload and every format-required payload remain required; host policy
+cannot downgrade an ADR-023 Required block to optional.
+
+| Activation policy | Readiness and failure behavior |
+|---|---|
+| Required | Must prepare successfully before Active; failure rolls back the cell |
+| Optional | Absence/failure is allowed only for optional format data; record unavailable and retire its partial resources without failing the cell |
+| Degradable | Declares a validated substitute satisfying its dependency contract; ReadyFallback participates in the barrier; no valid fallback means required failure |
+
+A required consumer cannot depend on an absent optional provider unless its declared
+fallback path satisfies the dependency. Policy is explicit per cell/profile; Audio
+or Navigation is not globally assumed optional just because of its feature name.
+Optional providers may finish after Active through a separate admitted owner-side
+attachment transaction. Until then their capability is unavailable. They have bounded
+stage deadlines; failure/expiry retires their attempt and records a diagnostic.
+
+The following API shapes express the required protocol, not implemented headers:
+
+```cpp
+enum class ProviderStageState : uint8_t { Pending, Ready, ReadyFallback };
+enum class ProviderBarrierState : uint8_t { Pending, Prepared, Retired };
+
+class IFeatureStreamingProvider {
+public:
+    virtual ~IFeatureStreamingProvider() = default;
+    virtual Result<ProviderCost> EstimateCellCost(const CellManifestView&) const = 0;
+    virtual Result<ProviderStageHandle> BeginStage(ProviderStageRequest request) = 0;
+    virtual Result<ProviderStageState> PollStage(ProviderStageHandle) = 0;
+    virtual Result<ProviderBarrierHandle> PreparePublish(
+        ProviderStageHandle, ActivationTicket) = 0;
+    virtual Result<ProviderBarrierHandle> BeginRetire(
+        ProviderStageHandle, RetirementTicket) = 0;
+    virtual Result<ProviderBarrierState> PollBarrier(ProviderBarrierHandle) = 0;
+    virtual void PublishPrepared(ProviderStageHandle, ActivationTicket) noexcept = 0;
+};
+```
+
+ProviderStageRequest owns/retains the payload lease, StreamingFence, reservation
+lease, cancellation token and scene incarnation. Poll never waits; errors preserve
+provider identity and underlying cause. Failed BeginStage admission creates no
+accepted work or retained resources; an accepted stage that later fails keeps its
+handle until BeginRetire/PollBarrier confirms cleanup. Handles include provider incarnation and
+slot generation, and operations are idempotent per handle/ticket. The host reserves
+completion/retirement queue capacity before starting work, so memory pressure cannot
+prevent cleanup admission. Providers publish completion data, not arbitrary callbacks
+holding raw ECS, manager or widget pointers.
+
+Ready means resources are privately staged, not visible to live consumers.
+PreparePublish schedules provider-affine attachment preparation and acknowledges
+Prepared only when a validated no-fail publication action can be performed at the
+host's common cell commit boundary. PublishPrepared exposes that prepared state;
+it cannot initiate I/O, allocate, wait or discover a new recoverable failure. Providers
+unable to honor that contract cannot be activation-critical in this composition.
+Unexpected provider contract violations are contained as a partition fault; they do
+not justify claiming a partially published cell successfully Active.
+
+BeginRetire stops new access and asynchronously releases stage/active resources in
+the registered dependency order. Retired acknowledges that device fences, readers,
+worker access and cell-owned allocations have ended. It does not mean merely that
+a free/delete command was queued. A retained shared asset cache may outlive the cell
+under a separate charged ownership lease; it must not retain an unaccounted cell
+reservation or raw entity dependency.
+
+## Residency State Machine And Barriers
+
+There are five normal states plus Failed, six enum values in total:
+
+```cpp
+enum class StreamingCellState : uint8_t {
+    Unloaded, Loading, Resident, Active, Evicting, Failed
+};
+```
+
+```mermaid
+stateDiagram-v2
+    Unloaded --> Loading: Cost and queue admission
+    Loading --> Resident: Payload validated
+    Resident --> Active: Required readiness plus Scene commit
+    Loading --> Evicting: Cancel or failure
+    Resident --> Evicting: Cancel or required failure
+    Active --> Evicting: Eviction or required runtime failure
+    Evicting --> Unloaded: Retirement barrier complete
+    Evicting --> Failed: Retirement complete with terminal failure
+    Failed --> Loading: Retry policy and fresh admission
+```
+
+| State | Invariant |
+|---|---|
+| Unloaded | No cell-owned resident payload, active entity or cell-scoped provider resource remains; index descriptors and separately owned shared caches may remain |
+| Loading | Admitted asset I/O/decode in progress under a fence and reservations |
+| Resident | Payload validated; detached Scene candidate/provider stages may still be pending; no live ECS entities from this attempt |
+| Active | Required providers and CoreEcs crossed the current attempt's activation barrier; optional capability status remains explicit |
+| Evicting | Access revoked and cleanup progressing; retired leases/allocations remain charged until acknowledgement |
+| Failed | Terminal failure record after cleanup, with no live cell resources; retry requires policy, capacity and a fresh generation |
+
+Resident -> Active requires all of: validated payload, all Required providers Ready
+and Prepared, Degradable providers Ready or ReadyFallback **and Prepared**, reserved
+resource costs, a prepared SceneActivationBatch, and a current fence/cancellation
+check. Scene Runtime commits the detached ECS candidate transaction at
+CommitDeferredLifecycleChanges together with provider publication in the validated
+DAG. Cells cannot start ticking with missing critical colliders/nav data. OnCellActive
+observation happens only after success. Recoverable failure before publication keeps
+the active scene untouched and sends the attempt through Evicting to Failed or retry.
+Device/runtime failure after publication uses eviction/fallback policy; it is not
+retroactively described as an atomic pre-commit rollback.
+
+Cancellation in Loading requests I/O interruption where supported; it does not
+promise physical cancellation of an OS read. The attempt moves to Evicting until
+all outstanding buffers and jobs are retired. Resident/Active eviction first revokes
+new access, then executes the same registered dependency DAG used on shutdown:
+quiesce dependent bindings while needed Scene handles remain valid, commit ECS
+removal at the Scene safe point, and release backing resources after their dependents
+and GPU/read leases retire. The actual before/after edges are registered, not a
+universal Providers -> Entities or Entities -> Providers list.
+
+Evicting -> Unloaded (or Failed) requires Scene removal acknowledgement, every
+started provider's Retired acknowledgement, all I/O/read leases retired and every
+cell reservation released or transferred to a separately admitted shared owner.
+Slow optional cleanup still participates in this barrier. Cleanup timeout keeps the
+attempt Evicting with RetirementStalled; it never frees resources still in use or
+pretends the cell is Unloaded. Rapid reload cannot reuse that attempt's slots; a
+new admitted generation cannot evade accounting for the retiring one.
+
+## Budget Reservation And Admission
+
+StreamingPartitionAuthority owns one aggregate ledger with CPU, GPU, staging,
+queue/scratch and retired-resource accounting. Count every allocation once, including
+simultaneously resident compressed/decoded/upload copies. Feature sub-budgets are
+slices of the global cap, not additional allowances. Shared resources have one
+charged owner and explicit leases; a cell may reference them without charging the
+same allocation twice. Configuration uses checked byte arithmetic (MiB conversion
+is explicit); reservation sums cannot underflow the general pool.
+
+1. EstimateCellCost reads validated metadata and returns bounded CPU/GPU/staging
+   peak costs. It performs no allocation, I/O or live-world mutation. Where v1
+   metadata lacks a provider estimate, use its validated descriptor upper bound or
+   reject admission; unknown cost is never treated as zero.
+2. ReserveBudget atomically admits the total peak, provider slices, asset/Scene
+   costs and queue slots before Loading. Provider staging/native uploads cannot
+   start without their reservation token.
+3. Growth discovered during decode/staging requests an additional reservation
+   **before** allocation. Denial yields/retries within policy or fails staging; no
+   provider may overshoot the ledger and report it afterward.
+4. CommitReservation converts reserved staging/peak portions to actual resident
+   ownership; unused portions release only after scratch/upload copies retire.
+5. ReleaseReservation occurs on acknowledged retirement, never just on Cancel or
+   a scheduled GPU free. Old partition work and caller-held leases remain charged.
+
+The governing invariant is that a cell cannot enter a state whose required resources
+have not been admitted. The host validates per-provider costs and rejects unsupported
+unbounded allocations. Default budgets are configurable: four concurrent loads,
+four concurrent retirements, 1024 MiB aggregate, a 2 ms owner-work target and five
+seconds linger; terrain/foliage/physics/audio reservations of 256/256/128/64 MiB are
+sub-caps, leaving 320 MiB for general/other-provider work. These are baseline policy
+values, not a guarantee of frame timing or a rendering-tier gate. Each task unit is
+bounded; the time target stops starting new units, not preempts a native call.
+
+Providers may evict disposable local cache/LOD entries within their allowance but
+cannot discard activation-critical resources beneath an Active cell. They request
+cell eviction or an admitted fallback transition through the authority. Navigation
+scratch and tile leases likewise remain within its share, including retired tiles.
+
+## Streaming Volumes, Priority And Retry Policy
+
+Camera, Gameplay, NetworkRelevance and Preload volumes create bounded residency
+demands against canonical cell bounds. Multiple covering volumes use the maximum
+priority. Pins are owner-scoped demands, released explicitly or on owner teardown;
+they do not grant budget bypass. If pinned mandatory content cannot fit, admission
+fails visibly and the owning host chooses a safe pause/loading/failure behavior.
+
+Priority uses the maximum of `basePriority * typeMultiplier * override / (distance + epsilon)`
+plus a bounded queue-age boost. Inputs are finite; epsilon is positive (default 1 m).
+Default type multipliers are Camera 1.0, Gameplay 0.9, NetworkRelevance 0.8 and Preload
+1.2; override is validated in [0.5,2.0]. Age boost is
+`min(waitSeconds * ageSlope, maxAgeBoost)`, default slope 0.1/second and cap 2.0.
+Stable cell tuple order breaks ties. The boost only changes priority: it cannot
+promise admission for an oversized cell or override pins/required-content policy.
+Queue age uses clamped monotonic service time, not gameplay time dilation.
+
+Loss of all demands starts the configured linger timer; new demand cancels linger.
+CellBudgetExceeded leaves an unadmitted request pending and re-evaluated under queue
+and byte caps; it does not put an unallocated cell into Failed. Preflight reports
+permanently oversized cells distinctly so they do not retry forever.
+
+Transient I/O/provider errors may retry only after cleanup and fresh budget admission.
+Default policy permits three automatic retries with unscaled monotonic cooldowns
+of 2, 4 and 8 seconds, capped by a configurable maximum. Retries are async requeue,
+not sleeps. Integrity/schema/missing-required-provider errors are permanent until
+content/provider revision changes or explicit authorized retry. Once exhausted,
+Failed remains until that change or explicit retry. Volume exit/reentry alone does
+not reset the counter; this replaces the ambiguous "volume cooldown trigger" and
+prevents camera flapping from creating endless retry storms. Diagnostics expose
+attempt count, next retry time and terminal cause.
+
+## Scene, Prefab And Navigation Reconciliation
+
+Cell CoreEcs packages use ADR-017 Tier 0-style offline expansion: placed prefab
+instances are expanded during bake into a RuntimeSceneDefinition/component snapshot
+for the cell. Stable identities, dependency digests, opaque component preservation
+and strict gameplay validation follow the same prefab/scene cook rules. Activation
+prepares one detached SceneActivationBatch; it does not synchronously load or spawn
+nested CookedPrefab references from OnCellActive.
+
+Runtime-created content uses the separate ADR-017 Tier 1 admission seam
+SceneCommandBuffer::RequestSpawnPrefab, its application-owned OperationStore and
+commit/cancellation contract. It is not implicitly part of a cell's atomic load.
+Every dynamic spawn declares cell-bound or persistent ownership; cell-bound requests
+capture the fence, are cancelled on eviction, and cannot publish after the cell
+loses authority. Their staged/committed entities and leases participate in teardown.
+Persistent/gameplay/network-owned entities are not deleted merely because their
+position lies inside an evicted cell. Unsupported dynamic content in a baked required
+payload fails cook rather than silently weakening rollback/component guarantees.
+
+ADR-016 NavigationRuntime tile streaming is subordinate resource staging under this
+World Streaming policy. A host IFeatureStreamingProvider adapter stages the ADR-023
+NavigationMesh block, reports readiness/reservation cost, participates in the cell
+transaction, and acknowledges retirement only after tile readers finish. Demand for
+missing tiles becomes a bounded authority request; there is no second navigation
+cell loader. Standalone navigation without World Streaming keeps its existing host
+asset-lifetime adapter. This introduces no concrete WorldStreaming dependency into
+NavigationRuntime. The two ADRs describe the same authority boundary.
+
+## Multiplayer Authority And Editor Isolation
+
+Server authority decides gameplay cell relevance and replicated entity lifecycle.
+Each peer mounts its own partition incarnation, enforces local budgets, and stages
+provider resources independently. Server relevance commands identify world dataset/
+revision, cell tuple and ordered command sequence; clients validate these against
+their mounted world and map them to local PartitionEpoch, never compare remote
+counter numbers as if they were local generations. Stale-world/out-of-order commands
+cannot resurrect evicted cells.
+
+Clients report Ready/Unavailable/Failed with the matching relevance version. Server
+loading/relevance policy must wait for required content or use an explicit safe
+fallback before permitting dependent gameplay; it cannot force a client over budget.
+Client camera prefetch may optimize presentation only within server-approved content
+policy and local capacity. It cannot change server gameplay activation, spawn a
+second authoritative actor or evict required relevant cells unilaterally. Network-owned
+actors materialize through the replication owner, not duplicate local prefab spawning.
+Server and client Active need not occur in the same frame; local residency is not a
+network authority grant. Server-only/client-only layer flags remain enforced.
+
+ADR-018 NET administration and wst.* mutations use the same permission/server-authority
+checks and state machine. Forced eviction is an authorized demand-policy override,
+not a way to skip provider retirement, budget accounting or generation checks.
+Snapshot diagnostics may be read-only; heavy exports use asynchronous operations.
+
+Runtime eviction cannot remove authoring data. Editor documents may page unloaded
+geometry and own editing pins under a separate authoring residency policy; the full
+world need not be live in memory. BakeStreamingCells reads authored pages/assets
+through that policy. Play/Preview uses separate RuntimeScene/partition state and
+cannot delete or mutate document-owned content through runtime eviction.
+
+## Error Handling And Shutdown
+
+All fallible operations follow ADR-008 Result/Error. Lifecycle errors preserve the
+existing WorldStreaming names below; binary StreamingCellErrorCode values in the
+format section remain intact and are retained as underlying causes when translated.
+
+| Lifecycle code | Recovery |
+|---|---|
+| CellNotFound / InvalidCoordinate / VolumeNotFound | Reject input without mutation; never return an apparently successful empty result for invalid input |
+| CellAlreadyActive / CellAlreadyLoading | Return current typed status; do not create duplicate work |
+| CellBudgetExceeded | Bounded deferral or explicit oversized rejection; no over-allocation |
+| StaleGeneration | Suppress publication, retire only the matching old request's resources |
+| ProviderFailed | Required/no-fallback: rollback then Failed; optional: mark unavailable and retire; preserve provider cause |
+| Cancelled | Request interruption, suppress active publication and finish retirement |
+| GenerationExhausted / InvalidProviderGraph | Close affected admission; no counter wrap or invalid composition |
+| ProviderStageTimedOut / RetirementStalled | Apply criticality policy or retain Evicting resources; never fake readiness/retirement |
+| ShutdownIncomplete | Report bounded-drain timeout and retain unresolved dependencies safely |
+
+World replacement advances PartitionEpoch, closes old admission and starts retirement
+for every old Loading/Resident/Active attempt. Old acknowledgements route only to the
+old retirement records. New partition admission, if allowed concurrently, shares the
+same host ledger with all old retained resources.
+
+Shutdown stops volume evaluation/admission, cancels work, then uses the **same**
+registered dependency DAG and Scene safe points as normal eviction. Asset Pipeline,
+provider modules, completion routing and backing storage remain alive until all
+streaming-owned work/leases are retired. There is no hardcoded opposite entity/provider
+order and no ordinary-frame synchronous teardown loop.
+
+An ADR-010-permitted shutdown drain has a host-configured deadline. On expiry return
+ShutdownIncomplete with outstanding fences/owners/bytes; do not detach work that holds
+references to destroyed subsystems or free its memory. The host retains an isolated
+retirement owner plus all provider/asset/module dependencies until acknowledgement.
+It must report shutdown failure rather than claim a clean unload; a process-exit host
+may choose controlled process termination, but an in-process world reload cannot use
+that policy to destroy live dependencies. No unsafe forced thread cancellation is
+part of this contract. Quarantined resources remain charged and may block new loads.
+
+## Streaming Contract Qualification
+
+These are required implementation tests, not runtime changes delivered by this ADR:
+
+- Delayed GPU/physics/nav stages hold Resident; all required Prepared acknowledgements
+  and a successful Scene transaction are necessary before Active.
+- Required failure rolls back without live ECS mutation; optional/fallback behavior
+  is explicit and does not downgrade Required wire payloads.
+- Delayed retirement, uncancellable I/O, retained nav readers and GPU fences keep the
+  cell Evicting and charged until all relevant acknowledgements arrive.
+- World replacement and rapid cell cancel/reload distinguish epoch from generation;
+  stale Ready cannot reactivate, stale retirement still frees the right attempt, and
+  exhaustion never wraps. Include LOD/layer identity and malformed coordinates.
+- Underestimated cost, peak CPU/GPU copies, shared resources and old partition work
+  cannot exceed reservations or release credits early. Pins/age priority do not
+  bypass capacity; retries are bounded despite volume flapping.
+- Normal eviction and shutdown execute the same declared dependency edges. Timeout
+  cannot free provider/module/asset state still referenced by work.
+- Cell prefab expansion preserves declared components/identity; late cell-bound dynamic
+  spawns are cancelled, and persistent/network entities are not accidentally deleted.
+- Multiplayer delayed/missing content, stale relevance commands and local budget
+  rejection do not grant gameplay authority. Authoring pages survive runtime eviction.
 
 ## Cooked World Index Format (`world.index`)
 
@@ -405,41 +803,27 @@ using StreamingResult = Result<T, StreamingCellError>;
 
 ## Decode Pipeline, Cancellation, and Failure Guarantees
 
-Streaming cell decode executes as an asynchronous job pipeline over `HoroFoundation::JobSystem` with deterministic cancellation checkpoints and zero partial state leakage:
+Decode retains the ADR-023 byte validation/transaction contract and participates in
+the runtime fencing, reservation and provider barriers above. Foundation JobSystem
+workers stage immutable/private data; only the owner advances cell state.
 
 ```text
-┌─────────────────┐     Cancel?     ┌──────────────────────────┐
-│  1. Async I/O   ├────────────────►│ Discard buffer           │
-└────────┬────────┘                 │ Return Cancelled         │
-         ▼                          └──────────────────────────┘
-┌─────────────────┐   Check fail?   ┌──────────────────────────┐
-│  2. Integrity   ├────────────────►│ Emit diagnostic          │
-│   & Validation  │                 │ Transition to Failed     │
-└────────┬────────┘                 └──────────────────────────┘
-         ▼
-┌─────────────────┐     Cancel?     ┌──────────────────────────┐
-│ 3. Decompress   ├────────────────►│ Free staging memory      │
-│  & Slice Table  │                 │ Return Cancelled         │
-└────────┬────────┘                 └──────────────────────────┘
-         ▼
-┌─────────────────┐   Error/Cancel? ┌──────────────────────────┐
-│ 4. Providers &  ├────────────────►│ Roll back provider slices│
-│ ECS Instantiate │                 │ Free staging entities    │
-└────────┬────────┘                 │ Zero ECS state touches   │
-         ▼                          └──────────────────────────┘
-┌─────────────────┐
-│   5. Commit to  │ (Sync point on owner thread: swap storage candidate)
-│  Runtime Scene  │
-└─────────────────┘
+Admitted I/O -> Integrity checks -> Independent bounded block decode
+            -> Resident: detached CoreEcs plus async provider stages
+            -> Required Ready/Prepared barrier
+            -> CommitDeferredLifecycleChanges transaction -> Active
+
+Cancel/error before commit -> Evicting -> acknowledged resource retirement
+                          -> Unloaded, Failed, or admitted retry
 ```
 
 ### Decode Phase Guarantees
 
-1. **Async I/O Phase**: Reads raw bytes from the archive into a scratch buffer. If `cancelToken.IsCancelled()` is signaled, the read is aborted and the buffer returned to the pool immediately.
+1. **Async I/O Phase**: Reads into reserved scratch under the captured StreamingFence. Cancellation requests interruption where supported; a buffer returns to its pool only after the I/O operation relinquishes access. Late completions cannot publish but still retire their matching resources.
 2. **Integrity & Validation Phase**: Validates artifact length, computes SHA-256 over the fixed header with its hash field zeroed plus the exact cell body, and compares it with both header and `world.index` before trusting header controls or TOC contents. It then validates magic/version, the exact v1 TOC location, canonical provider ordering, exactly one required first `CoreEcs`, zero padding, aligned non-overlapping block ranges, aggregate sizes, and file containment. Aggregate uncompressed size and CRC are then recomputed from TOC metadata with `crc32_combine` and compared before decompression.
 3. **Independent Block Decode Phase**: In canonical order, each required or supported optional entry is decrypted if needed, independently decompressed with the header codec, checked for exact decoded size, and verified against its entry CRC32. Unsupported optional entries may remain compressed and unstaged. Budget failure returns `AllocationLimitExceeded`; size/hash/CRC mismatch returns `CorruptedIntegrity`.
-4. **Provider Staging Phase**: The built-in Core ECS provider creates detached `RuntimeSceneStorage`. Terrain, Foliage, Physics Mesh, Audio, Navigation Mesh, Destruction, and custom `IFeatureStreamingProvider` implementations construct resources in private candidate containers.
-5. **Atomic Synchronization & Commit**: On the owner thread during `CommitDeferredLifecycleChanges`, the detached candidate is merged into the active `RuntimeScene` in a single structural transaction. If an error or cancellation occurred in phases 1–4, the candidate is discarded, feature providers drop their staged allocations, and the active scene remains completely untouched.
+4. **Provider Staging Phase**: The built-in Core ECS provider prepares detached `RuntimeSceneStorage` from cooked flattened definitions. Domain adapters decode private data and admit asynchronous native staging within reservations. Resident does not imply every provider is Ready. Required and valid fallback providers must acknowledge Prepared before the activation barrier opens.
+5. **Atomic Synchronization & Commit**: After the current fence, reservations and required provider barrier are validated, Scene Runtime commits the detached candidate and prepared publication actions at `CommitDeferredLifecycleChanges`. Required failure/cancellation before publication leaves the active scene untouched; candidate/provider resources retire asynchronously through Evicting. Optional payload failures follow the declared policy and cannot downgrade a required wire block.
 
 ### Binary Format Verification Requirements
 
@@ -454,225 +838,6 @@ Streaming cell decode executes as an asynchronous job pipeline over `HoroFoundat
   hash field, TOC bytes, padding, compressed bytes, decoded bytes, and aggregate
   fields and assert the specified artifact-SHA/per-entry-CRC/aggregate-CRC phase.
 
-## Streaming Volumes
-
-Streaming volumes define which cells should be loaded:
-
-- **Camera volume**: Cells within a radius of the active camera
-- **Gameplay volumes**: Pre-defined volumes attached to gameplay triggers
-- **Network relevance volumes**: Cells relevant to the local player in
-  multiplayer
-- **Preload volumes**: Always-loaded cells for critical areas
-
-```cpp
-struct StreamingVolume {
-    StreamingVolumeType     type;
-    Math::WorldCoordinate64 origin;
-    float                   radius;
-    StreamingPriority       priority;
-    bool                    unloadOutside;
-};
-```
-
-`unloadOutside` (bool): When `true`, cells that are inside this volume's
-radius must remain loaded, but this volume does **not** prevent a cell from
-unloading if all other volumes have also released it. When `false`, the
-volume acts as a **pin**: cells within its radius are held loaded regardless
-of other volumes' state. This allows "camera" volumes to release cells when
-the camera moves away while "preload" volumes permanently pin critical
-cells.
-
-The streaming system evaluates all active volumes each frame and computes a
-union of required cells. Cells not in the union but currently loaded are
-scheduled for unloading after a configurable linger duration.
-
-**Linger duration** is a global setting stored in `StreamingBudget` (not per
-volume or per cell):
-
-```cpp
-struct StreamingBudget {
-    uint32_t  maxConcurrentLoads;
-    uint32_t  maxConcurrentUnloads;
-    size_t    maxResidentMemoryMB;
-    float     maxFrameTimeMS;        // time budget for streaming work per frame
-    float     unloadLingerSeconds;   // delay before unloading cells that left all volumes
-    size_t    terrainMemoryReservationMB;
-    size_t    foliageMemoryReservationMB;
-};
-```
-
-This prevents rapid load/unload cycles when the camera oscillates near a
-cell boundary.
-
-## Cell Lifecycle
-
-```
-                 ┌──────────────────────────┐
-                 │                          │
-                 ▼                          │
-Unloaded ──→ Loading ──→ Loaded ──→ Unloading ──→ Unloaded
-               │                                    ▲
-               │        (max retries)               │
-               └──→ Failed ─────────────────────────┘
-```
-
-**States**:
-
-- **Unloaded**: No resources allocated
-- **Loading**: Scene asset is being read from disk; terrain and foliage data
-  are requested from the asset pipeline via async I/O with cancellation
-  tokens
-- **Loaded**: All objects and components are instantiated in the scene
-  runtime. The cell remains in this state until all volumes release it and
-  the linger duration expires.
-- **Unloading**: Objects are being removed; references are cleaned up. Once
-  complete, transitions to Unloaded.
-- **Failed**: Loading encountered an unrecoverable error after exhausting
-  retries. The cell stays in Failed until explicitly retried (editor
-  command, streaming volume re-evaluation after a configurable cooldown).
-
-**Retry policy**:
-
-```cpp
-struct StreamingRetryPolicy {
-    uint32_t  maxRetries;             // default 3
-    float     retryCooldownSeconds;   // delay before re-queuing a Failed cell
-    bool      autoRetryOnVolumeChange;// re-attempt when a new volume covers this cell
-};
-```
-
-When a `Loading` cell fails, the streaming system decrements a retry counter
-for that cell. If retries remain, the cell is re-queued after the cooldown.
-If retries are exhausted, the cell enters `Failed` state and a diagnostic
-is emitted. When `autoRetryOnVolumeChange` is true, a Failed cell is
-automatically re-queued (with a fresh retry counter) when a streaming volume
-newly covers it.
-
-Transitions are driven by `StreamingRequest` objects queued into the job
-system:
-
-```cpp
-struct StreamingRequest {
-    StreamingCellId  cellId;
-    StreamingAction  action;          // Load or Unload
-    StreamingPriority priority;
-    CancellationToken cancelToken;   // from asset pipeline: job system CancellationToken
-};
-```
-
-The `cancelToken` is derived from the asset pipeline's async I/O contract:
-all asset read operations for this cell share a single token. If the cell
-transitions to `Unloading` before the load completes, the token is
-cancelled, aborting in-flight I/O and releasing partial resources.
-
-## Priority And Budget
-
-### Priority Calculation
-
-Streaming priority is computed as a weighted sum each frame:
-
-```
-priority = (1.0 / (distance + epsilon))
-         * volumeTypeMultiplier
-         * explicitOverrideMultiplier
-         + antiStarvationBoost
-```
-
-where:
-
-| Factor | Description |
-| ------ | ----------- |
-| `distance` | Meters from cell center to nearest active streaming volume origin. Closer cells score higher. `epsilon` prevents division by zero. |
-| `volumeTypeMultiplier` | Camera = 1.0, Gameplay = 0.9, Network = 0.8, Preload = 1.2 (preload cells are pinned, but within the preload set, closer cells still load first) |
-| `explicitOverrideMultiplier` | Gameplay scripts can set a multiplier (0.5–2.0) on specific cells via `StreamingPriorityOverride` |
-| `antiStarvationBoost` | Increases linearly with seconds spent queued as a pending load request. Prevents distant cells from never starting. |
-
-When multiple volumes cover the same cell, the **highest** computed priority
-across all covering volumes is used (not an average). This ensures a cell
-covered by both a low-priority network volume and a high-priority camera
-volume gets the camera priority.
-
-The `StreamingCell.priority` field stores this cached computed value per
-frame. The `StreamingVolume.priority` field defines that volume's **base**
-contribution weight; it feeds into the formula above, scaled by distance
-and the volume type multiplier.
-
-### Streaming Budget
-
-The canonical `StreamingBudget` is defined above in the streaming-volume section.
-`terrainMemoryReservationMB` and `foliageMemoryReservationMB` are **sub-
-allocations** carved out of `maxResidentMemoryMB`. The terrain and foliage
-subsystems each have their own internal caches (`TerrainStreamingBudget`)
-that are capped by these reservations. The remaining budget
-(`maxResidentMemoryMB - terrainReservation - foliageReservation`) is
-available for scene objects and other cell payloads.
-
-This avoids double-counting: the world-streaming system owns the total cap,
-and terrain/foliage operate within their allocated slices. If a terrain tile
-cache exceeds its reservation, terrain evicts internally without asking the
-world-streaming system.
-
-## World Composition
-
-Large worlds are composed from multiple layers:
-
-- **Persistent layer**: Always-loaded core objects (sky, global audio, game
-  mode)
-- **Streaming layers**: Cell-based world content
-- **Dynamic layers**: Runtime-spawned content (projectiles, VFX, temporary
-  objects)
-
-Layer ownership determines streaming responsibility. The canonical
-`WorldLayerOwnership` enumeration is defined in the cooked World Index
-schema above:
-
-- `WorldStreaming` — managed by the streaming system
-- `GameplayScript` — managed by gameplay code
-- `NetworkReplication` — managed by the networking layer
-
-## Networking Integration
-
-In multiplayer, the server owns streaming authority:
-
-- Server determines which cells are relevant to each client
-- Server sends cell load/unload notifications to clients
-- Clients stream cells as directed by the server
-- Network-relevant objects within cells are replicated normally
-
-**Budget scope in multiplayer**: The `StreamingBudget` is applied **per
-peer**:
-- The server manages its own world view with a server-side budget (usually
-  higher, since servers must keep relevant cells for all connected clients
-  resident).
-- Each client has its own budget, enforced locally. The server does not
-  track per-client memory usage; it only sends load/unload directives.
-- Bandwidth for cell state notifications is managed through the networking
-  layer's bandwidth budget.
-
-The server may keep all cells loaded (no server-side streaming) in
-smaller-scale games, or apply server-side streaming for large open worlds.
-This is a deployment configuration, not a code change.
-
-## Editor Integration
-
-Editor streaming tools register through the `EditorPanelHost` system:
-
-- **World Composition View**: Registered as a standalone `EditorTab`
-  (`WorldCompositionTab`). Displays layer list, cell grid with
-  load-state color coding, and streaming statistics. Subscribes to
-  `StreamingCellStateChangedEvent` on the `EditorDataBus`.
-- **Streaming Volume Placement**: `StreamingVolume` objects are scene
-  entities with a gizmo component. Volume editing uses the standard
-  viewport gizmo system — no custom editor panel needed.
-- **Cell Baking**: Exposed as an editor command in the Build menu
-  (`BakeStreamingCells`). The command iterates cells, exports their
-  content to streaming assets, and reports diagnostics.
-- **Streaming Preview**: A viewport overlay toggle that color-codes cells by
-  load state (green=loaded, yellow=loading, red=unloaded, gray=failed).
-  Registered as a `ViewportPanel` overlay.
-- **Streaming Budget HUD**: A bottom-dock panel showing real-time budget
-  usage, load queue depth, and frame-time impact.
-
 ## Large-World Coordinate Precision and Floating Origin Rebasing
 
 World streaming in Horo Engine operates on a global coordinate grid backed by 64-bit precision, avoiding single-precision float truncation over vast distances:
@@ -684,27 +849,20 @@ World streaming in Horo Engine operates on a global coordinate grid backed by 64
 
 See [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin-rebasing.md) and [ADR-026](../../adr/026-large-world-precision-and-floating-origin-strategy.md) for the complete normative specification.
 
-## Related Documents
+## Related Documents and ADRs
 
-- [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin-rebasing.md):
-  canonical 64-bit world coordinates, floating origin rebasing, and subsystem adapters
-- [ADR-026: Large-World Precision and Floating Origin Strategy](../../adr/026-large-world-precision-and-floating-origin-strategy.md):
-  ratified architectural decision and platform cost analysis
-- [Scene Runtime](./scene-runtime.md): cell loading integrates with the scene
-  model
-- [Rendering Architecture](./rendering-architecture.md): camera-relative rendering
-  matrices and universal 32-bit shader pipeline
-- [Physics Architecture](./physics-architecture.md): local rebased physics clusters
-  and velocity-invariant origin shift handling
-- [Asset Pipeline](./asset-pipeline.md): streaming cell assets, `CancellationToken`,
-  and async I/O contract
-- [Terrain And Foliage Architecture](./terrain-and-foliage-architecture.md):
-  terrain tile cache and foliage cluster streaming; budget sub-allocation
-- [Networking Architecture](./networking-architecture.md): server-authoritative
-  streaming and per-peer budget scoping
-- [Concurrency And Jobs](../foundation/concurrency-and-jobs.md): streaming job
-  system and `CancellationToken`
-- [Editor Panel Host](../editor/editor-panel-host.md): world composition tab
-  registration, `StreamingCellStateChangedEvent` on `EditorDataBus`
-- [Editor Document Model](../editor/editor-document-model.md): cell baking as
-  editor commands
+- [ADR-016: Navigation Ownership](../../adr/016-navigation-target-ownership-and-dependency-boundary.md): Cell-backed navigation staging and reader leases.
+- [ADR-017: Prefab Ownership](../../adr/017-prefab-role-ownership-and-capability-tiers.md): Offline expansion versus runtime spawn admission.
+- [ADR-018: Command Policy](../../adr/018-command-registration-permissions-threading-and-packaged-build-policy.md): wst/network authority and owner-thread dispatch.
+- [ADR-023: World Index and Cell Format](../../adr/023-world-index-and-cell-format-architecture-decision.md): Unchanged canonical wire formats.
+- [ADR-010: Job and Operation Ownership](../../adr/010-job-waiting-and-operation-store-ownership.md): Bounded lifecycle drains and shared OperationStore.
+
+- [ADR-012: World Streaming Partition Authority and Subsystem Boundaries](../../adr/012-world-streaming-partition-authority-and-subsystem-boundaries.md): Partition ownership, provider barriers and resource admission.
+- [Scene Runtime](./scene-runtime.md): ECS entity storage, candidate preparation, and transactional structural mutations.
+- [Asset Pipeline](./asset-pipeline.md): Streaming cell assets, chunked package archives, and async I/O with `CancellationToken`.
+- [Terrain And Foliage Architecture](./terrain-and-foliage-architecture.md): Terrain clipmap streaming and cell-aligned foliage clusters.
+- [Physics Architecture](./physics-architecture.md): Static mesh collider registration and scene binding.
+- [Networking Architecture](./networking-architecture.md): Server-authoritative cell relevance and replication.
+- [Concurrency And Job System](../foundation/concurrency-and-jobs.md): Job workers, cancellation tokens, and thread roles.
+- [Error And Diagnostics](../foundation/error-and-diagnostics.md): Fallible `Result<T, Error>` contracts and diagnostic codes.
+- [Editor Document Model](../editor/editor-document-model.md): Multi-layer authoring documents and offline cell baking.

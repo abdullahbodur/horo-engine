@@ -203,6 +203,12 @@ ADR-023 NavigationMesh cell payload into private provider resources. Cell tile p
 or logical removal occurs with the existing `CommitDeferredLifecycleChanges` cell transaction;
 `NavIntentCommit` consumes the committed topology revision and never sees partially installed
 cell state. The adapter participates in rollback if any required cell provider fails.
+The ADR-012 provider protocol captures both PartitionEpoch and per-cell
+StreamingGeneration, reserves staging/resident/retired bytes, and explicitly
+acknowledges Ready/Prepared before activation. Eviction acknowledges Retired only
+after every query/tile lease and provider-affine release completes; logical removal
+alone is not physical deallocation. Optional/fallback policy cannot bypass an
+activation-critical navigation requirement.
 
 Navigation tile streaming means requesting needed content and installing/releasing navigation
 resources under that contract; it is not another cell loader. Missing tiles generate bounded

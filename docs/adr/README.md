@@ -22,6 +22,7 @@ to the replacement.
 | [008](008-error-model-exception-boundary-and-registry.md) | Error Model, Exception Boundary and Registry Ownership | proposed | 2026-08-27 |
 | [009](009-configuration-schema-precedence-and-secret-boundary.md) | Configuration Schema, Precedence and Secret Boundary | proposed | 2026-08-28 |
 | [010](010-job-waiting-and-operation-store-ownership.md) | Job Waiting and Operation Store Ownership | proposed | 2026-08-28 |
+| [012](012-world-streaming-partition-authority-and-subsystem-boundaries.md) | World Streaming Partition Authority and Subsystem Boundaries | proposed | 2026-08-28 |
 | [013](013-environment-query-ownership-item-and-scoring-model.md) | Environment Query Ownership, Item and Scoring Model | proposed | 2026-08-28 |
 | [014](014-sequencer-ownership-clock-authority-and-binding-boundary.md) | Sequencer Ownership, Clock Authority and Binding Boundary | proposed | 2026-08-28 |
 | [015](015-accessibility-ownership-typed-transport-and-non-gating-policy.md) | Accessibility Ownership, Typed Transport and Non-Gating Policy | proposed | 2026-08-28 |
