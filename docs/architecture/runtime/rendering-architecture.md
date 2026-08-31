@@ -158,6 +158,17 @@ silently switch to `null`.
 
 ## Capabilities, Limits And Product Profiles
 
+[ADR-029](../../adr/029-opengl-compatibility-profile-and-platform-policy.md) owns
+the `opengl` component's native version, platform, and deprecation policy:
+desktop OpenGL 4.1 Core minimum, actual-context validation, and qualified desktop
+Windows/Linux/macOS support. “Compatibility renderer” does not permit the OpenGL
+Compatibility Profile. OpenGL ES/WebGL references elsewhere in this architecture
+describe possible future targets, not support provided by this component.
+The macOS warning never changes backend selection or project settings by itself.
+Context requirements must reach the selected private platform adapter before
+window creation; completing that seam and native admission is downstream
+implementation work, not a claim that today's bootstrap is fully qualified.
+
 [ADR-028](../../adr/028-renderer-capability-limits-and-product-profiles.md) owns
 the renderer capability and profile policy. Backend-reported device facts,
 implemented backend operations, driver-adjusted effective support, and requested
