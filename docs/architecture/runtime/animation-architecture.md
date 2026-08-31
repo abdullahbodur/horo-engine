@@ -369,14 +369,20 @@ scene conversion:
 
 ### Update Order
 
-Animation produces a pose once per rendered frame. Physics may step multiple
+For the non-AI frame-pose path, animation produces a pose once per rendered frame.
+This is distinct from ADR-022's fixed-tick AI locomotion/rig ordering: AI cinematic
+movement enters NavIntentCommit, physics authority remains in locomotion, and rig
+update follows committed movement. The sequencer does not move that fixed-tick
+work into VariableUpdate or permit presentation samples to mutate physics.
+
+On the frame-pose path, physics may step multiple
 times per frame at a fixed interval; the animation pose is sampled before those
 steps and is not re-sampled inside a physics step.
 
 ```text
 Frame Update
   Gameplay sets animation parameters & behavior state
-  Cinematic sequencer evaluates (overriding transforms/properties if active)
+  Cinematic presentation values sample through admitted owner bindings
   Animation graph evaluates -> pose
   IK applied -> modified pose
   Root motion delta produced

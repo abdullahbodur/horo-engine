@@ -160,6 +160,24 @@ dropped time and steps, catch-up saturation, negative samples, and maximum-delta
 clamps. Hosts query snapshots without locks or logging in the hot path;
 observability adapters may publish them at their own bounded cadence.
 
+### Cinematic Fixed Control Clock
+
+ADR-014 defines an optional Runtime-owned unscaled fixed control clock for
+presentation-only cutscenes that continue while gameplay is paused. It is a service
+clock, not FixedUpdate: it advances no simulationTick/completedSimulationTick count
+and never runs physics, AI, controller movement or gameplay callbacks during pause.
+The host services its bounded quanta in VariableUpdate before presentation sampling.
+
+Its validated configuration explicitly supplies a positive quantum and catch-up
+limit. Baseline defaults reuse 16,666,667 ns, five quanta and the 250 ms elapsed-time
+clamp above; excess whole quanta are dropped with counters, keeping the remainder.
+The first frame/resume establishes zero delta. Host suspension freezes the clock.
+Identical recorded control-quanta and setting histories reproduce cinematic
+sampling; elapsed wall time or a different dropped-time history alone does not.
+Gameplay pause tokens compose at a safe point before the next simulation tick;
+releasing a cinematic token cannot unpause another owner's reason. See
+[Cinematic Sequencer Architecture](./cinematic-sequencer-architecture.md).
+
 ## Error And Allocation Contract
 
 Expected participant failures use `Result<void>` and stable error codes.
