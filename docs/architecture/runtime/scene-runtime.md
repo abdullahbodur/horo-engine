@@ -249,6 +249,20 @@ access. A stable order is produced for equal dependencies.
 Initial implementations may execute systems serially. The access contract still
 exists so future parallelism does not require redesigning system ownership.
 
+## Runtime Save And Restore Integration
+
+[Runtime persistence](./save-game-and-persistence.md) is coordinated by an
+application/session-owned service, not a service retaining a replaceable scene
+reference. Capture hands workers an owned immutable, revision-consistent snapshot;
+live ECS pools are not held frozen after the lifecycle safe point. Slot restore
+prepares a private bundle of Scene, gameplay, slot player and persistent world state
+through the existing QueuePreparation admission seam. CommitDeferredLifecycleChanges
+publishes all prepared roots without fallible work or intermediate observers. Its scene
+candidate cannot auto-activate while the composite bundle gate is pending; account
+settings/achievements remain outside that transaction. This composite commit is an
+implementation requirement beyond SCN-001, not a second public activation path.
+Old scene/provider resources retire asynchronously with their leases preserved.
+
 ## Runtime Scene Definition
 
 The definition contains:
