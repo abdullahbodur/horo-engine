@@ -95,6 +95,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Render Backend Parity Contract](./runtime/render-backend-parity-contract.md):
   equal lifecycle, presentation, editor integration, and verification obligations
   for interactive renderer backends.
+- [Renderer Capability, Limits and Product Profiles](../adr/028-renderer-capability-limits-and-product-profiles.md):
+  reported versus effective support, driver restrictions, typed format/limit
+  admission, and Baseline through Ultra quality policy.
 - [Renderer Distribution And Availability](./runtime/renderer-distribution-and-availability.md):
   optional renderer components, install/repair/probe states, launcher recovery,
   and selection policy.

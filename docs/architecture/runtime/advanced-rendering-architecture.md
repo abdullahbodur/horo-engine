@@ -40,8 +40,10 @@ Not covered:
 
 ## Core Decisions
 
-- The renderer supports both deferred and forward+ paths. The active path is
-  selected by feature tier and scene requirements.
+- The renderer supports deferred, forward+ and baseline forward paths. The
+  frontend selects a recipe from product preferences, scene requirements and
+  effective feature/format/limit predicates under
+  [ADR-028](../../adr/028-renderer-capability-limits-and-product-profiles.md).
 - Lighting is clustered or tiled by default to scale with many punctual lights.
 - Shadows use a configurable atlas with cascaded directional shadows and
   punctual shadow maps.
@@ -53,10 +55,11 @@ Not covered:
   individual materials.
 - TAA and upscaling are optional but supported through a vendor-neutral
   interface.
-- Ray tracing, mesh shaders, and bindless resources are gated by feature tier
-  and compile-time capability.
-- Every high-end feature has a deterministic raster or CPU-driven fallback;
-  tiers disable features rather than fail.
+- Ray tracing, mesh shaders and bindless resources require implemented backend
+  paths, effective device support and product permission independently.
+- Optional high-end features use declared, implemented and cooked raster or
+  CPU-driven fallbacks. Missing required features fail admission; a profile
+  cannot silently disable content requirements.
 - The render graph owns resource allocation and barrier scheduling; individual
   features declare inputs and outputs.
 
@@ -64,7 +67,9 @@ Not covered:
 
 ### Deferred Lighting
 
-Default path for `dx12_vulkan` and `high_end` tiers.
+Preferred path for High and Ultra when the complete GBuffer attachment, format,
+sample and resource-limit requirements pass. Otherwise the frontend evaluates
+the explicitly allowed fallback recipes before admitting resource work.
 
 Pass flow:
 
@@ -84,7 +89,9 @@ it without per-material negotiation.
 
 ### Forward+ Lighting
 
-Default path for `dx11` and fallback for `es3`.
+Preferred path for Standard when compute preparation and its resource requirements
+are effective. Baseline uses forward raster with bounded CPU light preparation;
+this is also the explicit fallback when compute is unavailable.
 
 Forward+ performs a light culling prepass to produce a per-tile light list,
 then renders opaque and translucent meshes in a forward pass.
@@ -99,16 +106,17 @@ then renders opaque and translucent meshes in a forward pass.
 | Rect        | Optional; area light approximation.                      |
 | Sky         | Ambient contribution and environment cubemap.            |
 
-Rect and Sky light support is tier-dependent. `es3` may support only basic
-approximations; full area-light and dynamic sky contributions are enabled on
-`dx11` and above.
+Rect and Sky light recipes declare their shader/format/limit requirements.
+Baseline may use basic approximations; richer area-light and dynamic-sky paths
+are selected only when their requirements and product budgets pass admission.
 
 ### Clustered / Tiled Culling
 
 Lights are assigned to screen-space tiles or world-space clusters. Each tile
 stores a compact index list. Shaders iterate only over relevant lights.
 
-Culling is performed on CPU or GPU depending on tier and light count.
+Culling is performed on CPU or GPU according to effective support, the selected
+recipe and the product's bounded light/work budget.
 
 ## Shadows
 
@@ -117,7 +125,7 @@ Culling is performed on CPU or GPU depending on tier and light count.
 Directional lights use cascaded shadow maps (CSM).
 
 - cascades are split by logarithmic or mixed partitioning
-- cascade count is tier-dependent
+- cascade count is a validated product budget bounded by effective resource limits
 - cascade blending reduces seams
 - stable cascades reduce shimmer during camera rotation
 
@@ -138,9 +146,9 @@ prioritized by:
 ### Contact Shadows
 
 Optional screen-space contact shadows add fine detail near the camera. They are
-a separate pass that may be disabled on lower tiers. Contact shadows are used on
-`dx12_vulkan` and may be combined with or replaced by virtual shadow maps on
-`high_end`.
+a separate optional pass. High may prefer contact shadows; Ultra may prefer a
+virtual-shadow-map recipe. Both require independent resource/format predicates
+and an explicit fallback to the admitted shadow-atlas recipe.
 
 ## Global Illumination
 
@@ -174,7 +182,7 @@ Optional real-time technique using the depth buffer and GBuffer.
 
 - lower accuracy than baked GI
 - useful for dynamic objects and contact color bleeding
-- tier-gated
+- effective-capability and product-policy gated, with a baked-GI/probe fallback
 
 ## Reflections
 
@@ -200,7 +208,8 @@ mirrors.
 
 ### Ray-Traced Reflections
 
-Available on tiers that support hardware ray tracing.
+Available only when effective support includes the required ray operations and
+resources, the effect implementation is linked, and product policy enables it.
 
 - more accurate than SSR
 - denoising required
@@ -266,13 +275,17 @@ Backends:
 | `FSR`    | AMD spatial/temporal upscaling.  |
 | `XeSS`   | Intel XeSS upscaling.            |
 
-The renderer selects the best available backend based on GPU vendor, tier, and
-user preference. All backends share the same input: jittered low-res color,
-motion vectors, depth, and exposure.
+The frontend selects an upscaler provider from the explicit product/user policy
+and effective support for that provider's requirements. Vendor identity alone
+does not authorize selection; provider selection never switches the renderer API.
+Temporal providers consume jittered low-resolution color, motion vectors, depth
+and exposure. Each provider declares its exact inputs and cooked/runtime support;
+native resolution is the explicit optional-upscaler fallback.
 
 ## Ray Tracing
 
-Ray tracing is gated by feature tier and compile-time capability.
+Ray tracing is gated by effective ray-operation support, implemented/cooked effect
+paths and product policy; an Ultra preference alone does not enable it.
 
 Use cases:
 
@@ -288,7 +301,9 @@ Requirements:
 - shader table management
 - denoising pass
 
-Ray tracing is never required. Every ray-traced effect has a raster fallback.
+Built-in profile recipes do not require ray tracing. Their optional ray-traced
+effects declare raster fallbacks. Content that explicitly requires a ray path
+fails admission on unsupported hardware rather than silently changing its effect.
 
 ## GPU-Driven Rendering
 
@@ -317,7 +332,8 @@ Bindless descriptor indexing reduces descriptor set pressure.
 - materials pass texture indices
 - descriptor heap/array managed by the renderer
 
-Fallback to bound descriptors on tiers without bindless support.
+Fallback to a declared bound-resource variant when effective bindless support is
+absent or product policy disables it; missing required variants fail admission.
 
 ## Mesh Shaders And Meshlets
 
@@ -337,7 +353,8 @@ Virtual texturing allows scenes to use more texture data than GPU memory.
 - runtime requests visible tiles
 - sparse texture arrays or page tables manage residency
 
-Virtual texturing is optional and tier-gated.
+Virtual texturing is optional and admitted through its effective feature/format
+requirements and product residency budgets, not through a profile rank.
 
 ## Occlusion Culling
 
@@ -363,14 +380,16 @@ This document defines the boundary:
 Detailed terrain/foliage architecture is covered in a separate document when
 implemented.
 
-## Feature Tiers
+## Product Profile Policy
 
-| Tier          | Lighting                | Shadows                     | GI                        | Reflections          | Post  | TAA/Upscale   | Ray Tracing | Bindless | Mesh Shaders |
-| ------------- | ----------------------- | --------------------------- | ------------------------- | -------------------- | ----- | ------------- | ----------- | -------- | ------------ |
-| `es3`         | Forward, limited lights | Single cascade, no punctual | Ambient + probes          | Probes only          | Basic | Native        | No          | No       | No           |
-| `dx11`        | Forward+                | Cascaded + atlas            | Lightmaps + probes        | SSR + probes         | Full  | TAA optional  | No          | Limited  | No           |
-| `dx12_vulkan` | Deferred                | Cascaded + atlas + contact  | Lightmaps + probes + SSGI | SSR + RT reflections | Full  | TAA/TAAU/FSR  | Optional    | Yes      | Optional     |
-| `high_end`    | Deferred/clustered      | Virtual shadow maps         | Real-time GI              | SSR + RT + probes    | Full  | All upscalers | Yes         | Yes      | Yes          |
+[ADR-028](../../adr/028-renderer-capability-limits-and-product-profiles.md) owns
+the Baseline through Ultra recipe preferences and the legacy API-tier migration.
+This document owns effect algorithms and their concrete requirements. A profile
+is not a bundle of guaranteed hardware features: every selected pass declares
+required operations, formats, limits, inputs, variants and finite budgets.
+The frontend records optional fallback decisions and rejects missing required
+paths before resource creation. No feature or upscaler selects another renderer
+backend, and no frame-hot path queries the native driver for capability policy.
 
 ## Render Graph Integration
 
@@ -396,7 +415,8 @@ Debug views:
 ## Testing Requirements
 
 - Visual regression tests for representative scenes.
-- Tier fallback tests verifying degraded output without crashes.
+- Profile/feature fallback tests verifying declared degradation, rejection of
+  missing required paths and preservation of the active plan after failed updates.
 - Shader permutation tests for each lighting path.
 - Performance tests measuring draw call scaling.
 - Determinism tests for TAA and motion vector generation.

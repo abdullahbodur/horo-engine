@@ -271,6 +271,13 @@ not own scene rendering policy or replace `RenderFrontend`.
 
 ## Required Baseline Capability
 
+This is an interactive-backend lifecycle/parity requirement, not automatic
+qualification for every scene or for the `Baseline` product rendering recipe.
+[ADR-028](../../adr/028-renderer-capability-limits-and-product-profiles.md) defines
+the distinct product profiles and effective support used for resource/plan
+admission. Optional features require both native support and an implemented,
+driver-policy-approved backend path; profile names never grant support.
+
 OpenGL and Metal reach parity only when both provide:
 
 - interactive window presentation;

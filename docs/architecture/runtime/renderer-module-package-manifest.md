@@ -283,7 +283,9 @@ settings.
 ## Capability Hints
 
 `capabilityHints` exist for catalog presentation and preflight planning only.
-They are not authoritative. The initialized backend's typed capability snapshot
+They are not authoritative. The frontend's effective capability snapshot after
+device initialization and driver-policy adjustment, as defined by
+[ADR-028](../../adr/028-renderer-capability-limits-and-product-profiles.md),
 is authoritative.
 
 A manifest cannot use capability hints to bypass parity requirements or backend
