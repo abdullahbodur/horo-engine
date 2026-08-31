@@ -116,6 +116,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [GPU Memory and Residency Ownership](../adr/034-gpu-memory-and-residency-ownership.md):
   native allocator ownership, backing-capacity accounting, streaming reservations,
   bounded pressure policy, and deferred reclamation.
+- [Shader Source and Intermediate Representation](../adr/035-shader-source-and-intermediate-representation.md):
+  HLSL authoring, target-specific SPIR-V/DXIL routes, normalized reflection,
+  compiler identity, source diagnostics, and cooked/runtime boundaries.
 - [Renderer Distribution And Availability](./runtime/renderer-distribution-and-availability.md):
   optional renderer components, install/repair/probe states, launcher recovery,
   and selection policy.
