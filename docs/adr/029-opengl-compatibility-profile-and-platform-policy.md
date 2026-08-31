@@ -1,4 +1,4 @@
-# ADR-029: OpenGL Compatibility Profile and Platform Policy
+# ADR-029: OpenGL Core Profile and Platform Policy
 
 - **Status**: proposed
 - **Date**: 2026-08-31
