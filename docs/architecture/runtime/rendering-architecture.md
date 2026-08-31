@@ -158,6 +158,14 @@ silently switch to `null`.
 
 ## Capabilities, Limits And Product Profiles
 
+[ADR-031](../../adr/031-vulkan-loader-platform-and-version-baseline.md) owns the
+planned `vulkan` component's native baseline: Vulkan 1.3 instance/device support,
+explicit dynamic-rendering/synchronization2/timeline feature enablement, a single
+system loader, and actual-surface admission on Windows/Linux desktop. It defers
+portability-subset product support. These are downstream requirements, not a
+claim that a Vulkan backend target exists or that optional engine features are
+already implemented.
+
 [ADR-030](../../adr/030-metal-platform-and-feature-baseline.md) owns the `metal`
 component's native baseline: macOS 14.0+, Apple7 on native arm64 or Mac2 on native
 x86_64, explicit MSL 2.4 shaders, and conventional command-buffer/encoder APIs.

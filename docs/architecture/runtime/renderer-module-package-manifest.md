@@ -258,6 +258,12 @@ validation fails.
 
 ## Runtime Requirements
 
+For Vulkan, [ADR-031](../../adr/031-vulkan-loader-platform-and-version-baseline.md)
+requires the system loader plus separately validated Vulkan 1.3 device/features
+and the selected WSI path. A `khronos.vulkan-loader` requirement cannot stand in
+for an ICD, GPU, or surface probe. `horo.moltenvk` below is a reserved runtime
+vocabulary example; portability packages are outside the initial product scope.
+
 Runtime requirements use known typed IDs and kinds. Examples:
 
 ```text

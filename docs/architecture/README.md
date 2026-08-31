@@ -104,6 +104,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Metal Platform and Feature Baseline](../adr/030-metal-platform-and-feature-baseline.md):
   macOS 14, native GPU-family admission, MSL 2.4, effective feature support,
   and deployment/qualification policy.
+- [Vulkan Loader, Platform and Version Baseline](../adr/031-vulkan-loader-platform-and-version-baseline.md):
+  Vulkan 1.3 core, required enabled features, system-loader ownership,
+  Windows/Linux WSI qualification, and deferred portability scope.
 - [Renderer Distribution And Availability](./runtime/renderer-distribution-and-availability.md):
   optional renderer components, install/repair/probe states, launcher recovery,
   and selection policy.

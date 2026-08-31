@@ -439,6 +439,13 @@ features. They do not change the selected renderer module or bypass component
 verification. A Vulkan SDK is not required merely because the Vulkan renderer is
 selected unless a documented runtime packaging policy explicitly says so.
 
+[ADR-031](../../adr/031-vulkan-loader-platform-and-version-baseline.md) fixes that
+policy for the initial `vulkan` component: use the platform-installed loader and
+driver, with no SDK runtime prerequisite and no bundled replacement loader.
+Loader presence, supported instance version, compatible device, enabled features,
+and actual WSI support are separate admission stages. The initial component does
+not package or silently select an Apple portability backend.
+
 ## Security And Platform Policy
 
 Renderer modules execute native code with editor-process privileges. Required

@@ -363,11 +363,17 @@ and carries the platform deprecation warning without an automatic backend switch
 
 The intended matrix is:
 
-| Host | OpenGL | Metal | Null |
-|---|---:|---:|---:|
-| macOS | Build + parity + GPU smoke | Build + parity + GPU smoke | Build + headless tests |
-| Linux | Build + parity; GPU smoke on display-capable CI | Not compiled | Build + headless tests |
-| Windows | Build + parity; GPU smoke on display-capable CI | Not compiled | Build + headless tests |
+| Host | OpenGL | Metal | Vulkan | Null |
+|---|---|---|---|---|
+| macOS | Build + parity + GPU smoke | Build + parity + GPU smoke | Portability deferred | Build + headless tests |
+| Linux | Build + parity; GPU smoke on display-capable CI | Not compiled | Planned: build + parity + GPU smoke per shipped X11/Wayland path | Build + headless tests |
+| Windows | Build + parity; GPU smoke on display-capable CI | Not compiled | Planned: build + parity + Win32 GPU smoke | Build + headless tests |
+
+[ADR-031](../../adr/031-vulkan-loader-platform-and-version-baseline.md) defines
+Vulkan's initial Windows 11/Linux x86_64 scope and independent loader, device,
+feature, and WSI checks. No Vulkan target is implemented by that M0 decision;
+its matrix cells describe future acceptance obligations. Software ICDs and
+headless tests cannot qualify the native interactive lanes.
 
 Metal being Apple-only is a host availability constraint, not a lower or higher
 architectural rank.
