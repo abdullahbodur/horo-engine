@@ -101,6 +101,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [OpenGL Core Profile and Platform Policy](../adr/029-opengl-compatibility-profile-and-platform-policy.md):
   desktop 4.1 Core admission, platform qualification, context negotiation,
   and explicit macOS deprecation/migration behavior.
+- [Metal Platform and Feature Baseline](../adr/030-metal-platform-and-feature-baseline.md):
+  macOS 14, native GPU-family admission, MSL 2.4, effective feature support,
+  and deployment/qualification policy.
 - [Renderer Distribution And Availability](./runtime/renderer-distribution-and-availability.md):
   optional renderer components, install/repair/probe states, launcher recovery,
   and selection policy.

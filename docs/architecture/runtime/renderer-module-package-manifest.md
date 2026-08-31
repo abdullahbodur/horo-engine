@@ -110,8 +110,7 @@ entries, and undeclared native libraries are rejected.
       "runtimeRequirements": [
         {
           "id": "apple.metal",
-          "kind": "system-framework",
-          "minimumVersion": "3"
+          "kind": "system-framework"
         }
       ],
       "files": [
@@ -271,6 +270,16 @@ horo.moltenvk               bundled-runtime
 A requirement may declare minimum version, bundled/system policy, and whether it
 can be fully validated before probe. It cannot declare an arbitrary executable
 or library search path.
+
+For `apple.metal`, the variant's `minimumOsVersion` and native admission policy
+in [ADR-030](../../adr/030-metal-platform-and-feature-baseline.md) are authoritative;
+a marketing-level Metal version is not a framework/GPU compatibility predicate.
+The example therefore requires the system framework without `minimumVersion`.
+Probe and initialization still check the actual device family and effective
+support. MSL requirements belong to cooked shader compatibility records, not a
+claim that installing the renderer supplies a compiler or GPU driver. Shipped
+Metal variants must verify architecture slices and binary deployment targets
+against the manifest; the layout examples do not certify both architectures.
 
 Bundled runtime files appear in the variant's `files` list and receive the same
 hash, signature, layout, and load-path validation as the main module. System

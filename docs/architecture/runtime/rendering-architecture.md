@@ -158,6 +158,13 @@ silently switch to `null`.
 
 ## Capabilities, Limits And Product Profiles
 
+[ADR-030](../../adr/030-metal-platform-and-feature-baseline.md) owns the `metal`
+component's native baseline: macOS 14.0+, Apple7 on native arm64 or Mac2 on native
+x86_64, explicit MSL 2.4 shaders, and conventional command-buffer/encoder APIs.
+Each shipped variant needs separate qualification. OS, GPU family, shader
+language, implemented operations, and product profiles remain distinct checks;
+neither a non-null device nor the `metal` identifier grants effective support.
+
 [ADR-029](../../adr/029-opengl-compatibility-profile-and-platform-policy.md) owns
 the `opengl` component's native version, platform, and deprecation policy:
 desktop OpenGL 4.1 Core minimum, actual-context validation, and qualified desktop
