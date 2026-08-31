@@ -3,160 +3,230 @@
 - **Status**: Proposed
 - **Date**: 2026-08-28
 - **Supersedes**: None
-- **Scope**: Environment Query System (EQS), query templates/plans, item types, contexts, generators, tests, score normalization, subsystem provider boundaries, time-budgeted execution, caching, determinism, and cancellation
+- **Scope**: EQS orchestration, typed providers, plans/items/contexts, scoring, safe points, deterministic/adaptive budgets, cache identity and cancellation
 - **Issue**: [#1346](https://github.com/abdullahbodur/horo-engine/issues/1346) ([GAI-004.1])
 - **JIRA**: HORO-1346
-- **Normative document**: [Navigation And AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md)
+- **Normative document**: [Navigation And AI Architecture — EQS](../architecture/runtime/navigation-and-ai-architecture.md#environment-query-system-eqs)
 
 ## Context
 
-Tactical AI agents require spatial reasoning to select positions in the world (such as finding cover, establishing flanking angles, maintaining line of sight to a target, or choosing patrol vantage points). Without a formal tactical query framework, gameplay code tends to embed ad hoc physics raycasts, NavMesh traversability checks, perception scans, and scoring heuristics directly inside behavior trees, state machines, or tick callbacks. This causes:
-
-1. **Distributed and competing ownership**: Navigation, Physics, and Perception systems are polled ad hoc without unified scheduling or lifecycle tracking.
-2. **Fixed-tick stalls and unbounded frame overhead**: Synchronous world queries (e.g. dozens of line-of-sight raycasts and NavMesh path computations) stall the simulation thread when multiple agents make tactical decisions simultaneously.
-3. **Inconsistent and non-deterministic scoring**: Ad hoc scoring formulas produce non-normalized values, suffer from arithmetic anomalies (NaN/Inf), and lack deterministic tie-breaking.
-4. **Lifecycle and memory leaks**: When an agent or target entity is destroyed during an in-flight query, callbacks access dangling pointers or leave background work orphaned.
-5. **Lack of caching and deduplication**: Identical tactical queries (e.g. multiple squad members searching for cover near the same anchor point) duplicate expensive geometric tests across ticks.
-
-[GAI-004.1] requires an authoritative architecture decision freezing the tactical query model, defining query templates, items, contexts, generators, tests, score normalization, provider separation, asynchronous time-budgeted execution, deterministic replay, caching, and lifecycle cancellation before subsequent GAI-004 implementation tickets proceed.
+Tactical AI queries compose candidate generation, geometric/navigation tests and
+ranking to find cover, targets or vantage points. The previous proposal described
+active query execution as passive snapshot provision, combined millisecond cutoffs
+with unconditional replay determinism, and treated ordinary slice exhaustion as a
+terminal partial result. Its cache omitted dependencies such as Perception and its
+cancellation wording implied that every running provider job could be stopped.
+These contracts need explicit authority, timing, identity and lifetime rules.
 
 ## Decision
 
-**The Gameplay AI subsystem (`HoroAI` / `EnvironmentQueryManager`) is the sole authority owning query orchestration, stage scheduling, test evaluation, score normalization, result aggregation, and terminal outcomes. Navigation, Physics, and Perception systems act strictly as read-only snapshot providers. Behavior trees and decision graphs consume query results asynchronously via typed handles without blocking fixed-tick simulation. All scoring is normalized to `[0.0, 1.0]` with strict deterministic tie-breaking cascades, and queries execute under per-tick time budgets with cooperative cancellation on entity or scene destruction.**
+**Gameplay AI owns tactical orchestration and scoring. Navigation, Physics and
+Perception own both their domain data and query execution; EQS submits bounded
+typed read-only requests. Immutable submission inputs govern an accepted query.
+Deterministic execution uses work units and declared-tick provider publication;
+adaptive execution may use wall-time targets with weaker timing guarantees.
+Ordinary yielding is nonterminal. Cache correctness requires complete input and
+provider identities. Cancellation suppresses late results while safely retiring
+work that cannot be interrupted.**
 
-### 1. Subsystem Ownership and Separation of Concerns
+### Ownership And Composition
 
-| Subsystem / Authority | Role in Environment Queries | Forbidden Actions |
+| Responsibility | Authority |
+|---|---|
+| Admission, query handles, lifecycle, scheduling and terminal publication | EnvironmentQueryManager within Gameplay AI |
+| Candidate/test stages | Internal QueryExecutor |
+| Normalization/aggregation/ranking | Internal QueryScoring |
+| Result entries and bounded eviction | Internal QueryCache |
+| Navigation projection, containment and path/cost kernels | NavigationCoordinator / NavigationApi under ADR-016 |
+| Collision ray/sweep/overlap kernels | Physics owner or its read-only query adapter |
+| Agent-specific sensed state and memory | Perception domain |
+| Decisions using immutable results | Behavior trees / decision graphs |
+
+Sole authority is a **subsystem** rule, not a mandate for one concrete manager class
+to implement every operation. Internal roles do not create independent schedulers,
+thread pools or OperationStores. EQS never implements pathfinding from borrowed
+NavMesh data, mutates provider state or gives clients access to server-private
+perception. Host composition injects domain adapters; no runtime editor dependency
+or provider discovery through global services is introduced.
+
+### Assets, Inputs And Extensions
+
+EnvironmentQueryTemplate has a stable AssetId registered in AssetRegistry;
+EnvironmentQueryPlan is its immutable cooked artifact, published through CookCatalog.
+Stable StageIds survive renaming/reordering. The plan records complete stage/context
+schemas, dependencies, result policy, scores and budgets. Runtime pins its artifact
+digest for the query lifetime rather than changing plans on hot reload.
+
+Follow the [Asset Pipeline](../architecture/runtime/asset-pipeline.md) and
+[ADR-017](017-prefab-role-ownership-and-capability-tiers.md): preserve every canonical
+cook-key field and use the dependency-aware extension for referenced assets and
+provider/schema artifacts. ProjectVersion authoring migration precedes cook;
+cooked-format/schema compatibility is independently checked at runtime. Unsupported
+versions, broken dependencies and bounds errors fail before activation. This is a
+required implementation contract, not a claim of a completed EQS cooker.
+
+Point uses canonical WorldCoordinate64; Actor carries a non-owning EntityRef with
+scene and entity generation; DirectionalRay includes an origin and finite direction.
+Custom items carry a stable type/schema ID and bounded immutable canonical bytes
+(maximum 64 inline bytes). No pointers, borrowed transient views, native C++ object
+layouts or callbacks enter payloads. Context data uses bounded retained storage.
+
+Required contexts, positions, identities, parameters, tags/team/faction/stance,
+seed and provider read versions are captured at successful submission. Contexts
+remain unchanged across ticks: consumers requiring fresher state cancel/reissue.
+Results expose as-of ticks and revisions; they are not promises of current state.
+Provider reads use retained immutable versions or validate the captured revision;
+inability to honor it yields StaleInputs, never a silent context refresh.
+
+Custom item/context/stage descriptors are inert metadata, following
+[ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md).
+They declare unique namespaced IDs, schema versions, size/alignment, dependencies,
+owner thread/safe point, mode capabilities and canonical serialization/hash/equality.
+Host composition rejects duplicates, missing dependencies, cycles and incompatible
+schemas. A provider without complete deterministic cache identity makes the query
+uncacheable, not partially keyed.
+
+### Generators, Tests And Scoring
+
+Grid, donut-ring and cone generators have checked dimensions and maxItems.
+NavMeshProjectionGenerator submits Navigation-owned work; PerceivedEntitiesGenerator
+reads an authorized perception snapshot. Stable item indices are assigned before
+async dispatch using canonical generation/entity order.
+
+GeometryLineOfSightTest measures physical obstruction through Physics.
+PerceivedVisibilityTest asks what an agent senses/remembers through Perception.
+Distance, dot-product, path-cost and cover-exposure tests declare all actual provider
+and context dependencies. Geometric visibility and perception are not synonyms.
+
+Each test filters, scores, or both. Scores normalize to [0,1] using declared fixed
+ranges. Scored plans use `sum(weight * score) / sum(weight)`; cook/admission require
+finite nonnegative weights and a finite positive total, and reject invalid ranges
+and statically reproducible arithmetic failures. Explicit filter-only plans bypass
+the formula and use stable selection ordering.
+
+Runtime NaN/Inf or overflow marks a candidate InvalidScore, excludes it from winning,
+and produces a bounded diagnostic; a displayed zero does not make invalid data
+eligible. Validation tests surface reproducible authoring errors. Ranking compares
+plan-versioned fixed-point ScoreKeys, then the configured tie-breaker and stable
+item index, with explicit precision/rounding and StageId aggregation order. No
+hash-map/pointer order or non-transitive epsilon comparator is permitted.
+
+### Threading, Safe Points And Modes
+
+EQS runs on the simulation owner using existing ADR-021/022 phases. BlackboardSync
+drains eligible results and publishes immutable terminal records before blackboards
+freeze. At the start of AiDecisionEvaluate, previously admitted queries advance;
+behavior nodes then submit requests or consume published results. New admissions
+never execute or callback inline. Navigation retains NavIntentCommit publication;
+Physics retains its owner-thread/outside-Step or leased-snapshot query contract.
+Provider completions feed a later BlackboardSync, not a reentrant decision callback.
+
+EQS accounts for stage/item work and provider admissions; providers own their own
+kernel/scratch/queue budgets. Backpressure yields before acceptance; an accepted
+request is not resubmitted each tick. Host composition intersects budgets, so EQS
+cannot reset provider quotas or gain capacity by nesting jobs. Background work uses
+Foundation JobSystem/JobId. Owner paths never Wait/Join; workers never wait on nested
+provider jobs. Only user-facing tooling gets OperationId through the application
+coordinator's shared OperationStore under [ADR-010](010-job-waiting-and-operation-store-ownership.md).
+
+| Mode | Authoritative budget | Replay guarantee |
 |---|---|---|
-| **`EnvironmentQueryManager` (GAI)** | **Single authority** owning query lifecycle, query plans, stage scheduling, candidate generation, test execution, scoring normalization, cache management, and terminal outcome delivery. | Does not own collision geometry, NavMesh geometry, or sensory stimulus stores. |
-| **`NavigationSystem`** | **Read-only provider** for NavMesh surface projection, polygon containment, traversability, and pathfinding distance/cost calculation. | Does not execute query plans, score candidates, or manage tactical decision state. |
-| **`PhysicsSystem`** | **Read-only provider** for geometric raycasts, shape sweeps, line-of-sight checks, and scene collision overlap queries. | Does not orchestrate multi-stage AI queries or rank items. |
-| **`PerceptionSystem`** | **Read-only provider** for perceived entities, stimulus locations, sensory memory records, and visibility states. | Does not generate spatial grids or evaluate navigation costs. |
-| **Decision Graphs / Behavior Trees** | **Consumers** requesting query execution via asynchronous task nodes and reading immutable `QueryResult` snapshots. | Never synchronously wait on queries or mutate query execution state during fixed ticks. |
+| DeterministicWorkUnits | Bounded item/stage/provider units, stable order and declared tick deadlines | Same semantic result and publication tick for identical input/revision histories and declared provider/numeric contract |
+| AdaptiveRealtime | Same hard caps plus optional wall-time targets at yield boundaries | No guarantee of identical completion timing or partial candidate populations |
 
-### 2. Query Asset, Template, and Item Model
+Deterministic providers execute bounded kernels on their declared owning executor,
+following ADR-016, instead of selecting whichever worker finished first. Unsupported
+mode, unavailable pinned inputs or unreservable quotas cause explicit rejection;
+there is no synchronous wait fallback. Result caching is disabled in deterministic
+mode to prevent cache state changing work allocation and completion timing.
+Adaptive decisions require recorded outcomes/timing for replay. Neither mode claims
+unverified cross-platform physics or floating-point bit identity.
 
-1. **Query Template (`EnvironmentQueryTemplate` / `EnvironmentQueryPlan`)**:
-   - Immutable, versioned compiled data assets.
-   - Declares primary item type, input context requirements, generator stages, ordered test/filter stages, normalization rules, and time budgets.
-   - Stages possess stable unique `StageId`s independent of editor ordering.
-2. **Item Types (`EnvQueryItemType`)**:
-   - `Point` (`WorldCoordinate`): 3D spatial points (cover positions, tactical vantage points, ambush locations).
-   - `Actor` / `Entity` (`EntityId`): Scene entities (potential targets, allies, cover obstacles, interactive items).
-   - `DirectionalRay` (`Ray` / `Direction`): Vectors or bearings (flanking trajectories, escape angles, aim vectors).
-   - `Custom`: Extensible payload with explicit schema for game-specific tactical constructs.
-3. **Query Contexts (`EnvQueryContext`)**:
-   - Built-in contexts: `Querier` (requesting agent), `Target` (primary focus/adversary), `QuerierLocation`, `TargetLocation`, `WorldOrigin`.
-   - Pluggable custom contexts: resolved by registered context providers (e.g. `SquadLeaderContext`, `CombatAnchorContext`, `LastKnownEnemyLocationContext`).
-   - Context values are snapshotted into an immutable `QueryContextSnapshot` at query start. Contexts never expose raw mutable scene pointers.
+### Yielding, Partial Results And Deadlines
 
-### 3. Generators and Tests
+Running, Yielded, AwaitingAdmission and AwaitingProvider are nonterminal. A per-tick
+budget cutoff retains state and resumes later; it never creates PartialSuccess.
 
-1. **Generators (`EnvQueryGenerator`)**:
-   - Produce candidate items bounded by explicit configuration parameters.
-   - Built-in generators:
-     - `GridGenerator`: 2D/3D regular lattice around context with defined radius, density/spacing, and layer masks.
-     - `DonutRingGenerator`: Concentric radial rings around context with inner radius, outer radius, and radial step counts.
-     - `ConeGenerator`: Wedge/cone oriented along context forward vector with radius, angle, and angular steps.
-     - `NavMeshProjectionGenerator`: Projects spatial candidate points onto valid NavMesh surfaces, filtering unreachable geometry.
-     - `PerceivedEntitiesGenerator`: Populates candidate items from agent perception memory matching filter criteria.
-   - All generators enforce strict maximum item limits (`maxItems`) to prevent unbounded memory allocation and CPU spikes.
-2. **Tests and Filters (`EnvQueryTest`)**:
-   - `LineOfSightTest`: Raycast or shape sweep between candidate item and target/querier context using Physics traces.
-   - `DistanceTest`: Euclidean, Chebyshev, Manhattan, or NavMesh path distance between item and context.
-   - `DotProductTest`: Directional alignment (facing angle, field of view, flanking angle).
-   - `PathfindingCostTest`: NavMesh path length, travel cost, or reachability.
-   - `CoverExposureTest`: Obstacle height, stance clearance, and exposure angle relative to threat positions.
-   - Test Modes:
-     - `FilterOnly`: Discards items failing a boolean threshold (e.g. must have line of sight).
-     - `ScoreOnly`: Assigns normalized continuous score `[0.0, 1.0]` without discarding.
-     - `FilterAndScore`: Discards non-qualifying items and scores survivors.
+| Terminal outcome | Meaning |
+|---|---|
+| Completed | All stages finished; empty eligible set is a valid result with no winner |
+| PartialSuccess | Caller opted in; hard deadline or explicit FinishEarly ends the query with at least one fully filtered/scored candidate |
+| TimedOut | Hard deadline reached without an allowed partial result, even if some candidates exist but complete results were required |
+| Failed | Typed provider/schema/scoring failure or explicit early finish with no eligible partial candidate |
+| StaleInputs | A required captured provider version can no longer be honored |
+| Cancelled / Aborted | Caller cancellation / required entity or scene invalidation; no tactical winner |
 
-### 4. Scoring Normalization and Deterministic Tie-Breaking
+Deadlines count simulation ticks from accepted submission; pause freezes tick-age.
+Lifecycle invalidation/cancellation wins over completion, then eligible completions
+(including on the deadline tick) precede deadline evaluation. Partial results include
+coverage and snapshot provenance and never enter the result cache. Population-based
+normalization cannot publish partial ranks before its required full-stage barrier.
 
-1. **Score Normalization**:
-   - Every scoring test normalizes raw values to `[0.0, 1.0]` using explicit scoring functions:
-     - `Linear`: `(val - min) / (max - min)`
-     - `InverseLinear`: `1.0 - (val - min) / (max - min)`
-     - `Sigmoid` / `SCurve`: Smooth progression emphasizing mid-ranges.
-     - `ThresholdStep`: Step function returning `0.0` or `1.0`.
-   - Arithmetic Safety: Non-finite scores (`NaN`, `+Inf`, `-Inf`) and division-by-zero are trapped; offending items are assigned `0.0` with diagnostic reporting and cannot rank as winning candidates.
-2. **Total Score Aggregation**:
-   - Weighted linear combination:
-     $$\text{TotalScore} = \frac{\sum_{i=1}^{N} w_i \cdot s_i}{\sum_{i=1}^{N} w_i}$$
-     where $w_i \ge 0$ is the stage weight and $s_i \in [0.0, 1.0]$ is the normalized test score.
-3. **Deterministic Tie-Breaking Cascade**:
-   - Candidate ranking must be 100% deterministic and independent of worker thread scheduling or memory address order.
-   - Ranking order:
-     1. Primary: Highest `TotalScore`.
-     2. Secondary: Configured tie-breaker test score (e.g. closest distance to Querier).
-     3. Tertiary: Stable item generation sequence index (`item_index`), ensuring zero jitter across replay runs.
+### Cache Correctness And Quantization
 
-### 5. Time-Budgeted Asynchronous Execution and Lifecycles
+Adaptive cache identity contains template AssetId/artifact digest, full canonical
+inputs and effective settings, extension/numeric versions, and the sorted revision
+set of every generator/context/filter/score/tie-breaker dependency. Include Navigation,
+Physics, Perception, entity lifecycle, team/tag and custom-provider revisions whenever
+read. Tokens identify provider instance, incarnation, revision and global/spatial scope.
+Unknown reads disable caching; TTL never replaces revision validation. Hash matches
+must also compare canonical key data. Scoped tokens are allowed only when the entire
+read footprint is known; otherwise use a conservative global token.
 
-```text
-+-------------------------------------------------------------------------+
-|                       EnvironmentQueryManager                           |
-|  +-------------------------------------------------------------------+  |
-|  | Tick (Time-Sliced Budget: e.g. 1.5ms / max N items per frame)      |  |
-|  +-------------------------------------------------------------------+  |
-|         |                     |                      |                  |
-|  +--------------+     +----------------+     +------------------+       |
-|  | Query State: |     | Query State:   |     | Query State:     |       |
-|  | Resolving    | --> | Generating /   | --> | Scoring /        |       |
-|  | Context      |     | Nav Projection |     | Physics Traces   |       |
-|  +--------------+     +----------------+     +------------------+       |
-|                                                      |                  |
-|                                              +------------------+       |
-|                                              | Query State:     |       |
-|                                              | Completed /      |       |
-|                                              | PartialSuccess   |       |
-|                                              +------------------+       |
-+-------------------------------------------------------------------------+
-```
+ContextQuantizationPolicy defaults to Exact. Explicit spatial grids declare positive
+size, rounding and accepted error tolerance. Canonical millimeter position storage
+is not a mandatory cache cell size. Approximate plans evaluate the same quantized
+context they hash and report that provenance; quantizing only the key would return
+incorrect results. Other inputs remain exact unless their schema explicitly defines
+an equally valid approximation policy. Consumers revalidate live eligibility before
+acting on historical/approximate results.
 
-1. **Asynchronous Multi-Frame Staging**:
-   - Queries execute across multiple frames using cooperative time-slicing under a configured global/per-tick time budget (e.g. `1.5ms` per simulation tick).
-   - High-load queries yield at stage boundaries or item batch boundaries and resume on subsequent ticks.
-2. **Terminal States**:
-   - `Completed`: Query evaluated all stages and returned ranked items.
-   - `PartialSuccess`: Budget exhausted or early exit requested; returns best-ranked valid candidate evaluated so far.
-   - `Cancelled`: Query cancelled cooperatively by caller token or owning task.
-   - `TimedOut`: Query exceeded maximum allowed elapsed frames without finding a valid candidate.
-   - `Aborted`: Querier, target entity, or scene was destroyed during in-flight evaluation.
-3. **Lifecycle Safety and Cancellation**:
-   - Queries hold weak `EntityId` handles and scene generation counters.
-   - On entity destruction or scene transition, in-flight queries transition to `Aborted` immediately; outstanding asynchronous jobs, raycasts, and pathfinding requests are cancelled.
-   - Result callbacks and decision nodes observe typed failure rather than executing against invalid entities.
-4. **Caching and Invalidation**:
-   - Immutable query results may be cached using a composite key:
-     $$\text{CacheKey} = (\text{QueryTemplateId}, \text{ContextSnapshotHash (querier/target positions quantized to integer millimeters)}, \text{NavMeshRevision}, \text{PhysicsRevision})$$
-   - Bounded LRU cache with time-to-live (TTL).
-   - Cache eviction never invalidates caller-owned `QueryResult` snapshots.
+Only complete successful immutable snapshots are cached. Lookup validates current
+provider revisions, scene/owner authority and every entity generation/identity.
+Dead entities cause a miss rather than silent filtering/re-ranking. Caller-owned
+result storage survives eviction, but Actor handles do not keep entities alive.
+Consumers revalidate generation and freshness before subsequent use.
 
-## Ratify-or-Revise Outcomes
+### Cancellation, Capacity And Validation
 
-| Area | Current Baseline | Outcome |
-|---|---|---|
-| Query orchestration authority | Ad hoc raycasts and navigation queries scattered in gameplay code | **Revised.** `EnvironmentQueryManager` is established as the sole orchestration authority. |
-| Subsystem boundaries | Direct synchronous physics/navmesh calls | **Ratified separation.** Navigation, Physics, and Perception provide read-only data snapshots; GAI executes queries. |
-| Item types | Implicit spatial coordinates only | **Revised.** Explicit typed items (`Point`, `Actor`/`Entity`, `DirectionalRay`, `Custom`). |
-| Scoring normalization | Unbounded raw values, potential division by zero | **Revised.** Mandatory normalization to `[0.0, 1.0]`, NaN/Inf traps, and deterministic tie-breaking cascades. |
-| Execution threading | Synchronous single-tick queries risking frame drops | **Revised.** Asynchronous time-budgeted multi-frame staging with cooperative cancellation. |
-| Lifecycle safety | Unchecked raw entity handles | **Revised.** Weak entity tracking, scene generation counters, and automatic abortion on destruction. |
+Query handles include manager/scene incarnation, slot and generation. Cancellation
+requests provider interruption where supported; work already running may finish.
+Late results are discarded by query/request generation without invoking dead owners
+or mutating replacement entities. Retained leases/payloads outlive worker access;
+retired uncancellable work still consumes admission capacity until reclaimed.
+Shutdown follows ADR-010 teardown rules without ordinary tick/render/transport waits.
+
+The normative [EQS profiles](../architecture/runtime/navigation-and-ai-architecture.md#eqs-compute-profiles-and-qualification)
+set explicit LowCpu/MediumCpu/HighCpu limits for concurrent queries, candidates,
+work units, provider admissions/in-flight requests, stages, payloads and total bytes.
+Adaptive wall targets vary by profile; graphics API selection grants no EQS capacity.
+Provider quotas and GameplayAiProfile still constrain admission. Stable round-robin
+slices prevent one query consuming every tick's work; overload yields or rejects,
+never grows memory without bounds.
+
+Implementation qualification covers deterministic versus adaptive histories,
+yield/partial/deadline transitions, provider affinity/backpressure, cache dependency
+and entity invalidation, approximate input semantics, invalid math/custom schemas,
+asset versioning and cancellation of providers that cannot stop running work. These
+are downstream acceptance requirements, not tests implemented by this ADR-only PR.
 
 ## Consequences
 
-- AI tactical decision making is decoupled from low-level physics and navigation details.
-- Frame rates remain stable under heavy AI load due to strict time budgeting and asynchronous staging.
-- Tactical queries produce 100% deterministic results across replay runs.
-- Behavior trees and decision graphs interact through clean, non-blocking async task nodes.
-- Memory and entity lifetimes are protected against dangling references and orphaned background jobs.
+- Tactical orchestration is centralized without taking domain query execution away
+  from Navigation/Physics/Perception or requiring a monolithic manager class.
+- Replay guarantees match actual budgets and provider behavior rather than a seed
+  and tie-breaker alone.
+- Snapshot age, partial coverage, stale dependencies and cancellation are visible
+  typed outcomes; retained result bytes are distinct from entity lifetime.
 
 ## Rejected Alternatives
 
-- **Let Physics or Navigation subsystem own tactical queries.** Rejected: violates single responsibility and couples world geometry to gameplay decision logic.
-- **Run all queries synchronously in a single frame.** Rejected: causes catastrophic simulation frame drops when multiple agents query simultaneously.
-- **Use unbounded floating-point scores without normalization.** Rejected: leads to weighted combination imbalances, arithmetic overflow, and non-deterministic behavior.
-- **Rely on memory address or hash map iteration order for candidate ranking.** Rejected: creates non-deterministic simulation divergence across different platforms and runs.
-- **Allow queries to hold direct scene pointers.** Rejected: leads to use-after-free crashes when entities or components are removed during query execution.
+- **Passive snapshot providers with EQS-owned pathfinding**: Duplicates domain query
+  execution and breaks Navigation/Physics encapsulation.
+- **Wall-clock cutoff plus unconditional deterministic partial success**: Different
+  completion populations can change the winner across machines and runs.
+- **Terminal result at every tick-budget cutoff**: Prevents resumable staged work.
+- **Position-only keys or unconditional millimeter quantization**: Omits semantic
+  dependencies or chooses an inappropriate accuracy/cache-reuse policy.
+- **Guaranteed physical interruption of every provider job**: Not implementable for
+  all providers; cooperative cancellation and safe result suppression are required.
