@@ -347,14 +347,14 @@ command-buffer lifetime, but those tests do not weaken the shared contract.
 
 ## Build Matrix
 
-The intended matrix is:
-
 These are qualification obligations, not claims that every lane is already
 passing. For OpenGL, ADR-029 requires a published OS/architecture/window-system
 and GPU/driver matrix backed by actual Core-context and parity/smoke evidence.
 X11 and Wayland qualify separately; software GL test results do not qualify
 hardware. macOS OpenGL remains conditional on a qualified system 4.1 Core path
 and carries the platform deprecation warning without an automatic backend switch.
+
+The intended matrix is:
 
 | Host | OpenGL | Metal | Null |
 |---|---:|---:|---:|
