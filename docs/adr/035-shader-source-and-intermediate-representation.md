@@ -124,8 +124,12 @@ Horo model. It records logical resource/parameter IDs, stage interfaces, scalar
 types, array extents, access, stage visibility and required feature predicates.
 Each native artifact also carries a target binding/packing map: slots/register
 spaces or indices represented as Horo values, member offsets/strides/matrix order,
-texture-sampler pairing and generated helper resources. Native reflection structs
-and SPIRV-Cross JSON never become the public renderer or material schema.
+texture-sampler pairing and generated helper resources. OpenGL 4.1 Core / GLSL
+4.10 does not require explicit `layout(binding = N)` locations, so the OpenGL map
+also records native GLSL resource and uniform-block names for runtime resolution
+through `glGetUniformLocation`, `glGetUniformBlockIndex` and equivalent queries.
+Native reflection structs and SPIRV-Cross JSON never become the public renderer
+or material schema.
 
 Manifest validation runs before compilation; final-artifact validation checks
 reflection against that manifest and the complete variant stage interface after
@@ -143,7 +147,9 @@ overlapping native slots, unbounded dimensions or inconsistent parameter types
 fail validation. Generated combined samplers/helper bindings have explicit mappings
 and count toward actual target limits. OpenGL's flat binding and combined-sampler
 mapping must preserve each logical texture/sampler pair; direct descriptor-set
-numbers are not valid GL bindings by assumption.
+numbers are not valid GL bindings by assumption. The backend binds from the
+recorded native names plus the Horo logical IDs, not from Vulkan/DXIL slot
+numbers copied into GLSL.
 
 Material/Scene code supplies typed semantic values. The renderer packs them through
 the selected target map; it must not memcpy a C++ struct or reuse Vulkan offsets
@@ -171,9 +177,15 @@ participate; the local GPU does not decide a portable cook target. A permutation
 key is a logical lookup index, not the complete artifact compatibility key.
 
 Emit payload, normalized reflection, target map, requirements, dependencies and
-diagnostics as one validated artifact generation. Failure of a required target or
-variant prevents publication of the requested target set; previous good published
-generations remain active. Optional exclusions must be declared before the cook,
+diagnostics as one validated artifact generation. When the target descriptor
+enables debug options, also emit and archive native debug artifacts with that
+generation: DXIL PDBs for D3D12, SPIR-V debug info for Vulkan, and equivalent
+source-mapping data for translated GLSL/MSL. Debug artifacts are companion
+records, not runtime admission inputs; packaged/shipping targets omit them unless
+the product explicitly requests a debug payload set. They must not change the
+public Horo interface schema or the admitted shader payload. Failure of a required
+target or variant prevents publication of the requested target set; previous good
+published generations remain active. Optional exclusions must be declared before the cook,
 not decided by dropping failed outputs afterward. Tools missing for Metal/DXIL
 production produce a clear unsupported cook-host/toolchain error, not placeholder
 payloads. Cross-host build services, when composed, obey the same input/output
