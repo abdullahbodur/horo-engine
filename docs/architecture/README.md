@@ -107,6 +107,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Vulkan Loader, Platform and Version Baseline](../adr/031-vulkan-loader-platform-and-version-baseline.md):
   Vulkan 1.3 core, required enabled features, system-loader ownership,
   Windows/Linux WSI qualification, and deferred portability scope.
+- [D3D12 Baseline and Agility SDK Policy](../adr/032-d3d12-baseline-and-agility-sdk-policy.md):
+  Windows/feature-level/Shader Model admission, pinned Agility dependencies,
+  executable-owned activation, redistribution, and driver qualification.
 - [Renderer Distribution And Availability](./runtime/renderer-distribution-and-availability.md):
   optional renderer components, install/repair/probe states, launcher recovery,
   and selection policy.

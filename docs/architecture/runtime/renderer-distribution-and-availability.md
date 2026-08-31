@@ -424,6 +424,14 @@ leaves the recent-project card and project files unchanged.
 
 ## Runtime And SDK Paths
 
+[ADR-032](../../adr/032-d3d12-baseline-and-agility-sdk-policy.md) defines D3D12's
+exception to a purely system-supplied core runtime: a pinned application-local
+Agility payload selected through the host executable's fixed activation
+contract. It is a verified runtime dependency, not a user Toolchains path.
+Host exports, payload, and compatible component set update together through a
+restart transaction. Independent renderer installation cannot override the
+process-wide SDK contract, and missing/incompatible files route to repair.
+
 Runtime renderer selection does not ask users for native library paths.
 Toolchain settings may expose validated paths for development tools, for example:
 
