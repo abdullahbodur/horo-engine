@@ -183,7 +183,7 @@ not a claim of unlimited capacity or a benchmark result.
 | Admitted cosmetic emitter reaches cap | Drop new births, retain existing particles, record a counter |
 | Required gameplay capacity unavailable | Typed failure requiring explicit owner handling; no silent clamp/drop |
 
-TryEnqueueSpawn returns Result<VfxRequestId> and copies bounded schema-typed parameters.
+TryEnqueueSpawn returns `Result<VfxRequestId>` and copies bounded schema-typed parameters.
 The scene owner serializes acceptance; authoritative producer inputs have stable
 ordering before admission. Each clock domain has its own queue/cutoff under the aggregate budget;
 no request is drained once per emitter or on both clocks. Freeze the accepted queue

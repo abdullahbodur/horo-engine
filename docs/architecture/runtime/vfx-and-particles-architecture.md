@@ -202,7 +202,7 @@ transaction with peak old/new memory admitted; old readers/fences must retire be
 reuse. Zero steady-state heap allocation is a requirement to verify for these paths,
 not an unlimited-capacity or measured performance claim.
 
-TryEnqueueSpawn returns Result<VfxRequestId> and copies a bounded typed parameter
+TryEnqueueSpawn returns `Result<VfxRequestId>` and copies a bounded typed parameter
 block, never an arbitrary heap-allocating VariantMap. The scene owner serializes
 accepted requests; external producers submit typed commands through declared owner
 seams. Authoritative producers have stable tick/producer/sequence ordering before
