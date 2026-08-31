@@ -7,6 +7,24 @@ covers sparse virtual texture pages, page table indirection, page residency
 management, feedback-based streaming, page cache compression, and integration
 with the material system and asset pipeline.
 
+## Memory Ownership Boundary
+
+[ADR-034: GPU Memory and Residency Ownership](../../adr/034-gpu-memory-and-residency-ownership.md)
+owns GPU allocation, reservations and pressure policy. Virtual Texturing selects
+pages and disposable cache entries within its admitted allowance; the renderer
+owns native atlas/sparse backing and safe mapping execution. Page-table updates
+and slot reuse wait for previous GPU readers. Evicting a page from an allocated
+atlas frees a slot, not physical heap capacity from the budget.
+
+For streamed worlds, this allowance consumes World Streaming's aggregate
+reservation through the host-composed adapter. Missing pages may use an explicitly
+admitted feature fallback, but cannot silently invalidate activation-critical cell
+content. Neither page selection nor renderer pressure independently evicts cells.
+Sparse resources require effective backend support; an atlas fallback has a
+separate cost plan that must fit. Page counts below are recipe sizing inputs,
+not extra memory allowances or proof of backend capability. Include atlas backing,
+page tables, feedback, upload and readback copies in peak-cost admission.
+
 ## Virtual Texture Model
 
 Virtual texturing decouples logical texture resolution from physical GPU

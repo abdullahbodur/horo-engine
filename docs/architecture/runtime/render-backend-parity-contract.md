@@ -269,6 +269,15 @@ may reject unsupported descriptor values through its typed capability/error
 contract; it may not reinterpret them, silently choose a fallback, or weaken
 owner and generation validation.
 
+All backends also obey
+[ADR-034's memory and residency policy](../../adr/034-gpu-memory-and-residency-ownership.md):
+admitted backing-capacity charges, bounded upload/readback work, safe retirement
+and typed pressure/failure results. Native budget telemetry and allocator strategy
+may differ or be unavailable; logical lifetime and owner allowances cannot.
+GUI/private helper allocations are included, not exempted from host accounting.
+Null tests inject costs and completion schedules; native budget and fragmentation
+qualification still requires each actual backend.
+
 In particular:
 
 - OpenGL global state is private to the OpenGL integration.

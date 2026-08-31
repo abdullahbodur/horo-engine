@@ -636,6 +636,21 @@ recovery requires a reconstruction source on the residency record
 
 ## Upload And Streaming
 
+The canonical allocator, budget, residency and pressure policy is
+[ADR-034: GPU Memory and Residency Ownership](../../adr/034-gpu-memory-and-residency-ownership.md).
+The host supplies finite envelopes; the frontend owns reservation accounting and
+readiness, while the backend owns native requirements, heaps and release.
+Charge backing capacity, copies and replacement overlap once, including retired
+resources until release acknowledgement. Heap slack is already charged capacity,
+not memory returned merely by destroying a suballocated resource.
+
+Streamed resources consume the World Streaming aggregate reservation through an
+explicit adapter; its GPU claim and the renderer record project the same charge.
+The renderer never selects cells to evict or discards activation-critical resources
+under an Active cell. Non-streamed, GUI, viewport and presentation resources have
+explicit owner scopes within the same host envelope. Native budget observations
+remain estimates, not guaranteed allocation capacity or permission to exceed caps.
+
 CPU asset preparation occurs on workers. GPU upload is queued to the
 render-capable thread with:
 

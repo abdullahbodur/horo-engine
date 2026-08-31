@@ -113,6 +113,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Presentation and Display Ownership](../adr/033-presentation-and-display-ownership.md):
   platform windows/display facts, renderer surface lifetime, host intent,
   resolved output, transition safe points, and multi-surface boundaries.
+- [GPU Memory and Residency Ownership](../adr/034-gpu-memory-and-residency-ownership.md):
+  native allocator ownership, backing-capacity accounting, streaming reservations,
+  bounded pressure policy, and deferred reclamation.
 - [Renderer Distribution And Availability](./runtime/renderer-distribution-and-availability.md):
   optional renderer components, install/repair/probe states, launcher recovery,
   and selection policy.
