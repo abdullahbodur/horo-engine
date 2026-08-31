@@ -1007,6 +1007,8 @@ or feature plan must be updated in the same change.
 - [Scene Runtime](./scene-runtime.md)
 - [Game UI And HUD](./game-ui-and-hud.md)
 - [Configuration System](../foundation/configuration-system.md)
+- [Accessibility Architecture](./accessibility-architecture.md): Semantic caption cues independent of playback; fixed-size audio-only metadata
+- [ADR-015: Accessibility Ownership, Typed Transport and Non-Gating Policy](../../adr/015-accessibility-ownership-typed-transport-and-non-gating-policy.md)
 - [Observability Metrics And Profiling](../observability/observability-performance.md)
 - [XR Architecture](./vr-ar-architecture.md)
 - [Editor AI Agent Architecture](../editor/editor-ai-agent-architecture.md)

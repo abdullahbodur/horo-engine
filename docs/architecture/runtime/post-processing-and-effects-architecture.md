@@ -166,6 +166,31 @@ struct ColorGradingSettings {
 
 A 3D LUT texture can be applied for full creative grading.
 
+### Accessibility Color Transforms
+
+Colorblind filters use backend-neutral desired settings captured from an immutable
+`ConfigurationSnapshotRef` at render-frame setup. The renderer owns applying the
+3×3 transform after creative grading and tonemapping; it does not own gameplay's
+accessibility preferences or expose live renderer state to gameplay.
+
+`IColorAccessibilityQuery` is defined by the backend-neutral visual-settings
+contract in [Accessibility Architecture](./accessibility-architecture.md), not by
+PostProcessing. Each query instance retains one snapshot revision. UI, gameplay
+and worker consumers read their own captured revision synchronously without a
+render-thread call, wait or dependency on the renderer implementation. The query
+reports desired mode/severity/contrast, not GPU application status. Non-color cues
+(icons, patterns, text) are produced independently by gameplay/HUD.
+
+Colorblind keys belong to the visual-settings domain under
+`accessibility.colorblind.*`; UI contrast belongs to `accessibility.visual.ui.*`.
+Motion/flash policy belongs to `accessibility.visual.safety.*`. Render consumes
+these keys without re-registering or maintaining a competing mutable preference.
+
+All quality configurations preserve accessibility semantics, including compact
+ALU implementations on lower-cost backends. The quality labels in the table below
+do not gate accessibility or define navigation compute tiers. Accessibility passes
+must not introduce synchronous CPU/GPU readback.
+
 ## Performance And Feature Tiers
 
 | Feature              | `es3`           | `dx11`           | `dx12_vulkan`    | `high_end`       |
