@@ -46,6 +46,7 @@ to the replacement.
 | [032](032-d3d12-baseline-and-agility-sdk-policy.md) | D3D12 Baseline and Agility SDK Policy | proposed | 2026-08-31 |
 | [033](033-presentation-and-display-ownership.md) | Presentation and Display Ownership | proposed | 2026-08-31 |
 | [034](034-gpu-memory-and-residency-ownership.md) | GPU Memory and Residency Ownership | proposed | 2026-08-31 |
+| [035](035-shader-source-and-intermediate-representation.md) | Shader Source and Intermediate Representation | proposed | 2026-08-31 |
 
 ## Conventions
 

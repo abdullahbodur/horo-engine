@@ -453,7 +453,7 @@ concerns. It also matches how artists and technical artists think about assets:
 | Setting        | Block | Description                                                                    |
 |----------------|-------|--------------------------------------------------------------------------------|
 | `entryPoints`  | cook  | Map of stage to function name: `{ "vertex": "vsMain", "fragment": "fsMain" }`. |
-| `targetStages` | cook  | Which SPIR-V stages to produce: `Vertex`, `Fragment`, `Compute`.               |
+| `targetStages` | cook  | Declared stages to compile for each admitted target; `Compute` requires explicit capability support. |
 | `defines`      | cook  | Preprocessor macros included in the variant key.                               |
 
 ### Audio Configuration
@@ -784,25 +784,39 @@ remain outside Phase A; the list below does not activate a desktop cook target.
 Shaders require a dedicated pipeline because they are source code that must be
 transpiled and optimized for each target graphics API.
 
+[ADR-035](../../adr/035-shader-source-and-intermediate-representation.md) owns the
+HLSL source contract, compiler/IR routes, normalized Horo reflection and diagnostics.
+SPIR-V is a shared derived intermediate, not a universal D3D12 interchange format.
+The following routes are target architecture; they add no current cook capability.
+
 Pipeline stages:
 
-1. **Preprocess**: resolve `#include`, macros, and shader graph nodes.
-2. **Compile to SPIR-V**: Horo source dialect is compiled to SPIR-V as the
-   canonical intermediate representation.
-3. **Transpile to target**: SPIR-V is translated or packaged for a future
-   typed backend capability; illustrative peers are:
-    - `desktop-vulkan` → SPIR-V with validated reflection metadata
-    - `desktop-opengl` → GLSL or backend-approved translated shader payload
-   - `desktop-metal` → MSL or backend-approved translated shader payload
-   - `headless-null` → reflection-only validation payload
-4. **Variant generation**: produce permutations for static shader keywords
-   (e.g., `USE_NORMAL_MAP`, `SHADOWS_ENABLED`). Each canonical keyword/permutation
-   set is folded into the effective settings digest, whose schema is identified by
-   the effective settings schema version. Variant cache identity derives from the
-   complete `CacheKeyV1`; a keyword hash may be an index or display aid, but is
-   never sufficient cache authority.
-5. **Pack**: cooked shader binaries and variant tables are stored alongside
-   material cooked assets.
+1. **Resolve inputs**: validate source manifests and bounded include/dependency
+   snapshots; graph lowering emits the same HLSL source contract and source maps.
+2. **Enumerate variants**: validate the finite declared keyword/permutation sets
+   before scheduling compilers. Fold each set into the versioned effective settings
+   digest. The complete dependency-aware cook key remains authoritative; a keyword
+   hash is only an index or display aid.
+3. **Compile per target and variant**: locked DXC options produce validated SPIR-V
+   for the Vulkan/GL/Metal routes or validated DXIL directly for D3D12.
+4. **Realize target artifacts**: normalize actual target reflection and validate
+   logical interfaces, binding maps and requirements:
+   - `desktop-vulkan` → SPIR-V for the ADR-031 Vulkan environment
+   - `desktop-opengl` → SPIRV-Cross GLSL 4.10 plus binding map
+   - `desktop-metal` → SPIRV-Cross MSL 2.4, then offline cooked Metal library
+   - `desktop-d3d12` → direct DXIL for the ADR-032 Shader Model baseline
+   - `headless-null` → declared source/interface validation without native GPU proof
+5. **Pack**: validated target payloads, Horo reflection/maps, dependencies and
+   variant tables form the host-published artifact generation. A required target
+   or variant failure cannot be silently omitted to publish a successful cook.
+
+The shader artifact identity includes the complete target descriptor and compiler,
+translator, validator, source-language, layout and generator versions/options.
+Native pipeline acceleration blobs have separate device/driver compatibility keys;
+neither they nor live GPU handles replace the canonical cooked artifact. Required
+missing variants are errors. Packaged games do not install authoring compilers,
+although a backend may realize a cooked payload (for example, GL compile/link of
+cooked GLSL) at its controlled resource preparation boundary.
 
 ```cpp
 struct ShaderCookResult {

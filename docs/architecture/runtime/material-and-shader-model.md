@@ -47,7 +47,10 @@ Not covered:
   requirements. The frontend selects an admitted recipe and records every fallback
   under [ADR-028](../../adr/028-renderer-capability-limits-and-product-profiles.md).
 - Pipeline state objects are cached and reused. Shader compilation may happen
-  offline during cook or lazily at runtime, but the cache key format is the same.
+  during cook or explicit editor/development preparation under
+  [ADR-035](../../adr/035-shader-source-and-intermediate-representation.md).
+  Portable artifacts, native driver caches and live GPU objects have distinct
+  ownership and compatibility keys.
 - No gameplay code queries raw shader handles. Gameplay sees only material names,
   parameter overrides, and feature flags.
 
@@ -263,14 +266,19 @@ whose requirements have not passed admission.
 
 ### Variant Compilation Policy
 
-- **Cook-time**: all declared permutations are compiled during asset cooking.
-- **Runtime lazy**: missing permutations may be compiled on first use if the
-  platform allows runtime shader compilation.
-- **Headless/server**: only variants requested by the release profile are
-  compiled; no runtime compilation.
+- **Cook-time**: compile all required declared permutations for the selected target
+  set through ADR-035's HLSL/SPIR-V or direct DXIL route. Publish payloads and
+  validated Horo reflection/target maps together.
+- **Editor/development**: explicit bounded compilation requests may build new
+  variants using the same target descriptor and diagnostics. Pending work never
+  blocks the frame loop; stale/failed candidates cannot replace the last good one.
+- **Packaged game/headless/server**: require declared cooked artifacts; no missing
+  variant may trigger HLSL/graph compilation. Controlled native realization of a
+  cooked artifact, such as GL compile/link of cooked GLSL, remains necessary.
 
-The pipeline emits diagnostics when a requested variant is missing and runtime
-compilation is disabled.
+A missing required variant is a typed error. Only predeclared, cooked and admitted
+optional fallback variants may replace it; platform source-compiler availability
+is not permission to invent a runtime variant.
 
 ### Variant Explosion Guard
 
@@ -306,23 +314,21 @@ name.
 
 ## Pipeline Cache
 
-The renderer owns a `ShaderPipelineCache` keyed by `ShaderPermutationKey`. It
-maps to:
+ADR-035 distinguishes Asset Pipeline's cooked shader artifacts, the backend's
+optional native driver/pipeline acceleration blobs, and the renderer registry's
+live GPU objects. `ShaderPermutationKey` is a logical index; full artifact identity
+also includes source/include digests, manifest/target/layout versions, toolchain
+builds and compiler options. Native blob compatibility additionally includes the
+device/driver identity required by the backend.
 
-- compiled shader binaries
-- pipeline state objects
-- descriptor set layouts (or equivalent backend abstractions)
-- root signature / pipeline layout handles
+Live pipelines/layouts/handles are never serialized. A shipped native cache is
+only acceleration: reject incompatible blobs and prepare from the admitted cooked
+artifact at a permitted non-frame-hot boundary. Cache invalidation does not permit
+an implicit source cook or claim that native pipeline creation can never compile.
 
-Cache lifetime:
-
-- process-scoped in development
-- shipped as a cold-start cache in release builds
-- invalidated when shader source, target platform, or renderer backend version
-  changes
-
-The cache must be serializable and reloadable without recompiling if the binary
-is compatible.
+Material parameters remain typed semantic values. Renderer packing uses the
+selected artifact's validated target offsets/strides and binding map; C++ struct
+layout or another backend's reflection cannot substitute for that map.
 
 ## Renderer Integration
 
@@ -412,8 +418,9 @@ Material validation rules:
 Cook-time diagnostics:
 
 - list of emitted variants per shader
-- variants skipped due to caps or profile limits
-- missing variant warnings when runtime compilation is disabled
+- declared optional variants excluded by the requested profile/target policy
+- missing required variants are errors; only declared optional exclusions may be
+  reported without failing publication
 
 ## Testing Requirements
 

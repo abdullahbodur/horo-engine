@@ -665,6 +665,15 @@ generation check.
 
 ## Shader And Pipeline Contract
 
+The source language, compiler routes, normalized reflection and diagnostics policy
+is [ADR-035](../../adr/035-shader-source-and-intermediate-representation.md).
+Portable HLSL source feeds validated SPIR-V for Vulkan/GLSL/MSL routes and direct
+DXIL for D3D12. Target-specific binding/packing maps preserve logical material
+interfaces; native compiler defaults and raw reflection structs are not public
+contracts. Packaged builds consume cooked variants, with controlled native
+realization such as GL compile/link of cooked GLSL. Missing variants cannot trigger
+an implicit authoring-source compiler or a blocking frame-hot pipeline build.
+
 Shaders are cooked by the asset pipeline. Runtime loading validates:
 
 - format and version
