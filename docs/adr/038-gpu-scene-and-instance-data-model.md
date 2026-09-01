@@ -121,7 +121,8 @@ struct GpuSceneInstanceRecord {
     SceneTransform previousPublishedTransform;
     LocalBounds localBounds;
     MeshHandle mesh;
-    MaterialBindingId material;
+    MaterialId material;
+    MaterialBindingId materialBinding;
     RenderClassification classification;
     InstanceFlags flags;
     uint32_t visibilityMask;
@@ -142,10 +143,36 @@ The minimal production projection provides:
 
 - current and previous **published** local-to-scene transforms for motion;
 - finite local bounds and enough derived origin-relative bounds for culling;
-- generation-checked mesh and material-table references;
-- explicit opaque/masked/forward-only/transparent classification from ADR-036;
+- generation-checked mesh handles and material-table references;
+- ADR-036 `RenderClassification` with all five mutually exclusive values:
+  `Opaque`, `Masked`, `ForwardOnlyOpaque`, `TransparentSorted` and
+  `TransparentAdditive` (`TransparentSorted` is never mixed into additive);
 - visibility/layer masks, shadow/selection flags and a typed LOD policy index; and
 - source/record/motion/origin generations required to reject stale consumers.
+
+`MaterialId` is the scene-conversion material-table key from
+[ADR-027](027-renderer-resource-identity-and-descriptors.md): not a resident GPU
+handle, not owner/slot/generation and not `AssetId`. `MaterialBindingId` is the
+frontend-owned packed binding-table identity for one published record: the
+`MaterialId` plus the resolved resident texture, sampler and buffer handles
+required by that material. It is invalidated on table/device recreation. It is
+not `MaterialId`, not a native descriptor index and not stored in ECS.
+Classification is derived from cooked `MaterialId` metadata. An Update that
+changes `classification` without a different `MaterialId` is rejected; ADR-036
+forbids category change by parameter override.
+
+Version fields are distinct and do not substitute for each other:
+
+| Field | Increments when | Does not increment when |
+|---|---|---|
+| `GpuSceneInstanceId.generation` | A slot is allocated or reused after every prior lease has retired | Any live-record field update |
+| `RenderStateRevision` | Any admitted published field of a live slot changes, including visibility, flags, LOD policy, mesh, binding, classification, bounds or transform | Slot reuse (the new generation starts a new revision sequence) |
+| `ScenePresentationEpoch` | The frontend opens a new scene-frame view group | Per-instance dirty fields |
+| `lastTransformChangeEpoch` | An admitted transform delta or `MotionState::Reset` is published in that epoch | Visibility, flags, LOD policy, mesh or material-only updates |
+| `GpuSceneGeneration` | A complete GPU Scene publication succeeds | Partial staging or rejected batches |
+
+A visibility-mask-only Update therefore increments `revision` and leaves
+`lastTransformChangeEpoch` and slot `generation` unchanged.
 
 “Previous” means the transform used by the last successfully published rendered
 generation, not every simulation update received. Coalescing multiple updates
@@ -174,15 +201,17 @@ silent default material is published.
 ### 4. Large-world transforms use one scene-origin generation
 
 The CPU shadow retains canonical high-precision scene transform authority from
-[ADR-026](026-large-world-precision-and-floating-origin-strategy.md). GPU transform
-and bounds records use finite camera-safe `float32` values relative to one
-`GpuSceneOrigin` and carry its generation. Each view converts its camera into the
-same origin before culling and shading; per-view camera-relative matrices are
+[ADR-026](026-large-world-precision-and-floating-origin-strategy.md)
+(`WorldCoordinate64`, `OriginRebaseCoordinator`, `OriginGeneration`). GPU
+transform and bounds records use finite camera-safe `float32` values relative to
+one `GpuSceneOrigin` and carry its generation. Each view converts its camera into
+the same origin before culling and shading; per-view camera-relative matrices are
 derived without rewriting stable identity or using a different world origin per
 backend.
 
 An origin rebase projects a committed ADR-026 `OriginRebaseEvent`. GPU Scene is
-an `IOriginRebaseParticipant`: it does not choose when to rebase. It stages a new
+an ADR-026 `IOriginRebaseParticipant` registered with `OriginRebaseCoordinator`;
+it does not choose when to rebase. It stages a new
 origin generation and a bounded rebuild/translation of every affected published
 transform and derived bound. The new instance buffers, view constants, culling
 inputs, motion policy and graph plan publish atomically at
@@ -214,11 +243,15 @@ Operations are typed:
 - bulk cell activation/removal is a bounded collection of those operations, not a
   provider-owned mutation of GPU buffers.
   [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md)
-  remains the cell-admission and `BeginRetire`/`PollBarrier` authority. GPU Scene
-  is a reader of committed cell residency: it emits create/remove for admitted or
-  retiring cells and holds generation leases that `PollBarrier` must observe. It
-  cannot evict a cell, expand a cell budget, or keep a retired cell's GPU records
-  after the barrier completes.
+  remains the cell-admission authority. Its current provider protocol is the
+  bounded poll operations (`BeginStage`/`PollStage`, `PreparePublish`/`PollBarrier`,
+  `BeginRetire`/`PollBarrier`); the earlier `IStreamingFeatureProvider`
+  `OnCellLoading`/`OnCellResident`/`OnCellEvicting` void-notification proposal is
+  replaced, not a second live contract. GPU Scene is a reader of committed cell
+  residency: it emits create/remove for admitted or retiring cells and holds
+  generation leases that `BeginRetire`/`PollBarrier` must observe. It cannot
+  evict a cell, expand a cell budget, or keep a retired cell's GPU records after
+  the barrier completes.
 
 Within a batch, operation order is stable by source identity and field category.
 Duplicate/conflicting operations, non-monotonic revisions, unknown removes,
@@ -368,9 +401,12 @@ Focused tests must cover:
 - stable subobjects, despawn/recreate, scene reincarnation, generation exhaustion,
   stale create/update/remove and deterministic free-list reuse;
 - complete/partial record validation, non-finite transforms/bounds, dirty masks,
-  duplicate/reordered deltas and coalesced previous-published motion;
-- mesh/material replacement, pending/missing dependencies, pin/retirement order,
-  table/schema/device generation changes and no dangling derived index;
+  duplicate/reordered deltas, coalesced previous-published motion, five-way
+  ADR-036 classification including sorted-versus-additive transparency, and
+  visibility-only updates that bump `revision` without `lastTransformChangeEpoch`;
+- mesh/material replacement, `MaterialId` versus `MaterialBindingId` invalidation,
+  pending/missing dependencies, pin/retirement order, table/schema/device
+  generation changes and no dangling derived index;
 - exact capacity, queue/upload backpressure, multi-frame staging, cancellation at
   every phase, rollback and last-good generation retention;
 - two or more views sharing records but producing independent LOD/visibility,

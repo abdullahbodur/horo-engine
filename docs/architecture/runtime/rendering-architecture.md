@@ -670,10 +670,12 @@ not replace the snapshot used by CPU-driven recipes.
 
 `RenderFrontend` owns the render-object-to-GPU-slot mapping, bounded CPU shadow,
 resource pins and immutable published GPU Scene generations. Current and previous
-published transforms, bounds, mesh/material generations, classification, LOD
-policy and origin/motion generations form the logical instance record; an explicit
-target shader/reflection schema owns packed GPU layout. Native addresses,
-descriptor indices and ECS indices are never persistent render identity.
+published transforms, bounds, mesh generations, `MaterialId` plus packed
+`MaterialBindingId`, and the five ADR-036 classifications form the logical
+instance record; an explicit target shader/reflection schema owns packed GPU
+layout. Native addresses, descriptor indices and ECS indices are never persistent
+render identity. `RenderClassification` keeps `TransparentSorted` and
+`TransparentAdditive` distinct.
 
 All views in one frontend-owned scene presentation epoch consume the same current
 and effective-previous transform pair. A record's last-transform-change epoch

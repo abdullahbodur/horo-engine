@@ -323,9 +323,12 @@ shadow and publishes immutable GPU Scene generations. Backends realize buffers
 and copies; they do not own instance identity or inspect ECS storage.
 
 The logical record contains current/previous-published transform, local and
-origin-relative bounds, resident mesh/material generations, ADR-036 render
-classification, visibility/shadow flags, LOD policy and record/motion/origin
-generations. A target's shader/reflection schema defines actual packing and table
+origin-relative bounds, resident mesh generations, scene `MaterialId` plus packed
+`MaterialBindingId`, and the five mutually exclusive ADR-036 classifications
+(`Opaque`, `Masked`, `ForwardOnlyOpaque`, `TransparentSorted`,
+`TransparentAdditive`). Visibility/shadow flags, LOD policy and
+record/motion/origin generations complete the record. Sorted-alpha and additive
+transparency remain separate; they are not one "transparent" class. A target's shader/reflection schema defines actual packing and table
 indices. The logical C++ carrier is never copied as an assumed native GPU layout,
 and descriptor/bindless indices are derived device-generation values rather than
 asset or scene identity.
