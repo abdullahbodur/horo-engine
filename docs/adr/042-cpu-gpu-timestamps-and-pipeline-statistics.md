@@ -6,6 +6,12 @@
 - **Scope**: Renderer timing clocks, query plans, delayed results, pipeline statistics and observability projection
 - **Issue**: [RND-017.2](https://github.com/abdullahbodur/horo-engine/issues/434)
 - **Jira**: [HORO-434](https://horo-engine.atlassian.net/browse/HORO-434)
+- **Related**: [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md),
+  [ADR-027](027-renderer-resource-identity-and-descriptors.md),
+  [ADR-033](033-presentation-and-display-ownership.md),
+  [ADR-034](034-gpu-memory-and-residency-ownership.md),
+  [ADR-039](039-ray-tracing-capability-and-abstraction.md),
+  [ADR-040](040-reconstruction-frame-generation-and-latency-providers.md)
 - **Companion decisions**: [ADR-028: Renderer Capability, Limits and Product Profiles](028-renderer-capability-limits-and-product-profiles.md), [ADR-041: Backend-Neutral Renderer Diagnostics Model](041-backend-neutral-renderer-diagnostics-model.md)
 - **Normative documents**: [Metrics And Profiling](../architecture/observability/observability-performance.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Render Backend Parity](../architecture/runtime/render-backend-parity-contract.md)
 
@@ -92,6 +98,14 @@ or failed frame may publish a result with `outcome`, but it never increments the
 successful real-frame count. Synthetic presentation has a separate presentation
 interval and cannot create `frame.cpu` or `render.submit.cpu` samples.
 
+Dotted interval IDs (`frame.cpu`, `render.submit.cpu`, `present.cpu`) are the
+canonical measurement names inside the instrumentation plan. Observability
+metrics in Section 7 are their published projections: `frame.cpu` duration of a
+successful real frame becomes `engine.frame.cpu_time`, the qualified GPU span
+becomes `engine.frame.gpu_time`, and `present.cpu` (or a separately identified
+presentation estimate) becomes `engine.frame.present_time`. They are one
+measurement with two names, not two clocks.
+
 ### 3. GPU clocks are per device and queue until calibration proves more
 
 Native GPU timestamps are opaque ticks. A backend publishes a generation-scoped
@@ -156,17 +170,36 @@ The graph compiler validates:
   semantics; and
 - no measurement scope around work that can migrate to an undeclared queue.
 
-The backend owns native query pools/heaps/buffers and private API commands. The
-frontend owns logical scope/query identities and finite plan budgets. Query
-capacity is reserved before frame admission and charged through GPU retirement.
-No backend allocates a query pool or readback buffer opportunistically mid-frame.
+The backend owns native query pools/heaps/buffers and private API commands. Those
+native heaps and readback buffers are ADR-027 resident resources charged under
+ADR-034: they use `Pending`/`Ready`/`Retiring`/`Retired`/`Failed` and
+`ResourceOperationId` for copies. The frontend-owned query **ring slot** is not a
+public `ResourceHandle`. It is a plan-scoped pool index into that Ready heap,
+owned until the corresponding GPU completion token retires. Slot reuse is the
+same completion barrier as ADR-027 `Retiring` → `Retired`, without giving every
+timestamp pair a named public handle. No backend allocates a query pool or
+readback buffer opportunistically mid-frame. Capacity is reserved before frame
+admission.
 
 The baseline always-on plan reserves one GPU begin/end pair for every graphics,
 compute or transfer queue that participates in the admitted real-frame graph and
 has effective timestamp support for the required stages. A required whole-frame
 plan rejects a participating queue without that support. Optional policy records
 the queue as unavailable and publishes only explicitly partial per-queue coverage;
-it never labels the observed subset as whole-frame GPU time. Detailed timing is
+it never labels the observed subset as whole-frame GPU time.
+
+[ADR-039](039-ray-tracing-capability-and-abstraction.md) AS build, update,
+compaction, copy and ray dispatch are ordinary graph work. If they participate in
+the real-frame graph they receive the same timestamp scopes. A dedicated
+compute/copy queue used for AS work is a participating queue under this rule:
+ADR-028 compute does not imply that queue or timestamp support on it. Enabling
+ray tracing cannot silently break a required whole-frame GPU timing plan. Either
+the AS queue has effective timestamps, the required plan fails admission, or an
+optional plan publishes partial per-queue coverage and never calls it
+whole-frame GPU time. Ray-specific profiler zones are named scopes, not a second
+query model.
+
+Detailed timing is
 off until requested and defaults to at most 128 GPU scopes per real frame, with a
 hard maximum of 512.
 Pipeline statistics default to at most 32 scopes on one sampled real frame, with a
@@ -180,7 +213,8 @@ hard maximum of 128. Every plan also validates:
 - no runtime budget growth or catch-up burst after a skipped sample.
 
 Profiles may lower these limits. Increasing them requires a new validated plan at
-a frame safe point. Pipeline statistics are disabled by default in Shipping;
+[ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md)
+`CommandThreadPolicy::RenderSafePoint`. Pipeline statistics are disabled by default in Shipping;
 detailed GPU scopes require an allowed profiler/diagnostics profile. Always-on
 frame totals remain optional when the backend cannot implement timestamps.
 
@@ -273,11 +307,13 @@ The renderer measurement collector validates a completed batch, converts ticks t
 seconds with the batch's calibration epoch and publishes through pre-registered
 Observability handles. It never performs dynamic metric lookup on a render thread.
 
-Always-on descriptors include:
+Always-on descriptors include the Observability names of the Section 2
+intervals (`frame.cpu` → `engine.frame.cpu_time`, and the GPU/present
+counterparts):
 
 | Metric | Kind/unit | Meaning |
 |---|---|---|
-| `engine.frame.cpu_time` | Histogram/seconds | Successful real-frame CPU interval. |
+| `engine.frame.cpu_time` | Histogram/seconds | Successful real-frame `frame.cpu` interval. |
 | `engine.frame.gpu_time` | Histogram/seconds | Qualified real-frame GPU span; unavailable when no trustworthy total exists. |
 | `engine.frame.present_time` | Histogram/seconds | CPU present operation or separately identified presentation estimate, never both combined. |
 | `renderer.measurement.dropped` | Counter/count | Results rejected by bounded admission, labeled by fixed reason. |
@@ -339,6 +375,8 @@ instrumentation plan while rendering continues unchanged.
 | Enable pipeline statistics continuously in all builds | Rejected: cost and native support vary; use sampled/profile-gated plans. |
 | Let backends invent scope names or statistic semantics | Rejected: frontend descriptors and canonical semantic revisions preserve parity. |
 | Grow query pools after saturation | Rejected: hides memory/work growth; resolve a new finite plan or drop optional measurement admission. |
+| Give every timestamp pair a public ADR-027 handle | Rejected: native heaps follow ADR-027; ring slots are plan-scoped indices behind GPU-completion retirement. |
+| Exempt ADR-039 AS queues from whole-frame timestamp rules | Rejected: a participating queue without timestamps fails a required plan or is labeled partial, never silent. |
 | Use timing metrics to drive rendering correctness/policy | Rejected: observability is not an admission or quality authority. |
 | Upload detailed measurements from the backend | Rejected: export, privacy and network policy belong to process Observability/Application composition. |
 
@@ -367,12 +405,16 @@ Tests must cover:
   and checked query-capacity arithmetic;
 - graphics, compute and transfer queue participation, required unsupported-queue
   rejection and optional partial coverage that never becomes whole-frame time;
+- ADR-039 AS/compute-copy queues as participating queues under the same
+  timestamp rule;
+- `frame.cpu` publishing as `engine.frame.cpu_time` and counterparts;
 - default/hard scope, pending-batch, storage and sampling limits, plus no catch-up
   burst or runtime growth;
 - delayed and out-of-order completion retaining source frame, plan/device/clock
   generations and result age;
-- not-ready expiration without query-slot reuse before GPU completion, saturation
-  without render stall and declared instrumentation-only fallback;
+- not-ready expiration without query-slot reuse before GPU completion, native
+  query heaps following ADR-027 retirement while ring slots stay plan-scoped,
+  saturation without render stall and declared instrumentation-only fallback;
 - each canonical pipeline statistic against native fixtures, unsupported semantic
   mappings, counter overflow and no sampled-frame extrapolation;
 - typed unsupported/required failure, optional availability revision, bounded
