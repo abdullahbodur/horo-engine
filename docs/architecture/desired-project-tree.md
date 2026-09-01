@@ -846,7 +846,6 @@ MyGame/
 │   ├── project.json
 │   ├── packages.json
 │   ├── packages.lock
-│   ├── plugins.json
 │   ├── release-profiles.json
 │   ├── editor_workspace.json
 │   ├── asset_index.json
@@ -1111,9 +1110,15 @@ com.vendor.weapon-pack-2.0.0.horopkg
 │   └── recoil_behavior.horo-behavior.json
 ├── services/
 │   └── recoil_service.horo-service.json
-├── editor/
-│   ├── weapon_stats_panel.horo-extension.json
-│   └── inspectors/
+├── extensions/
+│   └── com.vendor.weapon-tools.editor/
+│       ├── extension.json
+│       ├── bin/
+│       │   ├── linux-x64/libweapon_tools.so
+│       │   ├── macos-arm64/libweapon_tools.dylib
+│       │   └── windows-x64/weapon_tools.dll
+│       └── resources/
+│           └── icons/weapon-stats.svg
 ├── samples/
 │   ├── scenes/
 │   │   └── weapon_demo.horo
@@ -1124,6 +1129,11 @@ com.vendor.weapon-pack-2.0.0.horopkg
 │   └── README.md
 └── NOTICE.md
 ```
+
+`horo-package.toml` and `files.manifest.json` remain authoritative for the whole
+archive. Each `extensions/<module-id>/extension.json` describes only that module,
+its entry variants and contributions as defined by
+[ADR-054](../adr/054-extension-and-package-authority-boundary.md).
 
 ## Global Package Cache
 

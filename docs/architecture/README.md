@@ -16,7 +16,7 @@ For a first architecture review, read:
 6. [Concurrency And Job System](./foundation/concurrency-and-jobs.md)
 7. [Runtime Lifecycle](./runtime/runtime-lifecycle.md)
 8. [Scene Runtime](./runtime/scene-runtime.md)
-8. the host or subsystem documents relevant to the change
+9. the host or subsystem documents relevant to the change
 
 `system-design.md` defines the map and dependency direction. Detailed documents
 own their specific contracts; the overview does not override them.
@@ -209,6 +209,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 
 ## Extensions
 
+- [Extension and Package Authority Boundary](../adr/054-extension-and-package-authority-boundary.md):
+  one package identity/file/dependency authority, package-scoped extension
+  descriptors, trust/activation hand-off, layouts, and legacy migration.
 - [Extension Capability Roadmap](./extensions/extension-capability-roadmap.md):
   ecosystem capability stages and their separation from product milestones,
   workstreams, planning horizons, and technical dependencies.

@@ -17,13 +17,19 @@ Detailed restore, lifecycle, and release behavior is defined by:
 A Horo project must be restorable, verifiable, portable, releasable, and secure
 from committed project metadata plus declared package sources.
 
+[ADR-054](../../adr/054-extension-and-package-authority-boundary.md) makes this
+package model authoritative for extension-only and hybrid packages as well as
+asset, game-library and template packages. ExtensionHost consumes verified
+activation candidates; it is not a second resolver, installer or trust store.
+
 The package system is not a replacement for the asset importer or the extension
 system:
 
 - Asset importers convert individual source assets into project assets.
 - Packages distribute resolved sets of assets, scripts, behaviors, services,
   samples, templates, and optional editor contributions.
-- Editor/IDE addons remain high-trust Extension System contributions.
+- Editor/IDE addons are high-trust Extension System contributions carried by the
+  same package manifest, verification, lock and lifecycle model.
 
 ## Core Distinctions
 
@@ -48,6 +54,7 @@ and require separate trust approval.
 enum class HoroPackageKind {
     AssetPackage,
     GameLibrary,
+    ExtensionPackage,
     HybridPackage,
     TemplatePackage,
 };
@@ -71,6 +78,11 @@ enum class PackageContributionKind {
 Contribution kinds are validated independently. A `HybridPackage` may declare
 runtime and editor contributions, but editor contributions are not activated
 unless the extension trust flow succeeds.
+
+An `ExtensionPackage` contains one or more extension descriptors and may include
+only their declared binaries, scripts, resources, schemas, licenses and
+documentation. A package that also contributes project assets, gameplay code or
+services is a `HybridPackage`; both shapes use the same package authority.
 
 ## Package Operations
 
@@ -115,7 +127,7 @@ scripts = ["scripts/"]
 behaviors = ["behaviors/"]
 services = ["services/"]
 samples = ["samples/"]
-editor = ["editor/"]
+extensions = ["extensions/"]
 documentation = ["docs/"]
 
 [[contribution]]
@@ -128,7 +140,8 @@ capabilities = ["runtime.assets", "runtime.input"]
 [[contribution]]
 kind = "EditorExtension"
 id = "com.example.horo.gun-pack.editor-tools"
-root = "editor/"
+root = "extensions/com.example.horo.gun-pack.editor-tools/"
+descriptor = "extensions/com.example.horo.gun-pack.editor-tools/extension.json"
 required = false
 capabilities = ["editor.panel", "asset.inspect"]
 
@@ -156,7 +169,7 @@ package.horopkg
   scripts/
   behaviors/
   services/
-  editor/
+  extensions/
   samples/
   docs/
   NOTICE.md
@@ -186,6 +199,21 @@ activation, the verifier expands them into typed descriptors that declare:
 
 Activation, release inclusion, conflict checks, and dependency resolution use the
 expanded descriptors, not raw folder names.
+
+### Extension Descriptor Boundary
+
+An extension contribution points to one package-relative
+`extensions/<module-id>/extension.json`. The descriptor owns only module ABI,
+entry variants, contributions and requested permissions. It may defensively bind
+the owner package ID/version, but the binding must equal the parsed package
+manifest and verified install record.
+
+Package identity, version, source, cross-package dependencies, update channel,
+trust and enablement remain outside `extension.json`. Every descriptor, binary
+and resource is present in `files.manifest.json`; ExtensionHost receives an exact
+validated descriptor and install-record lease rather than scanning a directory.
+The complete authority and activation hand-off are defined by
+[ADR-054](../../adr/054-extension-and-package-authority-boundary.md).
 
 ## Package Sources
 
@@ -267,7 +295,6 @@ Package sources are resolved under package source policy. The policy defines:
 
 HTTP without TLS, unbounded redirects, unpinned mutable artifacts, and secrets in
 URLs are rejected unless an explicit local development policy allows them.
-
 
 ## Dependency Request And Lockfile
 
@@ -389,7 +416,6 @@ Rules:
 - editor extensions activate through the Extension System
 - trust approval, denial, revocation, and activation are audit events
 
-
 ### Trust Metadata Is Not Authoritative
 
 Declared package security metadata is advisory. The host computes required trust
@@ -509,7 +535,7 @@ Validation checks:
 | `PackageLifecycleService` | Install, enable, activate, update, uninstall, migrate |
 | `AssetImportService` | Imports individual assets from packages |
 | `GameplayModuleBoundary` | Registers game library modules, behaviors, services |
-| `ExtensionHost` | Activates trusted editor extension contributions |
+| `ExtensionHost` | Activates exact trusted extension candidates from verified install records and owns live module/registry leases |
 | `TrustService` | Evaluates signature, trust level, and user/policy approval |
 
 Editor modals, CLI commands, MCP tools, and CI jobs are adapters. They call these
@@ -534,7 +560,6 @@ type, phase, duration, byte count, cache hit, verification result, and trust
 requirement. They must not include URL query tokens, auth headers, raw secrets,
 or sensitive local paths.
 
-
 ## Required Tests
 
 - manifest schema validation
@@ -552,6 +577,9 @@ or sensitive local paths.
 - package-scoped asset identity resolves through lockfile
 - package-declared low trust cannot bypass computed trust requirement
 - package signature requires a trusted publisher root
+- extension descriptor owner/package binding and undeclared-file rejection
+- extension-only and hybrid packages resolve through the same request/lock graph
+- ExtensionHost cannot load raw directories or resolve/trust package state
 
 ## Related Documents
 

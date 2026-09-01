@@ -395,6 +395,14 @@ leased resources and consumes committed revisions. Background jobs publish via
 and implementation gates are defined by
 [ADR-016](../../adr/016-navigation-target-ownership-and-dependency-boundary.md).
 
+[ADR-054](../../adr/054-extension-and-package-authority-boundary.md) keeps
+extension package composition in the application boundary. Package resolution,
+verified install records, trust and durable enablement are application/package
+services. `ExtensionHost` consumes an immutable exact activation candidate,
+loads the declared module through `ExtensionApi`, and owns only live module and
+registry leases. It cannot scan raw directories, resolve dependencies, grant
+trust or mutate package lifecycle state.
+
 ## Dependency Direction
 
 Arrows point from the dependent target to the target that defines the contract:
