@@ -57,16 +57,19 @@ sequenceDiagram
 3. Validate lockfile compatibility with the current platform and engine runtime.
 4. Locate required packages in the local/global cache.
 5. Download or locate missing packages from declared portable sources.
-6. Verify artifact hash, manifest hash, signature, package format version, and
-   extracted layout.
+6. Decode and validate the typed package/file manifests, then construct a
+   `VerifiedPackageBundle` by checking artifact/archive hashes, every file and
+   reference, signature evidence, package format and extracted layout.
 7. Mount `MountReadOnly` package assets without copying.
 8. Prepare `ImportCopy` samples/assets only when requested by policy or user.
 9. Evaluate trust for script, native, gameplay, and editor contributions.
 10. Refresh asset index and static behavior, service, and script descriptors.
 11. Report project-ready state or blocking diagnostics.
 
-Restore may read static descriptors, manifests, generated metadata, and asset
-indexes. Restore must not load native libraries, initialize script runtimes,
+Restore may read validated static descriptors, immutable package models,
+generated metadata and asset indexes. It cannot pass a TOML DOM, decoded-only
+manifest or unknown string token into the resolver or lifecycle. Restore must not
+load native libraries, initialize script runtimes,
 execute package code, instantiate services, open editor panels, or run custom
 package hooks. Code-bearing contributions activate only during the activation
 phase after trust and enablement checks.
