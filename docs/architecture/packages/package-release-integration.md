@@ -34,11 +34,14 @@ During release build:
    pinned by `packages.lock`, but it must not select newer package versions,
    change package sources, or rewrite the lockfile.
 3. Missing, changed, or unverified lock entries fail release validation.
-4. Package contents are cooked through the asset pipeline.
-5. Editor-only contributions are excluded.
-6. Source packages and development metadata are excluded unless using a developer
+4. Each lock entry binds the same ADR-057 validated package/file manifest and
+   verified bundle digests used by restore/install; release does not reparse a
+   consumer-specific manifest model.
+5. Package contents are cooked through the asset pipeline.
+6. Editor-only contributions are excluded.
+7. Source packages and development metadata are excluded unless using a developer
    diagnostics profile.
-7. The release manifest records exact package versions, hashes, and package
+8. The release manifest records exact package versions, hashes, and package
    contribution closure.
 
 ## Release Validation
@@ -49,6 +52,8 @@ The release `Validating` phase includes:
 - lockfile `requestHash` matches canonical dependency request from `packages.json`
 - all required packages restored
 - package hashes and signatures verified
+- package kind, contribution, module, artifact and content-set closure comes from
+  the immutable ADR-057 typed model
 - package cache not trusted without verification
 - editor-only contributions excluded
 - runtime contributions compatible with target platform/profile
@@ -105,7 +110,6 @@ A DLC package declares:
 
 DLC cannot replace base-game assets unless an explicit patch or override policy
 allows it. DLC and patch packages are separate release concepts.
-
 
 ## License, Notice, And Attribution
 

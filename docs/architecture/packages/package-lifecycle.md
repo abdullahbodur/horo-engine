@@ -40,6 +40,12 @@ same lifecycle to extension-only and hybrid packages. `ExtensionHost` is the
 live module/contribution host for an exact verified activation candidate; it does
 not own a parallel install, dependency, trust or enablement lifecycle.
 
+[ADR-057](../../adr/057-package-manifest-v1-typed-model.md) supplies the lifecycle
+input boundary. Decode and semantic validation are inert; archive publication
+requires a `VerifiedPackageBundle` that binds the canonical package-manifest,
+file-manifest and archive digests plus verified signature evidence. Lifecycle
+state, source policy, trust and selected host artifacts remain separate records.
+
 ## Transactional Install
 
 Package install uses the same safety posture as distribution staging:
@@ -47,13 +53,16 @@ Package install uses the same safety posture as distribution staging:
 1. Download into a temporary location.
 2. Verify expected size and hash.
 3. Extract with path traversal, symlink, depth, file count, and size limits.
-4. Verify extracted layout and manifest hash.
+4. Decode and semantically validate the typed package/file manifests, then verify
+   every reference, digest, executable mode and required detached signature.
 5. Write an install record.
 6. Atomically move verified content into the active cache.
 7. Remove or quarantine failed staging directories.
 
 The editor/runtime must never load package content from an incomplete staged
-installation.
+installation or from a decoded/partially validated manifest. Parse, validation or
+verification failure quarantines staging and leaves the previous install record
+unchanged.
 
 ## Trust And Activation
 

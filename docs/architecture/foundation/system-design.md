@@ -411,6 +411,12 @@ service-export and script-API identities. Only a fully validated package
 composition can become an activation candidate, so no consumer may repair or
 reinterpret manifest strings during activation.
 
+[ADR-057](../../adr/057-package-manifest-v1-typed-model.md) gives package services
+one Horo-owned manifest model for data, tool, extension, gameplay-library, hybrid
+and template packages. TOML/archive/crypto/source adapters stay private. Resolver,
+restore, lifecycle, trust and release consume immutable validated/verified values
+and cannot reinterpret string maps or make parsing mutate ambient package state.
+
 ## Dependency Direction
 
 Arrows point from the dependent target to the target that defines the contract:
