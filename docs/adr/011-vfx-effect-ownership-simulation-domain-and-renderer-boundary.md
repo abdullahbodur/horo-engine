@@ -239,7 +239,11 @@ Shared PBR/unlit material compilation remains authoritative. RenderFrontend sche
 compute before dependent sort/cull and draw passes, with declared barriers. Opaque/
 masked mesh particles use standard depth/opaque and permitted shadow caster passes.
 Translucent/ribbon and additive paths depth-test without depth writes; additive skips
-sorting. Decals and volumetric accumulation use capability-validated dedicated paths.
+sorting. Batch color is unexposed linear ACEScg from
+[ADR-037](037-scene-color-and-hdr-architecture.md) pipeline step 1: additive adds
+scene-referred RGB with no coverage alpha; translucent/ribbon use the scene-color
+resource's declared linear coverage/opacity alpha. VFX does not blend after
+exposure or after the output transform. Decals and volumetric accumulation use capability-validated dedicated paths.
 Shadow casting in this contract is opaque/masked mesh only; unsupported combinations
 require an authored substitute or typed rejection, not a silently ignored boolean.
 

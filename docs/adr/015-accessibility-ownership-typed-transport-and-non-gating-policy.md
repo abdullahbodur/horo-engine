@@ -42,7 +42,7 @@ platform capability. No accessibility path may introduce unbounded core-loop wai
 | Feature | Authorities and consumers | Settings owner / namespace | Consumption boundary |
 |---|---|---|---|
 | Captions & subtitles | Dialogue/gameplay owns semantic cue identity and timing; Audio owns audio-only cue metadata; UI `CaptionRenderer` owns presentation | Caption presentation domain: `accessibility.captions.*` | Typed `CaptionEvent` queue at HUD frame boundary; audio-only metadata via bounded `AudioEventSnapshot` |
-| Colorblind filters | Backend-neutral visual-settings domain owns desired mode; renderer owns shader application; gameplay/HUD independently consume semantic settings | Visual-settings domain: `accessibility.colorblind.*` | Snapshot-backed `IColorAccessibilityQuery` on the consumer's captured revision; render pass applies its own snapshot |
+| Colorblind filters | Backend-neutral visual-settings domain owns desired mode; renderer owns shader application as [ADR-037](037-scene-color-and-hdr-architecture.md) `ColorPipelinePlan` step 6; gameplay/HUD independently consume semantic settings | Visual-settings domain: `accessibility.colorblind.*` | Snapshot-backed `IColorAccessibilityQuery` on the consumer's captured revision; the color pass applies its own snapshot to the complete composed image |
 | Input affordances | Collector owns physical facts; `InputMapping`/router owns sticky modifiers, hold/repeat/toggle state and remapping | Input domain: `accessibility.input.*` | Action resolution after immutable raw snapshot, before semantic frame publication |
 | Screen reader bridge | UI owns node metadata/focus; Platform owns native dispatch and capability | Platform accessibility domain: `accessibility.screen_reader.*` | Bounded owned messages to the platform-affine dispatcher |
 | Gameplay assists | Configuration owns desired settings; gameplay owns applying supported assists; gameplay-owned `GameplayAssistSettingsAdapter` publishes revision hints | Gameplay: `accessibility.gameplay.*` | Simulation tick start acquires authoritative snapshot, even if notification was missed |
@@ -106,7 +106,11 @@ provider directly; the event is not its state source.
   retained immutable snapshot, never live render state. Gameplay, UI and workers
   may read their own captured revision without cross-thread calls or waits.
   Rendering consumes that same contract independently; gameplay does not depend
-  on PostProcessing. Non-color cues remain gameplay/HUD responsibilities.
+  on PostProcessing. The renderer applies the colorblind transform only as
+  ADR-037 `ColorPipelinePlan` step 6: after the ACES output transform and
+  display-referred UI compose, covering HUD pixels as well as scene pixels. That
+  pass is not creative look/grading (`ColorGradingSettings`, ADR-037 step 3).
+  Non-color cues remain gameplay/HUD responsibilities.
 - **Input** preserves physical facts in `RawInputCollector`. Sticky keys,
   hold/repeat thresholds and toggles belong to semantic mapping after collection.
   Focus loss, device disconnect and context removal clear synthetic held state.
