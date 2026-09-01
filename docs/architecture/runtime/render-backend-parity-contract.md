@@ -397,6 +397,19 @@ hardware as pass, retry an image mismatch into success or auto-promote its outpu
 Null proves orchestration and comparison fixtures but cannot qualify native
 pixels, compiler routes, color conversion or driver behavior.
 
+[ADR-051 benchmark parity](../../adr/051-renderer-benchmark-and-regression-gates.md)
+requires common workload identity, measurement semantics, environment provenance,
+typed outcomes, bounded artifacts and gate math. Native placement/calibration may
+differ under ADR-042, but a backend cannot change workload policy, enable cheaper
+fallbacks, omit slow frames, fabricate unavailable totals or compare against
+another hardware cohort.
+
+Performance parity means each supported backend has explicit qualified results;
+it does not require equal frame time across different APIs/devices. Missing or
+unstable baselines, invalid environments and absent required hardware remain
+unqualified matrix states. Null proves sample/baseline/gate fixtures but cannot
+establish native performance or instrumentation overhead.
+
 In particular:
 
 - OpenGL global state is private to the OpenGL integration.
