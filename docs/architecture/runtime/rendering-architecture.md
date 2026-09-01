@@ -347,10 +347,20 @@ Real reconstruction consumes a canonical frame contract: linear ACEScg at its
 declared exposure stage, positive linear view-depth meters, normalized
 `previousUv - currentUv` motion excluding projection jitter, explicit jitter and
 pre-exposure scales, typed finite masks, render/target extents and complete
-generations. Adapters convert to provider conventions privately. Reconstruction
-runs before target output transform and display-referred UI. Resolution control is
-separate product/frontend policy and changes extent only through a new frame-boundary
-plan/history generation.
+generations. UV origin is top-left, `u` increases right, `v` increases down and
+pixel centers use `((x + 0.5) / width, (y + 0.5) / height)`. Adapters convert to
+provider conventions privately. Reconstruction runs before target output
+transform and display-referred UI. Resolution control is separate product/frontend
+policy and changes extent only through a new frame-boundary plan/history
+generation.
+
+Reconstruction consumes render-extent depth, motion and masks. Baseline frame
+generation consumes target-extent guides. A frontend-owned `GuideResolvePass`
+bridges unequal extents explicitly: nearest positive finite depth and its motion
+win per render footprint, masks use a conservative maximum and missing qualified
+samples become invalid. Equal extents alias qualified inputs. A provider adapter
+may convert layout, orientation and units privately but cannot own an undeclared
+guide upscale or change these semantics.
 
 Temporal histories are scoped to view/provider/mode/extent/input/color/device
 generations and advance only after a successful **real** frame. Camera cuts,

@@ -92,10 +92,10 @@ provider operations.
 
 Selection returns one immutable `ImagePipelinePlan` with category/provider/mode
 IDs, actual render/output extents, scale, input/output contracts, capability,
-driver, cook and configuration generations, budgets and applied fallback rules. Missing
-required support fails before resource creation. Optional selection follows only
-declared edges; it never downloads a runtime, switches backend, changes present
-mode, disables an effect or chooses another category implicitly.
+driver, cook and configuration generations, budgets and applied fallback rules.
+Missing required support fails before resource creation. Optional selection
+follows only declared edges; it never downloads a runtime, switches backend,
+changes present mode, disables an effect or chooses another category implicitly.
 
 ### 3. Reconstruction consumes one canonical real-frame contract
 
@@ -105,9 +105,10 @@ generations. A reconstruction request declares:
 
 - render and target extents, finite scale and jitter sequence/sample;
 - exposed or pre-exposed linear ACEScg scene color in the exact ADR-037 stage;
-- positive linear view-space depth in meters plus projection/near/far metadata;
-- normalized motion vectors where `previousUv - currentUv` excludes projection
-  jitter, plus explicit current/previous jitter values;
+- positive linear view-space depth in meters at render extent plus
+  projection/near/far metadata;
+- render-extent normalized motion vectors where `previousUv - currentUv`
+  excludes projection jitter, plus explicit current/previous jitter values;
 - exposure/current-to-previous pre-exposure scales and reset/camera-cut flags;
 - optional reactive, transparency, disocclusion and composition masks in finite
   normalized `[0, 1]`, each with declared producer/meaning; and
@@ -118,6 +119,26 @@ cannot reinterpret device depth, flip motion sign, include jitter twice, infer
 meters from a projection matrix or invent a missing mask. Each selected provider
 declares which optional inputs become required for its mode; missing required
 inputs reject that candidate before execution.
+
+Canonical UV uses a top-left origin: `(0, 0)` is the top-left viewport corner,
+`u` increases right, `v` increases down and pixel centers are
+`((x + 0.5) / width, (y + 0.5) / height)`. Motion is expressed in normalized UV
+of the declared input extent, so the vector value is not multiplied by an extent
+ratio when its samples are resolved to another extent. Adapters may convert this
+orientation privately but cannot expose a backend/provider convention upstream.
+
+Reconstruction consumes depth, motion and masks at render extent. Baseline frame
+generation consumes them at target extent; neither provider silently owns guide
+upscaling. When extents differ, a frontend-owned `GuideResolvePass` creates the
+target-extent guides as explicit render-graph work. For each target pixel it uses
+the nearest positive finite depth in the corresponding render footprint and that
+sample's motion, while reactive, transparency, disocclusion and composition masks
+use the conservative maximum. A footprint without a qualified depth/motion sample
+is marked invalid and suppresses generation for that region or frame according to
+the admitted provider contract. Equal extents alias qualified guides without a
+pass. A provider that requires different semantic guides declares a separate
+named mode and is unavailable to this baseline contract; private adapters may
+change units/layout, not filtering ownership or meaning.
 
 Scene reconstruction executes before ADR-037's target output transform and before
 display-referred UI. Its output remains exposed/pre-exposed linear ACEScg with the
@@ -181,9 +202,10 @@ fires gameplay frame callbacks or satisfies capture/save readiness.
 
 The first Horo frame-generation stage consumes reconstructed **display-linear
 scene content before display-referred UI/accessibility/final transfer encoding**,
-plus provider-required depth, motion, exposure, masks and pacing metadata from the
-two real frames. It outputs a synthetic display-linear scene image. The frontend
-then composes the latest qualified display-referred UI/accessibility state and
+plus target-extent depth, motion and masks from `GuideResolvePass` (or equal-extent
+aliases), exposure and pacing metadata from the two real frames. It outputs a
+synthetic display-linear scene image. The frontend then composes the latest
+qualified display-referred UI/accessibility state and
 performs the target gamut/dither/encoding stage for that presentation frame. This
 prevents interpolation of ordinary HUD/editor text. A provider that cannot support
 this separation is unavailable for the baseline contract; integrated UI paths
@@ -308,8 +330,11 @@ Tests must cover:
 
 - duplicate/invalid descriptors, installed versus implemented/effective support,
   exact selection/fallback order and no backend/vendor shortcut;
-- canonical motion sign/units/jitter, linear depth, exposure/pre-exposure, masks,
-  extent/scale/alignment bounds and missing required inputs;
+- canonical top-left UV orientation, motion sign/units/jitter, linear depth,
+  exposure/pre-exposure, masks, extent/scale/alignment bounds and missing required
+  inputs;
+- unequal-extent guide resolve depth/motion pairing, conservative masks, invalid
+  footprints, equal-extent aliasing and no provider-owned implicit upscale;
 - spatial and temporal reconstruction, first frame, reset, camera cut, resize,
   color, exposure, device and provider changes, history rescale/invalidation and
   failed-frame non-advance;
