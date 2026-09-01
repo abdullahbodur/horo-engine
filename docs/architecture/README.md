@@ -233,7 +233,9 @@ dependency direction in [System Design](./foundation/system-design.md).
   C ABI, typed v1 manifests, permissions, registration, and lifecycle. Package
   authority and manifest-model decisions are recorded in
   [ADR-054](../adr/054-extension-and-package-authority-boundary.md) and
-  [ADR-055](../adr/055-extension-manifest-v1-typed-model.md).
+  [ADR-055](../adr/055-extension-manifest-v1-typed-model.md); external editor UI
+  uses the host-rendered boundary in
+  [ADR-056](../adr/056-external-editor-ui-boundary.md).
 
 ## Packages
 

@@ -498,7 +498,10 @@ points. This allows an add-on package to contribute a settings section, import
 wizard page, diagnostics page, or tool-specific configuration page without
 forking the owning modal.
 
-Page contributions are descriptors, not imperative UI mutations:
+Page contributions are descriptors and host-rendered typed UI schemas, not
+imperative UI mutations. External pages follow
+[ADR-056](../../adr/056-external-editor-ui-boundary.md): they do not implement a
+C++ modal/page interface or receive ImGui, input, renderer or modal-host objects.
 
 ```cpp
 struct EditorModalPageContribution {
@@ -512,11 +515,12 @@ struct EditorModalPageContribution {
 };
 ```
 
-The owning modal validates and orders pages, constructs page instances through
-registered factories, and controls navigation, validation, dirty state, preview,
-apply, cancel, and close policy. Extension pages cannot directly close the root
-modal, bypass confirmation policy, commit settings, or publish committed
-authority events.
+The owning modal validates and orders pages. A host-owned page session renders
+the copied schema and binds its declared actions/fields to approved capabilities;
+first-party pages may still use internal factories. The modal controls navigation,
+validation, dirty state, preview, apply, cancel, focus and close policy. Extension
+pages cannot directly close the root modal, bypass confirmation policy, commit
+settings, or publish committed authority events.
 
 ```mermaid
 sequenceDiagram

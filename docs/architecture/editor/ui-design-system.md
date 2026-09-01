@@ -70,6 +70,23 @@ ImGui wrapper must define its typed props/result contract, token usage,
 accessibility behavior, and component-gallery coverage before feature code
 depends on it.
 
+### External Package Boundary
+
+External packages do not implement that low-level integration point. Embedded
+extension tabs, panels, drawers, modal pages and settings pages publish bounded
+typed UI schemas and state; the GUI host renders them with the same components,
+tokens, localization, focus and accessibility rules as built-in surfaces. A
+versioned extension C ABI may carry copied schemas, action requests and lifecycle
+values, but never an ImGui context, draw list, SDL event, renderer handle, native
+child window or C++ component object.
+
+Advanced external tools use registered host-owned schemas for plots, timelines,
+node graphs, image/canvas annotation and other reviewed specialized views. There
+is no generic immediate-mode drawing escape hatch. Isolation-sensitive modules
+may put their controller in a supervised helper process while retaining the same
+host-rendered schema/action contract. See
+[ADR-056](../../adr/056-external-editor-ui-boundary.md).
+
 ## Editor Platform And Renderer Boundary
 
 The graphical editor uses SDL3 for platform windowing and multimedia
