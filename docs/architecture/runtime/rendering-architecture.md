@@ -625,6 +625,35 @@ struct RenderWorldSnapshot {
 Snapshots contain handles and immutable values. They do not contain pointers to
 component pools, editor widgets, or backend objects.
 
+Persistent GPU-driven projection follows
+[ADR-038](../../adr/038-gpu-scene-and-instance-data-model.md). Extraction assigns
+each logical renderable a generation-checked `RenderObjectId` that remains stable
+across frames and distinguishes multiple subobjects emitted by one entity. It may
+derive bounded ordered GPU Scene create/update/remove batches from acknowledged
+snapshot revisions, but those batches retain no component-pool pointers and do
+not replace the snapshot used by CPU-driven recipes.
+
+`RenderFrontend` owns the render-object-to-GPU-slot mapping, bounded CPU shadow,
+resource pins and immutable published GPU Scene generations. Current and previous
+published transforms, bounds, mesh/material generations, classification, LOD
+policy and origin/motion generations form the logical instance record; an explicit
+target shader/reflection schema owns packed GPU layout. Native addresses,
+descriptor indices and ECS indices are never persistent render identity.
+
+All views in one frontend-owned scene presentation epoch consume the same current
+and effective-previous transform pair. A record's last-transform-change epoch
+makes effective previous equal current in later unchanged epochs, preventing
+repeated stale motion without rewriting every static record. Per-view execution
+never advances shared transform history.
+
+Delta application is a bounded transaction. Queue pressure returns backpressure;
+staged multi-frame uploads leave the prior generation coherent; failure or
+cancellation rolls back the candidate. Removal and slot reuse wait for every
+in-flight frame/culling/draw lease. Origin rebase, resource replacement and device
+loss publish/rebuild complete generations rather than mutating records visible to
+old frames. GPU visibility and LOD output remain presentation data and cannot be
+queried as gameplay truth.
+
 Multiple views, including game, scene viewport, thumbnails, and previews, use
 separate `RenderView` descriptors over compatible snapshots.
 

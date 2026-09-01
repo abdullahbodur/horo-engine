@@ -315,22 +315,49 @@ fails admission on unsupported hardware rather than silently changing its effect
 
 ## GPU-Driven Rendering
 
-GPU-driven rendering moves culling and draw submission to the GPU.
+[ADR-038](../../adr/038-gpu-scene-and-instance-data-model.md) owns the persistent
+GPU Scene projection. `RenderFrontend` owns one scene per admitted scene
+runtime/incarnation and frontend/device generation. It maps stable, process-local
+`RenderObjectId` values to generation-checked GPU slots, retains a bounded CPU
+shadow and publishes immutable GPU Scene generations. Backends realize buffers
+and copies; they do not own instance identity or inspect ECS storage.
 
-Components:
+The logical record contains current/previous-published transform, local and
+origin-relative bounds, resident mesh/material generations, ADR-036 render
+classification, visibility/shadow flags, LOD policy and record/motion/origin
+generations. A target's shader/reflection schema defines actual packing and table
+indices. The logical C++ carrier is never copied as an assumed native GPU layout,
+and descriptor/bindless indices are derived device-generation values rather than
+asset or scene identity.
 
-- scene GPU buffer with instance data
-- compute culling pass
-- indirect draw/dispatch generation
-- draw compaction
+Render extraction emits bounded ordered create/update/remove delta batches over
+immutable state. Admission validates source/scene/revision generations, queue and
+capacity envelopes, dependencies and cancellation. Worker preparation owns its
+inputs and cannot map native memory or publish slots. The render-capable owner
+stages slots, pins and uploads, then atomically publishes a complete generation at
+a safe point. Queue pressure applies typed backpressure; multi-frame staging keeps
+the prior coherent generation active and never drops deltas or exposes partial
+updates.
 
-Benefits:
+Removed slots leave new visibility plans immediately but cannot be reused until
+every prior frame, culling result, generated draw and debug lease completes. Slot
+reuse increments a non-wrapping generation. Resource replacement, origin rebase
+and device recovery likewise publish new complete generations while old consumers
+retain old leases. Device-native addresses and compact table indices never survive
+device recreation.
 
-- fewer CPU draw calls
-- better scaling with instance count
-- enables GPU culling
+GPU culling, LOD, meshlet expansion and generated draws consume a published scene
+generation plus independent per-view work buffers. Visibility/selected LOD never
+mutates the base record or becomes gameplay truth. Generated counters/arguments
+are bounded and carry scene/view generations; mismatches are rejected before
+native execution. Multiple views share instance data without advancing simulation
+or previous-transform state more than once.
 
-Fallback to CPU-driven rendering when compute or indirect draw is unavailable.
+The CPU-driven path remains a separately admitted raster recipe over immutable
+snapshots. Missing compute/indirect support may select it only through the complete
+fallback policy in ADR-028/036; required GPU-driven content returns a typed
+failure. Allocating an instance buffer or issuing one indirect call is not evidence
+that a backend implements this lifecycle or may advertise GPU-driven support.
 
 ## Bindless Resources
 

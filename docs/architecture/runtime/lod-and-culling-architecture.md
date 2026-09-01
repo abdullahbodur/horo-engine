@@ -117,8 +117,10 @@ struct CullingFrustum {
 };
 ```
 
-GPU frustum culling is the default for DX12/Vulkan tiers. CPU culling is the
-fallback for OpenGL ES3.
+GPU frustum culling is admitted only when the selected recipe, effective
+compute/storage/indirect capabilities, bounded GPU Scene contract and cooked
+variants all pass. CPU culling is the declared baseline fallback; API name alone
+does not select either path.
 
 ## Occlusion Culling
 
@@ -165,7 +167,10 @@ Distance culling is integrated with the GPU culling compute pass.
 
 ## GPU-Driven Culling Pipeline
 
-On DX12/Vulkan and High-End tiers, culling is fully GPU-driven:
+GPU-driven culling consumes an immutable published GPU Scene generation from
+[ADR-038](../../adr/038-gpu-scene-and-instance-data-model.md), plus a generation-
+checked view descriptor, Hi-Z/history inputs when admitted and finite output
+capacities:
 
 ```
 1. Compute shader: frustum + occlusion + distance culling
@@ -174,9 +179,18 @@ On DX12/Vulkan and High-End tiers, culling is fully GPU-driven:
 4. Execute indirect draws (no CPU readback)
 ```
 
-The render graph submits a backend-neutral `IndirectDrawBatch` per material bucket. Backend implementations translate that batch to their native indirect execution API privately.
-Culling parameters (frustum, Hi-Z, camera position) are uploaded as uniform
-buffers each frame.
+Per-view visibility, selected LOD, compaction and generated commands live in
+view-owned work buffers; they never mutate persistent base instance records.
+Outputs carry their source GPU Scene/view/configuration generations and are
+rejected on mismatch before native execution. Counter, visible-index and argument
+overflow follow one admitted bounded policy and never write beyond capacity.
+
+The render graph submits backend-neutral generated-draw batches. Backends translate
+validated batches to private native indirect execution. Culling parameters
+(frustum, origin-relative camera, Hi-Z and policy) are uploaded per view. No CPU
+readback is required for normal drawing, and optional diagnostics are asynchronous,
+bounded and generation tagged. GPU visibility is presentation data, not gameplay
+or streaming truth.
 
 ## Debug And Visualization
 
@@ -187,17 +201,19 @@ buffers each frame.
 - Draw call statistics per culling category
 - GPU timing for culling compute passes
 
-## Feature Tiers
+## Product Profile Policy
 
-| Feature              | `es3`        | `dx11`       | `dx12_vulkan`  | `high_end`    |
-| -------------------- | ------------- | ------------- | --------------- | -------------- |
-| Mesh LOD             | 2 levels      | 4 levels      | 6 levels        | 8 levels       |
-| HLOD                 | No            | Yes           | Yes             | Yes            |
-| Impostors            | No            | Static        | Baked           | Baked + depth  |
-| Frustum culling      | CPU           | CPU           | GPU compute     | GPU compute    |
-| Occlusion culling    | HW queries    | HW queries    | Hi-Z + portal   | Hi-Z + portal  |
-| GPU-driven pipeline  | No            | No            | Yes             | Yes            |
-| Smooth LOD fade      | No            | Dithered      | Temporal dither | Temporal dither|
+ADR-028 product profiles express preferences, not API tiers or fixed LOD counts.
+Mesh/HLOD levels, transition policy, maximum candidate/visible instances, Hi-Z
+resolution/history, compaction/argument capacity, CPU/GPU work and memory are
+finite typed product/cook settings bounded by effective limits. Each GPU recipe
+declares compute, storage, indirect, format, shader and GPU Scene requirements.
+
+Baseline uses bounded CPU culling and direct/instanced draws. Higher profiles may
+prefer GPU frustum/distance/occlusion and generated draws when the complete recipe
+passes. Missing optional requirements selects only a declared CPU/lower-quality
+fallback and records it; required GPU-driven content fails admission. No path
+switches backend, silently drops candidates or changes gameplay visibility.
 
 ## Related Documents
 
