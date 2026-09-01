@@ -255,10 +255,26 @@ image mismatch to choose a passing sample or promotes either sample as a baselin
 
 ### Performance Regression Testing
 
-CI tracks numerical regressions on protected branches against a **7-day rolling average baseline** to prevent noise from temporary infrastructure spikes:
-- **Build Time**: Alerts if a CMake target's compilation time increases by >10%.
-- **Test Duration**: Alerts if integration suites degrade in execution time.
-- **Frame Time / Memory**: Automated headless scenes run with observability metrics enabled. If `engine.frame.cpu_time` or `process.memory.resident` regressions exceed 5%, the build is flagged for review.
+Build-time and test-duration trends continue to alert on target compilation
+increases above 10% and material integration-suite degradation.
+
+Renderer runtime gates follow
+[ADR-051](../../adr/051-renderer-benchmark-and-regression-gates.md). They compare
+only exact workload/environment cohorts against the median of 5–20 eligible
+protected-branch runs from the preceding seven days. Candidate/failed/quarantined
+runs never enter their own baseline; insufficient, expired or unstable baselines
+block required qualification.
+
+Default frame/memory gates combine relative and absolute bounds: CPU/GPU p50/p95
+regress above 5% and 0.20 ms, p99 above 8% and 0.50 ms, and declared peak memory
+above 5% and 16 MiB. Workload descriptors may tighten these values; loosening
+requires reviewed same-cohort evidence. Slow samples are not trimmed, regressions
+are not retried, and missing hardware/metrics are not pass.
+
+Pull requests always run Null/gate-math fixtures and may run affected native gates
+on stable lanes. Protected/scheduled matrices own required native cohorts and
+publish candidate distributions, baseline source values, exact gate math and
+typed environment/measurement failures.
 
 ## Coverage Model
 

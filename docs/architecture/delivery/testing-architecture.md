@@ -283,6 +283,26 @@ locally and required only on the documented protected/scheduled GPU lanes. A
 developer must not report native reference tests as passed when only Null fixtures
 or compilation ran.
 
+### Renderer Benchmark Tests
+
+[ADR-051](../../adr/051-renderer-benchmark-and-regression-gates.md) owns native
+renderer performance gates. Each workload fixes scene/content, capability path,
+quality/profile, resolution, cache/history state, warm-up, measured windows,
+process iterations and ADR-042 instrumentation. Results compare only within an
+exact reviewed environment cohort.
+
+Unit/Null tests exercise percentile/MAD and dual threshold boundaries, rolling-
+baseline eligibility/expiry, missing/unstable baselines, typed unsupported and
+failure paths, aggregate admission, cancellation and shutdown. Native gates run
+only on documented stable hardware lanes. Local or unmatched-machine numbers may
+be reported as diagnostics but are not official pass/fail evidence.
+
+Benchmarks retain every valid measured frame and cannot remove slow samples based
+on value, retry a regression into success or teach the baseline from a candidate.
+A reported performance claim includes workload revision, build/backend/device/
+driver cohort, instrumentation plan, sample count, distribution and baseline/gate
+manifest.
+
 Performance-sensitive event paths have focused microbenchmarks. Benchmarks
 report subscriber count, event type, allocation count, and dispatch duration;
 release thresholds are maintained per supported platform instead of relying on

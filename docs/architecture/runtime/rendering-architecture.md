@@ -792,6 +792,26 @@ Null validates deterministic service, normalization, comparator, artifact,
 budget, cancellation and shutdown fixtures. Only documented native hardware
 lanes qualify rasterization, shader compilation, readback and driver behavior.
 
+### Renderer benchmark and regression gates
+
+[ADR-051](../../adr/051-renderer-benchmark-and-regression-gates.md) defines
+immutable renderer workloads, exact environment cohorts, ADR-042 measurement
+plans and robust protected-branch baselines. Warm-up, measured windows, process
+iterations, capability path, cache state, frame/present policy and resource
+budgets are descriptor inputs; ambient editor/project/power state cannot alter a
+run silently.
+
+CPU, GPU, present, throughput and memory meanings remain separate. A benchmark
+cannot enable undeclared instrumentation, discard slow frames by value, continue
+across device/profile generations, substitute hardware/backend or add a failed
+candidate to its baseline. Unsupported, invalid environment/calibration,
+insufficient samples, unstable/missing baseline, regression and infrastructure
+failure are typed outcomes.
+
+Null validates workload orchestration, sample/gate arithmetic, baseline and
+lifecycle fixtures. Only matching documented native hardware cohorts establish
+renderer performance qualification.
+
 ## Backend Implementation Boundary
 
 Each concrete backend owns its API dependencies, context/device objects,

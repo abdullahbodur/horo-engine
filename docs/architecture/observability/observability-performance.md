@@ -835,6 +835,19 @@ series count, producer count, and capture volume for:
 Budgets are platform-specific or compared to checked-in baselines with explicit
 tolerance.
 
+[ADR-051](../../adr/051-renderer-benchmark-and-regression-gates.md) governs when
+renderer metrics become performance gates. The benchmark service consumes
+ADR-042 samples and ADR-043 aggregate memory through immutable typed results; the
+MetricsStore/Performance tab does not select workloads, cohorts, exclusions,
+baselines or thresholds.
+
+Benchmark manifests preserve workload/environment/instrumentation identity,
+sample validity, iteration distributions and baseline provenance. CPU frame, GPU
+frame, present, throughput and non-overlapping memory metrics remain separate.
+Missing/partial calibration or required metrics are unavailable outcomes rather
+than zero, and detailed profiler/statistic instrumentation belongs to a distinct
+cohort because it can perturb performance.
+
 ## Related Documents
 
 - [Observability Architecture](./observability.md)

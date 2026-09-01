@@ -62,6 +62,7 @@ to the replacement.
 | [048](048-gpu-crash-and-device-loss-diagnostic-bundles.md) | GPU Crash and Device-Loss Diagnostic Bundles | Proposed | 2026-09-01 |
 | [049](049-render-graph-and-resource-inspector-ui.md) | Render Graph and Resource Inspector UI | Proposed | 2026-09-01 |
 | [050](050-cross-backend-reference-image-tests.md) | Cross-Backend Reference Image Tests | Proposed | 2026-09-01 |
+| [051](051-renderer-benchmark-and-regression-gates.md) | Renderer Benchmark and Regression Gates | Proposed | 2026-09-01 |
 
 ## Conventions
 
