@@ -292,26 +292,58 @@ native resolution is the explicit optional-upscaler fallback.
 
 ## Ray Tracing
 
-Ray tracing is gated by effective ray-operation support, implemented/cooked effect
-paths and product policy; an Ultra preference alone does not enable it.
+[ADR-039](../../adr/039-ray-tracing-capability-and-abstraction.md) owns the ray
+capability and execution boundary. Ray support is a vector of independently
+reported, implemented and effective operations: acceleration-structure build,
+update, compaction, inline ray query, dedicated ray pipeline, custom intersection,
+any-hit, callable shaders, indirect dispatch, motion instances and serialization.
+`InlineRayQuery` does not imply `RayPipeline`; neither update nor compaction is
+inferred from a build path. The transitional `supportsRayTracing` boolean is not
+an admission authority.
 
-Use cases:
+The effective snapshot carries typed limits for geometry/primitive/instance
+counts, build sizes and alignments, recursion/payload/attribute bytes, supported
+formats/stages/flags, shader-group/dispatch dimensions and native table packing.
+Vulkan, D3D12 and Metal map only operations their actual native feature set and
+Horo backend implementation can execute. Equal backend standing means equivalent
+Horo semantics for an advertised operation, not a requirement to expose identical
+native pipeline or shader-table models. OpenGL 4.1 has no initial ray route.
 
-- reflections
-- shadows
-- ambient occlusion
-- global illumination
+`RenderFrontend` owns a `RayScene` projection over one immutable GPU Scene/device
+generation. It maps generation-checked mesh geometry to typed BLAS handles and
+GPU Scene instances to TLAS generations. Logical triangle/AABB descriptors contain
+explicit formats, ranges, bounds, material/hit semantics and update policy; they
+never expose native addresses. AS handles follow pending/ready/released state,
+dependency pins and GPU-completion retirement under ADR-027/034.
 
-Requirements:
+Build, legal update/rebuild, asynchronous compaction and TLAS publication are
+typed render-graph passes with explicit input, scratch, result, queue/access,
+budget and cancellation dependencies. A compacted or rebuilt candidate publishes
+atomically while old frames retain old structures. No feature code issues native
+build/barrier commands, blocks for GPU idle, performs frame-hot post-build readback
+or mutates a structure consumed by an earlier generation.
 
-- acceleration structure build/update
-- ray tracing pipeline state objects
-- shader table management
-- denoising pass
+Inline queries are declared variants in supported existing shader stages. A
+dedicated ray pipeline separately declares ray-generation, miss, hit, optional
+any-hit/intersection/callable groups, payload/attribute schemas and recursion.
+Logical `RayDispatchTable` records use stable group IDs and typed local arguments;
+backends privately pack native shader identifiers, addresses, sections and
+alignment. Metal intersection function tables are private realizations of a
+qualified operation, not proof of a DXR/Vulkan-shaped SBT.
 
-Built-in profile recipes do not require ray tracing. Their optional ray-traced
-effects declare raster fallbacks. Content that explicitly requires a ray path
-fails admission on unsupported hardware rather than silently changing its effect.
+Reflections, shadows, ambient occlusion and global illumination own their effect
+recipes, geometry/material coverage, denoiser and finite budgets. Built-in product
+profiles require no ray operation; Ultra may prefer individually enabled effects.
+Each optional recipe declares a qualified inline/pipeline route and explicit
+raster, screen-space, probe or baked fallback. Required ray content fails
+admission when any operation, limit, shader, memory, geometry or denoiser predicate
+is missing. No route changes silently in response to timing or pressure.
+
+Ray traversal and visibility are presentation data. Physics, AI, audio, networking
+and saves do not use hardware traversal as authoritative truth or synchronously
+read it back. Device loss invalidates every native AS address, pipeline identifier
+and dispatch table; recovery rebuilds from retained GPU Scene/mesh/cooked shader
+descriptors after effective capabilities are revalidated.
 
 ## GPU-Driven Rendering
 
