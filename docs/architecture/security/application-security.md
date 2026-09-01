@@ -26,6 +26,11 @@ editor and CLI hosts.
 - Runtime console and remote-console access are profile-gated, permission-scoped,
   and denied remotely by default.
 - Secrets remain in credential providers and short-lived secure memory.
+- Package source credentials and credential handles never enter package/project
+  manifests, lockfiles, cache provenance exported to projects, logs, diagnostics
+  or operation history. Source adapters resolve one short-lived origin-scoped
+  lease just before an approved request under
+  [ADR-058](../../adr/058-package-source-policy.md).
 - Security decisions are explicit, auditable, and revocable.
 
 ## Trust Domains

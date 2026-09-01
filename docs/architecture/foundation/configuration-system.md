@@ -44,7 +44,10 @@ validation infrastructure without becoming global configuration.
 Project extension package requests are portable project configuration, but they
 are not a trust grant and do not store resolved package paths. Extension package
 resolution, trust decisions, and development overrides follow
-[Extension System](../extensions/plugin-system.md).
+[Extension System](../extensions/plugin-system.md),
+[Horo Package System](../packages/package-system.md) and the dedicated
+[Package Source Policy](../../adr/058-package-source-policy.md). Generic settings
+precedence does not choose package authorities or resolve source conflicts.
 
 ## Schema
 

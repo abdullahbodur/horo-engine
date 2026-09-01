@@ -249,7 +249,8 @@ package composition, trust planning or ExtensionHost.
 
 ## Package Sources
 
-The package system is source-agnostic. A package may come from:
+The package system is source-agnostic, but source identity and precedence follow
+[ADR-058](../../adr/058-package-source-policy.md). A package may come from:
 
 - local `.horopkg` file
 - local package directory
@@ -261,24 +262,42 @@ The package system is source-agnostic. A package may come from:
 Only portable sources may be required for project restore. Local path overrides
 are user-local and must not be required on another machine.
 
-Example `packages.json` source declarations:
+Portable `packages.json` uses named credential-free sources and explicit
+dependency assignments. Map/file enumeration does not define priority:
 
 ```json
 {
+  "sources": {
+    "horo.public": {
+      "kind": "registry",
+      "registry": "official",
+      "priority": 100
+    },
+    "vendor.index": {
+      "kind": "static-index",
+      "url": "https://cdn.vendor.com/horo/index.json",
+      "indexSha256": "...",
+      "priority": 20
+    },
+    "project.vendored": {
+      "kind": "vendored",
+      "root": "vendor/packages/",
+      "priority": 10
+    }
+  },
   "dependencies": {
     "com.vendor.weapon-pack": {
-      "url": "https://cdn.vendor.com/weapon-pack-2.0.0.horopkg",
-      "sha256": "..."
+      "source": "vendor.index",
+      "version": "2.0.0"
     },
     "com.team.vendored-pack": {
-      "file": "vendor/packages/com.team.vendored-pack-1.0.0.horopkg"
-    },
-    "com.example.dialogue": {
-      "git": "https://github.com/example/dialogue-pack.git",
-      "rev": "abc123"
+      "source": "project.vendored",
+      "version": "1.0.0",
+      "artifact": "com.team.vendored-pack-1.0.0.horopkg",
+      "sha256": "..."
     },
     "com.horo.audio": {
-      "registry": "official",
+      "source": "horo.public",
       "version": "^1.0.0"
     }
   }
@@ -314,7 +333,25 @@ Git sources, full registries, and marketplace flows are later extensions.
 
 ### Package Source Policy
 
-Package sources are resolved under package source policy. The policy defines:
+Package source policy separates logical source identity, transport endpoint and
+artifact digest. Locked restore uses exactly the `ResolvedPackageSource` recorded
+in `.horo/packages.lock`; mirrors/cache/vendored copies may supply its exact bytes
+but cannot change authority, version, publisher or digest.
+
+Fresh resolution uses this deterministic order:
+
+1. explicitly enabled user-local development override for the package/profile;
+2. portable source explicitly assigned by the project request;
+3. explicitly assigned project vendored/static source;
+4. organization namespace/package routing;
+5. project named indexes by numeric priority then canonical source ID; and
+6. product default public source when allowed.
+
+Private is not automatically higher priority than public. Completion timing,
+filesystem order and map insertion cannot choose a source. An assigned or locked
+source never falls through to another authority when unavailable.
+
+The policy also defines:
 
 - allowed source types
 - allowed domains and URL schemes
@@ -327,6 +364,9 @@ Package sources are resolved under package source policy. The policy defines:
 
 HTTP without TLS, unbounded redirects, unpinned mutable artifacts, and secrets in
 URLs are rejected unless an explicit local development policy allows them.
+Availability failure may advance through ordered mirrors of the same logical
+source. Hash, signature, publisher, TLS, redirect-scope or authentication-policy
+failure quarantines the artifact and stops automatic fallback.
 
 ## Dependency Request And Lockfile
 
@@ -527,6 +567,12 @@ Private sources use credential handles. Raw secrets must not appear in:
 - diagnostic bundles
 - job history
 
+Credential handles themselves remain in user/organization credential bindings;
+they are also excluded from project files, lockfiles, exported cache metadata,
+diagnostics and operation history. A source request resolves one short-lived
+credential lease just in time, scoped to the source, endpoint origin and
+operation. Redirects, mirrors, subprocesses and package hooks cannot inherit it.
+
 Credential access follows [Application Security](../security/application-security.md)
 and [Release Security](../release/release-security.md).
 
@@ -617,6 +663,10 @@ or sensitive local paths.
 - extension descriptor owner/package binding and undeclared-file rejection
 - extension-only and hybrid packages resolve through the same request/lock graph
 - ExtensionHost cannot load raw directories or resolve/trust package state
+- deterministic source precedence under randomized map/request completion order
+- locked/assigned source unavailability does not re-resolve through another source
+- mirror availability fallback stops on integrity/signature/security failures
+- development overrides never enter committed requests, lockfiles or release
 
 ## Related Documents
 
