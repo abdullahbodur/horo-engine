@@ -316,14 +316,25 @@ listener.
 
 ## Storage Locations
 
-Log sessions, metric files, profiler captures and ADR-047 Horo-owned graphics
-captures are stored under platform user-state directories. Graphics captures use
-a distinct private restricted-data subtree, manifest and retention policy; they are
-not ordinary profiler traces or automatic support-bundle inputs.
+Log sessions, metric files and profiler captures use the existing log/session
+roots:
 
-- **macOS**: `~/Library/Logs/Horo/`
-- **Windows**: `%LOCALAPPDATA%\Horo\Logs\`
-- **Linux**: `${XDG_STATE_HOME:-~/.local/state}/horo/log/`
+- **macOS logs**: `~/Library/Logs/Horo/`
+- **Windows logs**: `%LOCALAPPDATA%\Horo\Logs\`
+- **Linux logs**: `${XDG_STATE_HOME:-~/.local/state}/horo/log/`
+
+ADR-047 Horo-owned graphics captures are large restricted native artifacts and use
+a separate Platform state subtree that log rotation/support-bundle scanners never
+traverse implicitly:
+
+- **macOS graphics captures**: `~/Library/Application Support/Horo/Diagnostics/GraphicsCaptures/`
+- **Windows graphics captures**: `%LOCALAPPDATA%\Horo\Diagnostics\GraphicsCaptures\`
+- **Linux graphics captures**: `${XDG_STATE_HOME:-~/.local/state}/horo/diagnostics/graphics-captures/`
+
+The Platform `UserDirectories` implementation resolves these logical roots;
+callers do not construct them from environment/home strings. Graphics captures
+have their own manifest and retention policy and are not ordinary profiler traces
+or automatic support-bundle inputs.
 
 The exact directory tree structures, file rotations, and retention configurations are defined in the [Storage Locations](./observability-logging.md#storage-locations) section of the logging contract.
 
