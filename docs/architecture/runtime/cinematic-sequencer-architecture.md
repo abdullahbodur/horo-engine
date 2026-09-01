@@ -406,14 +406,14 @@ No dependent sequence action assumes a request completed in that same tick.
 
 ### Presentation And Editor Path
 
-The existing non-AI frame pose path in [Animation Architecture](./animation-architecture.md)
-remains: gameplay prepares parameters, owner-admitted non-interpolated cinematic
-parameters apply,
-animation/IK produces pose and root motion, character movement resolves under its
-owner, physics runs, and rendering extracts committed state. This path is not a
-claim of render-rate-independent simulation. Optional interpolated cinematic
-values affect only the render/preview snapshot, not authoritative property values,
-event cursors, gameplay state or physics transforms.
+The non-AI path follows
+[ADR-061](../../adr/061-animation-ownership-update-order-and-clock.md): fixed-tick
+gameplay and owner-admitted cinematic parameters feed animation/root motion,
+character movement resolves under its owner, physics steps, post-physics pose
+composition finalizes, and tick commit publishes the state later used by rendering.
+Optional interpolated cinematic values affect only the render/preview snapshot,
+not authoritative property values, event cursors, gameplay state, root motion, or
+physics transforms.
 
 ```mermaid
 flowchart TD

@@ -129,6 +129,7 @@ The host tracks:
 
 - monotonic real time
 - clamped presentation delta
+- positive rational simulation rate and its revision
 - fixed simulation delta
 - accumulator
 - interpolation alpha
@@ -136,7 +137,8 @@ The host tracks:
 - frame number
 
 ```cpp
-accumulator += Clamp(realDelta, 0, maxFrameDelta);
+accumulator.AddScaled(Clamp(realDelta, RealDuration::Zero(), maxFrameDelta),
+                      simulationRate, simulationScaleRemainder);
 
 while (accumulator >= fixedDelta && steps < maxCatchUpSteps) {
     FixedUpdate(fixedDelta);
@@ -146,6 +148,17 @@ while (accumulator >= fixedDelta && steps < maxCatchUpSteps) {
 alpha = accumulator / fixedDelta;
 Render(alpha);
 ```
+
+`simulationRate` changes how much clamped elapsed time enters the accumulator;
+it does not change `fixedDelta`. Scaling uses checked rational/fixed-point math
+and the host clock owns `simulationScaleRemainder` across frames. `AddScaled`
+preflights overflow and commits the accumulator plus remainder atomically; it
+does not round through floating-point seconds or lose an unrepresented fraction.
+The baseline rate is `1/1`. A rate change commits through the owner-thread command
+boundary before fixed-step scheduling, preserves that remainder, and records a
+revision for replay evidence. Negative rates are invalid. Gameplay
+pause is separate composed state and contributes no accumulator time; it is not
+represented by a zero rate.
 
 Long stalls do not create an unbounded simulation spiral. When
 `maxCatchUpSteps` is reached, the host records dropped simulation time according
@@ -163,6 +176,11 @@ succeeds. `FrameContext::completedSimulationTick` is the count of committed
 ticks and is therefore zero before the first successful tick. Variable update
 and render extraction observe that committed count together with interpolation
 alpha.
+
+[ADR-061](../../adr/061-animation-ownership-update-order-and-clock.md) applies
+this policy to animation. Animation consumes the unchanged fixed quantum once
+per attempted tick. Host simulation rate is already represented by tick cadence;
+animation and physics do not multiply it into their delta again.
 
 The scheduler retains allocation-free cumulative counters for committed ticks,
 dropped time and steps, catch-up saturation, negative samples, and maximum-delta
@@ -207,12 +225,15 @@ Variable-rate update is not used for deterministic physics integration.
 One fixed tick executes:
 
 1. consume the input command state assigned to the tick
-2. run pre-physics gameplay systems
+2. run ordered pre-physics systems, including gameplay animation parameters,
+   animation pose/root-motion staging, and character-controller movement
 3. step physics
 4. publish physics results into scene transforms
-5. run post-physics and behavior systems
+5. run post-physics and behavior systems, including typed animation pose
+   overrides and candidate pose finalization
 6. commit deferred entity/component changes
-7. preserve previous/current state for interpolation
+7. atomically publish committed subsystem state, events, and previous/current
+   state for interpolation
 
 System ordering is declared by the scene runtime and validated before execution.
 The data bus is not used to establish per-tick system order.
@@ -222,13 +243,15 @@ The data bus is not used to establish per-tick system order.
 Variable update is used for:
 
 - editor camera and presentation behavior
+- interpolation of committed animation poses and isolated editor preview playback
 - non-simulation UI state
 - job progress and query refresh
 - audio presentation updates where supported
 - streaming and resource coordination
 
 Variable update must not introduce simulation behavior that changes with frame
-rate.
+rate. Animation presentation/preview cannot emit gameplay events, root motion,
+or physics/controller writes; its authoritative order is defined by ADR-061.
 
 ## Render Snapshot
 
@@ -276,7 +299,10 @@ document requires an explicit editor command.
 
 Pause stops simulation ticks but keeps event processing, GUI, rendering, and
 required service updates alive. Single-step advances exactly one fixed tick and
-returns to paused state.
+returns to paused state. It uses the ordinary unchanged fixed quantum and complete
+subsystem order; it does not consume accumulated wall time. Authoritative animation
+therefore holds during pause and advances once during a successful step. Isolated
+editor preview may advance only under its separate preview controls.
 
 ### Runtime Console And Development Overlays
 
