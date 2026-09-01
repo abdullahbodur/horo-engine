@@ -85,7 +85,12 @@ struct RendererIncidentEvidenceDescriptor {
 Descriptors are inert metadata. They do not register signal handlers, create
 files, retain native objects or start collection. Composition rejects duplicate
 IDs, foreign ownership, unknown phase/kind/privacy, zero/unbounded size and a
-fault-time contribution that is not preallocated and signal-safe.
+fault-time contribution that is not preallocated and signal-safe. Before renderer
+activation, checked arithmetic sums `maxBytes` for all descriptors admitted to
+each capture phase and for the active device as a whole. Composition fails if any
+sum exceeds its phase budget or the global preallocated incident-ready limit; it
+cannot admit descriptors whose individual bounds fit but whose aggregate would
+oversubscribe the default 8 MiB (or configured lower) reservation.
 
 Allowed kinds include typed incident header; recent ADR-041 event window; graph
 execution manifest; marker/correlation window; effective capability, validation
@@ -144,10 +149,12 @@ bounded incident safe-point sequence on the render-capable owner thread:
 2. freeze immutable frontend manifests/rings without walking live registries;
 3. invoke each admitted backend-native fault query exactly once while its required
    device/queue/context and validation objects remain alive;
-4. copy returned bounded data into incident-owned staging or record unavailable,
-   timed out, partial or unsafe-to-query explicitly;
+4. copy returned bounded data into preallocated incident-owned memory buffers, or
+   record unavailable, timed out, partial or unsafe-to-query explicitly; no
+   filesystem operation occurs at this safe point;
 5. release native evidence interfaces, then allow normal device teardown/recovery;
-6. finalize non-native encoding/hash/publication on bounded cancellable workers.
+6. write durable filesystem staging and finalize non-native encoding/hash/
+   publication on bounded cancellable workers.
 
 Native query capability declares required affinity, maximum bytes/time, whether it
 is legal after loss, and which parent object must remain alive. A query cannot call
@@ -240,7 +247,11 @@ that opaque dumps cannot be fully inspected.
 Default per-incident durable budget is 64 MiB structured plus 256 MiB native
 payload, 60-second finalization and 8 retained incidents/2 GiB total. Hard maxima
 are 256 MiB structured, 2 GiB native payload, 10-minute finalization, 64 incidents
-and 16 GiB total. Product/platform crash-dump policy may impose lower limits.
+and 16 GiB total. Per-incident, retained-count and aggregate-byte limits are
+independent and all must hold: the total-byte limit may therefore evict or omit
+optional evidence before the retained-count limit is reached (for example, only
+six default incidents can simultaneously consume the full 320 MiB per-incident
+budget). Product/platform crash-dump policy may impose lower limits.
 Checked free-space reservation precedes live rich collection; fault-time tombstone
 capacity is reserved at startup.
 

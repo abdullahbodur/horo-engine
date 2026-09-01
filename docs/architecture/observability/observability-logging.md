@@ -1144,7 +1144,7 @@ The crash path is split into two phases:
 this two-phase model for renderer incidents without weakening it. A process fault
 adds only preallocated scalar renderer/device/frame context to the marker. A live
 device loss may freeze bounded generation-scoped graph, marker, diagnostic,
-capability and memory evidence plus one admitted native fault query before device
+capability and memory evidence plus admitted native fault queries before device
 teardown. Bundle encoding remains asynchronous/next-launch and never gates
 recovery or runs inside a signal/exception handler.
 
