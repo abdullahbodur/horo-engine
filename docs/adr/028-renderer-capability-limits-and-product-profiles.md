@@ -142,6 +142,10 @@ predicates and finite product budgets before it can be admitted. The
 defines Forward, clustered Forward+, Deferred, transparency and complete-recipe
 fallback semantics; this ADR owns profile preference and effective capability
 admission rather than a second path definition. The
+[ADR-040 provider policy](040-reconstruction-frame-generation-and-latency-providers.md)
+separates reconstruction, denoising, frame generation and latency; profile names
+select none by implication, and native resolution/no generated frames remain
+independent fallbacks. The
 [interactive parity contract](../architecture/runtime/render-backend-parity-contract.md#required-baseline-capability)
 remains mandatory for every interactive backend at every profile. Meeting that
 lifecycle contract alone does not prove a material/scene recipe is supported.

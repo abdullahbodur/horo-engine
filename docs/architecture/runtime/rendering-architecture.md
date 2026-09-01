@@ -369,6 +369,68 @@ metadata, hotplug, allocation failure or stale completion retain the last good
 compatible plan or produce ADR-033's typed suspended/lost state, never a hidden
 curve, precision or transfer-function substitution.
 
+## Reconstruction, Generated Frames And Latency
+
+[ADR-040](../../adr/040-reconstruction-frame-generation-and-latency-providers.md)
+owns provider categories and timeline policy. Reconstruction, effect denoising,
+frame generation and latency integration use separate sealed frontend registries,
+effective capability/variant/budget checks, instances, histories and fallbacks.
+A component may contribute more than one category but no category enables another.
+Vendor SDK and backend types stay behind private negotiated adapters.
+
+Real reconstruction consumes a canonical frame contract: linear ACEScg at its
+declared exposure stage, positive linear view-depth meters, normalized
+`previousUv - currentUv` motion excluding projection jitter, explicit jitter and
+pre-exposure scales, typed finite masks, render/target extents and complete
+generations. UV origin is top-left, `u` increases right, `v` increases down and
+pixel centers use `((x + 0.5) / width, (y + 0.5) / height)`. Adapters convert to
+provider conventions privately. Reconstruction runs before target output
+transform and display-referred UI. Resolution control is separate product/frontend
+policy and changes extent only through a new frame-boundary plan/history
+generation.
+
+Reconstruction consumes render-extent depth, motion and masks. Baseline frame
+generation consumes target-extent guides. A frontend-owned `GuideResolvePass`
+bridges unequal extents explicitly: nearest positive finite depth and its motion
+win per render footprint, masks use a conservative maximum and missing qualified
+samples become invalid. Equal extents alias qualified inputs. A provider adapter
+may convert layout, orientation and units privately but cannot own an undeclared
+guide upscale or change these semantics.
+
+Temporal histories are scoped to view/provider/mode/extent/input/color/device
+generations and advance only after a successful **real** frame. Camera cuts,
+missing predecessors, incompatible scale/projection/color/exposure/motion/origin
+or device/provider changes reset, rescale or migrate only through a declared
+provider contract. Effect denoisers are the ADR-039/040 `DenoisingProvider`: they own
+effect-specific signal/guide/history schemas and never become global
+reconstruction history.
+
+Simulation, real rendering and presentation have distinct IDs.
+`ScenePresentationEpoch` groups all views of one scene frame;
+`RealRenderFrameId` is per `RenderViewId`. Frame generation
+may create `SyntheticPresentationFrameId` values bracketed by qualified real
+frames, but cannot create a simulation/render frame or advance input, extraction,
+animation, audio, exposure, temporal/material/VFX history, jitter, gameplay
+callbacks or real-frame statistics. The baseline generated image contains
+display-linear scene content after ADR-037 step 4; current qualified display UI
+and the step-6 accessibility transform then run on every real and synthetic
+presentation frame. Invalid/missing history, cuts, drops, resize/output/device
+changes or backpressure suppress optional generation and present real frames.
+
+Latency providers supply typed markers, measurements and bounded host-safe-point
+wait hints. Input, Simulation, frontend and ADR-033 presentation keep their clocks
+and ownership. A provider cannot pump input, alter fixed timestep/present mode,
+busy-wait, violate frames-in-flight safety or report generated cadence as lower
+simulation latency. Plans jointly admit queue depth, present policy, frame
+generation and a hard latency budget, with explicit no-generation/default-
+scheduling fallback.
+
+Provider graph work and histories use finite ADR-027/034 resources and completion
+retirement. Plan replacement is staged/atomic; provider failure/cancellation or
+device loss keeps the last compatible generation or resolves an explicit fallback.
+No runtime download, network access, opaque native cache or process-global SDK
+state is part of baseline recovery or packaged execution.
+
 ## Backend Module Registry
 
 Renderer backends are engine-internal modules with separate CMake targets,

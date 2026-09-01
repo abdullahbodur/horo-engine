@@ -51,6 +51,7 @@ to the replacement.
 | [037](037-scene-color-and-hdr-architecture.md) | Scene Color and HDR Architecture | Proposed | 2026-09-01 |
 | [038](038-gpu-scene-and-instance-data-model.md) | GPU Scene and Instance Data Model | Proposed | 2026-09-01 |
 | [039](039-ray-tracing-capability-and-abstraction.md) | Ray Tracing Capability and Abstraction | Proposed | 2026-09-01 |
+| [040](040-reconstruction-frame-generation-and-latency-providers.md) | Reconstruction, Frame Generation and Latency Providers | Proposed | 2026-09-01 |
 
 ## Conventions
 

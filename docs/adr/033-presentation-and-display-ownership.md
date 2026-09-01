@@ -88,6 +88,10 @@ queued frame count, and measured latency are distinct fields. A VSync checkbox
 or a GPU capability cannot stand in for all of them. Frontend/backend admission
 checks the requested frames-in-flight bound against actual device/surface
 support. RND-008.5/.6 own pacing and latency algorithms within that contract.
+[ADR-040](040-reconstruction-frame-generation-and-latency-providers.md)
+separates real/synthetic presentation identity, frame-generation buffering and
+optional latency-provider markers/wait hints. Generated cadence never changes
+simulation FPS or grants authority over present mode, input or frames in flight.
 
 Scene-linear HDR rendering is independent from HDR display output. HDR/EDR
 output requires the current OS/display state, native surface/format support,
