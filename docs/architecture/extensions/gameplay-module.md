@@ -23,6 +23,10 @@ long-term extension C ABI.
 
 ## Document Map
 
+- [Current Gameplay Module Contract Audit](./gameplay-module-contract-audit.md):
+  implementation snapshot covering the exact SDK ABI, generated bundle, build
+  and publication artifacts, ownership, editor reload, persistence, platform
+  behavior, evidence gaps, and focused follow-up ownership.
 - [Gameplay Module Boundary](./gameplay-module-boundary.md): native module ABI, ownership, registration, capability context, services, hot reload, and diagnostics.
 - [Gameplay Behavior Authoring](./gameplay-behavior-authoring.md): editor/IDE workflow, build integration, object-attached behaviors, scripted behaviors, visual scripting, and iteration-speed goals.
 - [Gameplay Runtime Integration](./gameplay-runtime-integration.md): game-owned asset types, input actions, runtime systems, scene/play lifecycle, component persistence, and deferred runtime extension points.
