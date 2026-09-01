@@ -358,14 +358,21 @@ native pipeline or shader-table models. OpenGL 4.1 has no initial ray route.
 `RenderFrontend` owns a `RayScene` projection over one immutable GPU Scene/device
 generation. It maps generation-checked mesh geometry to typed BLAS handles and
 GPU Scene instances to TLAS generations. Logical triangle/AABB descriptors contain
-explicit formats, ranges, bounds, material/hit semantics and update policy; they
-never expose native addresses. AS handles follow pending/ready/released state,
-dependency pins and GPU-completion retirement under ADR-027/034.
+explicit formats, ranges, bounds and update policy; they never expose native
+addresses. Hit shading uses `MaterialId` → `MaterialBindingId` → derived
+`RayHitGroupId`; that last ID is a pipeline group, not a third material identity.
+AS handles follow ADR-027
+`Pending`/`Ready`/`Retiring`/`Retired`/`Failed` state, dependency pins and
+GPU-completion retirement under ADR-027/034. ADR-011 VFX batches are not in
+RayScene. Masked geometry requires effective `AnyHit` (or equivalent coverage
+query); otherwise it is omitted, never treated as opaque.
 
 Build, legal update/rebuild, asynchronous compaction and TLAS publication are
 typed render-graph passes with explicit input, scratch, result, queue/access,
-budget and cancellation dependencies. A compacted or rebuilt candidate publishes
-atomically while old frames retain old structures. No feature code issues native
+budget and cancellation dependencies. A dedicated compute/copy queue is used only
+when independently effective; otherwise the graphics queue runs the same passes.
+A compacted or rebuilt candidate publishes at ADR-018 `RenderSafePoint` while old
+frames retain old structures. No feature code issues native
 build/barrier commands, blocks for GPU idle, performs frame-hot post-build readback
 or mutates a structure consumed by an earlier generation.
 
@@ -401,9 +408,12 @@ shadow and publishes immutable GPU Scene generations. Backends realize buffers
 and copies; they do not own instance identity or inspect ECS storage.
 
 The logical record contains current/previous-published transform, local and
-origin-relative bounds, resident mesh/material generations, ADR-036 render
-classification, visibility/shadow flags, LOD policy and record/motion/origin
-generations. A target's shader/reflection schema defines actual packing and table
+origin-relative bounds, resident mesh generations, scene `MaterialId` plus packed
+`MaterialBindingId`, and the five mutually exclusive ADR-036 classifications
+(`Opaque`, `Masked`, `ForwardOnlyOpaque`, `TransparentSorted`,
+`TransparentAdditive`). Visibility/shadow flags, LOD policy and
+record/motion/origin generations complete the record. Sorted-alpha and additive
+transparency remain separate; they are not one "transparent" class. A target's shader/reflection schema defines actual packing and table
 indices. The logical C++ carrier is never copied as an assumed native GPU layout,
 and descriptor/bindless indices are derived device-generation values rather than
 asset or scene identity.
@@ -413,7 +423,7 @@ immutable state. Admission validates source/scene/revision generations, queue an
 capacity envelopes, dependencies and cancellation. Worker preparation owns its
 inputs and cannot map native memory or publish slots. The render-capable owner
 stages slots, pins and uploads, then atomically publishes a complete generation at
-a safe point. Queue pressure applies typed backpressure; multi-frame staging keeps
+ADR-018 `CommandThreadPolicy::RenderSafePoint`. Queue pressure applies typed backpressure; multi-frame staging keeps
 the prior coherent generation active and never drops deltas or exposes partial
 updates.
 

@@ -235,15 +235,38 @@ Horo has three production opaque raster families:
   there is no separate 2D tiled production path.
 - **Deferred** writes a versioned GBuffer schema and performs screen-space
   lighting. It is a hybrid frame recipe: incompatible opaque materials and all
-  baseline transparency still use declared forward passes.
+  baseline transparency still use declared forward passes. Clustering is an
+  optional light-preparation contract on that family, not a fourth path: a
+  Deferred recipe must declare clustered preparation (same overflow as Clustered
+  Forward+) or clustering-less preparation (Forward-equivalent bounded
+  screen-space overflow). Unspecified Deferred light counts fail admission.
 
-Opaque, masked, forward-only opaque, stable sorted-alpha and additive work are
-explicit cooked material classifications. Masked coverage is consistent between
-depth, shadow and color/GBuffer passes. Sorted alpha is depth-tested,
-non-depth-writing and ordered back-to-front with stable instance-identity ties;
-additive work uses its own commutative pass. Order-independent transparency and
-refraction are separate optional recipes with declared capability, memory and
-fallback contracts.
+Scene-material classification is keyed by scene-conversion `MaterialId`
+([ADR-027](../../adr/027-renderer-resource-identity-and-descriptors.md)): a
+material-table key, not a resident GPU handle. Opaque, masked, forward-only
+opaque, stable sorted-alpha and additive work are mutually exclusive cooked
+categories. Combined alpha-test plus blend (dithered/stochastic transition) is
+unsupported unless authored as exactly one of those categories or an optional
+named stochastic/OIT recipe. Masked coverage is consistent between depth, shadow
+and color/GBuffer passes. Sorted alpha is depth-tested, non-depth-writing and
+ordered back-to-front with stable instance-identity ties; additive work uses its
+own commutative pass. Order-independent transparency and refraction are separate
+optional recipes with declared capability, memory and fallback contracts.
+
+[ADR-011](../../adr/011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md)
+VFX batches keep their own pass kinds (`VfxParticlePass`, deferred/forward
+`DecalRenderBatch`, `VolumetricVfxBatch`). The frontend maps those kinds onto the
+resolved recipe; it does not re-encode them as the five scene-material
+categories. A deferred-decal batch is remapped to the recipe's forward-decal
+pass when Deferred is not selected; it is not dropped and is not left targeting
+a missing GBuffer.
+
+**MSAA can change the opaque family, not only the sample count.** Deferred MSAA
+requires a declared multisample GBuffer, resolve and lighting contract;
+otherwise a permitted Clustered Forward+ or Forward recipe that honors the
+sample count may be selected. Diagnostics report that family change as a
+first-class fallback reason. The resolver must not silently drop MSAA on
+Deferred.
 
 Cluster dimensions, light/reference counts, GBuffer formats, MSAA behavior,
 semantic prepasses and overflow limits are typed recipe inputs bounded by the
@@ -278,8 +301,12 @@ normal, velocity or other semantic prepasses when a declared downstream input
 requires them, so an effect does not select deferred rendering indirectly.
 
 Recipe changes are explicit policy requests compiled and staged as new
-generations. Publication occurs at a render safe point after all required
-artifacts/resources validate; in-flight frames retain their old generation.
+generations. Publication occurs at
+[ADR-018](../../adr/018-command-registration-permissions-threading-and-packaged-build-policy.md)
+`CommandThreadPolicy::RenderSafePoint` after all required artifacts/resources
+validate; that is the same graphics-affine frame-synchronization boundary as
+[ADR-027](../../adr/027-renderer-resource-identity-and-descriptors.md). In-flight
+frames retain their old generation.
 Allocation failure, shader miss, slow frames, cancellation, stale inputs or device
 failure never cause an unreported mid-frame downgrade. An adaptive-quality system
 may request a new generation, but cannot mutate the active graph in place.
@@ -301,8 +328,10 @@ at asset/media boundaries, while non-color data textures bypass color transforms
 
 Exposure is a finite base-2 stop offset, `exposureEv`, with
 `exposureScale = exp2(exposureEv)`: `+1 EV` doubles scene RGB and `-1 EV` halves
-it. One versioned `ExposureState` is published per view and shared by effects,
-histories, tone mapping and diagnostics. Pre-exposure is a reversible internal
+it. Automatic exposure is a GPU reduction whose `ExposureState` is consumed by
+the next submitted view; same-frame histogram readback is forbidden. One
+versioned `ExposureState` is published per view and shared by effects, histories,
+tone mapping and diagnostics. Pre-exposure is a reversible internal
 representation whose scale/generation follows every affected resource; it never
 changes canonical scene values or becomes an effect-private estimate.
 
@@ -310,8 +339,12 @@ The frontend resolves a versioned `ColorPipelinePlan` using a pinned ACES 2 outp
 transform, cooked look policy, exposure and ADR-033's output snapshot. The plan
 records working/output encodings, transform identities, gamut/white point,
 transfer function, reference/paper white and peak/black luminance where known,
-bit depth, dithering and all relevant generations. Backends translate this plan;
-they do not choose tone curves, gamuts, brightness or fallback.
+bit depth, dithering and all relevant generations. Scene color, float32
+intermediates, LUTs, histories and output images are ADR-034 reservations
+admitted before realize. Publication is
+`CommandThreadPolicy::RenderSafePoint` on the host-declared render-capable
+thread, the same class as `RasterRecipe` replacement. Backends translate this
+plan; they do not choose tone curves, gamuts, brightness or fallback.
 
 Baseline SDR output uses sRGB/Rec.709 primaries, D65 and the sRGB transfer
 function. The first HDR contract uses a Rec.2020 container, D65, BT.2100 PQ, at
@@ -320,16 +353,18 @@ HDR display admission still requires the Platform/presentation facts and surface
 contract in ADR-033. HLG, scRGB and platform EDR are separate future descriptors,
 not aliases for HDR10.
 
-Scene-referred work runs before the output transform. Display-referred UI is
-composed afterward in display-linear target space at the declared reference-white
-scale; accessibility transforms cover the complete composed image before final
-gamut containment, dithering and transfer encoding. Encoding occurs exactly once.
-Scene-linear captures and display screenshots are separate typed products with
-their color-pipeline metadata.
+Scene-referred work, including ADR-011 VFX additive/translucent batches, runs
+before the output transform. Display-referred UI is composed afterward in
+display-linear target space at the declared reference-white scale; the ADR-015
+colorblind transform is ColorPipelinePlan step 6 and covers the complete
+composed image, including HUD, before final gamut containment, dithering and
+transfer encoding. Creative look/grading is step 3 and is not that pass.
+Encoding occurs exactly once. Scene-linear captures and display screenshots are
+separate typed products with their color-pipeline metadata.
 
 Changing exposure/color/output conventions invalidates or explicitly rescales
 dependent histories. SDR/HDR or display transitions stage a new plan and publish
-at a render safe point; scene shading remains ACEScg. Missing transforms, invalid
+at `CommandThreadPolicy::RenderSafePoint`; scene shading remains ACEScg. Missing transforms, invalid
 metadata, hotplug, allocation failure or stale completion retain the last good
 compatible plan or produce ADR-033's typed suspended/lost state, never a hidden
 curve, precision or transfer-function substitution.
@@ -526,12 +561,15 @@ payload, recursion, stage and dispatch limits. A backend advertises only routes 
 both reports and implements; profiles and API/backend names grant none.
 
 The frontend owns typed BLAS/TLAS handles and a `RayScene` projection over an
-immutable ADR-038 GPU Scene generation. AS size query, build, legal update/rebuild,
-compaction and ray dispatch are explicit graph work under resource/residency
-budgets and GPU-completion retirement. Logical ray shader groups and dispatch-table
-records are backend-neutral; native addresses, identifiers and table packing stay
-private. Optional effects resolve declared non-ray fallbacks, while required ray
-content fails admission. GPU ray results never become gameplay query truth.
+immutable ADR-038 GPU Scene generation. Hit groups derive from `MaterialId` /
+`MaterialBindingId`; VFX is not in RayScene; Masked geometry requires `AnyHit`
+or is omitted. AS size query, build, legal update/rebuild, compaction and ray
+dispatch are explicit graph work under resource/residency budgets and
+GPU-completion retirement, published at ADR-018 `RenderSafePoint`. Logical ray
+shader groups and dispatch-table records are backend-neutral; native addresses,
+identifiers and table packing stay private. Optional effects resolve declared
+non-ray fallbacks, while required ray content fails admission. GPU ray results
+never become gameplay query truth.
 
 The frontend and feature systems query capabilities through render API values,
 not by downcasting or including backend headers. Unsupported optional features
@@ -709,10 +747,12 @@ not replace the snapshot used by CPU-driven recipes.
 
 `RenderFrontend` owns the render-object-to-GPU-slot mapping, bounded CPU shadow,
 resource pins and immutable published GPU Scene generations. Current and previous
-published transforms, bounds, mesh/material generations, classification, LOD
-policy and origin/motion generations form the logical instance record; an explicit
-target shader/reflection schema owns packed GPU layout. Native addresses,
-descriptor indices and ECS indices are never persistent render identity.
+published transforms, bounds, mesh generations, `MaterialId` plus packed
+`MaterialBindingId`, and the five ADR-036 classifications form the logical
+instance record; an explicit target shader/reflection schema owns packed GPU
+layout. Native addresses, descriptor indices and ECS indices are never persistent
+render identity. `RenderClassification` keeps `TransparentSorted` and
+`TransparentAdditive` distinct.
 
 All views in one frontend-owned scene presentation epoch consume the same current
 and effective-previous transform pair. A record's last-transform-change epoch
@@ -720,13 +760,16 @@ makes effective previous equal current in later unchanged epochs, preventing
 repeated stale motion without rewriting every static record. Per-view execution
 never advances shared transform history.
 
-Delta application is a bounded transaction. Queue pressure returns backpressure;
+Delta application is a bounded transaction published at ADR-018
+`CommandThreadPolicy::RenderSafePoint`. Queue pressure returns backpressure;
 staged multi-frame uploads leave the prior generation coherent; failure or
 cancellation rolls back the candidate. Removal and slot reuse wait for every
-in-flight frame/culling/draw lease. Origin rebase, resource replacement and device
-loss publish/rebuild complete generations rather than mutating records visible to
-old frames. GPU visibility and LOD output remain presentation data and cannot be
-queried as gameplay truth.
+in-flight frame/culling/draw lease. Origin rebase projects a committed ADR-026
+event; cell create/remove follows ADR-012 residency without GPU Scene evicting
+cells. Resource replacement and device loss publish/rebuild complete generations
+rather than mutating records visible to old frames. GPU visibility and LOD output
+remain presentation data and cannot be queried as gameplay truth. ADR-011 VFX
+batches stay off GPU Scene slots.
 
 Multiple views, including game, scene viewport, thumbnails, and previews, use
 separate `RenderView` descriptors over compatible snapshots.
