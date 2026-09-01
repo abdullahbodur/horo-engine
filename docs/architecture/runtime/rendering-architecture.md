@@ -269,8 +269,9 @@ remove fallback edges. Required content is never disabled merely to reach a lowe
 profile.
 
 Every path publishes the same selected typed scene-color contract plus depth and
-declared optional semantic resources. RND-013 owns color encoding, working space,
-exposure and output transformation. A versioned deferred GBuffer schema declares
+declared optional semantic resources.
+[ADR-037](../../adr/037-scene-color-and-hdr-architecture.md) owns color encoding,
+working space, exposure and output transformation. A versioned deferred GBuffer schema declares
 its semantics, formats, encodings, sample behavior and producer/consumer stages;
 material and lighting artifacts carry that identity. Forward paths may emit
 normal, velocity or other semantic prepasses when a declared downstream input
@@ -288,6 +289,50 @@ baseline. It is not production Forward until it consumes the common recipe,
 material, graph, lifetime and qualification contracts. The Null backend can test
 recipe resolution and graph structure without claiming native raster or image
 parity.
+
+## Scene Color, Exposure And Output
+
+[ADR-037](../../adr/037-scene-color-and-hdr-architecture.md) owns scene color and
+HDR policy. Every production raster recipe emits linear ACEScg/AP1 scene color in
+canonical `RGBA16F`; wider-range/error-sensitive reductions use declared float32
+intermediates. Packed unsigned, normalized LDR and native sRGB attachments are not
+silent scene-color substitutes. Input color encodings are validated and converted
+at asset/media boundaries, while non-color data textures bypass color transforms.
+
+Exposure is a finite base-2 stop offset, `exposureEv`, with
+`exposureScale = exp2(exposureEv)`: `+1 EV` doubles scene RGB and `-1 EV` halves
+it. One versioned `ExposureState` is published per view and shared by effects,
+histories, tone mapping and diagnostics. Pre-exposure is a reversible internal
+representation whose scale/generation follows every affected resource; it never
+changes canonical scene values or becomes an effect-private estimate.
+
+The frontend resolves a versioned `ColorPipelinePlan` using a pinned ACES 2 output
+transform, cooked look policy, exposure and ADR-033's output snapshot. The plan
+records working/output encodings, transform identities, gamut/white point,
+transfer function, reference/paper white and peak/black luminance where known,
+bit depth, dithering and all relevant generations. Backends translate this plan;
+they do not choose tone curves, gamuts, brightness or fallback.
+
+Baseline SDR output uses sRGB/Rec.709 primaries, D65 and the sRGB transfer
+function. The first HDR contract uses a Rec.2020 container, D65, BT.2100 PQ, at
+least 10-bit output and explicit finite paper-white/target-peak values in nits.
+HDR display admission still requires the Platform/presentation facts and surface
+contract in ADR-033. HLG, scRGB and platform EDR are separate future descriptors,
+not aliases for HDR10.
+
+Scene-referred work runs before the output transform. Display-referred UI is
+composed afterward in display-linear target space at the declared reference-white
+scale; accessibility transforms cover the complete composed image before final
+gamut containment, dithering and transfer encoding. Encoding occurs exactly once.
+Scene-linear captures and display screenshots are separate typed products with
+their color-pipeline metadata.
+
+Changing exposure/color/output conventions invalidates or explicitly rescales
+dependent histories. SDR/HDR or display transitions stage a new plan and publish
+at a render safe point; scene shading remains ACEScg. Missing transforms, invalid
+metadata, hotplug, allocation failure or stale completion retain the last good
+compatible plan or produce ADR-033's typed suspended/lost state, never a hidden
+curve, precision or transfer-function substitution.
 
 ## Backend Module Registry
 
