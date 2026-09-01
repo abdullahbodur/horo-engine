@@ -104,8 +104,9 @@ The graph owns final tone/color conversion and composition against the resolved
 output contract. Native attachment encoding and metadata must agree with that
 contract; any hardware format conversion is declared so conversion is applied
 exactly once. Platform owns OS/display settings, not scene exposure. Precise
-scene color/HDR algorithms remain with RND-013 and output modeling with
-RND-008.2; this ADR supplies their boundary, not a second color pipeline.
+scene color, exposure and SDR/HDR transform policy is owned by
+[ADR-037](037-scene-color-and-hdr-architecture.md), while output modeling remains
+with RND-008.2; this ADR supplies their boundary, not a second color pipeline.
 
 Fullscreen/borderless/windowed mode is host intent applied by Platform. Renderer
 validates the resulting surface and requests reconfiguration when necessary; it
