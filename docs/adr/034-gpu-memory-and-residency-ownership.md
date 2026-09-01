@@ -1,6 +1,6 @@
 # ADR-034: GPU Memory and Residency Ownership
 
-- **Status**: Proposed
+- **Status**: proposed
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: GPU backing accounting, reservation transactions and pressure policy
@@ -12,14 +12,16 @@
 
 [ADR-027](027-renderer-resource-identity-and-descriptors.md) defines resident
 identity and retirement, including `ResourceOperationId` as the registry
-completion identity for one reserved generation. That is a different decision
-from [ADR-008](008-error-model-exception-boundary-and-registry.md) (error model);
-these numbers were not swapped. ADR-027 leaves physical allocation and budget
-policy to RND-010. The current public `IRenderBackend` has lifecycle and
-execution-plan contracts, not a heap allocator or memory ledger. Native viewport
-and GUI allocations still exist in the OpenGL and Metal editor integrations.
-This ADR defines their target ownership; it does not claim those paths already
-enforce the decision or implement new runtime APIs in M0.
+completion identity for one reserved generation. ADR-027 leaves physical
+allocation and budget policy to RND-010. Budget denials, capacity failures and
+stalled-retirement diagnostics are typed results under
+[ADR-008](008-error-model-exception-boundary-and-registry.md); they do not reuse
+resource-handle invalidity as the memory-policy error. The current public
+`IRenderBackend` has lifecycle and execution-plan contracts, not a heap allocator
+or memory ledger. Native viewport and GUI allocations still exist in the OpenGL
+and Metal editor integrations. This ADR defines their target ownership; it does
+not claim those paths already enforce the decision or implement new runtime APIs
+in M0.
 
 GPU memory is shared with other applications and may be shared with the CPU.
 Native allocation sizes, placement, and residency mechanisms differ by backend.

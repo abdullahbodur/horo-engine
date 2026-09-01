@@ -1,6 +1,6 @@
 # ADR-031: Vulkan Loader, Platform and Version Baseline
 
-- **Status**: Proposed
+- **Status**: proposed
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: Vulkan loader, 1.3 admission, WSI and Windows/Linux baseline
@@ -21,8 +21,7 @@ capabilities and product profiles, and the common
 [parity](../architecture/runtime/render-backend-parity-contract.md) and
 [distribution](../architecture/runtime/renderer-distribution-and-availability.md)
 contracts for lifecycle and selection. Renderer resource identity is
-[ADR-027](027-renderer-resource-identity-and-descriptors.md); that is a different
-decision from [ADR-008](008-error-model-exception-boundary-and-registry.md).
+[ADR-027](027-renderer-resource-identity-and-descriptors.md).
 GPU backing follows [ADR-034](034-gpu-memory-and-residency-ownership.md).
 Presentation follows [ADR-033](033-presentation-and-display-ownership.md).
 It does not choose a new shader source language, allocator, render-graph

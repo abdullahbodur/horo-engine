@@ -1,6 +1,6 @@
 # ADR-033: Presentation and Display Ownership
 
-- **Status**: Proposed
+- **Status**: proposed
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: Display facts, surface generations, output negotiation and present ownership
@@ -22,8 +22,7 @@ This ADR defines those ownership boundaries. It preserves the
 [renderer parity](../architecture/runtime/render-backend-parity-contract.md),
 and [ADR-028](028-renderer-capability-limits-and-product-profiles.md) device
 capability model. Renderer resource identity is
-[ADR-027](027-renderer-resource-identity-and-descriptors.md); that is a different
-decision from [ADR-008](008-error-model-exception-boundary-and-registry.md).
+[ADR-027](027-renderer-resource-identity-and-descriptors.md).
 It does not implement a display service, pick a tone-mapping algorithm, or
 redesign the runtime clock.
 

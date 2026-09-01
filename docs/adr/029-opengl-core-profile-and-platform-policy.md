@@ -1,6 +1,6 @@
 # ADR-029: OpenGL Core Profile and Platform Policy
 
-- **Status**: Proposed
+- **Status**: proposed
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: OpenGL native admission, platform qualification and context negotiation
@@ -26,10 +26,9 @@ an equal backend under the
 [ADR-028](028-renderer-capability-limits-and-product-profiles.md) already separates
 native reports, implemented operations, effective support, and product profiles.
 Renderer resource identity is
-[ADR-027](027-renderer-resource-identity-and-descriptors.md); that is a different
-decision from [ADR-008](008-error-model-exception-boundary-and-registry.md)
-(error model). This decision supplies OpenGL's native admission policy; it does
-not replace those contracts or assign a product profile to an API version.
+[ADR-027](027-renderer-resource-identity-and-descriptors.md). This decision
+supplies OpenGL's native admission policy; it does not replace those contracts
+or assign a product profile to an API version.
 
 ## Decision
 

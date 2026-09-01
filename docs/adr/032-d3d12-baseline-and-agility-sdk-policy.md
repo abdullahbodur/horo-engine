@@ -1,6 +1,6 @@
 # ADR-032: D3D12 Baseline and Agility SDK Policy
 
-- **Status**: Proposed
+- **Status**: proposed
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: D3D12 native admission, Agility activation and Windows baseline
@@ -21,8 +21,7 @@ baseline while preserving [ADR-028](028-renderer-capability-limits-and-product-p
 effective support and the common [parity](../architecture/runtime/render-backend-parity-contract.md)
 and [distribution](../architecture/runtime/renderer-distribution-and-availability.md)
 contracts. Renderer resource identity is
-[ADR-027](027-renderer-resource-identity-and-descriptors.md); that is a different
-decision from [ADR-008](008-error-model-exception-boundary-and-registry.md).
+[ADR-027](027-renderer-resource-identity-and-descriptors.md).
 It does not choose the engine-wide shader source language, GPU memory
 allocator, or render-graph implementation. GPU backing accounting is
 [ADR-034](034-gpu-memory-and-residency-ownership.md). Presentation/display

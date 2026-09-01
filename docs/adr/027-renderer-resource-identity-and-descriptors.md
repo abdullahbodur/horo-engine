@@ -1,13 +1,11 @@
 # ADR-027: Renderer Resource Identity and Descriptors
 
-- **Status**: Proposed
+- **Status**: proposed
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: Backend-neutral resident renderer resources
 - **Issue**: [#290](https://github.com/abdullahbodur/horo-engine/issues/290) ([RND-001.1])
 - **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
-- **Not ADR-008**: [ADR-008](008-error-model-exception-boundary-and-registry.md)
-  remains the error-model decision. This document was never numbered 008.
 
 ## Context
 

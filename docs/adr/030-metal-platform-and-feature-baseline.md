@@ -1,6 +1,6 @@
 # ADR-030: Metal Platform and Feature Baseline
 
-- **Status**: Proposed
+- **Status**: proposed
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: Metal native admission, GPU family, MSL and macOS deployment
@@ -23,10 +23,8 @@ starts at macOS 14. This decision preserves that floor and defines the Metal
 contract rather than treating those examples as hardware qualification.
 
 [ADR-028](028-renderer-capability-limits-and-product-profiles.md) owns reported,
-implemented, effective, and product-profile support. Renderer resource identity
-is [ADR-027](027-renderer-resource-identity-and-descriptors.md); that is a
-different decision from
-[ADR-008](008-error-model-exception-boundary-and-registry.md). GPU backing
+implemented, effective, and product-profile support. Renderer resource identity is
+[ADR-027](027-renderer-resource-identity-and-descriptors.md). GPU backing
 follows [ADR-034](034-gpu-memory-and-residency-ownership.md). Metal is an equal
 backend under the
 [parity contract](../architecture/runtime/render-backend-parity-contract.md),
