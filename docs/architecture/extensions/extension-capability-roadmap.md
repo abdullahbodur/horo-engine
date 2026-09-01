@@ -61,6 +61,13 @@ capability handles and bounded value marshalling; they never receive native
 pointers, host function tables, or ambient engine services. Provider updates,
 disablement, reload, and shutdown revoke or refresh bindings at safe points.
 
+[ADR-059](../../adr/059-script-consumable-module-boundary.md) makes the backend
+service authoritative, routes imports through a host-owned resolver and
+invocation gateway, confines VM objects to runtime adapters, and separates
+tooling-script contexts from gameplay behavior contexts. The initial runtime is
+an in-process sandbox; isolated providers remain a transport implementation of
+the same semantic service boundary.
+
 Primary initiative: `EXT-005`, supported by `EXT-002`, `GAM-001`, and
 `SDK-001`.
 
