@@ -60,6 +60,11 @@ No process-global capability singleton or mutable per-feature copy is allowed.
   dedicated pipeline and optional shader/dispatch operations with typed limits.
   The transitional `supportsRayTracing` boolean is not admission authority. A
   provider is usable only when its own requirements also pass.
+- Timestamp and pipeline-statistic operations follow
+  [ADR-042](042-cpu-gpu-timestamps-and-pipeline-statistics.md). Effective support
+  includes queue/stage/scope combinations, timestamp period/valid bits, calibration
+  ability/error, counter semantic revisions/widths, nesting rules and finite query
+  limits. A manifest hint or feature boolean admits no instrumentation by itself.
 - Limits have named fields and units: bytes for buffer/range sizes and shared
   memory; texels for extents; counts for attachments, descriptors, array layers,
   workgroup axes/invocations and frames in flight; bytes for offset alignment.
