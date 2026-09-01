@@ -761,6 +761,30 @@ Device/backend/runtime change invalidates the generation and reapplies policy
 before reconstruction. Null proves deterministic bounded resolution with synthetic
 fixtures but cannot qualify a native driver or workaround.
 
+### External graphics capture
+
+[ADR-047](../../adr/047-renderdoc-pix-and-metal-capture-integration.md) defines
+RenderDoc, PIX and Metal capture as explicit application operations. The caller
+selects an advertised provider/mode, exact renderer/device/surface target, typed
+frame or marker trigger, finite extent and restricted artifact policy. There is no
+automatic tool fallback, focus-derived target or content/plugin-triggered capture.
+
+The application service owns authorization, operation state, cancellation,
+timeouts, staging, atomic publication, retention and export. Private backend/tool
+adapters own native availability and begin/end translation on qualified threads.
+Launch, attachment and in-process control remain distinct capabilities; a
+creation-time requirement returns a user-approved restart/launch plan rather than
+mutating the active process/device.
+
+Capture consumes the active ADR-044 marker plan and records proven frame/graph/
+surface correlation without enabling validation or changing render work. Native
+payloads are restricted developer data because they may contain resource bytes,
+shader source and rendered user content. Artifacts remain local/private, bounded
+and excluded from automatic support bundles/upload. Device loss and shutdown stop
+once at legal boundaries and quarantine incomplete staging without adding a
+normal-path GPU-idle wait. Null proves shared request/state/artifact behavior but
+claims no native capture support.
+
 ## Backend Implementation Boundary
 
 Each concrete backend owns its API dependencies, context/device objects,

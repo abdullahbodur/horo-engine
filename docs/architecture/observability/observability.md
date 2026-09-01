@@ -234,6 +234,8 @@ Supported operations include:
 - change effective log level or category filter;
 - enable or disable file/console/in-memory sinks where the product profile allows;
 - start, arm, stop, or abort a profiler capture;
+- start, arm, stop, cancel, inspect, or export a profile-allowed external graphics
+  capture through [ADR-047](../../adr/047-renderdoc-pix-and-metal-capture-integration.md);
 - capture next hitch;
 - export a diagnostic bundle;
 - open the current log or capture folder;
@@ -296,15 +298,15 @@ All implementation contracts, API specifications, and testing patterns are locat
 
 ## Product Profiles
 
-| Profile | Logs | Core metrics | Profiler |
-|---|---|---|---|
-| Local Debug/test | Trace compiled, Debug default | On | Available, off by default |
-| Local Release/profile | Trace compiled, Info default | On | Available, off by default |
-| Packaged HoroEditor | Debug compiled, Info default | On | Selected channels |
-| Game Development | Trace compiled, Debug default | On | Available, off by default |
-| Game Profile | Trace compiled, Info default | On | Available, off by default |
-| Game Shipping | Info and above | Low-rate bounded set | Compiled out |
-| Diagnostics build | Trace available | On | Explicit detailed channels |
+| Profile | Logs | Core metrics | Profiler | External graphics capture |
+|---|---|---|---|---|
+| Local Debug/test | Trace compiled, Debug default | On | Available, off by default | Explicit local request when a qualified provider is available |
+| Local Release/profile | Trace compiled, Info default | On | Available, off by default | Explicit local request when a qualified provider is available |
+| Packaged HoroEditor | Debug compiled, Info default | On | Selected channels | Entitlement/profile/provider gated; off by default |
+| Game Development | Trace compiled, Debug default | On | Available, off by default | Explicit local request; off by default |
+| Game Profile | Trace compiled, Info default | On | Available, off by default | Explicit local qualification request; off by default |
+| Game Shipping | Info and above | Low-rate bounded set | Compiled out | Disabled |
+| Diagnostics build | Trace available | On | Explicit detailed channels | Explicit entitlement/provider request; off by default |
 
 Shipping observability remains local. It does not enable automatic telemetry,
 arbitrary capture paths, source-path disclosure, or an unauthenticated profiler
@@ -314,7 +316,10 @@ listener.
 
 ## Storage Locations
 
-Log sessions, metric files, and profiler captures are stored under platform user-state directories:
+Log sessions, metric files, profiler captures and ADR-047 Horo-owned graphics
+captures are stored under platform user-state directories. Graphics captures use
+a distinct private restricted-data subtree, manifest and retention policy; they are
+not ordinary profiler traces or automatic support-bundle inputs.
 
 - **macOS**: `~/Library/Logs/Horo/`
 - **Windows**: `%LOCALAPPDATA%\Horo\Logs\`
