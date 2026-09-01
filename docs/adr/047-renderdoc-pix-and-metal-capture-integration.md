@@ -204,10 +204,12 @@ paths never become metric dimensions.
 
 ### 7. Artifacts are application-owned, atomic and private
 
-Horo-owned captures are staged beneath the platform user-state diagnostics/capture
-root using generated opaque directory and file names. Callers cannot provide an
-arbitrary absolute output path. A later explicit export operation may copy a
-completed artifact to a user-selected destination through validated Platform paths.
+Horo-owned captures are staged beneath the dedicated Platform state
+`diagnostics/graphics-captures` root, separate from logs, profiler traces and
+support-bundle scan roots, using generated opaque directory and file names. Callers
+cannot provide an arbitrary absolute output path. A later explicit export operation
+may copy a completed artifact to a user-selected destination through validated
+Platform paths.
 
 Every capture directory contains a versioned Horo manifest and at most the finite
 provider artifacts declared by the operation. Publication uses same-filesystem
@@ -218,12 +220,15 @@ could not be adopted. A manifest is published only after artifact finalization;
 an unclean staging directory is recoverable/quarantined, never presented as a
 complete capture.
 
-Graphics captures are `RestrictedDeveloperData` by default because they may
-contain resource contents, shader source, rendered user data, paths or labels.
-The preflight confirmation states this explicitly. Files use user-private
-permissions, are local by default, excluded from project/package/source control
-and never auto-uploaded or placed in a normal support bundle. Preview/export is
-explicit, allowlisted and warns that native tool payloads cannot be fully redacted.
+Graphics captures use an artifact-level `RestrictedNativePayload` class because
+they may contain resource contents, shader source, rendered user data, paths or
+labels. This is not a new field-level Observability `PrivacyLevel`; generic bundle
+hooks treat it as `Forbidden`, and only the owning capture export operation may
+include it after separate confirmation. The preflight confirmation states this
+explicitly. Files use user-private permissions, are local by default, excluded
+from project/package/source control and never auto-uploaded or placed in a normal
+support bundle. Preview/export is explicit, allowlisted and warns that native tool
+payloads cannot be fully redacted.
 
 The default reservation is 2 GiB and 60 seconds; configurable admission may lower
 it. Hard ceilings are 16 GiB staged bytes, 120 captured frames and 10 minutes.
