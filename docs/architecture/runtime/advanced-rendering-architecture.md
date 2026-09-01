@@ -335,7 +335,7 @@ immutable state. Admission validates source/scene/revision generations, queue an
 capacity envelopes, dependencies and cancellation. Worker preparation owns its
 inputs and cannot map native memory or publish slots. The render-capable owner
 stages slots, pins and uploads, then atomically publishes a complete generation at
-a safe point. Queue pressure applies typed backpressure; multi-frame staging keeps
+ADR-018 `CommandThreadPolicy::RenderSafePoint`. Queue pressure applies typed backpressure; multi-frame staging keeps
 the prior coherent generation active and never drops deltas or exposes partial
 updates.
 

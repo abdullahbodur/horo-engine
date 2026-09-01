@@ -681,13 +681,16 @@ makes effective previous equal current in later unchanged epochs, preventing
 repeated stale motion without rewriting every static record. Per-view execution
 never advances shared transform history.
 
-Delta application is a bounded transaction. Queue pressure returns backpressure;
+Delta application is a bounded transaction published at ADR-018
+`CommandThreadPolicy::RenderSafePoint`. Queue pressure returns backpressure;
 staged multi-frame uploads leave the prior generation coherent; failure or
 cancellation rolls back the candidate. Removal and slot reuse wait for every
-in-flight frame/culling/draw lease. Origin rebase, resource replacement and device
-loss publish/rebuild complete generations rather than mutating records visible to
-old frames. GPU visibility and LOD output remain presentation data and cannot be
-queried as gameplay truth.
+in-flight frame/culling/draw lease. Origin rebase projects a committed ADR-026
+event; cell create/remove follows ADR-012 residency without GPU Scene evicting
+cells. Resource replacement and device loss publish/rebuild complete generations
+rather than mutating records visible to old frames. GPU visibility and LOD output
+remain presentation data and cannot be queried as gameplay truth. ADR-011 VFX
+batches stay off GPU Scene slots.
 
 Multiple views, including game, scene viewport, thumbnails, and previews, use
 separate `RenderView` descriptors over compatible snapshots.

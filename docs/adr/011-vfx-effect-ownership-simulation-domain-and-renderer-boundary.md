@@ -243,7 +243,9 @@ sorting. Batch color is unexposed linear ACEScg from
 [ADR-037](037-scene-color-and-hdr-architecture.md) pipeline step 1: additive adds
 scene-referred RGB with no coverage alpha; translucent/ribbon use the scene-color
 resource's declared linear coverage/opacity alpha. VFX does not blend after
-exposure or after the output transform. Decals and volumetric accumulation use capability-validated dedicated paths.
+exposure or after the output transform. Particle/decal/volume batches are not
+[ADR-038](038-gpu-scene-and-instance-data-model.md) `GpuSceneInstanceId` slots.
+Decals and volumetric accumulation use capability-validated dedicated paths.
 Shadow casting in this contract is opaque/masked mesh only; unsupported combinations
 require an authored substitute or typed rejection, not a silently ignored boolean.
 

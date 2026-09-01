@@ -6,6 +6,14 @@
 - **Scope**: Persistent render-object identity, GPU instance records, bounded updates and lifecycle
 - **Issue**: [RND-014.1](https://github.com/abdullahbodur/horo-engine/issues/401)
 - **Jira**: [HORO-401](https://horo-engine.atlassian.net/browse/HORO-401)
+- **Related**: [ADR-010](010-job-waiting-and-operation-store-ownership.md),
+  [ADR-011](011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md),
+  [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md),
+  [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md),
+  [ADR-026](026-large-world-precision-and-floating-origin-strategy.md),
+  [ADR-027](027-renderer-resource-identity-and-descriptors.md),
+  [ADR-034](034-gpu-memory-and-residency-ownership.md),
+  [ADR-036](036-raster-render-path-and-quality-architecture.md)
 - **Normative documents**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Advanced Rendering Architecture](../architecture/runtime/advanced-rendering-architecture.md)
 
 ## Context
@@ -54,6 +62,13 @@ declared recipe; it does not masquerade as a successfully published GPU Scene. A
 recipe may explicitly prefer GPU Scene and fall back to CPU submission when all
 content/feature/budget requirements permit. Required GPU-driven content fails with
 a typed result if the model cannot be admitted.
+
+[ADR-011](011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md)
+`VfxRenderBatch`, decal and volume contracts remain a parallel presentation path.
+They write unexposed ACEScg scene color under ADR-037 and do not occupy
+`GpuSceneInstanceId` slots, reuse GPU Scene free-lists, or treat GPU Scene
+visibility as emitter simulation truth. GPU Scene records are scene-extracted
+mesh/material renderables; VFX simulation ownership stays on ADR-011.
 
 ### 2. Source identity and GPU slot identity are distinct
 
@@ -159,25 +174,29 @@ silent default material is published.
 ### 4. Large-world transforms use one scene-origin generation
 
 The CPU shadow retains canonical high-precision scene transform authority from
-the scene/coordinate contract. GPU transform and bounds records use finite
-camera-safe `float32` values relative to one `GpuSceneOrigin` and carry its
-generation. Each view converts its camera into the same origin before culling and
-shading; per-view camera-relative matrices are derived without rewriting stable
-identity or using a different world origin per backend.
+[ADR-026](026-large-world-precision-and-floating-origin-strategy.md). GPU transform
+and bounds records use finite camera-safe `float32` values relative to one
+`GpuSceneOrigin` and carry its generation. Each view converts its camera into the
+same origin before culling and shading; per-view camera-relative matrices are
+derived without rewriting stable identity or using a different world origin per
+backend.
 
-An origin rebase stages a new origin generation and a bounded rebuild/translation
-of every affected published transform and derived bound. The new instance buffers,
-view constants, culling inputs, motion policy and graph plan publish atomically at
-a render safe point. Old frames retain the old origin/buffers. Rebase never mixes
-view constants from one generation with instance data from another. Motion resets
-or applies the mathematically equivalent old/new-origin correction explicitly;
-the origin shift itself cannot produce object velocity.
+An origin rebase projects a committed ADR-026 `OriginRebaseEvent`. GPU Scene is
+an `IOriginRebaseParticipant`: it does not choose when to rebase. It stages a new
+origin generation and a bounded rebuild/translation of every affected published
+transform and derived bound. The new instance buffers, view constants, culling
+inputs, motion policy and graph plan publish atomically at
+[ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md)
+`CommandThreadPolicy::RenderSafePoint`. Old frames retain the old origin/buffers.
+Rebase never mixes view constants from one generation with instance data from
+another. Motion resets or applies the mathematically equivalent old/new-origin
+correction explicitly; the origin shift itself cannot produce object velocity.
 
 If rebuilding all active records cannot fit the configured staging/update budget,
 the coordinator begins early enough to stage over bounded work while the old
 generation remains active, or returns a typed capacity/deadline result. It does not
-partially expose a rebased scene. Scene Runtime remains the origin-rebase authority;
-GPU Scene only projects the committed change.
+partially expose a rebased scene. Scene Runtime remains the origin-rebase
+authority; GPU Scene only projects the committed change.
 
 ### 5. Extraction emits ordered delta batches
 
@@ -194,6 +213,12 @@ Operations are typed:
 - `Remove` supplies source/instance generation and final source revision.
 - bulk cell activation/removal is a bounded collection of those operations, not a
   provider-owned mutation of GPU buffers.
+  [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md)
+  remains the cell-admission and `BeginRetire`/`PollBarrier` authority. GPU Scene
+  is a reader of committed cell residency: it emits create/remove for admitted or
+  retiring cells and holds generation leases that `PollBarrier` must observe. It
+  cannot evict a cell, expand a cell budget, or keep a retired cell's GPU records
+  after the barrier completes.
 
 Within a batch, operation order is stable by source identity and field category.
 Duplicate/conflicting operations, non-monotonic revisions, unknown removes,
@@ -215,11 +240,24 @@ size, scene/device/schema generations and cancellation ownership without touchin
 native memory. Queue-full returns backpressure; it never drops removes or labels an
 unpublished update successful.
 
-CPU validation/coalescing and packed upload preparation may run as bounded jobs
-over owned immutable data. Only the host-declared render-capable owner applies slot
-allocation, resource pins, upload reservations, graph-visible buffer changes and
-publication. Worker code cannot map native GPU memory, reuse slots, publish table
-indices or outlive its scene/device/cancellation leases.
+CPU validation/coalescing and packed upload preparation may run as bounded
+[ADR-010](010-job-waiting-and-operation-store-ownership.md) jobs over owned
+immutable data with explicit cancellation and scene/device leases. Only the
+host-declared render-capable owner applies slot allocation, resource pins, upload
+reservations, graph-visible buffer changes and publication at ADR-018
+`CommandThreadPolicy::RenderSafePoint`. Worker code cannot map native GPU memory,
+reuse slots, publish table indices or outlive its scene/device/cancellation
+leases. The render owner does not GPU-idle or mapped-readback-wait for a
+same-frame histogram, culling result or upload completion; subsequent consumers
+declare graph/fence dependencies on the published generation.
+
+CPU shadow records, GPU instance/compact tables, staging/upload arenas and
+in-flight generations are renderer-owned
+[ADR-034](034-gpu-memory-and-residency-ownership.md) reservations. Admission
+reserves them before realize. Mesh/material pins are
+[ADR-027](027-renderer-resource-identity-and-descriptors.md) generation-checked
+handles; upload/copy completion uses `ResourceOperationId`, not a native fence
+exposed to extraction. Budget denial is a typed ADR-008/034 result.
 
 Budgets separately bound queued batches/operations/bytes, CPU shadow records,
 active/retired slots, dirty records per publication, upload bytes, staging memory,
@@ -229,12 +267,12 @@ and new storage until retirement under ADR-034. No vector/buffer growth, full-sc
 sort, blocking wait or unbounded retry occurs during graph execution.
 
 One transaction validates all operations/dependencies, reserves candidate slots
-and pins, packs target records, schedules uploads, and waits through normal
-graph/fence dependencies. It publishes a new immutable `GpuSceneGeneration` only when
-all required buffers/tables are ready. Failure or cancellation rolls back candidate
-slots/pins/staging and retains the last good generation. A failed remove never
-revives destroyed gameplay state: extraction resyncs or the affected record is
-suppressed from new plans until consistency is restored and diagnosed.
+and pins, packs target records and schedules uploads. It publishes a new immutable
+`GpuSceneGeneration` at `RenderSafePoint` only when all required buffers/tables
+are ready. Failure or cancellation rolls back candidate slots/pins/staging and
+retains the last good generation. A failed remove never revives destroyed
+gameplay state: extraction resyncs or the affected record is suppressed from new
+plans until consistency is restored and diagnosed.
 
 When work exceeds one frame's allowed upload budget, accepted transactions remain
 pending and make bounded progress. The old published generation remains coherent.
@@ -302,6 +340,7 @@ instance buffers or private scene data.
 | One view-specific camera-relative instance buffer | Rejected as the persistent authority: multiplies updates and cannot serve multiple views. Use one scene origin plus per-view constants/work buffers. |
 | Drop/coarsen deltas when the upload queue is full | Rejected: creates silent visual/state divergence. Apply backpressure or an explicit whole-recipe fallback. |
 | Serialize GPU Scene in saves or cooked worlds | Rejected: it contains process/device/projection identity. Serialize scene/assets and reconstruct the projection. |
+| Put ADR-011 VFX particles into GPU Scene slots | Rejected: VFX pass kinds, skip-sort additive and simulation ownership would be rewritten as scene-mesh instances. |
 
 The selected model retains a CPU shadow and overlapping immutable generations,
 which increases memory. In exchange it bounds updates, protects in-flight work,
@@ -336,12 +375,16 @@ Focused tests must cover:
   every phase, rollback and last-good generation retention;
 - two or more views sharing records but producing independent LOD/visibility,
   with no duplicate transform-history advancement;
-- origin rebase while frames are in flight, atomic old/new generation use, motion
-  reset/correction and bounded full-candidate staging;
+- origin rebase of a committed ADR-026 event while frames are in flight, atomic
+  old/new generation use, motion reset/correction and bounded full-candidate
+  staging;
+- ADR-012 cell activate/retire as bounded create/remove with PollBarrier leases;
 - remove/reuse while culling/indirect/debug leases are in flight, overflow and
   mismatched generated-draw admission;
 - scene close, device loss during every phase, complete rebuild, stale completion,
-  partial initialization and repeated shutdown; and
+  partial initialization and repeated shutdown;
+- VFX batches remaining on the ADR-011 path rather than GPU Scene slots;
+- RenderSafePoint publication without same-frame GPU idle/readback; and
 - CPU fallback and required-GPU failure with explicit diagnostics. Native backend
   tests prove upload/barrier/retirement behavior; Null tests prove the state model.
 
