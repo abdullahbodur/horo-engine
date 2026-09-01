@@ -6,6 +6,12 @@ This document defines audio asset loading, device ownership, mixer and voice
 models, scene integration, streaming, real-time thread rules, lifecycle,
 editor tooling, middleware boundaries, and observability.
 
+[ADR-062](../../adr/062-audio-runtime-ownership-and-update-order.md) is the
+single normative owner of process/control/callback authority, runtime and device
+state transitions, scene-context barriers, suspend/recovery, fatal failure, and
+teardown order. This document owns the broader audio subsystem model and summarizes
+that lifecycle decision.
+
 ## Core Decisions
 
 - Engine audio APIs are backend-neutral.
@@ -54,6 +60,20 @@ AudioRuntime
 
 The process host owns `AudioRuntime`. A game runtime may create one scene audio
 context per active scene or listener policy.
+
+The host resolves `Omitted`, `Null`, or `Device` composition before construction.
+The audio control runtime is the only authority that commits runtime/device
+transitions and owns scene contexts, registries, graph generations, command
+normalization, and completion reconciliation. A selected backend owns native
+device objects and callback registration. The callback owns only its currently
+published preallocated render-core epoch and bounded acknowledgements/events.
+
+Scene, gameplay, cinematic, editor, asset, and streaming systems are typed
+producers. They submit owned value snapshots and commands through Audio API or an
+application audio capability; Audio Runtime does not include/query editor, GUI,
+MCP, CLI, gameplay, mutable ECS, or Scene Runtime internals. Scene contexts are
+generation-checked client handles and unload through the ordered barrier defined
+by ADR-062.
 
 ## Handles
 
@@ -320,6 +340,7 @@ unbounded user callbacks. Nodes that do not declare this contract at graph
 build time are rejected by the mixer graph validator.
 
 Graph validation runs whenever a mixer graph is built or modified:
+
 - in the editor when a bus graph or effect chain is authored
 - at scene load time
 - when a package hot-reloads an effect node
@@ -623,12 +644,18 @@ does not bypass real-time thread rules.
 
 ## Device Lifecycle
 
+ADR-062 owns the parent runtime state machine and callback-epoch handshake. The
+states below are subordinate backend/device facts committed only by the audio
+control runtime; the callback and backend cannot select product fallback or write
+runtime state.
+
 Device states:
 
 ```text
-Unavailable -> Opening -> Active -> Reconfiguring -> Active
-Active -> Lost -> Opening
-Active -> Closing -> Unavailable
+Closed -> Opening -> Ready
+Ready -> Reconfiguring -> Ready
+Ready | Reconfiguring -> Lost -> Opening | Closed
+Ready | Reconfiguring | Lost -> Quiescing -> Closed
 ```
 
 Device loss does not invalidate frontend asset identity. The runtime may
@@ -672,6 +699,13 @@ The real-time callback cannot:
 - query GUI, ECS, or configuration services
 - wait for jobs
 - execute user-provided unbounded callbacks
+
+It also cannot open, reconfigure, recover, or close the device; commit runtime,
+scene-context, focus, suspend, reset, fatal, or shutdown transitions; invoke a
+producer; or reclaim callback-visible memory. It may adopt/quiesce a published
+epoch at a buffer boundary, render preallocated silence, update allocation-free
+counters, and emit bounded acknowledgements/fault/device records. The control
+owner consumes those records and commits every lifecycle transition.
 
 It consumes prevalidated state and writes only to real-time-owned memory and
 bounded event queues.
@@ -824,6 +858,15 @@ Editor preview, play-in-editor, and packaged games may use different defaults,
 but each policy is typed configuration. Focus loss must not silently leave the
 audio runtime in an undocumented state.
 
+Focus policy is distinct from host suspension and device loss. Host/application
+policy submits the requested action; audio control orders and commits it. During
+explicit host suspension the required bounded audio lifecycle pump remains on the
+owner-thread command/end-frame boundaries while ordinary variable update is
+skipped. The callback follows only the committed continue/hold/silence/quiesce
+policy and never infers suspension from missing render frames. The remaining pump
+drains lifecycle-critical acknowledgements/device/fault records and can publish
+reserved critical work; ordinary scene/game command preparation stays suspended.
+
 This policy is configured in Project Settings > Audio > Focus Behavior, with
 per-platform profiles for editor preview and packaged games. The same page
 defaults mute-on-minimize on most desktop hosts, pause-gameplay-buses for
@@ -857,12 +900,15 @@ No ordinary log formatting occurs on the callback thread.
 Required tests cover:
 
 - voice and resource handle generations
+- runtime/device/callback-epoch legal transitions and stale acknowledgement rejection
+- startup cancellation/failure unwind at every acquired stage and callback-ready timeout
 - mixer routing and gain behavior
 - voice capacity policies
 - real-time queue saturation
 - streaming underrun recovery
 - device loss and reopen
 - scene unload with active voices
+- scene-context unload barriers under saturation, late producer completion, and replacement
 - null backend deterministic clock
 - callback path allocation and lock checks
 - audio asset format validation
@@ -878,6 +924,9 @@ Required tests cover:
 - audio snapshot/ducking transitions
 - gapless loop metadata preservation
 - platform focus/suspension policy
+- suspend/resume discontinuity, device recovery, failed reopen, and no silent Null fallback
+- callback/control fatal failure, terminal reconciliation, and detachment-gated reclamation
+- repeated shutdown after active, suspended, recovering, failed, and partial-start states
 - decoder plugin registration and cook-time selection
 - DSP node prepare/process real-time contract
 - spatializer registration and fallback behavior

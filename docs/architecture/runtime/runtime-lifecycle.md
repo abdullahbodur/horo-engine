@@ -69,11 +69,13 @@ Startup order:
 2. initialize emergency diagnostics and platform directories
 3. start observability and emit build/system identity
 4. resolve configuration
-5. construct platform, jobs, data bus, and application services
-6. initialize requested renderer and window capabilities
-7. load project and initial scene through application use cases
-8. start optional runtime console, MCP, and GUI adapters
-9. enter `Ready`, then `Running`
+5. construct platform, jobs, data bus, and asset services
+6. initialize the requested omitted/null/device audio composition through ADR-062
+7. initialize requested renderer and window capabilities
+8. construct application services
+9. load project and initial scene through application use cases
+10. start optional runtime console, MCP, and GUI adapters
+11. enter `Ready`, then `Running`
 
 Arguments, environment, and persisted settings are resolved through
 [Configuration System](../foundation/configuration-system.md). Startup failures return
@@ -122,6 +124,14 @@ entry before native frame acquisition; mismatched or unrealized candidates skip
 that output. Commit final destruction through deferred lifecycle work after
 retirement. Minimized/zero-pixel output suspends presentation, not the simulation
 clock. No additional runtime phase is introduced.
+
+[ADR-062](../../adr/062-audio-runtime-ownership-and-update-order.md) specializes
+audio participation without adding phases. Owner-thread commands commit audio
+lifecycle/focus/device/scene requests; `VariableUpdate` drains producer and
+callback queues and publishes bounded callback work; deferred lifecycle commit
+retires acknowledged scene-context barriers; `EndFrame` publishes bounded
+control snapshots. The hardware callback advances on its independent sample
+clock and never calls runtime phases.
 
 ## Time Model
 
@@ -342,7 +352,9 @@ host runs only `BeginFrame`, `PollPlatformEvents`,
 `ApplyQueuedOwnerThreadCommands`, and `EndFrame`. Fixed/variable simulation,
 render extraction, execution, GUI rendering, and presentation are skipped.
 Resume resets the clock baseline so suspended wall time never becomes catch-up
-work.
+work. ADR-062 keeps the bounded audio lifecycle/control subset serviceable on
+the remaining owner-thread boundaries; the callback follows only committed audio
+suspend policy.
 
 ## Fatal Failure
 
@@ -368,12 +380,15 @@ Canonical shutdown:
 5. stop MCP, networking, and other transports
 6. drain owner-thread continuations
 7. release GUI and editor sessions
-8. wait for renderer idle as required and destroy GPU resources
-9. stop audio and release device-owned resources
-10. destroy application and engine services
-11. stop job and platform services
+8. destroy scene/project/application services after closing their renderer and
+   audio producer ports
+9. wait for renderer idle as required and destroy GPU resources
+10. quiesce/detach the audio callback, reconcile terminal outcomes,
+   and release device-owned resources under ADR-062
+11. destroy remaining asset, data-bus, job, and platform services
 12. flush observability and write clean-shutdown marker
-13. transition to `Stopped`
+13. transition to `Stopped`, unless a subsystem's documented fatal-retention path
+    requires immediate process termination without normal reclamation
 
 Shutdown may be requested more than once but executes its transitions once.
 

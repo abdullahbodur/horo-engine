@@ -149,6 +149,9 @@ dependency direction in [System Design](./foundation/system-design.md).
   ownership, transform authority, collision events, queries, and determinism.
 - [Audio Architecture](./runtime/audio-architecture.md): real-time mixer, voices,
   streaming, devices, scene integration, and null audio.
+- [Audio Runtime Ownership and Update Order](../adr/062-audio-runtime-ownership-and-update-order.md):
+  process/control/callback authority, runtime and device states, scene-context
+  barriers, suspend/recovery, fatal failure, and teardown.
 - [Input Architecture](./runtime/input-architecture.md): input snapshots, action
   maps, focus, capture, modal routing, and simulation input frames.
 - [Game UI And HUD](./runtime/game-ui-and-hud.md): runtime game menus, HUDs,
