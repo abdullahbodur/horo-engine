@@ -6,6 +6,12 @@
 - **Scope**: Reconstruction, denoising, frame generation, latency categories and provider ownership
 - **Issue**: [RND-016.1](https://github.com/abdullahbodur/horo-engine/issues/422)
 - **Jira**: [HORO-422](https://horo-engine.atlassian.net/browse/HORO-422)
+- **Related**: [ADR-015](015-accessibility-ownership-typed-transport-and-non-gating-policy.md),
+  [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md),
+  [ADR-036](036-raster-render-path-and-quality-architecture.md),
+  [ADR-037](037-scene-color-and-hdr-architecture.md),
+  [ADR-038](038-gpu-scene-and-instance-data-model.md),
+  [ADR-039](039-ray-tracing-capability-and-abstraction.md)
 - **Companion decision**: [ADR-033: Presentation and Display Ownership](033-presentation-and-display-ownership.md)
 - **Normative documents**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Advanced Rendering Architecture](../architecture/runtime/advanced-rendering-architecture.md)
 
@@ -38,7 +44,7 @@ Horo defines these non-interchangeable categories:
 | Category | Input/output and ownership |
 |---|---|
 | `ReconstructionProvider` | Converts one real rendered frame at a declared render extent into one real reconstructed frame at the target extent. Spatial and temporal reconstruction are distinct modes/capabilities. Temporal mode owns view history and anti-aliasing semantics. |
-| `DenoisingProvider` | Filters one named noisy effect signal (for example ray reflection or GI) plus its effect-specific guides/history. The effect owner chooses it; it does not own scene/output resolution or global anti-aliasing. |
+| `DenoisingProvider` | Filters one named noisy effect signal (for example ray reflection or GI) plus its effect-specific guides/history. This is the same effect-owned denoiser contract [ADR-039](039-ray-tracing-capability-and-abstraction.md) requires; it is not a second model. The effect owner chooses it; it does not own scene/output resolution or global anti-aliasing. |
 | `FrameGenerationProvider` | Produces optional synthetic presentation frames between qualified real reconstructed frames. It owns interpolation history and synthetic-frame GPU work only, never simulation or real-frame history. |
 | `LatencyProvider` | Supplies optional scheduling/marker/wait integration for reducing or measuring end-to-end latency. It owns no image reconstruction, generated frame, present mode, gameplay clock or input semantics. |
 
@@ -100,8 +106,11 @@ changes present mode, disables an effect or chooses another category implicitly.
 ### 3. Reconstruction consumes one canonical real-frame contract
 
 The frontend produces a `RealRenderFrame` with stable scene/view/simulation tick,
-render-frame, GPU Scene, raster recipe, color pipeline, exposure and history
-generations. A reconstruction request declares:
+render-frame,
+[ADR-038](038-gpu-scene-and-instance-data-model.md) GPU Scene,
+[ADR-036](036-raster-render-path-and-quality-architecture.md) `RasterRecipe`,
+[ADR-037](037-scene-color-and-hdr-architecture.md) color-pipeline, exposure and
+history generations. A reconstruction request declares:
 
 - render and target extents, finite scale and jitter sequence/sample;
 - exposed or pre-exposed linear ACEScg scene color in the exact ADR-037 stage;
@@ -167,7 +176,9 @@ A failed/cancelled frame cannot advance it. Required reset/invalidation includes
 - first frame, camera cut/teleport or missing predecessor;
 - view/surface/device/provider/mode/schema replacement;
 - incompatible render/target extent, projection/jitter or color-plan change;
-- GPU Scene origin/motion discontinuity or missing/mismatched motion/depth;
+- [ADR-038](038-gpu-scene-and-instance-data-model.md) GPU Scene origin/motion
+  discontinuity, [ADR-036](036-raster-render-path-and-quality-architecture.md)
+  recipe-generation change, or missing/mismatched motion/depth;
 - long suspension, skipped real-frame sequence or explicitly invalid effect input;
 - provider-reported recoverable reset requirement translated to a typed Horo
   reason.
@@ -180,18 +191,32 @@ only if it is still compatible; otherwise selection resolves an explicit fallbac
 or reports the required feature unavailable.
 
 Denoising history belongs to one effect/view/input schema. A reflection denoiser
-cannot reuse GI history or become the global reconstruction history. Effect owners
-declare noisy signal, albedo/normal/depth/motion/exposure guides, sample count,
-confidence/variance, history and output semantics plus the denoiser fallback.
+cannot reuse GI history or become the global reconstruction history. This
+`DenoisingProvider` is the ADR-039 effect dependency: ray reflection, GI, shadow
+and AO recipes that declare a denoiser consume this category, not a parallel
+interface. Effect owners declare noisy signal, albedo/normal/depth/motion/exposure
+guides, sample count, confidence/variance, history and output semantics plus the
+denoiser fallback.
 
 ### 5. Frame generation creates presentation frames, not engine frames
 
 The frontend and presentation contract distinguish:
 
 ```text
-SimulationTickId -> RealRenderFrameId -> RealPresentationFrameId
-                                      \-> SyntheticPresentationFrameId(s)
+SimulationTickId -> ScenePresentationEpoch (ADR-038, shared by all views of that scene frame)
+                 -> RealRenderFrameId (per RenderViewId)
+                 -> RealPresentationFrameId
+                  \-> SyntheticPresentationFrameId(s)
 ```
+
+`ScenePresentationEpoch` is the ADR-038 scene-frame group: every view of that
+scene shares one GPU Scene generation and transform-history pair. `RealRenderFrameId`
+is not that epoch. It is assigned per `RenderViewId` real submission, so
+split-screen and XR eyes each own reconstruction/denoising history. Stereo/XR
+pairs still share the epoch and must admit or suppress frame generation together
+under one `FrameGenerationPlan` generation so left/right synthetic counts match.
+A synthetic presentation frame never receives a new epoch, tick or
+`RealRenderFrameId`.
 
 A generated frame references exactly the qualified bracketing real-render/present
 frames and the `FrameGenerationPlan` generation. It never receives a new
@@ -200,16 +225,25 @@ networking or audio, samples gameplay input, executes a real-frame render graph,
 updates exposure/TAA/denoiser/material/VFX histories, increments real-frame jitter,
 fires gameplay frame callbacks or satisfies capture/save readiness.
 
-The first Horo frame-generation stage consumes reconstructed **display-linear
-scene content before display-referred UI/accessibility/final transfer encoding**,
-plus target-extent depth, motion and masks from `GuideResolvePass` (or equal-extent
-aliases), exposure and pacing metadata from the two real frames. It outputs a
-synthetic display-linear scene image. The frontend then composes the latest
-qualified display-referred UI/accessibility state and
-performs the target gamut/dither/encoding stage for that presentation frame. This
-prevents interpolation of ordinary HUD/editor text. A provider that cannot support
-this separation is unavailable for the baseline contract; integrated UI paths
-need a separate named/qualified mode.
+Scene reconstruction remains [ADR-037](037-scene-color-and-hdr-architecture.md)
+scene-referred work: after exposure and creative look (step 3), before the ACES
+output transform (step 4). Frame generation interpolates **display-linear scene
+content after step 4 and before steps 5–6**. It does not interpolate
+[ADR-015](015-accessibility-ownership-typed-transport-and-non-gating-policy.md)
+colorblind filters or HUD. `ColorGradingSettings` is step 3 look, already in the
+reconstructed scene; it is not the accessibility path.
+
+Each real and synthetic presentation frame then independently:
+
+1. composes the latest qualified display-referred UI (step 5);
+2. applies the ADR-037 step-6 accessibility transform to the complete composed
+   image, including HUD; and
+3. performs target gamut containment, dither and transfer encoding.
+
+Colorblind users therefore see the filter on synthetic frames. A provider that
+cannot support this UI/accessibility-after-generation split is unavailable for
+the baseline contract; integrated UI paths need a separate named/qualified mode.
+This prevents interpolation of ordinary HUD/editor text and of accessibility.
 
 Synthetic frames are generation-tagged and observable in diagnostics/capture
 metadata. Ordinary screenshots default to the latest real presentation frame;
@@ -269,7 +303,8 @@ selected optional fallback; no provider allocates unbounded history, drops a rea
 frame while labeling it rendered, or silently lowers quality/scale.
 
 Plan replacement stages provider instances/resources and publishes atomically at
-a render safe point. Cancellation/stale completion destroys the candidate and
+[ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md)
+`CommandThreadPolicy::RenderSafePoint`. Cancellation/stale completion destroys the candidate and
 retains the last good compatible plan. Device loss invalidates provider-native
 objects/tokens/history and re-resolves effective support before reconstruction.
 No opaque SDK cache/handle is the only recovery source.
@@ -299,6 +334,8 @@ runtime execution.
 | Let a provider control dynamic resolution and effect placement | Rejected: product/frontend policy owns extent and graph semantics; provider consumes a resolved request. |
 | Feed native depth/motion/exposure conventions directly | Rejected: creates per-provider sign, jitter, units and generation errors. Use one canonical contract and private conversion. |
 | Interpolate final HUD/editor UI by default | Rejected: produces text/input artifacts and stale interactive state. Generate scene content, then compose current qualified UI. |
+| Interpolate ADR-015/037 accessibility or apply it only to real frames | Rejected: synthetic frames would show uncorrected color for colorblind users. Apply step 6 after UI on every presented frame. |
+| Give every view one shared `RealRenderFrameId` | Rejected: reconstruction history is per `RenderViewId`. Stereo pairs share `ScenePresentationEpoch` and matched generation counts, not one render-frame ID. |
 | Count synthetic frames as render/simulation frames | Rejected: corrupts timing, history, gameplay callbacks and performance reporting. Use separate presentation identity. |
 | Enable frame generation to reduce latency | Rejected: it may add buffering. Latency is a separately measured/resolved category. |
 | Let latency SDK hooks pump input or change simulation timing | Rejected: violates Input/Simulation ownership and deterministic fixed-step ordering. |
@@ -341,7 +378,10 @@ Tests must cover:
 - effect-scoped denoiser isolation, mismatched guide/history schemas and declared
   denoised/non-denoised fallback;
 - synthetic frame IDs/bracketing, no simulation/input/extraction/history/callback
-  advancement, UI-after-generation ordering, capture labels and resume warm-up;
+  advancement, UI-then-step-6-accessibility after generation on real and
+  synthetic frames, capture labels and resume warm-up;
+- split-screen/XR per-view `RealRenderFrameId` with shared `ScenePresentationEpoch`
+  and matched stereo synthetic counts;
 - missing/dropped/late real frames, backpressure, suspend/hotplug/resize/HDR change,
   present token/queue bounds and real-only fallback;
 - latency markers/waits on correct owner phases, hard-budget rejection, no input
