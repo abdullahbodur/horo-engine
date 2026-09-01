@@ -94,6 +94,10 @@ timestamp instrumentation, DXR, mesh shaders, sampler feedback, variable-rate
 shading, HDR/VRR, and newer Shader Models remain individually optional engine
 paths. Neither feature level 12_0 nor the name “DirectX 12 Ultimate” selects a
 `Baseline`/`High`/`Ultra` product recipe or grants effective support.
+DXR support follows
+[ADR-039](039-ray-tracing-capability-and-abstraction.md): the queried ray tier is
+translated into independently implemented AS, inline-query, pipeline and optional
+operation contracts with typed limits; Agility activation alone grants none.
 
 Packaged games consume cooked shaders without requiring DXC or a Windows SDK
 installation. Explicit editor source compilation uses the canonical shader

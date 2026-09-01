@@ -133,6 +133,10 @@ as universally usable.
 Selecting `metal` grants none of them automatically. An unimplemented native
 operation remains unavailable; do not mark compute true simply because the
 chosen API model includes a compute encoder.
+Metal acceleration structures, intersectors/queries and intersection function
+tables map independently through
+[ADR-039](039-ray-tracing-capability-and-abstraction.md); they are not relabeled a
+Vulkan/DXR-shaped dedicated ray pipeline merely to claim parity.
 
 ### 4. Initialization, identity, and selection
 

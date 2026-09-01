@@ -88,6 +88,10 @@ do not require the former extension name to remain advertised. Ray tracing,
 descriptor indexing/bindless, mesh shaders, HDR, timestamp queries, and engine
 compute execution remain individually optional under ADR-028; API version and
 the backend ID do not grant them.
+Ray support additionally follows
+[ADR-039](039-ray-tracing-capability-and-abstraction.md): acceleration-structure,
+ray-query and ray-tracing-pipeline extension/feature groups, limits, implemented
+routes and cooked variants are admitted independently.
 
 The selected adapter supplies native WSI requirements through a private Horo
 seam after host video initialization and before Vulkan instance creation. For

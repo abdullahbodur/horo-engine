@@ -55,7 +55,11 @@ No process-global capability singleton or mutable per-feature copy is allowed.
   Compute, indirect draw, descriptor indexing/bindless, mesh shaders, ray queries,
   ray pipelines and timestamp queries are independently represented. Compute
   does not imply a separate asynchronous compute queue. Ray queries do not imply
-  ray pipelines. A provider is usable only when its own requirements also pass.
+  ray pipelines. [ADR-039](039-ray-tracing-capability-and-abstraction.md) further
+  separates acceleration-structure build/update/compaction, inline query,
+  dedicated pipeline and optional shader/dispatch operations with typed limits.
+  The transitional `supportsRayTracing` boolean is not admission authority. A
+  provider is usable only when its own requirements also pass.
 - Limits have named fields and units: bytes for buffer/range sizes and shared
   memory; texels for extents; counts for attachments, descriptors, array layers,
   workgroup axes/invocations and frames in flight; bytes for offset alignment.

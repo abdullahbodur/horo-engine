@@ -494,6 +494,25 @@ Typed limits and an extensible feature set are future capability-contract
 additions. They must not be consumed until their public render API types and
 backend validation rules are implemented together.
 
+Ray plans follow
+[ADR-039](../../adr/039-ray-tracing-capability-and-abstraction.md). The transitional
+`supportsRayTracing` field cannot admit work: acceleration-structure
+build/update/compaction, inline ray query, dedicated ray pipeline and optional shader/dispatch
+operations are independently effective and carry typed geometry, size, alignment,
+payload, recursion, stage and dispatch limits. A backend advertises only routes it
+both reports and implements; profiles and API/backend names grant none.
+
+The frontend owns typed BLAS/TLAS handles and a `RayScene` projection over an
+immutable ADR-038 GPU Scene generation. Hit groups derive from `MaterialId` /
+`MaterialBindingId`; VFX is not in RayScene; Masked geometry requires `AnyHit`
+or is omitted. AS size query, build, legal update/rebuild, compaction and ray
+dispatch are explicit graph work under resource/residency budgets and
+GPU-completion retirement, published at ADR-018 `RenderSafePoint`. Logical ray
+shader groups and dispatch-table records are backend-neutral; native addresses,
+identifiers and table packing stay private. Optional effects resolve declared
+non-ray fallbacks, while required ray content fails admission. GPU ray results
+never become gameplay query truth.
+
 The frontend and feature systems query capabilities through render API values,
 not by downcasting or including backend headers. Unsupported optional features
 produce typed validation errors or disable declared optional passes before frame
