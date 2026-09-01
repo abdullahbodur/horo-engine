@@ -729,6 +729,28 @@ once at legal boundaries and quarantine incomplete staging without adding a
 normal-path GPU-idle wait. Null proves shared request/state/artifact behavior but
 claims no native capture support.
 
+### GPU crash and device-loss incident evidence
+
+[ADR-048](../../adr/048-gpu-crash-and-device-loss-diagnostic-bundles.md) separates
+live device-loss collection from process-crash handling. Normal execution keeps
+only finite generation-scoped event, graph, marker, capability, memory and surface
+evidence rings. The first loss freezes the old generation, performs each admitted
+native fault query once while its required parent remains alive, then allows
+teardown/recovery; encoding and publication cannot gate recovery.
+
+Process fault handlers never traverse renderer state or build bundles. They seal a
+minimal preallocated renderer incident tombstone and notify Platform's collector;
+rich association occurs out of process or on next launch from already durable/
+shared bounded evidence. Missing, unsafe, timed-out and abruptly terminated
+coverage remains explicit.
+
+Native fault payloads are optional restricted data and never automatic capture,
+telemetry or support-bundle content. The application/Observability owner controls
+private staging, atomic manifests, retention and user-confirmed export. Incident
+tasks cannot hold device/resources alive beyond one bounded native safe-point.
+Null validates freeze/generation/budget/publication semantics synthetically but
+cannot qualify native fault evidence or crash-handler safety.
+
 ## Backend Implementation Boundary
 
 Each concrete backend owns its API dependencies, context/device objects,
