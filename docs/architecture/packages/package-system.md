@@ -213,7 +213,12 @@ trust and enablement remain outside `extension.json`. Every descriptor, binary
 and resource is present in `files.manifest.json`; ExtensionHost receives an exact
 validated descriptor and install-record lease rather than scanning a directory.
 The complete authority and activation hand-off are defined by
-[ADR-054](../../adr/054-extension-and-package-authority-boundary.md).
+[ADR-054](../../adr/054-extension-and-package-authority-boundary.md). The
+descriptor is decoded and cross-reference validated against the leased install
+record into the immutable typed model defined by
+[ADR-055](../../adr/055-extension-manifest-v1-typed-model.md). A decoded value,
+unknown required field, unresolved typed identity or mismatched role cannot enter
+package composition, trust planning or ExtensionHost.
 
 ## Package Sources
 
