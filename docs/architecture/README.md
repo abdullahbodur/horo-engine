@@ -313,7 +313,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Metrics And Profiling](./observability/observability-performance.md): CPU, memory, frame,
   subsystem metrics, profiler captures, and performance views.
 - [Release Architecture](./release/release.md): release jobs, artifacts, reproducibility,
-  cancellation, and publishing.
+  cancellation, and publishing. Typed job/target/stage state, terminal results
+  and presentation-independent ownership are defined by
+  [ADR-060](../adr/060-release-domain-model-and-state-machine.md).
 - [Release Security](./release/release-security.md): trust boundaries, credentials,
   signing, archive protection, and CI controls.
 - [Distribution And Update](./release/distribution-and-update.md): signed update
