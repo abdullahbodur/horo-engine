@@ -272,8 +272,10 @@ Requirements:
 The canonical provider input uses exposed/pre-exposed linear ACEScg, positive
 linear view-space depth in meters, normalized `previousUv - currentUv` motion that
 excludes projection jitter, explicit current/previous jitter, exposure scales and
-typed optional masks. Provider adapters convert privately; they cannot infer sign,
-units or jitter inclusion from native resources.
+typed optional masks. UV origin is top-left, `u` increases right, `v` increases
+down and pixel centers use `((x + 0.5) / width, (y + 0.5) / height)`. Provider
+adapters convert privately; they cannot infer sign, orientation, units or jitter
+inclusion from native resources.
 
 TAAU (TAA Upscaling) renders at a lower resolution and reconstructs a higher
 output resolution using temporal accumulation. Horo's `taau` route is the built-in
@@ -319,6 +321,14 @@ animation, audio, exposure, TAA/denoising/material/VFX history, jitter, gameplay
 callbacks or real-frame statistics. Missing history, cuts, drops, resize, output
 or device changes or backpressure suppress generation and present real frames only
 under optional policy.
+
+Reconstruction consumes canonical depth/motion/masks at render extent. Frame
+generation consumes target-extent guides. If the extents differ, the frontend's
+explicit `GuideResolvePass` chooses the nearest positive finite depth and its
+motion from each render footprint, conservatively maximizes masks and marks an
+unqualified footprint invalid. Equal extents alias qualified inputs. Providers
+may convert layout/units privately but cannot silently own a different guide
+upscale or filtering policy.
 
 Latency is resolved jointly with frames-in-flight and presentation policy but is
 not frame generation. Providers may emit typed markers and bounded safe-point wait
