@@ -461,6 +461,13 @@ uses only the installed, verified, ABI-compatible, successfully probed set. This
 keeps the editor core and headless/CLI installations free of unused GPU
 dependencies.
 
+[ADR-052](../../adr/052-first-party-renderer-component-scope.md) assigns one
+signed first-party component to one backend identity and keeps install,
+verification, host support, runtime probe, selection and activation as orthogonal
+application/product facts. `RenderFrontend` owns none of those facts. Components
+cannot replace host renderer contracts or supply fallback policy; they implement
+one selected backend behind the private module boundary.
+
 ```text
 Resolve component record
     -> verify manifest/signature/ABI/probe state

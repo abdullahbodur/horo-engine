@@ -17,6 +17,19 @@ This format packages Horo-owned renderer modules that are versioned and released
 with a known Horo renderer ABI. It is not the public third-party plugin manifest
 and does not grant arbitrary projects permission to load native code.
 
+[ADR-052](../../adr/052-first-party-renderer-component-scope.md) limits one
+package to one stable `RenderBackendId`. In addition to its private renderer entry
+module, the signed allowlist may carry only matching backend-private presentation/
+editor adapters, backend-owned immutable runtime data, declared redistributable
+local libraries, metadata and notices. Another renderer, host core contracts,
+component/trust services, editor executable, project content and unrestricted
+tools/scripts are forbidden.
+
+`RenderApi`, `RenderFrontend`, `RenderModuleHost`, Platform, `RenderNull` and the
+public extension SDK are host-owned and cannot be replaced by package files.
+Application-owned shared runtimes use exact compatibility records and one product
+version; a renderer package cannot ship a competing private copy.
+
 The manifest is readable without loading the native library and contains no
 native pointers, process-local handles, credentials, absolute installation paths,
 or machine-local probe results.
