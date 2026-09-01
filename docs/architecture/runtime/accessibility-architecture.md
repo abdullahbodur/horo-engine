@@ -167,7 +167,13 @@ struct ClosedCaptionSettings {
 
 #### Typed Transport (Colorblind)
 
-The render pipeline applies color transforms after creative grading and tonemapping.
+The render pipeline applies the colorblind transform as
+[ADR-037](../../adr/037-scene-color-and-hdr-architecture.md) `ColorPipelinePlan`
+step 6: after creative look/grading, the ACES output transform, and
+display-referred UI composition, covering the complete composed image including
+HUD. Creative grading (`ColorGradingSettings` / cooked look LUTs) remains
+ADR-037 step 3 and is not this transform. Scene-linear EXR captures are taken
+before the output transform and therefore do not include the colorblind pass.
 Gameplay and HUD read desired settings from `IColorAccessibilityQuery`, a narrow
 backend-neutral settings contract, without depending on rendering or UI implementation
 modules. Its implementation retains one `ConfigurationSnapshotRef` and never
@@ -221,8 +227,8 @@ struct VisualAccessibilitySettings {
 
 #### Invariants (Colorblind)
 
-- Colorblind transformations are applied in the shader post-process chain without CPU-GPU
-  synchronization stalls or readbacks.
+- Colorblind transformations are applied as ADR-037 step 6 without CPU-GPU
+  synchronization stalls or readbacks, and they include composed UI.
 - Games must provide non-color visual indicators (patterns, icons, shapes, text tags)
   selected using the snapshot-backed `IColorAccessibilityQuery`.
 - Motion and flash suppression settings provide explicit hooks in camera and particle
