@@ -628,6 +628,13 @@ first-party component realizes one backend identity, while component management,
 selection/fallback, module-host composition and no-renderer recovery remain
 application/product responsibilities outside `RenderFrontend` and projects.
 
+Renderer manifest parsing follows
+[ADR-053](../../adr/053-renderer-module-manifest-parser.md). The private
+application/component service is side-effect-free and returns an immutable Horo-
+owned typed value plus canonical digest. It performs no extraction, filesystem or
+environment lookup, service registration, state mutation, probe, or native load;
+`RenderModuleHost` receives only a later verified exact install record.
+
 The null renderer is a supported implementation for headless execution and
 tests.
 

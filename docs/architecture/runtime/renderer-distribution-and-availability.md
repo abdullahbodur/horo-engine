@@ -195,15 +195,20 @@ Renderer component installation is transactional:
 ```text
 Resolve signed component metadata
     -> download to private staging
-    -> verify size and archive hash
-    -> extract with path and resource limits
-    -> verify every declared file
-    -> verify platform signature and Horo manifest signature
-    -> validate manifest and module ABI
+    -> enforce archive/manifest bounds and read manifest without extraction
+    -> canonical parse and internal semantic/path validation
+    -> match trusted catalog identity and verify manifest/archive signatures
+    -> resolve host variant and validate module ABI
+    -> validate archive allowlist, then extract with path/resource limits
+    -> verify every declared file and platform signature
     -> atomically publish installation record and component directory
     -> probe in helper process
     -> mark Available or retain actionable failure state
 ```
+
+The canonical parser contract is [ADR-053](../../adr/053-renderer-module-manifest-parser.md).
+Every later stage carries the parser's immutable typed identity and canonical
+digest; it cannot reparse with different options or use raw fields as authority.
 
 No editor process loads files from an incomplete staging directory. Cancellation
 or failure leaves the previous verified component active. Corrupt or
@@ -447,6 +452,7 @@ not package or silently select an Apple portability backend.
 Renderer modules execute native code with editor-process privileges. Required
 controls include:
 
+- bounded canonical manifest parsing before extraction or native loading;
 - signed component metadata and artifact hashes;
 - trusted product signing identity;
 - Windows Authenticode verification where required;
@@ -470,7 +476,9 @@ does not make it loadable until platform verification succeeds.
 - no-renderer startup routes to a typed repair result without creating a graphics
   window;
 - arbitrary project and working-directory libraries are ignored;
-- invalid manifest, hash, signature, layout, architecture, and ABI are rejected;
+- duplicate/non-canonical/oversized manifests, unknown required fields/extensions,
+  path collisions, invalid hashes/signatures/layout/architecture/ABI are rejected
+  before native loading;
 - interrupted install never publishes partial state;
 - update failure retains the prior verified component;
 - probe success, typed failure, timeout, crash, and malformed output;
