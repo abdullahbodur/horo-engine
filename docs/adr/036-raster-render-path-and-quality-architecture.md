@@ -28,10 +28,13 @@ This ADR owns production raster recipe semantics and selection. It preserves the
 effective capability and product-profile authority in
 [ADR-028](028-renderer-capability-limits-and-product-profiles.md), shader and
 reflection rules in [ADR-035](035-shader-source-and-intermediate-representation.md),
-and resource lifetime in
-[ADR-027](027-renderer-resource-identity-and-descriptors.md). Materials own their
-shading model and pass compatibility; post processing owns image effects; shadow
-systems own shadow algorithms. None of those systems selects a backend path.
+resource lifetime in
+[ADR-027](027-renderer-resource-identity-and-descriptors.md), and VFX extraction
+and pass-kind ownership in
+[ADR-011](011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md).
+Materials own their shading model and pass compatibility; post processing owns
+image effects; shadow systems own shadow algorithms; VFX owns effect-batch pass
+kinds. None of those systems selects a backend path.
 
 ## Decision
 
@@ -69,7 +72,7 @@ Horo defines three production opaque raster families:
 |---|---|---|---|
 | Forward | Optional depth prepass; one color target plus depth/stencil. No compute, storage-buffer, indirect-draw or multiple-render-target requirement. | Bounded CPU-prepared per-view and per-draw light lists. Every limit and overflow policy is selected before execution. | Portable baseline, simple scenes, previews and explicit fallback. |
 | Clustered Forward+ | Depth prepass; compute/storage support; bounded 3D view-space cluster grid and compact light-reference lists consumed by forward material passes. | One deterministic cluster assignment for opaque and compatible transparent work. Overflow is diagnosed and handled by the cooked recipe's declared bounded policy. | Standard scalable path when all predicates pass. |
-| Deferred | Depth/GBuffer production followed by screen-space lighting into scene color; requires the declared attachment count, formats, blend/sample support, bandwidth budget and compatible material variants. | Light preparation may reuse the clustered data contract, but deferred lighting consumes GBuffer attributes rather than re-shading geometry. | High-complexity opaque scenes and effects that require GBuffer data. |
+| Deferred | Depth/GBuffer production followed by screen-space lighting into scene color; requires the declared attachment count, formats, blend/sample support, bandwidth budget and compatible material variants. | Each recipe declares exactly one light-preparation contract: clustered (same 3D cluster data, overflow and stable-ID rules as Clustered Forward+) or clustering-less (bounded screen-space light list with Forward's overflow rules). Clustering is optional, not a fourth family. Lighting consumes GBuffer attributes rather than re-shading geometry. | High-complexity opaque scenes and effects that require GBuffer data. |
 
 “Forward+” is the product-facing name for the selected **3D clustered forward**
 family. Horo does not maintain a separate 2D tiled Forward+ production path. A
@@ -91,10 +94,30 @@ stable ID tie break) and telemetry; it never reads or writes out of bounds. A
 project that marks complete light coverage as required fails admission when its
 declared maximum cannot be represented.
 
+Deferred clustering is optional. It is not implied by the Deferred family name
+and is not a silent backend choice. Switching clustered versus clustering-less
+preparation is a new recipe generation. A clustering-less Deferred recipe
+declares a finite maximum deferred light count as a product/cook input capped by
+effective limits. Overflow uses the same stable identities, deterministic
+scoring and stable-ID tie break as Forward: retain the highest-scored lights
+inside the bound, report telemetry, and never read or write out of bounds. A
+project that marks complete light coverage as required fails admission when that
+declared maximum cannot be represented. Clustered Deferred overflow is the same
+declared cluster-bound policy as Clustered Forward+. Every admitted Deferred
+recipe is deterministic and bounded; unspecified or unbounded Deferred light
+counts fail admission.
+
 ### 3. Opaque, masked, special and transparent classification is explicit
 
-Render extraction classifies each material instance from cooked material
-metadata; it does not inspect shader names or backend state:
+Render extraction classifies each scene material instance from cooked material
+metadata keyed by scene-conversion
+[`MaterialId`](../architecture/runtime/material-and-shader-model.md).
+[ADR-027](027-renderer-resource-identity-and-descriptors.md) defines `MaterialId`
+as the material-table key owned by scene conversion: it is not a resident GPU
+handle, does not use owner/slot/generation, and is not `AssetId`. Classification
+does not inspect shader names, native pipelines or backend state. Parameter
+overrides that keep the same `MaterialId` cannot change category; a category
+change requires a different material identity.
 
 - `Opaque` writes depth and uses the active opaque family.
 - `Masked` evaluates deterministic alpha coverage and participates in depth,
@@ -108,11 +131,52 @@ metadata; it does not inspect shader names or backend state:
 - `TransparentAdditive` uses a separately declared commutative additive pass;
   it is not mixed into alpha ordering by accident.
 
+These five categories are mutually exclusive. A cooked material that combines
+alpha-test coverage with alpha or additive blending — including dithered or
+stochastic transition, cutout-then-fade, or dual-mode foliage — has no sixth
+category. Cook and admission return a typed unsupported-classification failure
+unless the asset is authored as exactly one of `Masked` (including
+alpha-to-coverage), `TransparentSorted`, `TransparentAdditive`, or an optional
+named stochastic/OIT feature recipe with its own capability, memory, ordering
+and fallback contract. The resolver does not invent a dual pass, treat the
+combination as `Opaque`, or silently drop one of the requested operations.
+
 Deferred is therefore a **hybrid frame recipe**, not a requirement that every
 material use deferred shading. Deferred-compatible opaque/masked work populates
 the GBuffer; forward-only opaque work executes at the recipe's declared boundary;
 all baseline transparency is forward shaded. The recipe provides transparent
 lighting data even when the opaque family is deferred.
+
+**ADR-011 VFX pass kinds stay VFX pass kinds.** Effect batches are not
+reclassified into the five scene-material categories. ADR-011's extraction
+contracts remain the pass-kind vocabulary:
+
+| ADR-011 contract | Pass kind | Placement under Deferred | Placement after fallback to Clustered Forward+ or Forward |
+|---|---|---|---|
+| `VfxRenderBatch` / `VfxParticlePass::Opaque` | Opaque mesh | Active GBuffer / deferred opaque | Opaque forward |
+| `VfxRenderBatch` / `VfxParticlePass::Masked` | Masked mesh | Same, with the masked coverage contract | Masked forward |
+| `VfxRenderBatch` / `VfxParticlePass::Translucent` | Translucent forward | Sorted transparent forward | Unchanged |
+| `VfxRenderBatch` / `VfxParticlePass::Additive` | Additive forward | Additive forward | Unchanged |
+| `DecalRenderBatch` deferred path | Deferred decal | Dedicated deferred-decal pass after GBuffer | Remapped to the recipe's forward-decal pass |
+| `DecalRenderBatch` forward path | Forward decal | Dedicated forward-decal pass (valid on a hybrid Deferred frame) | Forward-decal pass |
+| `VolumetricVfxBatch` | Volumetric accumulation | Declared volume injection/accumulation | Unchanged; independent of opaque family |
+
+VFX extraction emits those kinds without inspecting the opaque family or
+backend. `RenderFrontend` maps them onto the **resolved** recipe's actual
+passes and records the mapping in recipe diagnostics. A snapshot kind is not
+rewritten, dropped, or coerced into incompatible GBuffer channels.
+
+A deferred-decal batch is a request for the deferred-decal pass **when** the
+admitted opaque family is Deferred and the recipe admits deferred decals. If
+resolution selects Clustered Forward+ or Forward, that batch uses the recipe's
+declared forward-decal path (the clustered/forward decal-list substitute ADR-011
+already names). It is never left targeting a GBuffer that does not exist. If
+project/content policy marks deferred-decal appearance as required and no
+authored forward-decal substitute is admitted, recipe admission fails. Optional
+cosmetic decals follow ADR-011 authored fallback or unavailability, not a silent
+quality lie. Volumetric accumulation still requires its declared volume, depth
+and light graph inputs; missing those fails that optional feature or required
+content, and does not force Deferred.
 
 The baseline supports sorted alpha and additive transparency. Weighted blended
 order-independent transparency, per-pixel linked lists, depth peeling, stochastic
@@ -120,11 +184,18 @@ transparency and refraction are optional named feature recipes with separate
 capability, memory, ordering and fallback contracts. They cannot replace sorted
 alpha merely because a backend supports an atomic or blending feature.
 
-MSAA is admitted per complete recipe. Deferred MSAA requires declared multisample
-GBuffer, resolve and lighting semantics; otherwise the resolver may select a
-permitted clustered-forward or forward recipe. It may not silently disable the
-requested sample count. Alpha-to-coverage is a masked-material variant and never
-the universal transparency solution.
+**MSAA can change the opaque family, not only the sample count.** A requested
+sample count is a complete-recipe predicate, not a local attachment tweak.
+Deferred MSAA is admitted only when the selected GBuffer schema declares matching
+multisample attachments, resolve and lighting semantics. If those predicates
+fail, the resolver may select a permitted Clustered Forward+ or Forward recipe
+that can honor the sample count; it must not silently drop MSAA while remaining
+on Deferred. That outcome is a first-class family change: diagnostics must
+report requested family, selected family, the failed Deferred-MSAA predicate and
+the retained sample count as a path/fallback reason, never as a buried
+sample-count note. Project policy may remove that fallback edge; admission then
+fails rather than switching families. Alpha-to-coverage remains a `Masked`
+variant and is never the universal transparency solution.
 
 ### 4. Scene-color, depth and GBuffer contracts are path-independent inputs
 
@@ -185,11 +256,17 @@ are graph dependencies, not hidden callbacks or a fixed global list.
 CPU extraction and light preparation are bounded jobs over immutable snapshots.
 GPU cluster/GBuffer resources follow ADR-027/034 generation and retirement rules.
 Recipe replacement stages all required artifacts and resources, validates the
-candidate, then publishes at a render safe point. In-flight frames retain the old
-generation. Cancellation, stale device/content generations, missing pipelines or
-budget failure discard the candidate and keep the last good recipe where valid.
-Device loss follows renderer recovery; it does not trigger an unreported path
-downgrade.
+candidate, then publishes at
+[ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md)
+`CommandThreadPolicy::RenderSafePoint`. That is the same graphics-affine
+frame-synchronization boundary
+[ADR-027](027-renderer-resource-identity-and-descriptors.md) uses for registry
+mutation and debug dispatch, and
+[ADR-034](034-gpu-memory-and-residency-ownership.md) uses for native destroy.
+In-flight frames retain the old generation. Cancellation, stale device/content
+generations, missing pipelines or budget failure discard the candidate and keep
+the last good recipe where valid. Device loss follows renderer recovery; it does
+not trigger an unreported path downgrade.
 
 ## Rejected Alternatives
 
@@ -202,6 +279,8 @@ downgrade.
 | Switch paths automatically when frame time or allocation changes | Rejected: hidden mid-run semantic changes invalidate graph resources, temporal history and quality expectations. An explicit adaptive controller may request a new generation. |
 | Route all transparency through deferred lighting | Rejected: conventional GBuffer composition does not represent ordered transmission/blending. Baseline transparency remains forward. |
 | Require deferred solely because an effect wants normals or velocity | Rejected: optional semantic prepasses can satisfy declared inputs without making the opaque family an effect-owned choice. |
+| Require clustering for every Deferred recipe | Rejected: clustering is a light-preparation contract, not the Deferred family identity. A clustering-less Deferred recipe is valid only with Forward-equivalent bounded overflow. Unspecified or unbounded Deferred light counts are rejected. |
+| Reclassify VFX batches into the five scene-material categories | Rejected: ADR-011 already names VFX pass kinds. The frontend maps those kinds onto the resolved recipe; it does not rewrite snapshot kinds or drop deferred-decal work when Deferred is not selected. |
 
 The selected policy costs multiple cooked material/pass variants and requires
 cross-path image qualification. It bounds that cost to three opaque families,
@@ -220,7 +299,7 @@ resolve a typed recipe before admitting scene work.
 |---|---|
 | RND-012.2 / #381 | Production Forward opaque/masked passes, deterministic bounded CPU light lists and baseline fallback diagnostics. |
 | RND-012.3 / #382 | Versioned clustered Forward+ grid/list contract, bounded overflow behavior and compute-to-graphics graph synchronization. |
-| RND-012.4 / #384 | Versioned GBuffer schema, deferred lighting, forward-only material placement and complete attachment/sample admission. |
+| RND-012.4 / #384 | Versioned GBuffer schema, deferred lighting, clustered or clustering-less Deferred overflow, forward-only material placement and complete attachment/sample admission. |
 | RND-012.5+ / #386 onward | Light extraction/culling, shadows, transparency and quality tiers consume the resolved recipe without becoming selection authorities. |
 
 Contract and integration tests must cover:
@@ -229,14 +308,23 @@ Contract and integration tests must cover:
   attachment, format, sample, budget, shader and material predicates;
 - explicit removal of fallback edges, required-content failure and stable reason
   ordering in diagnostics;
-- forward and clustered overflow at exact bounds, stable-ID ties, zero lights,
-  maximum declared lights and malformed cluster/list data;
-- opaque, masked, forward-only, sorted-alpha and additive classification, including
-  stable transparent ties and incompatible/missing variants;
+- forward, clustered and clustering-less Deferred overflow at exact bounds,
+  stable-ID ties, zero lights, maximum declared lights, malformed cluster/list
+  data, clustered versus clustering-less Deferred recipe identity, and rejection
+  of unspecified Deferred light counts;
+- opaque, masked, forward-only, sorted-alpha and additive classification keyed by
+  MaterialId, including stable transparent ties, incompatible/missing variants,
+  and typed failure of combined masked-plus-transparent materials;
+- ADR-011 VFX kind mapping, including deferred-decal remapped to forward-decal
+  on Clustered Forward+/Forward fallback and required-decal admission failure;
 - deferred plus forward transparency/special materials, GBuffer schema mismatch,
   depth-prepass coverage mismatch and optional normal/velocity prepasses;
-- recipe replacement, cancellation, device/content generation changes, last-good
-  retention and GPU retirement with frames in flight; and
+- MSAA requests that cannot admit a multisample GBuffer selecting a permitted
+  forward family with first-class family-change diagnostics, and the same
+  request failing when that fallback edge is removed;
+- recipe replacement published at ADR-018 RenderSafePoint, cancellation,
+  device/content generation changes, last-good retention and GPU retirement with
+  frames in flight; and
 - cross-backend image fixtures for each advertised family and fallback, with
   documented numerical/image tolerances. Null coverage proves policy only.
 
@@ -245,6 +333,9 @@ Contract and integration tests must cover:
 Downstream tickets have one owner and one vocabulary for raster path selection.
 Profiles resolve deterministically, clustered lighting is no longer ambiguous,
 and deferred rendering composes explicitly with forward-only and transparent
-work. The cost is a versioned recipe/schema layer, more cooked variants, bounded
-light-list policy and mandatory cross-path qualification. This decision changes
-no current renderer implementation or advertised backend capability by itself.
+work. VFX batches keep ADR-011 pass kinds under every opaque family, Deferred
+light preparation is bounded whether or not clustering is selected, and an MSAA
+sample request cannot hide a family change. The cost is a versioned
+recipe/schema layer, more cooked variants, bounded light-list policy and
+mandatory cross-path qualification. This decision changes no current renderer
+implementation or advertised backend capability by itself.

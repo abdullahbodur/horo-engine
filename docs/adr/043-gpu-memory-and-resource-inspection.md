@@ -6,6 +6,11 @@
 - **Scope**: Backend-neutral GPU memory, allocation, residency and resource inspection
 - **Issue**: [RND-017.3](https://github.com/abdullahbodur/horo-engine/issues/435)
 - **Jira**: [HORO-435](https://horo-engine.atlassian.net/browse/HORO-435)
+- **Related**: [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md),
+  [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md),
+  [ADR-038](038-gpu-scene-and-instance-data-model.md),
+  [ADR-039](039-ray-tracing-capability-and-abstraction.md),
+  [ADR-042](042-cpu-gpu-timestamps-and-pipeline-statistics.md)
 - **Companion decisions**: [ADR-027: Renderer Resource Identity and Descriptors](027-renderer-resource-identity-and-descriptors.md), [ADR-034: GPU Memory and Residency Ownership](034-gpu-memory-and-residency-ownership.md), [ADR-041: Backend-Neutral Renderer Diagnostics Model](041-backend-neutral-renderer-diagnostics-model.md)
 - **Normative documents**: [Metrics And Profiling](../architecture/observability/observability-performance.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Render Backend Parity](../architecture/runtime/render-backend-parity-contract.md)
 
@@ -156,9 +161,20 @@ Public inspection identities are generation-scoped Horo values:
 
 - `GpuMemoryPoolId` identifies one charged logical pool in one device generation;
 - `GpuAllocationId` identifies one charged backing block or dedicated allocation;
-- typed ADR-027 owner/slot/generation values identify resident resources; and
+- typed ADR-027 owner/slot/generation values identify resident resources,
+  including [ADR-039](039-ray-tracing-capability-and-abstraction.md)
+  `BottomLevelAsHandle` and `TopLevelAsHandle`;
+- ADR-039 AS scratch, result, compaction-overlap and shader-table allocations
+  appear as `GpuAllocationSnapshot` records in the same ADR-034 reservation
+  classes (they are not omitted because they are ray work); and
 - `RenderResourceOwnerScopeId` identifies the admitted host, world, editor or
   service scope without becoming resource ownership itself.
+
+Stable identity order is the lexicographic unsigned tuple
+`(resourceClassOrdinal, ownerId, slot, generation)` within each record class.
+Omitted coverage intervals are contiguous ranges in that order. ADR-039 AS
+handles use the same owner/slot/generation comparison inside their class. The
+order is fixed for a renderer generation and does not use native addresses.
 
 None is serialized as durable asset identity or reused after renderer/device
 replacement. Native pointers, object handles, GPU virtual addresses, Vulkan
@@ -249,21 +265,36 @@ Shipping profile that disables detail maintains no detailed inspection records o
 mutation journal.
 
 An admitted session records its starting registry/ledger revisions, incrementally
-copies entries in stable Horo identity order at subsequent `RenderSafePoint`s and
+copies entries in stable Horo identity order at subsequent
+[ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md)
+`CommandThreadPolicy::RenderSafePoint`s and
 journals only the mutations that occur while that session is arming. Each safe
 point visits at most 512 records by default and 4,096 at the hard limit; there is
 no catch-up burst. At a final safe point it applies the bounded journal and seals
 one current consistent revision pair. The journal defaults to 8,192 mutations and
-has a hard limit of 65,536. If churn overtakes either limit, the optional session
-fails with `InspectionCapacityExceeded`; rendering and authoritative resource
-operations continue unchanged. No mutation fails merely to satisfy an inspector.
+has a hard limit of 65,536.
+
+Byte/count limits on the **request** (`maximumResources`, `maximumEncodedBytes`,
+page size) may return `Partial` when the caller allowed partial results: the
+revision pair is consistent, some identity ranges are omitted. Journal/churn
+overflow during **arming** always fails with `InspectionCapacityExceeded`. The
+service cannot prove a consistent revision pair, so it must not emit Partial of
+an inconsistent capture. Rendering and authoritative resource operations continue
+unchanged. No mutation fails merely to satisfy an inspector.
 
 Session projection pages, mutation journal, snapshot storage, owned page results,
-page cursors and worker queues are charged to the host diagnostics CPU-memory
-allowance before admission. Failure to reserve that storage rejects the request
-without weakening rendering budgets. Optional dependency/lifetime detail is armed
-with the session and capacity-admitted before scanning; unavailable detail returns
-`InspectionUnsupportedDetail` rather than introducing permanent shipping cost.
+page cursors and worker queues are charged to the **inspection** slice of the host
+diagnostics CPU-memory envelope before admission.
+[ADR-042](042-cpu-gpu-timestamps-and-pipeline-statistics.md) query/readback
+storage is a sibling slice of the same envelope, independently admitted. One
+session cannot steal the other's reserved bytes. Combined occupancy still cannot
+exceed the host diagnostics CPU envelope; if remaining room is insufficient, the
+new session is rejected with `InspectionCapacityExceeded` and the armed
+instrumentation plan is left unchanged. Failure to reserve inspection storage
+rejects the request without weakening rendering or timestamp budgets. Optional
+dependency/lifetime detail is armed with the session and capacity-admitted before
+scanning; unavailable detail returns `InspectionUnsupportedDetail` rather than
+introducing permanent shipping cost.
 
 The final safe point seals a revision token and immutable projection pages, then
 queues bounded materialization; it does not copy the complete registry in one
@@ -287,9 +318,16 @@ allowed partial results and reports total-known/returned counts, omitted classes
 byte limit and the omitted stable-identity intervals. Otherwise it returns
 `InspectionCapacityExceeded`; it never silently truncates a complete result.
 
-Only one detailed snapshot per renderer is materialized by default and at most
-two at the hard limit. Further requests receive bounded backpressure. Summary
-metrics continue independently and no catch-up burst follows a skipped request.
+Only one detailed snapshot per `RenderFrontendId` (one frontend instance) is
+materialized by default and at most two at the hard limit. That is not
+process-wide, not per device, and not per view or GPU Scene. Multiple views
+sharing one ADR-038 GPU Scene share one frontend and therefore one snapshot
+that includes their GPU Scene and ADR-039 AS resources. A second admitted
+preview/world frontend ([ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md)
+non-overlapping host envelopes) has its own snapshot slots. Device generation is
+a snapshot field, not the concurrency key. Further requests on the same frontend
+receive bounded backpressure. Summary metrics continue independently and no
+catch-up burst follows a skipped request.
 
 ### 6. Threading, cancellation and lifecycle are explicit
 
@@ -365,7 +403,12 @@ Tests must cover:
 - aggregate accounting without committed/payload/slack/retiring double counting,
   UMA overlap and separate discrete accounting domains;
 - exact-cap and checked-arithmetic request validation, default/hard record and byte
-  limits, deterministic partial coverage and complete-result rejection;
+  limits, deterministic partial coverage, journal-churn always failing rather than
+  Partial, and complete-result rejection;
+- ADR-039 BLAS/TLAS identities and AS scratch/result allocations in the same
+  snapshot;
+- lexicographic `(class, owner, slot, generation)` omitted intervals;
+- inspection vs ADR-042 sibling CPU-memory slices under one envelope;
 - stable owner/slot/generation, pool/allocation identities, stale/foreign cursors,
   device replacement and no native handle/address leakage;
 - dedicated, suballocated, shared, retiring and transient-aliased backing with
@@ -406,6 +449,9 @@ relationships and lifetime sequences.
 | Expose pointers, GPU addresses or native heap indices for correlation | Rejected: unsafe, backend-specific and invalid across recreation. |
 | Build every UI refresh from the live registry | Rejected: introduces owner-thread scans, inconsistent revisions and UI-controlled retention. |
 | Silently truncate a requested complete snapshot | Rejected: absence could be misread as retirement; partial coverage must be explicit. |
+| Return Partial after journal churn overflow | Rejected: Partial requires a consistent revision pair; arming overflow cannot prove that. |
+| Omit ADR-039 AS from resource/allocation snapshots | Rejected: AS result/scratch is ADR-034 charged backing and must be inspectable. |
+| Share one mutable diagnostics CPU pool between ADR-042 queries and inspection | Rejected: sibling slices of one envelope; independently admitted, jointly capped. |
 | Keep snapshots forever for historical comparison | Rejected: resource cardinality and labels require bounded retention; explicit export owns persistence. |
 | Use observed native budget as the renderer cap | Rejected: observation may be stale, estimated or unavailable; ADR-034 ledger admission remains authoritative. |
 | Make Null report zero hardware use as real support | Rejected: zero is a valid measurement and Null cannot qualify hardware behavior. |
