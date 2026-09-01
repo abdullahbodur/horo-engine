@@ -54,7 +54,8 @@ A Horo project is a directory with a `.horo/` metadata folder:
 MyGame/
     .horo/
         project.json           # project identity and settings
-        plugins.json           # portable requested plugin dependencies
+        packages.json          # portable package and extension requests
+        packages.lock          # exact resolved package graph
         input.json             # portable project input defaults
         editor_workspace.json  # last editor layout and UI state
         asset_index.json       # derived asset lookup registry
@@ -76,11 +77,14 @@ paths are resolved from this root.
 Durable portable metadata, machine-local state, and derived output remain
 separate:
 
-- `.horo/project.json`, `.horo/plugins.json`, `.horo/input.json`, and asset sidecars are portable
-  source-controlled inputs
+- `.horo/project.json`, `.horo/packages.json`, `.horo/packages.lock`,
+  `.horo/input.json`, and asset sidecars are portable source-controlled inputs
 - `.horo/editor_workspace.json`, `.horo/local/`, and `.horo/asset_index.json`
   are local or derived state
 - `build/` contains generated build outputs and content-addressed asset caches
+
+Legacy `.horo/plugins.json` is read only by the transactional ADR-054 migration
+into `.horo/packages.json`; it is not a second package request authority.
 
 ## Project Format And Identity
 
@@ -619,8 +623,9 @@ never mutates GUI route state directly. Stateful open requests return typed
   CI credential provider.
 - Workspace state is user-specific and should not be committed to version
   control.
-- `.horo/project.json`, `.horo/plugins.json`, `.horo/input.json`, and asset metadata sidecars are
-  portable and may be committed. `.horo/editor_workspace.json`,
+- `.horo/project.json`, `.horo/packages.json`, `.horo/packages.lock`,
+  `.horo/input.json`, and asset metadata sidecars are portable and may be
+  committed. `.horo/editor_workspace.json`,
   `.horo/asset_index.json`, `.horo/local/`, and generated build/cache output
   should be ignored.
 

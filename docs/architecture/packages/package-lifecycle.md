@@ -35,6 +35,11 @@ Resolve
 Install does not imply trust. Trust does not imply activation. Activation does
 not bypass contribution validation.
 
+[ADR-054](../../adr/054-extension-and-package-authority-boundary.md) applies this
+same lifecycle to extension-only and hybrid packages. `ExtensionHost` is the
+live module/contribution host for an exact verified activation candidate; it does
+not own a parallel install, dependency, trust or enablement lifecycle.
+
 ## Transactional Install
 
 Package install uses the same safety posture as distribution staging:
@@ -66,6 +71,25 @@ safe merely by reducing permissions.
 In non-interactive mode, new trust requirements fail unless a policy allowlist or
 previous user-local trust state exists.
 
+### Extension Activation Hand-Off
+
+For each enabled extension descriptor, `PackageLifecycleService` lends
+ExtensionHost one immutable candidate containing the verified install-record
+identity/lease, package and manifest digests, selected declared module artifact,
+approved permissions/capabilities and target activation generation. The host
+cannot accept a caller-selected raw directory or scan for another descriptor.
+
+ExtensionHost validates the descriptor/ABI/artifact binding, builds the complete
+candidate contribution batch and commits live registrations atomically. Its
+returned generation/leases prove live activation; only then may the package
+lifecycle snapshot publish `Active`. Failure leaves the package installed and
+records a typed activation outcome without granting trust or partial registry
+state.
+
+Disable, update, rollback and uninstall first detach contributed surfaces and
+registries, reject/drain callbacks and jobs, and release module leases. Verified
+cache content is not removed while an activation or content lease can still call
+or read it.
 
 ## Enablement State
 
@@ -140,7 +164,6 @@ If required references remain, policy may:
 
 Silent dangling references are forbidden.
 
-
 ## Rollback Contract
 
 Package lifecycle operations write a transaction journal before mutating project
@@ -171,6 +194,14 @@ requiresUserReview = true
 
 Migration plans must be previewable. Any migration that changes project-owned
 scene or asset files uses editor document commands/transactions where applicable.
+
+Legacy extension directories and `.horo/plugins.json` use the bounded ADR-054
+migration. It parses legacy metadata only to build a preview, generates a
+canonical `horo-package.toml`, `files.manifest.json` and package-scoped extension
+descriptor in staging, revalidates the result as one package, requests trust for
+the generated digest and atomically converts project requests to
+`.horo/packages.json`. The old directory/request state remains recoverable until
+commit and is never active at the same time as the new package authority.
 
 ## Conflict Policy
 
@@ -244,6 +275,9 @@ The modal must show:
 - transaction journal restores metadata and activation state on failed update
 - runtime enablement is portable while trust remains user-local
 - editor contribution deactivation closes panels safely
+- exact install-record/descriptor binding and stale activation generation
+- no raw-directory ExtensionHost activation
+- legacy extension migration preview, trust review, rollback and resume
 
 ## Related Documents
 

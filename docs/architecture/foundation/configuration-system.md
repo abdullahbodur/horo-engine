@@ -32,7 +32,7 @@ Configuration is divided by ownership:
 | Engine defaults | fixed timestep, default backend | packaged resources |
 | User preferences | theme, editor behavior, log filters | user config directory |
 | Project settings | default scene, physics, target profiles | `.horo/project.json` |
-| Project extension package requests | desired package IDs, versions, permission intent | `.horo/plugins.json` |
+| Project package and extension requests | desired package IDs, versions, sources and contribution groups | `.horo/packages.json` |
 | Workspace settings | panel layout, local editor state | editor workspace file |
 | Session overrides | temporary profiling or preview options | memory only |
 | Invocation overrides | CLI and environment overrides | process launch |
