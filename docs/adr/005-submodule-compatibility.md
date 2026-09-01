@@ -1,6 +1,6 @@
 # ADR-005: Submodule Compatibility Constraints
 
-- **Status**: accepted
+- **Status**: Accepted
 - **Date**: 2026-05-25
 - **Supersedes**: None
 - **Scope**: Engine consumption as a git submodule — guarantees, limitations, and test strategy

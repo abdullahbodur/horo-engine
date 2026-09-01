@@ -1,6 +1,6 @@
 # ADR-014: Sequencer Ownership, Clock Authority and Binding Boundary Decision
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Cinematic clock sources and policies, sampling/event phases, domain authority, bindings, origin rebasing and evaluation budgets

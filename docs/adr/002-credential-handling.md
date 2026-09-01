@@ -1,6 +1,6 @@
 # ADR-002: Credential Handling Model
 
-- **Status**: accepted
+- **Status**: Accepted
 - **Date**: 2026-05-25
 - **Supersedes**: None
 - **Scope**: Secrets, signing keys, and archive passwords in the build/release pipeline

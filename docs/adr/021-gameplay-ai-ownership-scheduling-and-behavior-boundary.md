@@ -1,6 +1,6 @@
 # ADR-021: Gameplay AI Ownership, Scheduling and Behavior Boundary
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Gameplay AI runtime (`HoroAI`), agent brain state, blackboard storage and transactions, perception memory, simulation fixed-tick phases, task scheduler sharing, and separation from editor AI tooling.

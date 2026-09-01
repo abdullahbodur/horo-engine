@@ -1,6 +1,6 @@
 # ADR-028: Renderer Capability, Limits and Product Profiles
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: M0 renderer capability and product-policy contract; no backend implementation

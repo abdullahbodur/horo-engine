@@ -1,6 +1,6 @@
 # ADR-024: Perception Ownership, Sense Policy and Budget Decision
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: AI perception subsystem, sensory stimulus emission, line-of-sight query seams, update policies, time-sliced budgets, and bounded memory decay

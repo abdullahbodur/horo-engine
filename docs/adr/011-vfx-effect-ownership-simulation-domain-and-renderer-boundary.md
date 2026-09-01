@@ -1,6 +1,6 @@
 # ADR-011: Effect Ownership, Simulation Domain Policy and Renderer Boundary
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Runtime VFX ownership, per-emitter domain policy, bounded admission, immutable extraction, GPU scheduling, retirement and per-view sorting

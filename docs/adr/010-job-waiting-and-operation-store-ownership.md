@@ -1,6 +1,6 @@
 # ADR-010: Job Waiting and Operation Store Ownership
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Job execution, waiting, low-level records, user-facing operation aggregation, observation and submission-captured context

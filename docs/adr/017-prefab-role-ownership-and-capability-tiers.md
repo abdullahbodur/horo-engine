@@ -1,6 +1,6 @@
 # ADR-017: Prefab Role, Ownership and Capability-Tier Decision
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Prefab asset definition, authoring templates, runtime spawnable templates (`CookedPrefab`), capability tiers (Tier 0, Tier 1, Tier 2), asset identity, project versioning, unknown component preservation, and lifecycle safety

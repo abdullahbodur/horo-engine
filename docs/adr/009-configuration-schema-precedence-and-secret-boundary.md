@@ -1,6 +1,6 @@
 # ADR-009: Configuration Schema, Precedence and Secret Boundary
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Foundation configuration schema, domain ownership, source precedence, environment indirection and credential references

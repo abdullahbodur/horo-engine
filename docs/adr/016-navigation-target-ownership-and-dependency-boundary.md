@@ -1,6 +1,6 @@
 # ADR-016: Navigation Target Ownership and Dependency Boundary
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Navigation target boundaries (`NavigationApi`, `NavigationRuntime`, `NavigationRecastDetour`, `NavigationNull`), third-party encapsulation (Recast/Detour), decoupling from editor viewport navigation and gameplay AI decision graphs, headless/server composition, and compute resource scaling

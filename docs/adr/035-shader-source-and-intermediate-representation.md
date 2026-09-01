@@ -1,6 +1,6 @@
 # ADR-035: Shader Source and Intermediate Representation
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: Shader source language, compiler routes and reflection authority

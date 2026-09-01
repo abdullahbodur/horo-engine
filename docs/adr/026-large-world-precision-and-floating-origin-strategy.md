@@ -1,6 +1,6 @@
 # ADR-026: Large-World Precision and Floating Origin Strategy
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Coordinate systems, precision representations (64-bit integer, double-precision floats, camera-relative floats), floating origin rebasing transactions, platform/GPU shader performance boundaries, physics/subsystem authority, and error domains.

@@ -1,6 +1,6 @@
 # ADR-013: Environment Query Ownership, Item and Scoring Model
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: EQS orchestration, typed providers, plans/items/contexts, scoring, safe points, deterministic/adaptive budgets, cache identity and cancellation

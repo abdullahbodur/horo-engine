@@ -1,6 +1,6 @@
 # ADR-001: Host-Agnostic Local Release Pipeline
 
-- **Status**: accepted
+- **Status**: Accepted
 - **Date**: 2026-05-30
 - **Deciders**: Abdullah Bodur (Horo Engine maintainer)
 - **Supersedes**: prior ADR-001 (narrow native-CI wording)

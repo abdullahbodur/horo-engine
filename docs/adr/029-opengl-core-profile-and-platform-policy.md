@@ -1,6 +1,6 @@
 # ADR-029: OpenGL Core Profile and Platform Policy
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: OpenGL native admission, platform qualification and context negotiation

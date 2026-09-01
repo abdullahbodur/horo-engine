@@ -1,6 +1,6 @@
 # ADR-004: CLI / Core / GUI Boundary
 
-- **Status**: accepted
+- **Status**: Accepted
 - **Date**: 2026-05-25
 - **Supersedes**: None
 - **Scope**: Module boundary between command-line interface, engine core pipeline, and editor UI

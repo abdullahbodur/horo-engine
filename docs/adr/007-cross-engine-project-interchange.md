@@ -1,6 +1,6 @@
 # ADR-007: Cross-Engine Project Interchange
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-26
 - **Supersedes**: None
 - **Scope**: Import and export of foreign engine projects (Godot, Unity, Unreal) into and out of Horo

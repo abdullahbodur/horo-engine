@@ -1,6 +1,6 @@
 # ADR-006: Lua 5.4 Gameplay Runtime
 
-- **Status**: accepted
+- **Status**: Accepted
 - **Date**: 2026-08-02
 - **Supersedes**: None
 - **Scope**: Project-authored gameplay scripting

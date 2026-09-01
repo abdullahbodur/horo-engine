@@ -1,6 +1,6 @@
 # ADR-033: Presentation and Display Ownership
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: Display facts, surface generations, output negotiation and present ownership

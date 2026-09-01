@@ -1,6 +1,6 @@
 # ADR-034: GPU Memory and Residency Ownership
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: GPU backing accounting, reservation transactions and pressure policy

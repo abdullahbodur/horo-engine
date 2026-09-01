@@ -1,6 +1,6 @@
 # ADR-023: World Index and Cell Format Architecture Decision
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Cooked world index manifest (`world.index`), streaming cell archive format (`.wcell` / `horopak` chunk), binary encoding, versioning, endianness, integrity hashing, feature-provider payloads, typed error model, and cancellation lifecycles

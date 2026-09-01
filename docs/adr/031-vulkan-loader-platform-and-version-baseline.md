@@ -1,6 +1,6 @@
 # ADR-031: Vulkan Loader, Platform and Version Baseline
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: Vulkan loader, 1.3 admission, WSI and Windows/Linux baseline

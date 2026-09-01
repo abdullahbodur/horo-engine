@@ -1,6 +1,6 @@
 # ADR-012: World Streaming Partition Authority and Subsystem Boundaries
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Partition/state ownership, async provider readiness and retirement, reservations, epoch/generation fencing, Scene integration, networking and shutdown

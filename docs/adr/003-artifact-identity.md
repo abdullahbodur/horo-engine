@@ -1,6 +1,6 @@
 # ADR-003: Artifact Identity, Checksum, and Manifest Model
 
-- **Status**: accepted
+- **Status**: Accepted
 - **Date**: 2026-05-25
 - **Supersedes**: None
 - **Scope**: Release artifact naming, integrity verification, and archive manifest

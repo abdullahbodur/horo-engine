@@ -1,6 +1,6 @@
 # ADR-027: Renderer Resource Identity and Descriptors
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: Backend-neutral resident renderer resources

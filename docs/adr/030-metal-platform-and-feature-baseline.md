@@ -1,6 +1,6 @@
 # ADR-030: Metal Platform and Feature Baseline
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: Metal native admission, GPU family, MSL and macOS deployment

@@ -1,6 +1,6 @@
 # ADR-018: Command Registration, Permissions, Threading and Packaged-Build Policy
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Runtime debug console command registration, `DebugCommandDescriptor`, `CommandPermission` access levels, execution threading rules, packaged-build retail gating, and reconciliation with network administration and world streaming diagnostics

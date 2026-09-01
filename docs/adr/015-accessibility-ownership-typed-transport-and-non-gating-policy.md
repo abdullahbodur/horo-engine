@@ -1,6 +1,6 @@
 # ADR-015: Accessibility Ownership, Typed Transport and Non-Gating Policy
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Accessibility state ownership, typed transports, configuration snapshots, DataBus boundaries, non-blocking loops, and semantic availability

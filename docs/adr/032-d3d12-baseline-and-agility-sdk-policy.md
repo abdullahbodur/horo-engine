@@ -1,6 +1,6 @@
 # ADR-032: D3D12 Baseline and Agility SDK Policy
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: D3D12 native admission, Agility activation and Windows baseline
