@@ -86,6 +86,13 @@ entries, unsafe links, and resource-expansion limits.
 Parsers treat sizes, counts, offsets, compression ratios, and recursion depth as
 untrusted. They validate before allocation and use configured resource limits.
 
+Renderer component manifests are native-code authority inputs and use the stricter
+[ADR-053](../../adr/053-renderer-module-manifest-parser.md) contract: bounded
+canonical JSON parsing and internal semantic/path validation complete before
+archive extraction, dependency resolution, probe, or library load. Parsed fields
+cannot select their own trust root; later signature/catalog verification remains
+bound to the exact canonical digest returned by the parser.
+
 High-risk or historically unsafe third-party parsers may run in a restricted
 helper process with bounded I/O.
 

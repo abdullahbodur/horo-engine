@@ -64,6 +64,7 @@ to the replacement.
 | [050](050-cross-backend-reference-image-tests.md) | Cross-Backend Reference Image Tests | Proposed | 2026-09-01 |
 | [051](051-renderer-benchmark-and-regression-gates.md) | Renderer Benchmark and Regression Gates | Proposed | 2026-09-01 |
 | [052](052-first-party-renderer-component-scope.md) | First-Party Renderer Component Scope | Proposed | 2026-09-01 |
+| [053](053-renderer-module-manifest-parser.md) | Renderer Module Manifest Parser | Proposed | 2026-09-02 |
 
 ## Conventions
 
