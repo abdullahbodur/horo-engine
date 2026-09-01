@@ -359,6 +359,18 @@ state transitions, stale generations, manifests and failures synthetically but
 cannot qualify native artifact readability, frame accuracy, marker visibility or
 overhead.
 
+[ADR-048 incident parity](../../adr/048-gpu-crash-and-device-loss-diagnostic-bundles.md)
+requires common incident identity, generation, freeze, manifest, coverage, privacy
+and bounded lifecycle semantics. Backend-native fault evidence may differ or be
+unavailable; absence is explicit and another backend's data is never synthesized.
+
+The old generation freezes before recovery mutation. Each native query executes
+once at its qualified owner safe point while required parent objects remain alive,
+then releases diagnostics ownership so teardown can proceed. Process crash handlers
+perform no backend traversal/query. Null proves shared rings, partial coverage,
+interrupted staging and stale-generation behavior but cannot qualify native fault
+APIs, dumps, driver accuracy or signal safety.
+
 In particular:
 
 - OpenGL global state is private to the OpenGL integration.

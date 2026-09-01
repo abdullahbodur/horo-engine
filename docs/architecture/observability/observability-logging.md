@@ -1140,6 +1140,20 @@ The crash path is split into two phases:
    previous session directory, records whether shutdown was clean, and makes the
    crash available for diagnostic-bundle selection.
 
+[ADR-048](../../adr/048-gpu-crash-and-device-loss-diagnostic-bundles.md) extends
+this two-phase model for renderer incidents without weakening it. A process fault
+adds only preallocated scalar renderer/device/frame context to the marker. A live
+device loss may freeze bounded generation-scoped graph, marker, diagnostic,
+capability and memory evidence plus one admitted native fault query before device
+teardown. Bundle encoding remains asynchronous/next-launch and never gates
+recovery or runs inside a signal/exception handler.
+
+Completed structured renderer incident evidence may be selected in a support
+bundle. Opaque native GPU fault/dump payloads are restricted developer data,
+excluded by default and require a separate explicit confirmation because their
+contents cannot be fully inspected or redacted. Missing/partial evidence remains
+manifest coverage rather than an empty successful artifact.
+
 Hang diagnostics use an explicit watchdog policy. A watchdog may record a
 bounded heartbeat failure, main-thread phase, and recent operation IDs, but it
 must not kill the process or collect a dump unless the active host/profile
