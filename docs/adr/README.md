@@ -55,6 +55,7 @@ to the replacement.
 | [041](041-backend-neutral-renderer-diagnostics-model.md) | Backend-Neutral Renderer Diagnostics Model | Proposed | 2026-09-01 |
 | [042](042-cpu-gpu-timestamps-and-pipeline-statistics.md) | CPU/GPU Timestamps and Pipeline Statistics | Proposed | 2026-09-01 |
 | [043](043-gpu-memory-and-resource-inspection.md) | GPU Memory and Resource Inspection | Proposed | 2026-09-01 |
+| [044](044-render-markers-and-debug-labels.md) | Render Markers and Debug Labels | Proposed | 2026-09-01 |
 
 ## Conventions
 

@@ -631,6 +631,33 @@ partial coverage, paging, retention, cancellation, stale generations and shutdow
 are explicit. RND-017.9 queries these snapshots; it does not walk live backend or
 frontend state.
 
+### Render markers and debug labels
+
+[ADR-044](../../adr/044-render-markers-and-debug-labels.md) owns stable logical
+marker descriptors, typed frame/graph/pass/queue/resource correlation, frontend
+graph placement and finite instrumentation plans. Backends translate validated
+balanced streams into private native marker/object-label APIs; they do not invent
+scope identity, expose native handles or let tool nesting alter graph dependencies.
+
+Marker modes resolve explicitly against effective capabilities and build/product
+policy. Required unsupported modes fail before instrumentation admission; optional
+fallback follows only a declared `NativeMarkersAndObjectLabels` → `NativeMarkers`
+→ `LogicalCapture` → `Off` edge. Debug builds do not imply native support, and
+validation-layer or external-capture activation remains separately owned.
+
+Graph compilation places scopes after culling, merging and queue assignment and
+validates same-context balance, nesting, native segmentation and pre-reserved
+record/text capacity. Runtime inserts reserve bounded queue capacity before command
+mutation. Encoding uses registered strings and fixed storage with no frame-hot
+interning/allocation. Marker emission never waits for GPU completion or performs
+file/network/tool operations.
+
+Resource debug labels are bounded privacy-validated metadata alongside ADR-027
+identity, not descriptor/cache/handle identity. Relabel uses the exact generation
+on the render-capable owner thread. Device recreation resolves a new marker plan
+and reapplies only admitted labels to new generations. Null validates logical
+placement and budgets with synthetic records but claims no native-tool visibility.
+
 ## Backend Implementation Boundary
 
 Each concrete backend owns its API dependencies, context/device objects,
