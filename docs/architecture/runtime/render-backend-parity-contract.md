@@ -346,6 +346,19 @@ semantics and be registered/qualified before policy references them. Null valida
 matching, conflict, bounds and generation behavior synthetically; affected and
 unaffected native hardware lanes qualify each actual rule and route.
 
+[ADR-047 graphics-capture parity](../../adr/047-renderdoc-pix-and-metal-capture-integration.md)
+requires one provider capability, request, state, typed failure and restricted
+artifact contract across supported backends. RenderDoc, PIX and Metal may expose
+different launch, attach and in-process modes; unsupported target/trigger semantics
+remain unavailable and never select another tool or approximate a frame.
+
+Adapters invoke native begin/end only on qualified owner contexts and preserve
+exact renderer/device/surface/marker generations. Capture cannot change backend,
+device, quality, validation or graph policy. Null validates authorization, bounds,
+state transitions, stale generations, manifests and failures synthetically but
+cannot qualify native artifact readability, frame accuracy, marker visibility or
+overhead.
+
 In particular:
 
 - OpenGL global state is private to the OpenGL integration.

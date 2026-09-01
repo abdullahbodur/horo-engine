@@ -58,6 +58,7 @@ to the replacement.
 | [044](044-render-markers-and-debug-labels.md) | Render Markers and Debug Labels | Proposed | 2026-09-01 |
 | [045](045-backend-validation-and-debug-layer-integration.md) | Backend Validation and Debug Layer Integration | Proposed | 2026-09-01 |
 | [046](046-gpu-driver-compatibility-and-workaround-registry.md) | GPU Driver Compatibility and Workaround Registry | Proposed | 2026-09-01 |
+| [047](047-renderdoc-pix-and-metal-capture-integration.md) | RenderDoc, PIX and Metal Capture Integration | Proposed | 2026-09-01 |
 
 ## Conventions
 
