@@ -1,10 +1,12 @@
 # ADR-035: Shader Source and Intermediate Representation
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-31
-- **Owners**: Rendering / Shader Toolchain / Asset Pipeline
-- **Tracking**: HORO-368 / #368 / RND-011.1
-- **Milestone**: M0 — Architecture Baseline
+- **Supersedes**: None
+- **Scope**: Shader source language, compiler routes and reflection authority
+- **Jira**: [HORO-368](https://horo-engine.atlassian.net/browse/HORO-368)
+- **Issue**: [#368](https://github.com/abdullahbodur/horo-engine/issues/368) ([RND-011.1])
+- **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 
 ## Context
 

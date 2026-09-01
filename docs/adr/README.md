@@ -52,6 +52,12 @@ to the replacement.
 
 - **Status**: `proposed`, `accepted`, `deprecated`, `superseded`
 - **Naming**: `NNN-lowercase-title-with-hyphens.md`
+- **IDs are stable**: a number is assigned once and is never reused for a
+  different decision. ADR-008 is the error-model decision
+  ([008](008-error-model-exception-boundary-and-registry.md)). ADR-027 is
+  renderer resource identity
+  ([027](027-renderer-resource-identity-and-descriptors.md)). Similar titles
+  in drafts or review extracts do not renumber either document.
 - **Format**: Each ADR includes Context, Decision, Consequences, and
   Rejected Alternatives sections at minimum
 - **Supersession**: When an ADR is superseded, its status changes to

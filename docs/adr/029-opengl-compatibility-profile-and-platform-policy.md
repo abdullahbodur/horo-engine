@@ -1,10 +1,12 @@
 # ADR-029: OpenGL Core Profile and Platform Policy
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-31
-- **Owners**: Rendering / Platform
-- **Tracking**: HORO-306 / #306 / RND-004.1
-- **Milestone**: M0 — Architecture Baseline
+- **Supersedes**: None
+- **Scope**: OpenGL native admission, platform qualification and context negotiation
+- **Jira**: [HORO-306](https://horo-engine.atlassian.net/browse/HORO-306)
+- **Issue**: [#306](https://github.com/abdullahbodur/horo-engine/issues/306) ([RND-004.1])
+- **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 
 ## Context
 
@@ -21,8 +23,11 @@ OpenGL Compatibility Profile. OpenGL remains an equal backend under the
 
 [ADR-028](028-renderer-capability-limits-and-product-profiles.md) already separates
 native reports, implemented operations, effective support, and product profiles.
-This decision supplies OpenGL's native admission policy; it does not replace
-those contracts or assign a product profile to an API version.
+Renderer resource identity is
+[ADR-027](027-renderer-resource-identity-and-descriptors.md); that is a different
+decision from [ADR-008](008-error-model-exception-boundary-and-registry.md)
+(error model). This decision supplies OpenGL's native admission policy; it does
+not replace those contracts or assign a product profile to an API version.
 
 ## Decision
 
@@ -51,9 +56,14 @@ semantics are defined by the
 The baseline shader variant must be valid for the admitted 4.1 Core contract.
 The shader/cook pipeline records each variant's language and feature
 requirements; a higher shader requirement needs a separately admitted variant
-and a declared fallback when optional. Existing editor GLSL `150` shaders do not
-lower the context minimum. This ADR does not introduce a new shader compiler,
-asset schema, or public setting for native context versions.
+and a declared fallback when optional. A 4.1 Core context may run GLSL 150 only
+when that source uses Core-legal 3.2 constructs and compiles and links against
+the admitted context. Existing editor GLSL `150` shaders do **not** lower the
+context minimum and are **not** grandfathered as admitted variants. Whether those
+current editor shaders satisfy 4.1 Core is RND-004.6 evidence: if they use
+removed Compatibility-profile features they fail admission and must be recooked
+or replaced. This ADR does not introduce a new shader compiler, asset schema, or
+public setting for native context versions.
 
 Compute, storage resources, bindless access, and other optional operations are
 not inferred from `opengl`, a version string, an extension string alone, or a
@@ -143,8 +153,12 @@ attempt fails, retry once without the debug flag after complete rollback of
 that attempt's resources. Both attempts require the same version, Core profile,
 and presentation contract. Report the loss of native debug diagnostics once;
 Horo's own validation remains enabled. A qualification test explicitly requiring
-a debug context fails instead of retrying. There is no retry that lowers the
-API/profile, drops required rendering features, or substitutes another backend.
+a debug context fails instead of retrying. If the non-debug retry also fails,
+context negotiation ends: unwind per step 4 and return the typed
+startup/availability failure from the non-debug attempt, retaining the
+debug-attempt failure as a diagnostic cause. There is no third attempt, no retry
+that lowers the API/profile, drops required rendering features, or substitutes
+another backend.
 
 ### 4. Selection and deprecation are explicit
 
@@ -152,7 +166,10 @@ Selection retains the precedence in
 [Rendering Architecture](../architecture/runtime/rendering-architecture.md#backend-selection):
 explicit CLI request, configuration, then host default. The project persists
 `opengl`, not an OS context handle, GL version, driver name, or module path.
-This decision does not change the existing transitional host default or the
+The **transitional host default** is the current interactive-editor default of
+`opengl` because that is the implemented editor migration path; headless tools
+and CI default to `null`. Rendering Architecture names that editor bootstrap
+explicitly transitional. This decision does not change that default or the
 restart requirement for renderer changes.
 
 Apple deprecated OpenGL in macOS 10.14 and recommends Metal for new development;

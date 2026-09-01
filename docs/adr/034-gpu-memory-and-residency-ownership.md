@@ -1,20 +1,25 @@
 # ADR-034: GPU Memory and Residency Ownership
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-31
-- **Owners**: Rendering / Application Hosts / World Streaming
-- **Tracking**: HORO-358 / #358 / RND-010.1
-- **Milestone**: M0 — Architecture Baseline
+- **Supersedes**: None
+- **Scope**: GPU backing accounting, reservation transactions and pressure policy
+- **Jira**: [HORO-358](https://horo-engine.atlassian.net/browse/HORO-358)
+- **Issue**: [#358](https://github.com/abdullahbodur/horo-engine/issues/358) ([RND-010.1])
+- **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 
 ## Context
 
 [ADR-027](027-renderer-resource-identity-and-descriptors.md) defines resident
-identity and retirement, but leaves physical allocation and budget policy to
-RND-010. The current public `IRenderBackend` has lifecycle and execution-plan
-contracts, not a heap allocator or memory ledger. Native viewport and GUI
-allocations still exist in the OpenGL and Metal editor integrations. This ADR
-defines their target ownership; it does not claim those paths already enforce
-the decision or implement new runtime APIs in M0.
+identity and retirement, including `ResourceOperationId` as the registry
+completion identity for one reserved generation. That is a different decision
+from [ADR-008](008-error-model-exception-boundary-and-registry.md) (error model);
+these numbers were not swapped. ADR-027 leaves physical allocation and budget
+policy to RND-010. The current public `IRenderBackend` has lifecycle and
+execution-plan contracts, not a heap allocator or memory ledger. Native viewport
+and GUI allocations still exist in the OpenGL and Metal editor integrations.
+This ADR defines their target ownership; it does not claim those paths already
+enforce the decision or implement new runtime APIs in M0.
 
 GPU memory is shared with other applications and may be shared with the CPU.
 Native allocation sizes, placement, and residency mechanisms differ by backend.
@@ -33,7 +38,7 @@ overcommit or count the same backing allocation more than once.
 | Renderer reservation ledger, logical resource readiness, reconstruction records and eviction eligibility | Render frontend | Typed Horo contracts; no native heap values, world-cell selection, or asset I/O. |
 | Allocation requirements, memory pools/heaps, native placement, mapping/coherency, fences and destruction | Selected render backend | Backend-private implementation; cannot invent higher budgets or discard live resources. |
 | Aggregate cell CPU/GPU/staging admission and cell residency/eviction | StreamingPartitionAuthority | Renderer resources consume its reservations; renderer pressure is input to this authority, not permission to evict a cell. |
-| Texture-page/LOD/cache selection within an allowance | Owning feature, such as Virtual Texturing | Uses admitted renderer backing; cannot claim more memory or invalidate required cell content. |
+| Texture-page/LOD/cache selection within an allowance | Owning feature, such as Virtual Texturing or VFX | Uses admitted renderer backing; cannot claim more memory or invalidate required cell content. |
 | Source/cooked identity, storage and asynchronous loading | Asset Pipeline | Supplies reconstruction data; `AssetId` is not a GPU allocation. |
 
 Foundation supplies existing allocation domains, results, jobs and observability
@@ -58,9 +63,21 @@ Releasing a suballocation does not return block capacity to the enclosing budget
 that happens only when the block is actually destroyed, or ownership is explicitly
 transferred to another admitted scope. Shared pools therefore have a separately
 admitted owner and leases; they cannot hide unused blocks in a departing cell.
-Dedicated allocations follow the same rule. Descriptor bytes, allocation bytes,
-and process/device telemetry are separately named and never summed as though
-they were disjoint allocations.
+Dedicated allocations follow the same rule.
+
+Empty-block reclaim is required. A block becomes destroy-eligible only when it
+has no live suballocations and every GPU/CPU reader of its last contents has
+retired. Destroy runs on the render-capable owner thread at a `RenderSafePoint`,
+inside the same per-frame destruction budget as pressure step 1. M0 does not add
+a background job that relocates persistent allocations. Moving live persistent
+resources is a later optional path and must use ADR-027 new-generation
+replacement with admitted overlap. Unused empty blocks must be destroyed; slack
+inside a still-occupied block stays charged. Long-running worlds and dedicated
+servers cannot rely on process exit to return that capacity. RND-010.2 measures
+block sizes; it does not make empty-block reclaim optional.
+
+Descriptor bytes, allocation bytes, and process/device telemetry are separately
+named and never summed as though they were disjoint allocations.
 
 UMA CPU/GPU mappings of the same physical backing count once in an aggregate
 physical-memory total; CPU/GPU accessibility are attributes. Separate decoded,
@@ -104,7 +121,10 @@ Non-streamed resources use an explicit host/editor/service owner scope.
    partial native allocations and staging charged until acknowledged retirement.
 5. Shared ownership transfer needs destination admission before source release.
    Accounting records move once; leases do not multiply charges. Cell retirement
-   follows its existing acknowledgement barrier, including shared-owner transfer.
+   follows [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md)
+   acknowledgement barriers (`BeginRetire` / `PollBarrier`): a cell stays
+   `Evicting` until Scene removal and every started provider is `Retired`,
+   including shared-owner transfer.
 
 For example, a charged 64 MiB pool containing 20 MiB of live textures still costs
 64 MiB, not 20 or 84 MiB. Removing one 8 MiB texture produces reusable slack after
@@ -145,8 +165,15 @@ Observations do not replace the renderer ledger or increase a configured cap.
 
 Admission checks the hard accounting cap and, when a usable native observation
 exists, observed headroom after host emergency margin and reservations not yet
-reflected in that observation. Do not subtract accounted bytes from native usage
-twice. When overlap cannot be established, conservatively withhold that headroom
+reflected in that observation. Check order is fixed: (1) hard accounting cap and
+enclosing cell/host allowances, then (2) usable native observed headroom. If both
+would fail, the primary typed result is the accounting or cell-budget denial.
+Native missing-headroom or OOM is a distinct secondary diagnostic, never a
+substitute that hides the ledger failure. If accounting admits the request and
+only native observation fails, report the native-headroom or OOM-class result.
+Device loss remains ADR-027 reconstruction, not a budget code. Do not subtract
+accounted bytes from native usage twice. When overlap cannot be established,
+conservatively withhold that headroom
 until a fresh sample rather than granting speculative capacity. Reclamation is
 not treated as observed native relief before acknowledgement/sample evidence.
 Missing telemetry uses the finite host cap and reserve; it is not unlimited memory
@@ -236,7 +263,9 @@ publish immutable revisioned snapshots to other threads.
 [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md)
 `RenderSafePoint` uses this same owner thread. CPU preparation uses the
 [ADR-010](010-job-waiting-and-operation-store-ownership.md) job contract; resource
-attempts use ADR-027 `ResourceOperationId`, with user-visible operations projected
+attempts use the ADR-027 `ResourceOperationId` defined in that ADR's creation-result
+section (registry completion identity for one reserved generation, not a resident
+handle and not `Horo::OperationId`), with user-visible operations projected
 through `OperationStore` when appropriate. No second scheduler or blocking poll
 is introduced. Retirement/completion capacity is reserved before admission, so a
 full producer queue cannot prevent cleanup. Normal Null completions are delivered
@@ -248,6 +277,19 @@ an allocated atlas frees a slot, not heap bytes. Sparse support requires effecti
 capabilities and implementation; an atlas fallback needs its own admitted cost.
 Old page-table readers must retire before remapping/reusing backing. Neither page
 streaming nor renderer eviction changes world-cell residency independently.
+
+[ADR-011](011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md)
+remains the VFX ownership and overflow authority for logical instances, spawn
+queues and cosmetic birth dropping (`EffectCapacityExceeded`, event-queue full).
+GPU backing those systems consume — `GpuParticleSimulator` buffers, indirect-draw
+arguments, upload/sort copies and frames in flight — is charged on this ledger.
+`ResourceBudgetExceeded` is this ADR's admission result, not permission for VFX
+to grow pools during Update. Pressure step 2 may trim only VFX disposable GPU
+caches the owner has authorized (scratch/sort copies with a reconstruction path).
+It must not evict a live required gameplay effect or treat `EffectInstancePool`
+overflow as heap-block destruction. ADR-011's "never grow during Update" rule and
+this ledger's reservation-before-allocate rule are the same transaction: VFX
+admits the logical instance only after the renderer claim exists.
 
 Presentation targets, swapchain-related backing estimates, GUI/font textures and
 viewport resources belong to explicit host/editor scopes in the same envelope.

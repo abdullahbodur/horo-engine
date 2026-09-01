@@ -6,6 +6,8 @@
 - **Scope**: Backend-neutral resident renderer resources
 - **Issue**: [#290](https://github.com/abdullahbodur/horo-engine/issues/290) ([RND-001.1])
 - **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
+- **Not ADR-008**: [ADR-008](008-error-model-exception-boundary-and-registry.md)
+  remains the error-model decision. This document was never numbered 008.
 
 ## Context
 
@@ -195,8 +197,9 @@ invalid, and not usable. Frame submissions, derived-resource creation, and
 bind/draw that name a `Pending` handle are rejected as not ready.
 
 `ResourceOperationId` identifies the registry completion result for that
-generation. The frontend may project a user-visible create into the application
-`OperationStore` through the existing coordinator
+generation. It is not a resident handle (`TextureHandle` and peers) and not
+`Horo::OperationId`. The frontend may project a user-visible create into the
+application `OperationStore` through the existing coordinator
 ([ADR-010](010-job-waiting-and-operation-store-ownership.md)); `Horo::OperationId`
 is not the resource handle and is not required for unpublished GPU work.
 
