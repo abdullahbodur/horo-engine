@@ -215,6 +215,80 @@ The existing `RenderBackendCapabilities` booleans are a transitional implementat
 The richer value contracts, driver-policy provider and profile resolver are
 downstream implementation work; this M0 decision does not claim them as available.
 
+## Raster Render Path And Quality Policy
+
+[ADR-036](../../adr/036-raster-render-path-and-quality-architecture.md) owns
+production raster recipe selection. `RenderFrontend` resolves one immutable,
+versioned `RasterRecipe` from the requested product profile, project/content
+requirements, the effective capability/limit snapshot, cooked variants and
+finite budgets. Backends report facts and execute the compiled graph; they do not
+select, promote, demote or silently substitute a path. Scene extraction and
+materials likewise provide typed requirements and compatibility, not global path
+policy.
+
+Horo has three production opaque raster families:
+
+- **Forward** uses bounded CPU-prepared per-view/per-draw light lists and requires
+  no compute, storage-buffer, indirect-draw or multiple-render-target support.
+- **Clustered Forward+** uses a depth prepass and bounded 3D view-space cluster
+  light lists. “Forward+” is the product-facing name for this clustered family;
+  there is no separate 2D tiled production path.
+- **Deferred** writes a versioned GBuffer schema and performs screen-space
+  lighting. It is a hybrid frame recipe: incompatible opaque materials and all
+  baseline transparency still use declared forward passes.
+
+Opaque, masked, forward-only opaque, stable sorted-alpha and additive work are
+explicit cooked material classifications. Masked coverage is consistent between
+depth, shadow and color/GBuffer passes. Sorted alpha is depth-tested,
+non-depth-writing and ordered back-to-front with stable instance-identity ties;
+additive work uses its own commutative pass. Order-independent transparency and
+refraction are separate optional recipes with declared capability, memory and
+fallback contracts.
+
+Cluster dimensions, light/reference counts, GBuffer formats, MSAA behavior,
+semantic prepasses and overflow limits are typed recipe inputs bounded by the
+effective snapshot. A profile name supplies no hidden numeric budget. Exceeding a
+runtime bound follows the admitted deterministic policy and diagnostics; it never
+changes the active path or accesses beyond allocated storage. Required complete
+coverage fails admission when it cannot be represented.
+
+Profile preferences resolve through complete-recipe checks:
+
+| Profile | Preferred opaque family | Permitted ordered fallback |
+|---|---|---|
+| Baseline | Forward | None beyond failure of unsupported required baseline work. |
+| Standard | Clustered Forward+ | Forward when project/content requirements and variants permit it. |
+| High | Deferred | Clustered Forward+, then Forward. |
+| Ultra | Deferred plus separately gated optional features | High, then its declared lower edges; Ultra is not a fourth opaque family. |
+
+Each candidate must satisfy all required material, transparency, shadow,
+scene-color, post-process-input, sample-count and budget predicates. The result
+records requested and selected path/profile, failed predicates, fallback rule,
+capability/content revisions and recipe generation. Explicit requirements may
+remove fallback edges. Required content is never disabled merely to reach a lower
+profile.
+
+Every path publishes the same selected typed scene-color contract plus depth and
+declared optional semantic resources. RND-013 owns color encoding, working space,
+exposure and output transformation. A versioned deferred GBuffer schema declares
+its semantics, formats, encodings, sample behavior and producer/consumer stages;
+material and lighting artifacts carry that identity. Forward paths may emit
+normal, velocity or other semantic prepasses when a declared downstream input
+requires them, so an effect does not select deferred rendering indirectly.
+
+Recipe changes are explicit policy requests compiled and staged as new
+generations. Publication occurs at a render safe point after all required
+artifacts/resources validate; in-flight frames retain their old generation.
+Allocation failure, shader miss, slow frames, cancellation, stale inputs or device
+failure never cause an unreported mid-frame downgrade. An adaptive-quality system
+may request a new generation, but cannot mutate the active graph in place.
+
+The editor's current bounded forward-preview lighting remains a migration
+baseline. It is not production Forward until it consumes the common recipe,
+material, graph, lifetime and qualification contracts. The Null backend can test
+recipe resolution and graph structure without claiming native raster or image
+parity.
+
 ## Backend Module Registry
 
 Renderer backends are engine-internal modules with separate CMake targets,

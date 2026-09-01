@@ -134,6 +134,10 @@ roadmap milestones, navigation/AI budgets, and gameplay authority.
 These are recipe preferences, not new feature implementations or fixed universal
 budgets. Each selected recipe declares exact required feature/format/limit
 predicates and finite product budgets before it can be admitted. The
+[ADR-036 raster policy](036-raster-render-path-and-quality-architecture.md)
+defines Forward, clustered Forward+, Deferred, transparency and complete-recipe
+fallback semantics; this ADR owns profile preference and effective capability
+admission rather than a second path definition. The
 [interactive parity contract](../architecture/runtime/render-backend-parity-contract.md#required-baseline-capability)
 remains mandatory for every interactive backend at every profile. Meeting that
 lifecycle contract alone does not prove a material/scene recipe is supported.

@@ -47,6 +47,7 @@ to the replacement.
 | [033](033-presentation-and-display-ownership.md) | Presentation and Display Ownership | Proposed | 2026-08-31 |
 | [034](034-gpu-memory-and-residency-ownership.md) | GPU Memory and Residency Ownership | Proposed | 2026-08-31 |
 | [035](035-shader-source-and-intermediate-representation.md) | Shader Source and Intermediate Representation | Proposed | 2026-08-31 |
+| [036](036-raster-render-path-and-quality-architecture.md) | Raster Render Path and Quality Architecture | Proposed | 2026-09-01 |
 
 ## Conventions
 
