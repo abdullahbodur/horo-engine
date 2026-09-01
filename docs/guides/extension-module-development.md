@@ -49,7 +49,8 @@ permission checks, result storage, and teardown.
 
 ## Development Flow
 
-1. Choose whether the package is backend-only, frontend-only, or hybrid.
+1. Choose explicit module roles for GUI-only, backend-only, script-consumable or
+   mixed behavior.
 2. Choose the extension points.
 3. Declare package identity, dependencies and the extension descriptor path in
    `horo-package.toml`.
@@ -102,7 +103,8 @@ The package-scoped module descriptor is:
   "module": {
     "id": "com.vendor.shader-tools.native",
     "version": "1.0.0",
-    "kind": "native",
+    "kind": "native-c-abi",
+    "roles": ["backend-capability", "editor-presentation"],
     "abi": "horo-extension-1",
     "entries": [
       {
@@ -229,6 +231,9 @@ The package-scoped module descriptor is:
 
 Rules:
 
+- Treat the JSON as the serialized form of the typed v1 model in
+  [ADR-055](../adr/055-extension-manifest-v1-typed-model.md). Only the fully
+  cross-reference validated value may reach registration or activation.
 - IDs are stable contracts. Do not rename or repurpose them after release.
 - Contributions are inert descriptors. Loading the package must not mutate host
   registries through static initialization.
@@ -246,15 +251,16 @@ Rules:
   resources, or mutate the project. Returning a failure selects the declared
   mesh, image, audio, or generic host fallback.
 
-## Package Shapes
+## Module Shapes
 
 Horo add-ons are not necessarily GUI add-ons:
 
 | Shape | Example | Rule |
 |---|---|---|
-| Backend-only | asset importer, cooker, project validator, pipeline step, toolchain provider | Must run without `HoroEditor` or ImGui. Exposes typed capabilities, diagnostics, settings, and observability. |
-| Frontend-only | inspector tab over existing scene/asset/log stores, command-palette shortcut, Settings page for built-in service | Owns presentation only. Reads existing authorities and calls existing capabilities. |
-| Hybrid | shader compile service plus inspector tab and MCP tool | Backend contribution is authoritative; GUI/MCP/command contributions are adapters over it. |
+| Backend-only | asset importer, cooker, project validator, pipeline step, toolchain provider | Declares `BackendCapability` and optional `HeadlessTooling`; it must run without `HoroEditor` or ImGui. |
+| GUI-only | inspector tab over existing scene/asset/log stores, command-palette shortcut, Settings page for built-in service | Declares `EditorPresentation`, owns presentation only and calls existing capabilities. |
+| Script-consumable | backend service with an approved Lua 5.4 binding | Declares `BackendCapability` plus `ScriptProvider`; a typed script API binds to one compatible service export. |
+| Mixed-role | shader compile service plus inspector tab and MCP tool | Declares the explicit union of its roles; GUI/MCP/command contributions remain adapters over the backend authority. |
 
 When a feature has real behavior, put that behavior behind a backend contribution
 first. The GUI then becomes optional presentation. This keeps the same add-on

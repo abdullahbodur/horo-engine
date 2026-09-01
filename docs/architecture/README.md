@@ -229,8 +229,11 @@ dependency direction in [System Design](./foundation/system-design.md).
     lifecycle, and component persistence.
   - [Gameplay Module Verification](./extensions/gameplay-module-verification.md):
     contract and regression coverage.
-- [Extension System](./extensions/plugin-system.md): editor/tool extension packages, C ABI,
-  manifests, permissions, registration, and lifecycle.
+- [Extension System](./extensions/plugin-system.md): editor/tool extension packages,
+  C ABI, typed v1 manifests, permissions, registration, and lifecycle. Package
+  authority and manifest-model decisions are recorded in
+  [ADR-054](../adr/054-extension-and-package-authority-boundary.md) and
+  [ADR-055](../adr/055-extension-manifest-v1-typed-model.md).
 
 ## Packages
 
