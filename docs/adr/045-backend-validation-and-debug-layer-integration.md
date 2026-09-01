@@ -249,15 +249,24 @@ required qualification session becomes failed with its typed cause. No per-messa
 reinstall loop is permitted. A callback finding itself does not trigger backend
 fallback, quality reduction, device recreation or process termination.
 
-Device loss closes acceptance for the old device generation, drains or
-generation-tags already admitted messages, unregisters device-scoped sources on
-their required owner threads, then destroys native state. Recreation resolves and
-realizes a new plan; it cannot reuse the old callback, messenger, information
-queue or context registration.
+Device loss closes normal acceptance for the old device generation but retains a
+bounded teardown/emergency emitter while dependent native objects are released.
+Already admitted messages remain generation-tagged. Device-scoped validation
+sources are unregistered on their required owner threads only after their last
+monitored child object and any qualified live-object report, and before release of
+the native parent that owns the source. Recreation resolves and realizes a new
+plan; it cannot reuse the old callback, messenger, information queue or context
+registration.
 
-Shutdown order is: stop new frontend work, close validation emitters, disable new
-native callbacks/poll admission, unregister/drain according to the native API,
-destroy validation objects, then destroy the device/context/instance. Accepted
+Shutdown order follows native parent scope rather than one universal object list:
+stop new frontend work; close normal emitters; retain bounded teardown ingestion;
+retire/destroy monitored command, resource, queue, surface and device children in
+their valid API order; run an explicitly supported bounded final live-object
+report; then unregister each callback/messenger/queue immediately before the
+context, device or instance that owns it. Finally close the teardown emitter.
+Thus Vulkan's instance messenger can observe device-child destruction before it
+is removed ahead of instance destruction, while a D3D12 device information queue
+and live-object reporter remain available through device-child teardown. Accepted
 events retain owned bounded values and may drain asynchronously. Late callbacks
 are rejected by generation without dereferencing destroyed state. Shutdown is
 idempotent after every partial-initialization stage and never waits for GPU idle
