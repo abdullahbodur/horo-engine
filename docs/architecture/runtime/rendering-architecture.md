@@ -601,6 +601,33 @@ bounded snapshot data. Unsupported, not-ready, disjoint, partial and stale value
 are explicit rather than zero. Per-frame/pass payloads do not become ADR-041 events
 or unbounded metric dimensions, and backend code does not own telemetry export.
 
+### GPU memory and resource inspection
+
+[ADR-043](../../adr/043-gpu-memory-and-resource-inspection.md) projects the
+ADR-027 resource registry and ADR-034 memory ledger into aggregate metrics and
+explicit immutable inspection snapshots. The registry remains resident identity
+and lifecycle authority; the ledger remains backing-accounting, admission and
+pressure authority. An inspector owns neither model and cannot mutate them through
+the read contract.
+
+Aggregate metrics preserve committed, reserved, live-payload, retiring and
+reusable-slack meanings without adding overlapping values. Optional native usage,
+budget and fragmentation observations retain sample age, availability and
+measured/estimated provenance. Missing facts remain unavailable rather than zero.
+Resource/allocation IDs, owner scopes, labels and native facts do not become
+unbounded metric dimensions.
+
+Detailed collection is an explicit finite operation. The frontend incrementally
+maintains a bounded inspection projection at the owning registry/ledger mutation
+points. At a render safe point it seals one consistent revision pair and immutable
+projection pages; it does not copy or walk the complete live registry for a tool
+refresh. Encoding and presentation work may continue on cancellable workers over
+owned records charged to a diagnostics CPU-memory allowance. Collection never
+waits for device idle, maps resource contents or exposes native pointers, handles
+or GPU addresses. Record/byte limits, partial coverage, paging, retention,
+cancellation, stale generations and shutdown are explicit. RND-017.9 queries
+these snapshots; it does not walk live backend or frontend state.
+
 ## Backend Implementation Boundary
 
 Each concrete backend owns its API dependencies, context/device objects,

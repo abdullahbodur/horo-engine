@@ -292,19 +292,25 @@ renderer/asset child tags are not double-counted in a parent total. Untracked
 native or third-party allocations explain why tagged engine usage may be lower
 than process memory.
 
-GPU memory is reported separately as `gpu.memory.*` only when the backend and
-platform expose a trustworthy value. The determination of trustworthiness is
-standardized across backends:
+GPU memory follows
+[ADR-043](../../adr/043-gpu-memory-and-resource-inspection.md). Always-available
+renderer-ledger metrics distinguish reserved, committed, live payload, retiring
+and reusable slack; overlapping breakdowns are not added together. Optional
+native usage, budget, working-set and fragmentation observations are separate
+instruments with backend-qualified semantics, sample age, availability and
+measured/estimated provenance. They do not replace the ADR-034 admission ledger.
 
-- **Vulkan**: Requires the `VK_EXT_memory_budget` extension. Memory usage is
-  retrieved from `VkPhysicalDeviceMemoryBudgetPropertiesEXT` fields.
-- **OpenGL**: Checks for NVidia (`GL_NVX_gpu_memory_info`) or AMD/ATI
-  (`GL_ATI_meminfo`) extensions.
+Vulkan may use `VK_EXT_memory_budget`, D3D12 may use qualified DXGI observations,
+Metal may use qualified working-set observations, and OpenGL may use qualified
+vendor extensions. None is a universal baseline or guaranteed reservation. When
+the active backend cannot provide a trustworthy native definition, only that
+native observation is unavailable; ledger metrics and bounded registry/resource
+inspection remain available. Missing native values never fall back to `0`.
 
-If none of these APIs/extensions are supported by the active GPU driver or
-platform, the metric is reported as `Unavailable` rather than falling back to a
-misleading `0`. A future backend may add its own adapter, but it must provide a
-trustworthy resident/budget definition before it can publish `gpu.memory.*`.
+Owner/resource/allocation identities and labels are prohibited metric dimensions.
+They belong in an explicit, finite, immutable inspection snapshot. Snapshot
+collection is profile-gated, bounded by record/byte/retention limits and never
+enumerates native objects, maps resource contents or blocks for GPU completion.
 
 ## Metric Availability And Degraded Sampling
 
