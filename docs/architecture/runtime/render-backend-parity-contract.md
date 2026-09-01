@@ -317,6 +317,22 @@ tools or turn markers into diagnostics/timestamps. Null validates logical stream
 budgets, generation invalidation and encoding fixtures synthetically but cannot
 qualify native-tool visibility or overhead.
 
+[ADR-045 validation parity](../../adr/045-backend-validation-and-debug-layer-integration.md)
+requires one backend-neutral startup request, immutable resolved plan,
+generation-scoped realized state, typed failure set and ADR-041 message projection.
+Activation order remains API-specific and private: OpenGL context intent, Vulkan
+instance/device facilities, Metal host launch/environment evidence and D3D12
+pre-device debug configuration are not exposed through public native flags.
+
+A backend must distinguish requested, realizable and active validation features.
+It may take a disabled retry only for an `Optional` plan with that exact declared
+edge and complete rollback; `Required` never silently disables. Validation cannot
+select another backend/device, lower baseline requirements or alter render work.
+Callbacks and polled sources obey bounded admission, fixed filters, generation and
+owner-thread teardown. Null proves shared resolution, mapping, saturation and
+lifecycle fixtures but cannot certify a native facility, driver message mapping,
+callback thread or validation overhead.
+
 In particular:
 
 - OpenGL global state is private to the OpenGL integration.
