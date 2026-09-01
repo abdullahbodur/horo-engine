@@ -651,6 +651,39 @@ bounded snapshot data. Unsupported, not-ready, disjoint, partial and stale value
 are explicit rather than zero. Per-frame/pass payloads do not become ADR-041 events
 or unbounded metric dimensions, and backend code does not own telemetry export.
 
+### GPU memory and resource inspection
+
+[ADR-043](../../adr/043-gpu-memory-and-resource-inspection.md) projects the
+ADR-027 resource registry and ADR-034 memory ledger into aggregate metrics and
+explicit immutable inspection snapshots, including ADR-039 BLAS/TLAS identities
+and their ADR-034-charged scratch/result allocations. The registry remains resident identity
+and lifecycle authority; the ledger remains backing-accounting, admission and
+pressure authority. An inspector owns neither model and cannot mutate them through
+the read contract. Snapshot concurrency is per `RenderFrontendId`. Inspection
+CPU-memory is a sibling of ADR-042 query/readback under the host diagnostics
+envelope. Journal overflow during arming is capacity failure, not Partial.
+
+Aggregate metrics preserve committed, reserved, live-payload, retiring and
+reusable-slack meanings without adding overlapping values. Optional native usage,
+budget and fragmentation observations retain sample age, availability and
+measured/estimated provenance. Missing facts remain unavailable rather than zero.
+Resource/allocation IDs, owner scopes, labels and native facts do not become
+unbounded metric dimensions.
+
+Detailed collection is an explicit finite operation and carries no per-resource
+projection or mutation-journal cost until a profile-allowed session is admitted.
+The frontend builds that session over bounded render-safe-point chunks, journals
+only concurrent mutations while arming, then seals one consistent revision pair
+and immutable pages. It never walks or copies the complete live registry in one
+tool refresh. Page reads return owned immutable values, so snapshot expiry cannot
+leave a borrowed view into recycled storage. Encoding and presentation work may
+continue on cancellable workers over records charged to a diagnostics CPU-memory
+allowance. Collection never waits for device idle, maps resource contents or
+exposes native pointers, handles or GPU addresses. Record/byte/journal limits,
+partial coverage, paging, retention, cancellation, stale generations and shutdown
+are explicit. RND-017.9 queries these snapshots; it does not walk live backend or
+frontend state.
+
 ## Backend Implementation Boundary
 
 Each concrete backend owns its API dependencies, context/device objects,
