@@ -53,8 +53,9 @@ Not covered:
   reflections behind a capability check.
 - Post-processing is a explicit render graph pass chain, not hidden in
   individual materials.
-- TAA and upscaling are optional but supported through a vendor-neutral
-  interface.
+- Reconstruction, denoising, frame generation and latency are separate provider
+  categories under
+  [ADR-040](../../adr/040-reconstruction-frame-generation-and-latency-providers.md).
 - Ray tracing, mesh shaders and bindless resources require implemented backend
   paths, effective device support and product permission independently.
 - Optional high-end features use declared, implemented and cooked raster or
@@ -257,7 +258,9 @@ Exposure may be:
 
 ## Temporal Anti-Aliasing
 
-TAA combines samples from multiple frames to reduce aliasing.
+Temporal reconstruction combines qualified real-frame samples to reduce aliasing
+and optionally reconstruct a larger target extent. It is selected through ADR-040's
+`ReconstructionProvider` category rather than an unqualified upscaler.
 
 Requirements:
 
@@ -266,29 +269,62 @@ Requirements:
 - history buffer
 - motion vector reprojection
 
+The canonical provider input uses exposed/pre-exposed linear ACEScg, positive
+linear view-space depth in meters, normalized `previousUv - currentUv` motion that
+excludes projection jitter, explicit current/previous jitter, exposure scales and
+typed optional masks. Provider adapters convert privately; they cannot infer sign,
+units or jitter inclusion from native resources.
+
 TAAU (TAA Upscaling) renders at a lower resolution and reconstructs a higher
-output resolution using temporal accumulation.
+output resolution using temporal accumulation. Horo's `taau` route is the built-in
+fallback provider; `native` produces one real frame at target extent without
+reconstruction-owned history. Histories are scoped to view, provider, mode,
+extent, input, color and device generations and advance only after a successful
+real frame.
+Camera cuts, missing predecessors and incompatible generations reset explicitly.
 
 ## Upscaling
 
-Horo exposes a vendor-neutral upscaler interface.
+[ADR-040](../../adr/040-reconstruction-frame-generation-and-latency-providers.md)
+replaces the legacy single upscaler interface with four sealed frontend-owned
+registries:
 
-Backends:
+- reconstruction converts one real rendered frame to one real reconstructed
+  frame; spatial and temporal modes are distinct;
+- denoising filters one named noisy effect and owns only that effect's history;
+- frame generation may insert synthetic presentation frames between qualified
+  real frames; and
+- latency integration supplies markers/validated scheduling hints without owning
+  images, input or simulation.
 
-| Backend  | Notes                            |
-| -------- | -------------------------------- |
-| `Native` | No upscaling.                    |
-| `TAAU`   | Temporal accumulation upscaling. |
-| `DLSS`   | NVIDIA deep-learning upscaling.  |
-| `FSR`    | AMD spatial/temporal upscaling.  |
-| `XeSS`   | Intel XeSS upscaling.            |
+Verified components contribute inert backend-neutral descriptors. The frontend
+selects providers from product intent, effective support, cooked variants, exact
+input/color/extent contracts and finite budgets. Vendor/SDK/backend names grant no
+capability and native SDK types stay private. `native`/`taau`, effect-owned
+fallback, no frame generation and default scheduling are independent baseline
+routes; selection never downloads a runtime, switches renderer or enables another
+category implicitly.
 
-The frontend selects an upscaler provider from the explicit product/user policy
-and effective support for that provider's requirements. Vendor identity alone
-does not authorize selection; provider selection never switches the renderer API.
-Temporal providers consume jittered low-resolution color, motion vectors, depth
-and exposure. Each provider declares its exact inputs and cooked/runtime support;
-native resolution is the explicit optional-upscaler fallback.
+Scene reconstruction runs before ADR-037's target output transform and
+display-referred UI. Dynamic resolution is separate product/frontend policy that
+publishes a valid render extent at a frame boundary; a provider consumes it and
+cannot change scale or effect placement itself. Effects declare whether they run
+at render or target extent.
+
+Frame generation consumes qualified bracketing real reconstructed frames and
+produces display-linear **scene content**. The frontend then composes current
+display-referred UI/accessibility and final-encodes each presentation image. A
+synthetic frame has a separate ID and never advances simulation, input, extraction,
+animation, audio, exposure, TAA/denoising/material/VFX history, jitter, gameplay
+callbacks or real-frame statistics. Missing history, cuts, drops, resize, output
+or device changes or backpressure suppress generation and present real frames only
+under optional policy.
+
+Latency is resolved jointly with frames-in-flight and presentation policy but is
+not frame generation. Providers may emit typed markers and bounded safe-point wait
+hints; they cannot pump input, alter fixed timestep/present mode, busy-wait or claim
+synthetic cadence as lower end-to-end latency. Measurements identify real versus
+synthetic presentation and explicit unknown segments.
 
 ## Ray Tracing
 
