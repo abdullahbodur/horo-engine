@@ -635,14 +635,17 @@ remain separate when that proof is unavailable, and overlapping work is never
 summed into a fabricated frame total.
 
 The frontend compiles registered logical measurement scopes and finite query,
-readback, pending-result and sampling budgets into the render graph. Backends own
-native pools/heaps and command translation. Query slots and readback remain charged
-until GPU completion; normal frames do not wait, map in-use storage or call device
-idle for results. Delayed/out-of-order batches retain source `RealRenderFrameId`,
-graph, plan, device, queue and clock generations. Synthetic presentation owns no
-render query batch.
+readback, pending-result and sampling budgets into the render graph. Native query
+heaps follow ADR-027/034; ring slots are plan-scoped indices retired after GPU
+completion. Plan growth publishes at ADR-018 `RenderSafePoint`. ADR-039 AS and
+dedicated compute/copy queues that participate in the real-frame graph obey the
+same timestamp rule as graphics queues. Normal frames do not wait, map in-use
+storage or call device idle for results. Delayed/out-of-order batches retain
+source `RealRenderFrameId`, graph, plan, device, queue and clock generations.
+Synthetic presentation owns no render query batch.
 
-Always-on frame totals project into fixed MetricsStore descriptors. Detailed pass
+Always-on interval `frame.cpu` publishes as `engine.frame.cpu_time` (and GPU/present
+counterparts) into fixed MetricsStore descriptors. Detailed pass
 timings and canonical qualified pipeline statistics are profile-gated capture or
 bounded snapshot data. Unsupported, not-ready, disjoint, partial and stale values
 are explicit rather than zero. Per-frame/pass payloads do not become ADR-041 events
