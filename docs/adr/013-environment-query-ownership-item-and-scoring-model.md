@@ -4,7 +4,7 @@
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: EQS orchestration, typed providers, plans/items/contexts, scoring, safe points, deterministic/adaptive budgets, cache identity and cancellation
-- **Issue**: [#1346](https://github.com/abdullahbodur/horo-engine/issues/1346) ([GAI-004.1])
+- **Issue**: [GAI-004.1](https://github.com/abdullahbodur/horo-engine/issues/1346)
 - **Jira**: [HORO-1346](https://horo-engine.atlassian.net/browse/HORO-1346)
 - **Normative document**: [Navigation And AI Architecture — EQS](../architecture/runtime/navigation-and-ai-architecture.md#environment-query-system-eqs)
 

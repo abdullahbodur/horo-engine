@@ -4,7 +4,7 @@
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Cinematic clock sources and policies, sampling/event phases, domain authority, bindings, origin rebasing and evaluation budgets
-- **Issue**: [#1697](https://github.com/abdullahbodur/horo-engine/issues/1697) ([CIN-001.1])
+- **Issue**: [CIN-001.1](https://github.com/abdullahbodur/horo-engine/issues/1697)
 - **Jira**: [HORO-1656](https://horo-engine.atlassian.net/browse/HORO-1656)
 - **Normative document**: [Cinematic Sequencer Architecture](../architecture/runtime/cinematic-sequencer-architecture.md)
 

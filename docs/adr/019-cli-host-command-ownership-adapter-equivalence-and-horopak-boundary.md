@@ -4,7 +4,7 @@
 - **Date**: 2026-08-28
 - **Supersedes**: None (Amends and extends [ADR-004](004-cli-core-gui-boundary.md))
 - **Scope**: CLI host ownership (`HoroEngine::CliHost`), command descriptor registry, option parsing, execution dispatch, structured presentation, executable responsibilities (`horo-engine`, `HoroEditor`, `horopak`), separation of concerns between CLI, runtime debug console (DBG-001), and MCP (MCP-001), console delegation seam, domain command adapter equivalence (`ICliCommandAdapter`), and `horopak` isolation boundary
-- **Issue**: [#1858](https://github.com/abdullahbodur/horo-engine/issues/1858) ([CLI-001.1])
+- **Issue**: [CLI-001.1](https://github.com/abdullahbodur/horo-engine/issues/1858)
 - **Jira**: [HORO-1814](https://horo-engine.atlassian.net/browse/HORO-1814)
 - **Normative document**: [CLI Architecture](../architecture/interfaces/cli-architecture.md)
 

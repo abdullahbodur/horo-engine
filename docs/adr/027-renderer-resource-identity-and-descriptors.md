@@ -4,7 +4,7 @@
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: Backend-neutral resident renderer resources
-- **Issue**: [#290](https://github.com/abdullahbodur/horo-engine/issues/290) ([RND-001.1])
+- **Issue**: [RND-001.1](https://github.com/abdullahbodur/horo-engine/issues/290)
 - **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 
 ## Context

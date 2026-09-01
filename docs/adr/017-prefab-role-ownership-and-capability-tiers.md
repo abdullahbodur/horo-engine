@@ -4,7 +4,7 @@
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Prefab asset definition, authoring templates, runtime spawnable templates (`CookedPrefab`), capability tiers (Tier 0, Tier 1, Tier 2), asset identity, project versioning, unknown component preservation, and lifecycle safety
-- **Issue**: [#1008](https://github.com/abdullahbodur/horo-engine/issues/1008) ([PFB-001.1])
+- **Issue**: [PFB-001.1](https://github.com/abdullahbodur/horo-engine/issues/1008)
 - **Jira**: [HORO-1008](https://horo-engine.atlassian.net/browse/HORO-1008)
 - **Normative document**: [Prefab Architecture](../architecture/runtime/prefab-architecture.md)
 

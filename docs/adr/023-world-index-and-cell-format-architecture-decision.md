@@ -4,9 +4,9 @@
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Cooked world index manifest (`world.index`), streaming cell archive format (`.wcell` / `horopak` chunk), binary encoding, versioning, endianness, integrity hashing, feature-provider payloads, typed error model, and cancellation lifecycles
-- **Issue**: [#1564](https://github.com/abdullahbodur/horo-engine/issues/1564) ([WST-004.1])
+- **Issue**: [WST-004.1](https://github.com/abdullahbodur/horo-engine/issues/1564)
 - **Jira**: [HORO-1564](https://horo-engine.atlassian.net/browse/HORO-1564)
-- **Parent**: [#1521](https://github.com/abdullahbodur/horo-engine/issues/1521) ([WST-004])
+- **Parent**: [WST-004](https://github.com/abdullahbodur/horo-engine/issues/1521)
 - **Normative document**: [World Streaming Architecture](../architecture/runtime/world-streaming-architecture.md)
 
 ## Context
@@ -19,7 +19,7 @@ Prior to this decision:
 - `docs/adr/003-artifact-identity.md` and `docs/architecture/runtime/asset-pipeline.md` defined general `.horo` package chunk containers and asset IDs, but lacked a normative specification for cooked world index manifests (`world.index`) and spatial cell chunks (`.wcell`).
 - The runtime lacked an explicit binary layout contract, little-endian data guarantees, integrity hash algorithms, version negotiation semantics, feature-provider payload offset tables, and a Foundation-compliant typed error model for corrupted or version-skewed cell artifacts.
 
-Ticket #1564 ([WST-004.1]) requires ratifying the normative specification for:
+[WST-004.1](https://github.com/abdullahbodur/horo-engine/issues/1564) requires ratifying the normative specification for:
 
 1. **Cooked World Index format (`world.index`)**: Manifest containing world bounding volume, partition grid dimensions, spatial cell hierarchy, layer definitions, streaming volumes, and checksum validation table.
 2. **Cooked Cell Archive format (`.wcell` / `horopak` chunk)**: Header with magic number (`HOROCELL`), schema version, little-endian encoding, CRC32/SHA-256 integrity hash, and independently compressed TOC payload blocks for Core ECS, Terrain, Foliage, Physics Mesh, Audio, Navigation Mesh, Destruction, and custom providers.

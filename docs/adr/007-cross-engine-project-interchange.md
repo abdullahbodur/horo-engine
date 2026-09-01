@@ -4,7 +4,7 @@
 - **Date**: 2026-08-26
 - **Supersedes**: None
 - **Scope**: Import and export of foreign engine projects (Godot, Unity, Unreal) into and out of Horo
-- **Issue**: [#2308](https://github.com/abdullahbodur/horo-engine/issues/2308) ([PEX-001.1])
+- **Issue**: [PEX-001.1](https://github.com/abdullahbodur/horo-engine/issues/2308)
 - **Normative document**: [Cross-Engine Project Interchange](../architecture/foundation/cross-engine-interchange.md)
 
 ## Context

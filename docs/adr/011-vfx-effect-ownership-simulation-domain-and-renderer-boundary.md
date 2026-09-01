@@ -4,7 +4,7 @@
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Runtime VFX ownership, per-emitter domain policy, bounded admission, immutable extraction, GPU scheduling, retirement and per-view sorting
-- **Issue**: [#1749](https://github.com/abdullahbodur/horo-engine/issues/1749) ([VFX-001.1])
+- **Issue**: [VFX-001.1](https://github.com/abdullahbodur/horo-engine/issues/1749)
 - **Jira**: [HORO-1706](https://horo-engine.atlassian.net/browse/HORO-1706)
 - **Normative document**: [VFX And Particles Architecture](../architecture/runtime/vfx-and-particles-architecture.md)
 

@@ -4,7 +4,7 @@
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: Vulkan loader, 1.3 admission, WSI and Windows/Linux baseline
-- **Issue**: [#322](https://github.com/abdullahbodur/horo-engine/issues/322) ([RND-006.1])
+- **Issue**: [RND-006.1](https://github.com/abdullahbodur/horo-engine/issues/322)
 - **Jira**: [HORO-322](https://horo-engine.atlassian.net/browse/HORO-322)
 - **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 

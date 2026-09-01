@@ -4,7 +4,7 @@
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Foundation configuration schema, domain ownership, source precedence, environment indirection and credential references
-- **Issue**: [#1821](https://github.com/abdullahbodur/horo-engine/issues/1821) ([CFG-001.1])
+- **Issue**: [CFG-001.1](https://github.com/abdullahbodur/horo-engine/issues/1821)
 - **Jira**: [HORO-1777](https://horo-engine.atlassian.net/browse/HORO-1777)
 - **Normative document**: [Configuration System](../architecture/foundation/configuration-system.md)
 

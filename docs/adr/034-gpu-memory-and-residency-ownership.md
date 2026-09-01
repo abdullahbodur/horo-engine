@@ -4,7 +4,7 @@
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: GPU backing accounting, reservation transactions and pressure policy
-- **Issue**: [#358](https://github.com/abdullahbodur/horo-engine/issues/358) ([RND-010.1])
+- **Issue**: [RND-010.1](https://github.com/abdullahbodur/horo-engine/issues/358)
 - **Jira**: [HORO-358](https://horo-engine.atlassian.net/browse/HORO-358)
 - **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 

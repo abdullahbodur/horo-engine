@@ -4,7 +4,7 @@
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: Display facts, surface generations, output negotiation and present ownership
-- **Issue**: [#338](https://github.com/abdullahbodur/horo-engine/issues/338) ([RND-008.1])
+- **Issue**: [RND-008.1](https://github.com/abdullahbodur/horo-engine/issues/338)
 - **Jira**: [HORO-338](https://horo-engine.atlassian.net/browse/HORO-338)
 - **Normative document**: [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md)
 
