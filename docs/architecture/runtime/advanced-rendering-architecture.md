@@ -293,7 +293,8 @@ registries:
 
 - reconstruction converts one real rendered frame to one real reconstructed
   frame; spatial and temporal modes are distinct;
-- denoising filters one named noisy effect and owns only that effect's history;
+- denoising filters one named noisy effect (the ADR-039 effect-owned denoiser)
+  and owns only that effect's history;
 - frame generation may insert synthetic presentation frames between qualified
   real frames; and
 - latency integration supplies markers/validated scheduling hints without owning
@@ -314,13 +315,16 @@ cannot change scale or effect placement itself. Effects declare whether they run
 at render or target extent.
 
 Frame generation consumes qualified bracketing real reconstructed frames and
-produces display-linear **scene content**. The frontend then composes current
-display-referred UI/accessibility and final-encodes each presentation image. A
+produces display-linear **scene content** after ADR-037 step 4. The frontend then
+composes current display-referred UI (step 5) and applies the ADR-015/037 step-6
+accessibility transform on every real and synthetic presentation image. A
 synthetic frame has a separate ID and never advances simulation, input, extraction,
-animation, audio, exposure, TAA/denoising/material/VFX history, jitter, gameplay
-callbacks or real-frame statistics. Missing history, cuts, drops, resize, output
+animation, audio, exposure, TAA/denoising/material/VFX history, jitter,
+`ScenePresentationEpoch`, gameplay callbacks or real-frame statistics.
+`RealRenderFrameId` is per `RenderViewId`; stereo pairs share the ADR-038 epoch
+and matched synthetic counts. Missing history, cuts, drops, resize, output
 or device changes or backpressure suppress generation and present real frames only
-under optional policy.
+under optional policy. Denoising is the ADR-039 effect-owned `DenoisingProvider`.
 
 Reconstruction consumes canonical depth/motion/masks at render extent. Frame
 generation consumes target-extent guides. If the extents differ, the frontend's
