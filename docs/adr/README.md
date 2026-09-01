@@ -71,6 +71,7 @@ to the replacement.
 | [057](057-package-manifest-v1-typed-model.md) | Package Manifest V1 Typed Model | Proposed | 2026-09-02 |
 | [058](058-package-source-policy.md) | Package Source Policy | Proposed | 2026-09-02 |
 | [059](059-script-consumable-module-boundary.md) | Script-Consumable Module Boundary | Proposed | 2026-09-02 |
+| [060](060-release-domain-model-and-state-machine.md) | Release Domain Model and State Machine | Proposed | 2026-09-02 |
 
 ## Conventions
 
