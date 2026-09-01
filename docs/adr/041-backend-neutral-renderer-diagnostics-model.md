@@ -6,6 +6,13 @@
 - **Scope**: Renderer diagnostic identity, context, ingestion, correlation and retention
 - **Issue**: [RND-017.1](https://github.com/abdullahbodur/horo-engine/issues/433)
 - **Jira**: [HORO-433](https://horo-engine.atlassian.net/browse/HORO-433)
+- **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md),
+  [ADR-027](027-renderer-resource-identity-and-descriptors.md),
+  [ADR-034](034-gpu-memory-and-residency-ownership.md),
+  [ADR-036](036-raster-render-path-and-quality-architecture.md),
+  [ADR-038](038-gpu-scene-and-instance-data-model.md),
+  [ADR-039](039-ray-tracing-capability-and-abstraction.md),
+  [ADR-040](040-reconstruction-frame-generation-and-latency-providers.md)
 - **Normative documents**: [Error And Diagnostics](../architecture/foundation/error-and-diagnostics.md), [Observability Architecture](../architecture/observability/observability.md), [Logging, Context, And Diagnostics](../architecture/observability/observability-logging.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 
 ## Context
@@ -22,7 +29,13 @@ API, and repeated per-frame warnings can produce unbounded work. Conversely, a
 second renderer-owned logging store would duplicate `ObservabilityRuntime`, split
 retention/privacy policy and make editor panels own collection accidentally.
 
-This ADR defines the backend-neutral event and ingestion seam. It does not define
+This ADR defines the backend-neutral event and ingestion seam. The
+“Diagnostics identify/include…” paragraphs in ADR-027, 034, 036, 038, 039 and
+040 are payload requirements for this schema, not parallel surfaces. An AS build
+failure, GPU Scene admission denial or reconstruction reset emits one
+`RendererDiagnosticEvent` whose `code`, `context` and `fields` carry those
+documents' bounded IDs. Subsystems do not keep a second diagnostic API.
+It does not define
 timestamp queries, pipeline statistics, memory inspection, native debug-layer
 setup, driver workarounds, external graphics capture, crash bundles, inspector UI,
 reference images, benchmark thresholds or release qualification. Those consumers
@@ -48,10 +61,18 @@ consumer never parses an event, native message or log text to determine success.
 
 Expected unsupported requests return a stable typed error such as
 `render.operation.unsupported`. An optional route may follow only a declared
-fallback edge. A recorded normal preference selection is `Info`; a fallback
-caused by a failed preferred route is `Warning` and
-records both route identities and the cause code. No failure becomes success
-merely because an event was emitted.
+fallback edge. Severity mapping is:
+
+- `Info`: a declared preference selection succeeded (no failed preferred route).
+- `Warning`: an **optional** preferred route failed and a declared fallback was
+  taken; the event records both route identities and the cause code.
+- `Error`: the requested operation failed, including
+  [ADR-036](036-raster-render-path-and-quality-architecture.md) required-content
+  admission failure. Required content never becomes optional and is never a
+  Warning fallback.
+- `Fatal`: the admitted renderer instance or process cannot continue safely.
+
+No failure becomes success merely because an event was emitted.
 
 ### 2. One canonical event schema crosses renderer boundaries
 
@@ -140,11 +161,16 @@ The message is bounded developer-facing fallback text. It is never identity and
 may be absent in compact hot-path submissions when the descriptor supplies a
 summary. Fields are a bounded typed allowlist of booleans, integers, finite
 numbers, durations, stable IDs and bounded safe strings. Version 1 admits at most
-16 fields, a 1,024-byte message, 1,024 bytes for any one evidence string and 4 KiB
-for the complete encoded event. Oversized native evidence is safely truncated and
-marked; invalid producer-authored values reject submission. Collections, resource
-contents, shader source, user input, unrestricted paths, environment dumps and
-native pointer values are forbidden.
+16 fields. Per-value caps are 1,024 bytes for the message and 1,024 bytes for any
+one evidence string; those are ceilings, not reservations. The complete encoded
+event, including schema, codes, times, context and fields, is at most 4 KiB.
+Required identity/context is packed first. Remaining budget is then given to
+optional evidence strings, which truncate (and set a truncated marker) rather
+than drop required context. Sixteen max-size strings cannot coexist in one event;
+a producer that would exceed 4 KiB is truncated or rejected, never allowed to
+omit `code` or renderer/device generation. Invalid producer-authored values
+reject submission. Collections, resource contents, shader source, user input,
+unrestricted paths, environment dumps and native pointer values are forbidden.
 
 ### 3. Context is complete, backend-neutral and generation-aware
 
@@ -155,8 +181,8 @@ native pointer values are forbidden.
 | Process | session, process role, build/configuration and product profile IDs inherited from observability context |
 | Renderer | frontend instance, backend ID/version, renderer generation and effective capability snapshot revision |
 | Device | stable Horo device identity, safe vendor/device/driver projection and device generation |
-| Work | operation/job/request IDs, simulation tick, real render frame, real or synthetic presentation frame and graph execution IDs |
-| Scope | optional surface, view, queue class, graph pass, resource, pipeline, provider, plan and history identities with generations |
+| Work | operation/job/request IDs, simulation tick, [ADR-040](040-reconstruction-frame-generation-and-latency-providers.md) `RealRenderFrameId` / real or `SyntheticPresentationFrameId` and graph execution IDs |
+| Scope | optional surface, view, queue class, graph pass, [ADR-027](027-renderer-resource-identity-and-descriptors.md) resource, [ADR-038](038-gpu-scene-and-instance-data-model.md) GPU Scene, [ADR-036](036-raster-render-path-and-quality-architecture.md) recipe, [ADR-039](039-ray-tracing-capability-and-abstraction.md) AS/pipeline, provider, plan and history identities with generations |
 
 Only applicable fields are present. Absence is explicit and never encoded as a
 zero ID. A native callback that cannot be correlated to a frame/pass still carries
@@ -180,9 +206,17 @@ profiler correlation but does not automatically become metric dimensions.
 The process composition root creates `ObservabilityRuntime` before renderer
 services and supplies a `RendererDiagnosticIngestPort` while composing
 `RenderFrontend`. The frontend derives renderer/device/work context and lends
-narrow generation-bound emitters to the selected backend and private providers.
-Backends and providers do not create sinks, stores, files, telemetry clients or
-process-global callbacks.
+narrow generation-bound emitters to the selected backend and private providers
+after the backend instance exists but **before** device/context creation that can
+raise native validation callbacks. Backends and providers do not create sinks,
+stores, files, telemetry clients or process-global callbacks.
+
+Native callbacks that fire before the emitter is lent use a backend-private
+fixed pre-init ring (default 64 records, never grown). They cannot call
+`ObservabilityRuntime` or UI. After the frontend lends the emitter, the ring
+drains with the new renderer/device generation. Overflow counts dropped pre-init
+`Info`/`Warning`; `Error`/`Fatal` still use the emergency path. After emitter
+close, late callbacks follow stale-generation rejection.
 
 Submission may occur from the render owner, worker, driver callback or platform
 callback thread. The port contract is:
@@ -221,8 +255,16 @@ an explicit audit contract requires delivery.
 Each code descriptor declares whether it is `OncePerGeneration`,
 `AggregateWindow`, `EveryOccurrence` or `StateTransition`. An aggregate window
 defaults to one second and must be between 100 milliseconds and 10 seconds. The
-router computes a bounded fingerprint from code, renderer/device generation and
-descriptor-approved scope keys. When a descriptor admits native evidence, its
+router computes a bounded fingerprint from `code`, renderer generation, device
+generation and **only** the descriptor-approved scope keys. Those keys name
+which additional generation identities join the fingerprint (pipeline, plan,
+GPU Scene, origin, history, resource slot, AS, surface or view). If the
+descriptor lists no extra keys, `OncePerGeneration` means once per
+`(code, renderer generation, device generation)`. A “once per pipeline
+generation” warning must declare the pipeline-generation scope key;
+`nativeAggregation` only decides whether native API family/source/message ID
+join the fingerprint, not which Horo generation is the window. When a
+descriptor admits native evidence, its
 policy declares whether normalized API family, source/type and stable numeric
 message ID join the fingerprint. The generic
 `render.backend.native_message_unknown` family must include API family and native
@@ -317,16 +359,21 @@ a hidden backend switch, retry, quality reduction or fabricated recovery.
 | Select fallback or recovery from severity/message text | Rejected: typed errors, lifecycle states and declared policy edges own behavior. |
 | Store native handles, raw paths or unrestricted driver dumps | Rejected: unstable identity and privacy/security risk; adapters publish bounded safe evidence. |
 | Drop high-severity events when the normal queue is full | Rejected: `Error` and `Fatal` require the bounded emergency path and explicit delivery status. |
+| Treat required-content admission failure as a Warning fallback | Rejected: ADR-036 required content never becomes optional; that is `Error`. |
+| Let `OncePerGeneration` imply an unspecified generation | Rejected: the descriptor names the extra scope keys; default is renderer+device generation only. |
+| Drop native callbacks that fire before the emitter is lent | Rejected: buffer them in a fixed pre-init ring; Error/Fatal still use the emergency path. |
 
 ## Migration And Verification
 
 Existing renderer logs migrate by registering stable categories/codes and moving
 searchable backend, device, profile, operation and generation values out of message
-text into typed context/fields. Existing typed errors retain their identity; the
-owning boundary adds one correlated event instead of duplicate logs at every
-layer. Native callback adapters migrate only when their RND-017 implementation
-ticket lands; until then absence is reported as unavailable diagnostics, not as
-renderer capability loss.
+text into typed context/fields. The diagnostic payload lists in ADR-027, 034,
+036, 038, 039 and 040 migrate onto this event schema: those ADRs keep their
+payload requirements, this ADR owns encoding, ingestion and retention. Existing
+typed errors retain ADR-008 identity; the owning boundary adds one correlated
+event instead of duplicate logs at every layer. Native callback adapters migrate
+only when their RND-017 implementation ticket lands; until then absence is
+reported as unavailable diagnostics, not as renderer capability loss.
 
 | Delivery | Required implementation evidence |
 |---|---|
@@ -353,8 +400,11 @@ Tests must cover:
   stale callback rejection;
 - multi-thread producer ordering, context capture/restoration, cancellation and
   no renderer-lock or sink wait on producer paths;
-- category gates before formatting, field/string/count bounds, invalid finite
+- category gates before formatting, field/string/count bounds, 4 KiB encoded
+  event with context reserved first, evidence truncation markers, invalid finite
   values, redaction and native handle/path normalization;
+- OncePerGeneration fingerprints using only descriptor-approved scope keys;
+- pre-init native callback ring drain after emitter lend and overflow counts;
 - paired UTC/monotonic occurrence capture, persistent wall-clock correlation,
   monotonic ordering and no substitution of drain time;
 - once, aggregate, every-occurrence and state-transition policies, including

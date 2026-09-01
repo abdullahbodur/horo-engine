@@ -601,10 +601,15 @@ event.
 The application composition supplies one bounded non-blocking diagnostic ingest
 port to `RenderFrontend`. The frontend lends generation-bound emitters with
 renderer, backend, safe device, product profile, capability revision and logical
-work context to private backends/providers. Producer threads perform no file I/O,
-UI calls, arbitrary allocation or sink waits. Native callback adapters map private
-API severity/source/message identity into registered Horo code, severity, subsystem
-and bounded fields without exposing handles or branching on raw text.
+work context to private backends/providers before device creation that can raise
+native validation. Pre-init callbacks use a fixed adapter ring, then drain.
+Producer threads perform no file I/O, UI calls, arbitrary allocation or sink
+waits. Native callback adapters map private API severity/source/message identity
+into registered Horo code, severity, subsystem and bounded fields without
+exposing handles or branching on raw text. ADR-027/034/036/038/039/040
+diagnostic payload lists populate this event; they are not a second API.
+Required-content admission failure is `Error`; optional declared fallback is
+`Warning`.
 
 Accepted events project into the existing `ObservabilityRuntime` structured log
 pipeline and retention. Renderer code owns no separate log store/file and publishes
