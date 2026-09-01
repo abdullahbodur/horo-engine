@@ -684,6 +684,27 @@ state destruction; late messages cannot enter a new generation. Null validates
 shared plan/fallback/mapping/lifecycle semantics but cannot qualify native layer
 availability, callback behavior or overhead.
 
+### GPU driver compatibility and workarounds
+
+[ADR-046](../../adr/046-gpu-driver-compatibility-and-workaround-registry.md)
+realizes ADR-028's restrictive driver-policy input. Delivery selects one signed,
+versioned immutable policy; private backends normalize typed environment facts;
+the frontend applies every matching rule before publishing effective capabilities.
+Projects, users, plugins and remote services cannot override safety rules.
+
+Rules may deny support, reduce upper bounds, strengthen alignment, deny routes or
+select a registered semantically equivalent private route. They cannot grant
+unreported/unimplemented support, weaken constraints, switch backend/device,
+change profile/content or suppress typed failures. Matching is independent of file
+order: restrictions compose conservatively and conflicts fail publication.
+
+Applied snapshots retain policy/environment/reported/implementation revisions,
+canonical matched rule IDs, before/after values and selected routes. Matching runs
+only at initialization/recreation safe points, never per frame/resource/draw.
+Device/backend/runtime change invalidates the generation and reapplies policy
+before reconstruction. Null proves deterministic bounded resolution with synthetic
+fixtures but cannot qualify a native driver or workaround.
+
 ## Backend Implementation Boundary
 
 Each concrete backend owns its API dependencies, context/device objects,
