@@ -786,6 +786,9 @@ transpiled and optimized for each target graphics API.
 
 [ADR-035](../../adr/035-shader-source-and-intermediate-representation.md) owns the
 HLSL source contract, compiler/IR routes, normalized Horo reflection and diagnostics.
+It is the sole normative owner of those choices; this section projects them onto
+Asset Pipeline's cook, cache, staging, and publication authority without defining
+a second shader language or artifact route.
 SPIR-V is a shared derived intermediate, not a universal D3D12 interchange format.
 The following routes are target architecture; they add no current cook capability.
 
