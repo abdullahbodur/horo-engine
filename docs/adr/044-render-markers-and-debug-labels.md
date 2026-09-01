@@ -6,7 +6,7 @@
 - **Scope**: Backend-neutral render marker identity, placement, correlation and native debug labels
 - **Issue**: [RND-017.4](https://github.com/abdullahbodur/horo-engine/issues/436)
 - **Jira**: [HORO-436](https://horo-engine.atlassian.net/browse/HORO-436)
-- **Companion decisions**: [ADR-027: Renderer Resource Identity and Descriptors](027-renderer-resource-identity-and-descriptors.md), [ADR-041: Backend-Neutral Renderer Diagnostics Model](041-backend-neutral-renderer-diagnostics-model.md), [ADR-042: CPU/GPU Timestamps and Pipeline Statistics](042-cpu-gpu-timestamps-and-pipeline-statistics.md), [ADR-043: GPU Memory and Resource Inspection](043-gpu-memory-and-resource-inspection.md)
+- **Companion decisions**: [ADR-027: Renderer Resource Identity and Descriptors](027-renderer-resource-identity-and-descriptors.md), [ADR-040: Reconstruction, Frame Generation and Latency Providers](040-reconstruction-frame-generation-and-latency-providers.md), [ADR-041: Backend-Neutral Renderer Diagnostics Model](041-backend-neutral-renderer-diagnostics-model.md), [ADR-042: CPU/GPU Timestamps and Pipeline Statistics](042-cpu-gpu-timestamps-and-pipeline-statistics.md), [ADR-043: GPU Memory and Resource Inspection](043-gpu-memory-and-resource-inspection.md)
 - **Normative documents**: [Metrics And Profiling](../architecture/observability/observability-performance.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Render Backend Parity](../architecture/runtime/render-backend-parity-contract.md)
 
 ## Context
@@ -234,8 +234,8 @@ generations; it never preserves an old native object label by slot matching.
 Many native tools expose marker correlation only as text. The backend adapter
 encodes a fixed Horo token first, followed by an optional registered display name
 and compact typed correlation. The token includes schema revision and
-`RenderMarkerId`; correlation uses fixed field keys and canonical unsigned decimal
-or hexadecimal Horo values. It contains no pointer or native enum.
+`RenderMarkerId`; correlation uses fixed field keys and canonical unsigned
+lowercase hexadecimal Horo values. It contains no pointer or native enum.
 
 Version 1 begins with `H1|m=<id>|k=<scope-or-insert>|x=<0-or-1>`. Optional
 correlation follows in this order: renderer generation (`rg`), device generation
