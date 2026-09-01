@@ -32,12 +32,14 @@ renderer initialization. The policy is a versioned signed release artifact or an
 embedded artifact covered by the engine package signature. Project assets, user
 settings, plugins and remote services cannot add, remove or override rules.
 
-The selected backend reports a canonical `GpuEnvironmentIdentity`; the renderer
-frontend evaluates it with reported and implemented capability snapshots and
-publishes one immutable `AppliedGpuCompatibilityPolicy` as part of the ADR-028
-effective capability revision. Backends provide typed facts and execute selected
-private routes. Feature systems consume effective support only and never query
-the registry, vendor ID or driver string.
+Each selected physical adapter/device candidate reports its own canonical
+`GpuEnvironmentIdentity`; identity is never resolved once for an entire backend or
+host. The renderer frontend evaluates the exact admitted adapter instance with its
+reported and implemented capability snapshots and publishes one immutable
+`AppliedGpuCompatibilityPolicy` as part of that adapter/device generation's
+ADR-028 effective capability revision. Backends provide typed facts and execute
+selected private routes. Feature systems consume effective support only and never
+query the registry, vendor ID or driver string.
 
 Descriptor creation and policy parsing are inert. They create no device, register
 no service, modify no environment variable and perform no network access. A
@@ -52,6 +54,7 @@ The canonical environment contains applicable values:
 struct GpuEnvironmentIdentity {
     RenderBackendId backend;
     BackendModuleVersion module;
+    GpuAdapterInstanceId adapterInstance;
     PlatformId platform;
     ArchitectureId architecture;
     OsVersion os;
@@ -64,12 +67,25 @@ struct GpuEnvironmentIdentity {
 };
 ```
 
+`adapterInstance` identifies the exact machine-local physical adapter/device
+candidate selected for this renderer generation. It is neither portable project
+data nor a vendor/model alias. Multi-GPU enumeration evaluates and records a
+separate environment and applied-policy result for every candidate; rules matched
+for an integrated GPU cannot leak into a discrete GPU selected by the same backend.
+
 Vendor/device/revision are numeric IDs in the backend's declared namespace, not
 marketing names. `DriverIdentity` preserves the source namespace and either a
 backend-normalized comparable tuple or `Unknown` with bounded raw evidence.
 OpenGL, Vulkan, Metal and D3D12 adapters normalize their platform-specific driver
 forms independently; one API's tuple is never compared using another API's
 ordering. Strings are evidence only and are not parsed by generic rule matching.
+
+`OsVersion`, `BackendModuleVersion` and applicable graphics-runtime/loader
+versions are likewise typed namespace-bearing comparable tuples with explicitly
+defined component ordering, prerelease semantics and absent-component behavior.
+Policy matching never orders their display/raw strings lexically. An unsupported
+or unparseable source representation becomes `Unknown` bounded evidence rather
+than a guessed tuple.
 
 Missing identity remains absent. It cannot equal zero, wildcard itself into a
 version-specific rule or borrow qualification from a similar product name.
