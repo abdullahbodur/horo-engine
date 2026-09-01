@@ -120,6 +120,13 @@ Choose the shortest path for the task:
 Typed errors remain the application contract. A caller never parses logs or
 metrics to discover whether an operation succeeded.
 
+Renderer-specific findings follow
+[ADR-041](../../adr/041-backend-neutral-renderer-diagnostics-model.md). They use a
+bounded backend-neutral event/ingestion seam and then project into the same
+process-owned structured log stores, retention and privacy policy. This does not
+create a renderer-owned sink or make diagnostic events operation results,
+per-frame metrics or profiler records.
+
 ## Ownership And Flow
 
 Each process composition root creates one runtime before application services:

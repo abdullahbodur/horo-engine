@@ -537,6 +537,37 @@ Backend capability snapshots are immutable for one initialized backend
 instance. Device recreation may produce a new snapshot; users of capabilities
 observe that through the frontend's typed recreation result.
 
+## Renderer Diagnostics
+
+[ADR-041](../../adr/041-backend-neutral-renderer-diagnostics-model.md) defines
+the renderer-specific projection onto Foundation errors and process observability.
+`Result<T, Error>` remains the operation contract. An immutable
+`RendererDiagnosticEvent` records a correlated finding, decision, degradation,
+failure or recovery; it never drives control flow and is not a metric or profiler
+event.
+
+The application composition supplies one bounded non-blocking diagnostic ingest
+port to `RenderFrontend`. The frontend lends generation-bound emitters with
+renderer, backend, safe device, product profile, capability revision and logical
+work context to private backends/providers. Producer threads perform no file I/O,
+UI calls, arbitrary allocation or sink waits. Native callback adapters map private
+API severity/source/message identity into registered Horo code, severity, subsystem
+and bounded fields without exposing handles or branching on raw text.
+
+Accepted events project into the existing `ObservabilityRuntime` structured log
+pipeline and retention. Renderer code owns no separate log store/file and publishes
+no per-record data-bus events. Repetition follows bounded descriptor-declared
+aggregation; per-frame/draw/resource activity uses metrics or an explicit profiler
+capture. High-severity queue pressure uses the existing emergency path. Typed
+fallback/lifecycle policy remains explicit even if diagnostic delivery fails.
+
+Device/backend replacement closes old emitters and unregisters callbacks on their
+owner thread before native state destruction. Accepted late evidence retains its
+source generation; rejected stale submissions are counted safely. Shutdown never
+waits for every normal sink on a renderer owner thread. Diagnostic export remains
+allowlisted, redacted, local by default and under Observability/Application
+ownership.
+
 ## Backend Implementation Boundary
 
 Each concrete backend owns its API dependencies, context/device objects,

@@ -1239,6 +1239,15 @@ Logs are not used to communicate success or failure between modules.
 notifications after `StructuredLogStore` changes. They do not carry every log
 record and are not required for file logging.
 
+[ADR-041 renderer diagnostic events](../../adr/041-backend-neutral-renderer-diagnostics-model.md)
+enter through a bounded generation-aware ingest port and become ordinary
+immutable structured log records after registered-code, context, field-limit and
+redaction validation. Renderer backends/providers do not configure sinks or own a
+second store. Native callback threads never perform formatting, file I/O or UI
+dispatch; repeated messages use bounded descriptor-declared aggregation. Metrics
+and profiler channels retain per-frame numeric/timeline detail instead of emitting
+one diagnostic record per draw, resource or frame.
+
 Metrics and profiler bus boundaries are defined in
 [Metrics And Profiling Contract](./observability-performance.md).
 
