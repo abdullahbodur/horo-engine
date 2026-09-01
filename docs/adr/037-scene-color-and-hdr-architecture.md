@@ -36,8 +36,9 @@ paths to publish this same scene-color contract.
 
 ### 1. Canonical scene color is linear ACEScg
 
-Horo's production scene working color space is **ACEScg**: AP1 primaries, ACES
-white point (approximately D60), and a linear transfer characteristic. RGB values
+Horo's production scene working color space is **ACEScg**: AP1 primaries, the
+ACES white point (`x = 0.32168`, `y = 0.33767`, approximately D60), and a linear
+transfer characteristic. RGB values
 are scene-referred and proportional to exposure. Values above `1.0` are expected;
 finite negative components are preserved through scene-referred processing
 because transforms and wide-gamut operations can produce them. Alpha is linear
@@ -111,7 +112,13 @@ RGB. This sign convention is normative. User compensation is
 `exposureCompensationEv` in the same stops. An optional physical-camera model may
 accept aperture, shutter time and ISO and derive a camera `EV100`, but it must
 publish the resulting Horo `exposureEv` plus its versioned calibration. Raw
-aperture/ISO values never bypass that conversion into shaders.
+aperture/ISO values never bypass that conversion into shaders. The physical
+mapping has the opposite sign before compensation: increasing `EV100` by one stop
+decreases derived `exposureEv` by one stop and therefore halves the multiplier.
+Equivalently, a calibrated model has the form
+`exposureEv = calibrationEv - EV100 + exposureCompensationEv`; its finite
+`calibrationEv` and model revision are explicit pipeline inputs rather than an
+ambient backend constant.
 
 Manual exposure publishes a selected finite `exposureEv`. Automatic exposure
 measures a declared bounded region of the unexposed scene, computes log2 ACEScg
@@ -259,6 +266,15 @@ recorded warnings; no bulk reinterpretation occurs at runtime. The current
 Reinhard, Uncharted and Neutral enum values are not assumed compatible with the
 new transform identities: projects select/migrate deliberately, and missing
 production transforms retain the last good pipeline or fail validation.
+
+Enforcement follows implementation readiness rather than this document landing:
+RND-013.3 must ship the typed color/exposure contracts, cooked production
+transform and a versioned editor/cook migration adapter before the old fields are
+removed. The adapter recognizes legacy schema versions, reports every inferred or
+unmappable value, stages a reversible project migration and keeps the last good
+preview active on failure. Packaged cooks reject remaining unmigrated production
+settings only after that migration path is available; backends do not begin hard
+failure merely because ADR-037 is Proposed.
 
 Current OpenGL/Metal viewport paths are not HDR-qualified merely because they use
 floating attachments or EDR-capable APIs. Each must consume the same cooked

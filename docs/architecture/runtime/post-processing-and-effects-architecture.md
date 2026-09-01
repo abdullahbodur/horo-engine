@@ -124,7 +124,7 @@ universal millisecond values to an effect or infer cost from a profile label.
 
 ```cpp
 struct BloomSettings {
-    float  threshold;       // luminance above which pixels bloom
+    float  thresholdEv;     // exposed luminance stops relative to neutral 0.18
     float  intensity;
     float  scatter;         // bloom spread (controls downsample chain)
     uint32_t quality;       // downsample levels
@@ -132,6 +132,11 @@ struct BloomSettings {
 ```
 
 Bloom uses a downsample-upsample chain with separable Gaussian blurs.
+`thresholdEv` is evaluated against exposed ACEScg luminance. The linear threshold
+is `0.18 * exp2(thresholdEv)`, so view exposure changes the measured luminance and
+preserves the intended photographic look. A separate absolute scene-linear
+threshold would require a different typed setting; an unqualified scalar is not
+accepted.
 
 ### Depth Of Field
 
