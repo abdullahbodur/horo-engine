@@ -622,6 +622,11 @@ Renderer component lifecycle follows
 [Renderer Distribution And Availability](../runtime/renderer-distribution-and-availability.md).
 Equal backend behavior follows
 [Render Backend Parity Contract](../runtime/render-backend-parity-contract.md).
+Component scope and lifecycle ownership follow
+[ADR-052](../../adr/052-first-party-renderer-component-scope.md): one signed
+first-party component realizes one backend identity, while component management,
+selection/fallback, module-host composition and no-renderer recovery remain
+application/product responsibilities outside `RenderFrontend` and projects.
 
 The null renderer is a supported implementation for headless execution and
 tests.
