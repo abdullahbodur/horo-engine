@@ -125,15 +125,16 @@ A versioned baseline key is:
 ```text
 case ID + scene revision + capture point + image-contract revision
 + backend ID + platform/architecture + effective profile/capability fingerprint
-+ baseline schema revision
++ baseline hardware scope + baseline schema revision
 ```
 
 Backend/platform baselines account for qualified implementation differences.
 Vendor/device/driver is recorded in provenance but does not create a new baseline
-automatically. A narrower hardware-class baseline requires a reviewed descriptor
-with evidence that one common backend/platform reference cannot satisfy the
-declared semantic tolerance. Unknown hardware still runs against the nearest
-applicable reviewed key only when matching is exact under that descriptor;
+automatically. `baseline hardware scope` is `BackendPlatformCommon` by default.
+A narrower stable adapter hardware-class ID is written into that key only through
+a reviewed descriptor with evidence that one common backend/platform reference
+cannot satisfy the declared semantic tolerance. Unknown hardware still runs
+against a baseline only when its scope match is exact under that descriptor;
 otherwise the result is `BaselineUnavailable`, never pass.
 
 Cross-backend parity is checked separately through descriptor-owned invariants:
@@ -227,12 +228,16 @@ atomic manifest-last commit. Interrupted output is reported and quarantined.
 
 ### 7. Work, storage and retries are finite
 
-Default case limits are 4096x4096, four channels, two captured frames, 256 MiB
-readback/intermediate memory, 512 MiB artifacts and 60 seconds after warm-up. Hard
-maxima are 8192x8192, four channels, eight frames, 1 GiB memory, 2 GiB artifacts
-and five minutes. The suite validates aggregate parallel-case memory, staging and
-GPU submission budgets before admission; individually valid cases cannot
-oversubscribe a lane.
+Default case limits are 2048x2048, four channels, one captured frame, 256 MiB
+peak readback/intermediate memory, 512 MiB artifacts and 60 seconds after warm-up.
+Hard maxima are 4096x4096, four channels, two frames, 1 GiB peak memory, 2 GiB
+artifacts and five minutes. Multi-frame cases capture, compare and release each
+frame's working buffers sequentially; all retained canonical outputs still count
+against the artifact limit. Before admission, checked format/dimension/frame math
+must prove that reference, actual, diff and required scratch buffers fit the peak
+memory bound and that worst-case retained outputs fit the artifact bound. The
+suite also validates aggregate parallel-case memory, staging and GPU submission
+budgets; individually valid cases cannot oversubscribe a lane.
 
 At most one capture per device is in flight by default and at most two at the hard
 limit. CPU comparison runs on cancellable bounded workers over owned buffers.
