@@ -185,7 +185,9 @@ are graph dependencies, not hidden callbacks or a fixed global list.
 CPU extraction and light preparation are bounded jobs over immutable snapshots.
 GPU cluster/GBuffer resources follow ADR-027/034 generation and retirement rules.
 Recipe replacement stages all required artifacts and resources, validates the
-candidate, then publishes at a render safe point. In-flight frames retain the old
+candidate, then publishes at
+[ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md)
+`CommandThreadPolicy::RenderSafePoint`. In-flight frames retain the old
 generation. Cancellation, stale device/content generations, missing pipelines or
 budget failure discard the candidate and keep the last good recipe where valid.
 Device loss follows renderer recovery; it does not trigger an unreported path

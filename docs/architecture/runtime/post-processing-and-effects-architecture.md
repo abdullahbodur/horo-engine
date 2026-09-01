@@ -110,9 +110,11 @@ color/exposure semantics, diagnostics and observable output remain equivalent.
 | Depth of field | Scene color, linear depth, camera/lens state | Scene-linear color with explicit history/exposure metadata. |
 | Motion blur | Scene color, velocity, depth and declared history | Scene-linear color with explicit history/exposure metadata. |
 | Bloom | Scene color and exposure state | Scene-linear additive contribution; thresholds use declared scene/exposure semantics. |
-| Creative grading/look | Exposed ACEScg scene color, cooked transform | Exposed scene-referred color before the output transform. |
+| Creative grading/look | Exposed ACEScg scene color, cooked transform | Exposed scene-referred color before the output transform (ADR-037 step 3). |
 | Target output transform | Graded color, output contract | Display-linear target-gamut color. |
-| Display composition/final encode | Display-linear scene/UI, accessibility and output contract | Dithered SDR/PQ encoded presentation image. |
+| Display-referred UI compose | Display-linear scene, UI at reference white | Complete composed display-linear image. |
+| Accessibility color transform | Composed image, `IColorAccessibilityQuery` snapshot | Complete composed image including HUD (ADR-037 step 6). |
+| Final encode | Accessible composed image, output contract | Dithered SDR/PQ encoded presentation image. |
 
 Performance budgets are finite product settings measured for a stated backend,
 resolution, content fixture and build mode. This architecture does not assign
@@ -199,14 +201,18 @@ struct ColorGradingSettings {
 };
 ```
 
-A 3D LUT texture can be applied for full creative grading.
+A 3D LUT texture can be applied for full creative grading. `ColorGradingSettings`
+and look LUTs are ADR-037 pipeline step 3: scene-referred, before the ACES
+output transform. They are not the colorblind path.
 
 ### Accessibility Color Transforms
 
 Colorblind filters use backend-neutral desired settings captured from an immutable
 `ConfigurationSnapshotRef` at render-frame setup. The renderer owns applying the
-3×3 transform after creative grading and tonemapping; it does not own gameplay's
-accessibility preferences or expose live renderer state to gameplay.
+3×3 transform as ADR-037 `ColorPipelinePlan` step 6: after the ACES output
+transform and display-referred UI compose, on the complete composed image
+including HUD. It does not own gameplay's accessibility preferences, share
+storage with `ColorGradingSettings`, or expose live renderer state to gameplay.
 
 `IColorAccessibilityQuery` is defined by the backend-neutral visual-settings
 contract in [Accessibility Architecture](./accessibility-architecture.md), not by

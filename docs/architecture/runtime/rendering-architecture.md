@@ -278,8 +278,9 @@ normal, velocity or other semantic prepasses when a declared downstream input
 requires them, so an effect does not select deferred rendering indirectly.
 
 Recipe changes are explicit policy requests compiled and staged as new
-generations. Publication occurs at a render safe point after all required
-artifacts/resources validate; in-flight frames retain their old generation.
+generations. Publication occurs at ADR-018 `CommandThreadPolicy::RenderSafePoint`
+after all required artifacts/resources validate; in-flight frames retain their
+old generation.
 Allocation failure, shader miss, slow frames, cancellation, stale inputs or device
 failure never cause an unreported mid-frame downgrade. An adaptive-quality system
 may request a new generation, but cannot mutate the active graph in place.
@@ -301,8 +302,10 @@ at asset/media boundaries, while non-color data textures bypass color transforms
 
 Exposure is a finite base-2 stop offset, `exposureEv`, with
 `exposureScale = exp2(exposureEv)`: `+1 EV` doubles scene RGB and `-1 EV` halves
-it. One versioned `ExposureState` is published per view and shared by effects,
-histories, tone mapping and diagnostics. Pre-exposure is a reversible internal
+it. Automatic exposure is a GPU reduction whose `ExposureState` is consumed by
+the next submitted view; same-frame histogram readback is forbidden. One
+versioned `ExposureState` is published per view and shared by effects, histories,
+tone mapping and diagnostics. Pre-exposure is a reversible internal
 representation whose scale/generation follows every affected resource; it never
 changes canonical scene values or becomes an effect-private estimate.
 
@@ -310,8 +313,12 @@ The frontend resolves a versioned `ColorPipelinePlan` using a pinned ACES 2 outp
 transform, cooked look policy, exposure and ADR-033's output snapshot. The plan
 records working/output encodings, transform identities, gamut/white point,
 transfer function, reference/paper white and peak/black luminance where known,
-bit depth, dithering and all relevant generations. Backends translate this plan;
-they do not choose tone curves, gamuts, brightness or fallback.
+bit depth, dithering and all relevant generations. Scene color, float32
+intermediates, LUTs, histories and output images are ADR-034 reservations
+admitted before realize. Publication is
+`CommandThreadPolicy::RenderSafePoint` on the host-declared render-capable
+thread, the same class as `RasterRecipe` replacement. Backends translate this
+plan; they do not choose tone curves, gamuts, brightness or fallback.
 
 Baseline SDR output uses sRGB/Rec.709 primaries, D65 and the sRGB transfer
 function. The first HDR contract uses a Rec.2020 container, D65, BT.2100 PQ, at
@@ -320,16 +327,18 @@ HDR display admission still requires the Platform/presentation facts and surface
 contract in ADR-033. HLG, scRGB and platform EDR are separate future descriptors,
 not aliases for HDR10.
 
-Scene-referred work runs before the output transform. Display-referred UI is
-composed afterward in display-linear target space at the declared reference-white
-scale; accessibility transforms cover the complete composed image before final
-gamut containment, dithering and transfer encoding. Encoding occurs exactly once.
-Scene-linear captures and display screenshots are separate typed products with
-their color-pipeline metadata.
+Scene-referred work, including ADR-011 VFX additive/translucent batches, runs
+before the output transform. Display-referred UI is composed afterward in
+display-linear target space at the declared reference-white scale; the ADR-015
+colorblind transform is ColorPipelinePlan step 6 and covers the complete
+composed image, including HUD, before final gamut containment, dithering and
+transfer encoding. Creative look/grading is step 3 and is not that pass.
+Encoding occurs exactly once. Scene-linear captures and display screenshots are
+separate typed products with their color-pipeline metadata.
 
 Changing exposure/color/output conventions invalidates or explicitly rescales
 dependent histories. SDR/HDR or display transitions stage a new plan and publish
-at a render safe point; scene shading remains ACEScg. Missing transforms, invalid
+at `CommandThreadPolicy::RenderSafePoint`; scene shading remains ACEScg. Missing transforms, invalid
 metadata, hotplug, allocation failure or stale completion retain the last good
 compatible plan or produce ADR-033's typed suspended/lost state, never a hidden
 curve, precision or transfer-function substitution.
