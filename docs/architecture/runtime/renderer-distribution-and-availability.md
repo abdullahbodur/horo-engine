@@ -3,7 +3,7 @@
 ## Purpose
 
 For the `opengl` component,
-[ADR-029](../../adr/029-opengl-compatibility-profile-and-platform-policy.md)
+[ADR-029](../../adr/029-opengl-core-profile-and-platform-policy.md)
 owns native admission and platform deprecation: desktop OpenGL 4.1 Core minimum,
 actual-context verification, and release qualification. A packaged component or
 system GL loader alone does not establish availability. The macOS deprecation

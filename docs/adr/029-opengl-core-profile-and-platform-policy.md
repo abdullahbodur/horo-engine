@@ -18,7 +18,9 @@ work could independently lower that requirement or infer features from it.
 
 “Compatibility renderer” describes OpenGL's product role: maintaining a desktop
 rendering option alongside the other native backends. It does **not** mean the
-OpenGL Compatibility Profile. OpenGL remains an equal backend under the
+OpenGL Compatibility Profile. The document filename is
+`029-opengl-core-profile-and-platform-policy.md` for that reason. OpenGL remains
+an equal backend under the
 [parity contract](../architecture/runtime/render-backend-parity-contract.md).
 
 [ADR-028](028-renderer-capability-limits-and-product-profiles.md) already separates
@@ -215,10 +217,20 @@ but the following gaps remain explicit implementation work:
 | RND-004.7 / #312 — Editor GUI and Viewport | Consume the selected backend's readiness; remove reliance on editor-only GL loading for runtime readiness; integrate the macOS warning through the common host workflow. |
 | RND-004.8 / #313 — Compatibility and GPU Qualification | Publish the release matrix and evidence, including actual contexts, platform diagnostics, driver restrictions, and negative admission tests. |
 
-Resource/memory realization (RND-004.3) and command/synchronization adaptation
-(RND-004.4) consume this policy and ADR-027/028; they do not choose another native
-minimum. Other renderer APIs, product profile recipes, package trust, driver
-rule governance, and native shader implementation retain their existing owners.
+Resource/memory realization (RND-004.3) follows
+[ADR-034](034-gpu-memory-and-residency-ownership.md) for charges, heaps/pools and
+retirement; it does not invent a second OpenGL budget. Command/synchronization
+adaptation (RND-004.4) consumes this policy and ADR-027/028; they do not choose
+another native minimum. Other renderer APIs, product profile recipes, package
+trust, driver rule governance, and native shader implementation retain their
+existing owners.
+
+Linux X11 and Wayland remain separate qualification entries. Those rows live in
+the shared
+[Renderer Distribution And Availability](../architecture/runtime/renderer-distribution-and-availability.md)
+matrix together with the Vulkan Linux lanes from
+[ADR-031](031-vulkan-loader-platform-and-version-baseline.md); each backend adds
+columns, not a second independent Linux matrix.
 
 The current SDL adapter sets version/profile during `CreateContext` after the
 host has created its window. The current backend forwards requested options

@@ -180,7 +180,7 @@ Each shipped variant needs separate qualification. OS, GPU family, shader
 language, implemented operations, and product profiles remain distinct checks;
 neither a non-null device nor the `metal` identifier grants effective support.
 
-[ADR-029](../../adr/029-opengl-compatibility-profile-and-platform-policy.md) owns
+[ADR-029](../../adr/029-opengl-core-profile-and-platform-policy.md) owns
 the `opengl` component's native version, platform, and deprecation policy:
 desktop OpenGL 4.1 Core minimum, actual-context validation, and qualified desktop
 Windows/Linux/macOS support. “Compatibility renderer” does not permit the OpenGL

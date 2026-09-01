@@ -1,10 +1,12 @@
 # ADR-031: Vulkan Loader, Platform and Version Baseline
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-31
-- **Owners**: Rendering / Platform
-- **Tracking**: HORO-322 / #322 / RND-006.1
-- **Milestone**: M0 — Architecture Baseline
+- **Supersedes**: None
+- **Scope**: Vulkan loader, 1.3 admission, WSI and Windows/Linux baseline
+- **Jira**: [HORO-322](https://horo-engine.atlassian.net/browse/HORO-322)
+- **Issue**: [#322](https://github.com/abdullahbodur/horo-engine/issues/322) ([RND-006.1])
+- **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 
 ## Context
 
@@ -18,8 +20,13 @@ This ADR defines native admission and deployment policy. It consumes
 capabilities and product profiles, and the common
 [parity](../architecture/runtime/render-backend-parity-contract.md) and
 [distribution](../architecture/runtime/renderer-distribution-and-availability.md)
-contracts for lifecycle and selection. It does not choose a new shader source
-language, allocator, render-graph scheduler, or public extension ABI.
+contracts for lifecycle and selection. Renderer resource identity is
+[ADR-027](027-renderer-resource-identity-and-descriptors.md); that is a different
+decision from [ADR-008](008-error-model-exception-boundary-and-registry.md).
+GPU backing follows [ADR-034](034-gpu-memory-and-residency-ownership.md).
+Presentation follows [ADR-033](033-presentation-and-display-ownership.md).
+It does not choose a new shader source language, allocator, render-graph
+scheduler, or public extension ABI.
 
 ## Decision
 
@@ -55,11 +62,14 @@ own that synchronization under the
 [Khronos swapchain semaphore guidance](https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html).
 
 Shader artifacts target the Vulkan 1.3 environment with SPIR-V no newer than
-1.6. Individual SPIR-V capabilities/extensions must also match enabled device
-features and the cooked variant requirements. The SPIR-V version ceiling alone
-does not admit arbitrary shader operations. RND-006.6 and the canonical shader
-toolchain record/validate the target environment and features; they do not add
-a Vulkan-specific asset registry or silently recompile failed packaged assets.
+1.6. Khronos [version guidance](https://docs.vulkan.org/guide/latest/versions.html)
+requires a Vulkan 1.3 implementation to support SPIR-V 1.6 and below; the 1.6
+ceiling is that required mapping, not a silent raise to Vulkan 1.4. Individual
+SPIR-V capabilities/extensions must also match enabled device features and the
+cooked variant requirements. The SPIR-V version ceiling alone does not admit
+arbitrary shader operations. RND-006.6 and the canonical shader toolchain
+record/validate the target environment and features; they do not add a
+Vulkan-specific asset registry or silently recompile failed packaged assets.
 
 ### 2. Required extensions and surface-specific admission
 
@@ -89,10 +99,14 @@ requirements with a typed startup diagnostic. Native window handles and Vulkan
 extension strings do not enter project settings or public Render API types.
 
 Select a graphics-capable queue and validate presentation support against the
-actual surface. A common queue family is preferred; a separate present family
-is allowed with explicit ownership/sharing and synchronization in RND-006.4/.5.
-Do not assume graphics capability implies present capability or require a
-dedicated compute/transfer queue. Validate surface formats, usages, extents,
+actual surface. A common graphics+present queue family is preferred. When the
+host has no explicit adapter request, eligible-device ordering prefers a device
+that can present from its graphics family over an otherwise eligible device that
+requires a split present family. A split present family is still admitted when
+it is the only eligible option or when an explicit adapter request names that
+device; RND-006.4/.5 then own sharing and synchronization. Do not assume
+graphics capability implies present capability or require a dedicated
+compute/transfer queue. Validate surface formats, usages, extents,
 image counts, and presentation modes before swapchain creation. FIFO is the
 required parity mode; unsupported explicit alternatives return typed results.
 Output color/HDR policy remains with the display/presentation owners.
@@ -104,14 +118,21 @@ desktop. Ubuntu 24.04 LTS is the Linux reference qualification distribution,
 matching [Developer Environment](../architecture/delivery/developer-environment.md).
 Other distributions require their own package/runtime compatibility evidence;
 an OS-family label is not a universal ABI or driver guarantee. X11 and Wayland
-are separate qualification lanes. Additional architectures and platforms need
-an explicit scope/migration decision before being advertised.
+are separate qualification lanes. Those Linux rows live in the same
+[Renderer Distribution And Availability](../architecture/runtime/renderer-distribution-and-availability.md)
+matrix as [ADR-029](029-opengl-core-profile-and-platform-policy.md) OpenGL Linux
+lanes; Vulkan and OpenGL add backend columns, not two independent matrices.
+Additional architectures and platforms need an explicit scope/migration decision
+before being advertised.
 
 macOS/iOS MoltenVK and other portability-subset implementations are **deferred**
 from this initial component. The baseline does not enable
 `VK_KHR_portability_enumeration` or its enumeration flag, and rejects a selected
-device advertising `VK_KHR_portability_subset`. An engineering host may test a
-separate experimental configuration but cannot label it native qualification.
+device advertising `VK_KHR_portability_subset`. Portability-subset rejection
+outranks explicit adapter match-or-fail: an explicit request for a
+portability-subset device still fails as an unsupported API variant, not as a
+successful identity match. An engineering host may test a separate experimental
+configuration but cannot label it native qualification.
 
 Future portability support must explicitly enable enumeration, enable the
 device subset extension when advertised, inspect subset features/limits, and
@@ -211,9 +232,9 @@ contracts, not evidence of implemented support. Downstream owners are:
 | Ticket | Required realization |
 |---|---|
 | RND-006.2 / #323 | Loader/dispatch seams with Platform, independent version queries, candidate admission, explicit feature enablement, queue/device ownership and diagnostics. |
-| RND-006.3 / #324 | Required resource/format/descriptor paths and retirement using effective support, without a mandatory bindless implementation. |
-| RND-006.4 / #326 | Core dynamic-rendering/synchronization2 path, timeline completion, queue ownership, and non-blocking frame execution. |
-| RND-006.5 / #325 | Private WSI requirements, actual-surface checks, swapchain binary-semaphore lifetime, resize and recovery. |
+| RND-006.3 / #324 | Required resource/format/descriptor paths and retirement using effective support under [ADR-034](034-gpu-memory-and-residency-ownership.md), without a mandatory bindless implementation. |
+| RND-006.4 / #326 | Core dynamic-rendering/synchronization2 path, timeline completion, queue ownership, and non-blocking frame execution under [ADR-010](010-job-waiting-and-operation-store-ownership.md). |
+| RND-006.5 / #325 | Private WSI requirements, actual-surface checks, swapchain binary-semaphore lifetime, resize and recovery under [ADR-033](033-presentation-and-display-ownership.md). |
 | RND-006.6 / #327 | Vulkan 1.3 SPIR-V target validation, required shader capabilities, cooked variants and pipeline diagnostics. |
 | RND-006.7 / #328 | Matching GUI/viewport integration that borrows the admitted backend, never creates an independent loader/device. |
 | RND-006.8 / #329 | Windows/Linux X11/Wayland qualification, validation layers, loss/rollback tests, and package/runtime evidence with release owners. |
