@@ -383,6 +383,20 @@ explicit; a backend cannot fabricate parity with names, zeros or latest values.
 Null validates logical fixtures and all service/UI states but cannot qualify native
 barriers, memory observations or measurement accuracy.
 
+[ADR-050 reference-image parity](../../adr/050-cross-backend-reference-image-tests.md)
+requires the same case identity, scene/capture/image contract, capability outcome,
+typed result and bounded artifact schema across backends. Backend-private adapters
+may normalize format, swizzle, pitch, origin and resolve semantics only as declared
+by the canonical Horo capture point; they cannot change scene policy, quality,
+shader variants or comparison thresholds.
+
+Each backend/platform uses an exact reviewed baseline key while cross-backend
+reports separately assert semantic feature/capture invariants. No backend may
+substitute another baseline/device/software route, treat unsupported or absent
+hardware as pass, retry an image mismatch into success or auto-promote its output.
+Null proves orchestration and comparison fixtures but cannot qualify native
+pixels, compiler routes, color conversion or driver behavior.
+
 In particular:
 
 - OpenGL global state is private to the OpenGL integration.

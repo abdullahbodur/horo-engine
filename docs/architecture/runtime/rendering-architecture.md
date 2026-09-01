@@ -772,6 +772,26 @@ Hidden tabs perform no polling/layout/formatting or instrumentation. Null suppli
 deterministic logical fixtures but cannot qualify native synchronization, timing
 or memory realization.
 
+### Cross-backend reference images
+
+[ADR-050](../../adr/050-cross-backend-reference-image-tests.md) defines native
+reference-image qualification at named Horo render-graph capture points. Cases
+own immutable scene/content revisions, fixed time/seeds/history, exact capability
+predicates and canonical SDR/HDR image contracts. Backend-private readback
+adapters normalize native format, swizzle, row pitch, orientation and resolve
+semantics without exposing native objects.
+
+Backend/platform golden gates and cross-backend semantic invariants are separate.
+Every result preserves backend, environment, capability revision, real frame,
+graph execution and baseline provenance. Unsupported, missing-baseline, timeout,
+device-loss and infrastructure outcomes remain typed and cannot fall back to
+another backend/reference or compare a blank image. Readback follows normal
+submission/deferred-destruction ownership and never requires global GPU idle.
+
+Null validates deterministic service, normalization, comparator, artifact,
+budget, cancellation and shutdown fixtures. Only documented native hardware
+lanes qualify rasterization, shader compilation, readback and driver behavior.
+
 ## Backend Implementation Boundary
 
 Each concrete backend owns its API dependencies, context/device objects,
