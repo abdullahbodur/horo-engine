@@ -5,6 +5,8 @@
 - **Supersedes**: None
 - **Scope**: Backend-neutral resident renderer resources
 - **Issue**: [RND-001.1](https://github.com/abdullahbodur/horo-engine/issues/290)
+- **Jira**: [HORO-290](https://horo-engine.atlassian.net/browse/HORO-290)
+- **Parent**: [RND-001](https://github.com/abdullahbodur/horo-engine/issues/13)
 - **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 
 ## Context
@@ -22,6 +24,38 @@ resource description independent of backend selection and leave render-graph
 access declarations to the render graph.
 
 ## Decision
+
+### Authority and implementation boundary
+
+This ADR is the single normative owner for resident renderer resource classes,
+identity, immutable creation descriptors, registry states, validation order,
+dependency retention, replacement, and the boundary between persistent asset
+identity and process-local GPU residency. The Resource Model section of
+[Rendering Architecture](../architecture/runtime/rendering-architecture.md)
+summarizes this decision; it does not define a second policy. Generic handle
+guidance in
+[Ownership And Resource Lifetime](../architecture/foundation/ownership-and-resource-lifetime.md)
+is subordinate to this renderer-specific contract.
+
+The implementation tickets consume this decision without reopening it:
+
+- [RND-001.2](https://github.com/abdullahbodur/horo-engine/issues/291)
+  implements the frontend registry, owner/slot/generation validation, state
+  machine, bounded request handling, pins, and retirement;
+- [RND-001.3](https://github.com/abdullahbodur/horo-engine/issues/292)
+  migrates mesh creation, upload, readiness, replacement, and residency onto
+  buffer and mesh resources;
+- [RND-001.4](https://github.com/abdullahbodur/horo-engine/issues/293) and
+  [RND-001.5](https://github.com/abdullahbodur/horo-engine/issues/294) migrate
+  OpenGL and Metal editor viewport resources without exposing native identity;
+- [RND-001.6](https://github.com/abdullahbodur/horo-engine/issues/295) qualifies
+  the shared lifetime and parity contract against Null and supported native
+  backends.
+
+[ADR-028](028-renderer-capability-limits-and-product-profiles.md) owns effective
+capability and limit admission. [ADR-034](034-gpu-memory-and-residency-ownership.md)
+owns backing-memory accounting, reservations, and pressure policy. Neither may
+create another resident identity, descriptor mutability, or lifetime model.
 
 ### Resource taxonomy
 
@@ -380,6 +414,15 @@ The renderer migration proceeds without parallel identity policies:
 5. Parity validation covers malformed, stale, foreign, pending, retiring,
    pinned-dependency release, non-retargeting replacement, reconstruction-source
    recovery, rollback, device-loss, and repeated-shutdown behavior.
+
+Each step replaces its transitional path atomically at the owning boundary.
+Callers do not retain an adapter that accepts both legacy and owner/slot/generation
+handles, and serialized data is not migrated to resident handles. RND-001.2 owns
+the registry implementation consumed by the resource migrations; RND-001.3
+through RND-001.5 cut over callers at their owning boundaries, and RND-001.6
+qualifies the resulting shared behavior. These responsibility boundaries do not
+define delivery order; native blocked-by relationships remain the scheduling
+authority.
 
 The current `RenderTargetHandle {index, generation}` and
 `RenderMeshHandle {MeshResourceId, generation}` are transitional. They migrate

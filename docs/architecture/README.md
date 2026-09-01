@@ -92,6 +92,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Rendering Architecture](./runtime/rendering-architecture.md): render
   extraction, frontend/backend boundaries, render graph, GPU resources, and
   null rendering.
+- [Renderer Resource Identity and Descriptors](../adr/027-renderer-resource-identity-and-descriptors.md):
+  resident resource taxonomy, owner/slot/generation handles, immutable
+  descriptors, validation, replacement, and deferred retirement.
 - [Render Backend Parity Contract](./runtime/render-backend-parity-contract.md):
   equal lifecycle, presentation, editor integration, and verification obligations
   for interactive renderer backends.

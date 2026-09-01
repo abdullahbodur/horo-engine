@@ -79,9 +79,14 @@ sequence is defined by
 Long-lived and reloadable resources use typed handles:
 
 ```cpp
+struct ResourceOwnerId {
+    uint64_t value;
+};
+
 template<typename Tag>
 struct Handle {
-    uint32_t index;
+    ResourceOwnerId owner;
+    uint32_t slot;
     uint32_t generation;
 };
 
@@ -89,8 +94,15 @@ using TextureHandle = Handle<TextureTag>;
 using MeshHandle = Handle<MeshTag>;
 ```
 
-Registries validate type, index, generation, and owner domain. Stale handles
+Registries validate type, slot, generation, and owner domain. Stale handles
 fail safely and never alias a newly allocated object at the same slot.
+
+For resident renderer resources, the exact resource taxonomy, non-zero
+owner/slot/non-wrapping-generation semantics, registry states, and retirement
+rules are owned by
+[ADR-027](../../adr/027-renderer-resource-identity-and-descriptors.md). The
+generic example above illustrates the common shape and does not authorize a
+renderer-specific two-field handle or a second identity policy.
 
 Serialized project and asset data stores stable logical IDs, not process-local
 handles. The authority that owns the runtime registry resolves those IDs at an
