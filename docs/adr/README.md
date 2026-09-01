@@ -50,7 +50,11 @@ to the replacement.
 
 ## Conventions
 
-- **Status**: `proposed`, `accepted`, `deprecated`, `superseded`
+- **Status**: lowercase `proposed`, `accepted`, `deprecated`, `superseded`
+- **Header fields**, in this order when present: Status, Date, Deciders,
+  Supersedes, Superseded by, Scope, Issue, Jira, Parent, Related,
+  Companion decision, Normative document(s). Use `Jira` (not `JIRA`). Link the
+  Jira key to the work item. Optional fields are omitted rather than left empty.
 - **Naming**: `NNN-lowercase-title-with-hyphens.md`
 - **IDs are stable**: a number is assigned once and is never reused for a
   different decision. ADR-008 is the error-model decision

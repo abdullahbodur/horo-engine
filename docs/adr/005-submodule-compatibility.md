@@ -1,10 +1,10 @@
 # ADR-005: Submodule Compatibility Constraints
 
-- **Status**: Accepted
+- **Status**: accepted
 - **Date**: 2026-05-25
-- **JIRA**: HORO-32
 - **Supersedes**: None
 - **Scope**: Engine consumption as a git submodule — guarantees, limitations, and test strategy
+- **Jira**: [HORO-32](https://horo-engine.atlassian.net/browse/HORO-32)
 
 ## Context
 

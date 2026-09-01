@@ -1,11 +1,11 @@
 # ADR-015: Accessibility Ownership, Typed Transport and Non-Gating Policy
 
-- **Status**: Proposed
+- **Status**: proposed
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Accessibility state ownership, typed transports, configuration snapshots, DataBus boundaries, non-blocking loops, and semantic availability
 - **Issue**: [#1849](https://github.com/abdullahbodur/horo-engine/issues/1849) ([ACC-001.1])
-- **JIRA**: HORO-1805
+- **Jira**: [HORO-1805](https://horo-engine.atlassian.net/browse/HORO-1805)
 - **Normative document**: [Accessibility Architecture](../architecture/runtime/accessibility-architecture.md)
 
 ## Context

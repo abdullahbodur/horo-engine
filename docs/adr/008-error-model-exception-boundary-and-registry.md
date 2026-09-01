@@ -1,6 +1,6 @@
 # ADR-008: Error Model, Exception Boundary and Registry Ownership
 
-- **Status**: Proposed
+- **Status**: proposed
 - **Date**: 2026-08-27
 - **Supersedes**: None
 - **Scope**: Foundation `Result<T,Error>`, `ErrorCode`/`Error`, diagnostics, registry and exception boundaries

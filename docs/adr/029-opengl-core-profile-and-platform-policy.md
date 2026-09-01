@@ -4,8 +4,8 @@
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: OpenGL native admission, platform qualification and context negotiation
-- **Jira**: [HORO-306](https://horo-engine.atlassian.net/browse/HORO-306)
 - **Issue**: [#306](https://github.com/abdullahbodur/horo-engine/issues/306) ([RND-004.1])
+- **Jira**: [HORO-306](https://horo-engine.atlassian.net/browse/HORO-306)
 - **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 
 ## Context

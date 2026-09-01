@@ -4,8 +4,8 @@
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: Metal native admission, GPU family, MSL and macOS deployment
-- **Jira**: [HORO-314](https://horo-engine.atlassian.net/browse/HORO-314)
 - **Issue**: [#314](https://github.com/abdullahbodur/horo-engine/issues/314) ([RND-005.1])
+- **Jira**: [HORO-314](https://horo-engine.atlassian.net/browse/HORO-314)
 - **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 
 ## Context

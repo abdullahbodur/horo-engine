@@ -1,11 +1,11 @@
 # ADR-010: Job Waiting and Operation Store Ownership
 
-- **Status**: Proposed
+- **Status**: proposed
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Job execution, waiting, low-level records, user-facing operation aggregation, observation and submission-captured context
 - **Issue**: [#1828](https://github.com/abdullahbodur/horo-engine/issues/1828) ([JOB-001.1])
-- **JIRA**: HORO-1784
+- **Jira**: [HORO-1784](https://horo-engine.atlassian.net/browse/HORO-1784)
 - **Normative document**: [Concurrency And Job System](../architecture/foundation/concurrency-and-jobs.md)
 
 ## Context

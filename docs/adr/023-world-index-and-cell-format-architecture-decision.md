@@ -1,11 +1,11 @@
 # ADR-023: World Index and Cell Format Architecture Decision
 
-- **Status**: Proposed
+- **Status**: proposed
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Cooked world index manifest (`world.index`), streaming cell archive format (`.wcell` / `horopak` chunk), binary encoding, versioning, endianness, integrity hashing, feature-provider payloads, typed error model, and cancellation lifecycles
 - **Issue**: [#1564](https://github.com/abdullahbodur/horo-engine/issues/1564) ([WST-004.1])
-- **JIRA**: HORO-1564
+- **Jira**: [HORO-1564](https://horo-engine.atlassian.net/browse/HORO-1564)
 - **Parent**: [#1521](https://github.com/abdullahbodur/horo-engine/issues/1521) ([WST-004])
 - **Normative document**: [World Streaming Architecture](../architecture/runtime/world-streaming-architecture.md)
 

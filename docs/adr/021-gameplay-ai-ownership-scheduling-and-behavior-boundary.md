@@ -1,11 +1,11 @@
 # ADR-021: Gameplay AI Ownership, Scheduling and Behavior Boundary
 
-- **Status**: Proposed
+- **Status**: proposed
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Gameplay AI runtime (`HoroAI`), agent brain state, blackboard storage and transactions, perception memory, simulation fixed-tick phases, task scheduler sharing, and separation from editor AI tooling.
 - **Issue**: [#1309](https://github.com/abdullahbodur/horo-engine/issues/1309) ([GAI-001.1])
-- **JIRA**: HORO-1309
+- **Jira**: [HORO-1309](https://horo-engine.atlassian.net/browse/HORO-1309)
 - **Related**:
   - [ADR-022: AI Fixed-Tick Order, Authority and Simulation Budget](022-ai-fixed-tick-order-authority-and-simulation-budget.md) (fine-grained tick, host authority, profiles)
   - [ADR-024: Perception Ownership, Sense Policy and Budget](024-perception-ownership-sense-policy-and-budget.md)
