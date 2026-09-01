@@ -11,6 +11,11 @@ The goal is to provide a deterministic, data-oriented animation runtime that can
 drive characters from simple loops to complex gameplay-responsive locomotion and
 cinematics.
 
+[ADR-061](../../adr/061-animation-ownership-update-order-and-clock.md) is the
+single normative owner of pose ownership, animation clock domains, fixed-tick
+order, root-motion timing, and physics/render handoff. This document owns the
+broader animation subsystem model and summarizes that decision.
+
 ## Scope
 
 Covered:
@@ -39,12 +44,14 @@ Not covered:
 - Animations are data assets. The runtime samples them; it does not author them.
 - Poses are the primary runtime currency: animation outputs a pose, IK modifies
   it, physics may override parts of it, and skinning consumes it.
-- The animation update runs as part of the runtime frame, before render
-  extraction. Fixed-step physics does not drive animation timing.
+- Authoritative animation advances once per attempted fixed simulation tick.
+  Presentation interpolates committed poses and editor preview uses isolated
+  state; neither advances gameplay animation.
 - Animation graphs are authored assets that compile into a runtime evaluation
   tree. They are not interpreted scripts.
-- Root motion is explicit: animation provides a delta transform; gameplay code
-  decides whether to consume it.
+- Root motion is explicit: animation stages the exact fixed-tick interval delta;
+  gameplay selects consumption policy and the character controller owns final
+  collision-aware movement.
 - Retargeting is a cook/import-time process where possible. Runtime retargeting
   is supported but more expensive.
 - GPU skinning is the default for skinned meshes. CPU skinning is a fallback for
@@ -94,12 +101,15 @@ struct Pose {
 Rules:
 
 - Local transforms are authoritative.
-- Model-space matrices are computed once per frame on first access, then cached
-  until the next pose evaluation invalidates them.
-- Poses are owned by the animation system and leased to gameplay/physics for
-  read-only inspection unless explicit write-back is declared.
-- Poses are allocated from a frame-local pool to avoid heap allocations during
-  playback.
+- Model-space matrices are computed once per pose generation on first access,
+  then cached until a new candidate pose invalidates them.
+- Mutable poses are owned only by Animation Runtime. Gameplay and physics receive
+  generation-checked read-only leases; physics returns typed post-step overrides
+  rather than writing pose arrays.
+- Working poses use bounded instance/frame storage. Previous/current committed
+  poses remain valid until presentation and render leases retire.
+- Render extraction receives a frame-owned immutable pose/palette projection
+  tagged with scene, instance, tick, and pose-generation identity.
 
 ## Animation Clip
 
@@ -109,8 +119,8 @@ A clip stores sampled animation data for one skeleton.
 struct AnimationClipDescriptor {
     ClipId id;
     SkeletonId skeleton;
-    float durationSeconds;
-    float sampleRate;
+    AnimationTime duration;
+    AnimationSampleRate sampleRate;
     WrapMode wrapMode;
     bool hasRootMotion;
     AnimationCompressionScheme compression;
@@ -138,11 +148,14 @@ Cook-time compression may reduce precision based on the active cook profile.
 ### Clip Sampling
 
 ```cpp
-Pose SampleClip(const AnimationClip& clip, float time, const Skeleton& skeleton);
+Pose SampleClip(const AnimationClip& clip, AnimationTime time,
+                const Skeleton& skeleton);
 ```
 
 Behavior:
 
+- `AnimationTime` uses the checked fixed-point/rational domain finalized by
+  ANI-001.6; authoritative cursors are not accumulated in floating-point seconds
 - time is wrapped according to `WrapMode` (`Once`, `Loop`, `PingPong`, `ClampForever`)
 - keyframe interpolation is linear or spline depending on clip metadata
 - rotations are normalized after interpolation
@@ -262,8 +275,8 @@ any other pose query.
 
 ## Root Motion
 
-Root motion produces a transform delta each frame from the animation clip's root
-joint.
+Root motion produces a transform delta for one authoritative fixed-tick player
+interval from the animation clip's root joint.
 
 ```cpp
 struct RootMotionDelta {
@@ -275,11 +288,16 @@ struct RootMotionDelta {
 Rules:
 
 - root motion is optional per clip
-- gameplay chooses whether to consume the delta for character movement
+- the authoritative delta is extracted once for the exact directed fixed-tick
+  player interval; presentation and preview never produce consumable root motion
+- gameplay chooses whether to consume the delta for character movement, while
+  the controller owns collision-aware resolution and final transform authority
 - networked games must replicate root motion parameters or resulting transforms,
   not raw animation time
-- root motion deltas are accumulated and applied during the gameplay movement
-  update, not inside the animation system
+- requests carry scene/instance/tick/generation identity and are consumed at
+  most once; stale, duplicate, preview, and failed-tick requests are rejected
+- reverse playback can emit an inverse directed delta only when the clip/node and
+  owner policy admit reverse traversal; it never reverses the physics world
 
 ## Retargeting
 
@@ -312,8 +330,8 @@ Animation events are named markers attached to a clip at a specific time.
 ```cpp
 struct AnimationEvent {
     EventName name;
-    float timeSeconds;
-    std::optional<float> durationSeconds;
+    AnimationTime time;
+    std::optional<AnimationTime> duration;
     VariantMap payload;  // typed key-value map; see foundation type glossary
 };
 ```
@@ -326,9 +344,11 @@ Event types:
 - `SpawnProjectile` — fire event
 - `Custom` — gameplay-defined
 
-The animation system emits events during evaluation. Consumers subscribe by
-name. Events do not directly spawn gameplay objects; they queue commands for the
-frame update.
+The animation system stages event occurrences during fixed-tick evaluation and
+publishes them only after that tick commits. Consumers subscribe by typed event
+identity. Events do not directly spawn gameplay objects; they enter bounded owner
+queues for a later permitted boundary. Reverse and large-interval traversal follow
+ADR-061's eligibility and atomic preflight rules.
 
 ## Skinning
 
@@ -369,32 +389,31 @@ scene conversion:
 
 ### Update Order
 
-For the non-AI frame-pose path, animation produces a pose once per rendered frame.
-This is distinct from ADR-022's fixed-tick AI locomotion/rig ordering: AI cinematic
-movement enters NavIntentCommit, physics authority remains in locomotion, and rig
-update follows committed movement. The sequencer does not move that fixed-tick
-work into VariableUpdate or permit presentation samples to mutate physics.
-
-On the frame-pose path, physics may step multiple
-times per frame at a fixed interval; the animation pose is sampled before those
-steps and is not re-sampled inside a physics step.
+The authoritative non-AI path follows ADR-061 inside every attempted fixed tick.
+This remains distinct from ADR-022's AI phase graph, but both paths are fixed-tick
+contracts. Catch-up evaluates animation separately for every attempted tick; one
+render-frame pose is never reused as the authoritative input to several physics
+steps.
 
 ```text
-Frame Update
-  Gameplay sets animation parameters & behavior state
-  Cinematic owner-admitted parameters apply (no presentation interpolation)
-  Animation graph evaluates -> pose
-  IK applied -> modified pose
-  Root motion delta produced
-  Gameplay consumes root motion (character controller resolves movement)
-  Physics fixed-step(s)
-  Render extraction reads final pose and joint palette
+Attempted Fixed Tick
+  Gameplay and owner-admitted cinematic inputs stage animation parameters
+  Animation evaluates candidate pose, eligible IK, events, and root-motion delta
+  Character controller resolves desired movement plus root motion
+  Physics steps once and publishes typed body/pose overrides
+  Animation composes admitted overrides and finalizes candidate pose
+  Tick commit publishes player state, events, and previous/current poses
+
+After FixedUpdate
+  Presentation interpolates committed poses and applies presentation-only overlays
+  Render extraction reads the immutable frame pose and joint palette
 ```
 
-Interpolated cinematic presentation overlays are applied only to the render/preview
-snapshot after movement authority resolves. They do not feed this path's root-motion
-output or write animation parameters consumed by physics. Only owner-admitted
-non-interpolated inputs participate in the movement-producing pose evaluation.
+Simulation-affecting IK runs before controller/physics consumption. Post-physics
+or presentation IK cannot feed same-tick root motion, movement, or colliders.
+Interpolated cinematic overlays apply only to the render/preview snapshot after
+movement authority resolves. Only owner-admitted non-interpolated fixed-tick inputs
+participate in movement-producing evaluation.
 
 The character controller runs during the gameplay movement phase, before the
 physics world is stepped. This matches the ordering described in
@@ -407,7 +426,7 @@ The renderer receives:
 - transform
 - mesh asset
 - material
-- joint palette handle or pointer
+- frame-owned immutable joint palette snapshot/lease
 - bounds
 
 Bounds for skinned meshes must account for pose extents. Conservative bounds may
@@ -416,8 +435,11 @@ be used when exact pose bounds are too expensive.
 ### Physics
 
 Physics reads pose for ragdoll initialization or hit-detection shapes. Physics
-does not write pose unless a ragdoll or procedural physics override is active.
-Animation-to-physics handoff is explicit and event-driven.
+never writes Animation Runtime storage. Ragdoll or procedural physics publishes a
+typed post-step override for the exact scene, instance, skeleton, tick, joint map,
+and pose generation. Animation validates and composes it under explicit
+`AnimationDriven`, `PhysicsDriven`, or `Blended` authority, then publishes the
+committed pose. Animation-to-physics handoff is explicit and generation-checked.
 
 ## Asset Formats
 
@@ -490,10 +512,14 @@ Animation-to-physics handoff is explicit and event-driven.
 
 - Unit tests for pose hierarchy updates and matrix multiplication.
 - Sampling tests for loop/ping-pong wrap modes.
+- Fixed-tick determinism tests across different render cadences and catch-up grouping.
+- Pause, single-step, simulation-rate, reverse, and large-interval budget tests.
 - Blend tree tests verifying normalized weights and rotation correctness.
 - IK solver tests for known configurations.
 - Retargeting tests comparing source and target poses.
 - Visual regression tests for skinned mesh playback.
+- Root-motion duplicate/stale request and physics-override authority tests.
+- Preview/play isolation, stale pose lease, reload, scene replacement, and shutdown tests.
 - Performance tests for joint palette upload and GPU skinning throughput.
 
 ## Related Documents

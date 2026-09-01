@@ -137,6 +137,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Animation Architecture](./runtime/animation-architecture.md): skeletal
   animation, clips, animation graphs, blend trees, IK, root motion, retargeting,
   and animation events.
+- [Animation Ownership, Update Order and Clock](../adr/061-animation-ownership-update-order-and-clock.md):
+  pose ownership, fixed-tick advancement, pause/step/rate semantics, root-motion
+  timing, and physics/render handoff.
 - [VFX And Particles Architecture](./runtime/vfx-and-particles-architecture.md):
   CPU/GPU particle systems, VFX graphs, decals, and volumetric effects.
 - [Character Controller Architecture](./runtime/character-controller-architecture.md):

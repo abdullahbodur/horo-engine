@@ -64,7 +64,9 @@ enum class SequenceDilationPolicy : uint8_t { SourceNative, ApplyGameplayScale }
 ```
 
 - **CommittedSimulation** consumes `FixedStepContext::fixedDelta * playbackSpeed`
-  once per committed tick. Supplied simulation dilation is not multiplied twice.
+  once per committed tick. Host simulation rate is already represented by fixed-
+  tick production under [ADR-061](061-animation-ownership-update-order-and-clock.md)
+  and is not multiplied into `fixedDelta` again.
   Cursor, values and events are staged for the attempted tick and discarded if it
   fails. No render-interpolated delta advances this authoritative clock.
 - **UnscaledFixedControl** consumes host-owned unscaled fixed service quanta even
@@ -140,8 +142,9 @@ requirements are rejected instead of creating a second scheduler.
 For AI entities, movement is an admitted NavIntentCommit intent, followed by
 CharacterControllerLocomotion and AnimationRigUpdate under ADR-022. Cinematics do
 not insert another AI mutation phase or let clients control server-owned actors.
-The non-AI presentation/root-motion path in Animation Architecture retains its
-separate ordering; it is not a render-rate-independent simulation guarantee.
+The non-AI animation/root-motion path follows ADR-061's authoritative fixed-tick
+ordering. Sequencer inputs that can affect movement are staged through that owner
+seam; optional presentation samples remain render-only.
 Optional interpolated values target immutable presentation/preview output only.
 
 Physics/controller transforms, velocity and collider state cannot be directly

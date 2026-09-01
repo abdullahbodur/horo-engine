@@ -11,6 +11,10 @@ The goal is to give gameplay systems a stable, deterministic way to move
 characters in a physics world without exposing the full complexity of rigid-body
 dynamics to every gameplay module.
 
+[ADR-061](../../adr/061-animation-ownership-update-order-and-clock.md) owns the
+fixed-tick animation/root-motion ordering and pose handoff. This document owns
+movement admission, collision resolution, and the resulting transform.
+
 ## Scope
 
 Covered:
@@ -66,20 +70,20 @@ and orientation. The controller reads and writes the transform each frame.
 ## Update Order
 
 ```text
-Frame Update
-  Gameplay reads input and animation state
-  Gameplay computes desired velocity / root motion delta
-  Animation evaluates and produces root motion delta
+Attempted Fixed Tick
+  Gameplay stages desired movement and animation parameters
+  Animation evaluates and stages the exact tick's root motion request
   Character controller resolves movement
-  Transform is updated
-  Moving platform velocity applied if attached
-  Scene runtime synchronizes transform
+  Character transform and moving-platform result are published
+  Physics steps once
+  Post-physics animation pose override/finalization runs
+  Tick commit publishes previous/current state
 ```
 
-The controller always runs after animation root motion is sampled and before
-physics fixed-step integration. This ordering ensures gameplay-driven movement
-is resolved into a final transform before the physics world is stepped, so
-physics bodies can react to the character's new position in the same frame.
+The controller runs once after animation root motion is staged and before each
+physics fixed step. Catch-up repeats the complete sequence; it does not reuse one
+render-frame root delta. This ensures gameplay-driven movement is resolved into a
+final transform before physics reacts during the same attempted tick.
 
 ## Movement Resolution
 
@@ -91,7 +95,7 @@ struct MovementRequest {
     Quat desiredOrientation;
     bool jumpRequested;
     bool crouchRequested;
-    float deltaTime;
+    FixedDeltaTime deltaTime;
 };
 ```
 
@@ -272,7 +276,7 @@ Animation root motion may provide a movement delta.
 ```cpp
 enum class RootMotionPriority {
     Suggest,     // root motion is applied only if gameplay input is zero
-    Override     // root motion replaces gameplay input for this frame
+    Override     // root motion replaces gameplay input for this fixed tick
 };
 
 struct RootMotionRequest {
@@ -287,6 +291,13 @@ struct RootMotionRequest {
 The controller treats root motion as a movement request and resolves it through
 the same collision passes. This ensures that animation-driven movement still
 respects walls, slopes, and steps.
+
+The request identifies its scene, animation instance, simulation tick, and root-
+motion generation and can be consumed at most once. Presentation/editor-preview,
+stale, duplicate, or failed-tick requests are invalid. Reverse player traversal
+may submit the inverse directed delta when animation and gameplay policy admit it;
+the controller still performs ordinary forward collision resolution and does not
+reverse physics.
 
 If root motion and gameplay input conflict, gameplay input takes precedence
 unless the root motion request has `RootMotionPriority::Override`. The animation
@@ -368,7 +379,8 @@ Runtime variables:
 - Moving platform attachment and detachment tests.
 - Surface event emission tests.
 - Root motion collision tests.
-- Determinism tests for fixed-step playback.
+- Root motion duplicate/stale generation and reverse-policy tests.
+- Determinism tests for fixed-step playback under different render/catch-up grouping.
 - Performance tests for many concurrent controllers.
 
 ## Related Documents

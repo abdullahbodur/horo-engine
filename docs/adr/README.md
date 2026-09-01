@@ -72,6 +72,7 @@ to the replacement.
 | [058](058-package-source-policy.md) | Package Source Policy | Proposed | 2026-09-02 |
 | [059](059-script-consumable-module-boundary.md) | Script-Consumable Module Boundary | Proposed | 2026-09-02 |
 | [060](060-release-domain-model-and-state-machine.md) | Release Domain Model and State Machine | Proposed | 2026-09-02 |
+| [061](061-animation-ownership-update-order-and-clock.md) | Animation Ownership, Update Order and Clock | Proposed | 2026-09-02 |
 
 ## Conventions
 

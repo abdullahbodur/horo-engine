@@ -249,6 +249,13 @@ access. A stable order is produced for equal dependencies.
 Initial implementations may execute systems serially. The access contract still
 exists so future parallelism does not require redesigning system ownership.
 
+Within a fixed tick,
+[ADR-061](../../adr/061-animation-ownership-update-order-and-clock.md) requires
+gameplay parameter commit before animation pre-physics evaluation, root-motion
+request admission before character-controller movement, physics next, and typed
+post-physics pose override/finalization before tick publication. These are
+dependencies within the existing phase graph, not new `RuntimePhase` values.
+
 ## Runtime Save And Restore Integration
 
 [Runtime persistence](./save-game-and-persistence.md) is coordinated by an
