@@ -6,6 +6,9 @@
 - **Scope**: Backend-neutral render marker identity, placement, correlation and native debug labels
 - **Issue**: [RND-017.4](https://github.com/abdullahbodur/horo-engine/issues/436)
 - **Jira**: [HORO-436](https://horo-engine.atlassian.net/browse/HORO-436)
+- **Related**: [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md),
+  [ADR-038](038-gpu-scene-and-instance-data-model.md),
+  [ADR-039](039-ray-tracing-capability-and-abstraction.md)
 - **Companion decisions**: [ADR-027: Renderer Resource Identity and Descriptors](027-renderer-resource-identity-and-descriptors.md), [ADR-040: Reconstruction, Frame Generation and Latency Providers](040-reconstruction-frame-generation-and-latency-providers.md), [ADR-041: Backend-Neutral Renderer Diagnostics Model](041-backend-neutral-renderer-diagnostics-model.md), [ADR-042: CPU/GPU Timestamps and Pipeline Statistics](042-cpu-gpu-timestamps-and-pipeline-statistics.md), [ADR-043: GPU Memory and Resource Inspection](043-gpu-memory-and-resource-inspection.md)
 - **Normative documents**: [Metrics And Profiling](../architecture/observability/observability-performance.md), [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Render Backend Parity](../architecture/runtime/render-backend-parity-contract.md)
 
@@ -112,14 +115,30 @@ struct RenderMarkerCorrelation {
     std::optional<RenderQueueId> queue;
     std::optional<RenderPassId> pass;
     std::optional<TypedRenderResourceIdentity> resource;
+    std::optional<GpuSceneInstanceId> gpuSceneInstance;
+    std::optional<RenderViewId> view;
     std::optional<PipelineIdentity> pipeline;
     std::optional<ProviderOperationId> providerOperation;
+    std::optional<SurfaceGeneration> surface;
+    std::optional<HistoryGeneration> history;
 };
 ```
 
 Absence is explicit, never a zero ID. A resource uses its exact ADR-027
-owner/slot/generation and resource class; a native handle, pointer, address or
-backend object name cannot substitute. A frame marker distinguishes real render
+owner/slot/generation and resource class, including
+[ADR-039](039-ray-tracing-capability-and-abstraction.md) `BottomLevelAsHandle` /
+`TopLevelAsHandle`; a native handle, pointer, address or backend object name
+cannot substitute. GPU-driven draws correlate
+[ADR-038](038-gpu-scene-and-instance-data-model.md) `GpuSceneInstanceId` when the
+work is instance-scoped so a capture can answer which renderable produced the
+call. `view` is present for view-scoped work.
+
+This struct is not a copy of ADR-041 `RendererDiagnosticContext`. Command-level
+markers are narrower: `surface` and `history` appear only when the pass is
+surface- or history-scoped. They are omitted on ordinary draws rather than
+copied from the diagnostic context.
+
+A frame marker distinguishes real render
 frames from synthetic presentation frames. Generated frames may correlate to their
 bracketing real frames but never acquire a false graph/resource identity.
 
@@ -214,8 +233,10 @@ Shipping rejects developer strings unless a specific allowlisted diagnostics
 profile admits them.
 
 `SetRenderDebugLabel` is an explicit metadata operation. It validates the exact
-typed ready resource generation and queues mutation on the render-capable owner
-thread. It does not create a new resource generation or mutate the descriptor.
+typed ready resource generation and queues mutation at
+[ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md)
+`CommandThreadPolicy::RenderSafePoint` on the render-capable owner thread. It does
+not create a new resource generation or mutate the descriptor.
 Stale, foreign, pending and retiring handles return their ADR-027 identity/lifecycle
 errors. Unsupported native labeling returns `ObjectLabelUnsupported`; an optional
 logical-only label remains available only when the resolved plan declared that
@@ -241,7 +262,8 @@ Version 1 begins with `H1|m=<id>|k=<s|i>|x=<0|1>`, where `s` is scope, `i` is
 insert and `x=1` means optional native text was truncated. Optional
 correlation follows in this order: renderer generation (`rg`), device generation
 (`dg`), real frame (`rf`), synthetic frame (`sf`), graph (`g`), queue (`q`), pass
-(`p`), typed resource (`r`), pipeline (`pl`) and provider operation (`po`), then
+(`p`), typed resource (`r`), GPU Scene instance (`gs`), view (`vw`), pipeline
+(`pl`), provider operation (`po`), surface (`su`) and history (`hy`), then
 display name (`n`). Unsigned numeric components use lowercase hexadecimal without
 locale or a `0x` prefix. Percent-encoding covers the small allowed UTF-8 display
 name suffix. Native APIs whose end operation carries no text correlate it through
@@ -249,10 +271,13 @@ the validated scope stack rather than synthesizing a second identity string.
 
 The resource field is never packed into one implementation-defined integer. Its
 grammar is `r=<class>:<owner>:<slot>:<generation>`. `class` is one registered
-versioned token (`buf`, `tex`, `view`, `samp`, `shd`, `pipe`, `target` or `mesh`),
-and the three identity components are separate lowercase hexadecimal values. A
-future resource class requires a schema revision or an explicitly compatible new
-registered token; it cannot reuse an existing token with new meaning.
+versioned token (`buf`, `tex`, `view`, `samp`, `shd`, `pipe`, `target`, `mesh`,
+`blas` or `tlas`). `blas` and `tlas` are ADR-039 bottom- and top-level
+acceleration-structure handles. The three identity components are separate
+lowercase hexadecimal values. GPU Scene instance grammar is
+`gs=<frontend>:<scene>:<slot>:<generation>`. A future resource class requires a
+schema revision or an explicitly compatible new registered token; it cannot reuse
+an existing token with new meaning.
 
 The plan reserves the backend's qualified encoded-text limit. If the minimum
 identity token cannot fit, native marker support is unavailable. Optional display
@@ -270,11 +295,22 @@ adapted when supported and omitted without semantic loss when unsupported.
 
 ### 8. Budgets and saturation are finite
 
-The default plan admits 256 nested scope pairs and 512 inserts per real-frame
-graph, 1,024 registered marker descriptors, 96 KiB of registered display strings
-and 256 KiB of in-flight encoded marker storage per real frame. Hard limits are
-2,048 scope pairs, 4,096 inserts, 8,192 descriptors, 1 MiB of registered strings
-and 2 MiB encoded storage per real frame. Counts across frames in flight use
+The default plan admits 256 nested scope pairs and 512 inserts **in aggregate**
+per real-frame graph, 1,024 registered marker descriptors, 96 KiB of registered
+display strings and 256 KiB of in-flight encoded marker storage per real frame.
+Hard limits are 2,048 scope pairs, 4,096 inserts, 8,192 descriptors, 1 MiB of
+registered strings and 2 MiB encoded storage per real frame.
+
+Those aggregates are not a free-for-all. Like ADR-042 timestamp pairs, every
+graphics, compute or transfer queue that participates in the admitted real-frame
+graph receives a reserved floor: 32 nested scope pairs and 64 inserts by default
+(256 / 512 at the hard limit). Remaining budget after floors is shared. One dense
+graphics queue cannot consume the whole plan and leave compute/transfer unmarked.
+A participating queue whose reserved floor cannot be met fails a required marker
+plan or, under optional policy, records that queue's markers unavailable without
+silently taking another queue's floor.
+
+Counts across frames in flight use
 checked arithmetic and are charged to renderer diagnostics CPU memory before plan
 activation. Profiles may lower but not grow these limits at runtime.
 
@@ -356,7 +392,9 @@ Tests must cover:
 
 - descriptor duplicate/owner/string/privacy rejection and inert construction;
 - exact correlation for real/synthetic frames, graph/pass/queue, typed resource
-  generations, pipelines and provider operations with explicit absence;
+  generations including `blas`/`tlas`, GPU Scene instance, view, pipelines and
+  provider operations with explicit absence;
+- per-queue reserved floors plus aggregate caps;
 - cull/merge/queue reassignment, nested/segmented scope validation, early return,
   cancellation and no unmatched native begin/end;
 - required unsupported rejection and each declared optional mode fallback without
@@ -398,4 +436,7 @@ qualified adapter per backend/tool mode.
 | Repair unmatched scopes inside a backend | Rejected: hides frontend graph-placement bugs and may cross invalid native boundaries. |
 | Allocate or intern dynamic labels while recording | Rejected: frame-hot cost and cardinality must be admitted before execution. |
 | Fail rendering whenever optional marker emission fails | Rejected: observational instrumentation cannot become render correctness. |
+| Leave `blas`/`tlas` to a later schema | Rejected: ADR-039 AS work is first-class graph work and must be markable in v1. |
+| Omit GPU Scene instance from draw correlation | Rejected: GPU-driven captures need the renderable slot, not only mesh/pipeline. |
+| One aggregate marker budget with no per-queue floor | Rejected: a dense graphics queue would starve compute/transfer markers. |
 | Launch or control capture tools from marker adapters | Rejected: external tool lifecycle, permission and artifacts belong to RND-017.7. |
