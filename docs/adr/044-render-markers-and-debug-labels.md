@@ -237,7 +237,8 @@ and compact typed correlation. The token includes schema revision and
 `RenderMarkerId`; correlation uses fixed field keys and canonical unsigned
 lowercase hexadecimal Horo values. It contains no pointer or native enum.
 
-Version 1 begins with `H1|m=<id>|k=<scope-or-insert>|x=<0-or-1>`. Optional
+Version 1 begins with `H1|m=<id>|k=<s|i>|x=<0|1>`, where `s` is scope, `i` is
+insert and `x=1` means optional native text was truncated. Optional
 correlation follows in this order: renderer generation (`rg`), device generation
 (`dg`), real frame (`rf`), synthetic frame (`sf`), graph (`g`), queue (`q`), pass
 (`p`), typed resource (`r`), pipeline (`pl`) and provider operation (`po`), then
@@ -245,6 +246,13 @@ display name (`n`). Unsigned numeric components use lowercase hexadecimal withou
 locale or a `0x` prefix. Percent-encoding covers the small allowed UTF-8 display
 name suffix. Native APIs whose end operation carries no text correlate it through
 the validated scope stack rather than synthesizing a second identity string.
+
+The resource field is never packed into one implementation-defined integer. Its
+grammar is `r=<class>:<owner>:<slot>:<generation>`. `class` is one registered
+versioned token (`buf`, `tex`, `view`, `samp`, `shd`, `pipe`, `target` or `mesh`),
+and the three identity components are separate lowercase hexadecimal values. A
+future resource class requires a schema revision or an explicitly compatible new
+registered token; it cannot reuse an existing token with new meaning.
 
 The plan reserves the backend's qualified encoded-text limit. If the minimum
 identity token cannot fit, native marker support is unavailable. Optional display
@@ -263,7 +271,7 @@ adapted when supported and omitted without semantic loss when unsupported.
 ### 8. Budgets and saturation are finite
 
 The default plan admits 256 nested scope pairs and 512 inserts per real-frame
-graph, 1,024 registered marker descriptors, 64 KiB of registered display strings
+graph, 1,024 registered marker descriptors, 96 KiB of registered display strings
 and 256 KiB of in-flight encoded marker storage per real frame. Hard limits are
 2,048 scope pairs, 4,096 inserts, 8,192 descriptors, 1 MiB of registered strings
 and 2 MiB encoded storage per real frame. Counts across frames in flight use
