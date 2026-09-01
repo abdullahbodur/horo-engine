@@ -578,6 +578,29 @@ waits for every normal sink on a renderer owner thread. Diagnostic export remain
 allowlisted, redacted, local by default and under Observability/Application
 ownership.
 
+### CPU/GPU timestamps and pipeline statistics
+
+[ADR-042](../../adr/042-cpu-gpu-timestamps-and-pipeline-statistics.md) owns
+renderer measurement plans. CPU intervals use the process monotonic clock. Native
+GPU ticks remain generation-scoped device/queue domains; cross-queue or CPU/GPU
+ordering requires explicit calibration with a finite error bound. Per-queue spans
+remain separate when that proof is unavailable, and overlapping work is never
+summed into a fabricated frame total.
+
+The frontend compiles registered logical measurement scopes and finite query,
+readback, pending-result and sampling budgets into the render graph. Backends own
+native pools/heaps and command translation. Query slots and readback remain charged
+until GPU completion; normal frames do not wait, map in-use storage or call device
+idle for results. Delayed/out-of-order batches retain source `RealRenderFrameId`,
+graph, plan, device, queue and clock generations. Synthetic presentation owns no
+render query batch.
+
+Always-on frame totals project into fixed MetricsStore descriptors. Detailed pass
+timings and canonical qualified pipeline statistics are profile-gated capture or
+bounded snapshot data. Unsupported, not-ready, disjoint, partial and stale values
+are explicit rather than zero. Per-frame/pass payloads do not become ADR-041 events
+or unbounded metric dimensions, and backend code does not own telemetry export.
+
 ## Backend Implementation Boundary
 
 Each concrete backend owns its API dependencies, context/device objects,

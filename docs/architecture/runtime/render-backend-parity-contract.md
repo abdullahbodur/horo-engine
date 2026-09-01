@@ -289,6 +289,20 @@ sinks, retention, UI, fallback policy or per-record data-bus publication. Null
 validates schema, ordering, saturation and lifecycle behavior; actual native
 callback and emergency-path qualification still requires each backend.
 
+[ADR-042 measurement parity](../../adr/042-cpu-gpu-timestamps-and-pipeline-statistics.md)
+is operation-specific and optional unless a product/capture request requires it.
+A backend advertises timestamp or pipeline-statistic support only with exact
+queue/stage/scope limits, clock description, counter widths and canonical semantic
+mapping. It owns native queries through GPU completion and returns delayed
+generation-tagged results without normal-frame waits. Unsupported/unqualified
+values are unavailable, never zero or approximated.
+
+Equivalent instrumentation plans preserve logical scope and result semantics;
+native placement and calibration adapters may differ. Null validates graph/query
+budgets, delayed schedules, ordering, invalidation and typed failure with synthetic
+fixtures, but cannot establish native clock accuracy, statistic semantics,
+instrumentation overhead or performance parity.
+
 In particular:
 
 - OpenGL global state is private to the OpenGL integration.

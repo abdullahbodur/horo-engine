@@ -576,6 +576,26 @@ if timestamp frequency, reset behavior, or queue correlation cannot be trusted.
 CPU/GPU overlap is visualized as separate tracks; summaries do not add CPU and
 GPU durations into a fake total.
 
+[ADR-042](../../adr/042-cpu-gpu-timestamps-and-pipeline-statistics.md)
+specializes renderer measurement. CPU intervals use the process monotonic domain.
+GPU durations remain per device/queue clock until a generation-scoped calibration
+with a finite accepted error relates domains. Uncorrelated queue spans are never
+summed into a frame total, and unsupported, not-ready, disjoint or stale results
+remain unavailable rather than zero.
+
+Renderer query plans are immutable, capability/profile admitted and finite.
+Always-on frame totals use a low-cost bounded plan; pass scopes and pipeline
+statistics are explicit sampled/capture channels. Native query storage remains
+owned through GPU completion, while delayed batches retain source real-frame,
+device, plan and clock generations. Synthetic presentation creates no render query
+batch. Detailed scope/counter data belongs in captures or bounded snapshots, not
+dynamic per-pass metric series.
+
+Pipeline statistics publish only when a backend exactly qualifies the canonical
+semantic revision. Sampled counters are not extrapolated into unsampled totals.
+Renderer collection uses pre-registered handles and existing MetricsStore/profiler
+retention; remote export remains application-composed, allowlisted and explicit.
+
 An external profiler backend may stream live data to a local profiler process,
 but remote listening is disabled by default and requires explicit user action,
 authentication where applicable, and a non-shipping build policy.
