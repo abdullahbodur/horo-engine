@@ -127,7 +127,7 @@ orthogonal dimensions:
 | Verification | `Unchecked`, `Verifying`, `Verified`, `AbiMismatch`, `SignatureInvalid`, `Quarantined` | verifier/trust/ABI policy |
 | Host support | `Unknown`, `Supported`, `UnsupportedOs`, `UnsupportedArchitecture`, `UnsupportedOsVersion` | signed manifest + Platform facts |
 | Runtime availability | `Unknown`, `ProbeRequired`, `Probing`, `Available`, `MissingRuntime`, `ProbeFailed`, `ProbeTimedOut`, `ProbeCrashed`, `Stale` | probe service |
-| Selection | `NotSelected`, `Requested`, `SelectedForNextStart` | startup policy resolver |
+| Selection | `NotSelected`, `Selected`, `SelectedForNextStart` | startup policy resolver |
 | Activation | `Inactive`, `Loading`, `Negotiating`, `Initializing`, `Active`, `Failed`, `Stopping` | current host composition |
 
 Installed means only that an install record exists. It does not imply verified,

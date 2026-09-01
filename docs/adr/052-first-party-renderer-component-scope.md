@@ -134,7 +134,7 @@ The dimensions mean:
 | Verification | `Unchecked`, `Verifying`, `Verified`, `AbiMismatch`, `SignatureInvalid`, `Quarantined` | verifier/trust and ABI policy |
 | Host support | `Unknown`, `Supported`, `UnsupportedOs`, `UnsupportedArchitecture`, `UnsupportedOsVersion` | signed manifest + platform facts |
 | Runtime availability | `Unknown`, `ProbeRequired`, `Probing`, `Available`, `MissingRuntime`, `ProbeFailed`, `ProbeTimedOut`, `ProbeCrashed`, `Stale` | probe service result/identity |
-| Selection | `NotSelected`, `Requested`, `SelectedForNextStart` | command/project/user/host policy resolver |
+| Selection | `NotSelected`, `Selected`, `SelectedForNextStart` | command/project/user/host policy resolver |
 | Activation | `Inactive`, `Loading`, `Negotiating`, `Initializing`, `Active`, `Failed`, `Stopping` | current host composition instance |
 
 Installed means an install record exists; it does not imply verified, supported,
