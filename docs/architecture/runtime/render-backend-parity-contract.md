@@ -278,6 +278,17 @@ GUI/private helper allocations are included, not exempted from host accounting.
 Null tests inject costs and completion schedules; native budget and fragmentation
 qualification still requires each actual backend.
 
+All backends additionally obey
+[ADR-041's renderer diagnostics model](../../adr/041-backend-neutral-renderer-diagnostics-model.md).
+Equivalent unsupported, invalid, degraded, lost and recovered conditions use the
+same registered Horo codes, severities, subsystem identity and semantic fields.
+Native message IDs/text may provide bounded private-adapter evidence, but backend
+parity never requires consumers to understand native enums or parse strings.
+Backends submit through the host's bounded generation-aware port and cannot own
+sinks, retention, UI, fallback policy or per-record data-bus publication. Null
+validates schema, ordering, saturation and lifecycle behavior; actual native
+callback and emergency-path qualification still requires each backend.
+
 In particular:
 
 - OpenGL global state is private to the OpenGL integration.
