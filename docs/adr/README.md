@@ -67,6 +67,7 @@ to the replacement.
 | [053](053-renderer-module-manifest-parser.md) | Renderer Module Manifest Parser | Proposed | 2026-09-02 |
 | [054](054-extension-and-package-authority-boundary.md) | Extension and Package Authority Boundary | Proposed | 2026-09-02 |
 | [055](055-extension-manifest-v1-typed-model.md) | Extension Manifest V1 Typed Model | Proposed | 2026-09-02 |
+| [056](056-external-editor-ui-boundary.md) | External Editor UI Boundary | Proposed | 2026-09-02 |
 
 ## Conventions
 

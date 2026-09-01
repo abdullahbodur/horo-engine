@@ -56,8 +56,10 @@ permission checks, result storage, and teardown.
    `horo-package.toml`.
 4. Declare module ABI/entries, permissions, settings, errors, events, and UI
    contributions in the package-scoped `extension.json`.
-5. Implement the native module behind the Horo extension C ABI.
-6. Register factories for the declared contributions.
+5. Implement the native module behind the Horo extension C ABI or an approved
+   isolated helper protocol.
+6. Publish typed backend implementations and host-rendered UI schemas/actions for
+   the declared contributions; do not register external drawing callbacks.
 7. Read engine and IDE data through approved query capabilities.
 8. Mutate engine/editor state only through typed commands or application use
    cases.
@@ -283,6 +285,12 @@ Frontend contribution
 External native editor/tool modules cross a C ABI. C++ STL types, exceptions,
 RTTI-dependent ownership, allocator ownership, and C++ object deletion do not
 cross this boundary.
+
+The C ABI also does not expose ImGui contexts, draw lists, SDL events, renderer
+handles, native child windows or C++ panel/component interfaces. Embedded UI is a
+copied typed schema/state/action contract rendered by Horo; complex tools use
+registered specialized view schemas or a separately launched application. See
+[ADR-056](../adr/056-external-editor-ui-boundary.md).
 
 Use the concrete SDK declaration in
 `include/Horo/Extensions/ExtensionAbi.h`; do not reproduce private copies of
@@ -658,6 +666,8 @@ Each extension package should have contract tests for:
 ## Common Mistakes
 
 - Adding a tab by editing `EditorLayer` instead of contributing `editor.tab`.
+- Implementing external editor UI with raw ImGui, native child windows or a C++
+  panel interface instead of the typed host-rendered UI contract.
 - Reading another tab's state directly instead of querying an authority.
 - Subscribing a GUI surface directly to `EngineDataBus`.
 - Sending commands through the data bus.
@@ -671,6 +681,7 @@ Each extension package should have contract tests for:
 ## Related Architecture
 
 - [Extension System](../architecture/extensions/plugin-system.md)
+- [External Editor UI Boundary](../adr/056-external-editor-ui-boundary.md)
 - [Editor Panel Host](../architecture/editor/editor-panel-host.md)
 - [Editor Modal Host](../architecture/editor/editor-modal-host.md)
 - [Editor Data Bus](../architecture/editor/editor-data-bus.md)
