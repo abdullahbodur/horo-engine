@@ -114,11 +114,27 @@ struct RendererMemoryInspectionSnapshot {
     MonotonicTimePoint capturedAtMonotonic;
     RendererMemoryInspectionCoverage coverage;
     RendererMemoryAggregateSnapshot aggregates;
-    std::span<const GpuMemoryPoolSnapshot> pools;
-    std::span<const GpuAllocationSnapshot> allocations;
-    std::span<const RenderResourceSnapshot> resources;
+    RendererMemoryInspectionPageManifest pages;
+};
+
+struct RendererMemoryInspectionPage {
+    RendererMemoryInspectionSnapshotId snapshot;
+    RendererMemoryInspectionRecordClass recordClass;
+    RendererMemoryInspectionPageCursor next;
+    OwnedImmutableRecordArray records;
 };
 ```
+
+The snapshot header contains no borrowed range into service storage. `ReadPage`
+returns an owned immutable page value whose bounded record array keeps its backing
+alive independently of projection-page recycling. A page cursor is identity and
+position only; it is never a pointer. Snapshot expiry rejects new page reads but
+cannot invalidate a page value already returned to a consumer. Page-result storage
+is capacity-admitted and released by its owning value. The page is move-only and
+its internal ownership token returns storage on destruction; copying records
+requires an explicit caller-owned copy outside this service. One consumer may hold
+four page values by default and at most 16. Further reads receive backpressure.
+No public raw span, pointer or iterator may outlive its owning page value.
 
 The snapshot carries one internally consistent registry/ledger revision pair or
 fails with `InspectionRevisionUnavailable`. UTC and process-monotonic capture time
@@ -226,39 +242,42 @@ snapshot. Hard limits are 256 pools, 16,384 allocations, 65,536 resources and
 Product profiles may lower these values. Checked arithmetic validates every count,
 offset and byte estimate before materialization. Limits do not grow at runtime.
 
-At a `RenderSafePoint`, the frontend captures already-maintained aggregates and a
-bounded registry/ledger projection in stable Horo identity order. The projection
-is maintained incrementally at the same serialized mutation points as the owning
-models; it is not reconstructed by walking all live entries when a tool refreshes.
-Each mutation has a finite projection-work limit, and optional dependency/lifetime
-detail must be enabled and capacity-admitted before collection. A request for
-detail that was not maintained returns `InspectionUnsupportedDetail` rather than
-performing an unbounded catch-up scan.
+Aggregate metrics consume already-maintained ADR-034 ledger revisions and require
+no per-resource inspection mirror. Detailed projection is completely inactive
+until a profile-allowed inspection request successfully reserves a session. A
+Shipping profile that disables detail maintains no detailed inspection records or
+mutation journal.
 
-Core aggregate and identity projection capacity is reserved with the registry and
-ledger hard caps during frontend composition. Failure to reserve it fails
-composition rather than creating an uninspectable active renderer. Optional detail
-capacity is separate: if it saturates, rendering and authoritative resource
-operations continue, the affected detail becomes explicitly unavailable at the
-new projection revision, and ADR-041 reports one bounded aggregate. The projection
-can never turn an otherwise successful resource operation into failure merely to
-satisfy an inspector.
+An admitted session records its starting registry/ledger revisions, incrementally
+copies entries in stable Horo identity order at subsequent `RenderSafePoint`s and
+journals only the mutations that occur while that session is arming. Each safe
+point visits at most 512 records by default and 4,096 at the hard limit; there is
+no catch-up burst. At a final safe point it applies the bounded journal and seals
+one current consistent revision pair. The journal defaults to 8,192 mutations and
+has a hard limit of 65,536. If churn overtakes either limit, the optional session
+fails with `InspectionCapacityExceeded`; rendering and authoritative resource
+operations continue unchanged. No mutation fails merely to satisfy an inspector.
 
-The safe point seals a revision token and immutable projection pages, then queues
-bounded materialization; it does not copy the complete registry on the owner
-thread. Projection pages, snapshot storage, page cursors and worker queues are
-charged to the host diagnostics CPU-memory allowance before admission. Failure to
-reserve that storage rejects the request without weakening rendering budgets.
-The path does not call device idle, wait for GPU completion, map resource contents
-or synchronously ask a driver to enumerate live objects. Backend observations
-arrive through their existing bounded sampler/callback path and are joined by
-revision/provenance. Encoding, filtering that does not affect consistency, sorting
-for presentation and serialization may run on a cancellable worker over owned
-immutable records.
+Session projection pages, mutation journal, snapshot storage, owned page results,
+page cursors and worker queues are charged to the host diagnostics CPU-memory
+allowance before admission. Failure to reserve that storage rejects the request
+without weakening rendering budgets. Optional dependency/lifetime detail is armed
+with the session and capacity-admitted before scanning; unavailable detail returns
+`InspectionUnsupportedDetail` rather than introducing permanent shipping cost.
+
+The final safe point seals a revision token and immutable projection pages, then
+queues bounded materialization; it does not copy the complete registry in one
+owner-thread refresh. The path does not call device idle, wait for GPU completion,
+map resource contents or synchronously ask a driver to enumerate live objects.
+Backend observations arrive through their existing bounded sampler/callback path
+and are joined by revision/provenance. Encoding, filtering that does not affect
+consistency, sorting for presentation and serialization may run on a cancellable
+worker over owned immutable records.
 
 A materialized snapshot may be read in bounded pages without touching live
 renderer state. Page cursors contain snapshot ID, schema and position, expire with
-the snapshot and reject foreign/stale use. Paging does not recapture later state.
+the snapshot and reject foreign/stale use. Paging returns owned immutable page
+values and does not recapture later state.
 One page defaults to at most 256 records and 256 KiB encoded data; callers may
 request less, and the hard limits are 1,024 records and 1 MiB. A single record that
 cannot fit the hard encoded-page limit makes the request invalid rather than
@@ -279,11 +298,12 @@ thread. Producers submit owned bounded requests and receive an operation result;
 they do not lock the registry or backend directly. Worker jobs follow ADR-010
 cancellation and completion rules and capture no borrowed renderer references.
 
-Cancellation before capture removes the request. Cancellation after capture
-suppresses publication and releases immutable CPU storage after active page leases
-end; it does not cancel GPU work or alter resource lifetime. Consumer leases and
-result queues are bounded, so a forgotten inspector causes backpressure rather
-than unbounded retention.
+Cancellation before capture removes the request and journal. Cancellation after
+capture suppresses publication and releases service-owned immutable storage; page
+values already returned remain valid under their own bounded ownership. It does
+not cancel GPU work or alter resource lifetime. Result queues and concurrently
+owned pages are bounded, so a forgotten inspector causes backpressure rather than
+unbounded service retention.
 
 Device/backend replacement closes admission, completes or cancels pending captures,
 and preserves already-published snapshots only as explicitly stale historical
@@ -351,11 +371,14 @@ Tests must cover:
 - dedicated, suballocated, shared, retiring and transient-aliased backing with
   resource-to-region relationships and qualified fragmentation provenance;
 - immutable consistent revision pairs under concurrent creation/release, delayed
-  native samples and no recapture during page traversal;
+  native samples, bounded arming journals and no recapture during page traversal;
+- no detailed projection or mutation-journal cost before an allowed inspection
+  session, including Shipping-disabled detail;
 - no GPU wait, device-idle, content mapping, live-driver enumeration or unbounded
   render-thread filtering during capture;
-- queue saturation, cancellation before/after capture, abandoned leases, bounded
-  retention, partial initialization and repeated shutdown;
+- queue saturation, cancellation before/after capture, snapshot expiry with an
+  already-returned owned page, bounded retention, partial initialization and
+  repeated shutdown;
 - typed unsupported/busy/capacity/revision/device-loss outcomes, ADR-041 bounded
   aggregation and no missing-to-zero conversion;
 - metric descriptor cardinality, availability revisions, redaction, export size

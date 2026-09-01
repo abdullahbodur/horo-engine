@@ -617,16 +617,19 @@ measured/estimated provenance. Missing facts remain unavailable rather than zero
 Resource/allocation IDs, owner scopes, labels and native facts do not become
 unbounded metric dimensions.
 
-Detailed collection is an explicit finite operation. The frontend incrementally
-maintains a bounded inspection projection at the owning registry/ledger mutation
-points. At a render safe point it seals one consistent revision pair and immutable
-projection pages; it does not copy or walk the complete live registry for a tool
-refresh. Encoding and presentation work may continue on cancellable workers over
-owned records charged to a diagnostics CPU-memory allowance. Collection never
-waits for device idle, maps resource contents or exposes native pointers, handles
-or GPU addresses. Record/byte limits, partial coverage, paging, retention,
-cancellation, stale generations and shutdown are explicit. RND-017.9 queries
-these snapshots; it does not walk live backend or frontend state.
+Detailed collection is an explicit finite operation and carries no per-resource
+projection or mutation-journal cost until a profile-allowed session is admitted.
+The frontend builds that session over bounded render-safe-point chunks, journals
+only concurrent mutations while arming, then seals one consistent revision pair
+and immutable pages. It never walks or copies the complete live registry in one
+tool refresh. Page reads return owned immutable values, so snapshot expiry cannot
+leave a borrowed view into recycled storage. Encoding and presentation work may
+continue on cancellable workers over records charged to a diagnostics CPU-memory
+allowance. Collection never waits for device idle, maps resource contents or
+exposes native pointers, handles or GPU addresses. Record/byte/journal limits,
+partial coverage, paging, retention, cancellation, stale generations and shutdown
+are explicit. RND-017.9 queries these snapshots; it does not walk live backend or
+frontend state.
 
 ## Backend Implementation Boundary
 
