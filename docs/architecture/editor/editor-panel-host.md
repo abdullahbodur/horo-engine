@@ -67,6 +67,7 @@ EditorLayer
     |                       +-- ConsoleTab
     |                       +-- McpTab
     |                       +-- PerformanceTab
+    |                       +-- RenderInspectorTab (registered, closed by default)
     |
     +-- EditorModalHost          exclusive modal workflows above the workspace
 ```
@@ -117,6 +118,14 @@ The bottom Console tab is a presentation consumer of the foundation
 `IStructuredLogQuery` capability. It does not parse terminal text or own a second
 logger. Terminal, persistent JSONL, and Console delivery fan out from the same
 accepted structured record.
+
+The optional dockable `RenderInspectorTab` follows
+[ADR-049](../../adr/049-render-graph-and-resource-inspector-ui.md). It consumes an
+application-owned immutable renderer-inspection query service and owns only
+selection, filters, graph pan/zoom and other presentation state. It does not reach
+into the render frontend/backend, resource registry, memory ledger or metrics
+stores. It is closed by default; restoring/opening/closing it cannot arm
+instrumentation, and a hidden tab performs no capture, paging, layout or polling.
 
 `EditorModalHost` is a separate overlay owner. Settings, Build & Release, import,
 and confirmation workflows are not tabs or layout nodes. While a modal is open,

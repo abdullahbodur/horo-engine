@@ -713,6 +713,14 @@ Profiler capture control is a typed observability operation. Starting or
 stopping a capture is not encoded as a data-bus command. Capture state is owned
 by `ProfilerCaptureService`; notifications publish state changes after commit.
 
+[ADR-049](../../adr/049-render-graph-and-resource-inspector-ui.md) keeps the
+high-cardinality render graph/resource inspector separate from this metrics view.
+`PerformanceTab` may open an exact matching inspection bundle through a typed
+application command, but it does not own graph capture, page storage or inspector
+layout. Conversely, `RenderInspectorTab` may link to an exact profiler/capture
+session but never treats metrics as graph/resource identity or changes metric
+sampling from its draw cadence.
+
 Editor Settings may configure safe defaults for metric history, graph windows,
 and available capture channels. Settings cannot enable a channel compiled out of
 the active product profile.

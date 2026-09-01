@@ -751,6 +751,27 @@ tasks cannot hold device/resources alive beyond one bounded native safe-point.
 Null validates freeze/generation/budget/publication semantics synthetically but
 cannot qualify native fault evidence or crash-handler safety.
 
+### Render graph and resource inspector
+
+[ADR-049](../../adr/049-render-graph-and-resource-inspector-ui.md) defines an
+explicit immutable inspection bundle for one exact renderer/device/frame/graph
+generation. The frontend projects post-compilation pass/resource/use/dependency/
+lifetime/synchronization data into bounded owned pages. The editor never walks
+live frontend/backend state or exposes native handles/enums.
+
+ADR-043 memory/resource detail and ADR-042 delayed measurements join only through
+proven generation, frame, graph, queue and scope identities. Pending, disjoint,
+partial, nearest-aggregate and unavailable data remain explicit; same names or
+latest values never establish correlation. Diagnostics and markers likewise join
+by typed context, not text.
+
+The application query service owns capture, paging, overlays, retention,
+cancellation and safe export. `RenderInspectorTab` owns presentation state only
+and cannot mutate barriers, queues, resources, residency, labels or graph policy.
+Hidden tabs perform no polling/layout/formatting or instrumentation. Null supplies
+deterministic logical fixtures but cannot qualify native synchronization, timing
+or memory realization.
+
 ## Backend Implementation Boundary
 
 Each concrete backend owns its API dependencies, context/device objects,
