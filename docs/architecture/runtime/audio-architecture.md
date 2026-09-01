@@ -19,6 +19,9 @@ that lifecycle decision.
   command processing.
 - The audio callback performs no heap allocation, blocking I/O, logging, or
   contended locking.
+- Canonical mixer/DSP blocks use 64-byte-aligned planar binary32 samples and an
+  explicit Horo speaker, Ambisonic, or discrete channel order under
+  [ADR-063](../../adr/063-audio-sample-format-and-channel-layout.md).
 - Game and scene code use typed handles and enqueue commands.
 - Decoding and streaming I/O occur outside the real-time thread.
 - Audio assets use the common asset identity, cooking, and cache contracts.
@@ -85,6 +88,28 @@ using AudioBusHandle = Handle<AudioBusTag>;
 
 Handles are generation checked. Asset IDs remain the persistent identity for
 clips and streams.
+
+## Internal Processing Format
+
+[ADR-063](../../adr/063-audio-sample-format-and-channel-layout.md) is the single
+normative owner of real-time sample representation and channel layout. Mixer,
+voice, bus, DSP, spatializer, resampler, and extension processing consumes
+borrowed `AudioPlanarBlockView` values: one contiguous binary32 plane per ordered
+semantic channel, at least 64-byte plane alignment, common valid/capacity frame
+counts, and positive-zero silence/padding.
+
+Speaker presets have exact Horo orders; channel count alone is never identity.
+Ambisonics uses ACN order and SN3D normalization (AmbiX), with orders 0–3 admitted
+only when profile/provider limits permit. Discrete channels carry no speaker
+meaning. Native/file/middleware layouts map explicitly at adapters and never leak
+their format enums into runtime contracts.
+
+Internal buses may exceed nominal `[-1, +1]` full scale. Declared DSP/limiter
+nodes own intentional saturation; one finite safety clamp occurs immediately
+before native output conversion. Denormals normalize under the approved callback
+floating-point environment, non-finite samples enter bounded fault policy, and
+no per-sample logging occurs. ADR-063 owns the complete conversion, silence,
+tail, denormal, clipping, and validation rules.
 
 ## Audio Assets
 
@@ -912,6 +937,10 @@ Required tests cover:
 - null backend deterministic clock
 - callback path allocation and lock checks
 - audio asset format validation
+- planar block alignment/stride/capacity/silence and borrowed-lifetime validation
+- exact speaker preset and native/file role-map fixtures without index reinterpretation
+- ACN/SN3D Ambisonic order/count and FuMa/N3D conversion/rejection fixtures
+- denormal, non-finite, internal headroom, final clamp, and integer conversion policy
 - 2D vs 3D source behavior
 - distance attenuation policy
 - listener selection and missing-listener diagnostics
