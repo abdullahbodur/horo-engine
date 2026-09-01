@@ -49,6 +49,9 @@ Not covered:
 - Pipeline state objects are cached and reused. Shader compilation may happen
   during cook or explicit editor/development preparation under
   [ADR-035](../../adr/035-shader-source-and-intermediate-representation.md).
+  ADR-035 is the sole source-language, compiler-route, reflection, and packaged
+  compilation authority; this material model only supplies semantic inputs and
+  consumes its validated artifacts.
   Portable artifacts, native driver caches and live GPU objects have distinct
   ownership and compatibility keys.
 - No gameplay code queries raw shader handles. Gameplay sees only material names,
