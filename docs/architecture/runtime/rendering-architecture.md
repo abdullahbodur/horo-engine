@@ -503,12 +503,15 @@ payload, recursion, stage and dispatch limits. A backend advertises only routes 
 both reports and implements; profiles and API/backend names grant none.
 
 The frontend owns typed BLAS/TLAS handles and a `RayScene` projection over an
-immutable ADR-038 GPU Scene generation. AS size query, build, legal update/rebuild,
-compaction and ray dispatch are explicit graph work under resource/residency
-budgets and GPU-completion retirement. Logical ray shader groups and dispatch-table
-records are backend-neutral; native addresses, identifiers and table packing stay
-private. Optional effects resolve declared non-ray fallbacks, while required ray
-content fails admission. GPU ray results never become gameplay query truth.
+immutable ADR-038 GPU Scene generation. Hit groups derive from `MaterialId` /
+`MaterialBindingId`; VFX is not in RayScene; Masked geometry requires `AnyHit`
+or is omitted. AS size query, build, legal update/rebuild, compaction and ray
+dispatch are explicit graph work under resource/residency budgets and
+GPU-completion retirement, published at ADR-018 `RenderSafePoint`. Logical ray
+shader groups and dispatch-table records are backend-neutral; native addresses,
+identifiers and table packing stay private. Optional effects resolve declared
+non-ray fallbacks, while required ray content fails admission. GPU ray results
+never become gameplay query truth.
 
 The frontend and feature systems query capabilities through render API values,
 not by downcasting or including backend headers. Unsupported optional features

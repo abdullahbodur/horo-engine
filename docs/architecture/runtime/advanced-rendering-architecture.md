@@ -312,14 +312,21 @@ native pipeline or shader-table models. OpenGL 4.1 has no initial ray route.
 `RenderFrontend` owns a `RayScene` projection over one immutable GPU Scene/device
 generation. It maps generation-checked mesh geometry to typed BLAS handles and
 GPU Scene instances to TLAS generations. Logical triangle/AABB descriptors contain
-explicit formats, ranges, bounds, material/hit semantics and update policy; they
-never expose native addresses. AS handles follow pending/ready/released state,
-dependency pins and GPU-completion retirement under ADR-027/034.
+explicit formats, ranges, bounds and update policy; they never expose native
+addresses. Hit shading uses `MaterialId` → `MaterialBindingId` → derived
+`RayHitGroupId`; that last ID is a pipeline group, not a third material identity.
+AS handles follow ADR-027
+`Pending`/`Ready`/`Retiring`/`Retired`/`Failed` state, dependency pins and
+GPU-completion retirement under ADR-027/034. ADR-011 VFX batches are not in
+RayScene. Masked geometry requires effective `AnyHit` (or equivalent coverage
+query); otherwise it is omitted, never treated as opaque.
 
 Build, legal update/rebuild, asynchronous compaction and TLAS publication are
 typed render-graph passes with explicit input, scratch, result, queue/access,
-budget and cancellation dependencies. A compacted or rebuilt candidate publishes
-atomically while old frames retain old structures. No feature code issues native
+budget and cancellation dependencies. A dedicated compute/copy queue is used only
+when independently effective; otherwise the graphics queue runs the same passes.
+A compacted or rebuilt candidate publishes at ADR-018 `RenderSafePoint` while old
+frames retain old structures. No feature code issues native
 build/barrier commands, blocks for GPU idle, performs frame-hot post-build readback
 or mutates a structure consumed by an earlier generation.
 
