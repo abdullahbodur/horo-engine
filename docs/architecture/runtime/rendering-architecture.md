@@ -401,16 +401,20 @@ Temporal histories are scoped to view/provider/mode/extent/input/color/device
 generations and advance only after a successful **real** frame. Camera cuts,
 missing predecessors, incompatible scale/projection/color/exposure/motion/origin
 or device/provider changes reset, rescale or migrate only through a declared
-provider contract. Effect denoisers own effect-specific signal/guide/history
-schemas and never become global reconstruction history.
+provider contract. Effect denoisers are the ADR-039/040 `DenoisingProvider`: they own
+effect-specific signal/guide/history schemas and never become global
+reconstruction history.
 
-Simulation, real rendering and presentation have distinct IDs. Frame generation
+Simulation, real rendering and presentation have distinct IDs.
+`ScenePresentationEpoch` groups all views of one scene frame;
+`RealRenderFrameId` is per `RenderViewId`. Frame generation
 may create `SyntheticPresentationFrameId` values bracketed by qualified real
 frames, but cannot create a simulation/render frame or advance input, extraction,
 animation, audio, exposure, temporal/material/VFX history, jitter, gameplay
 callbacks or real-frame statistics. The baseline generated image contains
-display-linear scene content; current qualified display UI/accessibility and final
-encoding run afterward. Invalid/missing history, cuts, drops, resize/output/device
+display-linear scene content after ADR-037 step 4; current qualified display UI
+and the step-6 accessibility transform then run on every real and synthetic
+presentation frame. Invalid/missing history, cuts, drops, resize/output/device
 changes or backpressure suppress optional generation and present real frames.
 
 Latency providers supply typed markers, measurements and bounded host-safe-point
