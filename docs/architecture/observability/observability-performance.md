@@ -499,6 +499,14 @@ HORO_PROFILE_MEMORY_FREE(pointer);
 Static scope names are preferred. Dynamic names are bounded, interned, and
 prohibited in hot paths when they derive from IDs or user input.
 
+Renderer-native markers and object labels follow
+[ADR-044](../../adr/044-render-markers-and-debug-labels.md). An armed profiler may
+retain their registered logical IDs and typed frame/graph/pass/queue/resource
+correlation. The backend-native text is a bounded projection for GPU tools, not
+the profiler record or timing result. Marker traffic never becomes dynamic metric
+series or one diagnostic event per command. External capture-tool activation and
+artifacts remain separate from marker emission.
+
 Detailed captures follow a strict session state machine:
 
 ```mermaid

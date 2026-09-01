@@ -303,6 +303,20 @@ budgets, delayed schedules, ordering, invalidation and typed failure with synthe
 fixtures, but cannot establish native clock accuracy, statistic semantics,
 instrumentation overhead or performance parity.
 
+[ADR-044 marker parity](../../adr/044-render-markers-and-debug-labels.md) requires
+the same registered marker identity, typed correlation, graph placement, balanced
+scope semantics, finite plan and object-label metadata contract. Native marker and
+label operations are optional effective capabilities with exact queue/context,
+nesting, object-class and encoded-text limits; a backend cannot infer them from a
+Debug build or silently discard a required mode.
+
+Private adapters may segment a logical scope only when the effective capability
+and plan declare equivalent correlation across native command boundaries. They do
+not expose pointers/addresses, allocate or intern frame-hot strings, launch capture
+tools or turn markers into diagnostics/timestamps. Null validates logical streams,
+budgets, generation invalidation and encoding fixtures synthetically but cannot
+qualify native-tool visibility or overhead.
+
 In particular:
 
 - OpenGL global state is private to the OpenGL integration.
