@@ -235,15 +235,38 @@ Horo has three production opaque raster families:
   there is no separate 2D tiled production path.
 - **Deferred** writes a versioned GBuffer schema and performs screen-space
   lighting. It is a hybrid frame recipe: incompatible opaque materials and all
-  baseline transparency still use declared forward passes.
+  baseline transparency still use declared forward passes. Clustering is an
+  optional light-preparation contract on that family, not a fourth path: a
+  Deferred recipe must declare clustered preparation (same overflow as Clustered
+  Forward+) or clustering-less preparation (Forward-equivalent bounded
+  screen-space overflow). Unspecified Deferred light counts fail admission.
 
-Opaque, masked, forward-only opaque, stable sorted-alpha and additive work are
-explicit cooked material classifications. Masked coverage is consistent between
-depth, shadow and color/GBuffer passes. Sorted alpha is depth-tested,
-non-depth-writing and ordered back-to-front with stable instance-identity ties;
-additive work uses its own commutative pass. Order-independent transparency and
-refraction are separate optional recipes with declared capability, memory and
-fallback contracts.
+Scene-material classification is keyed by scene-conversion `MaterialId`
+([ADR-027](../../adr/027-renderer-resource-identity-and-descriptors.md)): a
+material-table key, not a resident GPU handle. Opaque, masked, forward-only
+opaque, stable sorted-alpha and additive work are mutually exclusive cooked
+categories. Combined alpha-test plus blend (dithered/stochastic transition) is
+unsupported unless authored as exactly one of those categories or an optional
+named stochastic/OIT recipe. Masked coverage is consistent between depth, shadow
+and color/GBuffer passes. Sorted alpha is depth-tested, non-depth-writing and
+ordered back-to-front with stable instance-identity ties; additive work uses its
+own commutative pass. Order-independent transparency and refraction are separate
+optional recipes with declared capability, memory and fallback contracts.
+
+[ADR-011](../../adr/011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md)
+VFX batches keep their own pass kinds (`VfxParticlePass`, deferred/forward
+`DecalRenderBatch`, `VolumetricVfxBatch`). The frontend maps those kinds onto the
+resolved recipe; it does not re-encode them as the five scene-material
+categories. A deferred-decal batch is remapped to the recipe's forward-decal
+pass when Deferred is not selected; it is not dropped and is not left targeting
+a missing GBuffer.
+
+**MSAA can change the opaque family, not only the sample count.** Deferred MSAA
+requires a declared multisample GBuffer, resolve and lighting contract;
+otherwise a permitted Clustered Forward+ or Forward recipe that honors the
+sample count may be selected. Diagnostics report that family change as a
+first-class fallback reason. The resolver must not silently drop MSAA on
+Deferred.
 
 Cluster dimensions, light/reference counts, GBuffer formats, MSAA behavior,
 semantic prepasses and overflow limits are typed recipe inputs bounded by the
@@ -278,9 +301,12 @@ normal, velocity or other semantic prepasses when a declared downstream input
 requires them, so an effect does not select deferred rendering indirectly.
 
 Recipe changes are explicit policy requests compiled and staged as new
-generations. Publication occurs at ADR-018 `CommandThreadPolicy::RenderSafePoint`
-after all required artifacts/resources validate; in-flight frames retain their
-old generation.
+generations. Publication occurs at
+[ADR-018](../../adr/018-command-registration-permissions-threading-and-packaged-build-policy.md)
+`CommandThreadPolicy::RenderSafePoint` after all required artifacts/resources
+validate; that is the same graphics-affine frame-synchronization boundary as
+[ADR-027](../../adr/027-renderer-resource-identity-and-descriptors.md). In-flight
+frames retain their old generation.
 Allocation failure, shader miss, slow frames, cancellation, stale inputs or device
 failure never cause an unreported mid-frame downgrade. An adaptive-quality system
 may request a new generation, but cannot mutate the active graph in place.
