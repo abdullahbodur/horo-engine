@@ -4,7 +4,7 @@
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: Shader source language, compiler routes and reflection authority
-- **Issue**: [#368](https://github.com/abdullahbodur/horo-engine/issues/368) ([RND-011.1])
+- **Issue**: [RND-011.1](https://github.com/abdullahbodur/horo-engine/issues/368)
 - **Jira**: [HORO-368](https://horo-engine.atlassian.net/browse/HORO-368)
 - **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 

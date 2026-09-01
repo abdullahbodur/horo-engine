@@ -4,7 +4,7 @@
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Navigation target boundaries (`NavigationApi`, `NavigationRuntime`, `NavigationRecastDetour`, `NavigationNull`), third-party encapsulation (Recast/Detour), decoupling from editor viewport navigation and gameplay AI decision graphs, headless/server composition, and compute resource scaling
-- **Issue**: [#1224](https://github.com/abdullahbodur/horo-engine/issues/1224) ([NAV-001.1])
+- **Issue**: [NAV-001.1](https://github.com/abdullahbodur/horo-engine/issues/1224)
 - **Jira**: [HORO-1224](https://horo-engine.atlassian.net/browse/HORO-1224)
 - **Normative document**: [Navigation And AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md)
 

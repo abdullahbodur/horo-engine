@@ -4,7 +4,7 @@
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: AI simulation tick scheduling, perception-decision-navigation pipeline ordering, multiplayer host authority boundaries, simulation profiles and CPU budget allocation
-- **Issue**: [#1358](https://github.com/abdullahbodur/horo-engine/issues/1358) ([GAI-005.1])
+- **Issue**: [GAI-005.1](https://github.com/abdullahbodur/horo-engine/issues/1358)
 - **Jira**: [HORO-1358](https://horo-engine.atlassian.net/browse/HORO-1358)
 - **Normative documents**:
   - [Navigation And AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md)

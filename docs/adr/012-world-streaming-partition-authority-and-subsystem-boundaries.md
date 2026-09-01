@@ -4,7 +4,7 @@
 - **Date**: 2026-08-28
 - **Supersedes**: None
 - **Scope**: Partition/state ownership, async provider readiness and retirement, reservations, epoch/generation fencing, Scene integration, networking and shutdown
-- **Issue**: [#1528](https://github.com/abdullahbodur/horo-engine/issues/1528) ([WST-001.1])
+- **Issue**: [WST-001.1](https://github.com/abdullahbodur/horo-engine/issues/1528)
 - **Jira**: [HORO-1528](https://horo-engine.atlassian.net/browse/HORO-1528)
 - **Normative document**: [World Streaming Architecture](../architecture/runtime/world-streaming-architecture.md)
 
