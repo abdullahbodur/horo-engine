@@ -526,10 +526,10 @@ typed diagnostic.
 ## Scripted Behaviors
 
 Script-authored behavior is a first-class authoring goal because it provides the
-fastest iteration loop for designers and gameplay programmers. The exact first
-runtime, such as Lua, C#, or another embedded runtime, is selected by a separate
-scripting-runtime decision. This document defines the invariants that every
-scripting runtime must satisfy.
+fastest iteration loop for designers and gameplay programmers. ADR-006 selects
+Lua 5.4 as the first private gameplay runtime adapter. Future additional runtime
+adapters must preserve the invariants in this document rather than defining a
+new behavior contract.
 
 Scripted behaviors register `BehaviorDescriptor` records and attach to scene
 objects exactly like native behaviors. Script source files may be interpreted,
@@ -549,6 +549,14 @@ generated descriptors, including bytecode/module lifetime, debug hook ownership,
 state preservation hooks, and how script call frames map to behavior lifecycle
 diagnostics. Those details are runtime-specific, but they cannot add a second
 scene serialization model or a separate editor attachment path.
+
+Gameplay scripts may import approved backend module APIs only through
+[ADR-059](../../adr/059-script-consumable-module-boundary.md). Required imports
+are descriptor dependencies resolved before behavior activation and injected
+into the owning script behavior context. They do not add module-level script
+startup, tick, reload or shutdown callbacks. Scene access and mutation continue
+through `BehaviorContext`, declared access and deferred commands; a service import
+cannot expose editor state, native provider objects or ambient engine services.
 
 The minimum authoring workflow is:
 

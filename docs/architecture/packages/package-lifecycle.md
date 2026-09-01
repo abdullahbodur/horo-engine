@@ -223,7 +223,7 @@ Conflicts are contribution-specific:
 - behavior type ID conflict
 - service ID conflict
 - schedule node ID conflict
-- script module name conflict
+- script API ID, namespace, or compatible service-export conflict
 - editor command/menu ID conflict
 - input action ID conflict
 - shader keyword conflict
@@ -248,6 +248,12 @@ Possible resolutions:
 
 Runtime identifiers should not be automatically renamed because serialized scene
 references can break.
+
+Script API conflicts resolve from stable typed identities, compatible version
+constraints and the verified package graph under
+[ADR-059](../../adr/059-script-consumable-module-boundary.md). Package load order,
+runtime globals and automatic namespace renaming are not conflict-resolution
+mechanisms.
 
 ## Package UI Contract
 
