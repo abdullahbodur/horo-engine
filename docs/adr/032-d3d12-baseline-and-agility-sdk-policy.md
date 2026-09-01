@@ -1,10 +1,12 @@
 # ADR-032: D3D12 Baseline and Agility SDK Policy
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-31
-- **Owners**: Rendering / Platform / Delivery
-- **Tracking**: HORO-330 / #330 / RND-007.1
-- **Milestone**: M0 — Architecture Baseline
+- **Supersedes**: None
+- **Scope**: D3D12 native admission, Agility activation and Windows baseline
+- **Issue**: [#330](https://github.com/abdullahbodur/horo-engine/issues/330) ([RND-007.1])
+- **Jira**: [HORO-330](https://horo-engine.atlassian.net/browse/HORO-330)
+- **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 
 ## Context
 
@@ -18,8 +20,12 @@ engine product profile describe different things. This ADR fixes the native
 baseline while preserving [ADR-028](028-renderer-capability-limits-and-product-profiles.md)
 effective support and the common [parity](../architecture/runtime/render-backend-parity-contract.md)
 and [distribution](../architecture/runtime/renderer-distribution-and-availability.md)
-contracts. It does not choose the engine-wide shader source language, GPU memory
-allocator, or render-graph implementation.
+contracts. Renderer resource identity is
+[ADR-027](027-renderer-resource-identity-and-descriptors.md).
+It does not choose the engine-wide shader source language, GPU memory
+allocator, or render-graph implementation. GPU backing accounting is
+[ADR-034](034-gpu-memory-and-residency-ownership.md). Presentation/display
+ownership is [ADR-033](033-presentation-and-display-ownership.md).
 
 ## Decision
 
@@ -78,7 +84,8 @@ completion. Enhanced barriers are optional and admitted through their feature
 query and implemented graph adapter in RND-007.4. Installing a newer runtime
 must not silently change barrier semantics or mix tracking models for a resource
 without an explicit supported transition. Normal frames never wait for GPU idle;
-the renderer's existing bounded test/teardown/recovery exceptions remain intact.
+the renderer's existing bounded test/teardown/recovery exceptions remain intact
+under [ADR-010](010-job-waiting-and-operation-store-ownership.md).
 
 Required interactive parity includes device/queue lifecycle, FIFO presentation,
 primary color output, offscreen color/depth viewport targets, indexed meshes,
@@ -99,8 +106,10 @@ The initial dependency selection is the stable NuGet package
 **`Microsoft.Direct3D.D3D12` 1.619.5**, with **`D3D12SDKVersion = 619`**.
 This is the chosen M0 pin, not an assertion that the renderer is implemented or
 qualified. Microsoft's [Agility release table](https://devblogs.microsoft.com/directx/directx12agility/)
-maps that package release to SDK version 619. Preview packages and floating
-`latest` constraints are not allowed in product releases.
+maps package **1.619.5** to SDK version **619** (retail table dated 2026-07-30).
+RND-007.8 re-checks that mapping against the live table before the CMake pin is
+frozen. Preview packages and floating `latest` constraints are not allowed in
+product releases.
 
 Delivery records the exact package version, source identity, content digest,
 native architecture, redistribution file inventory, license notices, and
@@ -173,7 +182,10 @@ unavailable diagnostic configuration fails rather than silently disabling it.
 
 The shared host owns backend selection before window/presentation creation;
 `d3d12` does not become the Windows default by this ADR. DXGI/D3D12/COM handles
-remain private to backend/platform targets. The backend owns device, queues,
+remain private to backend/platform targets. DXGI factory creation, adapter
+enumeration, and `D3D12CreateDevice` run on the host-declared render-capable
+owner thread after that thread has initialized COM for the process. They are
+not dispatched to arbitrary worker jobs. The backend owns device, queues,
 command resources, descriptors, and fences; editor adapters borrow admitted
 access rather than creating an independent D3D12 device.
 
@@ -197,8 +209,10 @@ capability snapshots under
 [ADR-027](027-renderer-resource-identity-and-descriptors.md) and ADR-028; recovery
 rebuilds device state and never reuses stale GPU identities. DRED diagnostics
 and bounded recovery belong to RND-007.8, without extending normal-frame waits.
-DXGI present/HDR/tearing/display policy remains with RND-007.5 and the common
-presentation owners.
+DXGI present/HDR/tearing/display policy remains with RND-007.5 under
+[ADR-033](033-presentation-and-display-ownership.md). Descriptor, heap, and
+budget paths in RND-007.3 obey
+[ADR-034](034-gpu-memory-and-residency-ownership.md).
 
 ### 6. M0 migration and evidence
 
@@ -209,9 +223,9 @@ No current Windows artifact is certified by this decision.
 | Owner | Required downstream realization |
 |---|---|
 | RND-007.2 / #331 | Host activation seam with Platform/Delivery, adapter/device/queue initialization, feature-level/Shader Model checks, and actionable runtime errors. |
-| RND-007.3 / #332 | Bounded descriptor/resource/memory paths, format checks, and retirement that work at the baseline binding contract. |
-| RND-007.4 / #333 | Legacy barrier baseline, optional enhanced barriers, fence completion, and non-blocking graph execution. |
-| RND-007.5 / #334 | DXGI surface/display admission, presentation lifecycle, and separately gated HDR/VRR. |
+| RND-007.3 / #332 | Bounded descriptor/resource/memory paths, format checks, and retirement that work at the baseline binding contract under [ADR-034](034-gpu-memory-and-residency-ownership.md). |
+| RND-007.4 / #333 | Legacy barrier baseline, optional enhanced barriers, fence completion, and non-blocking graph execution under [ADR-010](010-job-waiting-and-operation-store-ownership.md). |
+| RND-007.5 / #334 | DXGI surface/display admission, presentation lifecycle, and separately gated HDR/VRR under [ADR-033](033-presentation-and-display-ownership.md). |
 | RND-007.6 / #335 | Pinned DXIL/profile/validator handling, root signature 1.0 path, optional variants, and cook/cache enforcement. |
 | RND-007.7 / #336 | Matching GUI/viewport integration over runtime-owned objects and explicit diagnostics. |
 | RND-007.8 / #337 | DRED/removal/rollback tests, hardware qualification and coordinated package/export/runtime verification with Delivery. |

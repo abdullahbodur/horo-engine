@@ -5,7 +5,7 @@
 - **Supersedes**: None
 - **Scope**: Cinematic clock sources and policies, sampling/event phases, domain authority, bindings, origin rebasing and evaluation budgets
 - **Issue**: [#1697](https://github.com/abdullahbodur/horo-engine/issues/1697) ([CIN-001.1])
-- **JIRA**: HORO-1656
+- **Jira**: [HORO-1656](https://horo-engine.atlassian.net/browse/HORO-1656)
 - **Normative document**: [Cinematic Sequencer Architecture](../architecture/runtime/cinematic-sequencer-architecture.md)
 
 ## Context
@@ -23,9 +23,15 @@ These ambiguities must be resolved before independent implementations converge.
 Clock source, pause following and dilation policy are separate validated settings.
 Value sampling is history-independent; events use stateful interval crossing.
 Authoritative simulation writes use their domain's fixed-tick seam, while optional
-presentation samples never mutate gameplay or fire authoritative events. SceneModel
-owns bindings for scene/component-authored properties only. Physics, camera and
-pause authorities admit typed requests and retain final control.**
+presentation samples never mutate gameplay or fire authoritative events. Those
+presentation samples occupy the runtime lifecycle window after `RenderExtraction`
+and before `Present` (phases 8–10: `RenderExecution`, `RenderGui`, `Present` in
+[Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md#frame-phases);
+[ADR-033](033-presentation-and-display-ownership.md) owns that split). A coarser
+“render execution and GUI presentation” grouping in this ADR is that same window,
+not a second phase contract. SceneModel owns bindings for scene/component-authored
+properties only. Physics, camera and pause authorities admit typed requests and
+retain final control.**
 
 ### Ownership And Dependencies
 

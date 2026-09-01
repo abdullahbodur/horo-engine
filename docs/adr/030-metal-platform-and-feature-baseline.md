@@ -1,10 +1,12 @@
 # ADR-030: Metal Platform and Feature Baseline
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-31
-- **Owners**: Rendering / Platform
-- **Tracking**: HORO-314 / #314 / RND-005.1
-- **Milestone**: M0 — Architecture Baseline
+- **Supersedes**: None
+- **Scope**: Metal native admission, GPU family, MSL and macOS deployment
+- **Issue**: [#314](https://github.com/abdullahbodur/horo-engine/issues/314) ([RND-005.1])
+- **Jira**: [HORO-314](https://horo-engine.atlassian.net/browse/HORO-314)
+- **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 
 ## Context
 
@@ -21,8 +23,11 @@ starts at macOS 14. This decision preserves that floor and defines the Metal
 contract rather than treating those examples as hardware qualification.
 
 [ADR-028](028-renderer-capability-limits-and-product-profiles.md) owns reported,
-implemented, effective, and product-profile support. Metal is an equal backend
-under the [parity contract](../architecture/runtime/render-backend-parity-contract.md),
+implemented, effective, and product-profile support. Renderer resource identity is
+[ADR-027](027-renderer-resource-identity-and-descriptors.md). GPU backing
+follows [ADR-034](034-gpu-memory-and-residency-ownership.md). Metal is an equal
+backend under the
+[parity contract](../architecture/runtime/render-backend-parity-contract.md),
 not a higher feature tier or an automatic replacement for OpenGL.
 
 ## Decision
@@ -140,7 +145,9 @@ Without an explicit adapter selection, the initial policy validates the system
 default device. It does not search for a more capable adapter behind the user's
 back. An explicit adapter request, when implemented by RND-005.2, must match the
 requested machine-local identity or fail; adapter identities are not portable
-project settings. This does not add a new public selection API in M0.
+project settings. Match-or-fail is identity matching, not a Metal-specific slot
+budget; registry slot/generation exhaustion remains ADR-027. This does not add
+a new public selection API in M0.
 
 This default deliberately follows the OS's device choice rather than forcing a
 discrete GPU and its power/display trade-offs on dual-GPU Macs. Functional parity
@@ -150,7 +157,10 @@ selected adapter and admission failure so an explicit adapter choice can be
 offered. A failing default device is not silently replaced by another candidate.
 A future high-performance or low-power preference must be an explicit host
 selection policy, tested by RND-005.2, rather than a model-name heuristic hidden
-inside Metal initialization.
+inside Metal initialization. An OS-initiated GPU change (automatic graphics
+switching, external-display routing, or power-management reassignment) is
+device loss/replacement under ADR-027: invalidate the old generation and
+rebuild; do not keep old resources, queues, or snapshots on the new GPU.
 
 After acquiring the matching presentation attachment, initialization requires:
 
@@ -181,9 +191,15 @@ environment before device creation, verify activation as supported by the
 platform, or return an actionable validation-unavailable result. Do not silently
 disable requested validation or mutate process environment during initialization.
 Production startup without that request does not require developer diagnostics.
+There is no OpenGL-style retry-once without the validation request: Metal
+validation is a process/environment contract that must exist before
+`MTLCreateSystemDefaultDevice`. Retrying without it would silently drop
+requested diagnostics. OpenGL retries the debug *context attribute* because the
+same 4.1 Core profile can still succeed; that is a different native seam, not
+an inconsistency to copy.
 
 Backend selection remains CLI, configuration, then host default. The
-[ADR-029](029-opengl-compatibility-profile-and-platform-policy.md) macOS OpenGL
+[ADR-029](029-opengl-core-profile-and-platform-policy.md) macOS OpenGL
 warning can offer Metal installation/probing and explicit migration; it does
 not select Metal, persist settings, or qualify this component. Missing or
 unsupported Metal follows normal repair/error handling and authorized fallback
@@ -222,9 +238,9 @@ shader compilation, or the set of currently shipped artifacts.
 | Owner | Required downstream work |
 |---|---|
 | RND-005.2 / #315 — Adapter, Device and Capability | Actual OS/device/family checks, typed failures, effective capabilities/limits/formats, adapter identity, and loss/recreation invalidation. |
-| RND-005.3 / #316 — Resource, Heap and Binding | Portable binding baseline, queried memory properties, format admission, and safe retirement without unified-memory assumptions. |
+| RND-005.3 / #316 — Resource, Heap and Binding | Portable binding baseline, queried memory properties, format admission, and safe retirement without unified-memory assumptions, under [ADR-034](034-gpu-memory-and-residency-ownership.md). |
 | RND-005.4 / #317 — Commands, Synchronization and Graph | Implement admitted operation paths and non-blocking completion without requiring the Metal 4 model. |
-| RND-005.5 / #318 — Presentation, HDR and Drawable | Validate layer/device settings, surface lifetime and affinity, display capability, and recovery. |
+| RND-005.5 / #318 — Presentation, HDR and Drawable | Validate layer/device settings, surface lifetime and affinity, display capability, and recovery under [ADR-033](033-presentation-and-display-ownership.md). |
 | RND-005.6 / #319 — Shader, Pipeline and Material | Pin MSL/deployment options, cooked library metadata and admission, baseline/optional variants, and minimum-runtime pipeline validation. |
 | RND-005.7 / #321 — Editor GUI and Viewport | Consume runtime readiness and borrowed device access; remove implicit source-compiler defaults and integrate explicit diagnostics. |
 | RND-005.8 / #320 — Apple Hardware and GPU Qualification | Coordinate explicit deployment targets with build/package owners; verify binary metadata and publish native OS/architecture/GPU evidence. |

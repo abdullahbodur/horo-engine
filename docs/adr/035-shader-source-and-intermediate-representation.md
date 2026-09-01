@@ -1,10 +1,12 @@
 # ADR-035: Shader Source and Intermediate Representation
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-31
-- **Owners**: Rendering / Shader Toolchain / Asset Pipeline
-- **Tracking**: HORO-368 / #368 / RND-011.1
-- **Milestone**: M0 — Architecture Baseline
+- **Supersedes**: None
+- **Scope**: Shader source language, compiler routes and reflection authority
+- **Issue**: [#368](https://github.com/abdullahbodur/horo-engine/issues/368) ([RND-011.1])
+- **Jira**: [HORO-368](https://horo-engine.atlassian.net/browse/HORO-368)
+- **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 
 ## Context
 
@@ -61,7 +63,7 @@ floating tool download. An installed SDK/compiler default is never the lock.
 | Target | Selected route and runtime artifact | Baseline constraint |
 |---|---|---|
 | Vulkan | HLSL → DXC SPIR-V → validation/normalization → cooked SPIR-V + Horo reflection | [ADR-031](031-vulkan-loader-platform-and-version-baseline.md): explicit Vulkan 1.3 environment, SPIR-V at most 1.6, only declared/enabled capabilities. |
-| OpenGL | HLSL → validated SPIR-V → SPIRV-Cross → cooked desktop GLSL + Horo binding map | [ADR-029](029-opengl-compatibility-profile-and-platform-policy.md): GLSL 4.10 / desktop 4.1 Core; native compile/link at controlled resource preparation, not a requirement for GL SPIR-V support. |
+| OpenGL | HLSL → validated SPIR-V → SPIRV-Cross → cooked desktop GLSL + Horo binding map | [ADR-029](029-opengl-core-profile-and-platform-policy.md): GLSL 4.10 / desktop 4.1 Core; native compile/link at controlled resource preparation, not a requirement for GL SPIR-V support. |
 | Metal | HLSL → validated SPIR-V → SPIRV-Cross MSL → Apple offline compiler/library → cooked library + Horo binding map | [ADR-030](030-metal-platform-and-feature-baseline.md): explicit MSL 2.4 and macOS 14 deployment/architecture options; no toolchain required by packaged players. |
 | D3D12 | Same HLSL → DXC directly → validated DXIL + Horo binding map | [ADR-032](032-d3d12-baseline-and-agility-sdk-policy.md): explicit stage Shader Model 6.0 profile and baseline root signature 1.0; no SPIR-V → HLSL → DXIL round trip. |
 | Headless Null | Source/manifest validation and normalized reflection fixture/artifact, without native GPU creation | Only declared validation coverage; no claim that an uncompiled native target or visual result passed. |

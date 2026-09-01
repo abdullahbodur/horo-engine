@@ -1,10 +1,12 @@
 # ADR-033: Presentation and Display Ownership
 
-- **Status**: proposed
+- **Status**: Proposed
 - **Date**: 2026-08-31
-- **Owners**: Platform / Rendering / Application Hosts
-- **Tracking**: HORO-338 / #338 / RND-008.1
-- **Milestone**: M0 — Architecture Baseline
+- **Supersedes**: None
+- **Scope**: Display facts, surface generations, output negotiation and present ownership
+- **Issue**: [#338](https://github.com/abdullahbodur/horo-engine/issues/338) ([RND-008.1])
+- **Jira**: [HORO-338](https://horo-engine.atlassian.net/browse/HORO-338)
+- **Normative document**: [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md)
 
 ## Context
 
@@ -19,8 +21,10 @@ This ADR defines those ownership boundaries. It preserves the
 [runtime frame phases](../architecture/runtime/runtime-lifecycle.md#frame-phases),
 [renderer parity](../architecture/runtime/render-backend-parity-contract.md),
 and [ADR-028](028-renderer-capability-limits-and-product-profiles.md) device
-capability model. It does not implement a display service, pick a tone-mapping
-algorithm, or redesign the runtime clock.
+capability model. Renderer resource identity is
+[ADR-027](027-renderer-resource-identity-and-descriptors.md).
+It does not implement a display service, pick a tone-mapping algorithm, or
+redesign the runtime clock.
 
 ## Decision
 
@@ -87,10 +91,14 @@ support. RND-008.5/.6 own pacing and latency algorithms within that contract.
 
 Scene-linear HDR rendering is independent from HDR display output. HDR/EDR
 output requires the current OS/display state, native surface/format support,
-implemented final conversion, and host policy to agree. An explicit required
-HDR request fails or suspends when that contract disappears; an Auto policy may
-choose its declared SDR fallback and report the change. Never relabel unsupported
-HDR output as active or reuse stale monitor capabilities after a move/hotplug.
+implemented final conversion, and host policy to agree. When an explicit
+required HDR contract disappears: if the last committed SDR output is still a
+valid drawable, **fail the HDR request** with a typed result and keep that SDR
+output active; if the OS/display has already invalidated the surface (no usable
+drawable), **suspend or mark Lost** and do not invent a successful frame. An
+Auto policy may choose its declared SDR fallback and report the change. Never
+relabel unsupported HDR output as active or reuse stale monitor capabilities
+after a move/hotplug.
 
 The graph owns final tone/color conversion and composition against the resolved
 output contract. Native attachment encoding and metadata must agree with that
@@ -135,7 +143,13 @@ Platform event callbacks publish bounded pending state and return. Coalesce
 ordinary resize/DPI/display changes into at most one pending reconfiguration
 per admitted surface, retaining the latest revision. Complete superseded
 observable requests explicitly as superseded; do not accumulate one operation
-per OS event. Close/loss signals cannot be overwritten by a later size update.
+per OS event. A different host command class (fullscreen/borderless/windowed,
+explicit present-mode change) arriving while the surface is `Reconfiguring`
+does **not** cancel in-flight native realization of the current revision. That
+revision completes or fails; the newer command becomes the next pending
+candidate for the following safe point. Close/loss signals cannot be
+overwritten by a later size or mode update; they invalidate acquisition
+immediately.
 The initial host admits one primary surface; future multi-surface admission
 has an explicit host quota and rejects excess requests before native allocation.
 
@@ -166,19 +180,32 @@ layout from transactional native publication without silently accepting a stale
 plan or performing an extra extraction pass in the same frame.
 
 Present remains after `RenderExecution` and `RenderGui`, as defined by the
-runtime lifecycle. A runtime `BeginFrame` phase is not permission to acquire a
-native drawable before presentation admission. Failed execution or cancellation
-skips normal present and releases/aborts any acquired frame exactly once through
-the existing frame scope. Zero drawable extent suspends presentation without
-stopping simulation or creating a fake successful native frame.
+[runtime lifecycle](../architecture/runtime/runtime-lifecycle.md#frame-phases)
+phases 8–10. Domain ADRs that still group “render execution and GUI
+presentation” as one coarser step (including
+[ADR-014](014-sequencer-ownership-clock-authority-and-binding-boundary.md)
+cinematic presentation samples) occupy that same window: after
+`RenderExtraction` and before `Present`. Sequencer presentation samples must
+not mutate simulation during `RenderExecution`/`RenderGui`; authoritative
+cinematic writes stay on the fixed-tick seam. A runtime `BeginFrame` phase is
+not permission to acquire a native drawable before presentation admission.
+Failed execution or cancellation skips normal present and releases/aborts any
+acquired frame exactly once through the existing frame scope. Zero drawable
+extent suspends presentation without stopping simulation or creating a fake
+successful native frame.
 
 Reconfiguration prepares the new admitted configuration and publishes it only
-after native success. Keep the old configuration only while the native platform
-still considers it usable. Swapchain replacement, display removal, or context
-loss can make rollback to the old native state impossible: report Suspended or
-Lost and rebuild explicitly instead of promising unconditional rollback.
-Retire old images/synchronization objects after their backend-specific consumers
-finish; CPU publication alone does not make them safe to destroy.
+after native success. It is subject to
+[ADR-034](034-gpu-memory-and-residency-ownership.md): reserve old/new overlap
+and transient presentation backing **before** native realization; if that
+reservation is denied, keep the last valid active output or suspend rather
+than publishing a new active extent. Keep the old configuration only while the
+native platform still considers it usable. Swapchain replacement, display
+removal, or context loss can make rollback to the old native state impossible:
+report Suspended or Lost and rebuild explicitly instead of promising
+unconditional rollback. Retire old images/synchronization objects after their
+backend-specific consumers finish; CPU publication alone does not make them
+safe to destroy.
 
 On close, stop new acquisition, finish or abort the current frame as permitted,
 retire queued native references, detach the backend, destroy the private surface
@@ -199,9 +226,14 @@ An unavailable secondary output does not stall unrelated ready outputs unless
 the host explicitly selected a grouped-present policy. Grouped atomic display
 presentation is not guaranteed by this baseline.
 
-Backend-global frame tokens cannot silently be reused as multi-window tokens.
-RND-008.8 must migrate that contract before exposing multi-window presentation;
-the existing API does not already implement this ADR's full target model.
+A **backend-global frame token** is the `FrameToken` returned by
+`IRenderBackend::BeginFrame` in
+[Rendering Architecture](../architecture/runtime/rendering-architecture.md#backend-interface):
+one outstanding acquired frame per backend instance, owned by
+`RenderFrameScope` until present or abort. It is not a per-window identity and
+cannot silently be reused as a multi-window token. RND-008.8 must migrate that
+contract before exposing multi-window presentation; the existing API does not
+already implement this ADR's full target model.
 Similarly, D3D12's future pre-window metadata must describe its DXGI attachment
 requirements; it cannot masquerade as OpenGL or Vulkan to fit existing tags.
 

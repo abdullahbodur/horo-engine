@@ -4,8 +4,8 @@
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: M0 renderer capability and product-policy contract; no backend implementation
-- **Jira**: [HORO-296](https://horo-engine.atlassian.net/browse/HORO-296)
 - **Issue**: [#296](https://github.com/abdullahbodur/horo-engine/issues/296) ([RND-003.1])
+- **Jira**: [HORO-296](https://horo-engine.atlassian.net/browse/HORO-296)
 - **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 
 ## Context

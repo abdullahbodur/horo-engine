@@ -2,9 +2,9 @@
 
 - **Status**: Accepted
 - **Date**: 2026-05-25
-- **JIRA**: HORO-32
 - **Supersedes**: None
 - **Scope**: Module boundary between command-line interface, engine core pipeline, and editor UI
+- **Jira**: [HORO-32](https://horo-engine.atlassian.net/browse/HORO-32)
 
 ## Context
 

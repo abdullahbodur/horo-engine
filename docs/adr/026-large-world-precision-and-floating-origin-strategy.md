@@ -5,7 +5,7 @@
 - **Supersedes**: None
 - **Scope**: Coordinate systems, precision representations (64-bit integer, double-precision floats, camera-relative floats), floating origin rebasing transactions, platform/GPU shader performance boundaries, physics/subsystem authority, and error domains.
 - **Issue**: [#1604](https://github.com/abdullahbodur/horo-engine/issues/1604) ([WST-007.1])
-- **JIRA**: HORO-1604
+- **Jira**: [HORO-1604](https://horo-engine.atlassian.net/browse/HORO-1604)
 - **Parent**: [#1524](https://github.com/abdullahbodur/horo-engine/issues/1524) ([WST-007])
 - **Normative documents**:
   - [Coordinate Precision And Origin Rebasing](../architecture/runtime/coordinate-precision-and-origin-rebasing.md)

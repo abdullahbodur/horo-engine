@@ -239,7 +239,7 @@ Required rules:
 OpenGL context behavior and Metal command-buffer behavior are implementation
 details beneath these rules.
 
-[ADR-029](../../adr/029-opengl-compatibility-profile-and-platform-policy.md)
+[ADR-029](../../adr/029-opengl-core-profile-and-platform-policy.md)
 defines OpenGL's desktop 4.1 Core admission policy. The selected private adapter
 must apply complete context requirements before window creation, and the backend
 must validate the actual context and required entry points before publishing

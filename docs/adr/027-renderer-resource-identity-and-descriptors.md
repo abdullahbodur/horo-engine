@@ -195,8 +195,9 @@ invalid, and not usable. Frame submissions, derived-resource creation, and
 bind/draw that name a `Pending` handle are rejected as not ready.
 
 `ResourceOperationId` identifies the registry completion result for that
-generation. The frontend may project a user-visible create into the application
-`OperationStore` through the existing coordinator
+generation. It is not a resident handle (`TextureHandle` and peers) and not
+`Horo::OperationId`. The frontend may project a user-visible create into the
+application `OperationStore` through the existing coordinator
 ([ADR-010](010-job-waiting-and-operation-store-ownership.md)); `Horo::OperationId`
 is not the resource handle and is not required for unpublished GPU work.
 

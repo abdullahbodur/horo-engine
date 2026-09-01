@@ -2,9 +2,9 @@
 
 - **Status**: Accepted
 - **Date**: 2026-05-25
-- **JIRA**: HORO-32
 - **Supersedes**: None
 - **Scope**: Secrets, signing keys, and archive passwords in the build/release pipeline
+- **Jira**: [HORO-32](https://horo-engine.atlassian.net/browse/HORO-32)
 
 ## Context
 
