@@ -69,8 +69,9 @@ Targets are `NextRealRenderFrame`, an admitted future `RealRenderFrameId`, a
 retained exact `GraphExecutionId`, or a completed ADR-048 incident graph manifest.
 The request carries exact renderer/device generations and optional surface/view.
 It never infers current target from editor focus, selected scene object or backend
-enumeration. Synthetic presentation without a real graph is explicitly
-unsupported.
+enumeration. UI-fabricated presentation in the absence of a renderer-provided
+projection is explicitly unsupported; deterministic Null renderer projections
+remain valid contract fixtures.
 
 Detail independently requests graph topology, resource uses/lifetimes, barrier/
 queue transitions, ADR-043 allocation/resource records, ADR-042 CPU/GPU timing and
@@ -176,13 +177,23 @@ One page defaults to 256 rows or 256 KiB and has hard maxima of 1,024 rows and
 1 MiB. Pages are move-only owned immutable values with identity/position cursors,
 the same lifetime rule as ADR-043. A tab may hold eight pages by default and at
 most 32; further reads return backpressure. Expiry rejects new reads but does not
-invalidate already returned owned pages.
+invalidate already returned owned pages. This client cache limit does not limit
+the records considered by a service query.
 
 Filters use finite typed sets, exact IDs, bounded registered-name search and
-numeric ranges. Free-text search is applied on a worker to already materialized
-bounded safe display strings; regex/native message/path search is not evaluated on
-the renderer owner thread. Sorting and graph layout run on cancellable workers over
-owned pages and have finite output/time budgets.
+numeric ranges. The snapshot-owning service applies filter/search/sort queries on
+cancellable workers across the full bounded immutable dataset, then exposes the
+matching ordered result through pages. Free-text search examines only already
+materialized bounded safe display strings; regex/native message/path search is not
+evaluated on the renderer owner thread. A query builds at most one checked bounded
+record-index permutation charged to the bundle byte budget and returns typed
+timeout/cancellation/backpressure instead of silently searching only cached pages.
+The UI page cache holds result windows, not query truth.
+
+Graph layout likewise consumes the full included closed topology from service-
+owned immutable storage and emits a finite clustered/virtualized projection. It
+does not infer omitted edges or require all source records to reside in the tab's
+page cache. Search, sorting and layout have explicit finite output/time budgets.
 
 By default one bundle may arm and two completed bundles may be retained per
 renderer; hard maxima are two arming and eight retained. Retention defaults to
