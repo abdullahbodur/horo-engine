@@ -69,6 +69,7 @@ to the replacement.
 | [055](055-extension-manifest-v1-typed-model.md) | Extension Manifest V1 Typed Model | Proposed | 2026-09-02 |
 | [056](056-external-editor-ui-boundary.md) | External Editor UI Boundary | Proposed | 2026-09-02 |
 | [057](057-package-manifest-v1-typed-model.md) | Package Manifest V1 Typed Model | Proposed | 2026-09-02 |
+| [058](058-package-source-policy.md) | Package Source Policy | Proposed | 2026-09-02 |
 
 ## Conventions
 

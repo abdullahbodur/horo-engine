@@ -50,7 +50,9 @@ state, source policy, trust and selected host artifacts remain separate records.
 
 Package install uses the same safety posture as distribution staging:
 
-1. Download into a temporary location.
+1. Resolve one deterministic source/artifact record under
+   [ADR-058](../../adr/058-package-source-policy.md), then download through its
+   ordered approved transports into a temporary location.
 2. Verify expected size and hash.
 3. Extract with path traversal, symlink, depth, file count, and size limits.
 4. Decode and semantically validate the typed package/file manifests, then verify

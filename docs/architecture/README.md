@@ -242,7 +242,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Package System](./packages/package-system.md): core package kinds, contributions,
   manifest, sources, resolver, lockfile, cache, and trust model. The canonical
   typed manifest and verified-bundle boundary is
-  [ADR-057](../adr/057-package-manifest-v1-typed-model.md).
+  [ADR-057](../adr/057-package-manifest-v1-typed-model.md); deterministic source,
+  mirror, credential and override policy is
+  [ADR-058](../adr/058-package-source-policy.md).
 - [Package Restore](./packages/package-restore.md): clean-machine project restore,
   bootstrap, CI, offline restore, dev overrides, and non-interactive policy.
 - [Package Lifecycle](./packages/package-lifecycle.md): install, trust, enable,
