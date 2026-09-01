@@ -355,9 +355,12 @@ shadow and publishes immutable GPU Scene generations. Backends realize buffers
 and copies; they do not own instance identity or inspect ECS storage.
 
 The logical record contains current/previous-published transform, local and
-origin-relative bounds, resident mesh/material generations, ADR-036 render
-classification, visibility/shadow flags, LOD policy and record/motion/origin
-generations. A target's shader/reflection schema defines actual packing and table
+origin-relative bounds, resident mesh generations, scene `MaterialId` plus packed
+`MaterialBindingId`, and the five mutually exclusive ADR-036 classifications
+(`Opaque`, `Masked`, `ForwardOnlyOpaque`, `TransparentSorted`,
+`TransparentAdditive`). Visibility/shadow flags, LOD policy and
+record/motion/origin generations complete the record. Sorted-alpha and additive
+transparency remain separate; they are not one "transparent" class. A target's shader/reflection schema defines actual packing and table
 indices. The logical C++ carrier is never copied as an assumed native GPU layout,
 and descriptor/bindless indices are derived device-generation values rather than
 asset or scene identity.
@@ -367,7 +370,7 @@ immutable state. Admission validates source/scene/revision generations, queue an
 capacity envelopes, dependencies and cancellation. Worker preparation owns its
 inputs and cannot map native memory or publish slots. The render-capable owner
 stages slots, pins and uploads, then atomically publishes a complete generation at
-a safe point. Queue pressure applies typed backpressure; multi-frame staging keeps
+ADR-018 `CommandThreadPolicy::RenderSafePoint`. Queue pressure applies typed backpressure; multi-frame staging keeps
 the prior coherent generation active and never drops deltas or exposes partial
 updates.
 

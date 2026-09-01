@@ -6,6 +6,11 @@
 - **Scope**: Scene working color space, exposure, precision, output transforms and SDR/HDR boundaries
 - **Issue**: [RND-013.1](https://github.com/abdullahbodur/horo-engine/issues/391)
 - **Jira**: [HORO-391](https://horo-engine.atlassian.net/browse/HORO-391)
+- **Related**: [ADR-011](011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md),
+  [ADR-015](015-accessibility-ownership-typed-transport-and-non-gating-policy.md),
+  [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md),
+  [ADR-034](034-gpu-memory-and-residency-ownership.md),
+  [ADR-036](036-raster-render-path-and-quality-architecture.md)
 - **Companion decision**: [ADR-033: Presentation and Display Ownership](033-presentation-and-display-ownership.md)
 - **Normative documents**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md), [Post-Processing and Effects Architecture](../architecture/runtime/post-processing-and-effects-architecture.md)
 
@@ -120,14 +125,24 @@ Equivalently, a calibrated model has the form
 `calibrationEv` and model revision are explicit pipeline inputs rather than an
 ambient backend constant.
 
-Manual exposure publishes a selected finite `exposureEv`. Automatic exposure
-measures a declared bounded region of the unexposed scene, computes log2 ACEScg
-luminance with stable histogram/reduction bounds, excludes non-finite samples,
-and publishes one `ExposureState` generation per view. Metering mode, percentile
-bounds, neutral target (default scene-linear `0.18`), minimum/maximum EV, separate
-brighten/darken adaptation rates in EV per second, compensation, simulation/view
-time source and reset policy are typed settings. Empty/invalid samples retain the
-last valid value or use the declared initial EV and report the reason.
+Manual exposure publishes a selected finite `exposureEv` with the plan. Automatic
+exposure is a GPU reduction over a declared bounded region of the unexposed ACEScg
+scene. It computes log2 luminance with stable histogram/reduction bounds, excludes
+non-finite samples, and writes one `ExposureState` generation consumed by the
+**next** submitted view of that `RenderViewId` (one-frame delay). Same-frame GPU
+idle, mapped histogram readback, and CPU metering of GPU scene color are
+forbidden: [ADR-010](010-job-waiting-and-operation-store-ownership.md) does not
+allow the render owner to wait for GPU work that needs that same owner to
+continue, [ADR-011](011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md)
+forbids GPU readback as a required frame result, and [ADR-015](015-accessibility-ownership-typed-transport-and-non-gating-policy.md)
+forbids synchronous CPU/GPU readback on render accessibility/color passes.
+Diagnostics may copy an already-published state at a later
+`CommandThreadPolicy::RenderSafePoint`; that copy is not the production meter.
+Metering mode, percentile bounds, neutral target (default scene-linear `0.18`),
+minimum/maximum EV, separate brighten/darken adaptation rates in EV per second,
+compensation, simulation/view time source and reset policy are typed settings.
+Empty/invalid samples retain the last valid value or use the declared initial EV
+and report the reason.
 
 Exposure is computed once and consumed by bloom, tone mapping, histories and
 debug views; individual effects cannot maintain private exposure estimates.
@@ -182,6 +197,32 @@ artifacts are ACEScg before the output transform and carry metadata; display
 screenshots capture the resolved post-transform encoding. The two are different
 capture products.
 
+Step 3 is the versioned creative look: `ColorGradingSettings`, cooked look LUTs
+and other scene-referred grading. It runs on exposed ACEScg before the ACES
+output transform and participates in look/transform identity and scene-linear
+capture. It is not an accessibility feature and does not read
+`IColorAccessibilityQuery`.
+
+Step 6 is the [ADR-015](015-accessibility-ownership-typed-transport-and-non-gating-policy.md)
+colorblind transform. The renderer applies the snapshot-backed
+`IColorAccessibilityQuery` matrix (or equivalent compact ALU) to the **complete
+composed display-linear image**, including display-referred UI/HUD. Gameplay and
+HUD still consume that same query independently for non-color cues (icons,
+patterns, text). `ColorGradingSettings` is never this path: sharing storage or
+folding step 6 into step 3 would either miss HUD pixels, bake accessibility into
+look identity, or change scene-linear EXR captures when a user enables a
+colorblind filter. The two named steps exist because they have different
+color-referred domains, consumers, capture products and settings owners.
+
+[ADR-011](011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md)
+`VfxRenderBatch` writes unexposed linear ACEScg during step 1. Additive batches
+add scene-referred RGB with no coverage alpha and keep skip-sort. Translucent
+and ribbon batches use the scene-color resource's declared linear
+coverage/opacity alpha, depth-test without depth writes, and the existing sort
+contract. Particle/decal/volume colors follow the same import/cook encoding as
+other scene colors. VFX does not blend after exposure, after the output
+transform, or into encoded SDR/PQ.
+
 ### 5. SDR and HDR output contracts are distinct
 
 The baseline interactive SDR output is **sRGB/Rec.709 primaries, D65 white, sRGB
@@ -230,13 +271,32 @@ Editor owns controls and desired settings but displays requested versus active
 plans separately. Backends translate the plan; they do not choose a gamut, curve,
 paper white or fallback.
 
+Canonical `RGBA16F` scene color, declared `float32` intermediates, cooked
+LUT/transform buffers, color and exposure histories, and target output images are
+renderer-owned [ADR-034](034-gpu-memory-and-residency-ownership.md) reservations.
+Plan/recipe admission reserves them before realize. Budget denial is a typed
+ADR-008/034 result; it is not a silent format, LUT or history drop. Histories
+remain charged until their generation retires under ADR-027.
+
+`ColorPipelinePlan` publication uses
+[ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md)
+`CommandThreadPolicy::RenderSafePoint` on the host-declared render-capable thread
+([Threading And Synchronization](../architecture/runtime/rendering-architecture.md#threading-and-synchronization)).
+The frontend stages a candidate from project look, cooked transforms,
+`ExposureState`, the [ADR-036](036-raster-render-path-and-quality-architecture.md)
+`RasterRecipe` and ADR-033's output contract, validates resources and transforms,
+then publishes at that boundary. In-flight frames retain the previous generation.
+This is the same publication class as `RasterRecipe` replacement, not a mid-pass
+or worker commit. Device/output changes, cancellation and stale transform
+completion keep the last good compatible plan or produce the typed
+suspended/lost behavior from ADR-033; they do not mutate the active plan in
+place.
+
 Diagnostics identify source asset/encoding, working/output plan and generations,
 requested/actual output, exposure state, failing transform/pass, unsupported
 format/transfer/metadata predicate, fallback reason and sanitization counts. Color
 values, LUT payloads and captures are bounded and excluded from telemetry by
-default. Device/output changes, cancellation and stale transform completion keep
-the last good compatible plan or produce the typed suspended/lost behavior from
-ADR-033.
+default.
 
 ## Rejected Alternatives
 
@@ -252,6 +312,7 @@ ADR-033.
 | Use one unqualified `float exposure` | Rejected: sign, unit and physical-camera mapping are ambiguous. Horo uses base-2 stops with an explicit multiplier. |
 | Render SDR separately from HDR | Rejected: duplicates lighting/effects and produces semantic drift. One scene-linear result feeds target-specific output plans. |
 | Let an HDR-capable GPU enable HDR output | Rejected: display, OS, surface, format, metadata and host policy must all pass ADR-033 admission. |
+| Fold colorblind filters into `ColorGradingSettings` or apply them before UI compose | Rejected: look identity and scene-linear capture must stay independent of accessibility; HUD pixels must still receive the filter. |
 
 The selected pipeline adds color-transform cooking, metadata, reference fixtures
 and wide-gamut authoring discipline. It avoids per-backend looks and preserves one
@@ -295,15 +356,20 @@ Verification must include:
 - RGBA16F extremes, finite negative/above-one values, NaN/Inf production and
   bounded final sanitization, plus declared float32 reduction references;
 - exposure `+1/-1 EV`, manual/auto bounds, empty histograms, adaptation/reset,
-  pre-exposure reconstruction and history rescale/invalidation;
+  one-frame GPU reduction delay without same-frame readback, pre-exposure
+  reconstruction and history rescale/invalidation;
 - pinned ACES output reference vectors/images, LUT interpolation, transform/cache
   identity changes and rejection of missing/corrupt production transforms;
 - SDR sRGB and HDR10 PQ transfer/gamut/bit-depth/dither results, paper-white/peak
   bounds, metadata agreement and no double encoding;
-- display-referred UI/accessibility ordering, out-of-gamut containment and scene-
+- display-referred UI compose then step-6 accessibility covering HUD, no
+  colorblind effect on scene-linear EXR, out-of-gamut containment and scene-
   versus display-capture metadata;
+- VFX additive/translucent batches writing unexposed ACEScg in step 1;
+- ADR-034 reservation of scene-color, LUT, history and output images before
+  realize;
 - HDR admission, Auto-to-SDR fallback, explicit-HDR failure, hotplug/display move,
-  safe-point publication and last-good output retention; and
+  ADR-018 `RenderSafePoint` publication and last-good output retention; and
 - native image comparison on every advertised backend with declared tolerances.
   Null tests prove math, plan and failure schedules but not display conformance.
 
