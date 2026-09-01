@@ -135,8 +135,9 @@ working gamut, exposure and output transform belong to RND-013; this ADR require
 only that all admitted paths produce the same selected scene-color contract.
 
 Deferred GBuffer layouts are versioned cooked schemas. A schema declares each
-semantic, format, encoding, clear/load/store behavior, sample count and producer/
-consumer stage. It is selected against complete format/attachment/limit support.
+semantic, format, encoding, clear/load/store behavior, sample count and
+producer/consumer stage. It is selected against complete
+format/attachment/limit support.
 Backends cannot add private channels or reinterpret values. Material and lighting
 pipelines carry the schema identity; incompatible artifacts fail before graph
 execution. Optional post-process inputs are graph requirements that participate
