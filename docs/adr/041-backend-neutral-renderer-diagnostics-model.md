@@ -65,7 +65,8 @@ struct RendererDiagnosticEvent {
     DiagnosticSeverity severity;
     RendererDiagnosticKind kind;
     RendererSubsystem subsystem;
-    std::chrono::steady_clock::time_point occurredAt;
+    std::chrono::system_clock::time_point occurredAtUtc;
+    std::chrono::steady_clock::time_point occurredAtMonotonic;
     RendererDiagnosticProducerSequence producerSequence;
     RendererDiagnosticContext context;
     RendererDiagnosticFields fields;
@@ -76,10 +77,17 @@ struct RendererDiagnosticEvent {
 
 `DiagnosticCode` is the existing Foundation identity registered in the owning
 module's validated renderer diagnostic contribution. Its meaning cannot change
-within a schema version. `relatedErrorCode` carries the exact existing Foundation `ErrorCode`
-when the event supports a failed operation; it is absent for non-failing findings.
+within a schema version. `relatedErrorCode` carries the exact existing Foundation
+`ErrorCode` when the event supports a failed operation; it is absent for
+non-failing findings.
 Runtime sites use validated/interned handles rather than inventing strings. The
 codes, not `message`, drive filtering, tests, deduplication and host presentation.
+
+The emitter samples UTC and process monotonic occurrence time as one pair at the
+source. UTC supports correlation with persistent/system logs across sessions;
+monotonic time supplies in-session ordering, intervals and aggregate windows
+without wall-clock jumps. The log projection preserves both values and never
+substitutes later drain time for event occurrence time.
 
 Each module declares its diagnostic identities before activation:
 
@@ -91,6 +99,7 @@ struct RendererDiagnosticCodeDescriptor {
     RendererDiagnosticKind kind;
     RendererSubsystem subsystem;
     RendererDiagnosticRepetition repetition;
+    RendererDiagnosticNativeAggregation nativeAggregation;
     std::span<const RendererDiagnosticFieldDescriptor> fields;
     DiagnosticPrivacyClass privacy;
     std::span<const ErrorCode> allowedRelatedErrors;
@@ -99,9 +108,10 @@ struct RendererDiagnosticCodeDescriptor {
 
 Composition rejects duplicate codes, foreign ownership, an invalid default
 severity, unregistered field keys/types, an unbounded repetition policy or an
-unregistered related error. Descriptor creation is inert metadata and performs no
-sink registration, native callback setup or runtime mutation. Runtime emission
-uses the validated handle derived during composition.
+unregistered related error. It also rejects a native-message family without a
+bounded native aggregation policy. Descriptor creation is inert metadata and
+performs no sink registration, native callback setup or runtime mutation. Runtime
+emission uses the validated handle derived during composition.
 
 Canonical severities are `Info`, `Warning`, `Error` and `Fatal`, with these
 meanings:
@@ -212,9 +222,13 @@ Each code descriptor declares whether it is `OncePerGeneration`,
 `AggregateWindow`, `EveryOccurrence` or `StateTransition`. An aggregate window
 defaults to one second and must be between 100 milliseconds and 10 seconds. The
 router computes a bounded fingerprint from code, renderer/device generation and
-descriptor-approved
-scope keys. Arbitrary message text and high-cardinality fields cannot enter the
-fingerprint.
+descriptor-approved scope keys. When a descriptor admits native evidence, its
+policy declares whether normalized API family, source/type and stable numeric
+message ID join the fingerprint. The generic
+`render.backend.native_message_unknown` family must include API family and native
+message ID so unrelated driver findings never collapse together. Raw message text
+and other high-cardinality fields cannot enter the fingerprint. The fixed
+aggregate-table budget still bounds adversarial native ID cardinality.
 
 An aggregate stores first/latest monotonic time, first/latest sequence, occurrence
 count and suppressed count. Capacity is fixed; overflow evicts the lowest-severity
@@ -341,8 +355,11 @@ Tests must cover:
   no renderer-lock or sink wait on producer paths;
 - category gates before formatting, field/string/count bounds, invalid finite
   values, redaction and native handle/path normalization;
+- paired UTC/monotonic occurrence capture, persistent wall-clock correlation,
+  monotonic ordering and no substitution of drain time;
 - once, aggregate, every-occurrence and state-transition policies, including
-  bounded aggregate overflow and recovery summaries;
+  descriptor-selected native identity, separation of unknown native IDs, bounded
+  aggregate overflow and recovery summaries;
 - queue saturation with low-severity drops, warning aggregation and emergency
   delivery of error/fatal records;
 - initialization failure, partial shutdown, callback unregistration, device loss,
