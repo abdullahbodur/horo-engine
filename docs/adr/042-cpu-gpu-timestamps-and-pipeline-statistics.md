@@ -161,9 +161,14 @@ frontend owns logical scope/query identities and finite plan budgets. Query
 capacity is reserved before frame admission and charged through GPU retirement.
 No backend allocates a query pool or readback buffer opportunistically mid-frame.
 
-The baseline always-on plan reserves one GPU begin/end pair per active graphics
-queue for each admitted real frame. Detailed timing is off until requested and
-defaults to at most 128 GPU scopes per real frame, with a hard maximum of 512.
+The baseline always-on plan reserves one GPU begin/end pair for every graphics,
+compute or transfer queue that participates in the admitted real-frame graph and
+has effective timestamp support for the required stages. A required whole-frame
+plan rejects a participating queue without that support. Optional policy records
+the queue as unavailable and publishes only explicitly partial per-queue coverage;
+it never labels the observed subset as whole-frame GPU time. Detailed timing is
+off until requested and defaults to at most 128 GPU scopes per real frame, with a
+hard maximum of 512.
 Pipeline statistics default to at most 32 scopes on one sampled real frame, with a
 hard maximum of 128. Every plan also validates:
 
@@ -194,7 +199,7 @@ struct RendererMeasurementBatch {
     RendererMeasurementBatchId id;
     RendererInstrumentationGeneration plan;
     DeviceGeneration device;
-    CapabilityGeneration capabilities;
+    EffectiveCapabilitiesRevision capabilities;
     RealRenderFrameId sourceFrame;
     GraphExecutionId graph;
     RenderQueueId queue;
@@ -360,6 +365,8 @@ Tests must cover:
   presentation timing;
 - graph scope begin/end, pass culling/merge, queue/stage placement, nesting rules
   and checked query-capacity arithmetic;
+- graphics, compute and transfer queue participation, required unsupported-queue
+  rejection and optional partial coverage that never becomes whole-frame time;
 - default/hard scope, pending-batch, storage and sampling limits, plus no catch-up
   burst or runtime growth;
 - delayed and out-of-order completion retaining source frame, plan/device/clock
