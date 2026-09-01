@@ -92,11 +92,9 @@ Missing capability never selects a cheaper path and reports benchmark success.
 ### 3. Environment identity defines a comparable cohort
 
 ```cpp
-struct RendererBenchmarkEnvironment {
-    BuildArtifactIdentity build;
+struct RendererBenchmarkCohortIdentity {
     RendererBackendId backend;
     RendererAdapterIdentity adapter;
-    GpuAdapterInstanceId adapterInstance;
     DriverVersion driver;
     OsVersion os;
     CpuTopologyClass cpu;
@@ -105,6 +103,19 @@ struct RendererBenchmarkEnvironment {
     EffectiveCapabilitiesRevision capabilities;
     CompatibilityPolicyFingerprint workarounds;
     RendererInstrumentationPlanId instrumentation;
+};
+
+struct RendererBenchmarkRunProvenance {
+    SourceCommitIdentity source;
+    BuildArtifactIdentity build;
+    ShaderArtifactSetIdentity shaders;
+    GpuAdapterInstanceId adapterInstance;
+    RendererRunnerIdentity runner;
+};
+
+struct RendererBenchmarkEnvironment {
+    RendererBenchmarkCohortIdentity cohort;
+    RendererBenchmarkRunProvenance provenance;
 };
 ```
 
@@ -224,11 +235,19 @@ denominator; a zero/non-finite baseline is invalid. Latency/memory use
 `candidate - baseline`; throughput uses `baseline - candidate`. Checked arithmetic
 precedes unit conversion.
 
-The candidate also fails stability when iteration MAD divided by the positive
-iteration median exceeds `3.0%` for p50/p95 or `5.0%` for p99/peaks, unless a
-tighter descriptor rule applies. Baseline dispersion above the same limits freezes
-the gate as `BaselineUnstable`; it does not widen thresholds. The lane emits source
-iterations for triage.
+The candidate fails stability only when both a relative and metric-appropriate
+absolute iteration-MAD bound are exceeded:
+
+- p50/p95 latency: `3.0%` and `0.05 ms`;
+- p99 latency: `5.0%` and `0.10 ms`;
+- throughput: `3.0%` and `0.50 frame/s`; and
+- memory peaks: `5.0%` and `4 MiB`.
+
+Declared count/capacity metrics own an explicit stability rule or are exact-only.
+A tighter descriptor rule may apply. Baseline dispersion above the same paired
+limits freezes the gate as `BaselineUnstable`; it does not widen thresholds. The
+lane emits source iterations for triage. Equality at either stability threshold
+does not fail.
 
 A descriptor can tighten any gate. Loosening requires a local rationale, owner,
 before/after evidence on the same cohort and review in the same change. Runtime
