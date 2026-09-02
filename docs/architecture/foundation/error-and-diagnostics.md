@@ -207,6 +207,25 @@ Code descriptors are metadata, not a dispatch mechanism. Runtime hot paths may
 store compact interned identifiers after validation, but serialized errors keep
 the stable textual domain and code.
 
+### Platform Services Async Failures
+
+[ADR-130](../../adr/130-platform-services-frontend-request-lifetime-timeout-null-and-error-semantics.md)
+applies this model to frontend-owned asynchronous platform requests. Pre-admission
+failure returns `Result<PlatformRequestHandle<T>>` with no request record. An admitted
+request atomically publishes exactly one `Succeeded`, `Failed`, `Cancelled` or
+`TimedOut` terminal state/result; observers are deferred views of that record and do
+not create another outcome channel.
+
+The following identities are deliberately distinct: `platform.frontend.unavailable`,
+`platform.capability.unavailable`, `platform.provider.null`,
+`platform.request.cancelled`, `platform.request.timed_out`,
+`platform.request.expired`, `platform.request.stale` and
+`platform.provider.failed`. Provider failure additionally carries one typed normalized
+category such as Offline, NotSignedIn, Forbidden, RateLimited, PreconditionFailed,
+QuotaExceeded, InvalidResponse, TransientFailure or PermanentFailure. Native SDK codes
+remain bounded redacted cause/diagnostic evidence and never replace Horo branching
+identity.
+
 ### Serialized Error Shape
 
 Structured host payloads use one canonical safe shape derived from the C++

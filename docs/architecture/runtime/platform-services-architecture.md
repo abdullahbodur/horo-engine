@@ -12,6 +12,12 @@ The goal is a single backend-neutral frontend that gameplay code can use
 without caring which platform the game is running on, while the actual
 platform SDK implementations live in separate, optionally loaded backends.
 
+[ADR-130](../../adr/130-platform-services-frontend-request-lifetime-timeout-null-and-error-semantics.md)
+is the normative baseline for frontend-owned request records, admission, state and
+result publication, deferred callback dispatch, capability truth, Null behavior,
+timeout and provider-error normalization. Later service decisions specialize this
+contract rather than creating another request lifecycle.
+
 ## Scope
 
 Platform services covered here:
@@ -87,61 +93,104 @@ calling thread on network I/O.
 
 ```cpp
 template <typename T>
-class PlatformServiceRequest {
+class PlatformRequestHandle {
 public:
     RequestId Id() const;
-    RequestState State() const;
-    bool IsPending() const;
-    bool IsComplete() const;
-    bool WasCancelled() const;
-
-    void OnComplete(std::function<void(Result<T>)> callback);
-    void Cancel();
+    FrontendGeneration Frontend() const;
 };
 
 class PlatformServicesFrontend {
 public:
-    PlatformServiceRequest<AchievementUnlockResult>
+    Result<PlatformRequestHandle<AchievementUnlockResult>>
     UnlockAchievement(AchievementId id);
 
-    PlatformServiceRequest<LeaderboardEntries>
+    Result<PlatformRequestHandle<LeaderboardEntries>>
     GetLeaderboardEntries(LeaderboardId id, const LeaderboardQuery& query);
 
-    PlatformServiceRequest<CloudReadResult>
+    Result<PlatformRequestHandle<CloudReadResult>>
     ReadCloudSave(CloudSaveObjectKey key);
 
-    PlatformServiceRequest<CloudMutationResult>
+    Result<PlatformRequestHandle<CloudMutationResult>>
     WriteCloudSave(CloudWriteRequest request);
 
-    PlatformServiceRequest<void>
+    Result<PlatformRequestHandle<void>>
     SetPresence(const PresenceState& state);
+
+    template <typename T>
+    Result<PlatformRequestSnapshot<T>> Query(PlatformRequestHandle<T> request) const;
+    template <typename T>
+    Result<PlatformRequestSubscription> Subscribe(
+        PlatformRequestHandle<T> request,
+        PlatformCompletionExecutor executor,
+        PlatformTerminalObserver<T> observer);
+    Result<void> Cancel(PlatformRequestId request);
 };
 ```
 
+Pre-admission validation, permission, lifecycle, capability, session and bounded-
+capacity failure returns `Result` with no request record or provider call. Once admitted,
+the frontend owns the request record independently of every handle and subscription.
+Handles contain only typed request/frontend identity; they never own provider objects.
+
+The authoritative snapshot state is exhaustive:
+
+```cpp
+enum class PlatformRequestState : uint8_t {
+    Queued,
+    Running,
+    Cancelling,
+    Succeeded,
+    Failed,
+    Cancelled,
+    TimedOut
+};
+```
+
+| From | Legal next states |
+|---|---|
+| `Queued` | `Running`, `Cancelling`, `Failed`, `TimedOut` |
+| `Running` | `Cancelling`, `Succeeded`, `Failed`, `TimedOut` |
+| `Cancelling` | `Succeeded`, `Failed`, `Cancelled`, `TimedOut` |
+| `Succeeded`, `Failed`, `Cancelled`, `TimedOut` | none |
+
+Exactly one terminal result publishes atomically with the terminal state. Success owns
+one immutable value; Failed, Cancelled and TimedOut own one typed Error matching the
+state. Non-terminal snapshots contain no terminal result.
+
 ### Request Lifetime
 
-1. Caller invokes a frontend method and receives a `PlatformServiceRequest`.
-2. The frontend assigns a unique `RequestId`, validates inputs, and routes the
-   call to the active backend service.
-3. The backend performs the platform call asynchronously. It may complete
-   immediately, queue work on an SDK thread, or schedule a network operation.
-4. When the backend reports completion, the frontend transitions the request to
-   `Complete` and dispatches the caller's callback on an engine job or main
-   thread.
-5. The request handle remains valid after completion; `OnComplete` may be
-   invoked synchronously if the request has already finished.
+1. The frontend validates and either returns an admission error or atomically creates
+   a `Queued` record with request, provider, session, policy and deadline generations.
+2. Provider submission moves the record to `Running`; failure after admission commits
+   `Failed` without inventing provider progress.
+3. The provider performs asynchronous work and enqueues bounded generation-tagged
+   evidence. SDK threads never mutate frontend state or invoke user code.
+4. The frontend owner lane validates evidence and commits at most one terminal state/
+   result before scheduling observer notification.
+5. The record remains queryable under finite count/time retention after completion and
+   until provider/callback retirement permits reclamation.
+
+Dropping the last handle or subscription does not cancel an admitted request, erase a
+write or free provider work. Explicit `Cancel(requestId)` or owner shutdown policy is
+required. Querying expired or stale identity returns `platform.request.expired` or
+`platform.request.stale`; it does not fabricate a replacement terminal result.
 
 ### Cancellation
 
-`Cancel()` asks the frontend to abort the operation. Cancellation is best-effort:
+`Cancel()` posts cancellation intent to the frontend owner. It never invokes the
+provider or an observer inline. Cancellation is best-effort:
 
-- If the request has not left the frontend queue, it is removed and the caller
-  receives `request_cancelled`.
-- If the backend is already executing, the frontend forwards the cancellation.
-  The backend may ignore it if the SDK does not support cancellation.
-- A completed request cannot be cancelled retroactively.
+- An accepted queued/running request moves to `Cancelling` and closes new retries.
+- Provider acknowledgement with no committed effect publishes `Cancelled` and
+  `platform.request.cancelled`.
+- A provider success already committed or completed despite cancellation may publish
+  `Succeeded`; provider failure may publish `Failed`.
+- Deadline expiry may still publish `TimedOut`. A terminal request cannot be cancelled
+  retroactively.
 
-Multiple `Cancel()` calls are idempotent. Only one final state is published.
+Multiple `Cancel()` calls are idempotent. Cancellation intent is recorded separately
+from the one final state; `Cancelled` does not promise rollback unless a service-
+specific contract provides that guarantee.
 
 ### Threading
 
@@ -150,23 +199,39 @@ SDK thread. Backends must not call frontend completion handlers directly; they
 notify the frontend through an internal completion queue that the frontend
 drains on an appropriate engine thread.
 
-Gameplay code may call frontend methods from any thread, but request handles
-and callbacks should be owned by systems that understand the engine's threading
-rules. The frontend itself is thread-safe.
+The authoritative observation API is snapshot query plus optional subscription.
+Subscription returns a move-only RAII token and each token receives at most one
+terminal notification. Destroying it prevents future delivery without cancelling the
+request. Callbacks never run inline from submit, subscribe, cancel, provider callback,
+queue drain/state mutation or while a frontend/provider lock is held. The frontend
+commits terminal state first, then posts immutable request ID/terminal snapshot to the
+declared engine executor for a later dispatch turn. Subscribing after retained terminal
+completion schedules the same deferred delivery rather than invoking synchronously.
+
+Gameplay code may submit from permitted threads through bounded ingress, but the
+frontend serializes request mutation on its declared owner lane. Re-entering from a
+later completion callback may enqueue new work; it cannot recursively drain completion
+or change the published terminal record. Callback exceptions are caught at the engine
+executor boundary and do not change the platform request result.
 
 ### Timeouts, Retry, And Throttling
 
-The frontend applies a per-service timeout policy. If a backend does not
-complete a request in time, the frontend treats it as `platform_error` and
-cancels the underlying operation.
+The frontend captures one finite monotonic deadline at admission. Valid completion
+evidence observed no later than the deadline is processed before deadline evaluation.
+Otherwise the frontend commits `TimedOut` with `platform.request.timed_out`, requests
+best-effort provider cancellation and closes caller-visible completion. Later native
+completion is retirement/reconciliation evidence only and cannot replace the result.
+Provider resources remain alive until acknowledged safe; timeout is not proof of
+physical cancellation.
 
-Retry is controlled by the frontend, not by gameplay code:
+Retry is controlled by the owning frontend/service policy, not gameplay code, and all
+attempts fit within the original request deadline:
 
 - Idempotent writes such as stat updates may be retried a bounded number of
   times before surfacing an error.
 - Reads and queries are not retried automatically unless the project policy
   explicitly allows it.
-- When the backend reports `offline` or `not_signed_in`, retriable writes move
+- When the backend reports normalized `Offline` or `NotSignedIn`, retriable writes move
   to the offline queue instead of being retried immediately.
 
 High-frequency writes are throttled and coalesced:
@@ -190,21 +255,26 @@ platform.leaderboards.deferred_submits -- submissions delayed by debounce
 
 ### Result And Errors
 
-Requests return typed `Result<T>`. Errors are normalized so gameplay code does
-not need platform-specific error handling:
+Submission and terminal snapshots use typed `Result`/`Error` contracts. Errors are
+normalized so gameplay code does not need platform-specific error handling:
 
 ```text
-offline           -- no network or platform session
-not_signed_in     -- no authenticated user
-forbidden         -- platform policy or user consent blocks the call
-not_supported     -- the active backend does not implement this service
-rate_limited      -- call must be retried later
-precondition_failed -- remote revision changed; caller must refetch/reclassify
-quota_exceeded    -- provider cannot retain the requested object
-platform_error    -- backend-specific error, diagnostic detail available
-request_cancelled -- caller cancelled
-timeout           -- frontend timeout before backend completion
+platform.frontend.unavailable       -- frontend not active for admission
+platform.capability.unavailable     -- selected real provider lacks the service
+platform.provider.null              -- explicit Null composition; no operation accepted
+platform.request.capacity_exceeded  -- bounded admission/observation capacity exhausted
+platform.request.cancelled          -- acknowledged cancellation terminal outcome
+platform.request.timed_out          -- frontend deadline terminal outcome
+platform.request.expired            -- terminal observation retention ended
+platform.request.stale              -- request/frontend/provider/session generation mismatch
+platform.provider.failed            -- admitted provider operation failed
 ```
+
+`platform.provider.failed` carries one normalized category: `Offline`, `NotSignedIn`,
+`Forbidden`, `RateLimited`, `PreconditionFailed`, `QuotaExceeded`, `InvalidResponse`,
+`TransientFailure` or `PermanentFailure`. Bounded redacted native codes may appear as
+diagnostic/cause evidence but never as branching identity. Capability absence, Null,
+cancellation and timeout are never remapped into provider failure.
 
 ### Ordering And Coalescing
 
@@ -236,13 +306,13 @@ struct AchievementDefinition {
 
 class IAchievementService {
 public:
-    virtual PlatformServiceRequest<AchievementUnlockResult>
+    virtual Result<PlatformRequestHandle<AchievementUnlockResult>>
     Unlock(AchievementId id) = 0;
 
-    virtual PlatformServiceRequest<AchievementProgressResult>
+    virtual Result<PlatformRequestHandle<AchievementProgressResult>>
     SetProgress(AchievementId id, uint32_t current, uint32_t total) = 0;
 
-    virtual PlatformServiceRequest<std::vector<AchievementState>>
+    virtual Result<PlatformRequestHandle<std::vector<AchievementState>>>
     QueryState() = 0;
 };
 ```
@@ -274,18 +344,18 @@ class ILeaderboardService {
 public:
     // The backend receives an idempotency key so duplicate submissions from
     // retry or offline replay do not create multiple leaderboard entries.
-    virtual PlatformServiceRequest<void>
+    virtual Result<PlatformRequestHandle<void>>
     SubmitScore(LeaderboardId id,
                 int64_t score,
                 IdempotencyKey key) = 0;
 
-    virtual PlatformServiceRequest<LeaderboardEntries>
+    virtual Result<PlatformRequestHandle<LeaderboardEntries>>
     GetEntries(LeaderboardId id, const LeaderboardQuery& query) = 0;
 
-    virtual PlatformServiceRequest<void>
+    virtual Result<PlatformRequestHandle<void>>
     SetStat(StatName name, int64_t value) = 0;
 
-    virtual PlatformServiceRequest<std::optional<int64_t>>
+    virtual Result<PlatformRequestHandle<std::optional<int64_t>>>
     GetStat(StatName name) = 0;
 };
 ```
@@ -345,16 +415,16 @@ class ICloudSaveService {
 public:
     virtual CloudConcurrencyCapability ConcurrencyCapability() const = 0;
 
-    virtual PlatformServiceRequest<std::vector<CloudSaveMetadata>>
+    virtual Result<PlatformRequestHandle<std::vector<CloudSaveMetadata>>>
     List() = 0;
 
-    virtual PlatformServiceRequest<CloudReadResult>
+    virtual Result<PlatformRequestHandle<CloudReadResult>>
     Read(CloudSaveObjectKey key) = 0;
 
-    virtual PlatformServiceRequest<CloudMutationResult>
+    virtual Result<PlatformRequestHandle<CloudMutationResult>>
     Write(CloudWriteRequest request) = 0;
 
-    virtual PlatformServiceRequest<CloudMutationResult>
+    virtual Result<PlatformRequestHandle<CloudMutationResult>>
     Delete(CloudSaveObjectKey key, ProviderObjectRevision expected) = 0;
 };
 ```
@@ -397,10 +467,10 @@ struct PresenceState {
 
 class IPresenceService {
 public:
-    virtual PlatformServiceRequest<void>
+    virtual Result<PlatformRequestHandle<void>>
     SetPresence(const PresenceState& state) = 0;
 
-    virtual PlatformServiceRequest<void>
+    virtual Result<PlatformRequestHandle<void>>
     ClearPresence() = 0;
 };
 ```
@@ -418,7 +488,7 @@ struct PlatformUserHandle {
 
 class IFriendsService {
 public:
-    virtual PlatformServiceRequest<std::vector<PlatformUserHandle>>
+    virtual Result<PlatformRequestHandle<std::vector<PlatformUserHandle>>>
     GetFriends() = 0;
 };
 ```
@@ -492,33 +562,54 @@ The backend is a capability bundle. A platform may implement all, some, or none
 of the services.
 
 ```cpp
-struct PlatformServiceCapabilities {
-    bool achievements;
-    bool leaderboards;
-    bool cloudSave;
-    bool presence;
-    bool friends;
+enum class PlatformServiceAvailability : uint8_t {
+    Available,
+    Unavailable
+};
+
+enum class PlatformServiceUnavailableReason : uint8_t {
+    NoProviderSelected,
+    NullProviderSelected,
+    ServiceUnsupported,
+    HostPolicyDenied,
+    ProviderInitializationFailed
+};
+
+struct PlatformServiceCapability {
+    PlatformServiceKind service;
+    PlatformServiceAvailability availability;
+    PlatformServiceLimits limits;
+    std::optional<PlatformServiceBindingId> binding;
+    std::optional<PlatformServiceUnavailableReason> unavailableReason;
+};
+
+struct PlatformServiceCapabilitySnapshot {
+    ProviderGeneration providerGeneration;
+    BoundedArray<PlatformServiceCapability> services;
 };
 
 class IPlatformServicesBackend {
 public:
     virtual ~IPlatformServicesBackend() = default;
 
-    virtual PlatformServiceCapabilities Capabilities() const = 0;
-
-    virtual void Initialize(const PlatformServicesConfig& config) = 0;
-    virtual void Shutdown() = 0;
-
-    virtual IAchievementService* Achievements() = 0;
-    virtual ILeaderboardService* Leaderboards() = 0;
-    virtual ICloudSaveService* CloudSave() = 0;
-    virtual IPresenceService* Presence() = 0;
-    virtual IFriendsService* Friends() = 0;
+    virtual Result<PlatformServiceCapabilitySnapshot>
+    Initialize(const PlatformServicesConfig& config) = 0;
+    virtual Result<ProviderOperationId>
+    Submit(const PlatformProviderRequest& request,
+           PlatformProviderCompletionSink& completions) = 0;
+    virtual Result<void> RequestCancel(ProviderOperationId operation) = 0;
+    virtual Result<void> Shutdown() = 0;
 };
 ```
 
-Backends return `nullptr` for services they do not implement. The frontend
-returns `not_supported` for calls to unavailable services.
+The validated capability snapshot is the sole availability truth. `Available` has
+exactly one compatible private binding; `Unavailable` has no binding and exactly one
+reason. Missing, duplicate or mismatched bindings fail composition. Public callers do
+not inspect provider pointers, backend names or SDK flags.
+
+Connectivity, sign-in, consent and rate-limit state are request preconditions/session
+state, not a second installed-capability flag. Provider reload or session replacement
+increments generation; stale completion evidence cannot publish into the replacement.
 
 ## Offline And Degraded Behavior
 
@@ -535,7 +626,7 @@ when the operation enters the frontend and is preserved across persistence,
 retry, and replay. This prevents a retry + queue replay combination from
 producing duplicate backend effects.
 
-When the backend reports `offline` or `not_signed_in`, the frontend:
+When the backend reports normalized `Offline` or `NotSignedIn`, the frontend:
 
 1. assigns an idempotency key if the operation does not already have one
 2. persists the operation to the local queue
@@ -557,17 +648,18 @@ Replay rules:
 
 - Queue order is preserved per user account.
 - If a queued operation fails with a non-retriable error (for example,
-  `forbidden`), it is removed from the queue and the failure is surfaced.
+  normalized `Forbidden`), it is removed from the queue and the failure is surfaced.
 - If the backend accepts an idempotent operation, the queue advances.
 - Duplicate keys are ignored: the frontend checks the queue file and the set of
   in-flight requests before submitting.
 
-The null backend is always available. It:
-
-- reports no capabilities
-- returns `not_supported` for all reads
-- accepts and silently discards all writes after logging a metric
-- never leaves the local queue in an inconsistent state
+The Null backend is a valid explicit headless/test/product composition. It reports all
+remote services unavailable with `NullProviderSelected`. Every read and write fails
+admission with `platform.provider.null`; it creates no request, offline queue entry,
+idempotency record or provider mutation. In particular, it never accepts or silently
+discards achievements, stats, scores, cloud writes or presence. Optional
+application intent may be explicitly suppressed before submission, but that is not a
+successful Null operation. Tests needing success use the capability-accurate mock.
 
 ## Authentication And Session Boundary
 
@@ -578,8 +670,8 @@ ADR-113 requires that mapping to produce a private provider-scoped
 `LocalUserStorageId` and then select a product-owned `GameProfileId`. Raw platform
 handles, gamertags, emails and display names are not save-directory or cloud-slot
 identity. Backends explicitly report single-local-user, current-user-only or
-multi-user capability; unsupported switching returns `not_supported` rather than
-sharing a guessed user namespace.
+multi-user capability; unsupported switching returns
+`platform.capability.unavailable` rather than sharing a guessed user namespace.
 
 ```cpp
 struct PlatformSessionState {
@@ -600,6 +692,22 @@ public:
 The frontend dispatches these changes to gameplay systems that care about sign
 in/out. Cloud save sync and offline queue replay are triggered by sign-in
 events.
+
+## Shutdown And Late Completion
+
+Shutdown closes frontend admission and increments generation before requesting
+policy-permitted cancellation. It then drains accepted owner-lane evidence, commits at
+most one terminal result per admitted request, stops subscriptions/executor delivery
+and waits within the declared bound for provider operation and callback epochs. Safe
+retirement, not terminal publication or dropped handles, permits provider/package and
+borrowed-buffer release.
+
+If native work does not retire within the bound, shutdown reports typed failure and
+retains the required dependencies rather than unloading provider code early. Late
+callbacks carry the closed provider/session/frontend generation, may complete private
+retirement bookkeeping and cannot publish a new terminal result or invoke user code.
+Shutdown is idempotent after partial initialization and repeated calls return the
+recorded outcome without duplicating cancellation or native teardown.
 
 ## Security And Trust
 
@@ -631,7 +739,9 @@ events.
   not been reviewed.
 - Cloud save retention follows platform policy; the engine does not control it.
 - Children's accounts and restricted platforms may disable social features.
-  The frontend surfaces this as `forbidden` or `not_supported`.
+  The frontend surfaces this as normalized `Forbidden` provider failure or
+  `platform.capability.unavailable`, according to whether a supported operation was
+  denied dynamically or the capability was excluded at composition.
 
 ## Observability
 
@@ -769,7 +879,17 @@ by Horo UI. Horo only authors the configuration and observes the state.
 
 Required tests cover:
 
-- null backend accepts writes without crashing
+- admission failure creates no request/provider call/callback, while dropping every
+  handle/subscription leaves an admitted operation owned until terminal retirement
+- every legal and illegal request-state transition, with terminal state/result atomic
+  and exactly once under completion/cancel/timeout/shutdown races
+- callbacks are never inline or under frontend/provider locks; late subscription is
+  deferred, token destruction suppresses delivery and re-entry cannot recursively
+  drain completion
+- timeout uses one monotonic admission deadline across retries, wins only when no
+  eligible pre-deadline completion exists and remains terminal after late provider work
+- Null rejects every read and write with `platform.provider.null` and creates no
+  request, offline entry or idempotency record
 - mock backend replays scripted responses
 - frontend routes calls to the correct backend service
 - offline queue persists and replays in order
@@ -784,7 +904,11 @@ Required tests cover:
   malformed/oversized results cannot publish or replace a local generation
 - cloud credential/provider metadata is redacted from save diagnostics and tools
 - session sign-in/out triggers queue replay and state callbacks
-- unavailable services return `not_supported`
+- typed capability snapshot and private binding agree; missing/duplicate/mismatched
+  bindings fail composition and unavailable services return
+  `platform.capability.unavailable`
+- Null, capability absence, cancellation, timeout and provider failure have distinct
+  stable codes; provider categories/native evidence never replace frontend identity
 - presence updates coalesce to the most recent state
 
 ### Mock Backend
@@ -815,7 +939,7 @@ Tests use the mock backend to verify:
 
 - correct request routing and error translation
 - timeout handling when `delay` exceeds the policy
-- offline queue behavior when the backend returns `offline`
+- offline queue behavior when the backend returns normalized `Offline`
 - idempotency key stability across retries and replay
 - stat coalescing and leaderboard debounce logic
 
@@ -823,6 +947,8 @@ Platform-specific backend tests live in the private platform repositories.
 
 ## Related Documents
 
+- [ADR-130](../../adr/130-platform-services-frontend-request-lifetime-timeout-null-and-error-semantics.md):
+  frontend request ownership, lifecycle, callback, capability, Null and error baseline.
 - [Platform Services Config UI Reference](./platform-services-config.html): achievements, leaderboards, cloud saves, presence, and platform adapters panel.
 
 - [Audio Architecture](./audio-architecture.md)
