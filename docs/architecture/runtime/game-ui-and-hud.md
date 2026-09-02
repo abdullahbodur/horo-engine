@@ -301,6 +301,19 @@ viewport `RuntimeUiInputContextId`. It hit-tests the last successfully presented
 interaction revision. Split-screen focus/capture is independent unless an explicit
 game-instance modal policy blocks multiple contexts.
 
+[ADR-078](../../adr/078-runtime-ui-input-context-and-player-routing.md) keeps device,
+input user, local player, logical viewport and UI context identities separate. Each
+context declares a single-player, shared-player, game-instance or unassigned-join
+audience and a viewport policy. Routing records every transition's winner/outcome
+in a bounded immutable consumption ledger; gameplay receives only the unconsumed
+projection for its exact player/tick.
+
+Viewport-, Player- and GameInstance-exclusive modals block associated lower
+contexts even when no UI element handles an action; only a finite host-owned safety
+passthrough list may bypass them. Assignment change neutralizes old held/captured
+input before a new player/context activates. Focus, restoration, capture and active
+device modality remain per context/audience rather than process global.
+
 ## Runtime Text And Font Contract
 
 Runtime text/style documents reference stable `FontFamilyAssetId` or typed semantic
