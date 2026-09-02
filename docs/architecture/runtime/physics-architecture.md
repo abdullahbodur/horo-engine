@@ -116,6 +116,29 @@ Shape replacement builds a candidate lease first and swaps body references only
 at the Physics pre-step safe point, retaining old leases until all readers and
 frames that can reference them have drained.
 
+## Scene Conversion And Activation Ownership
+
+[ADR-087](../../adr/087-scene-to-physics-ownership-and-conversion.md) makes
+authored rigid-body components explicit body producers, collider components
+explicit contributors to one named body shape and constraint components explicit
+links between named body slots. Colliders, render meshes, primitives and hierarchy
+never create implicit bodies; authoring conveniences persist complete component
+bundles.
+
+Physics owns `PhysicsScenePlanBuilder`, which consumes immutable typed scene data
+and resolves body graphs, transforms, shape/material/filter dependencies,
+constraints and stable writeback mappings without editor or native types. The host
+injects Physics as a scene activation participant. It builds a closed detached
+world candidate; neither workers nor editor code mutate the active world or publish
+handles.
+
+`RuntimeSceneService` owns the aggregate candidate and sole activation path.
+`CommitDeferredLifecycleChanges` atomically publishes ECS storage, resource leases,
+the Physics world and its generation-scoped binding table only after all fallible
+work and final generation/budget validation succeed. Replacement failure destroys
+only the candidate and leaves the prior scene/world/query state unchanged. The
+first Physics tick occurs after the complete bundle is authoritative.
+
 ## Fixed-Step Pipeline
 
 One physics tick:

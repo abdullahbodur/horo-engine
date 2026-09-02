@@ -156,6 +156,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Collision Layer, Profile and Query Channel Policy](../adr/086-collision-layer-profile-and-query-channel-policy.md):
   project-stable typed filter identities, symmetric simulation responses, complete
   reusable profiles, query intent and private generation-scoped compiled tables.
+- [Scene-to-Physics Ownership and Conversion](../adr/087-scene-to-physics-ownership-and-conversion.md):
+  explicit authored body/collider/constraint producers, Physics-owned scene plans,
+  detached world candidates and atomic aggregate activation/rollback.
 - [Audio Architecture](./runtime/audio-architecture.md): ADR-backed ownership,
   clocks, formats, assets, mixer, spatial, devices, tooling and explicit 1.0 versus
   Post-1.0 product boundaries.
