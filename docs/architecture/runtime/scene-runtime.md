@@ -189,6 +189,15 @@ new semantic revision, entity/component set, intact/chunk visibility and require
 bodies only through one complete activation root. Core 1.0 never generates missing
 mesh topology or collision during scene activation.
 
+[ADR-146](../../adr/146-destruction-runtime-activation-physics-cleanup-and-rollback.md)
+specializes that seam for intact-to-chunk transitions and cleanup. One transition ticket
+closes the exact semantic snapshot, ECS batch, Physics/Render receipts, leases and peak
+reservation. Participant-private publication remains unreachable through ordinary
+Scene/Physics/Render queries; `CommitDeferredLifecycleChanges` is the sole public
+visibility and rollback boundary. Pre-commit failure preserves the old root, while
+post-commit restore, dormancy or recovery requires a new revisioned aggregate
+transaction. RuntimeScene never infers fracture from a body or rewinds native handles.
+
 ## Navigation Authoring And Runtime Boundary
 
 [ADR-105](../../adr/105-navigation-asset-and-scene-ownership-boundary.md)
@@ -593,6 +602,8 @@ Required tests cover:
 - binary format corruption and version behavior
 - destruction binding conversion and aggregate semantic/entity/render/Physics chunk
   publication with no runtime geometry fallback
+- destruction transition-ticket isolation, pre-commit rollback, post-commit compensating
+  transactions and dormancy cleanup with no partial query visibility
 
 ## Related Documents
 
