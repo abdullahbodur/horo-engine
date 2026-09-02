@@ -107,6 +107,7 @@ to the replacement.
 | [093](093-prefab-override-property-identity-and-delta-operations.md) | Prefab Override Property Identity and Delta Operations | Proposed | 2026-09-02 |
 | [094](094-prefab-nested-composition-and-variant-inheritance.md) | Prefab Nested Composition and Variant Inheritance | Proposed | 2026-09-02 |
 | [095](095-prefab-cook-boundary-and-artifact-model.md) | Prefab Cook Boundary and Artifact Model | Proposed | 2026-09-02 |
+| [096](096-prefab-external-reference-and-binding-slot-contract.md) | Prefab External Reference and Binding Slot Contract | Proposed | 2026-09-02 |
 
 ## Conventions
 

@@ -217,6 +217,35 @@ edge kinds, placement IDs, reachable source revisions and override digests, then
 flattens the hierarchy. Packaged runtime does not traverse authoring inheritance or
 composition graphs and never runs construction behavior to produce prefab data.
 
+### External Reference Boundary And Binding Slots
+
+[ADR-096](../../adr/096-prefab-external-reference-and-binding-slot-contract.md)
+permits only stable prefab-local object/component references, typed `AssetId`
+references and references to declared binding slots. Direct serialized scene object
+IDs, runtime `EntityRef`, ECS/component addresses, pointers, paths and name/tag
+queries are invalid in prefab source, variants, overrides and cooked templates.
+
+A concrete prefab may declare at most 64 stable `PrefabBindingSlotId` interfaces,
+each typed as an external scene object or registered component and marked Required
+or Optional. Variants inherit declarations unchanged. Bindings are separate from
+ADR-093 overrides and spawn initialization values: they map one declared interface
+to an external identity for one placement/spawn and have no default comparison,
+apply/revert or property operation semantics.
+
+Static scene instances bind slots to stable scene-authoring targets. Nested
+placements may bind an inner slot to a containing prefab-local target or re-expose
+it through an exactly compatible outer slot; they cannot capture a scene target.
+Dynamic spawn requests carry bounded copied `EntityRef` bindings that are
+revalidated for target scene, generation, component schema, uniqueness and required
+coverage at owner-thread commit. Missing required or invalid supplied optional
+bindings fail transactionally. Omitted optional slots become typed `Unbound` with no
+search or fallback.
+
+Create-from-selection classifies every known reference. Internal targets become
+stable local references, assets retain `AssetId`, and every external/opaque crossing
+is reported for explicit include, expose-slot or cancel action. The transaction
+never silently nulls, copies or captures an external scene object.
+
 ---
 
 ## Identity, Hierarchy, And Asset Model
@@ -281,6 +310,9 @@ namespace Horo::Prefab {
     inline constexpr std::size_t MaximumVariantInheritanceDepth = 8;
     inline constexpr std::size_t MaximumNestedPrefabDepth = 16;
     inline constexpr std::size_t MaximumDirectNestedPlacements = 256;
+    inline constexpr std::size_t MaximumPrefabBindingSlots = 64;
+    inline constexpr std::size_t MaximumPrefabBindingUses = 256;
+    inline constexpr std::size_t MaximumPrefabInstanceBindings = 64;
     inline constexpr std::size_t MaximumRuntimeSpawnDepth = 8; // inherited lineage, including target
 }
 ```
@@ -341,6 +373,7 @@ struct PrefabDocument {
     std::vector<PrefabObjectNode> objects; // concrete only; first node is root; IDs may be sparse
     std::vector<NestedPrefabPlacementV1> nestedPlacements; // concrete assets only
     std::optional<PrefabVariantInheritanceV1> variant; // variant assets only
+    std::vector<PrefabBindingSlotDeclarationV1> bindingSlots; // concrete assets only
     std::vector<Assets::AssetId> referencedAssets;
 };
 ```
@@ -442,6 +475,8 @@ namespace Horo::Runtime {
         Assets::AssetId prefabAssetId;
         Transform spawnTransform;
         std::optional<EntityRef> parentEntity{std::nullopt};
+        BoundedVector<PrefabRuntimeBindingV1> externalBindings;
+        PrefabInitializationValuesV1 initialization;
     };
 
     struct SpawnedPrefabHandle {
@@ -610,8 +645,13 @@ enum class PrefabError : std::uint32_t {
     InvalidHierarchy,          // Duplicate local IDs, invalid parents, roots, or graph
     ComponentCountExceeded,    // More than MaximumPrefabComponentsPerObject (64)
     EntityAllocationExhausted,  // Scene runtime ran out of available EntityIds
-    ComponentTypeUnregistered,  // Cooked template references an unavailable component type
-    ComponentAllocationFailed   // Memory allocation failed for component pool
+    ComponentTypeUnregistered, // Cooked template references an unavailable component type
+    ComponentAllocationFailed, // Memory allocation failed for component pool
+    InvalidReference,          // Unsupported or unresolved persisted reference class
+    BindingSlotInvalid,        // Declaration/use/re-exposure schema is invalid
+    RequiredBindingMissing,    // Required instance/spawn slot has no binding
+    BindingTargetInvalid,      // Supplied target is stale, cross-scene or incompatible
+    BindingLimitExceeded       // Declaration/use/instance-binding bound exceeded
 };
 ```
 
@@ -668,6 +708,13 @@ enum class PrefabError : std::uint32_t {
 | **Malformed** | Variant has two parents or owns hierarchy deltas | Explicit rejection; no serialized-order merge or guessed topology |
 | **Lifecycle** | Source changes during descendant re-resolution | Stale completion cannot replace newer registry/document snapshot |
 | **Capability** | Construction callback could affect composition | Callback is never invoked; unsupported request is rejected |
+| **Valid** | Local object/component and AssetId references | Stable identities resolve without path/index dependence |
+| **Valid** | Required static/dynamic typed binding supplied | Conversion/spawn validates before atomic publication |
+| **Valid** | Optional binding omitted | Canonical typed `Unbound`; no discovery or fallback |
+| **Malformed** | Prefab stores scene ID, EntityRef, pointer, path or name query | `InvalidReference`; source/artifact rejected |
+| **Malformed** | Missing required or invalid supplied optional binding | Transaction fails; no partial scene/entities/hooks |
+| **Lifecycle** | Create-from-selection crosses boundary | Explicit include/expose/cancel report; no silent null/copy/capture |
+| **Lifecycle** | Bound target is destroyed/reused | Typed unavailable/stale result; never retargeted |
 
 ---
 
@@ -676,6 +723,8 @@ enum class PrefabError : std::uint32_t {
 - [ADR-017: Prefab Role, Ownership and Capability-Tier Decision](../../adr/017-prefab-role-ownership-and-capability-tiers.md)
 - [ADR-093: Prefab Override Property Identity and Delta Operations](../../adr/093-prefab-override-property-identity-and-delta-operations.md)
 - [ADR-094: Prefab Nested Composition and Variant Inheritance](../../adr/094-prefab-nested-composition-and-variant-inheritance.md)
+- [ADR-095: Prefab Cook Boundary and Artifact Model](../../adr/095-prefab-cook-boundary-and-artifact-model.md)
+- [ADR-096: Prefab External Reference and Binding Slot Contract](../../adr/096-prefab-external-reference-and-binding-slot-contract.md)
 - [ADR-018: Command Registration, Permissions, Threading and Packaged-Build Policy](../../adr/018-command-registration-permissions-threading-and-packaged-build-policy.md)
 - [ADR-010: Job Waiting and Operation Store Ownership](../../adr/010-job-waiting-and-operation-store-ownership.md)
 - [Scene Runtime Architecture](./scene-runtime.md)

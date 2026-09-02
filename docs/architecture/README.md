@@ -264,6 +264,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Prefab Cook Boundary and Artifact Model](../adr/095-prefab-cook-boundary-and-artifact-model.md):
   single prefab resolver, expanded-scene versus spawnable-template artifacts,
   complete cache identity, generation retention, hot reload and shipping policy.
+- [Prefab External Reference and Binding Slot Contract](../adr/096-prefab-external-reference-and-binding-slot-contract.md):
+  portable local/asset references, rejected scene capture, stable typed external
+  slots, explicit instance bindings and transactional boundary validation.
 - [Built-In Scene Primitives](./runtime/built-in-scene-primitives.md): core
   procedural meshes, collider shapes, and scene object primitives available
   without external packages.

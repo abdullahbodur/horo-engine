@@ -365,6 +365,21 @@ Prefab references placed in the authoring document are expanded before the
 runtime scene is built. Runtime modules see only the expanded objects, never raw
 prefab paths. See [Prefab Architecture](./prefab-architecture.md).
 
+[ADR-096](../../adr/096-prefab-external-reference-and-binding-slot-contract.md)
+requires prefab-local references to resolve inside the complete expanded candidate
+and forbids prefab source from retaining scene IDs, `EntityRef`, pointers, paths or
+name queries to external scene objects. Static prefab instance bindings live in the
+containing `SceneDocument`, keyed by stable typed slot ID and stable scene target.
+Conversion resolves required/optional bindings against one immutable document
+snapshot before publishing `RuntimeSceneDefinition`.
+
+Runtime binding tables contain scene-qualified generation-checked references and
+do not own target lifetime. A missing required, duplicate, stale or incompatible
+binding rejects activation; omitted optional bindings become typed `Unbound`.
+Target destruction after activation makes access unavailable without retargeting a
+reused entity slot. Scene reload rebuilds the table as part of its detached
+candidate and never carries raw addresses from the previous runtime generation.
+
 ## Load State Machine
 
 ```text

@@ -410,6 +410,20 @@ its activation dependencies are ready. In play-in-editor, the sequence runs on
 the runtime clone, not on the authoring document. See
 [Prefab Architecture](../runtime/prefab-architecture.md).
 
+[ADR-096](../../adr/096-prefab-external-reference-and-binding-slot-contract.md)
+keeps external prefab bindings distinct from serialized behavior fields and spawn
+initialization values. A behavior field may persist a prefab-local stable reference,
+an `AssetId` reference or a declared `PrefabBindingSlotId`; it cannot persist a
+scene-local `EntityRef`, ECS/component address, pointer, path or name/tag query.
+
+After structural commit, `BehaviorContext` exposes a read-only typed binding view
+for the attachment's declared slot uses. Required coverage and target component
+compatibility are validated before any behavior instance or hook is published.
+Optional absence is typed `Unbound`; invalid supplied optional input is still an
+error. Bindings grant neither undeclared component access nor ownership of the
+target. Target destruction yields `BindingUnavailable`, and behavior code must
+handle that reference-loss path without discovery or automatic retargeting.
+
 Behavior code mutates scene state only through `BehaviorContext`, declared
 component access, and the scene command buffer. It may change component values
 when its descriptor declares write access. Entity creation, destruction, and
