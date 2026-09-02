@@ -280,6 +280,22 @@ These adapters do not own source-file persistence, language intelligence,
 behavior validation, shader graph validation, or graph compilation. They render
 and translate user interaction into Horo-owned commands.
 
+### Audio Backend Composition
+
+[ADR-067](../../adr/067-platform-audio-backend-strategy.md) owns the planned
+output-backend target roles and supported 1.0 matrix. Common Audio API, model, and
+runtime targets expose only Horo contracts. WASAPI, Core Audio, PipeWire,
+SDL3Audio, and NullAudio are separate concrete targets with private dependencies
+and target-platform guards; no backend publishes Windows SDK, Apple framework,
+PipeWire/SPA, or SDL audio headers or usage requirements.
+
+Executable composition roots link only the backend peers admitted by that product
+and target OS, then call explicit inert registration functions before startup
+selection. Linking SDL3 for windowing/input does not activate or require the
+SDL3Audio backend. Minimal/headless products may link NullAudio only or omit Audio
+entirely. Static initialization never enumerates or opens devices, initializes a
+native service, starts a thread/callback, or mutates ambient state.
+
 ## Dependency Direction
 
 The build system enforces the dependency direction declared in
