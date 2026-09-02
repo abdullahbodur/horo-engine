@@ -9,6 +9,15 @@ integration, and observability for Horo Engine.
 Networking is an optional engine capability. Hosts, tools, and games that do not need it
 do not construct, link, or activate concrete transport backends.
 
+Future Character replication/rollback must consume
+[ADR-092](../../adr/092-character-controller-determinism-and-state-composition.md)'s
+canonical typed state/codec rather than defining another authoritative Character
+field set. Network authority, interest, baselines, prediction, packet framing,
+compression, acknowledgement and security remain Network-owned. Exact canonical
+deltas may wrap the state; lossy presentation snapshots are distinct and cannot be
+used for canonical restore/hash. Connection/session/packet state never enters the
+Character checkpoint.
+
 ## Core Decisions
 
 - **Strict Layered Architecture**: Networking is separated into target-level tiers: public contracts and types (`HoroEngine::NetworkApi`), session coordination and replication runtime (`HoroEngine::NetworkRuntime`), and private concrete transport backends (`HoroEngine::NetworkTransportNull`, `HoroEngine::NetworkTransportENet`).

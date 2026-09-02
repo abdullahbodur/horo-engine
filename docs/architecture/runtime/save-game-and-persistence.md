@@ -47,6 +47,16 @@ raw output sample indices, queues, decoder/DSP state, ring buffers, and native
 objects never enter a save. Restore resolves current localized/cooked content and
 prepares a new Audio transport generation before publication.
 
+[ADR-092](../../adr/092-character-controller-determinism-and-state-composition.md)
+applies the same single-authority rule to Character. Runtime Save contributes the
+required `horo.character.state.v1` provider chunk through
+`CharacterStateCodecV1`; it does not serialize only a transform, live
+`CharacterWorld`, Jolt/proxy state or a save-specific Character schema. The chunk
+belongs to the same capture epoch as its paired Physics/world checkpoint. Restore
+decodes/migrates a complete canonical Character candidate, resolves stable support
+bindings against the detached Physics candidate and publishes only with the
+aggregate no-fail commit.
+
 ```text
 SceneDocument -> one-way RuntimeSceneDefinition conversion
     -> application/session runtime ownership
