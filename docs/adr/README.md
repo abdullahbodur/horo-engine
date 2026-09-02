@@ -167,6 +167,7 @@ to the replacement.
 | [153](153-pcg-pure-evaluation-commit-and-generated-output-ownership.md) | PCG Pure Evaluation, Commit and Generated-Output Ownership | Proposed | 2026-09-02 |
 | [154](154-pcg-cross-system-authority-readiness-and-commit-boundary.md) | PCG Cross-System Authority, Readiness and Commit Boundary | Proposed | 2026-09-02 |
 | [155](155-pcg-graph-document-preview-bake-and-undo-ownership.md) | PCG Graph Document, Preview, Bake and Undo Ownership | Proposed | 2026-09-02 |
+| [156](156-pcg-scale-budgets-trust-and-release-scope.md) | PCG Scale Budgets, Trust and Release Scope | Proposed | 2026-09-02 |
 
 ## Conventions
 

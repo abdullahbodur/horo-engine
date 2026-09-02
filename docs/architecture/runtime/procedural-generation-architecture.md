@@ -295,20 +295,50 @@ transaction, and undo/redo restores exact semantic patches without reevaluation.
 
 ## Feature Tiers
 
-The names below are product-profile labels, not renderer APIs or authority levels. At
-composition/cook time they resolve to an immutable Horo-owned profile containing
-supported modes, node/output families, determinism classes and finite graph, point,
-memory, work, concurrency and overlap limits. Unknown cost is not zero; complete input,
-intermediate, output and target-preparation costs are reserved before admission.
+[ADR-156](../../adr/156-pcg-scale-budgets-trust-and-release-scope.md) fixes three
+provider-neutral version-1 operational profiles. They are not renderer APIs, hardware
+detection results or authority levels. At composition/cook time they resolve to an
+immutable Horo-owned profile containing supported modes, node/output families,
+determinism classes and finite graph, point, memory, work, concurrency and overlap
+limits.
 
-| Feature              | `es3`      | `dx11` / `dx12_vulkan` | `high_end` |
-| -------------------- | ----------- | ------------- | ------------ |
-| PCG offline bake     | Yes         | Yes           | Yes          |
-| PCG runtime          | No          | Simple        | Full         |
-| Point cloud size     | 16K         | 256K          | 2M           |
-| Graph node count     | 32          | 256           | 1K           |
-| Live preview         | No          | Yes           | Yes          |
-| Hierarchical graphs  | No          | Yes           | Yes          |
+| Feature | `PCGBaseline` | `PCGStandard` | `PCGHigh` |
+|---|---:|---:|---:|
+| Offline bake / validation | Yes | Yes | Yes |
+| Isolated editor preview | Yes, bounded | Yes | Yes |
+| Semantic runtime/headless commit | No | Yes | Yes |
+| Nodes / edges per graph | 32 / 64 | 256 / 512 | 1,024 / 2,048 |
+| Points in one node output | 16K | 256K | 2M |
+| Total materialized point records | 64K | 1M | 8M |
+| Concurrent evaluations / admitted queue | 1 / 4 | 4 / 32 | 8 / 64 |
+| Total PCG-owned/charged memory | 112 MiB | 1,024 MiB | 4,096 MiB |
+| Hierarchical graphs | No | No | No |
+| Custom executable node providers | No | No | No |
+
+Unknown cost is not zero. Complete plan/input/intermediate/candidate/target and old/new
+overlap costs are reserved before admission. Saturation returns typed backpressure or
+yields already admitted work; it never truncates points, drops authoritative requests,
+skips nodes, chooses a new seed or commits a partial result.
+
+## Trust, Observability And Release Scope
+
+Graph/cooked/cache/package/spatial/save/network values are untrusted until their schema,
+bounds, digest, dependency, cost, capability and semantic invariants pass. Built-in code
+trust does not waive input/resource validation. Version 1 executes repository-built,
+host-composed node types only; graph content cannot load native libraries, scripts,
+WASM, processes or remote providers.
+
+Normal metrics use finite dimensions such as mode, profile, determinism class, phase,
+target kind and outcome. Graph/asset/node/object/cell/user IDs, paths, coordinates, seeds
+and attribute values are prohibited metric dimensions. Detailed per-operation evidence
+requires a bounded capability-gated diagnostic snapshot and follows process
+Observability redaction, retention and export policy.
+
+M5/1.0 qualifies the built-in single-DAG CPU path, immutable spatial inputs, offline/
+preview/runtime/headless modes, exact target commit and the limits above through
+PCG-7.2–PCG-7.6. Hierarchical/subgraph composition (PCG-7.7) and custom executable
+providers (PCG-7.8) are post-1.0. They do not gate M5 and are rejected under version-1
+plan/profile identities.
 
 ## Related Documents
 
@@ -318,6 +348,7 @@ intermediate, output and target-preparation costs are reserved before admission.
 - [PCG Pure Evaluation, Commit and Generated-Output Ownership](../../adr/153-pcg-pure-evaluation-commit-and-generated-output-ownership.md)
 - [PCG Cross-System Authority, Readiness and Commit Boundary](../../adr/154-pcg-cross-system-authority-readiness-and-commit-boundary.md)
 - [PCG Graph Document, Preview, Bake and Undo Ownership](../../adr/155-pcg-graph-document-preview-bake-and-undo-ownership.md)
+- [PCG Scale Budgets, Trust and Release Scope](../../adr/156-pcg-scale-budgets-trust-and-release-scope.md)
 - [PCG Graph Editor UI Reference](./pcg-graph-editor.html)
 
 - [Scene Runtime](./scene-runtime.md): generated objects as entities
