@@ -185,6 +185,15 @@ raw joints/gaze and continuous pose history remain excluded from ordinary logs, 
 bundles, metrics, replay, analytics, AI context and support capture. Revocation closes
 collection, invalidates snapshot generations and neutralizes dependent Input actions.
 
+[ADR-162](../../adr/162-mixed-reality-ownership-privacy-and-capability-tier.md)
+classifies raw camera/depth as restricted sensor data; gaze/continuous pose as sensitive
+biometric/behavioral data; room planes/meshes as sensitive environment geometry; and
+anchor references/maps as sensitive location-derived persistent data. Derived hits and
+light estimates retain spatial classification. Each consumer needs its own purpose and
+least-privilege generation; provider discovery or OS permission is not consent. Ordinary
+logs, crash bundles, metrics, replay, saves, AI context and support exports exclude these
+data unless a separate visible bounded retention/export policy admits them.
+
 ## Process Execution
 
 Process policy validates:

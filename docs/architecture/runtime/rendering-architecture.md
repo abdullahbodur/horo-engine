@@ -1271,6 +1271,14 @@ asynchronous reprojection, distortion, scan-out and guardian/chaperone remain ou
 the Horo graph. A desktop mirror is an independent ADR-033 output, not proof that the XR
 compositor presented successfully.
 
+[ADR-162](../../adr/162-mixed-reality-ownership-privacy-and-capability-tier.md)
+keeps mixed-reality providers outside Renderer. Passthrough arrives only as an admitted
+backend-neutral compositor-layer plan; Renderer owns virtual pixels/depth/occlusion but
+receives no raw camera stream or permission handle. Bounded light estimates are optional
+inputs with provider/spatial/access generations and cannot rewrite authored lights,
+exposure or color authority. Observed room geometry reaches GPU resources only through
+an explicit destination-owned derived adapter, never a provider callback.
+
 See [XR Architecture](./vr-ar-architecture.md) for session, view, capability,
 privacy, and qualification ownership.
 
