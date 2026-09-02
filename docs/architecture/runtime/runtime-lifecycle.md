@@ -235,7 +235,8 @@ The host tracks:
 - frame number
 
 ```cpp
-accumulator += Scale(Clamp(realDelta, 0, maxFrameDelta), simulationRate);
+accumulator.AddScaled(Clamp(realDelta, RealDuration::Zero(), maxFrameDelta),
+                      simulationRate, simulationScaleRemainder);
 
 while (accumulator >= fixedDelta && steps < maxCatchUpSteps) {
     FixedUpdate(fixedDelta);
@@ -248,9 +249,12 @@ Render(alpha);
 
 `simulationRate` changes how much clamped elapsed time enters the accumulator;
 it does not change `fixedDelta`. Scaling uses checked rational/fixed-point math
-and preserves fractional remainder. The baseline rate is `1/1`. A rate change
-commits through the owner-thread command boundary before fixed-step scheduling
-and records a revision for replay evidence. Negative rates are invalid. Gameplay
+and the host clock owns `simulationScaleRemainder` across frames. `AddScaled`
+preflights overflow and commits the accumulator plus remainder atomically; it
+does not round through floating-point seconds or lose an unrepresented fraction.
+The baseline rate is `1/1`. A rate change commits through the owner-thread command
+boundary before fixed-step scheduling, preserves that remainder, and records a
+revision for replay evidence. Negative rates are invalid. Gameplay
 pause is separate composed state and contributes no accumulator time; it is not
 represented by a zero rate.
 
@@ -521,13 +525,15 @@ Canonical shutdown:
 8. close Runtime UI command/input admission, retire every scope/attachment, join
    UI work, and release UI render/resource leases
 9. release GUI and editor sessions
-10. wait for renderer idle as required and destroy GPU resources
-11. stop audio producers, quiesce/detach the callback, reconcile terminal outcomes,
+10. destroy scene/project/application services after closing their renderer and
+   audio producer ports
+11. wait for renderer idle as required and destroy GPU resources
+12. stop remaining audio producers, quiesce/detach the callback, reconcile terminal outcomes,
    and release device-owned resources under ADR-062
-12. destroy application and engine services
-13. stop job and platform services
+13. destroy remaining asset, data-bus, job, and platform services
 14. flush observability and write clean-shutdown marker
-15. transition to `Stopped`
+15. transition to `Stopped`, unless a subsystem's documented fatal-retention path
+    requires immediate process termination without normal reclamation
 
 Shutdown may be requested more than once but executes its transitions once.
 

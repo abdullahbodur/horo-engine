@@ -247,6 +247,13 @@ callback/job/handle quiescence cannot be proven, the update is restart-required.
 Serialized gameplay fields, project assets and tooling configuration cannot depend
 on a live provider pointer and remain inspectable when the API is unavailable.
 
+Retention is bounded to the active generation plus at most one draining predecessor
+per provider. While that predecessor still owns any lease, later candidates may be
+verified and coalesced to the newest compatible candidate, but another generation
+cannot activate. Exceeding the configured drain deadline or retained-code budget
+marks the newest update restart-required; repeated updates never accumulate an
+unbounded chain of loaded native libraries.
+
 Compatibility classification, migration evidence and recovery behavior are owned
 by [EXT-005.6](https://github.com/abdullahbodur/horo-engine/issues/173). Additive
 schema evolution may be compatible only when existing call shapes and semantics

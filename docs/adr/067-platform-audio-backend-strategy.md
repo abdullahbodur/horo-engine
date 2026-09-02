@@ -282,11 +282,20 @@ Required strategy coverage includes:
 - supported/unsupported target guards for every backend and architecture;
 - native-only, SDL3-only, Null-only, combined, Audio-omitted, and cross-target
   composition without ambient registration or dependency leakage;
-- explicit/default/fallback-list resolution independent of registration, link,
+- selection-priority fixtures for command-line/test override, project/build
+  profile, permitted user preference, and platform-native host default, plus
+  explicit/default/fallback-list resolution independent of registration, link,
   enumeration, and probe-completion order;
 - missing/unavailable/init-failed native selection with no implicit SDL3/Null
-  activation and active-runtime backend identity fixed until host replacement;
-- shared parity fixtures and per-platform real hardware/lifecycle qualification;
+  activation, including an interactive-host startup failure instead of NullAudio,
+  and active-runtime backend identity fixed until host replacement;
+- shared asynchronous open/start/close and format-conversion parity fixtures for
+  WASAPI, CoreAudio, PipeWire, SDL3Audio, and NullAudio, plus per-platform real
+  hardware/lifecycle qualification;
+- deterministic NullAudio clock, callback cadence, generation, and control-state
+  transition fixtures without physical-hardware claims;
+- public-header and transitive-usage-requirement checks proving that native SDK,
+  PipeWire/SPA, and SDL audio dependencies remain private to their adapters;
 - requested/effective/reported/measured value separation and typed optional
   capability absence;
 - partial startup, callback-ready timeout, device loss/recovery, stale/late native

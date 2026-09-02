@@ -87,9 +87,9 @@ Version-1 defaults and hard maxima are identical for product parsing:
 | Manifest bytes | 1 MiB |
 | Nesting depth | 16 |
 | Members in one object | 128 |
-| Total object members | 8,192 |
-| Elements in one array | 2,048 |
-| Total JSON values | 16,384 |
+| Total object members | 32,768 |
+| Elements in one array | 4,096 |
+| Total JSON values | 65,536 |
 | UTF-8 bytes in one ordinary string | 4 KiB |
 | UTF-8 bytes in one relative path | 1,024 |
 | Variants | 64 |

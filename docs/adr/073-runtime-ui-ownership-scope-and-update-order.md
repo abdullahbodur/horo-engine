@@ -85,6 +85,16 @@ Each runtime tree has a `RuntimeUiInstanceId` and every element is addressed by 
 Handles are transient and never serialized. Commands name the expected scope,
 instance, element and document revisions; stale or cross-scope handles fail.
 
+Both IDs use a fixed 128-bit value: one nonzero 64-bit `UiOwnershipGeneration`
+uniquely identifies the service/runtime/scope incarnation, followed by a 32-bit
+slot and a nonzero 32-bit slot generation. Zero is invalid. Slot generations use
+checked increment; releasing a slot at `UINT32_MAX` retires that slot permanently
+instead of wrapping. Ownership generations also use checked increment; exhausting
+`UINT64_MAX` closes new Runtime UI admission with `GenerationExhausted` and requires
+host-owned runtime replacement. No counter wraps, saturates into a reusable value,
+or reuses an identity still observable by a command, snapshot, render epoch, or
+lease.
+
 Authored `UiDocumentId`/`AssetId` and stable `UiElementId` values survive cook,
 reload and runtime instantiation. They are used for diagnostics, binding, saved
 semantic state and explicit reload reconciliation, not as mutable pointer/slot
@@ -149,8 +159,13 @@ Runtime UI participates in the existing `RuntimePhase` sequence and adds no phas
 7. `RenderGui` remains host/editor/development GUI composition; runtime game UI
    does not become ImGui work merely because an editor hosts the game viewport.
 8. A successful presentation adopts the extracted interaction revision as the
-   next frame's hit-test/focus evidence. Failed/skipped presentation disables
-   viewport interaction until a matching revision is presented.
+   next frame's hit-test/focus evidence. A transient skipped presentation that
+   leaves the prior image visible continues to route input only against the last
+   successfully presented snapshot; it never hit-tests the newer unpublished
+   layout. Interaction is disabled when no such snapshot exists, its owner/scope/
+   attachment generation has retired, or output invalidation means the host cannot
+   assert that the prior image remains visible. A later matching presentation
+   re-enables interaction and advances the adopted revision.
 9. `CommitDeferredLifecycleChanges` retires detached/removed generations after
    frame ownership is closed; `EndFrame` publishes bounded metrics/observations.
 
@@ -311,8 +326,9 @@ Required contract coverage includes:
   activation, required versus optional policy and last-good retention;
 - deterministic owner-command/VariableUpdate/layout/extraction order across zero/
   multiple fixed ticks and 30/60/144 Hz render cadence;
-- input against last-presented layout, failed/skipped presentation suppression,
-  UI-local transaction visibility and cross-owner command deferral;
+- input against last-presented layout while a transient skip preserves its image,
+  unpublished-layout rejection, invalidated-output suppression, UI-local
+  transaction visibility and cross-owner command deferral;
 - gameplay pause, nested pause tokens, single-step, UI time policies, focus loss,
   host suspension/resume and no suspended-time catch-up;
 - split-screen/multiple viewport/player focus and capture, editor-play priority,

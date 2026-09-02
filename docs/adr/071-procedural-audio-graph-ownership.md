@@ -163,6 +163,16 @@ or remain non-virtualizable. The runtime never skips arbitrary blocks and later
 claims equivalent state. Voice stealing, seek, restart and tail cancellation
 produce typed observations through normal Audio control queues.
 
+Seek is a prepared control-path state transition, never callback-time unbounded
+catch-up. A generator is seekable only when its cooked contract provides either a
+direct deterministic state reconstruction or a versioned checkpoint plus a bounded
+maximum catch-up interval whose work fits the active profile. Audio prepares the
+target state in a private candidate and publishes it at a sample boundary. A graph
+without that contract reports `Unsupported`; an out-of-range/corrupt checkpoint or
+catch-up request that exceeds its declared bound fails without changing the live
+instance. Restart/reset-to-origin is a separate explicit producer policy and cannot
+be mislabeled as an exact seek.
+
 ### 7. Parameters and triggers reuse AudioFrontend scheduling
 
 Public control uses stable `AudioParameterId` and `AudioTriggerId` values plus
@@ -203,7 +213,10 @@ family through the ADR-069 activation transaction. Its descriptor declares stabl
 node type and schema IDs, pin/rate/layout contracts, deterministic tier, state/
 scratch/work/latency/tail limits, resource kinds, trust requirements, and compatible
 compiler and Audio RT ABI versions. Registration order never resolves duplicate
-node identities.
+node identities. A duplicate versioned node identity is a terminal validation error
+for the complete ADR-069 activation candidate: Audio publishes none of that
+candidate's contributions, releases its candidate leases/state, reports both owner
+identities, and retains the prior immutable registry snapshot.
 
 Pure-data built-in opcodes are preferred. Native third-party process code must use
 the separate ADR-069 Audio RT C ABI, trust, fixed memory, fault and module-lease
@@ -273,13 +286,15 @@ Required contract coverage includes:
 - cook cancellation, missing dependency/provider, cache mismatch, publication
   rollback, last-good retention and runtime cooked-header validation;
 - state/scratch/work/resource/event/latency/tail/voice budget rejection before
-  publication, queue pressure and declared virtualization/state progression;
+  publication, queue pressure, declared virtualization/state progression, direct
+  seek reconstruction, bounded checkpoint catch-up and unsupported/failed seek;
 - sample-boundary parameter ramps/triggers, stale generation/revision, duplicate
   occurrence and late-policy outcomes through AudioFrontend;
 - proof that generator graphs cannot mutate mixer topology or music/gameplay state,
   and that output follows ordinary voice spatial/routing/priority behavior;
 - extension ABI/version/trust/limit mismatch, transactional registration rollback,
-  package disable/update and lease-gated retirement;
+  duplicate versioned node identity, package disable/update and lease-gated
+  retirement;
 - editor revision races, undo/redo, failed preview compile, tab/project close and
   shutdown with no widget/provider/asset view retained by runtime;
 - callback allocation, lock, wait, logging, I/O, registry/service lookup, dynamic

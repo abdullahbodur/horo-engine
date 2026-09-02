@@ -50,9 +50,9 @@ channel-major storage:
 
 ```cpp
 struct AudioPlanarBlockView {
-    AudioChannelLayout layout;
+    AudioChannelLayoutView layout;
     AudioSampleRate sampleRate;
-    std::span<AudioSample*> planes;
+    std::span<AudioSample* const> planes;
     AudioFrameCount validFrames;
     AudioFrameCount capacityFrames;
 };
@@ -65,12 +65,14 @@ rounded up for a private SIMD width, but padding is zero and is never counted as
 audio time, hashed as payload, or exposed as extra frames. Every plane in a block
 has the same capacity and valid-frame count.
 
-The exact storage owner is a callback-safe pool, retained decoded block, or bounded
-adapter buffer. A view is borrowed for one declared processing call/epoch and
-cannot escape to jobs, scene/editor code, or a later callback. No DSP node changes
-the plane array, layout, sample rate, capacity, or ownership. In-place sample
-mutation is permitted only when the compiled graph grants exclusive write access;
-otherwise the graph assigns a separate admitted output block.
+The exact sample and plane-pointer storage owner is a callback-safe pool, retained
+decoded block, or bounded adapter buffer. A block view and its layout view are
+borrowed for one declared processing call/epoch and cannot escape to jobs,
+scene/editor code, or a later callback. `AudioSample* const` prevents a node from
+retargeting plane entries while leaving admitted sample storage mutable. No DSP
+node changes the plane array, layout, sample rate, capacity, or ownership. In-place
+sample mutation is permitted only when the compiled graph grants exclusive write
+access; otherwise the graph assigns a separate admitted output block.
 
 Native interleaved input/output is converted only in the private backend adapter.
 Decoder/capture adapters may accept interleaved bytes outside the mixer, but must
@@ -91,16 +93,26 @@ enum class AudioLayoutKind : std::uint8_t {
 
 struct AudioChannelLayout {
     AudioLayoutKind kind;
+    std::vector<AudioChannelRole> orderedChannels;
+    std::optional<AmbisonicDescriptor> ambisonic;
+};
+
+struct AudioChannelLayoutView {
+    AudioLayoutKind kind;
     std::span<const AudioChannelRole> orderedChannels;
     std::optional<AmbisonicDescriptor> ambisonic;
 };
 ```
 
-The stored layout is an owned immutable value in descriptors/artifacts/graph state;
-the span above illustrates processing access and does not authorize borrowed
-configuration lifetime. Unknown role values, zero channels, duplicate speaker
-roles, inconsistent Ambisonic metadata, channel-count mismatch, and counts above
-the admitted profile limit are typed validation failures.
+`AudioChannelLayout` is the owning value used in descriptors and prepared graph
+generations. Its vector may allocate only during non-callback construction or
+validation and becomes immutable before epoch publication. The retained graph
+generation owns that value for the complete callback epoch.
+`AudioChannelLayoutView` borrows its channel sequence for one processing call from
+the current retained generation; it is never stored as configuration or used to
+extend lifetime. Unknown role values, zero channels, duplicate speaker roles,
+inconsistent Ambisonic metadata, channel-count mismatch, and counts above the
+admitted profile limit are typed validation failures.
 
 Horo's baseline speaker presets use this exact plane order:
 
@@ -243,6 +255,8 @@ infer delivery order from ticket numbers or milestones.
 Required contract coverage includes:
 
 - binary32 full-scale/silence/non-finite behavior and bitwise positive-zero clear;
+- owning layout copy/move/immutability and rejection of layout views that outlive
+  their retained graph epoch;
 - plane count, 64-byte alignment, valid/capacity/padding, exclusive in-place, and
   stale borrowed-view rejection;
 - exact preset orders through native/file mappings, including side/back mismatch;

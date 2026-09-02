@@ -196,7 +196,7 @@ Each state override declares required bits, forbidden bits, a bounded property s
 and an explicit `UiStateLayer`:
 
 ```text
-Selection -> Focus -> Pointer -> Activation -> Availability -> Validation
+Selection -> Focus -> Pointer -> Activation -> Validation -> Availability
 ```
 
 Matching blocks apply from low to high layer. Inside one layer, fewer required bits
@@ -206,10 +206,14 @@ filter matching and do not add specificity. This gives combined states such as
 focused+hovered+pressed one deterministic result without a combinatorial class.
 
 The built-in layer assignment is fixed: checked/selected use `Selection`, focused
-uses `Focus`, hovered/dragging use `Pointer`, pressed uses `Activation`, disabled/
-busy use `Availability`, and invalid uses `Validation`. A package may add state bits
-only through a versioned registered property/state namespace and explicit layer;
-unknown required bits reject compatibility.
+uses `Focus`, hovered/dragging use `Pointer`, pressed uses `Activation`, invalid
+uses `Validation`, and disabled/busy use the highest state layer, `Availability`.
+This makes terminal availability styling override validation indicators for any
+property it declares, reducing contradictory error/focus noise while an element
+cannot be acted upon. Host Accessibility/user policy remains the final property
+overlay above every state layer. A package may add state bits only through a
+versioned registered property/state namespace and explicit layer; unknown required
+bits reject compatibility.
 
 State overrides are immediate resolved values in this ADR. RUI-004.5 may derive
 transitions between old/new computed styles using RUI-004.4 clocks, but animation
@@ -327,7 +331,8 @@ Required coverage includes:
 - property defaults, element inheritance, type/class-list/inline/state/
   accessibility precedence and non-inheritable property isolation;
 - all visual state bits/layers, combined states, required/forbidden matching,
-  specificity/authored-order ties and unknown package state compatibility;
+  specificity/authored-order ties, disabled+invalid and busy+invalid availability
+  precedence, and unknown package state compatibility;
 - font/image/material dependencies, semantic cook fingerprint changes,
   byte-identical cook and malformed/version-skewed payloads;
 - measure-affecting versus paint-only invalidation, locale/font/accessibility/

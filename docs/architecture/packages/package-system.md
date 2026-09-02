@@ -109,15 +109,22 @@ Install, trust, enable, and activation are separate lifecycle steps. See
 
 ## Manifest Format
 
-`horo-package.toml` is the canonical serialized projection of
-`ValidatedPackageManifestV1`; it is not exposed as a TOML DOM or string map to
+The signed/distributed `horo-package.toml` is the canonical serialized projection
+of `ValidatedPackageManifestV1`; it is not exposed as a TOML DOM or string map to
 consumers. Every ID, semantic version/range, kind, scope, platform/architecture,
 ABI, capability, module, artifact, contribution, content set, license and
 signature requirement decodes into its owning bounded type. Source selection,
 credentials, trust decisions, cache/install state and lock resolution are not
 package-manifest fields.
 
+The following is an authoring-format example, not canonical distribution bytes.
+Authoring tools may preserve its comments and contribution-root shorthand, then
+must expand it into the complete typed reference graph and emit deterministic,
+comment-free canonical TOML before signing or publication.
+
 ```toml
+schemaVersion = 1
+
 [package]
 id = "com.example.horo.gun-pack"
 version = "1.2.3"
@@ -134,9 +141,23 @@ scriptRuntime = "lua-1"
 assetArchiveFormat = "1"
 platforms = ["windows-x64", "linux-x64", "macos-arm64"]
 
-[dependencies]
-"com.horo.input" = { version = "^1.0.0", contributions = ["runtime"] }
-"com.horo.editor.widgets" = { version = "^2.0.0", contributions = ["editor"] }
+[[dependency]]
+id = "input-runtime"
+package = "com.horo.input"
+versions = "^1.0.0"
+requirement = "required"
+scopes = ["runtime"]
+requiredFeatures = []
+requiredContributions = []
+
+[[dependency]]
+id = "editor-widgets"
+package = "com.horo.editor.widgets"
+versions = "^2.0.0"
+requirement = "optional"
+scopes = ["editor"]
+requiredFeatures = []
+requiredContributions = []
 
 # Shorthand contribution roots. The verifier expands these into typed
 # contribution descriptors before install/activation.
@@ -275,7 +296,7 @@ dependency assignments. Map/file enumeration does not define priority:
 {
   "sources": {
     "horo.public": {
-      "kind": "registry",
+      "kind": "public-registry",
       "registry": "official",
       "priority": 100
     },
@@ -309,6 +330,13 @@ dependency assignments. Map/file enumeration does not define priority:
   }
 }
 ```
+
+Fresh resolution with an explicit dependency source queries only that authority.
+An unassigned request snapshots every eligible source in its ordered search set
+before selection and compares the chosen package ID/exact version identity across
+that snapshot. A lower-priority digest mismatch is a hard conflict; unavailable
+required metadata makes the snapshot incomplete rather than silently converting
+resolution into first-match behavior.
 
 Mutable Git branches, unpinned URLs, and local absolute paths are not valid
 portable restore sources.

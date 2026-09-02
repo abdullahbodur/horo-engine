@@ -55,6 +55,11 @@ enum class PackageSourceKind {
 };
 ```
 
+Canonical serialized kind values are the exact kebab-case projections
+`public-registry`, `private-registry`, `static-index`, `direct-artifact`,
+`vendored-artifact` and `local-development-override`; the generic value
+`registry` is invalid because it loses the public/private policy distinction.
+
 `PackageSourceId` names a logical configured authority such as `horo.public`,
 `team.release` or `project.vendored`. A source owns package/version metadata and a
 stable safe artifact coordinate. One source may have ordered transport endpoints
@@ -135,6 +140,24 @@ Private is not intrinsically higher priority than public, and a registry is neve
 selected merely because it responds first. Namespace routing and source assignment
 are exact policy entries, not prefix guessing. Parallel metadata queries preserve
 the precomputed order; completion timing cannot change selection.
+
+Fresh resolution is not a first-response or first-query match. An explicit source
+assignment, namespace route, vendored assignment or development override is an
+exclusive authority choice and queries only that choice. Otherwise the resolver
+takes a bounded, revision-pinned metadata snapshot from every eligible configured
+source in the applicable ordered tier set before choosing a candidate. It then
+applies the order above and semantic-version rules to that complete snapshot.
+Failure to obtain required metadata for any member of a non-exclusive search set
+returns `SourceMetadataIncomplete`; it does not silently reduce the set and claim
+that identity-conflict checking completed.
+
+Before committing a fresh resolution, the resolver compares the trusted advertised
+artifact/manifest identity for the chosen package ID and exact version across all
+sources in that snapshot. A different digest is `PackageIdentityConflict` even
+when it came from a lower-priority source. Identical identities are one candidate
+with multiple provenance observations. Source priority chooses among versions or
+unique identities only after this cross-source consistency check; it never hides
+a same-ID/version digest conflict.
 
 Within one source, versions are filtered by request range, compatibility, yanked/
 policy state and publisher requirements, then selected by the resolver's canonical
@@ -241,7 +264,7 @@ The resolver returns typed outcomes:
 | Condition | Result |
 |---|---|
 | Same package ID/version and identical verified digest from approved transports of one source | Same artifact; provenance records the successful transport without duplicating a candidate. |
-| Same package ID/version with different digest from any sources | `PackageIdentityConflict`; stop and report both safe source IDs/digests. |
+| Same package ID/version with different digest in any non-exclusive eligible-source snapshot | `PackageIdentityConflict`; stop and report both safe source IDs/digests before selection commits. Explicitly assigned/routed requests have one authority and do not query unrelated sources. |
 | Higher-priority source has no matching version | Continue to the next configured source only when the request does not require the first source exclusively. |
 | Explicitly assigned source unavailable | `AssignedSourceUnavailable`; do not fall through to another authority. |
 | Locked artifact unavailable | `LockedArtifactUnavailable`; do not re-resolve. |

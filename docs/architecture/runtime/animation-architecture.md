@@ -119,7 +119,7 @@ A clip stores sampled animation data for one skeleton.
 struct AnimationClipDescriptor {
     ClipId id;
     SkeletonId skeleton;
-    AnimationTime duration;
+    AnimationDeltaTime duration;
     AnimationSampleRate sampleRate;
     WrapMode wrapMode;
     bool hasRootMotion;
@@ -176,7 +176,10 @@ AnimationGraph
 ```
 
 Graph assets compile to a runtime `AnimationGraphInstance`. The graph owns its
-parameter block and pose working memory.
+parameter block, pose working memory, player cursors, and the exact fractional
+remainders produced by playback-rate multiplication and cursor accumulation.
+Candidate cursors and remainders publish together only when their fixed tick
+commits.
 
 ### Graph Parameters
 
@@ -294,8 +297,11 @@ Rules:
   the controller owns collision-aware resolution and final transform authority
 - networked games must replicate root motion parameters or resulting transforms,
   not raw animation time
-- requests carry scene/instance/tick/generation identity and are consumed at
-  most once; stale, duplicate, preview, and failed-tick requests are rejected
+- requests carry scene/instance/tick/generation identity; consumption becomes
+  durable only at successful tick commit, an aborted attempt's lease and staged
+  marker are discarded, and a retry may consume its newly staged equivalent
+- stale, duplicate-after-commit, preview, and leaked aborted-attempt requests are
+  rejected
 - reverse playback can emit an inverse directed delta only when the clip/node and
   owner policy admit reverse traversal; it never reverses the physics world
 
@@ -331,7 +337,7 @@ Animation events are named markers attached to a clip at a specific time.
 struct AnimationEvent {
     EventName name;
     AnimationTime time;
-    std::optional<AnimationTime> duration;
+    std::optional<AnimationDeltaTime> duration;
     VariantMap payload;  // typed key-value map; see foundation type glossary
 };
 ```
@@ -487,8 +493,8 @@ committed pose. Animation-to-physics handoff is explicit and generation-checked.
   "schemaVersion": 1,
   "assetType": "animation_clip",
   "skeleton": "skeleton_humanoid_001",
-  "duration": 1.0,
-  "sampleRate": 30,
+  "duration": { "numerator": 1, "denominator": 1 },
+  "sampleRate": { "numerator": 30, "denominator": 1 },
   "wrapMode": "Loop",
   "hasRootMotion": true,
   "tracks": [
@@ -500,10 +506,20 @@ committed pose. Animation-to-physics handoff is explicit and generation-checked.
     }
   ],
   "events": [
-    { "name": "Footstep.Left", "time": 0.25 }
+    {
+      "name": "Footstep.Left",
+      "time": { "numerator": 1, "denominator": 4 }
+    }
   ]
 }
 ```
+
+The rational objects above are illustrative schema values in seconds and samples
+per second. ANI-001.6 owns their final field widths and normalization rules.
+Durations use `AnimationDeltaTime`; cursors and event positions use
+`AnimationTime`. Decoders reject zero denominators, overflow, non-canonical
+fractions, and values outside the clip's declared duration instead of converting
+through binary floating point.
 
 ### Animation Graph Asset
 

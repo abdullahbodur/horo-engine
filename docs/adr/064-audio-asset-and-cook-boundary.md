@@ -78,6 +78,11 @@ through platform/trust policy, enforces generic source/dependency byte and count
 limits, captures immutable bytes or a bounded seekable reader, and invokes the
 selected contribution with cancellation and diagnostic context. It does not infer
 format from a file extension alone or parse RIFF/Ogg/Opus/MP3/native bank fields.
+The Audio extractor consumes the reader through invocation-scoped `ReadAt` calls
+into caller-owned bounded buffers; it cannot require one allocation proportional
+to source size, retain the reader, or assume contiguous source residency. Small
+sources may use a reader backed by an immutable contiguous view without changing
+the decoder contract.
 
 Audio owns a versioned `AudioSourceExtractor` contribution selected through its
 container/codec registry. It performs bounded probing, container parsing, decoder

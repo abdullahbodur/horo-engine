@@ -84,9 +84,12 @@ not strings, CSS tokens or renderer enums.
 Width, height, min/max, gaps, padding, margins, offsets and track descriptors
 declare which kinds and signs they accept. Size, min/max, padding, gap, flex/grid
 weights and aspect ratios reject negative values. Margins and positional offsets
-may be negative when the descriptor permits it. NaN, infinity, negative zero with
-semantic significance, unknown enum values, percent overflow and values outside
-the configured logical extent/capacity bounds fail validation before activation.
+may be negative when the descriptor permits it. NaN, infinity, unknown enum values,
+percent overflow and values outside the configured logical extent/capacity bounds
+fail validation before activation. Floating source `-0` canonicalizes to ordinary
+zero during parsing and cannot
+survive into the signed fixed-point representation; it is not a distinct semantic
+value or a validation failure.
 
 `Intrinsic` is a measurement source, not another serialized length kind. An `Auto`
 axis asks the element/container algorithm for its intrinsic contribution. This
@@ -124,10 +127,16 @@ For each axis, the engine applies this order:
    bound.
 3. Resolve an authored definite preferred length (`Dip` or resolvable `Percent`).
    If none exists, use the parent-assigned size when present; otherwise measure the
-   `Auto` intrinsic contribution.
-4. When exactly one axis remains auto and a positive aspect ratio plus the other
-   definite axis exists, derive the auto axis from the ratio. Aspect ratio does not
-   override two definite axes.
+   `Auto` intrinsic contribution. Retain whether each provisional candidate came
+   from an independently definite authored/parent value or intrinsic measurement.
+4. Apply a positive authored aspect ratio whenever fewer than two axes are
+   independently definite. With one definite axis, derive the other axis from it.
+   With two intrinsic `Auto` axes, choose the largest ratio-conforming box that does
+   not exceed either non-negative intrinsic preferred extent; a single available
+   intrinsic axis is the basis, and two zero extents remain zero. The comparison
+   and derivation use checked fixed-point math. Aspect ratio does not override two
+   independently definite axes, and the following min/max step remains stronger
+   when its clamp cannot preserve the ratio.
 5. Resolve min and max against the same containing axis and clamp the candidate.
    If resolved minimum exceeds resolved maximum, minimum wins and the effective
    maximum becomes that minimum, with a diagnostic.
@@ -296,11 +305,12 @@ fallback must be declared in the cooked descriptor.
 
 Required coverage includes:
 
-- every legal/illegal unit and sign combination, finite limits and checked numeric
-  overflow;
+- every legal/illegal unit and sign combination, source negative-zero
+  canonicalization, finite limits and checked numeric overflow;
 - definite/auto/percentage/intrinsic sizing with min/max and the `min > max` rule;
 - zero/one/two anchors, definite versus auto size, alignment and negative offsets;
-- aspect ratio with zero, one or two definite axes and min/max clamping;
+- aspect ratio with zero, one or two independently definite axes, two-`Auto`
+  intrinsic containment, a single intrinsic basis and min/max clamping;
 - flow/flex/grid free-space distribution, freeze/redistribution, spans and stable
   remainder assignment;
 - indefinite percentage dependencies, one bounded remeasure, cycles and diagnosed

@@ -256,7 +256,6 @@ struct ExtensionSettingDescriptorV1 {
     ExtensionSettingId id;
     ExtensionModuleId owner;
     ExtensionSettingScope scope;
-    ExtensionSettingValueKind kind;
     ExtensionSettingValue defaultValue;
     ExtensionSettingConstraints constraints;
     ExtensionSettingReloadPolicy reload;
@@ -268,9 +267,11 @@ struct ExtensionSettingDescriptorV1 {
 
 Scope is one of user, workspace, project, project-profile or session under the
 configuration contract. Reload policy is a closed enum such as `ImmediateSafe`,
-`NextOperation`, `NextActivation` or `RestartRequired`. Kind, default and
-constraints must match exactly. Secret values are not manifest defaults; settings
-that need credentials use typed credential-reference capability contracts.
+`NextOperation`, `NextActivation` or `RestartRequired`. The serialized `kind`
+selects the `defaultValue` variant during decoding and is not retained as a second
+typed-model discriminator; constraints must match that active variant exactly.
+Secret values are not manifest defaults; settings that need credentials use typed
+credential-reference capability contracts.
 
 Settings are declared once and referenced by ID from contributions or service
 exports. Prefix/string convention is not used to infer ownership. Preset opt-in is
@@ -347,6 +348,14 @@ package resource with bounded typed signatures; it cannot expose raw host/module
 pointers, C++ names, arbitrary reflection or undeclared functions. A
 `ScriptProvider` role without a script API, or a script API referencing a missing/
 incompatible service/runtime/permission, is invalid.
+
+The script API permission set is additive to its referenced service export, not a
+replacement or subset constraint. Validation computes the effective requirement
+as the set union of both declarations, requires every member of that union to be
+declared by the descriptor and remain inside the package capability envelope, and
+records the union in the activation candidate. Trust approval and every script
+invocation are gated on that complete effective set, so a binding cannot hide or
+subtract a permission required by its underlying service.
 
 ### 10. Cross-reference validation is complete before activation
 

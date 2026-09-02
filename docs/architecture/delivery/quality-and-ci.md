@@ -242,6 +242,7 @@ change; CI cannot overwrite or automatically approve candidate output.
 ### Flaky Test Policy
 
 GUI and visual tests are susceptible to flakiness. The CI policy is strict:
+
 - Any test that flips between pass/fail on the same commit is automatically marked as **Flaky** by the CI runner.
 - Flaky tests are immediately **quarantined** (they run, but do not fail the pipeline).
 - A tracking ticket is automatically generated for the owning team.

@@ -404,11 +404,15 @@ the authoritative fixed-tick interval; presentation frames never accumulate root
 motion. This ensures animation-driven movement respects walls, slopes, and steps.
 
 The request identifies its scene, animation instance, simulation tick, and root-
-motion generation and can be consumed at most once. Presentation/editor-preview,
-stale, duplicate, or failed-tick requests are invalid. Reverse player traversal
-may submit the inverse directed delta when animation and gameplay policy admit it;
-the controller still performs ordinary forward collision resolution and does not
-reverse physics.
+motion generation. Controller resolution stages a consumption marker in the tick
+transaction; only successful tick commit makes that marker durable. Aborting an
+attempt discards its marker and request lease, so a retry of the same simulation
+tick can consume the newly staged equivalent request. After a successful commit,
+another request with that identity is a duplicate and is rejected. Presentation/
+editor-preview, stale, duplicate-after-commit, or leaked aborted-attempt requests
+are invalid. Reverse player traversal may submit the inverse directed delta when
+animation and gameplay policy admit it; the controller still performs ordinary
+forward collision resolution and does not reverse physics.
 
 Gameplay selects the admitted translation/rotation mode before command closure.
 `Suggest` uses an explicit gameplay-translation presence bit, not a velocity

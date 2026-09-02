@@ -148,9 +148,15 @@ sorts candidates by this lexicographic tuple:
 4. stable authored face order and `FontFaceId`.
 
 Requested variation coordinates are clamped only when the descriptor explicitly
-allows clamping; otherwise an out-of-range coordinate fails. Unspecified axes use
-the family entry's normalized default. Matching never depends on source filename,
-registration order, platform enumeration, hash iteration or atlas availability.
+allows clamping. When clamping is disabled, an out-of-range coordinate disqualifies
+that face descriptor for the current request; matching continues with the next
+candidate in the same deterministic ordering and then the fallback-family chain.
+It does not invalidate the family or silently substitute an axis value. Exhausting
+all compatible candidates returns typed `NoCompatibleVariation` evidence for the
+shaping cluster and applies no missing-glyph policy because no face was selected.
+Unspecified axes use the family entry's normalized default. Matching never depends
+on source filename, registration order, platform enumeration, hash iteration or
+atlas availability.
 
 ### 5. Fallback is an ordered, validated family graph
 
@@ -158,9 +164,12 @@ Each family declares a finite ordered `fallbackFamilies` list. Application/
 Localization policy may prepend or append a versioned script/locale fallback
 profile and must name one terminal product fallback family. At preparation, Runtime
 UI expands the graph depth-first in declared order, de-duplicates by first
-occurrence and publishes a flat immutable `FontFallbackChain`. Self edges, cycles,
-duplicates inside one list, missing families, excessive depth/count and a missing
-terminal family reject the candidate.
+occurrence across paths in the expanded graph and publishes a flat immutable
+`FontFallbackChain`. Reaching one family through multiple otherwise valid paths is
+therefore deterministic and not an authored error. By contrast, an immediate
+duplicate inside one family's unexpanded `fallbackFamilies` list is rejected as
+malformed authoring data. Self edges, cycles, missing families, excessive depth/
+count and a missing terminal family also reject the candidate.
 
 Resolution for one shaping cluster/run is:
 
@@ -333,9 +342,11 @@ Required coverage includes:
 - valid/malformed/oversized TTF, OTF and collection fixtures; table bounds,
   overlaps, checksums, face indexes, duplicate keys and parser cancellation;
 - regular/italic/oblique, weights 1/400/500/700/1000, stretch ties, authored-order
-  ties, variation defaults/ranges/clamp policy and disabled/enabled synthesis;
-- fallback ordering, first-occurrence de-duplication, self/cross cycles, missing
-  terminal family, depth/count limits and script/locale profile changes;
+  ties, variation defaults/ranges, clamp policy, candidate disqualification and
+  all-candidate `NoCompatibleVariation`, plus disabled/enabled synthesis;
+- fallback ordering, expanded-graph first-occurrence de-duplication, immediate-list
+  duplicate rejection, self/cross cycles, missing terminal family, depth/count
+  limits and script/locale profile changes;
 - grapheme/variation-selector/color-glyph coverage and no codepoint-level cluster
   fragmentation;
 - replacement, omit-with-advance and strict missing behavior with bounded/redacted

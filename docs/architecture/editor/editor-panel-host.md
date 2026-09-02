@@ -492,9 +492,10 @@ sequenceDiagram
 ```
 
 Requested event subscriptions are advisory for validation, diagnostics, and
-permission review. A tab still performs subscription through the typed
-`EditorDataBus` API at attach time. Event payloads remain invalidation hints;
-the tab queries the authoritative model or store for the data it needs.
+permission review. The host-owned UI session performs subscription through the
+typed `EditorDataBus` API at attach time; external module/controller code never
+receives the C++ bus. Event payloads remain invalidation hints, and the session
+queries the authoritative model or store through approved capabilities.
 
 Extensions may contribute new editor-local event types only under their stable
 module prefix. Those events are visible only to the active editor session unless

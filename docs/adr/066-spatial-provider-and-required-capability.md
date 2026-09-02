@@ -80,10 +80,19 @@ Horo IDs, limits, layouts, and results only.
 Project/build policy selects a versioned `SpatialRenderProfile` for each admitted
 audio output/listener context. A profile contains:
 
+```cpp
+enum class SpatialProviderSelectorKind : std::uint8_t {
+    Exact,
+    OrderedCandidates,
+    Automatic,
+};
+```
+
 - a stable profile ID and schema version;
 - a requirement strength: `Optional` or `Required`;
 - the complete required capability set and minimum limits;
-- an exact provider ID or an explicit ordered candidate list when identity matters;
+- one selector kind plus its exact provider ID or ordered candidate list when
+  identity matters;
 - output layout, sample-rate, quality, latency, source/object, scratch, and memory
   constraints;
 - for `Optional` only, an explicit `AllowCoreStereoFallback` flag;
@@ -101,8 +110,13 @@ admitted provider. It never permits core fallback unless the core provider itsel
 is the explicitly required provider and its capability set is sufficient.
 `Optional` permits fallback only when the profile explicitly enables it and the
 content/output contract remains valid under core stereo. An omitted fallback flag,
-unknown strength, empty required candidate, or contradictory limit fails profile
-validation.
+unknown strength/selector, or contradictory limit fails profile validation.
+
+`Exact` requires one non-zero provider ID and no candidate list.
+`OrderedCandidates` requires a non-empty duplicate-free list and no exact ID.
+`Automatic` requires `Optional`, no exact ID, and an empty list; its emptiness is
+intentional schema state rather than a missing candidate error. `Required` with
+`Automatic`, or an empty list under `OrderedCandidates`, fails validation.
 
 ### 4. Resolution is deterministic and registration-order independent
 
@@ -112,7 +126,7 @@ is:
 
 1. the exact provider requested by the profile, when present;
 2. the profile's explicit ordered candidate IDs;
-3. for an optional automatic profile only, compatible candidates ordered by the
+3. for an explicit `Optional` + `Automatic` profile only, compatible candidates ordered by the
    host's versioned recommendation policy and then canonical provider ID;
 4. core stereo only when optional fallback is explicitly allowed and compatible.
 
@@ -186,7 +200,8 @@ Audio control consumes the fault and applies the resolved profile policy:
 - for `Required`, stop ordinary admission for the affected output, enter ADR-062
   recovery or terminal failure policy, and restore audio only after the required
   provider passes a new transactional preflight;
-- for `Optional` with admitted fallback, prepare a complete core-stereo provider
+- for `Optional` with admitted `AllowCoreStereoFallback`, prepare a complete
+  core-stereo provider
   and graph generation off-thread, publish it at a buffer boundary, and report
   `ActiveFallback` after matching acknowledgement;
 - for `Optional` without a valid fallback, use the same unavailable/recovery path
@@ -234,6 +249,12 @@ physics extraction owns world queries; providers do not query ECS, physics,
 editor, configuration, package discovery, files, or network during processing.
 `Prepare` and destruction run on declared non-callback owner threads; `Process`
 runs with fixed memory and bounded work on the real-time path.
+
+`Process` returns a fixed-size `SpatialProcessResult` containing only
+`Rendered`, `RenderedSilence`, or `Fault` plus a stable bounded fault code. It is
+`noexcept` and does not allocate or construct a general diagnostic. On `Fault`,
+the callback writes positive-zero silence for the admitted output and emits the
+generation-tagged preallocated ADR-062 fault record for control-side handling.
 
 AUD-005.5 and AUD-011.4 define the concrete processing and registration APIs, but
 they must preserve this selection and failure model. A middleware backend that

@@ -119,6 +119,14 @@ reversing simulation or physics. Rate multiplication and cursor accumulation
 preserve a per-instance remainder so equivalent tick/settings histories do not
 drift because of render cadence or repeated float rounding.
 
+The runtime instance owns these exact remainders alongside its cursors and graph
+state. Candidate cursor and remainder updates are staged and committed together;
+a failed tick cannot publish one without the other. Asset durations are intervals
+(`AnimationDeltaTime`), while cursor and event positions are absolute clip-local
+`AnimationTime` values. Serialized examples use normalized rational values rather
+than binary floating-point seconds; ANI-001.6 owns the final widths and overflow
+rules.
+
 Reverse traversal is permitted only for clips/nodes whose contract supports it.
 It samples the directed interval from the old cursor to the new cursor, emits only
 events explicitly eligible for reverse, and extracts the inverse directed root
@@ -220,10 +228,14 @@ animation/controller state. Root pitch/roll remains visual; only the admitted tw
 about Character's owned up basis can affect collision heading.
 
 One `(scene, animation instance, simulation tick, root-motion generation)` request
-can be consumed at most once. A stale, duplicate, preview, presentation, or
-failed-tick request is rejected. Network replication owns input/state or resulting
-transform policy; raw presentation time and process-local pose handles are never
-replication identity.
+can be committed as consumed at most once. Controller resolution records only a
+candidate consumption marker in the current tick transaction. Abort discards that
+marker and the attempt-scoped request lease; a retry of the same simulation tick
+may consume the newly staged equivalent request. Successful tick commit makes the
+marker durable, after which the same identity is a duplicate. A stale, duplicate-
+after-commit, preview, presentation, or leaked aborted-attempt request is rejected.
+Network replication owns input/state or resulting transform policy; raw
+presentation time and process-local pose handles are never replication identity.
 
 ### 7. Physics override and render publication
 

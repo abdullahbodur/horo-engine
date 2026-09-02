@@ -64,11 +64,13 @@ enum class AudioSendTap : std::uint8_t {
 };
 ```
 
-The source bus primary route always uses its post-fader output. A send copies or
-accumulates the selected immutable tap into its destination; it does not transfer
-buffer ownership or mutate the source tap. Send gain is applied exactly once at
-that edge. An unknown tap, non-finite gain, duplicate route ID, missing endpoint,
-or unsupported layout conversion is a graph validation error.
+The source bus primary route always uses its post-fader output. Routing uses a
+pull model: a send exposes the selected immutable source tap, and the destination
+reads and accumulates it only when that destination executes. It does not transfer
+buffer ownership or mutate the source tap. Send gain is applied exactly once while
+the destination accumulates that edge. An unknown tap, non-finite gain, duplicate
+route ID, missing endpoint, or unsupported layout conversion is a graph validation
+error.
 
 A return is an ordinary bus with a typed `Return` role, an effect chain, one
 primary route toward Master, and incoming sends. It is not a hidden paired object
@@ -118,18 +120,24 @@ the documented numerical tolerance; scheduling completion order is never mix ord
 For each processing block, a bus executes:
 
 1. clear its preallocated accumulator to ADR-063 positive-zero silence;
-2. accumulate admitted direct voices, then incoming routes in canonical order;
+2. pull and accumulate admitted direct-voice output slots, then the immutable
+   source taps of incoming routes in canonical order, applying each route gain;
 3. run its prepared insert chain in stable descriptor order;
-4. expose the `PostInsertPreFader` tap;
+4. publish the immutable `PostInsertPreFader` tap;
 5. apply bus gain, mute, and bounded sample-safe automation to produce post-fader;
-6. emit sends in ascending route ID from their declared tap;
-7. emit the post-fader primary route, or for Master convert to the output adapter.
+6. publish the immutable post-fader tap used by primary and post-fader send routes;
+7. for Master only, convert the post-fader output to the output adapter.
 
 The compiled order guarantees every source is complete before its destination
-executes. Bus pause semantics act on admitted voice/automation clocks according to
-their separate typed policy; pause never changes graph topology or processing order.
-Solo and editor preview remain projection/debug policy and do not alter the cooked
-graph unless an explicit runtime profile compiles their effective routes.
+executes. A non-Master bus never writes a destination accumulator. The compiler
+assigns retained tap storage and may alias a tap with working storage only when its
+complete read lifetime proves that later fader/DSP writes cannot change the
+published samples. Every destination clears before pulling, so no global clear
+pre-pass is required and already published source data is never erased. Bus pause
+semantics act on admitted voice/automation clocks according to their separate
+typed policy; pause never changes graph topology or processing order. Solo and
+editor preview remain projection/debug policy and do not alter the cooked graph
+unless an explicit runtime profile compiles their effective routes.
 
 ### 5. Layout, latency, and resource constraints are graph inputs
 
@@ -229,7 +237,9 @@ Required contract coverage includes:
 - byte-identical compiled order/route tables across source order, editor history,
   unordered-map seed, registration order, job completion order, locale, and host;
 - canonical direct-voice, incoming-route, insert, pre/post-fader send, primary,
-  and Master output order using numerical reference signals;
+  and Master output order using numerical reference signals, including proof that
+  destination clearing cannot erase an earlier source and tap aliasing cannot
+  mutate a published pre-fader signal;
 - layout mismatch, missing conversion, fan-in/fan-out, scratch, state, latency,
   tail, and callback-work budget failures before publication;
 - stale build cancellation, failed prepare, queue saturation, superseded build,
