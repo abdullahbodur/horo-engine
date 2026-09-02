@@ -1212,6 +1212,12 @@ writes scene depth or renders the same decal twice in one view.
 
 ## XR Views And External Presentation Targets
 
+[ADR-160](../../adr/160-xr-rendering-openxr-compositor-and-renderer-ownership.md)
+is normative for the XR/Renderer handoff. XROpenXR owns native frame, swapchain, image
+and composition calls; Renderer owns Horo extraction, graph/GPU work, external-resource
+registration and completion evidence. The private bridge translates native resources
+without becoming a second owner.
+
 XR supplies a bounded runtime-driven set of view descriptors and
 generation-scoped runtime-owned image identities. Renderer does not assume that
 an XR frame contains exactly two eyes, and public render contracts do not expose
@@ -1223,6 +1229,12 @@ and configuration identity so later quad-view or foveated-inset execution does
 not require a public API migration. An unsupported view configuration is
 rejected before resource acquisition and is never silently truncated.
 
+For `XRProjection1_0`, that first production admission is exactly one primary opaque
+stereo configuration with exactly two runtime views. One-view input is limited to an
+explicit simulator/test profile. Any greater-than-two configuration is retained as
+discovery evidence but fails admission before swapchain-image acquisition until the
+complete N-view path is implemented and qualified.
+
 Runtime-owned images enter the graph as typed external resources with declared:
 
 - format, extent, array/view index, and permitted uses;
@@ -1231,12 +1243,33 @@ Runtime-owned images enter the graph as typed external resources with declared:
 - synchronization and frames-in-flight lifetime;
 - session, swapchain, image, and configuration generations.
 
+An XR image and imported `RenderResourceId` are correlated, non-interchangeable
+identities. Renderer borrows the allocation for one external lease and never destroys
+it. XROpenXR releases/reuses it only after Renderer supplies completion evidence for all
+covered queue references; CPU command recording alone is insufficient. The descriptor
+also carries physical allocation extent versus active render rectangle, typed color
+representation and initial/final external synchronization state.
+
 Dynamic resolution, fixed or gaze-driven foveation, variable-rate shading,
 density maps, depth submission, and motion inputs are renderer capabilities.
 They are negotiated before frame execution. Foveation is not modeled as a
 generic post-process, and Horo does not implement runtime-owned asynchronous
 reprojection. Ordinary projection-layer rendering is the explicit fallback
 when optional features are unavailable.
+
+One immutable XR render-quality plan separates swapchain extent, render rectangle,
+dynamic scale/controller, fixed or gaze-driven foveation, Renderer VRS versus runtime
+density-map mechanism, privacy revision and fallback. Scale/plan changes occur at a safe
+point and invalidate/migrate histories by explicit policy; they do not recreate a
+swapchain every frame. Space-warp depth/motion/timing inputs require their own declared
+semantics and cannot be substituted with generic motion-blur data.
+
+XRRuntime supplies one complete frame and backend-neutral layer intent. Renderer returns
+typed submission/completion evidence but never calls native image release or end-frame.
+XROpenXR validates and encodes native layers after required targets complete. Runtime
+asynchronous reprojection, distortion, scan-out and guardian/chaperone remain outside
+the Horo graph. A desktop mirror is an independent ADR-033 output, not proof that the XR
+compositor presented successfully.
 
 See [XR Architecture](./vr-ar-architecture.md) for session, view, capability,
 privacy, and qualification ownership.
