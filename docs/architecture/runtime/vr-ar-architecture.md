@@ -54,6 +54,12 @@ separates portable project intent, effective runtime snapshots, editor tooling,
 Observability/captures and release evidence. Metrics use finite dimensions, and runtime
 compatibility never substitutes for physical-device qualification.
 
+[ADR-172](../../adr/172-immersive-agent-ownership-authoring-mode-and-risk.md)
+specializes the optional developer-only immersive Editor AI consumer. XR supplies
+validity- and generation-checked poses, rays, gaze and actions as bounded evidence;
+it does not interpret agent intent, approve proposals, own editor transactions or
+expose the capability in packaged games.
+
 ## Ownership
 
 ```text

@@ -415,6 +415,14 @@ enabled by a remote caller or archive field.
 
 ## Security
 
+[ADR-172](../../adr/172-immersive-agent-ownership-authoring-mode-and-risk.md)
+specializes immersive editor-agent tools. Multimodal input is bounded evidence,
+not MCP authorization: voice, gaze, pointing, contact and physical interaction
+cannot approve a tool plan. Mutating plans require a local proposal-bound approval
+and still pass through application validation and an atomic editor transaction.
+Mode, document, project or XR-session replacement invalidates approval; remote MCP
+identity cannot impersonate locally present physical approval.
+
 [ADR-122](../../adr/122-cinematic-trigger-sources-and-capability-policy.md)
 specializes cinematic start/control tools. A registered tool remains an MCP adapter
 over the common application `ICinematicPlaybackCapability`; it never receives the

@@ -183,6 +183,7 @@ to the replacement.
 | [169](169-vtx-producer-terrain-world-streaming-packaging-and-server-ownership.md) | VTX Producer, Terrain, World Streaming, Packaging and Server Ownership | Proposed | 2026-09-02 |
 | [170](170-vtx-settings-diagnostics-capture-and-qualification-ownership.md) | VTX Settings, Diagnostics, Capture and Qualification Ownership | Proposed | 2026-09-02 |
 | [171](171-android-host-target-and-ownership.md) | Android Host, Target and Ownership | Proposed | 2026-09-02 |
+| [172](172-immersive-agent-ownership-authoring-mode-and-risk.md) | Immersive Agent Ownership, Authoring Mode and Risk | Proposed | 2026-09-02 |
 
 ## Conventions
 
