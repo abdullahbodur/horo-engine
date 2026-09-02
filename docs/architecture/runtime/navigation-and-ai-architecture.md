@@ -1497,6 +1497,20 @@ through the Foundation `JobSystem`:
 
 ## Debugging And Visualization
 
+[ADR-110](../../adr/110-navigation-editor-surface-and-command-ownership.md)
+maps navigation tooling onto the shared editor architecture. A persistent
+`NavigationDefinitionDocument` and ordinary `SceneDocument` commands own authored
+definition/Scene intent. The dockable `NavigationTab` is a closed-by-default query
+and action projection; ADR-106 `NavigationBakeService`/`OperationStore` owns every
+accepted bake, so panel hide/close never cancels work or publishes an artifact.
+
+Live inspection uses a bounded backend-neutral `INavigationInspectionQuery` over
+immutable world/topology/overlay/profile generations. Viewport overlays consume
+neutral debug primitives and own presentation state only. UI callbacks and provider
+extensions receive no mutable runtime/provider/native object; authorized debug
+actions use typed application/runtime commands at declared safe points. Navigation
+surfaces use the shared design system and localization catalogs.
+
 - NavMesh visualization overlay (walkable areas, obstacles, off-mesh links)
 - Path visualization (active paths with waypoints)
 - Perception visualization (sight cones, hearing radii, known stimuli)

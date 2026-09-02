@@ -403,6 +403,13 @@ Rules:
 
 See [Editor Modal Host](./editor-modal-host.md).
 
+ADR-110 navigation documents, panels, operation projections and transient modals
+reuse these fields, tables, badges, buttons, split panes, progress/status and modal
+shells. Navigation/provider code does not draw feature-local pills or pass raw
+ImGui through a provider extension. Long profile/asset/fingerprint values, narrow
+docks and every disabled/loading/stale/error state retain the shared typography,
+focus, scale and accessibility rules.
+
 ## Theme Model
 
 The editor `Theme` and design tokens in this section style HoroEditor only.

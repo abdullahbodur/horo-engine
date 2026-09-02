@@ -13,6 +13,7 @@ Examples include:
 - Import Asset
 - Generate Diagnostic Bundle
 - project or scene creation workflows
+- navigation-definition creation and navigation conflict/migration workflows
 - destructive-action confirmations
 - credential and file-picker dialogs
 
@@ -610,6 +611,13 @@ Inside a modal:
 - modal completion returns a typed result to its opener when a result is needed
 
 No handler relies on event subscriber order to drive a modal workflow.
+
+[ADR-110](../../adr/110-navigation-editor-surface-and-command-ownership.md)
+limits navigation modals to definition creation, conflict/migration decisions and
+explicit cancellation confirmation. Routine definition editing, bake progress and
+runtime inspection remain documents/panels. A navigation modal owns only its draft;
+commit uses typed document/application capabilities. Closing it cannot implicitly
+cancel an accepted bake or mutate navigation runtime/provider state.
 
 ## Frame Order
 

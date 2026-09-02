@@ -91,6 +91,13 @@ switching languages.
 
 ### Initial migration boundary
 
+ADR-110 navigation surfaces use editor-owned stable message keys for visible
+document/panel/modal labels, actions, tooltips, empty/loading/stale/error states,
+validation messages and accessibility names. Asset names, profile IDs, provider
+fingerprints, paths and error codes remain typed technical data. Navigation UI
+implementation changes update `en-US` and `tr-TR` catalogs together and test long
+localized text in narrow dock/modal layouts.
+
 The first migration covers editor-owned visible labels, buttons, tabs, tooltips,
 placeholders, modal status text, and user-facing validation/error text. It does
 not rewrite logs, stable error codes, JSON keys, protocol fields, asset paths,

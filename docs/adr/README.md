@@ -121,6 +121,7 @@ to the replacement.
 | [107](107-navigation-query-consistency-and-snapshot-ownership.md) | Navigation Query Consistency and Snapshot Ownership | Proposed | 2026-09-02 |
 | [108](108-dynamic-overlay-carving-and-tile-rebuild-policy.md) | Dynamic Overlay, Carving and Tile-Rebuild Policy | Proposed | 2026-09-02 |
 | [109](109-avoidance-crowd-and-renderer-independent-budget.md) | Avoidance, Crowd and Renderer-Independent Budget | Proposed | 2026-09-02 |
+| [110](110-navigation-editor-surface-and-command-ownership.md) | Navigation Editor Surface and Command Ownership | Proposed | 2026-09-02 |
 
 ## Conventions
 
