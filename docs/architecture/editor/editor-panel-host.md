@@ -69,6 +69,7 @@ EditorLayer
     |                       +-- PerformanceTab
     |                       +-- RenderInspectorTab (registered, closed by default)
     |                       +-- NavigationTab (registered, closed by default)
+    |                       +-- GameplayAiTab (registered, closed by default)
     |
     +-- EditorModalHost          exclusive modal workflows above the workspace
 ```
@@ -843,6 +844,18 @@ Visible as the Workspace panel with the following tabs:
     lifetime or accesses provider/native state.
   - Provider/extension detail uses validated host-rendered schema under ADR-110
     and ADR-056, not arbitrary plugin ImGui.
+
+- **Gameplay AI tab**: selected-agent blackboard, active plan/node/task, perception,
+  EQS and budget inspection.
+  - Owner: `GameplayAiTab`, registered closed by default.
+  - Queries: bounded immutable `IGameplayAiInspectionQuery` pages carrying world,
+    agent, plan/schema and tick generations.
+  - Executes: document-open actions and separately authorized typed runtime-debug
+    commands through safe-point capabilities.
+  - Owns only presentation selection, filters and paging. Hide/close stops polling
+    and releases leases; it never cancels a task, query, simulation or PIE session.
+  - Provider detail uses ADR-111/ADR-056 host-rendered schema, never runtime/native
+    pointers or arbitrary plugin ImGui.
 
 - **MCP tab**: MCP command history and activity.
   - Owner: `McpTab`

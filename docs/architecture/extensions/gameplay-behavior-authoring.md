@@ -526,6 +526,14 @@ are not linked into packaged runtime modules.
 
 ## Editor Separation
 
+[ADR-111](../../adr/111-gameplay-ai-document-panel-and-runtime-debug-ownership.md)
+requires gameplay-AI blackboard, decision and EQS authoring to reuse the shared
+multi-document/graph command contracts. Live debug panels consume immutable
+Scene-generation snapshots and do not own behavior/task/node lifetime. Any runtime
+debug mutation is a permissioned typed safe-point command; provider extensions
+contribute inert metadata or host-rendered schema, not ImGui or mutable runtime
+objects.
+
 Game code may expose metadata used by generic editor property and scene tools.
 Editor-specific presentation extensions belong to the editor extension
 contract and are not linked into game runtime modules.

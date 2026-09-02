@@ -1243,6 +1243,13 @@ AI decision making is authored as dedicated graph assets that compile into flat,
 
 ### Graph Asset Model And UI Independence
 
+[ADR-111](../../adr/111-gameplay-ai-document-panel-and-runtime-debug-ownership.md)
+maps blackboard schemas, the three decision graph kinds and EQS templates to
+explicit asset-document routes. Decision/EQS graph tabs reuse the shared Horo
+`GraphViewSnapshot`/`GraphEditCommand` surface, while subsystem document
+controllers own semantic validation, history, save/conflict and compilation.
+Cooked plans and live Scene-owned instances never become editor document state.
+
 1. **Pure Semantic Graph Assets**:
    - Persisted graph identity is established by typed assets: `BehaviorTreeAsset` (`.horo_bt`), `StateMachineAsset` (`.horo_sm`), and `UtilityAiAsset` (`.horo_utility`).
    - Assets contain only semantic topology: stable `GraphId`, `NodeId`, `PinId`, `PropertyId`, schema versions, node type identifiers, property bindings, and blackboard key bindings.
@@ -1516,6 +1523,12 @@ surfaces use the shared design system and localization catalogs.
 - Perception visualization (sight cones, hearing radii, known stimuli)
 - AI debug panel (blackboard inspector, behavior tree state, active path)
 - NavMesh generation diagnostics (build time, coverage percentage)
+
+The closed-by-default `GameplayAiTab` reads bounded immutable, generation-scoped
+runtime snapshots. Hiding/closing it stops polling and releases leases only; it
+cannot cancel tasks, EQS work, simulation or PIE. Authorized developer mutations
+are typed, permissioned runtime commands committed at fixed-tick safe points, never
+direct widget writes. Provider UI remains inert metadata/host-rendered schema.
 
 ## Simulation Lifecycle And Fixed-Tick Phase Ordering
 

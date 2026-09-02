@@ -122,6 +122,7 @@ to the replacement.
 | [108](108-dynamic-overlay-carving-and-tile-rebuild-policy.md) | Dynamic Overlay, Carving and Tile-Rebuild Policy | Proposed | 2026-09-02 |
 | [109](109-avoidance-crowd-and-renderer-independent-budget.md) | Avoidance, Crowd and Renderer-Independent Budget | Proposed | 2026-09-02 |
 | [110](110-navigation-editor-surface-and-command-ownership.md) | Navigation Editor Surface and Command Ownership | Proposed | 2026-09-02 |
+| [111](111-gameplay-ai-document-panel-and-runtime-debug-ownership.md) | Gameplay AI Document, Panel and Runtime-Debug Ownership | Proposed | 2026-09-02 |
 
 ## Conventions
 
