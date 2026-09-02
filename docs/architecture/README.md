@@ -218,6 +218,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Runtime UI Accessibility Capability and Ownership](../adr/082-runtime-ui-accessibility-capability-and-ownership.md):
   semantic nodes, settings projection, native platform bridges, capability truth,
   editor validation, qualification evidence, lifecycle, and unsupported behavior.
+- [UI Template Identity, Schema and Expansion](../adr/083-ui-template-identity-schema-and-expansion.md):
+  template/local/instance identity, typed parameters and slots, insertion versus
+  linked instancing, deterministic expansion, explicit rebase, detach, and cook.
 - [Networking Architecture](./runtime/networking-architecture.md): optional
   handle-based transports, session/authentication runtime, bounded I/O, and
   remote security.

@@ -188,6 +188,13 @@ thread-affine; native actions return as revision-checked commands for a later
 VariableUpdate. Shutdown closes action/dispatch admission and retires semantic/
 native leases before Platform, Localization, Input or Configuration disappear.
 
+[ADR-083](../../adr/083-ui-template-identity-schema-and-expansion.md) keeps template
+insert/rebase/detach in authoring document transactions. UI cook resolves accepted
+template revisions and flattens linked instances into ordinary cooked elements;
+packaged runtime activation therefore follows ADR-073 without source-template or
+live-propagation phases. Preview replacement prepares a complete candidate and
+retains last-good UI on expansion/dependency failure.
+
 ## Time Model
 
 The host tracks:

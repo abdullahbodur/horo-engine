@@ -560,8 +560,28 @@ and schema projections, not live runtime pointers or editor widgets.
 
 ## Templates And Presets
 
-Templates are authoring conveniences over core primitives. They do not add new
-runtime element kinds unless explicitly declared by a package.
+[ADR-083](../../adr/083-ui-template-identity-schema-and-expansion.md) makes
+templates first-class Assets-backed authoring fragments over core/registered UI
+elements. Stable template-local element, parameter, slot and document-instance IDs
+are distinct from runtime handles and display/path/index values. Templates do not
+add runtime element kinds or execute callbacks.
+
+Parameters target exact typed registered properties; named slots admit bounded
+typed document-owned child fragments. Arbitrary string property paths and deep
+linked-instance overrides are not supported. Nested templates form a finite
+acyclic dependency graph and expand deterministically under complete identity,
+schema, dependency and budget validation.
+
+Insert expands into fresh ordinary document-owned elements and retains no update
+relationship. Linked instance serializes the asset, accepted semantic revision,
+public arguments and slot content while its subtree remains a derived projection.
+Template updates mark UpdateAvailable and require an explicit previewed atomic
+rebase; they never patch documents or running UI on source save.
+
+Detach materializes fresh persisted element IDs and removes the link. Cook resolves
+exact accepted/locked dependencies and flattens linked instances into ordinary
+`CookedUiDocument` elements, so packaged Runtime UI has no source-template,
+propagation or detach authority.
 
 Core templates may include:
 
