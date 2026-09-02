@@ -260,6 +260,9 @@ src/
     backends/
       recast_detour/    target-private Recast & Detour implementation
       null/             explicit capability absence, shared publication timing
+  terrain/
+    api/                backend-neutral terrain/foliage IDs, revisions, descriptors, commands and snapshots
+    runtime/            dataset/tile/cluster lifecycle, overlays, preparation, readiness and retirement
   render/
     api/                backend-neutral contracts and value types
     frontend/           render submission and resource coordination
@@ -314,6 +317,8 @@ HoroEngine::NavigationApi
 HoroEngine::NavigationRuntime
 HoroEngine::NavigationRecastDetour
 HoroEngine::NavigationNull
+HoroEngine::TerrainApi
+HoroEngine::TerrainRuntime
 HoroEngine::RenderApi
 HoroEngine::RenderFrontend
 HoroEngine::RenderModuleAbi
@@ -403,6 +408,16 @@ leased resources and consumes committed revisions. Background jobs publish via
 and implementation gates are defined by
 [ADR-016](../../adr/016-navigation-target-ownership-and-dependency-boundary.md).
 
+[ADR-137](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
+makes Terrain/Foliage a runtime vertical slice rather than generic Foundation,
+RuntimeScene internals or renderer-backend code. `TerrainApi` owns Horo-only IDs,
+revisions, handles, descriptors and narrow command/query/snapshot contracts;
+`TerrainRuntime` owns live dataset/tile/cluster generations, overlays, preparation,
+readiness and retirement. RuntimeScene holds typed bindings, World Streaming owns
+aggregate cell admission/budgets, and Render/Physics/Navigation own their realized
+resources. Hosts compose narrow integration ports without reverse dependencies or
+native handles in the Terrain API.
+
 [ADR-054](../../adr/054-extension-and-package-authority-boundary.md) keeps
 extension package composition in the application boundary. Package resolution,
 verified install records, trust and durable enablement are application/package
@@ -438,10 +453,14 @@ assets / scene-model / render-api / audio-api /
 network-api / navigation-api / gameplay-api /
 extension-api ------------------------------------------> foundation
 
-physics / audio-runtime / network-runtime /
-navigation-runtime / render-frontend / pipeline --------> neutral APIs and models
+terrain-api --------------------------------------------> assets + foundation
 
-runtime-scene -------------------------------------------> runtime + assets + foundation
+physics / audio-runtime / network-runtime /
+navigation-runtime / terrain-runtime /
+render-frontend / pipeline ------------------------------> neutral APIs and models
+
+runtime-scene -------------------------------------------> runtime + assets + terrain-api
+                                                          + foundation
 
 audio-platform / audio-null /
 network-transport-null / network-transport-enet /
@@ -461,7 +480,7 @@ apps ---------------------------------------------------> runtime + adapters + p
 
 Required rules:
 
-- Foundation does not depend on platform, scene, renderer, editor, MCP, or UI.
+- Foundation does not depend on platform, scene, terrain, renderer, editor, MCP, or UI.
 - The foundation logging facade and structured record model do not depend on
   GUI, editor, transport, or a concrete sink backend.
 - Foundation metric descriptors, aggregation, and profiler instrumentation do

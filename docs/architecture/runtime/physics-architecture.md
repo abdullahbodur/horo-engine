@@ -139,6 +139,14 @@ work and final generation/budget validation succeed. Replacement failure destroy
 only the candidate and leaves the prior scene/world/query state unchanged. The
 first Physics tick occurs after the complete bundle is authoritative.
 
+[ADR-137](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
+keeps terrain/foliage collision on this ownership path. Terrain supplies immutable
+cooked shape-install descriptors tagged with exact dataset/tile/content generations;
+Physics prepares and owns bodies, native shapes, thread affinity and retirement.
+Terrain observes typed readiness/leases only and cannot mutate an active body or claim
+collision ready from visual residency. Replacement publishes through the aggregate
+scene/cell barrier and retains old Physics resources until Physics acknowledges release.
+
 ## Character Query Boundary
 
 [ADR-089](../../adr/089-character-controller-ownership-implementation-and-update-order.md)
@@ -389,6 +397,8 @@ Required tests cover:
 - core collider shape primitives resolve correctly from the primitive catalog
 - origin shift position translation without velocity or momentum alterations
 - sleeping island preservation across origin rebasing transactions
+- terrain/foliage collision descriptor generation, aggregate activation, stale
+  replacement rejection and Physics-owned retirement
 
 ## Related Documents
 
@@ -403,3 +413,4 @@ Required tests cover:
 - [Built-In Scene Primitives](./built-in-scene-primitives.md)
 - [Ownership And Resource Lifetime](../foundation/ownership-and-resource-lifetime.md)
 - [Observability Metrics And Profiling](../observability/observability-performance.md)
+- [ADR-137: Terrain and Foliage Ownership, Data, Tier and Lifecycle](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
