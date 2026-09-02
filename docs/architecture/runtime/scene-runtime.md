@@ -180,6 +180,15 @@ leases, Physics world and the private generation-scoped binding table publish as
 single no-fail bundle. Any earlier failure/cancellation destroys only candidate
 state, consumes no public identities and preserves the prior active scene/world.
 
+[ADR-144](../../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md)
+uses the same aggregate seam for destruction. Scene data carries only stable
+destructible/fracture-asset/policy binding intent. The scene-scoped Destruction owner
+commits canonical health, semantic phase and chunk/support membership; Physics and
+Render prepare pre-cooked chunk representations privately. RuntimeScene exposes the
+new semantic revision, entity/component set, intact/chunk visibility and required
+bodies only through one complete activation root. Core 1.0 never generates missing
+mesh topology or collision during scene activation.
+
 ## Navigation Authoring And Runtime Boundary
 
 [ADR-105](../../adr/105-navigation-asset-and-scene-ownership-boundary.md)
@@ -582,6 +591,8 @@ Required tests cover:
 - nested reference cancellation and cycle detection
 - scene unload with jobs, physics, and render leases
 - binary format corruption and version behavior
+- destruction binding conversion and aggregate semantic/entity/render/Physics chunk
+  publication with no runtime geometry fallback
 
 ## Related Documents
 
@@ -594,5 +605,6 @@ Required tests cover:
 - [Rendering Architecture](./rendering-architecture.md)
 - [Editor Document Model](../editor/editor-document-model.md)
 - [Save Game And Persistence](./save-game-and-persistence.md)
+- [Destruction And Fracture](./destruction-and-fracture-architecture.md)
 - [ADR-114](../../adr/114-canonical-runtime-world-persistence-boundary.md): canonical
   state classification, Scene base/override composition and adapter ownership.

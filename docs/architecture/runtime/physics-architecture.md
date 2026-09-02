@@ -158,6 +158,15 @@ A stale snapshot/receipt or required Physics failure rolls back the candidate, n
 old collision world. Physics alone acknowledges retirement after steps, queries and shape/
 body readers drain.
 
+[ADR-144](../../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md)
+keeps fracture semantics outside Physics. Contacts are bounded tick/generation evidence;
+they cannot mutate health, chunk membership or Scene structure from a solver callback.
+Destruction consumes eligible evidence after the step and may stage a later transition.
+Physics prepares only the exact pre-cooked convex chunk shapes/bodies named by that
+transition, publishes them privately at its safe point and returns typed readiness to
+the aggregate Scene commit. Core 1.0 performs no runtime mesh cutting, convex
+decomposition, collision cook or fallback-shape invention.
+
 ## Character Query Boundary
 
 [ADR-089](../../adr/089-character-controller-ownership-implementation-and-update-order.md)
@@ -412,6 +421,9 @@ Required tests cover:
   replacement rejection and Physics-owned retirement
 - Terrain collision snapshot/receipt generations, adversarial owner-safe-point order,
   required/optional failure and no partial query visibility before aggregate commit
+- destruction contacts remain immutable post-step evidence, while pre-cooked chunk
+  bodies prepare/rollback/publish/retire through Physics safe points without runtime
+  geometry or collision cooking
 
 ## Related Documents
 
@@ -428,3 +440,4 @@ Required tests cover:
 - [Observability Metrics And Profiling](../observability/observability-performance.md)
 - [ADR-137: Terrain and Foliage Ownership, Data, Tier and Lifecycle](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
 - [ADR-141: Terrain/Foliage Cross-System Ownership and Readiness](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md)
+- [ADR-144: Destruction Ownership, Authority, State and Runtime Geometry Boundary](../../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md)
