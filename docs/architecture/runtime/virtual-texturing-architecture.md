@@ -140,6 +140,25 @@ variants. They serialize no descriptor index, physical coordinate or native hand
 Shader variants are produced offline under ADR-035; a page miss may emit bounded
 feedback and use a declared fallback, but cannot compile, allocate or mutate mappings.
 
+## Producers, Packaging And Servers
+
+[ADR-169: VTX Producer, Terrain, World Streaming, Packaging and Server Ownership](../../adr/169-vtx-producer-terrain-world-streaming-packaging-and-server-ownership.md)
+defines producer and product integration. Generic texture/material and Terrain adapters
+capture exact immutable source/dependency generations and return detached canonical page
+inputs or bounded runtime hints. They never push mutable pages, paths or live domain
+objects into VTX. Terrain remains canonical Terrain authority; VTX pages are derived
+visual artifacts.
+
+World Streaming requests VTX readiness inside its cell reservation and alone commits or
+evicts the aggregate cell. Release walks typed published dependencies to include exact
+VTX manifests/packs, Material/shader variants and every allowed fallback. It never scans
+cook caches or page directories.
+
+Dedicated/headless runtime products resolve VTX to `Unavailable` and exclude client-only
+page packs, GPU variants, feedback and residency. Listen servers include them only for
+the explicitly composed local graphical client scope. Cook/validation tools may use
+non-rendering VTX contracts without advertising server runtime support.
+
 ## Capability And Product Scope
 
 VTX uses feature-local tiers:

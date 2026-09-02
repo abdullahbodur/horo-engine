@@ -448,6 +448,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [VTX GPU Page Table, Physical Cache, Shader and Material Ownership](../adr/168-vtx-gpu-page-table-physical-cache-shader-and-material-ownership.md):
   logical mapping intent versus Renderer realization, Atlas/Sparse semantic parity,
   atomic frame bindings, material slots and offline sampling variants.
+- [VTX Producer, Terrain, World Streaming, Packaging and Server Ownership](../adr/169-vtx-producer-terrain-world-streaming-packaging-and-server-ownership.md):
+  immutable producer seams, Terrain/source non-transfer, cell readiness, fallback
+  reachability and dedicated/headless exclusion.
 - [Destruction And Fracture Architecture](./runtime/destruction-and-fracture-architecture.md):
   fracture assets, chunk physics, debris, authority, and network reconstruction.
 - [Destruction Ownership, Authority, State and Runtime Geometry Boundary](../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md):

@@ -352,8 +352,13 @@ according to the game product policy.
 
 ## Asset Packaging
 
-Release assets are addressed by stable logical asset identifiers and packaged
-into `assets.horo`.
+Release assets are addressed by stable logical asset identifiers and packaged into
+`assets.horo` according to typed dependency reachability. Under
+[ADR-169](../../adr/169-vtx-producer-terrain-world-streaming-packaging-and-server-ownership.md),
+VTX-enabled client products include the exact manifest/page-pack, Material/shader and
+declared fallback closure. Dedicated/headless products exclude client-only VTX GPU
+artifacts by default; listen-server inclusion belongs only to its local graphical
+client scope. Cook-cache directory contents are never package authority.
 
 The archive provides:
 
