@@ -362,6 +362,15 @@ cell loader. Standalone navigation without World Streaming keeps its existing ho
 asset-lifetime adapter. This introduces no concrete WorldStreaming dependency into
 NavigationRuntime. The two ADRs describe the same authority boundary.
 
+[ADR-105](../../adr/105-navigation-asset-and-scene-ownership-boundary.md) makes each
+cell NavigationMesh block a packaging/residency projection of a published grounded
+NavMesh cook, not an independently authored asset. It retains the source definition
+AssetId, bake-scope/profile/tile identity, exact input provenance and artifact
+digest. Generated cell tiles receive no new sidecars or authoring AssetIds, and
+streaming/runtime state never writes back to the Scene, definition or cooked base.
+A missing required block prevents cell activation; temporary nonresidency may only
+produce the existing bounded residency request plus typed partial/no-data outcome.
+
 ## Runtime Save And Dormant Cell State
 
 [Runtime persistence](./save-game-and-persistence.md) captures a coherent revision of

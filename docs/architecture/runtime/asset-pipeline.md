@@ -772,6 +772,39 @@ leases. It cannot invoke import/cook work or substitute a fallback shape. The Sh
 domain does not create a parallel asset ID, scheduler, cache, package lock or
 publication authority.
 
+### Navigation Domain Capture And Cook Boundary
+
+[ADR-105](../../adr/105-navigation-asset-and-scene-ownership-boundary.md)
+gives Assets the tracked `NavigationDefinition` identity/sidecar, immutable input
+storage, dependency-aware scheduling/cache keys, staging, atomic generation
+publication, packaging and runtime byte delivery. The Navigation domain owns typed
+grounded profiles, area/link/source semantics, Scene contribution capture,
+canonicalization, NavMesh build rules, neutral payload validation and provider-
+private conversion.
+
+The application bake operation captures one bounded immutable
+`NavigationBakeInputSnapshot` from exact migrated project/Scene revisions, the
+definition AssetId/source digest, stable contributor IDs and accepted canonical
+geometry-source digests. A host adapter may project an ADR-085 normalized Physics
+source model without exposing a runtime world or solver-native shape. The snapshot
+is ephemeral derived state: it is neither registered as an asset nor edited,
+migrated, packaged or loaded by runtime. Cookers receive it through host-owned
+bounded views and cannot retain live Scene, registry, ECS or asset-record pointers.
+
+Cook output is an immutable `GroundedNavMeshArtifact`/neutral `NavMeshData` keyed by
+the full source/dependency/settings/schema/coordinate/cooker/provider fingerprint.
+Generated scope/profile/tile partitions retain definition, grounded-profile and
+stable contributor provenance but receive no authoring AssetIds or sidecars.
+Provider-native sections are optional fingerprinted derived data. Only Assets may
+publish the complete candidate generation; Navigation creates no parallel cache,
+output tree, current-generation pointer or package authority.
+
+Runtime accepts only validated published artifacts and immutable leases. Missing,
+stale, corrupt or unsupported required data fails Scene/cell preparation. Runtime
+cannot parse source, invoke bake, migrate data, choose an inactive generation or
+substitute straight-line navigation. Dynamic carved topology remains transient
+runtime state and cannot be published as a new cooked base.
+
 ### Prefab Domain Resolution And Cook Boundary
 
 [ADR-095](../../adr/095-prefab-cook-boundary-and-artifact-model.md) gives Assets

@@ -305,7 +305,8 @@ NavMesh is generated from scene collision geometry:
 
 - Static mesh colliders are voxelized and used to build a navigation mesh
 - NavMesh generation runs as an offline asset cook step or background tooling job
-- Generated NavMesh is stored as an immutable cooked `NavMeshData` asset referenced by AssetId
+- Generated NavMesh is stored as immutable cooked `NavMeshData` under the source
+  definition AssetId and its typed scope/profile partitions
 
 ```cpp
 struct NavMeshBuildSettings {
@@ -325,13 +326,32 @@ future volumetric provider/artifact; they are not ordinary grounded profiles.
 
 ### NavMesh Asset And Cook Contract
 
-`NavMeshData` is the immutable cooked payload/view. An authoring NavMesh definition contains
-build settings, agent profiles, source geometry references, areas/off-mesh links, and a stable
-Asset Registry `AssetId` assigned in its sidecar. Moving/renaming source preserves that ID.
-The host's Asset Pipeline adapter registers the canonical `core.navmesh` type and its cooker,
-writes immutable artifacts to `CookCatalog`, and loads them through `IAssetProvider` /
-`AssetLoadService`. NavMeshData itself does not import the registry/provider implementation;
-the adapter associates AssetId/type with the neutral payload and pins its lifetime.
+[ADR-105](../../adr/105-navigation-asset-and-scene-ownership-boundary.md)
+separates four one-way representations: durable `NavigationDefinition` plus typed
+Scene navigation intent, an ephemeral immutable `NavigationBakeInputSnapshot`, a
+published `GroundedNavMeshArtifact` exposed as neutral `NavMeshData`, and a
+generation-scoped runtime `NavigationTopologySnapshot`. Generated polygons, tiles,
+provider sections, topology handles and carved results never become authored Scene
+truth or flow back into a definition.
+
+The `NavigationDefinition` uses the stable Asset Registry `AssetId` assigned in its
+sidecar and owns grounded profiles, build/tile policy, areas and bake-scope policy.
+Typed Scene components reference it and contribute explicit accepted collision
+sources, modifiers, grounded off-mesh links and dynamic-obstacle intent through
+stable Scene object/component/contribution IDs. Moving or renaming source preserves
+those identities. Render geometry is not implicit input; every geometry contribution
+names an exact validated source/collision artifact.
+
+Bake captures one bounded revision-consistent snapshot with exact project, Scene,
+definition, registry, package, geometry, profile, settings, coordinate, schema,
+cooker and provider provenance. The host's Asset Pipeline adapter registers the
+canonical navigation type and cooker, writes immutable artifacts to `CookCatalog`,
+and loads them through `IAssetProvider` / `AssetLoadService`. `NavMeshData` itself
+does not import the registry/provider implementation; the adapter associates the
+definition AssetId, scope/profile/tile role and neutral payload while pinning its
+lifetime. Generated scope/profile/tile partitions live inside the cook product
+rooted at the definition AssetId and do not receive new authoring AssetIds or
+sidecars.
 
 Source definitions/settings follow `HoroProjectVersion` migration. Cooked bytes carry an
 independent `navMeshFormatVersion` and the standard artifact envelope, including actual-byte
@@ -352,6 +372,15 @@ are private cooked sections decoded by that provider, never exposed as public ve
 The host chooses a compatible payload/provider pairing or returns `UnsupportedCookedVersion`.
 Cell packaging reuses the same cooked content through ADR-023's NavigationMesh payload; it
 must not create competing AssetIds or an independent residency/cook authority.
+
+Scene conversion resolves required definition/profile/scope references to exact
+published artifact identities and digests. Runtime validates and materializes a
+detached topology candidate; Scene or cell activation publishes it atomically.
+Missing/stale/corrupt required data blocks activation, while explicit optional use
+reports `NoNavigationData`. Runtime never opens source, bakes, migrates or selects an
+inactive prior generation. Dynamic carving derives a new runtime topology generation
+without mutating the published artifact; a persistent change edits authored intent
+and requires recook.
 
 ### NavMesh Data
 

@@ -314,6 +314,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Default Navigation Provider and Recast-Detour Adoption](../adr/104-default-navigation-provider-and-recast-detour-adoption.md):
   exact Recast/Detour pin, private module/build profile, threading/determinism,
   optional tile-cache/crowd capabilities and grounded-only scope.
+- [Navigation Asset and Scene Ownership Boundary](../adr/105-navigation-asset-and-scene-ownership-boundary.md):
+  authored definition/Scene intent, immutable bake capture, cooked artifact
+  provenance, runtime topology ownership, migration and missing-data policy.
 
 - [Cinematic Sequencer Architecture](./runtime/cinematic-sequencer-architecture.md):
   timeline, tracks, clock authority, typed property bindings, evaluation phase,
