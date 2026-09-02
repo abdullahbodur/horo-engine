@@ -84,6 +84,10 @@ Use these names deliberately:
   record own package identity, files and cross-package dependencies;
   `extension.json` is only a module/contribution descriptor. See
   [ADR-054](../../adr/054-extension-and-package-authority-boundary.md).
+- The descriptor is decoded and then cross-reference validated into the immutable,
+  backend- and GUI-neutral v1 model from
+  [ADR-055](../../adr/055-extension-manifest-v1-typed-model.md). Only that
+  validated value may enter package composition, trust planning or activation.
 - Extension packages may be backend-only, frontend-only, or hybrid. GUI support
   is optional presentation over host-approved backend capabilities; it is not
   the definition of an extension.
@@ -162,10 +166,13 @@ path tricks do not bypass containment checks.
 
 ## Module Descriptor Schema
 
-`extension.json` separates one module's ABI/entry variants, contributions and
-requested permissions. Package identity, dependencies, sources, trust and
-enablement remain in the package system. Every path in the descriptor is relative
-to the verified package root, not to the descriptor directory:
+`extension.json` separates one module's ABI/entry variants, explicit roles,
+contributions, service/script surfaces and requested permissions. Package
+identity, dependencies, sources, trust and enablement remain in the package
+system. The JSON below is a readable projection of the typed v1 model; consumers
+do not retain a JSON DOM or reinterpret its strings after validation. Every path
+in the descriptor is relative to the verified package root, not to the descriptor
+directory:
 
 ```json
 {
@@ -177,7 +184,8 @@ to the verified package root, not to the descriptor directory:
   "module": {
     "id": "com.vendor.fbx-importer.native",
     "version": "2.0.0",
-    "kind": "native",
+    "kind": "native-c-abi",
+    "roles": ["backend-capability", "editor-presentation"],
     "abi": "horo-extension-1",
     "entries": [
       {
@@ -231,6 +239,9 @@ Validation rules:
 
 - Package IDs come only from the verified package install record. Module and
   contribution IDs are globally canonical and stable.
+- Package, module, contribution, permission, setting, event, error, service
+  export and script API identities are distinct bounded types; textual equality
+  does not make their domains interchangeable.
 - An optional `ownerPackage` binding must exactly match that install record.
 - Module IDs belong to exactly one package.
 - Contribution IDs are unique across all active packages and built-in
@@ -239,8 +250,21 @@ Validation rules:
   are declared only in `horo-package.toml` and the resolved package graph.
 - Descriptor-requested permissions must be a subset of the package contribution
   capability envelope and approved by trust policy before load.
-- Unknown manifest fields are preserved only in documented extension namespaces;
-  unknown required fields reject the package.
+- Module roles are non-empty and explicit. GUI, backend, script-provider and
+  runtime contributions cannot grant their matching role by inference.
+- Contribution payloads are closed typed variants selected by a registered
+  extension-point schema ID/version. Arbitrary property maps cannot enter a live
+  registry.
+- Settings, events, errors, service exports and script APIs are declared as typed
+  records and every reference resolves within the validated package composition.
+- A script API adds its permissions to those of its referenced service export;
+  validation, trust approval and invocation enforce the complete set union.
+- Unknown fields reject schema v1 except inside its bounded extension envelope;
+  unknown required extensions reject the descriptor and unknown optional
+  extensions remain inert canonical data.
+- Decoded or partially validated descriptors cannot construct an activation
+  candidate. Complete rules and the migration contract are defined by
+  [ADR-055](../../adr/055-extension-manifest-v1-typed-model.md).
 
 ## Extension Point Catalog
 
@@ -339,16 +363,17 @@ and allocator ownership do not cross the binary ABI. The C ABI adapter validates
 and copies module-owned descriptor data into the host-owned typed registry before
 the module can participate in import operations.
 
-## Backend, Frontend, And Hybrid Packages
+## GUI, Backend, Script-Consumable, And Mixed Modules
 
-An add-on is not synonymous with an editor panel. Packages fall into three
-normal shapes:
+An add-on is not synonymous with an editor panel. Each module declares the exact
+roles needed by its shape; packages may compose multiple modules:
 
 | Shape | Examples | Required boundary |
 |---|---|---|
-| Backend-only | asset importer, cooker, project validator, network transport, build pipeline step, toolchain provider | Declares backend contribution, capability, permissions, errors, settings, observability, and optional process-event imports. |
-| Frontend-only | diagnostics tab over existing stores, command-palette shortcut, Settings page for built-in capability | Declares editor contribution and consumes existing approved capabilities. |
-| Hybrid | shader tools with compile service plus inspector tab, network transport plus connection diagnostics panel, importer plus import-settings page | Declares backend contribution and separate GUI/MCP/CLI-facing contributions over the backend capability. |
+| GUI-only | diagnostics tab over existing stores, command-palette shortcut, Settings page for built-in capability | Declares `EditorPresentation`, contributes presentation only and consumes existing approved capabilities. |
+| Backend-only | asset importer, cooker, project validator, network transport, build pipeline step, toolchain provider | Declares `BackendCapability` and optional `HeadlessTooling`, plus typed capabilities, permissions, errors, settings and observability. |
+| Script-consumable | backend service with an approved Lua 5.4 binding | Declares `BackendCapability` and `ScriptProvider`; the script API references a compatible typed service export. |
+| Mixed-role | shader tools with compile service plus inspector tab, network transport plus connection diagnostics panel, importer plus import-settings page | Declares the explicit union of its real roles and separate GUI/CLI/MCP adapters over the backend authority. |
 
 The backend side is authoritative. It owns state transitions, jobs, cache keys,
 generated outputs, and operation results through host APIs. The frontend side is

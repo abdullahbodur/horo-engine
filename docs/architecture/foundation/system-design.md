@@ -403,6 +403,14 @@ loads the declared module through `ExtensionApi`, and owns only live module and
 registry leases. It cannot scan raw directories, resolve dependencies, grant
 trust or mutate package lifecycle state.
 
+[ADR-055](../../adr/055-extension-manifest-v1-typed-model.md) makes the descriptor
+boundary a public Horo-owned typed model. Syntax decoding is implementation-private;
+package/install-record validation produces an immutable backend- and GUI-neutral
+value with distinct module, contribution, permission, setting, event, error,
+service-export and script-API identities. Only a fully validated package
+composition can become an activation candidate, so no consumer may repair or
+reinterpret manifest strings during activation.
+
 ## Dependency Direction
 
 Arrows point from the dependent target to the target that defines the contract:
