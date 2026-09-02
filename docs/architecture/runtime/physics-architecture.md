@@ -147,6 +147,17 @@ Terrain observes typed readiness/leases only and cannot mutate an active body or
 collision ready from visual residency. Replacement publishes through the aggregate
 scene/cell barrier and retains old Physics resources until Physics acknowledges release.
 
+[ADR-141](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md)
+defines the receipt protocol for that barrier. Terrain lends a bounded immutable neutral
+collision snapshot with exact Terrain/content/mutation/cell/request/origin evidence.
+Physics validates and prepares its own shapes, bodies, filters and material mappings, then
+returns generation-tagged Ready/Prepared/Published/Retired receipts. Prepared publication
+executes at the Physics pre-step safe point into activation-scoped routing; ordinary
+queries cannot discover it until RuntimeScene/World Streaming commits the aggregate root.
+A stale snapshot/receipt or required Physics failure rolls back the candidate, never the
+old collision world. Physics alone acknowledges retirement after steps, queries and shape/
+body readers drain.
+
 ## Character Query Boundary
 
 [ADR-089](../../adr/089-character-controller-ownership-implementation-and-update-order.md)
@@ -399,6 +410,8 @@ Required tests cover:
 - sleeping island preservation across origin rebasing transactions
 - terrain/foliage collision descriptor generation, aggregate activation, stale
   replacement rejection and Physics-owned retirement
+- Terrain collision snapshot/receipt generations, adversarial owner-safe-point order,
+  required/optional failure and no partial query visibility before aggregate commit
 
 ## Related Documents
 
@@ -414,3 +427,4 @@ Required tests cover:
 - [Ownership And Resource Lifetime](../foundation/ownership-and-resource-lifetime.md)
 - [Observability Metrics And Profiling](../observability/observability-performance.md)
 - [ADR-137: Terrain and Foliage Ownership, Data, Tier and Lifecycle](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
+- [ADR-141: Terrain/Foliage Cross-System Ownership and Readiness](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md)

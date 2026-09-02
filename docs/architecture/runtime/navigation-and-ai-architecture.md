@@ -280,6 +280,17 @@ forced-eviction commands (ADR-018 / WST-010.8) enter the same world state machin
 scenes without World Streaming use a host asset-lifetime adapter with the same snapshot and
 lease rules; neither case adds a concrete WorldStreaming dependency to NavigationRuntime.
 
+[ADR-141](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md)
+applies the aggregate receipt protocol to Terrain/Foliage navigation. Terrain lends a
+bounded immutable neutral grounded-surface/hole/obstacle/link snapshot tagged with exact
+Terrain/content/mutation/cell/request/origin evidence. Navigation owns artifact/provider
+validation, candidate topology, query-root publication and native/provider-affine
+retirement. Its Ready/Prepared/Published receipt names the resulting topology revision;
+ordinary queries cannot reach the activation-scoped candidate until the aggregate Scene/
+cell root commits. Missing/stale receipts do not imply coverage, and a retained old tile
+cannot satisfy a new generation. Retired is acknowledged only after query/tile leases and
+provider resources release.
+
 Global locations use `WorldCoordinate64`; provider-local coordinates use SceneMath conversions
 with a captured origin epoch. ADR-026 rebases translate dynamic paths/obstacles consistently.
 A late result from an old origin is converted or rejected before application; rebasing alone
@@ -1793,6 +1804,7 @@ These are required downstream runtime/CI tests, not tests implemented by this AD
 - [Save Game And Persistence](./save-game-and-persistence.md): durable perception-memory capture and staged restore
 - [ADR-114: Canonical Runtime World Persistence Boundary](../../adr/114-canonical-runtime-world-persistence-boundary.md)
 - [ADR-137: Terrain and Foliage Ownership, Data, Tier and Lifecycle](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
+- [ADR-141: Terrain/Foliage Cross-System Ownership and Readiness](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md)
 - [Navigation Bake UI HTML Reference](./navigation-bake.html): non-normative
   static UI reference
 - [Debug Console And Overlays](./debug-console-and-overlays.md): AI debug visualization

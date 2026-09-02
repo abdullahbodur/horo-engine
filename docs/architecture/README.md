@@ -311,6 +311,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Foliage Placement, Baked/Dynamic State and Eviction Ownership](../adr/140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md):
   deterministic baked placement, ephemeral runtime overlays, durable canonical deltas,
   capacity policy, save handoff and no-loss World Streaming eviction.
+- [Terrain/Foliage Cross-System Ownership and Readiness](../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md):
+  immutable producer snapshots, typed Render/Physics/Navigation receipts, owner-safe-
+  point staging, aggregate activation, rollback and reverse-dependency retirement.
 - [World Streaming Architecture](./runtime/world-streaming-architecture.md):
   streaming cells, volumes, priority, budgets, server authority, and editor
   world-composition tools.
