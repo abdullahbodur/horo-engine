@@ -351,6 +351,35 @@ struct PrefabDocument {
 
 The Asset Pipeline cooks source `.prefab` files into immutable `CookedPrefab` artifacts.
 
+### Cook Boundary And Artifact Roles
+
+[ADR-095](../../adr/095-prefab-cook-boundary-and-artifact-model.md) separates four
+representations. Project-owned `PrefabDocument` source is migrated before cook and
+is not a runtime artifact. ADR-094's immutable `EffectivePrefabCandidateV1` is the
+only nested/variant expansion result consumed by viewport, Scene Cook and Prefab
+Cook; it is never edited, registered, packaged or loaded by runtime.
+
+Scene Cook embeds static placements as ordinary entity/component definitions in
+the cooked scene's `RuntimeSceneDefinition`. Prefab Cook emits a separate flat
+`CookedPrefab` only for declared dynamic-spawn roots. Both invoke the same Prefab
+resolver; neither generic Assets nor Scene Runtime re-expands the graph. AssetCook
+owns bounded scheduling, cache validation, staging, deterministic manifests and
+atomic generation publication, while the Prefab/Scene domains own semantic
+resolution and their typed output schemas.
+
+The dependency-aware key covers exact source and transitive revisions/digests,
+ProjectVersion, package/schema/resolver revisions, semantic edges/placement IDs,
+override digests, contribution/output/envelope versions, target/profile and—per
+role—scene placement/conversion or dynamic-spawn format policy. Candidate failure,
+cancellation, corruption, stale completion or publication failure leaves the prior
+`current.json` and provider generation active.
+
+Standard releases ship no raw `.prefab`, sidecar, effective candidate or editor
+provenance. Static-only prefab content appears only in the cooked scene. A
+`CookedPrefab` and its resource closure ship only when reachable from a declared
+dynamic-spawn root. Developer source profiles may include sources explicitly, but
+they never become runtime parsing authority.
+
 Source `.prefab` files share `ProjectVersion` and its migration pipeline. Cooked blobs do **not**.
 The header carries a distinct `cookedFormatVersion`. Runtime never migrates cooked bytes.
 Prefab cooking preserves the Asset Pipeline's complete canonical versioned cache-key inputs:
@@ -366,6 +395,12 @@ Source migrations, dependency/target/settings changes, and cooker/format changes
 output. `UnsupportedCookedVersion` fails the runtime operation; only authoring/build tools
 recook and republish a compatible catalog/artifact. Runtime neither migrates nor recooks.
 `CorruptedPayload` is a separate envelope, magic, digest, or structural validation failure.
+
+Development hot reload activates a fully validated replacement generation. Later
+spawns use its `CookedPrefab`; already spawned entities remain unchanged. Static
+source changes produce a new cooked scene candidate and require the normal Scene
+Runtime activation transaction. Asset reload never patches scene-owned entities or
+falls back to source parsing.
 
 ### Binary Layout
 
