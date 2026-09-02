@@ -4,6 +4,7 @@
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <type_traits>
@@ -41,6 +42,10 @@ namespace {
         int executeCount{0};
         int presentCount{0};
         int resizeCount{0};
+        int createBufferCount{0};
+        int createMeshCount{0};
+        int destroyBufferCount{0};
+        int destroyMeshCount{0};
         bool failPresentation{false};
         bool throwDuringInitialize{false};
         bool throwDuringResize{false};
@@ -50,6 +55,9 @@ namespace {
         FrameThrowPoint frameThrowPoint{FrameThrowPoint::None};
         bool frameActive{false};
         FrameToken activeFrame{};
+        std::uint64_t nextResourceInstance{1};
+        bool failResourceCreation{false};
+        bool throwDuringResourceCreation{false};
     };
 
     BackendLifecycleState lifecycleState;
@@ -67,6 +75,44 @@ namespace {
 
         [[nodiscard]] const RenderBackendCapabilities &Capabilities() const noexcept override {
             return capabilities_;
+        }
+
+        Result<std::uint64_t> CreateBuffer(const RenderBufferDescriptor &, std::span<const std::byte>) override {
+            ++lifecycleState.createBufferCount;
+            if (lifecycleState.throwDuringResourceCreation) {
+                throw std::runtime_error{"Injected resource creation exception."};
+            }
+            if (lifecycleState.failResourceCreation) {
+                return Result<std::uint64_t>::Failure({ErrorCode{"render.test.resource_failed"},
+                                                       ErrorDomainId{"render.test"},
+                                                       ErrorSeverity::Error,
+                                                       "Injected resource creation failure.",
+                                                       {}});
+            }
+            return Result<std::uint64_t>::Success(lifecycleState.nextResourceInstance++);
+        }
+
+        Result<std::uint64_t> CreateMesh(const RenderMeshDescriptor &, std::uint64_t, std::uint64_t) override {
+            ++lifecycleState.createMeshCount;
+            if (lifecycleState.throwDuringResourceCreation) {
+                throw std::runtime_error{"Injected resource creation exception."};
+            }
+            if (lifecycleState.failResourceCreation) {
+                return Result<std::uint64_t>::Failure({ErrorCode{"render.test.resource_failed"},
+                                                       ErrorDomainId{"render.test"},
+                                                       ErrorSeverity::Error,
+                                                       "Injected resource creation failure.",
+                                                       {}});
+            }
+            return Result<std::uint64_t>::Success(lifecycleState.nextResourceInstance++);
+        }
+
+        void DestroyBuffer(std::uint64_t) noexcept override {
+            ++lifecycleState.destroyBufferCount;
+        }
+
+        void DestroyMesh(std::uint64_t) noexcept override {
+            ++lifecycleState.destroyMeshCount;
         }
 
         Result<FrameToken> BeginFrame(const FrameDescriptor &descriptor) override {
@@ -163,7 +209,11 @@ namespace {
         }
 
     private:
-        RenderBackendCapabilities capabilities_{.backend = RenderBackendId{"tracking"}};
+        RenderBackendCapabilities capabilities_{
+            .backend = RenderBackendId{"tracking"},
+            .supportsBufferResources = true,
+            .supportsMeshResources = true,
+        };
         bool initialized_{false};
     };
 
@@ -182,6 +232,7 @@ namespace {
     static_assert(!std::is_copy_assignable_v<RenderFrameScope>);
     static_assert(std::is_nothrow_move_constructible_v<RenderFrameScope>);
     static_assert(std::is_nothrow_move_assignable_v<RenderFrameScope>);
+    static_assert(!std::is_same_v<RenderMeshHandle, RenderMeshSourceHandle>);
 
     [[nodiscard]] std::unique_ptr<RenderFrontend> CreateTrackingFrontend() {
         RenderBackendRegistry registry;
@@ -196,6 +247,188 @@ namespace {
         auto created = RenderFrontend::Create(registry, RenderBackendId{"tracking"}, RenderBackendConfig{});
         Check(created.HasValue());
         return std::move(created).Value();
+    }
+
+    [[nodiscard]] RenderMeshDescriptor MeshDescriptor(const RenderBufferHandle vertexBuffer, const RenderBufferHandle indexBuffer) {
+        return {.vertexBuffer = vertexBuffer,
+                .indexBuffer = indexBuffer,
+                .vertexStride = sizeof(float) * 3,
+                .vertexCount = 3,
+                .indexFormat = RenderIndexFormat::UInt32,
+                .indexCount = 3,
+                .topology = RenderPrimitiveTopology::Triangles,
+                .localBounds = {{0.0F, 0.0F, 0.0F}, {1.0F, 1.0F, 0.0F}}};
+    }
+
+    struct PendingTriangleBuffers {
+        ResourceCreation<RenderBufferHandle> vertex;
+        ResourceCreation<RenderBufferHandle> index;
+    };
+
+    [[nodiscard]] PendingTriangleBuffers QueueTriangleBuffers(RenderFrontend &frontend) {
+        const std::array<float, 9> vertices{};
+        const std::array<std::uint32_t, 3> indices{0, 1, 2};
+        auto vertex = frontend.CreateBuffer({.byteSize = sizeof(vertices),
+                                             .usage = RenderBufferUsage::Vertex,
+                                             .access = RenderBufferAccess::DeviceLocal},
+                                            std::as_bytes(std::span{vertices}));
+        auto index = frontend.CreateBuffer({.byteSize = sizeof(indices),
+                                            .usage = RenderBufferUsage::Index,
+                                            .access = RenderBufferAccess::DeviceLocal},
+                                           std::as_bytes(std::span{indices}));
+        Check(vertex.HasValue());
+        Check(index.HasValue());
+        return {.vertex = vertex.Value(), .index = index.Value()};
+    }
+
+    TEST_CASE("Frontend Publishes Bounded Buffer And Mesh Uploads", "[unit][runtime][renderer][resource]") {
+        lifecycleState = {};
+        std::unique_ptr<RenderFrontend> frontend = CreateTrackingFrontend();
+        const PendingTriangleBuffers buffers = QueueTriangleBuffers(*frontend);
+
+        Check(frontend->ResourceState(buffers.vertex.handle).Value() == RenderResourceState::Pending);
+        Check(frontend->ResourceOperationResult(buffers.vertex.operation).HasError());
+        auto earlyMesh = frontend->CreateMesh(MeshDescriptor(buffers.vertex.handle, buffers.index.handle));
+        Check(earlyMesh.HasError());
+        Check(earlyMesh.ErrorValue().code.Value() == "render.frontend.resource.dependency_not_ready");
+
+        const auto buffersProcessed = frontend->ProcessResourceRequests();
+        Check(buffersProcessed.HasValue());
+        Check(buffersProcessed.Value() == 2);
+        Check(lifecycleState.createBufferCount == 2);
+        Check(frontend->ResourceOperationResult(buffers.vertex.operation).HasValue());
+        Check(frontend->ResourceState(buffers.index.handle).Value() == RenderResourceState::Ready);
+
+        auto mesh = frontend->CreateMesh(MeshDescriptor(buffers.vertex.handle, buffers.index.handle));
+        Check(mesh.HasValue());
+        Check(frontend->ResourceState(mesh.Value().handle).Value() == RenderResourceState::Pending);
+        Check(frontend->ProcessResourceRequests().Value() == 1);
+        Check(lifecycleState.createMeshCount == 1);
+        Check(frontend->ResourceState(mesh.Value().handle).Value() == RenderResourceState::Ready);
+
+        Check(frontend->ReleaseBuffer(buffers.vertex.handle).HasValue());
+        Check(frontend->ReleaseBuffer(buffers.index.handle).HasValue());
+        Check(lifecycleState.destroyBufferCount == 0);
+        Check(frontend->ReleaseMesh(mesh.Value().handle).HasValue());
+        Check(lifecycleState.destroyMeshCount == 1);
+        Check(lifecycleState.destroyBufferCount == 2);
+    }
+
+    TEST_CASE("Frontend Mesh Replacement Preserves The Old Generation On Failure", "[unit][runtime][renderer][resource]") {
+        lifecycleState = {};
+        std::unique_ptr<RenderFrontend> frontend = CreateTrackingFrontend();
+        const PendingTriangleBuffers buffers = QueueTriangleBuffers(*frontend);
+        Check(frontend->ProcessResourceRequests().Value() == 2);
+        auto original = frontend->CreateMesh(MeshDescriptor(buffers.vertex.handle, buffers.index.handle));
+        Check(original.HasValue());
+        Check(frontend->ProcessResourceRequests().Value() == 1);
+
+        lifecycleState.failResourceCreation = true;
+        auto failedReplacement =
+            frontend->ReplaceMesh(original.Value().handle, MeshDescriptor(buffers.vertex.handle, buffers.index.handle));
+        Check(failedReplacement.HasValue());
+        Check(frontend->ProcessResourceRequests().Value() == 1);
+        Check(frontend->ResourceOperationResult(failedReplacement.Value().operation).HasError());
+        Check(frontend->ResourceOperationResult(failedReplacement.Value().operation).ErrorValue().code.Value() ==
+              "render.test.resource_failed");
+        Check(frontend->ResourceState(original.Value().handle).Value() == RenderResourceState::Ready);
+
+        lifecycleState.failResourceCreation = false;
+        auto replacement = frontend->ReplaceMesh(original.Value().handle, MeshDescriptor(buffers.vertex.handle, buffers.index.handle));
+        Check(replacement.HasValue());
+        Check(frontend->ProcessResourceRequests().Value() == 1);
+        Check(frontend->ResourceState(replacement.Value().handle).Value() == RenderResourceState::Ready);
+        const auto staleOriginal = frontend->ResourceState(original.Value().handle);
+        Check(staleOriginal.HasError());
+        Check(staleOriginal.ErrorValue().code.Value() == "render.frontend.resource.stale");
+        Check(lifecycleState.destroyMeshCount == 1);
+    }
+
+    TEST_CASE("Frontend Enforces Upload Byte And Drain Budgets", "[unit][runtime][renderer][resource]") {
+        lifecycleState = {};
+        RenderBackendRegistry registry;
+        Check(registry
+                  .Register(RenderBackendDescriptor{
+                      .id = RenderBackendId{"tracking"},
+                      .displayName = "Tracking",
+                      .provider = MakeTrackingBackendProvider(),
+                  })
+                  .HasValue());
+        Check(registry.Seal().HasValue());
+        auto invalid = RenderFrontend::Create(registry, RenderBackendId{"tracking"}, RenderBackendConfig{},
+                                              {.maximumPendingBytes = 8, .maximumBytesPerDrain = 16, .maximumRequestsPerDrain = 1});
+        Check(invalid.HasError());
+        Check(invalid.ErrorValue().code.Value() == "render.frontend.resource.invalid_upload_limits");
+
+        auto created = RenderFrontend::Create(registry, RenderBackendId{"tracking"}, RenderBackendConfig{},
+                                              {.maximumPendingBytes = 16, .maximumBytesPerDrain = 8, .maximumRequestsPerDrain = 4});
+        Check(created.HasValue());
+        std::unique_ptr<RenderFrontend> frontend = std::move(created).Value();
+        const std::array<std::byte, 8> bytes{};
+        auto first = frontend->CreateBuffer({.byteSize = bytes.size(),
+                                             .usage = RenderBufferUsage::Vertex,
+                                             .access = RenderBufferAccess::HostVisible},
+                                            bytes);
+        auto second =
+            frontend->CreateBuffer({.byteSize = bytes.size(), .usage = RenderBufferUsage::Index, .access = RenderBufferAccess::HostVisible},
+                                   bytes);
+        Check(first.HasValue());
+        Check(second.HasValue());
+        const auto queueFull = frontend->CreateBuffer({.byteSize = bytes.size(),
+                                                       .usage = RenderBufferUsage::Vertex,
+                                                       .access = RenderBufferAccess::HostVisible},
+                                                      bytes);
+        Check(queueFull.HasError());
+        Check(queueFull.ErrorValue().code.Value() == "render.frontend.resource.upload_capacity_exceeded");
+        Check(frontend->ProcessResourceRequests().Value() == 1);
+        Check(frontend->ResourceState(first.Value().handle).Value() == RenderResourceState::Ready);
+        Check(frontend->ResourceState(second.Value().handle).Value() == RenderResourceState::Pending);
+        Check(frontend->ProcessResourceRequests().Value() == 1);
+    }
+
+    TEST_CASE("Frontend Stores Backend Resource Exceptions As Operation Results", "[unit][runtime][renderer][resource]") {
+        lifecycleState = {};
+        std::unique_ptr<RenderFrontend> frontend = CreateTrackingFrontend();
+        const std::array<std::byte, 4> bytes{};
+        auto buffer = frontend->CreateBuffer({.byteSize = bytes.size(),
+                                              .usage = RenderBufferUsage::Vertex,
+                                              .access = RenderBufferAccess::DeviceLocal},
+                                             bytes);
+        Check(buffer.HasValue());
+        lifecycleState.throwDuringResourceCreation = true;
+        Check(frontend->ProcessResourceRequests().Value() == 1);
+        const Result<void> failed = frontend->ResourceOperationResult(buffer.Value().operation);
+        Check(failed.HasError());
+        Check(failed.ErrorValue().code.Value() == "render.frontend.resource.backend_exception");
+    }
+
+    TEST_CASE("Frontend Rejects Malformed Incompatible And Foreign Mesh Uploads", "[unit][runtime][renderer][resource]") {
+        lifecycleState = {};
+        std::unique_ptr<RenderFrontend> frontend = CreateTrackingFrontend();
+        const std::array<std::byte, 4> bytes{};
+        const auto malformed =
+            frontend->CreateBuffer({.byteSize = 0, .usage = RenderBufferUsage::Vertex, .access = RenderBufferAccess::DeviceLocal}, {});
+        Check(malformed.HasError());
+        Check(malformed.ErrorValue().code.Value() == "render.frontend.resource.invalid_buffer_descriptor");
+        const auto sizeMismatch =
+            frontend->CreateBuffer({.byteSize = 8, .usage = RenderBufferUsage::Vertex, .access = RenderBufferAccess::DeviceLocal}, bytes);
+        Check(sizeMismatch.HasError());
+        Check(sizeMismatch.ErrorValue().code.Value() == "render.frontend.resource.buffer_upload_size_mismatch");
+
+        const PendingTriangleBuffers buffers = QueueTriangleBuffers(*frontend);
+        Check(frontend->ProcessResourceRequests().Value() == 2);
+        RenderMeshDescriptor incompatible = MeshDescriptor(buffers.vertex.handle, buffers.index.handle);
+        incompatible.vertexCount = std::numeric_limits<std::uint32_t>::max();
+        const auto rejectedLayout = frontend->CreateMesh(incompatible);
+        Check(rejectedLayout.HasError());
+        Check(rejectedLayout.ErrorValue().code.Value() == "render.frontend.resource.invalid_mesh_descriptor");
+
+        std::unique_ptr<RenderFrontend> other = CreateTrackingFrontend();
+        const PendingTriangleBuffers foreign = QueueTriangleBuffers(*other);
+        Check(other->ProcessResourceRequests().Value() == 2);
+        const auto rejectedOwner = frontend->CreateMesh(MeshDescriptor(foreign.vertex.handle, buffers.index.handle));
+        Check(rejectedOwner.HasError());
+        Check(rejectedOwner.ErrorValue().code.Value() == "render.frontend.resource.wrong_owner");
     }
 
     TEST_CASE("Frontend Stages Execution And Presentation", "[unit][runtime][renderer]") {

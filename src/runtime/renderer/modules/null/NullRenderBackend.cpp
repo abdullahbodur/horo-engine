@@ -51,6 +51,40 @@ namespace Horo::Render {
                 return capabilities_;
             }
 
+            /** @copydoc IRenderBackend::CreateBuffer */
+            Result<std::uint64_t> CreateBuffer(const RenderBufferDescriptor &descriptor,
+                                               const std::span<const std::byte> initialData) override {
+                if (!initialized_) {
+                    return Result<std::uint64_t>::Failure(
+                        MakeBackendError(NullBackendErrors::NotInitialized, "Renderer backend is not initialized."));
+                }
+                if (!descriptor.IsValid() || initialData.size() != descriptor.byteSize) {
+                    return Result<std::uint64_t>::Failure(
+                        MakeBackendError(NullBackendErrors::InvalidConfig, "Null buffer realization request is invalid."));
+                }
+                return NextResourceInstance();
+            }
+
+            /** @copydoc IRenderBackend::CreateMesh */
+            Result<std::uint64_t> CreateMesh(const RenderMeshDescriptor &descriptor, const std::uint64_t vertexBuffer,
+                                             const std::uint64_t indexBuffer) override {
+                if (!initialized_) {
+                    return Result<std::uint64_t>::Failure(
+                        MakeBackendError(NullBackendErrors::NotInitialized, "Renderer backend is not initialized."));
+                }
+                if (!descriptor.IsValid() || vertexBuffer == 0 || indexBuffer == 0) {
+                    return Result<std::uint64_t>::Failure(
+                        MakeBackendError(NullBackendErrors::InvalidConfig, "Null mesh realization request is invalid."));
+                }
+                return NextResourceInstance();
+            }
+
+            /** @copydoc IRenderBackend::DestroyBuffer */
+            void DestroyBuffer(std::uint64_t) noexcept override {}
+
+            /** @copydoc IRenderBackend::DestroyMesh */
+            void DestroyMesh(std::uint64_t) noexcept override {}
+
             /** @copydoc IRenderBackend::BeginFrame */
             Result<FrameToken> BeginFrame(const FrameDescriptor &descriptor) override {
                 if (!initialized_) {
@@ -193,11 +227,24 @@ namespace Horo::Render {
             }
 
         private:
-            RenderBackendCapabilities capabilities_{.backend = RenderBackendId{"null"}};
+            [[nodiscard]] Result<std::uint64_t> NextResourceInstance() {
+                if (nextResourceInstance_ == std::numeric_limits<std::uint64_t>::max()) {
+                    return Result<std::uint64_t>::Failure(
+                        MakeBackendError(NullBackendErrors::ResourceInstanceExhausted, "Null resource instance space is exhausted."));
+                }
+                return Result<std::uint64_t>::Success(nextResourceInstance_++);
+            }
+
+            RenderBackendCapabilities capabilities_{
+                .backend = RenderBackendId{"null"},
+                .supportsBufferResources = true,
+                .supportsMeshResources = true,
+            };
             RenderBackendConfig config_{};
             FramebufferExtent extent_{};
             FrameToken activeFrame_{};
             std::uint64_t nextFrameToken_{1};
+            std::uint64_t nextResourceInstance_{1};
             bool initialized_{false};
             bool frameActive_{false};
         };
