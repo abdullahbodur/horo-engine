@@ -192,6 +192,13 @@ serials, paths/handles, extension strings, live XR IDs, project/scene/entity IDs
 pose/gaze/location/geometry are forbidden dimensions. Detailed correlation belongs only
 in bounded redacted events or an explicitly armed capture.
 
+VTX tooling follows
+[ADR-170](../../adr/170-vtx-settings-diagnostics-capture-and-qualification-ownership.md).
+VTX metrics use only registered low-cardinality tier/stage/result/host-role dimensions;
+page, texture, material, cell, camera/view and operation identities belong in bounded
+snapshots, sampled events or explicit captures. Null fixtures do not qualify native
+Atlas/Sparse correctness or performance.
+
 ### C++ Metrics API
 
 The Horo facade exposes typed handles resolved once during initialization:
