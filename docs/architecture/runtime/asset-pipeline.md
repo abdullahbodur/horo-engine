@@ -651,6 +651,13 @@ registers those contributions through the generic catalog. The Assets targets
 never depend on Audio targets, and Audio does not create a parallel scheduler,
 cache, output tree, publication record, or asset identity.
 
+[ADR-071](../../adr/071-procedural-audio-graph-ownership.md) applies the same
+authority split to `ProceduralAudioGraph` assets. AudioModel owns the typed graph
+schema and AudioCook emits an immutable `CompiledSoundGenerator`; AST retains the
+stable `AssetId`, dependencies, deterministic cache inputs, staging, publication,
+rollback and delivery. Editor layout/session state is excluded from the semantic
+cook fingerprint, and source graphs never execute directly at runtime.
+
 AST validates the contribution envelope and declared outputs, then publishes a
 complete generation atomically. AudioRuntime consumes immutable published bytes
 through the Assets provider API and validates the Audio-owned cooked header

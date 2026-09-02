@@ -659,6 +659,13 @@ shader, material, audio, or procedural semantics itself. Subsystem validators ow
 type checking, cycle rules, asset references, feature requirements, code/shader
 generation, and runtime compatibility.
 
+Procedural audio graph surfaces additionally follow
+[ADR-071](../../adr/071-procedural-audio-graph-ownership.md). The Editor owns the
+document controller, node placement, selection, undo/redo, localized presentation
+and preview controls; AudioModel owns schema/edit validation and AudioCook owns the
+compiled generator. Preview uses the ordinary AudioFrontend/voice/mixer path, and
+stale compile or diagnostic results are rejected by document revision.
+
 ## Viewport Panel
 
 The viewport panel owns rendering of the active scene camera or game camera in
