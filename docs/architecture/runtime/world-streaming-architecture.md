@@ -395,7 +395,9 @@ retired layers and query leases remain charged to the existing world ledger.
 
 [Runtime persistence](./save-game-and-persistence.md) captures a coherent revision of
 active ECS plus session-owned persistent cell deltas/tombstones, including Unloaded
-cells. That ledger is not another residency authority. Before releasing the last live
+cells. Under ADR-114, Persistent World is the sole canonical adapter owner for those
+deltas; the core Scene adapter does not serialize a second copy from components or
+resident cells. That ledger is not another residency authority. Before releasing the last live
 copy during eviction, providers publish dirty state under the same owner safe point
 and registered retirement DAG. Failed delta capture/admission retains the source and
 keeps retirement charged; it cannot silently discard a dropped item or deletion.
@@ -909,6 +911,7 @@ See [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin
 - [ADR-017: Prefab Ownership](../../adr/017-prefab-role-ownership-and-capability-tiers.md): Offline expansion versus runtime spawn admission.
 - [ADR-018: Command Policy](../../adr/018-command-registration-permissions-threading-and-packaged-build-policy.md): wst/network authority and owner-thread dispatch.
 - [ADR-023: World Index and Cell Format](../../adr/023-world-index-and-cell-format-architecture-decision.md): Unchanged canonical wire formats.
+- [ADR-114: Canonical Runtime World Persistence Boundary](../../adr/114-canonical-runtime-world-persistence-boundary.md): persistent-world adapter ownership and derived/transient exclusions.
 - [ADR-010: Job and Operation Ownership](../../adr/010-job-waiting-and-operation-store-ownership.md): Bounded lifecycle drains and shared OperationStore.
 
 - [ADR-012: World Streaming Partition Authority and Subsystem Boundaries](../../adr/012-world-streaming-partition-authority-and-subsystem-boundaries.md): Partition ownership, provider barriers and resource admission.

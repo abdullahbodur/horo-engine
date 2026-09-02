@@ -314,6 +314,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Local Storage, User Profile and Slot Ownership](../adr/113-local-storage-user-profile-and-slot-ownership.md):
   product/environment/user/profile namespaces, slot/category identity, path
   authority, multi-user fallback and profile-switch fencing.
+- [Canonical Runtime World Persistence Boundary](../adr/114-canonical-runtime-world-persistence-boundary.md):
+  authoring-base/runtime-override composition, state classification,
+  subsystem-owned canonical adapters and aggregate capture/restore.
 - [Navigation And AI Architecture](./runtime/navigation-and-ai-architecture.md):
   NavMesh, pathfinding, dynamic obstacle overlays, perception, crowd, blackboard,
   and editor bake tooling.

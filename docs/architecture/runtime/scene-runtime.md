@@ -290,8 +290,14 @@ Components are typed state carriers. They:
 - avoid hidden thread synchronization
 - do not invoke GUI or transport services
 - do not own system scheduling
-- declare serialization and runtime-only status
+- declare authoring-schema and runtime persistence participation metadata
 - use stable asset and entity references
+
+Components do not self-serialize arbitrary memory for runtime saves. Under
+[ADR-114](../../adr/114-canonical-runtime-world-persistence-boundary.md), exactly one
+subsystem-owned canonical adapter owns each durable semantic field. Reflection and
+component storage support authoring/runtime access but do not grant persistence
+authority.
 
 Polymorphic gameplay behavior is owned through explicit behavior components
 registered by the gameplay module boundary, not hidden in arbitrary component
@@ -363,14 +369,21 @@ not new `RuntimePhase` values.
 [Runtime persistence](./save-game-and-persistence.md) is coordinated by an
 application/session-owned service, not a service retaining a replaceable scene
 reference. Capture hands workers an owned immutable, revision-consistent snapshot;
-live ECS pools are not held frozen after the lifecycle safe point. Slot restore
-prepares a private bundle of Scene, gameplay, slot player and persistent world state
-through the existing QueuePreparation admission seam. CommitDeferredLifecycleChanges
-publishes all prepared roots without fallible work or intermediate observers. Its scene
-candidate cannot auto-activate while the composite bundle gate is pending; account
-settings/achievements remain outside that transaction. This composite commit is an
-implementation requirement beyond SCN-001, not a second public activation path.
-Old scene/provider resources retire asynchronously with their leases preserved.
+live ECS pools are not held frozen after the lifecycle safe point. ADR-114 assigns the
+core Scene adapter only persistent entity existence, authored/spawn identity,
+tombstones, hierarchy/reference remaps and explicitly owned core fields. Gameplay,
+Physics/Character and Persistent World adapters retain their own canonical semantics;
+Scene never reflects over their component memory.
+
+Slot restore resolves a compatible cooked authoring base, composes stable-ID keyed
+overrides/spawns/tombstones and prepares a private bundle of Scene, gameplay, slot
+player and persistent world state through the existing QueuePreparation admission
+seam. It never edits SceneDocument or cooked assets. CommitDeferredLifecycleChanges
+publishes all prepared roots without fallible work or intermediate observers. Its
+scene candidate cannot auto-activate while the composite bundle gate is pending;
+account settings/achievements remain outside that transaction. This composite commit
+is an implementation requirement beyond SCN-001, not a second public activation path.
+Old scene/participant resources retire asynchronously with their leases preserved.
 
 [ADR-092](../../adr/092-character-controller-determinism-and-state-composition.md)
 requires the Character provider snapshot to share the exact committed tick, scene/
@@ -461,7 +474,8 @@ Reload strategy is explicit per state category:
 | Physics state | Rebuild unless preservation contract exists |
 
 Reload does not copy arbitrary component memory by type name. Preservation uses
-typed adapters and stable object IDs.
+typed adapters and stable object IDs. Development hot-reload/restart preservation is
+not automatically a durable ADR-114 participant or save-schema promise.
 
 ## Scene References
 
@@ -580,3 +594,5 @@ Required tests cover:
 - [Rendering Architecture](./rendering-architecture.md)
 - [Editor Document Model](../editor/editor-document-model.md)
 - [Save Game And Persistence](./save-game-and-persistence.md)
+- [ADR-114](../../adr/114-canonical-runtime-world-persistence-boundary.md): canonical
+  state classification, Scene base/override composition and adapter ownership.

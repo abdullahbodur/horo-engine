@@ -297,6 +297,26 @@ services outlive scene-scoped systems and behaviors that depend on them;
 scene-scoped services are created before dependent scene instances and destroyed
 after dependent behaviors, systems, and jobs are drained.
 
+## Canonical Runtime Persistence
+
+Gameplay modules contribute runtime-save state only through the subsystem-owned
+`CanonicalStateParticipantDescriptor` and `ICanonicalStateAdapter` contract in
+[ADR-114](../../adr/114-canonical-runtime-world-persistence-boundary.md). The
+descriptor is inert metadata declaring stable participant/schema identity, scope,
+required policy, dependencies, bounds and owned field/type IDs. Host composition
+binds the adapter and rejects duplicate semantic ownership.
+
+A component or service does not gain persistence authority from reflection, a
+serialized authoring field or trivially-copyable layout. Its owning gameplay adapter
+captures stable semantic values/references at the aggregate save safe point and
+prepares detached restore state for one no-fail publication. Pointers, behavior/service
+instances, callbacks, jobs, queues, native handles and module-local indices are never
+durable payloads. Unknown or incompatible required adapters fail before live mutation.
+
+One semantic field belongs to one participant. A gameplay service and ECS component
+cannot both save authoritative copies. Account/profile values remain outside runtime
+slots, and client modules cannot persist replicated server state as local authority.
+
 ## Native Hot Reload
 
 Data, scene, shader, and asset hot reload follow their owning subsystem
@@ -306,7 +326,7 @@ Native gameplay code reload, when enabled in development:
 
 - occurs only at a runtime safe point
 - stops affected systems and joins module-owned jobs
-- serializes only explicitly preservable state
+- transfers only explicitly preservable state through a hot-reload adapter
 - invalidates all module-owned callbacks and function pointers
 - reloads through a versioned module boundary
 - recreates systems and restores compatible state
@@ -334,6 +354,9 @@ If any unload precondition cannot be proven, the editor requests a play-session
 or process restart instead of unloading unsafe C++ code.
 
 Shipping builds do not load unsigned replacement gameplay code.
+
+Hot-reload preservation is an implementation/session migration and does not
+implicitly register a durable canonical participant, schema or compatibility promise.
 
 ## Errors And Diagnostics
 
@@ -388,3 +411,5 @@ game.<project>.save
 - [Horo Package System](../packages/package-system.md): imported game library modules
 - [Build System](../delivery/build-system.md)
 - [Ownership And Resource Lifetime](../foundation/ownership-and-resource-lifetime.md)
+- [ADR-114](../../adr/114-canonical-runtime-world-persistence-boundary.md): canonical
+  runtime-state adapters and single semantic ownership.
