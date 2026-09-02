@@ -160,6 +160,14 @@ interaction snapshot, publishes a consumption ledger and sends only filtered
 gameplay/UI owner commands onward. Context/modal/focus/capture teardown commits at
 the same ADR-073 lifecycle cutoffs.
 
+[ADR-079](../../adr/079-runtime-ui-binding-provider-schema-identity-and-lifetime.md)
+keeps provider ownership outside Runtime UI while preserving one coherent read
+revision. Provider owners publish typed immutable snapshots at their safe points;
+Runtime UI freezes a compatible set during VariableUpdate and emits expected-
+revision writes as commands for provider-owner safe points. Provider revocation
+closes admission and drains snapshot/command/UI leases through deferred lifecycle
+retirement before player/scene/game/module storage or code disappears.
+
 ## Time Model
 
 The host tracks:

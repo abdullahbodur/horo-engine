@@ -90,6 +90,7 @@ to the replacement.
 | [076](076-runtime-ui-style-asset-token-and-inheritance.md) | Runtime UI Style Asset, Token and Inheritance | Proposed | 2026-09-02 |
 | [077](077-runtime-ui-animation-clock-and-time-domain.md) | Runtime UI Animation Clock and Time Domain | Proposed | 2026-09-02 |
 | [078](078-runtime-ui-input-context-and-player-routing.md) | Runtime UI Input Context and Player Routing | Proposed | 2026-09-02 |
+| [079](079-runtime-ui-binding-provider-schema-identity-and-lifetime.md) | Runtime UI Binding Provider Schema, Identity and Lifetime | Proposed | 2026-09-02 |
 
 ## Conventions
 

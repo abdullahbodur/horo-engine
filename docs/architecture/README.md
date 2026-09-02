@@ -205,6 +205,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Runtime UI Input Context and Player Routing](../adr/078-runtime-ui-input-context-and-player-routing.md):
   device/user/player/viewport separation, UI/gameplay priority, modal exclusivity,
   consumption, assignment, focus/capture, modality, and editor-play routing.
+- [Runtime UI Binding Provider Schema, Identity and Lifetime](../adr/079-runtime-ui-binding-provider-schema-identity-and-lifetime.md):
+  typed provider/property schemas, scoped instances, immutable read snapshots,
+  owner-validated writes, registration/revocation, module unload, and compatibility.
 - [Networking Architecture](./runtime/networking-architecture.md): optional
   handle-based transports, session/authentication runtime, bounded I/O, and
   remote security.

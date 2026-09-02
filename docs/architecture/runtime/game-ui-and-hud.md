@@ -471,8 +471,30 @@ Health Bar Template
 ```
 
 Bindings are explicit, typed, and validated. They must not perform stringly-typed
-reflection work in hot rendering paths. Gameplay modules may register binding
-providers through the gameplay boundary.
+reflection work in hot rendering paths.
+
+[ADR-079](../../adr/079-runtime-ui-binding-provider-schema-identity-and-lifetime.md)
+defines stable namespace-owned provider/property IDs, major/minor schema versions
+and canonical property fingerprints. Cooked bindings reference a provider type,
+property, minimum compatible schema, typed owner selector and read/write direction;
+they never store a C++ member/reflection path, mutable pointer, service key or live
+provider instance.
+
+Provider type descriptors are finite inert metadata registered as validated batches
+by the host composition root. Runtime instances choose exactly one GameInstance,
+Player, Scene or Module activation scope and enter through explicit capability/
+generation leases. Missing/ambiguous required selectors fail rather than choosing
+the nearest/latest provider.
+
+During VariableUpdate, UI freezes one coherent immutable provider snapshot set.
+Layout/style/render never call provider getters or retain mutable ECS/module state.
+A write-capable property accepts only a typed expected-revision owner command; read
+visibility does not imply write authority and UI never receives a mutable setter.
+
+Revocation closes read/write admission, publishes unavailable evidence, cancels
+pending work and drains snapshot/command/callback/UI-generation leases before a
+scene/player/game/module disappears. Editor preview uses explicit fixture providers
+and schema projections, not live runtime pointers or editor widgets.
 
 ## Templates And Presets
 

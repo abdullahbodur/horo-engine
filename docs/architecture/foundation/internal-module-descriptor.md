@@ -17,6 +17,13 @@ backend, allocate a runtime object, or invoke a lifecycle callback. A descriptor
 may name paired activation/deactivation entry points, but only a later
 host-owned composition stage may call them.
 
+Runtime UI binding provider type schemas follow the same rule under
+[ADR-079](../../adr/079-runtime-ui-binding-provider-schema-identity-and-lifetime.md).
+A module descriptor may declare a bounded provider contribution, but parsing or
+validating it cannot activate an instance, publish a registry entry, inspect Runtime
+UI or grant read/write capability. The composition root validates/publishes the
+batch and retains module callback/registry leases through revocation and unload.
+
 Production modules use the same shape regardless of target role:
 
 | Target role | Descriptor representation |
