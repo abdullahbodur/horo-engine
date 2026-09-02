@@ -368,6 +368,19 @@ ADR-106 publication neither advances history nor clears dirty state, and undo do
 not delete cooked artifacts. A deliberate cross-document edit requires a staged
 multi-document transaction; UI surfaces cannot write either document directly.
 
+## Gameplay AI Asset Documents
+
+[ADR-111](../../adr/111-gameplay-ai-document-panel-and-runtime-debug-ownership.md)
+defines separate document routes for blackboard schemas, behavior-tree/state-
+machine/utility graphs and EQS templates. Each keeps its own asset-rooted session,
+revision, semantic history, dirty/save/recovery/conflict state and subsystem
+validator. Shared graph widgets emit commands but own no semantic storage.
+
+Cross-schema/reference edits use the staged multi-document transaction contract.
+Compilation is revision-correlated derived work and does not clear dirty state.
+Live PIE blackboards, nodes, tasks and query results never enter document history;
+importing reviewed runtime data requires a separate typed editor command.
+
 ## Runtime Conversion
 
 The document converts to `RuntimeSceneDefinition` through an editor service.

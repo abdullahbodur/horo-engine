@@ -332,6 +332,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Navigation Editor Surface and Command Ownership](../adr/110-navigation-editor-surface-and-command-ownership.md):
   definition/Scene documents, bake operation projection, dockable inspection,
   transient modals, viewport overlays and provider UI limits.
+- [Gameplay AI Document, Panel and Runtime-Debug Ownership](../adr/111-gameplay-ai-document-panel-and-runtime-debug-ownership.md):
+  blackboard/decision/EQS document routes, shared graph commands, derived compile
+  state, immutable live inspection and safe-point debug actions.
 
 - [Cinematic Sequencer Architecture](./runtime/cinematic-sequencer-architecture.md):
   timeline, tracks, clock authority, typed property bindings, evaluation phase,
