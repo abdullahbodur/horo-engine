@@ -354,6 +354,20 @@ When the canonical file changes externally:
 
 By default, external reload starts a new history branch, clears redo history, and prevents undo across the reload boundary. It is never injected as a hidden command. Rebase is allowed only through an explicit policy that rebuilds valid semantic history entries.
 
+## Navigation Definition And Scene Intent
+
+[ADR-110](../../adr/110-navigation-editor-surface-and-command-ownership.md)
+applies this document contract to a persistent `NavigationDefinitionDocument`
+rooted at the definition `AssetId`. It owns only profiles, areas, build/tile and
+scope policy with its own session/revision/history/dirty/save/recovery state.
+`SceneDocument` separately owns definition references, sources, modifiers, links
+and dynamic-obstacle intent through typed Scene commands.
+
+Starting a navigation bake is an application use case, not a document command.
+ADR-106 publication neither advances history nor clears dirty state, and undo does
+not delete cooked artifacts. A deliberate cross-document edit requires a staged
+multi-document transaction; UI surfaces cannot write either document directly.
+
 ## Runtime Conversion
 
 The document converts to `RuntimeSceneDefinition` through an editor service.

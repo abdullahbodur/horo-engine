@@ -68,6 +68,7 @@ EditorLayer
     |                       +-- McpTab
     |                       +-- PerformanceTab
     |                       +-- RenderInspectorTab (registered, closed by default)
+    |                       +-- NavigationTab (registered, closed by default)
     |
     +-- EditorModalHost          exclusive modal workflows above the workspace
 ```
@@ -829,6 +830,20 @@ Visible as the Workspace panel with the following tabs:
     A navigation panel/menu may submit or request cancellation, but panel closure,
     docking and workspace restoration never own the operation, builder, staging,
     publication lock or artifact lifetime.
+
+- **Navigation tab**: navigation authoring readiness, bake actions/diagnostics and
+  bounded runtime inspection.
+  - Owner: `NavigationTab`, registered closed by default.
+  - Queries: document/definition readiness, artifact/currentness,
+    `IOperationQuery` and immutable `INavigationInspectionQuery` snapshots.
+  - Executes: typed document commands, ADR-106 bake submission/control and
+    separately authorized runtime-debug commands through narrow capabilities.
+  - Owns only filters, selection, focused `OperationId`, overlay interest and
+    other bounded presentation state. Hide/close stops polling and releases
+    presentation leases; it never cancels a bake, ends play, changes runtime
+    lifetime or accesses provider/native state.
+  - Provider/extension detail uses validated host-rendered schema under ADR-110
+    and ADR-056, not arbitrary plugin ImGui.
 
 - **MCP tab**: MCP command history and activity.
   - Owner: `McpTab`

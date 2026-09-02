@@ -329,6 +329,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Avoidance, Crowd and Renderer-Independent Budget](../adr/109-avoidance-crowd-and-renderer-independent-budget.md):
   path/safe-velocity/movement ownership, optional best-effort DetourCrowd,
   deterministic admission, independent project scale/quality and safe overload.
+- [Navigation Editor Surface and Command Ownership](../adr/110-navigation-editor-surface-and-command-ownership.md):
+  definition/Scene documents, bake operation projection, dockable inspection,
+  transient modals, viewport overlays and provider UI limits.
 
 - [Cinematic Sequencer Architecture](./runtime/cinematic-sequencer-architecture.md):
   timeline, tracks, clock authority, typed property bindings, evaluation phase,

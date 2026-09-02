@@ -268,6 +268,12 @@ Rules:
   corresponding change notification.
 - Failed operations return typed errors and do not publish success/change events.
 
+ADR-110 navigation surfaces follow the same rule. Definition/Scene owners publish
+committed document revisions, application owners publish bake/artifact/operation
+revisions, and runtime inspection publishes generation invalidation. The
+`NavigationTab` and viewport query those authorities; neither publishes duplicate
+success nor uses `EditorDataBus` to command a bake or mutate runtime/provider state.
+
 Example:
 
 ```cpp

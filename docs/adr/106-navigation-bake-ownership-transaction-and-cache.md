@@ -6,7 +6,7 @@
 - **Scope**: Navigation bake application-service ownership, GUI/CLI/MCP/cook entry points, immutable revision capture, latest-wins supersession, structured concurrency, workspace locking, dependency-aware cache identity, staged publication, last-valid rollback, terminal states, crash recovery and shutdown
 - **Issue**: [NAV-003.1](https://github.com/abdullahbodur/horo-engine/issues/1244)
 - **Jira**: [HORO-1244](https://horo-engine.atlassian.net/browse/HORO-1244)
-- **Related**: [ADR-005](005-submodule-compatibility.md), [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-023](023-world-index-and-cell-format-architecture-decision.md), [ADR-105](105-navigation-asset-and-scene-ownership-boundary.md)
+- **Related**: [ADR-005](005-submodule-compatibility.md), [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-023](023-world-index-and-cell-format-architecture-decision.md), [ADR-105](105-navigation-asset-and-scene-ownership-boundary.md), [ADR-110](110-navigation-editor-surface-and-command-ownership.md)
 - **Normative documents**: [Navigation and AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md), [Asset Pipeline](../architecture/runtime/asset-pipeline.md), [Concurrency and Job System](../architecture/foundation/concurrency-and-jobs.md), [Platform Abstraction](../architecture/foundation/platform-abstraction.md), [Editor Panel Host](../architecture/editor/editor-panel-host.md), [CLI Architecture](../architecture/interfaces/cli-architecture.md), [MCP Architecture](../architecture/interfaces/mcp-architecture.md)
 
 ## Context
