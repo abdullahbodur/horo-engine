@@ -366,6 +366,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Cinematic Event Dispatch and Audio Coupling Boundary](../adr/120-cinematic-event-dispatch-and-audio-coupling-boundary.md):
   cooked typed EventTrack bindings, application-owned safe-point dispatch, explicit
   failure outcomes and AudioFrontend coupling through AUD-family authority.
+- [Cinematic Editor Document and Authoring Context](../adr/121-cinematic-editor-document-and-authoring-context.md):
+  persistent sequence asset tabs, shared command/save/conflict ownership, detachable
+  scene authoring context, stale-reference inspection and disposable preview state.
 - [Post-Processing And Effects Architecture](./runtime/post-processing-and-effects-architecture.md):
   screen-space effects, HDR post chain, tonemapping, color grading, and
   accessibility pass ordering.

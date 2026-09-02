@@ -381,6 +381,32 @@ Compilation is revision-correlated derived work and does not clear dirty state.
 Live PIE blackboards, nodes, tasks and query results never enter document history;
 importing reviewed runtime data requires a separate typed editor command.
 
+## Cinematic Sequence Asset Documents
+
+[ADR-121](../../adr/121-cinematic-editor-document-and-authoring-context.md)
+defines each sequence asset as a first-class persistent `SequenceDocument` rooted at
+its stable `AssetId`. `EditorWorkspaceController` and the document tab host own its
+session, route, typed command/history, dirty, save/autosave/recovery/conflict and
+derived compile/preview revisions through this document contract. The Create Sequence
+modal is only a transient asset-creation workflow; it opens the persistent tab after
+atomic publication and owns no hidden document or undo stack.
+
+An optional generation-checked `SequenceAuthoringContext` attaches the sequence
+session to an immutable SceneDocument binding-resolution snapshot. It enables scene
+picking, property enumeration, recording and preview but owns no authored content.
+The sequence remains editable without a scene. Rename/reorder preserve stable object
+bindings; wrong scene, deletion, component/schema change, reload or scene replacement
+publish derived typed stale states without clearing or name-retargeting the authored
+identity. Repair is an explicit undoable Sequence command.
+
+Sequence edits and scene edits remain in their owning documents. An intentional
+two-document action uses the staged multi-document application transaction; UI cannot
+run two direct mutations or maintain a third history. Scrub/play state, live handles,
+authority leases and viewport state belong to a disposable preview/session projection
+and never enter document storage. Save, autosave, recovery, external conflict, Save
+As/Copy As, close guards and stale worker-result rejection use the shared policies
+above unchanged.
+
 ## Runtime Conversion
 
 The document converts to `RuntimeSceneDefinition` through an editor service.
@@ -467,6 +493,12 @@ Required tests cover:
   one-entry history and no direct Inspector/file-watcher mutation
 - apply-to-prefab failure or uncertain external publication preserves instance
   intent and reports reconciliation state
+- sequence asset create/open/close uses a persistent document tab and shared command,
+  dirty, save, autosave, recovery and external-conflict ownership without a parallel
+  sequencer stack or serializer state
+- sequence authoring context covers no/wrong/replaced scene, stable rename/reorder,
+  missing object/component, schema mismatch, explicit repair and stale preview/
+  binding/compile results without mutating authored identity
 
 ## Related Documents
 
@@ -479,3 +511,4 @@ Required tests cover:
 - [Asset Pipeline](../runtime/asset-pipeline.md)
 - [Prefab Architecture](../runtime/prefab-architecture.md)
 - [Save Game And Persistence](../runtime/save-game-and-persistence.md)
+- [Cinematic Sequencer](../runtime/cinematic-sequencer-architecture.md)

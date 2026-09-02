@@ -353,6 +353,14 @@ persisted on editor close or explicit save. Ownership of its runtime slices is:
 - `EditorViewportModel`: editor camera and navigation state
 - individual tabs: project-scoped presentation state under their stable tab ID
 
+Sequence-document tabs follow
+[ADR-121](../../adr/121-cinematic-editor-document-and-authoring-context.md).
+Workspace state may retain their open route, active tab, timeline selection,
+zoom/scroll/playhead and detachable authoring-scene route by stable asset/tab
+identity. It never stores sequence content, dirty/history/save state, live scene
+handles or preview authority leases. A restored missing sequence/scene asset produces
+a typed diagnostic and omits/detaches that route without modifying either document.
+
 `EditorViewportModel` owns a backend-neutral `EditorViewportCamera`, advances a
 monotonic viewport revision after committed navigation or explicit preview
 invalidation, and publishes `ViewportChangedEvent`. Camera navigation and gizmo
