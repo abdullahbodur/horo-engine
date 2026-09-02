@@ -439,6 +439,7 @@ governs concurrency, data retention, and event propagation as follows:
 ### Concurrency And Write Semantics
 
 To prevent lock contention on hot engine threads (e.g., render, update):
+
 - **Thread-Local Accumulators**: Hot-path metrics (such as draw calls, frames, and allocation counters) write directly to thread-local or sharded atomic slots.
 - **Periodic Aggregation**: The central `MetricsStore` aggregates these sharded buffers at a fixed rate (e.g., once per frame for frame metrics, or every 500ms for system/process counters) using a readers-writer lock (`std::shared_mutex`).
 - **Query Path**: Reads and presentation queries acquire a shared lock (`shared_lock`), while the aggregator thread acquires a unique write lock (`unique_lock`) only during flush phases.
@@ -713,6 +714,14 @@ Profiler capture control is a typed observability operation. Starting or
 stopping a capture is not encoded as a data-bus command. Capture state is owned
 by `ProfilerCaptureService`; notifications publish state changes after commit.
 
+[ADR-049](../../adr/049-render-graph-and-resource-inspector-ui.md) keeps the
+high-cardinality render graph/resource inspector separate from this metrics view.
+`PerformanceTab` may open an exact matching inspection bundle through a typed
+application command, but it does not own graph capture, page storage or inspector
+layout. Conversely, `RenderInspectorTab` may link to an exact profiler/capture
+session but never treats metrics as graph/resource identity or changes metric
+sampling from its draw cadence.
+
 Editor Settings may configure safe defaults for metric history, graph windows,
 and available capture channels. Settings cannot enable a channel compiled out of
 the active product profile.
@@ -756,6 +765,7 @@ Python timers use `time.perf_counter_ns()` to guarantee high-resolution monotoni
 ### Registry Thread Safety
 
 To support concurrent scripts and parallel task executions (e.g. `multiprocessing` or `threading` wrappers in release jobs):
+
 - **Locking**: The Python metrics registry in `horo_metrics.py` implements a global `threading.Lock` protecting the creation and updating of instrument handles.
 - **Process Sampler Platform Behavior**: Process CPU and resident memory usage collection uses `psutil` if available. On Linux systems where `psutil` is absent, it parses `/proc/self/stat` directly. On macOS systems without `psutil`, CPU and memory stats default to `Unavailable`. The script will gracefully mark them unavailable without raising import or runtime errors.
 

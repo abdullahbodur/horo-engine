@@ -371,6 +371,18 @@ perform no backend traversal/query. Null proves shared rings, partial coverage,
 interrupted staging and stale-generation behavior but cannot qualify native fault
 APIs, dumps, driver accuracy or signal safety.
 
+[ADR-049 inspector parity](../../adr/049-render-graph-and-resource-inspector-ui.md)
+requires the same logical pass/resource/use/dependency/lifetime/synchronization
+schema, stable Horo identities, immutable pages and typed coverage. Backends may
+provide optional normalized realization facts but never expose native handles,
+addresses or enums to the application/editor.
+
+Memory, timing, statistics, diagnostics and markers join only through exact source
+generation/frame/graph/queue/scope identities. Unavailable or delayed facts remain
+explicit; a backend cannot fabricate parity with names, zeros or latest values.
+Null validates logical fixtures and all service/UI states but cannot qualify native
+barriers, memory observations or measurement accuracy.
+
 In particular:
 
 - OpenGL global state is private to the OpenGL integration.
