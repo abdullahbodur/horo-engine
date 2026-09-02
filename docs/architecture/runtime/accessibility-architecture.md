@@ -31,6 +31,14 @@ colorblind viewport simulation, screen reader logging, control scheme validation
    quality. Native integration reports actual platform capability. Accessibility
    work cannot introduce unbounded waits into core loops or reverse dependencies.
 
+[ADR-161](../../adr/161-xr-interaction-runtime-ui-locomotion-and-accessibility-ownership.md)
+extends this non-gating rule to XR comfort. When an experience provides artificial
+movement or rotation, its declared disable/snap-turn, speed/handedness, seated/standing/
+recenter, motion-reduction and teleport/continuous-mode controls remain semantically
+available across renderer/device quality tiers. Configuration owns preferences;
+Gameplay, Character, Camera/Renderer and Runtime UI apply them only at their own
+boundaries. Missing authored alternatives are explicit limitations, not silent fallbacks.
+
 ## Runtime UI Semantic And Capability Boundary
 
 [ADR-082](../../adr/082-runtime-ui-accessibility-capability-and-ownership.md)

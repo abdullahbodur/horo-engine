@@ -39,6 +39,11 @@ specializes runtime-driven N-view admission, swapchain/external-resource leases,
 and layer submission, auxiliary targets and XR render-quality plans. XROpenXR owns native
 frame/compositor calls; Renderer owns Horo graph/GPU work and completion evidence.
 
+[ADR-161](../../adr/161-xr-interaction-runtime-ui-locomotion-and-accessibility-ownership.md)
+specializes the XR evidence-to-intent boundary across Input, Runtime UI, gameplay,
+Character, Camera and Accessibility. XR never owns UI focus or authoritative movement,
+and baseline comfort semantics are independent of renderer/device tier.
+
 ## Ownership
 
 ```text
@@ -416,6 +421,29 @@ snapshots. Architecture does not prescribe a universal 90 Hz minimum. Each
 qualified tuple records its supported modes and measured comfort/performance
 evidence.
 
+XR interaction sources publish bounded generation-scoped ray/direct/proximity evidence.
+Host adapters may combine it with read-only Physics/Scene queries, but a hit remains a
+candidate. Runtime UI alone resolves its last-presented hit tree, hover, focus, capture
+and semantic action; gameplay alone validates use/grab intent; Character alone commits
+collision-root movement. Source or target loss neutralizes capture/intents rather than
+reusing the last ray/hit.
+
+World-space canvases remain ordinary Runtime UI owner scopes with the same layout,
+localization, semantic accessibility and action-command model. Renderer owns per-view
+projection/depth/occlusion/pixels. A native composition layer does not become a second UI
+tree or bypass UI focus.
+
+Locomotion produces tick-assigned gameplay intent. Continuous/snap movement and teleport
+reach Character through typed commands; moving the camera or recentering tracking space
+is not a collision-safe teleport. Camera/view composition combines committed Character
+root, calibration and tracked head pose without acquiring movement authority.
+
+When artificial locomotion/rotation exists, disable controls where gameplay permits,
+snap-turn configuration, speed/handedness, seated/standing/recenter behavior, motion-
+reduction controls and declared teleport/continuous availability remain visible across
+renderer/device tiers. Missing authored alternatives are explicit limitations, never
+silent fallbacks.
+
 ## Mixed Reality And Privacy
 
 Passthrough, anchors, plane/mesh understanding, hit testing, and light estimation
@@ -543,6 +571,7 @@ device release gate.
 - [OpenXR Loader, Backend Packaging and Host Composition](../../adr/158-openxr-loader-backend-packaging-and-host-composition.md)
 - [XR Action, Tracking and Input-Projection Ownership](../../adr/159-xr-action-tracking-and-input-projection-ownership.md)
 - [XR Rendering, OpenXR Compositor and Renderer Ownership](../../adr/160-xr-rendering-openxr-compositor-and-renderer-ownership.md)
+- [XR Interaction, Runtime UI, Locomotion and Accessibility Ownership](../../adr/161-xr-interaction-runtime-ui-locomotion-and-accessibility-ownership.md)
 - [XR Setup UI Reference](./xr-setup.html)
 - [Rendering Architecture](./rendering-architecture.md)
 - [Render Backend Parity Contract](./render-backend-parity-contract.md)

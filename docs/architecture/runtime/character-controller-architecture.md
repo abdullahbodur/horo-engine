@@ -148,6 +148,13 @@ is the committed projection; arbitrary systems do not write it. Gameplay owns
 desired heading, Animation owns root-motion rotation/visual pose and Physics owns
 platform motion evidence under ADR-089.
 
+[ADR-161](../../adr/161-xr-interaction-runtime-ui-locomotion-and-accessibility-ownership.md)
+applies this authority to XR. Gameplay converts routed XR actions and tracking-space
+evidence into tick-assigned movement, turn or teleport intents. Character validates
+collision/clearance and owns the committed root; Camera motion, room-scale head motion,
+recenter and raw XR poses cannot write it. An optional body-follow policy produces a
+future Character intent rather than a render-frame Transform update.
+
 ## Update Order
 
 ```text

@@ -9,6 +9,12 @@ serialization, templates, editor authoring, and package boundaries.
 Game UI is runtime game content. It is not the same system as HoroEditor panels,
 tabs, modals, inspectors, or the editor design-system widgets.
 
+[ADR-161](../../adr/161-xr-interaction-runtime-ui-locomotion-and-accessibility-ownership.md)
+keeps XR world-space interaction inside this same Runtime UI authority. XR adapters
+supply generation-scoped ray/direct/proximity evidence, but Runtime UI owns presented
+hit testing, focus, capture, semantic action and command production. Renderer owns
+per-view projection/occlusion/pixels, and neither can create a second XR widget tree.
+
 [ADR-073](../../adr/073-runtime-ui-ownership-scope-and-update-order.md) is the
 single normative owner of RuntimeUiService, game/player/scene/viewport scopes,
 instance lifecycle, frame update order, pause/suspension, input/presentation
@@ -337,6 +343,12 @@ contexts even when no UI element handles an action; only a finite host-owned saf
 passthrough list may bypass them. Assignment change neutralizes old held/captured
 input before a new player/context activates. Focus, restoration, capture and active
 device modality remain per context/audience rather than process global.
+
+An XR pointer is another generation-scoped Input source for the exact player/viewport
+context. It hit-tests the last successfully presented interaction snapshot. Switching
+ray/direct modes, tracking or session loss, assignment change, modal/route exclusion,
+presentation-revision loss and source destruction release capture and neutralize the
+source. A Physics/Renderer hit is evidence only; it cannot set focus or invoke a widget.
 
 ## Runtime Accessibility Semantics
 
