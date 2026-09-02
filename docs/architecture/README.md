@@ -260,6 +260,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Replication Ownership, Authority and Compatibility](../adr/099-replication-ownership-authority-and-compatibility.md):
   explicit world roles, stable schema/FieldId identity, owner-safe capture/apply,
   compatibility, object generations and prohibited ambient replication.
+- [Prediction Capability Tiers and Determinism Policy](../adr/100-prediction-capability-tiers-and-determinism-policy.md):
+  non-predicted baseline, local candidates, qualified rollback provider closure,
+  bounded histories/replay, correction and side-effect reconciliation.
 - [Asset Pipeline](./runtime/asset-pipeline.md): import, cook, package, runtime
   loading, cache, and hot reload.
 - [Prefab Architecture](./runtime/prefab-architecture.md): dual-role authoring

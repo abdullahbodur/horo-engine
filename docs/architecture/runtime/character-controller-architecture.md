@@ -117,6 +117,13 @@ coordinator separately owns complete ordered producer command histories and repl
 the ordinary fixed-tick pipeline. History exhaustion or missing input ends the
 rewind horizon explicitly.
 
+[ADR-100](../../adr/100-prediction-capability-tiers-and-determinism-policy.md)
+uses this contract only for an explicitly admitted `RollbackResimulation` provider
+closure. `NonPredicted` and `LocalPrediction` do not construct Character checkpoint
+history merely because a client is autonomous. Network rollback must pair Character
+with the exact Physics/world checkpoint and all other participating providers; it
+cannot restore a standalone Character blob or a network-specific field subset.
+
 ## Character Controller Component
 
 ```cpp

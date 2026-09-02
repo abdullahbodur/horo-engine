@@ -245,13 +245,34 @@ event publication alone produces no network traffic.
 
 ## Prediction and Reconciliation Boundary
 
-Prediction is not implied by client role. The non-predicted path applies server
-snapshots through the same adapter without mandatory history/replay storage.
+Prediction is opt-in under
+[ADR-100](../../adr/100-prediction-capability-tiers-and-determinism-policy.md):
 
-An autonomous client may use prediction only when a later capability policy and the
-declaring gameplay owner provide canonical input/state/capture/restore hooks. Such
-state remains a local candidate; authoritative server snapshots and corrections
-win. Simulated clients never gain prediction or input-submission authority.
+| Tier | Client behavior | History/guarantee |
+|---|---|---|
+| `NonPredicted` | Applies authoritative snapshots; presentation may interpolate separately | No input journal, checkpoint ring or replay work; this is the default |
+| `LocalPrediction` | Advances an autonomous local candidate from fixed-tick input | Bounded pending inputs/current candidate; correction replaces current candidate without historical rewind |
+| `RollbackResimulation` | Restores an aggregate checkpoint, applies correction and replays the ordinary fixed-tick pipeline | Bounded input/checkpoint/occurrence history and qualified deterministic provider closure |
+
+Games select a validated `PredictionDescriptor` with input/state schemas, fixed
+tick rate, hooks, provider set, determinism requirement, history/replay limits and
+overflow policy. Missing hooks/providers or an unqualified fingerprint rejects the
+tier. Simulated clients never gain prediction or input-submission authority.
+
+Rollback reuses canonical owner contracts such as ADR-092 Character plus its paired
+Physics/world checkpoint. NetworkRuntime cannot invent a smaller state or restore
+component/native solver memory. Aggregate restore/correction/replay publishes only
+after complete transactional success.
+
+History and replay work are hard-bounded. An old correction, broken provider/delta
+closure or count/byte/replay overflow causes a full authoritative resync and
+temporary `NonPredicted` behavior; limits never expand. LocalPrediction overflow
+similarly discards its candidate and returns to authoritative state.
+
+Prediction never changes server authority. Distributed authority, peer lockstep
+and client-majority correction are unsupported. Speculative side effects require
+stable occurrence IDs and bounded confirm/cancel/deduplication; irreversible
+external effects are server-authoritative only.
 
 ## Interest Management
 
@@ -330,7 +351,7 @@ field identity, authority or compatibility.
 | -------------------- | ----------- | ----------------------- | ---------- |
 | Max players (server) | 4           | 32                      | 128        |
 | Replicated objects   | 512         | 4K                      | 16K        |
-| Client prediction    | Basic       | Full                    | Full       |
+| Client prediction    | Optional    | Optional                | Optional   |
 | Interest management  | Distance    | Spatial+Group           | Spatial+Group |
 | Dedicated server     | Yes         | Yes                     | Yes        |
 | Bandwidth budget     | 64 KB/s     | 256 KB/s                | 512 KB/s   |
@@ -355,6 +376,12 @@ Required automated coverage includes:
   overflow, cancellation and shutdown with queued work;
 - proof that arbitrary component mutations and generic event publication do not
   replicate without a registered schema and explicit capture/dirty path.
+- NonPredicted profiles allocate/schedule no prediction input/checkpoint/replay
+  history; prediction descriptors reject incomplete hooks/provider closure.
+- Latency/loss/reorder/duplicate inputs, local correction, rollback golden replay,
+  history/replay overflow, full resync/degrade and lifecycle generation changes.
+- Speculative occurrence deduplication and prohibition of irreversible client-side
+  effects during replay.
 
 Descriptor, compatibility, record framing and codec parsers receive bounded fuzz/
 property coverage. Diagnostics identify stable IDs/versions and safe reasons but
@@ -365,6 +392,7 @@ exclude field payloads by default.
 - [ADR-097: Default Real-Time Transport Backend](../../adr/097-default-real-time-transport-backend.md)
 - [ADR-098: Protocol, Session and Trust Policy](../../adr/098-protocol-session-and-trust-policy.md)
 - [ADR-099: Replication Ownership, Authority and Compatibility](../../adr/099-replication-ownership-authority-and-compatibility.md)
+- [ADR-100: Prediction Capability Tiers and Determinism Policy](../../adr/100-prediction-capability-tiers-and-determinism-policy.md)
 - [Networking Architecture](./networking-architecture.md)
 - [Scene Runtime](./scene-runtime.md)
 - [Gameplay Behavior Authoring](../extensions/gameplay-behavior-authoring.md)

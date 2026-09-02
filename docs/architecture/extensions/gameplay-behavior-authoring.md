@@ -222,6 +222,14 @@ sessions, transport, interest or baselines, and neither may retain component vie
 or bypass behavior invariants. Publishing an ordinary gameplay event does not
 replicate it; inputs/RPCs require separate direction-scoped schemas.
 
+Prediction is separately opt-in under
+[ADR-100](../../adr/100-prediction-capability-tiers-and-determinism-policy.md).
+Gameplay owners contribute a validated descriptor and tier-required fixed-tick
+input/candidate or capture/restore/simulate/reconcile hooks. Ordinary behavior
+fields/events are never predicted automatically. Irreversible effects are
+server-authoritative; speculative presentation requires stable bounded occurrence
+identity so replay cannot duplicate it.
+
 ### Native C++ Behavior Example
 
 A native behavior is ordinary gameplay code compiled into the project gameplay
