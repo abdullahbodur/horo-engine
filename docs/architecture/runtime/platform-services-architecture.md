@@ -108,10 +108,10 @@ public:
     GetLeaderboardEntries(LeaderboardId id, const LeaderboardQuery& query);
 
     PlatformServiceRequest<CloudSaveMetadata>
-    ReadCloudSave(SaveSlotId slot);
+    ReadCloudSave(CloudSaveObjectKey key);
 
     PlatformServiceRequest<void>
-    WriteCloudSave(SaveSlotId slot, std::span<const std::byte> data);
+    WriteCloudSave(CloudSaveObjectKey key, std::span<const std::byte> data);
 
     PlatformServiceRequest<void>
     SetPresence(const PresenceState& state);
@@ -311,41 +311,43 @@ replacement for the local save system; it is an upload/download layer on top of
 local save files.
 
 ```cpp
-struct SaveSlotId { StableString value; };
+struct CloudSaveObjectKey { BoundedOpaqueBytes value; };
+struct ProviderObjectRevision { BoundedOpaqueBytes value; };
 
 struct CloudSaveMetadata {
-    SaveSlotId slot;
-    Timestamp modifiedTime;
+    CloudSaveObjectKey key;
+    ProviderObjectRevision revision;
+    Timestamp modifiedTime; // presentation/provenance only, never causality
     uint64_t sizeBytes;
 };
 
 class ICloudSaveService {
 public:
-    virtual PlatformServiceRequest<CloudSaveMetadata>
+    virtual PlatformServiceRequest<std::vector<CloudSaveMetadata>>
     List() = 0;
 
     virtual PlatformServiceRequest<std::vector<std::byte>>
-    Read(SaveSlotId slot) = 0;
+    Read(CloudSaveObjectKey key) = 0;
 
     virtual PlatformServiceRequest<void>
-    Write(SaveSlotId slot, std::span<const std::byte> data) = 0;
+    Write(CloudSaveObjectKey key, std::span<const std::byte> data) = 0;
 
     virtual PlatformServiceRequest<void>
-    Delete(SaveSlotId slot) = 0;
+    Delete(CloudSaveObjectKey key) = 0;
 };
 ```
 
-Conflict resolution is configured per project:
+Under ADR-113, gameplay and UI never create `CloudSaveObjectKey` from a string. The
+save/cloud coordinator derives it from the typed product/environment/profile/slot
+address and authenticated provider-user context. Installation-local user IDs are not
+serialized into it. It is not a local path, display name or `SaveGameSlotId` with
+erased scope. The backend treats both key and finalized archive bytes as opaque and
+never edits the local format or catalog.
 
-```text
-prefer_local   -- local save wins, upload overwrites cloud
-prefer_cloud   -- cloud save wins, download overwrites local
-most_recent    -- compare timestamps, newer wins
-manual         -- prompt the player (UI owns the choice)
-```
-
-The engine calls `Read` at game start and `Write` after the local save system
-commits a new save. Cloud save never directly edits the local save format.
+Provider revisions and timestamps are returned as transport metadata. They do not
+select a winning local/cloud generation automatically. SAV-006 owns write
+preconditions, offline authority and divergent-generation resolution; UI may present
+a choice but never becomes sync authority.
 
 ### Presence
 
@@ -534,6 +536,13 @@ The null backend is always available. It:
 Platform services do not own the game user account. They expose a platform user
 handle that the game identity layer can map to its own player profile.
 
+ADR-113 requires that mapping to produce a private provider-scoped
+`LocalUserStorageId` and then select a product-owned `GameProfileId`. Raw platform
+handles, gamertags, emails and display names are not save-directory or cloud-slot
+identity. Backends explicitly report single-local-user, current-user-only or
+multi-user capability; unsupported switching returns `not_supported` rather than
+sharing a guessed user namespace.
+
 ```cpp
 struct PlatformSessionState {
     bool signedIn;
@@ -696,7 +705,8 @@ Configuration authority lives in Project Settings:
 
 - active platform backend selection
 - achievement, leaderboard, stat, and presence stable ID tables
-- cloud save conflict resolution policy
+- cloud save capability, timeout and retry policy; conflict resolution authority is
+  owned by the save/cloud coordinator
 - per-service timeout and retry policy
 - offline queue persistence settings
 
@@ -722,7 +732,8 @@ Required tests cover:
 - offline queue persists and replays in order
 - request cancellation does not leak state
 - stable ID registries reject unregistered names
-- cloud save conflict resolution strategies
+- typed cloud-object addressing, provider revision propagation and no timestamp-based
+  automatic winner selection
 - session sign-in/out triggers queue replay and state callbacks
 - unavailable services return `not_supported`
 - presence updates coalesce to the most recent state
@@ -768,5 +779,7 @@ Platform-specific backend tests live in the private platform repositories.
 - [Audio Architecture](./audio-architecture.md)
 - [Input Architecture](./input-architecture.md)
 - [Platform Abstraction Architecture](../foundation/platform-abstraction.md)
+- [ADR-113](../../adr/113-local-storage-user-profile-and-slot-ownership.md): product,
+  user/profile and logical-slot addressing across local and cloud boundaries.
 - [Extension System](../extensions/plugin-system.md)
 - [Release Security](../release/release-security.md)

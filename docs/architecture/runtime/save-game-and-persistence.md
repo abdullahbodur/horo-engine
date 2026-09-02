@@ -8,6 +8,8 @@ HORO-1391 #1391 [SAV-001.1]. These are normative implementation requirements; th
 complete save service/archive protocol is not claimed as implemented by this change.
 ADR-112 freezes the portable archive, canonical state, identity and compatibility
 policy for HORO-1410 #1410 [SAV-002.1].
+ADR-113 freezes product/environment/user/profile namespaces, logical slot addressing
+and storage mapping for HORO-1425 #1425 [SAV-003.1].
 
 - RuntimeSaveService coordinates one runtime save/restore authority under the
   application/session lifetime. It never retains an unleased reference to a scene
@@ -90,7 +92,16 @@ cannot unload codecs under a worker or register through ambient service discover
 Schematic interface shapes (not new installed headers):
 
 ```cpp
+struct ProductStorageId { Uuid value; };
+struct EnvironmentStorageId { Uuid value; };
+struct LocalUserStorageId { Uuid value; };
+struct GameProfileId { Uuid value; };
 struct SaveGameSlotId { Uuid value; }; // nonzero opaque identity, never a path
+struct SaveNamespaceHandle { GenerationCheckedHandle value; };
+struct SaveAddress {
+    SaveNamespaceHandle namespaceHandle;
+    SaveGameSlotId slot;
+};
 struct SaveOperationHandle { OperationId value; };
 struct RestoreOperationHandle { OperationId value; };
 struct CanonicalStateHash { Sha256 value; };
@@ -107,7 +118,7 @@ enum class SaveCommitOutcome : uint8_t {
 };
 struct SaveOperationSnapshot {
     OperationId operation;
-    SaveGameSlotId slot;
+    SaveAddress address;
     SaveOperationPhase phase;
     SaveCommitOutcome commitOutcome;
     float progress;
@@ -117,7 +128,7 @@ struct SaveOperationSnapshot {
     OptionalArchiveContentHash archiveContent;
 };
 struct SaveRequest {
-    BoundedUtf8 displayName;       // metadata only, never a filename
+    BoundedUtf8 displayName;       // catalog metadata only, never archive/path identity
     SaveRequestKind kind;         // manual, quicksave, autosave
     ThumbnailPolicy thumbnail;   // optional/omitted or explicitly required
 };
@@ -125,14 +136,14 @@ struct SaveRequest {
 class RuntimeSaveService final {
 public:
     RuntimeSaveService(IRuntimeSessionHost&, SaveProviderRegistry&,
-                       SaveStorageAdapter&, PlatformServices&, JobSystem&,
-                       OperationStore&);
+                       SaveStorageAdapter&, SaveNamespaceBinding&,
+                       PlatformServices&, JobSystem&, OperationStore&);
     Result<SaveOperationHandle> SaveSlotAsync(
-        SaveGameSlotId, SaveRequest, CancellationToken);
+        SaveAddress, SaveRequest, CancellationToken);
     Result<RestoreOperationHandle> LoadSlotAsync(
-        SaveGameSlotId, RestoreRequest, CancellationToken);
+        SaveAddress, RestoreRequest, CancellationToken);
     Result<OperationId> RefreshCatalogAsync(CancellationToken);
-    Result<OperationId> DeleteSlotAsync(SaveGameSlotId, CancellationToken);
+    Result<OperationId> DeleteSlotAsync(SaveAddress, CancellationToken);
     SaveCatalogSnapshot GetCatalogSnapshot() const; // cached immutable data; no I/O
     Result<SaveOperationSnapshot> GetOperationSnapshot(OperationId) const;
     void PumpOwnerThread();              // bounded record drain; never filesystem I/O
@@ -297,7 +308,7 @@ JSON reserialized by the reader.
 
 | Logical payload entry | Content |
 |---|---|
-| header.json | Logical slot ID, `SlotGenerationId`, optional parent generation, producing `ProductSaveCompatibilityVersion`, project/world/account scope, baseSceneAsset, timestamps, display name and slot kind |
+| header.json | Logical slot ID, `SlotGenerationId`, optional parent generation, producing `ProductSaveCompatibilityVersion`, project/world/account scope, baseSceneAsset and bounded provenance timestamps |
 | manifest.json | `SaveSchemaVersion`, `CanonicalStateHash`, StableTypeId-sorted participant/chunk IDs, each `ParticipantSchemaVersion`, required flags, lengths, codecs and per-chunk SHA-256 |
 | runtime_ecs.bin | Stable authored/spawn identities, dynamic components, tombstones and reference remap records |
 | gameplay module entries | Each registered module's versioned state |
@@ -680,42 +691,127 @@ hashing or signature stripping was intended. Account-global data in an old slot 
 not restored into the account store; any explicit import is a separate
 user-authorized account migration with conflict/merge policy.
 
-## Storage Namespace And Path Safety
+## Product, User, Profile And Slot Storage
 
-SaveGameSlotId is an opaque nonzero UUID. Quicksave/autosave/manual names are catalog
-labels mapping to IDs, not filename strings accepted from gameplay. SaveStorageAdapter
-alone formats the canonical UUID filename in a trusted project/account/environment
-namespace. Runtime APIs accept no raw path; displayName is bounded validated UTF-8
-metadata and never concatenated into a path. Existing named slots require an explicit
-catalog import/mapping, not silently treating a name as a path.
+### Typed namespace hierarchy
 
-The adapter resolves the trusted save root and enforces containment using safe
-handle-relative/no-follow platform operations, not a string prefix test. Reject
-symlink/reparse redirection, traversal, alternate-stream/device/path separators and
-unexpected file types at the storage boundary. Temporary names include operation
-identity and are created exclusively in the same storage namespace/filesystem.
-Never follow entry names or embedded paths from the archive into the filesystem.
-Authorized imports copy untrusted input through bounded verification into that namespace.
+`ProductStorageId` is stable product configuration copied into release metadata; it
+is never derived from display name, executable/install path, semantic version, branch
+or update channel. `EnvironmentStorageId` explicitly separates production,
+development, tests and each unique PIE session. A product fork allocates a new product
+ID and imports old saves deliberately. Missing/zero identities disable save admission
+rather than falling back to a current directory or name.
 
-Mutations acquire a namespace/slot lease that covers final source/destination checks
-and publication; other processes/cloud adapters use the same locking/version protocol.
-Credentials, scope authority and lock paths come from trusted host composition, not
-archive metadata. Cleanup only targets owned temporary records under a valid lease;
-a wildcard sweep must not unlink another process's active work. Catalog/delete/import
-operations apply the same typed-ID, containment and generation checks.
+The namespace owner is a typed variant. A client `UserProfileOwner` combines one
+opaque `LocalUserStorageId` with one product-owned `GameProfileId`. A dedicated/headless
+`ServerWorldOwner` combines a `ServerStorageOwnerId` with stable world/tenant scope.
+The resulting `SaveNamespaceId { product, environment, owner }` is opened by the
+application/profile owner and exposed to Runtime Save as a generation-checked
+`SaveNamespaceHandle`. Callers cannot construct a handle from raw IDs.
 
-Foundation's existing path-based DurableFileSystem primitives are building blocks,
-not proof that all no-follow/containment/outcome guarantees already exist. SaveStorageAdapter
-must implement and qualify these platform guarantees before a production save path
-is enabled. Secure console/cloud containers may map IDs to platform records rather
-than expose host filesystem paths, while preserving the same transaction outcomes.
+Platform Services owns live platform authentication handles. The game identity/profile
+service privately maps a provider-scoped handle to `LocalUserStorageId`; gamertag,
+email, display name and raw provider tokens are never directory components. It owns
+the per-user profile catalog, active `GameProfileId`, account association and profile
+display metadata. Runtime Save owns slot operations, not user sign-in, profile
+creation/linking or profile-store state.
+
+When multi-device/cloud persistence is advertised, the backend must provide a stable
+opaque authenticated-user scope so the same platform account maps consistently on
+each device. If it cannot, cloud persistence is unavailable and local fallback uses
+an installation-local partition; mutable user text is never hashed as a substitute.
+
+Platform user capability is explicit:
+
+| Capability | Behavior |
+|---|---|
+| `SingleLocalUser` | Bind one installation-local user partition. Platform-user selection/switching returns `NotSupported`; multiple product profiles may still be allowed. |
+| `CurrentPlatformUser` | Bind only the authenticated current user; sign-out closes the binding and no new user inherits it. |
+| `MultiplePlatformUsers` | Select an explicit signed-in handle; each maps to a distinct local partition. |
+
+Guest/offline storage is its own installation-local user partition. Later sign-in does
+not merge or re-own it automatically. Cross-user/product profile movement is an
+explicit verified import/copy transaction that preserves source data until destination
+publication succeeds.
+
+### Slot, category and catalog identity
+
+`SaveGameSlotId` is an opaque nonzero UUID scoped to its namespace and remains stable
+across overwrites. ADR-112's `SlotGenerationId` instead identifies one durable
+publication to that slot. `SaveAddress { namespaceHandle, slot }` is the only runtime,
+UI and cloud-coordinator address; it contains no path or label.
+
+Manual, Quick, Auto, Checkpoint and registered product `SaveCategoryId` values are
+catalog policy controlling capacity, rotation, overwrite and presentation. Quicksave
+aliases and autosave rings map to slot IDs. Category, display name, list index and
+timestamp never identify a slot or form a filename. Reclassification changes catalog
+metadata transactionally without changing slot identity or archive bytes.
+
+The storage authority owns one immutable revisioned catalog projection per open
+namespace. Records include address, category, bounded presentation metadata, current
+generation/content/state identities and lifecycle state. UI retains addresses and
+expected catalog revisions; it never loads/deletes by label, timestamp or row index.
+
+### Physical mapping and safety
+
+Platform Abstraction resolves a product state root for the validated
+`ProductStorageId`. SaveStorageAdapter alone maps
+`SaveNamespaceId + SaveGameSlotId` to storage. The conceptual filesystem shape is:
+
+```text
+<product-state-root>/
+  <environment-id>/
+    <owner-id>/
+      catalog
+      slots/<save-slot-id>.horosave
+      staging/<owned-operation-id>.temporary
+```
+
+Every component uses a fixed lossless filesystem-safe encoding of its opaque identity.
+Free-form product/user/profile/category/slot labels are never path components. Secure
+console containers may map the same typed keys to records without exposing paths.
+
+The adapter enforces containment using safe handle-relative/no-follow platform
+operations, not a string prefix test. Reject symlink/reparse redirection, traversal,
+alternate-stream/device/path separators and unexpected file types. Never follow entry
+names or embedded paths from the archive into the filesystem. Authorized imports copy
+untrusted input through bounded verification into the destination namespace.
+
+Mutations acquire a namespace/slot lease covering final source/destination checks and
+publication; other processes/cloud coordination use the same locking/generation
+protocol. Credentials, scope authority and lock paths come from trusted composition,
+not archive metadata. Cleanup only targets owned temporary records under a valid
+lease; a wildcard sweep must not unlink another process's active work. Catalog,
+delete and import apply the same typed-ID, containment and generation checks.
+
+Foundation's path-based DurableFileSystem primitives are building blocks, not proof
+that no-follow/containment/outcome guarantees exist. SaveStorageAdapter must implement
+and qualify them before production saves are enabled. Profile/account storage, cloud
+retry journals, editor recovery, authored projects and PIE sandboxes remain distinct
+sibling/virtual namespaces with separate schemas and mutation leases.
+
+### Profile-switch transaction
+
+The application/session owner closes old save/load/delete/import/cloud-apply admission,
+cancels pre-commit work, boundedly settles or retains ownership for post-commit work,
+stops old cloud scheduling, releases catalog/slot leases and invalidates the old
+namespace handle generation. It then binds the selected user/profile, validates the
+product/environment, opens its catalog, publishes a new snapshot and reopens admission.
+
+Operations never change namespace in flight. Completion captures the old handle
+generation and can report/finalize only against that authority, never update the new
+profile's catalog/UI. A local save already past commit may finish in the old namespace
+but cannot upload under the new platform user. Sign-out uses the same close path.
+Failure to open the new catalog yields explicit `NoActiveProfile`; rollback/rebind is
+a fresh transaction, not a half-old/half-new binding.
 
 ## Host Environments, Account State And Cloud
 
 | Host | Required behavior |
 |---|---|
-| PIE | Unique session sandbox or bounded virtual store; never writes production slots, account profile or canonical .horo documents |
-| Packaged standalone | PlatformServices resolves trusted user/project save storage; manual/quicksave/rotating autosave catalog |
+| PIE | Unique `EnvironmentStorageId` sandbox or bounded virtual store; never writes production slots, account profile or canonical .horo documents |
+| Development/test | Explicit non-production product/environment partition; sharing requires reviewed product policy, never path/name coincidence |
+| Packaged standalone | Validated product environment plus installation/platform-user and active game-profile namespace; manual/quicksave/rotating autosave catalog |
 | Dedicated/headless | Server world namespace and authoritative gameplay state; no viewport, client prediction, HUD or client account preferences |
 
 The host decides signature policy from its trust needs; being a server alone is not
@@ -730,6 +826,13 @@ or account-wide stats. Account changes triggered by gameplay are independent typ
 profile operations. A successful save/load is not a transaction over external platform
 achievement/cloud-account APIs. Account policy may merge monotonic progression, but
 that is never an automatic rewind from slot_player_state.bin.
+
+Catalog UI consumes immutable records keyed by `SaveAddress`; no filesystem path or
+raw platform handle crosses the surface. The save/cloud coordinator derives a bounded
+`CloudSaveObjectKey` from the typed address and authenticated provider context.
+Platform Services treats that key and finalized archive bytes as opaque and cannot
+edit local storage. Provider timestamps remain presentation/provenance only. SAV-006
+owns cloud revisions, write preconditions, offline authority and divergence policy.
 
 Cloud adapters receive only final signed/unsigned archives allowed by the namespace
 policy. Conflict detection compares `SlotGenerationId` lineage and
@@ -757,9 +860,9 @@ migration; cloud availability cannot authorize unsigned downgrade.
 
 ## Failure, Cancellation And Shutdown Summary
 
-All failures follow ADR-008 Result/Error, retaining operation, slot, source revision
-and nested asset/provider/filesystem cause. Admission errors are distinct from later
-operation outcomes.
+All failures follow ADR-008 Result/Error, retaining operation, `SaveAddress`, source
+`SlotGenerationId`/`ArchiveContentHash` when available and nested asset/provider/
+filesystem cause. Admission errors are distinct from later operation outcomes.
 
 | Failure | Observable result |
 |---|---|
@@ -790,6 +893,12 @@ documentation change:
 
 - Authoring/recovery/workspace/account isolation, PIE namespace separation and
   headless exclusion of UI/client profile data.
+- Product/environment/user/profile collision tests, all three platform-user
+  capabilities, guest import, sign-out and restart with no display name/path identity.
+- Profile-switch races before/after commit, stale completion fencing, catalog-open
+  failure, production/development/PIE/server separation and UI/cloud path opacity.
+- Duplicate/renamed display names, category reclassification, quicksave/autosave
+  aliases and stable slot identity across overwrite.
 - Capture one tick across ECS/providers/world deltas; resume live mutation immediately
   after the safe point; race scene replacement, COW exhaustion and stale readbacks.
 - Byte fixtures for the 32-byte preamble, unsigned/signed trailer lengths, exact hash
@@ -844,4 +953,5 @@ and regression coverage.
 - [ADR-012](../../adr/012-world-streaming-partition-authority-and-subsystem-boundaries.md): Cell authority and barriers.
 - [ADR-008](../../adr/008-error-model-exception-boundary-and-registry.md): Typed error propagation.
 - [ADR-112](../../adr/112-save-archive-container-and-compatibility-policy.md): Portable container, canonical state, version axes, identities and compatibility horizon.
+- [ADR-113](../../adr/113-local-storage-user-profile-and-slot-ownership.md): Product/user/profile namespaces, logical slot addressing and physical storage ownership.
 - [Application Security](../security/application-security.md): Trust and untrusted-input boundaries.
