@@ -468,6 +468,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [PCG Pure Evaluation, Commit and Generated-Output Ownership](../adr/153-pcg-pure-evaluation-commit-and-generated-output-ownership.md):
   immutable generation candidates, target-owner aggregate commit, exact provenance,
   atomic regeneration and cleanup that preserves hand-authored/adopted content.
+- [PCG Cross-System Authority, Readiness and Commit Boundary](../adr/154-pcg-cross-system-authority-readiness-and-commit-boundary.md):
+  host-composed target adapters, exact readiness receipts, aggregate rollback and
+  preserved TRF/WST/NAV/Scene/VFX/network/persistence authority.
 - [Multiplayer Replication Architecture](./runtime/multiplayer-replication-architecture.md):
   replication roles, property deltas, RPCs, prediction, interest management,
   dedicated servers, and security.

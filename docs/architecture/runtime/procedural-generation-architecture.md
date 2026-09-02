@@ -261,6 +261,20 @@ These integrations use immutable spatial snapshots and typed target-owner candid
 They do not expose live provider storage to PCG or grant nodes authority to mutate the
 integrated subsystem.
 
+[ADR-154](../../adr/154-pcg-cross-system-authority-readiness-and-commit-boundary.md)
+defines the integration adapter and readiness contract. Adapters depend on both the PCG
+and target public APIs and are composed by the host; PCG Core does not depend on target
+implementations. Each target prepares private state and returns a transaction/generation/
+dependency/cost-scoped receipt. Required owners publish together at one aggregate safe
+point or all prepared state rolls back.
+
+Terrain/Foliage retains dataset, type, instance, cook, runtime placement, extraction and
+eviction authority. World Streaming owns cell demand/reservation/publication; Scene/
+Prefab owns entity expansion/identity; Navigation owns topology; VFX observes only
+post-commit facts; Network and Runtime Save capture target-owner canonical state rather
+than PCG workers/intermediates. Required unavailable capabilities fail the transaction;
+declared optional omission is typed and changes the selected output-plan identity.
+
 ## Editor Authoring
 
 The PCG editor provides a node-graph editing surface:
@@ -295,6 +309,7 @@ intermediate, output and target-preparation costs are reserved before admission.
 - [PCG Graph Source, Cooked Plan, Cache and Runtime Ownership](../../adr/150-pcg-graph-source-cooked-plan-cache-and-runtime-ownership.md)
 - [PCG Spatial Input Snapshot and Node-Library Ownership](../../adr/152-pcg-spatial-input-snapshot-and-node-library-ownership.md)
 - [PCG Pure Evaluation, Commit and Generated-Output Ownership](../../adr/153-pcg-pure-evaluation-commit-and-generated-output-ownership.md)
+- [PCG Cross-System Authority, Readiness and Commit Boundary](../../adr/154-pcg-cross-system-authority-readiness-and-commit-boundary.md)
 - [PCG Graph Editor UI Reference](./pcg-graph-editor.html)
 
 - [Scene Runtime](./scene-runtime.md): generated objects as entities
