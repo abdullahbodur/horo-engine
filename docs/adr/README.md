@@ -165,6 +165,7 @@ to the replacement.
 | [151](151-pcg-ownership-authority-tier-and-lifecycle.md) | PCG Ownership, Authority, Tier and Lifecycle | Proposed | 2026-09-02 |
 | [152](152-pcg-spatial-input-snapshot-and-node-library-ownership.md) | PCG Spatial Input Snapshot and Node-Library Ownership | Proposed | 2026-09-02 |
 | [153](153-pcg-pure-evaluation-commit-and-generated-output-ownership.md) | PCG Pure Evaluation, Commit and Generated-Output Ownership | Proposed | 2026-09-02 |
+| [154](154-pcg-cross-system-authority-readiness-and-commit-boundary.md) | PCG Cross-System Authority, Readiness and Commit Boundary | Proposed | 2026-09-02 |
 
 ## Conventions
 
