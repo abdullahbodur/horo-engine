@@ -714,6 +714,32 @@ at ADR-018 `RenderSafePoint` on the render-capable owner thread. Device recreati
 and reapplies only admitted labels to new generations. Null validates logical
 placement and budgets with synthetic records but claims no native-tool visibility.
 
+### Backend validation and debug layers
+
+[ADR-045](../../adr/045-backend-validation-and-debug-layer-integration.md) owns
+native validation/debug-layer policy. The host resolves an immutable
+`Disabled`, `Optional` or `Required` request before presentation-window and native
+instance/context/factory/device creation. Debug builds do not imply activation,
+Shipping defaults to disabled, and a live policy change requires backend or, when
+the platform requires it, process restart.
+
+The selected private backend resolves an inert plan, activates each facility at
+its API-required creation stage and publishes generation-scoped realized state.
+Request, reported availability and active features remain distinct. A missing
+required facility fails with a typed result; optional policy may take only its
+declared same-backend disabled retry after complete rollback. Validation policy
+cannot lower the API contract, switch backend/device, use software rendering or
+change product quality.
+
+Native messages map through ADR-041's bounded generation-aware ingestion port and
+registered codes. Callbacks perform no UI/file/network work, arbitrary allocation,
+fallback or synchronous sink flush. Fixed filters, native mapping tables and
+break policy are profile-validated before activation. Device loss/recreation and
+shutdown unregister old sources on their required owner threads before native
+state destruction; late messages cannot enter a new generation. Null validates
+shared plan/fallback/mapping/lifecycle semantics but cannot qualify native layer
+availability, callback behavior or overhead.
+
 ## Backend Implementation Boundary
 
 Each concrete backend owns its API dependencies, context/device objects,
