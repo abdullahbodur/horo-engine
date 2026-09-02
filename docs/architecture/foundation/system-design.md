@@ -430,6 +430,14 @@ Application selects the XR/Platform/Renderer/Input tuple before activation. Rend
 owns GPU work/external resources, Input owns canonical actions and Platform supplies OS
 host primitives; none owns the XR session. Native types never enter `XRApi`.
 
+[ADR-158](../../adr/158-openxr-loader-backend-packaging-and-host-composition.md)
+makes `XROpenXR` an optional first-party product component rather than an ambient
+ExtensionHost plugin. Package/install services verify the exact backend/loader artifact
+record, Platform supplies only library and native-host primitives, XROpenXR owns loader
+dispatch, and the application composes one immutable XR/Platform/Renderer/Input plan.
+Component installation, backend composition, loader/runtime availability, system
+support, session activation and capability availability remain distinct typed states.
+
 [ADR-054](../../adr/054-extension-and-package-authority-boundary.md) keeps
 extension package composition in the application boundary. Package resolution,
 verified install records, trust and durable enablement are application/package
