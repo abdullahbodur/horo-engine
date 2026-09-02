@@ -445,6 +445,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [VTX Feedback, Readback, Prediction and Camera-Data Ownership](../adr/167-vtx-feedback-readback-prediction-and-camera-data-ownership.md):
   Renderer-owned feedback/readback resources, immutable delayed observations, typed
   camera/producer hints, bounded prediction and non-authoritative demand evidence.
+- [VTX GPU Page Table, Physical Cache, Shader and Material Ownership](../adr/168-vtx-gpu-page-table-physical-cache-shader-and-material-ownership.md):
+  logical mapping intent versus Renderer realization, Atlas/Sparse semantic parity,
+  atomic frame bindings, material slots and offline sampling variants.
 - [Destruction And Fracture Architecture](./runtime/destruction-and-fracture-architecture.md):
   fracture assets, chunk physics, debris, authority, and network reconstruction.
 - [Destruction Ownership, Authority, State and Runtime Geometry Boundary](../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md):

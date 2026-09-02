@@ -36,6 +36,10 @@ The equal first-class obligations of interactive backend modules are defined by
   Renderer also owns VTX feedback/compaction/copy passes, native resources and delayed
   readback lifetime. It publishes bounded immutable observations; it neither predicts
   page demand nor waits for same-frame CPU consumption.
+- [ADR-168](../../adr/168-vtx-gpu-page-table-physical-cache-shader-and-material-ownership.md)
+  gives Renderer complete ownership of VTX page-table/atlas/sparse resources, uploads,
+  mappings, descriptors, graph synchronization and retirement. VTX supplies only
+  finite logical revision intent, and each frame sees one immutable binding snapshot.
 
 ## Layer Model
 

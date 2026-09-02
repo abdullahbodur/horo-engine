@@ -61,6 +61,10 @@ Not covered:
   Materials owns semantic sampling intent and required/fallback variants, while VTX
   owns logical page state and Renderer owns physical resources and bindings. Variant
   selection is admitted before activation and never generated on a runtime page miss.
+- [ADR-168](../../adr/168-vtx-gpu-page-table-physical-cache-shader-and-material-ownership.md)
+  further requires typed logical VTX slots and offline reflected sampling variants.
+  Material assets/instances never store atlas coordinates, sparse tiles, descriptor
+  indexes or mapping revisions; render extraction resolves a per-frame binding lease.
 
 ## Shader Graph Editor Surface
 

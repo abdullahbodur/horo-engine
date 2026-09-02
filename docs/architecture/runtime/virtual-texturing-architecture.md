@@ -122,6 +122,24 @@ pin, priority and reservation policy. Missing/sampled/overflowed/cancelled obser
 carry explicit completeness; normal frames never wait for readback or allocate a larger
 buffer in response to overflow.
 
+## Renderer Realization And Material Sampling
+
+[ADR-168: VTX GPU Page Table, Physical Cache, Shader and Material Ownership](../../adr/168-vtx-gpu-page-table-physical-cache-shader-and-material-ownership.md)
+defines the realization boundary. VTX emits finite generation/revision-scoped logical
+map/unmap intent without physical slots or handles. Renderer owns page-table and
+atlas/sparse resources, uploads, mapping, descriptors, graph work, synchronization and
+GPU-safe retirement, then returns a backend-neutral completion.
+
+`Atlas` and `Sparse` realize one canonical sampling contract and are admitted/
+qualified independently. A frame captures one immutable binding snapshot; upload
+finishes before mapping visibility, unmap precedes physical reuse, and old resources
+remain leased through every submitted reader. No partial mapping revision is visible.
+
+Materials own semantic VTX slots, sampling intent and cooked required/fallback
+variants. They serialize no descriptor index, physical coordinate or native handle.
+Shader variants are produced offline under ADR-035; a page miss may emit bounded
+feedback and use a declared fallback, but cannot compile, allocate or mutate mappings.
+
 ## Capability And Product Scope
 
 VTX uses feature-local tiers:
