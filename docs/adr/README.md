@@ -80,6 +80,7 @@ to the replacement.
 | [066](066-spatial-provider-and-required-capability.md) | Spatial Provider and Required Capability | Proposed | 2026-09-02 |
 | [067](067-platform-audio-backend-strategy.md) | Platform Audio Backend Strategy | Proposed | 2026-09-02 |
 | [068](068-music-transport-and-cross-system-ownership.md) | Music Transport and Cross-System Ownership | Proposed | 2026-09-02 |
+| [069](069-audio-extension-capability-and-abi.md) | Audio Extension Capability and ABI | Proposed | 2026-09-02 |
 
 ## Conventions
 
