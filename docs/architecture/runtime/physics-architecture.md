@@ -175,6 +175,16 @@ solver/profile/platform-private immutable shape artifact under ADR-085. It canno
 chunk topology/identity or substitute a box/mesh/recomputed hull; Destruction cannot
 serialize Jolt data or claim a native shape ready.
 
+[ADR-146](../../adr/146-destruction-runtime-activation-physics-cleanup-and-rollback.md)
+defines the runtime body transaction. Contact callbacks append only bounded immutable
+evidence; Destruction consumes it after the step and plans a later transition. Physics
+prepares exact pre-cooked chunk bodies privately, applies staged initial impulses and
+installs them at the pre-step safe point into transition-ticket routing. Ordinary queries
+continue to resolve the old root until RuntimeScene aggregate commit. Before that commit,
+cancel/failure retires only the candidate after readers drain; after it, recovery is a
+new transaction rather than restoration of old native handles. Solver sleep cannot
+authorize canonical chunk cleanup.
+
 ## Character Query Boundary
 
 [ADR-089](../../adr/089-character-controller-ownership-implementation-and-update-order.md)
@@ -432,6 +442,8 @@ Required tests cover:
 - destruction contacts remain immutable post-step evidence, while pre-cooked chunk
   bodies prepare/rollback/publish/retire through Physics safe points without runtime
   geometry or collision cooking
+- destruction body receipts remain transition/world/binding-generation scoped; private
+  publication is not query visibility, and aggregate commit is the rollback boundary
 
 ## Related Documents
 
@@ -450,3 +462,4 @@ Required tests cover:
 - [ADR-141: Terrain/Foliage Cross-System Ownership and Readiness](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md)
 - [ADR-144: Destruction Ownership, Authority, State and Runtime Geometry Boundary](../../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md)
 - [ADR-145: Destruction Source, Chunk Geometry, Collision and Cook Ownership](../../adr/145-destruction-source-chunk-geometry-collision-and-cook-ownership.md)
+- [ADR-146: Destruction Runtime Activation, Physics, Cleanup and Rollback](../../adr/146-destruction-runtime-activation-physics-cleanup-and-rollback.md)

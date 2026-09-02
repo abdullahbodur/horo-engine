@@ -15,6 +15,12 @@ aggregate Scene/Physics/Render publication. Runtime mesh cutting is post-1.0 onl
 defines source normalization, canonical DFR chunk/interior/connectivity artifacts,
 solver-neutral collision inputs, Assets cache/publication and separate Physics/Render
 derived products.
+[ADR-146](../../adr/146-destruction-runtime-activation-physics-cleanup-and-rollback.md)
+defines the runtime transaction over those products. Commands and post-step contact
+evidence enter at bounded Destruction safe points; Physics prepares exact pre-cooked
+chunk bodies privately; RuntimeScene alone exposes semantic, entity, Physics and Render
+changes through one aggregate commit. Sleep or visibility never grants cleanup
+authority, and rollback preserves the old root only before that commit.
 
 ## Ownership
 
@@ -109,12 +115,16 @@ Every trigger becomes an authority-, generation- and revision-checked typed comm
 Physics contacts are immutable evidence consumed after the Physics step; callbacks do
 not fracture objects directly. On a successful pre-cooked transition:
 
-1. Destruction validates the exact cooked chunk/support closure and complete peak cost.
-2. Physics and Render prepare required chunk representations privately.
-3. RuntimeScene commits semantic state, intact/chunk visibility, entities and required
+1. Destruction validates command/evidence generation and computes the exact cooked
+   direct-detach plus unsupported-chunk closure and complete peak cost.
+2. Physics and Render prepare required chunk representations privately under one
+   transition ticket; ordinary queries still resolve the previous root.
+3. Physics publishes prepared bodies into ticket-scoped routing only at its pre-step
+   safe point, without making them public.
+4. RuntimeScene commits semantic state, intact/chunk visibility, entities and required
    bodies through one activation-ticket-scoped aggregate root.
-4. Canonical gameplay/network/save events publish only after commit.
-5. Optional VFX, Audio and Decal presentation requests consume the committed event.
+5. Canonical gameplay/network/save events publish only after commit.
+6. Optional VFX, Audio and Decal presentation requests consume the committed event.
 
 Failure or cancellation before commit preserves the intact/previous generation. Old
 representations remain leased and charged until every consumer acknowledges retirement.
@@ -162,6 +172,13 @@ struct FractureChunkGraph {
 };
 ```
 
+Core 1.0 support loss uses deterministic graph reachability, not a stress solver.
+After directly selected chunks are removed, the planner traverses the remaining cooked
+graph from immutable anchors in stable chunk/neighbor order. Every remaining chunk not
+reachable from an anchor joins the detach set. The complete result must fit active
+limits or the transition fails atomically; it is never truncated. Damage accumulation
+and threshold rules are separate from this closure step.
+
 ## Physics Integration
 
 Fracture chunks use the physics system:
@@ -170,6 +187,10 @@ Fracture chunks use the physics system:
 - Chunk collision shapes use convex decomposition (pre-computed in the
   fracture asset)
 - Initial velocities are derived from the fracture event
+- Bodies prepare privately from the exact DFR/Physics shape artifact and become query-
+  visible only with the aggregate RuntimeScene commit
+- Contact callbacks collect bounded immutable evidence; they do not mutate Destruction,
+  Scene structure or body topology
 - Physics sleep remains solver state and does not grant cleanup authority
 - Gameplay-authoritative and durable chunks retire only through explicit policy and,
   where required, a successful Runtime Save/Persistent World handoff
@@ -221,13 +242,23 @@ not an automatic `High` feature.
 
 Destruction builds transitions as detached candidates with exact affected chunks,
 consumer requirements and peak reservations. Workers validate immutable artifacts only;
-the owner lane commits state. Stale revision/generation, authority loss, budget denial,
-consumer failure or cancellation changes nothing before aggregate publication.
+the owner lane commits state. Physics and Render may publish prepared resources only to
+ticket-scoped private routing. Stale revision/generation, authority loss, budget denial,
+consumer failure or cancellation changes nothing before aggregate publication; private
+resources retire after owner-safe readers drain.
+
+Aggregate commit is the rollback boundary. Before it, failure preserves the complete old
+root. After it, restore, dormancy or recovery is a new authorized command/revision rather
+than an in-place rewind. A required consumer loss exposes typed suspended/failed
+availability and never fabricates an intact state.
 
 Runtime Save captures stable destructible/chunk identities, content/state revisions,
 health, broken/support/dormant sets and required progress. Native bodies, shapes, GPU
 resources, particles, voices, contacts and caches are derived/excluded. World Streaming
 cannot evict the last durable state before the persistence owner accepts its handoff.
+Sleeping, old or invisible chunks are not cleanup-eligible by implication. An explicit
+bounded policy chooses canonical dormancy, and required durable state must be accepted
+before live Scene/Physics/Render representations retire through another aggregate commit.
 
 Shutdown closes admission, cancels task groups, invalidates candidates, requests exact-
 generation consumer retirement and retains artifacts/reservations/modules until every
@@ -261,3 +292,6 @@ headless/Null/all interactive backends, cancellation and repeated shutdown.
 - [ADR-145](../../adr/145-destruction-source-chunk-geometry-collision-and-cook-ownership.md):
   normalized source/recipe inputs, canonical DFR chunk/interior/connectivity artifact,
   solver-neutral collision inputs and separate Physics/Render derived products
+- [ADR-146](../../adr/146-destruction-runtime-activation-physics-cleanup-and-rollback.md):
+  command and contact safe points, deterministic support loss, private Physics body
+  preparation, aggregate publication, cleanup, rollback, replacement and shutdown
