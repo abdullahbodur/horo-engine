@@ -772,6 +772,33 @@ leases. It cannot invoke import/cook work or substitute a fallback shape. The Sh
 domain does not create a parallel asset ID, scheduler, cache, package lock or
 publication authority.
 
+### Prefab Domain Resolution And Cook Boundary
+
+[ADR-095](../../adr/095-prefab-cook-boundary-and-artifact-model.md) gives Assets
+stable prefab identity, immutable snapshot capture, bounded cook scheduling,
+dependency-aware cache keys, staging, manifest verification, atomic generation
+publication, rollback, packaging and runtime byte delivery. Assets does not parse
+prefab hierarchy semantics, apply overrides or create a second expansion path.
+
+The Prefab domain owns source validation and one versioned ADR-094 resolver that
+produces an immutable `EffectivePrefabCandidateV1`. Scene Cook consumes it to embed
+static placements as ordinary `RuntimeSceneDefinition` content. Prefab Cook consumes
+it to emit flat `CookedPrefab` artifacts for declared dynamic-spawn roots. The
+effective candidate is not an asset, cache publication or runtime input.
+
+Keys include exact source/transitive identity, revision and digest; project,
+package, schema and resolver revisions; semantic edge/placement and override
+digests; cooker/output/envelope versions; target/profile; and the role-specific
+scene placement/conversion or dynamic-spawn policy. Fresh and cached outputs pass
+the same envelope, requested-key, payload, bounds and compatibility validation.
+
+Standard packaging excludes raw prefab source, sidecars and effective candidates.
+Static-only prefab content ships inside cooked scenes; `CookedPrefab` ships only in
+the declared dynamic-spawn closure. Candidate cancellation, corruption, staleness
+or publication failure preserves the prior active generation. Reloaded templates
+affect future spawns only; static scene replacement remains a Scene Runtime
+transaction.
+
 ### Determinism And Failure Invariants
 
 A cooker receives an invocation-bounded immutable source input, immutable
@@ -891,10 +918,11 @@ a bounded payload, and a cryptographic digest. The compatibility policy will be:
 - an artifact newer than the runtime is rejected with a request for a compatible
   engine version
 
-Prefab cooking is also future work. It will resolve prefab references in scenes
-and inline expanded objects into the cooked scene artifact; release packages
-will not ship raw `.prefab` files as runtime data. See
-[Prefab Architecture](./prefab-architecture.md).
+Prefab cooking is also future work. One Prefab-domain resolver will supply both
+scene cook, which inlines static placements, and runtime-template cook, which emits
+`CookedPrefab` only for declared dynamic-spawn roots. Standard release packages do
+not ship raw `.prefab` files as runtime data. See [Prefab Architecture](./prefab-architecture.md)
+and [ADR-095](../../adr/095-prefab-cook-boundary-and-artifact-model.md).
 
 The future development output contract uses
 `build/<preset>/cooked_assets/<target>/` as each target's `<cooked-root>/<target>`

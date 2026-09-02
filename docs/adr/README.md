@@ -106,6 +106,7 @@ to the replacement.
 | [092](092-character-controller-determinism-and-state-composition.md) | Character Controller Determinism and State Composition | Proposed | 2026-09-02 |
 | [093](093-prefab-override-property-identity-and-delta-operations.md) | Prefab Override Property Identity and Delta Operations | Proposed | 2026-09-02 |
 | [094](094-prefab-nested-composition-and-variant-inheritance.md) | Prefab Nested Composition and Variant Inheritance | Proposed | 2026-09-02 |
+| [095](095-prefab-cook-boundary-and-artifact-model.md) | Prefab Cook Boundary and Artifact Model | Proposed | 2026-09-02 |
 
 ## Conventions
 

@@ -261,6 +261,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Prefab Nested Composition and Variant Inheritance](../adr/094-prefab-nested-composition-and-variant-inheritance.md):
   stable nested-placement edges, single-parent variants, deterministic precedence,
   combined-graph validation, transactional propagation and flattened cook output.
+- [Prefab Cook Boundary and Artifact Model](../adr/095-prefab-cook-boundary-and-artifact-model.md):
+  single prefab resolver, expanded-scene versus spawnable-template artifacts,
+  complete cache identity, generation retention, hot reload and shipping policy.
 - [Built-In Scene Primitives](./runtime/built-in-scene-primitives.md): core
   procedural meshes, collider shapes, and scene object primitives available
   without external packages.
