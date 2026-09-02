@@ -14,6 +14,8 @@ ADR-114 freezes authoring/runtime state composition and subsystem-owned canonica
 adapters for HORO-1438 #1438 [SAV-004.1].
 ADR-115 freezes local/cloud authority, provider revisions and conflict preservation
 for HORO-1466 #1466 [SAV-006.1].
+ADR-116 freezes save-source trust, bounded admission, tool capabilities, credentials
+and development/shipping security profiles for HORO-1495 #1495 [SAV-008.1].
 
 - RuntimeSaveService coordinates one runtime save/restore authority under the
   application/session lifetime. It never retains an unleased reference to a scene
@@ -433,6 +435,37 @@ a valid signature also does not prevent replay of an old valid save. Titles need
 anti-rollback require separately trusted generation/anti-replay state, not a
 timestamp inside the attacker-controlled file. The archive is not encrypted by this
 protocol.
+
+### Untrusted Input And Threat Policy
+
+Every archive begins as untrusted bytes, including a file already present in the
+canonical save directory, a provider-authenticated cloud download, a migrated output,
+a modded save and a server-signed save. Path containment, catalog membership,
+transport authentication, a filename suffix, a content hash or a signature is only
+the evidence it specifically claims; none skips later compatibility, semantic,
+namespace or freshness checks.
+
+[ADR-116](../../adr/116-save-data-threat-model-and-trust-policy.md) defines the common
+admission pipeline. The host resolves the operation profile, capability, namespace,
+budgets and cancellation policy before acquiring bytes. Framing and total length are
+checked before payload allocation; outer integrity precedes trust in payload control
+fields; signature/scope policy precedes decode; compatibility and migrations operate
+on bounded detached candidates; and all owners prepare before one no-fail restore or
+atomic publication. Failure leaves the active runtime, source and last-known-good
+local generation unchanged.
+
+Import, export, inspection, migration, load, delete and conflict resolution are
+separate capabilities. UI, CLI and MCP invoke application-owned operations with typed
+addresses or admitted external handles; they never call codecs, choose trust roots,
+hold leases, access signing/cloud credentials or publish a live slot directly.
+Inspection returns bounded allowlisted metadata and safe diagnostics, not raw
+participant state by default.
+
+Development profiles may admit isolated unsigned/modded namespaces, fixture tools and
+explicit raw developer export. They retain the same framing, parser/decompression
+limits, path containment, transactional publication and credential isolation as
+shipping. Shipping/server policy is fail-closed and cannot be weakened by archive
+fields, debug flags, directory copies or a remote tool request.
 
 ## Save Pipeline, Publication And Cancellation
 
@@ -973,6 +1006,15 @@ documentation change:
   `ArchiveContentHash`.
 - Required signature stripping, wrong project/account/world, untrusted key, signer
   timeout, malformed inputs, decompression bombs and unsupported schema versions.
+- Every local/imported/cloud/migrated/modded/server-signed source enters as untrusted;
+  catalog location, provider authentication and inspection success never skip
+  integrity, scope, compatibility or semantic validation.
+- Per-operation byte/count/string/nesting/decompression/work/disk budgets; hostile
+  archives cannot trigger unbounded retry, diagnostic output or automatic budget
+  escalation.
+- Inspect/import/export/migrate/load/delete/conflict capability separation across
+  UI, CLI and MCP, including shipping remote denial and no raw state/path/credential
+  leakage.
 - Snapshot admission versus eventual worker failure, per-operation sticky outcomes,
   cancellation races on both commit gates and no UI-thread filesystem calls.
 - Disk-full/flush/rename/directory-sync fault injection, especially rename-success plus
@@ -1023,4 +1065,5 @@ and regression coverage.
 - [ADR-113](../../adr/113-local-storage-user-profile-and-slot-ownership.md): Product/user/profile namespaces, logical slot addressing and physical storage ownership.
 - [ADR-114](../../adr/114-canonical-runtime-world-persistence-boundary.md): Authoring/runtime composition, state classification and subsystem-owned canonical adapters.
 - [ADR-115](../../adr/115-cloud-save-authority-revision-and-conflict-policy.md): Local/cloud authority, provider CAS revisions, offline lineage and conflict preservation.
+- [ADR-116](../../adr/116-save-data-threat-model-and-trust-policy.md): Save-source trust classification, bounded admission, tool capabilities, credentials and profile policy.
 - [Application Security](../security/application-security.md): Trust and untrusted-input boundaries.

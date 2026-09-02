@@ -320,6 +320,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Cloud Save Authority, Revision and Conflict Policy](../adr/115-cloud-save-authority-revision-and-conflict-policy.md):
   local authority, provider CAS/lease revisions, offline lineage classification,
   conflict preservation and coordinator-owned resolution.
+- [Save Data Threat Model and Trust Policy](../adr/116-save-data-threat-model-and-trust-policy.md):
+  untrusted save sources, bounded admission, integrity/authenticity/replay policy,
+  tool capabilities, credentials and development/shipping profiles.
 - [Navigation And AI Architecture](./runtime/navigation-and-ai-architecture.md):
   NavMesh, pathfinding, dynamic obstacle overlays, perception, crowd, blackboard,
   and editor bake tooling.

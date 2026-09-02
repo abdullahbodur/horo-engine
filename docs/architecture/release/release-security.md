@@ -147,6 +147,33 @@ controls.
 Encryption without authentication, nonce reuse, hardcoded keys, and silent
 downgrade to an unprotected archive are prohibited.
 
+This section governs protected release/project `.horo` archives. It does not imply
+that runtime `.horosave` files are encrypted. Runtime save integrity, signatures,
+scope, replay and confidentiality claims are independently defined by
+[ADR-116](../../adr/116-save-data-threat-model-and-trust-policy.md).
+
+## Runtime Save Security Profile
+
+A shipping release publishes a versioned save security profile containing only
+public policy:
+
+- admitted local/import/mod/cloud/tool operations and their capability IDs;
+- `SaveSignaturePolicy`, allowed algorithms and public trust-policy/key IDs;
+- product/environment/server namespace rules and any required anti-replay policy ID;
+- archive/parser/decompression/migration/staging/diagnostic budgets; and
+- whether raw inspection/export or remote MCP save mutation is unavailable.
+
+The release manifest never contains signing private keys, provider tokens, reusable
+credentials or machine-local credential bindings. CI validates that secure namespaces
+cannot resolve to Optional/Disabled signing, development roots or unbounded tool
+profiles. Development policy may add isolated unsigned/modded fixtures and inspection
+capabilities, but cannot be copied or renamed into a shipping namespace.
+
+Hash verification is not authentication, signature verification is not freshness or
+confidentiality, and provider transport authentication is not archive admission. Save
+signing uses the credential provider through a short-lived scoped operation; private
+material never enters the archive builder, manifest, logs or diagnostic artifacts.
+
 ## Artifact Integrity And Signing
 
 Every published artifact has a cryptographic hash recorded in the release
@@ -296,6 +323,8 @@ Security validation includes:
 - command and path injection tests
 - secret redaction tests
 - wrong-key and tamper-detection archive tests
+- runtime save-profile validation, signature stripping/wrong scope/valid-old replay,
+  and development-to-shipping downgrade rejection
 - nonce uniqueness and KDF parameter tests
 - manifest and signature verification tests
 - interrupted staging and cleanup tests
@@ -316,6 +345,9 @@ verification stop the release.
 
 - [Application Security](../security/application-security.md): running editor/CLI trust,
   plugin, project, path, process, and MCP policy.
+- [Save Game And Persistence](../runtime/save-game-and-persistence.md): runtime save
+  archive, signature, restore and cloud authority.
+- [ADR-116: Save Data Threat Model and Trust Policy](../../adr/116-save-data-threat-model-and-trust-policy.md)
 - [Distribution And Update](./distribution-and-update.md): signed update
   manifests, package verification, activation, and rollback.
 - [Release Architecture](./release.md): authoritative release jobs and

@@ -392,6 +392,27 @@ Secrets, credentials, raw file contents, and large payloads are never retained
 in history by default. History retention is policy-bounded by count, age, and
 storage budget.
 
+## Save Tool Boundary
+
+MCP save tools follow
+[ADR-116](../../adr/116-save-data-threat-model-and-trust-policy.md). Inspect, import,
+export, migrate, load, delete and conflict resolution declare separate capabilities,
+side-effect policy, confirmation policy and shipping-profile availability. Project
+trust or an authenticated MCP session does not imply access to another product,
+environment, user, profile, server-world or slot namespace.
+
+Tool handlers pass typed addresses or explicitly admitted external-file handles to
+application-owned save use cases. They do not call archive codecs, read arbitrary
+paths, select trust roots, access provider/signing credentials, retain leases or
+publish runtime/catalog state from an MCP thread. Every source, including a local save
+path or authenticated cloud result, follows bounded untrusted-input admission.
+
+Inspection results contain bounded allowlisted metadata, verification state and safe
+diagnostics. Raw archive/participant content, unrestricted paths, credentials and
+private provider identity are excluded from request history and ordinary results.
+Development-only raw export requires a distinct local capability and cannot be
+enabled by a remote caller or archive field.
+
 ## Security
 
 - MCP transport does not accept anonymous remote connections in production.
@@ -435,6 +456,8 @@ Required additional coverage:
 - rate-limit and body-size enforcement
 - bounded query pagination and stable ordering
 - history redaction of secrets and large payloads
+- save inspect/import/export/migrate/load/delete/conflict capability separation,
+  hostile-input budgets, shipping remote denial and no raw save/path/credential history
 
 Run MCP tests:
 
@@ -497,5 +520,8 @@ import logic, build behavior, or release policy.
 - [Release Security](../release/release-security.md): transport and signing trust.
 - [Application Security](../security/application-security.md): runtime authentication,
   capability, project trust, rate-limit, and remote-binding policy.
+- [Save Game And Persistence](../runtime/save-game-and-persistence.md): save authority,
+  archive admission, transactional publication and cloud coordination.
+- [ADR-116: Save Data Threat Model and Trust Policy](../../adr/116-save-data-threat-model-and-trust-policy.md)
 - [Observability Architecture](../observability/observability.md): levels, categories, MDC,
   storage, and protocol-log redaction.
