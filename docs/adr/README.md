@@ -131,6 +131,7 @@ to the replacement.
 | [117](117-playback-ownership-frame-order-and-determinism.md) | Playback Ownership, Frame Order and Determinism | Proposed | 2026-09-02 |
 | [118](118-animation-character-and-gameplay-authority-during-cinematics.md) | Animation, Character and Gameplay Authority During Cinematics | Proposed | 2026-09-02 |
 | [119](119-camera-authority-during-cinematics.md) | Camera Authority During Cinematics | Proposed | 2026-09-02 |
+| [120](120-cinematic-event-dispatch-and-audio-coupling-boundary.md) | Cinematic Event Dispatch and Audio Coupling Boundary | Proposed | 2026-09-02 |
 
 ## Conventions
 

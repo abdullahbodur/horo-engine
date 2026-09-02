@@ -884,6 +884,24 @@ create action before the feature can create valid runtime data.
 
 ## Real-Time Command Queue
 
+[ADR-120](../../adr/120-cinematic-event-dispatch-and-audio-coupling-boundary.md)
+specializes the cinematic producer seam without changing Audio ownership. EventTrack
+gameplay occurrences use the application-owned `CinematicEventDispatcher`; an
+AudioTrack instead submits a bounded generation-tagged schedule/cancel/seek/preroll
+bundle through the Audio/Cinematic adapter into `AudioFrontend`. Sequencer supplies
+stable occurrence identity, source `SequenceTime` and intent. Audio alone validates
+prepared media, correlates source time to sample time, admits the schedule, publishes
+callback commands, owns voice/transport lifetime and reports actual observations.
+
+The seam consumes AUD-001.1/ADR-062 for runtime/callback phases,
+AUD-002.1/ADR-064 for cooked media and readiness, and AUD-008.1/ADR-068 for transport,
+sequence-to-sample mapping, seek/preroll, late policy and acknowledgement. CIN does
+not create alternate Audio rules. Required unavailable media fails cinematic
+activation with a typed result. Optional silence/skip must be authored; unloaded media
+uses bounded asynchronous preparation. No missing-media path performs synchronous I/O
+on sequence evaluation or the callback, substitutes a filename/clip, or reports an
+implicit successful silent voice.
+
 Audio commands may originate from gameplay systems, animation events, timeline
 playback, editor preview, asset hot reload, streaming services, scene unload, or
 device lifecycle services. These producers do not write directly into the audio

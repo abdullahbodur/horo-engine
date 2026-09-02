@@ -18,6 +18,9 @@ skeletal pose or actor control.
 [ADR-119](../../adr/119-camera-authority-during-cinematics.md) defines per-view
 runtime, PIE and editor camera authority, cinematic cut handoff, frame-commit
 validity and tiered transition/render contracts.
+[ADR-120](../../adr/120-cinematic-event-dispatch-and-audio-coupling-boundary.md)
+defines cooked typed EventTrack bindings, session-safe-point gameplay dispatch,
+failure outcomes and the AudioFrontend handoff governed by AUD-family decisions.
 [ADR-068](../../adr/068-music-transport-and-cross-system-ownership.md) owns the
 AudioTrack handoff: Sequencer retains sequence clock, directed event traversal,
 seek/scrub and preroll intent while Audio alone maps accepted requests to sample
@@ -56,6 +59,9 @@ time and schedules the callback.
 - **Per-view camera authority**: Runtime and PIE Camera services resolve gameplay
   plus cinematic proposals independently; the editor viewport controller retains
   authoring-camera authority. One immutable selection covers one rendered frame.
+- **One typed event path**: A session `CinematicEventDispatcher` invokes cooked,
+  versioned gameplay adapters at destination owner boundaries. `EngineDataBus` is
+  not gameplay EventTrack delivery, and AudioTrack submits intent through AudioFrontend.
 
 ## System Boundaries and Target Topology
 
@@ -275,16 +281,24 @@ struct EventKeyframe {
 };
 ```
 
-Host composition maps each binding to a narrow gameplay/audio/VFX adapter. Cook
-and activation reject missing adapters, incompatible payload schemas or insufficient
-capabilities. The evaluation queue contains fixed-size occurrence records and
-payload handles, with asset residency retained until drain/cancellation. Neither
-string lookup nor dynamic payload-map construction occurs during sampling.
+Host composition registers versioned descriptors and maps each cooked binding to a
+narrow gameplay/application adapter. Cook rejects unknown qualified names, duplicate
+or colliding identities, incompatible payload schemas, oversized payloads and
+forbidden build contexts. Activation rejects a required missing handler/capability;
+an optional binding may disable only under its explicit policy.
 
-Camera and event requests use typed domain queues, not `EngineDataBus` dispatch.
-ADR-015 restricts accessibility traffic specifically; it does not reserve the whole
-bus for accessibility. The broader bus principle still forbids using it to establish
-per-tick ordering or carry high-frequency timeline data.
+After the source tick commits, one session `CinematicEventDispatcher` drains fixed-
+size occurrence records at each destination owner's next safe point and invokes the
+registered adapter in canonical occurrence order. The handler may submit an ordinary
+domain command or application operation; it cannot reenter active sequence
+evaluation. Occurrence IDs provide exactly-once/idempotent retry identity, and every
+admission, authority, target, backpressure or handler outcome is typed and retained
+within bounded generation-scoped result storage.
+
+Gameplay EventTrack delivery never uses `EngineDataBus`. The bus may announce that
+result state changed, but subscribers, dead-event policy and bus backpressure cannot
+alter delivery/order/success. Neither string lookup nor dynamic payload-map
+construction occurs during sampling or dispatch. ADR-120 owns the full boundary.
 
 ### 5. Audio Track
 
@@ -308,6 +322,19 @@ voice handle or computes a device sample index. Render-frame sampling and editor
 scrub do not replay cues. Seek/scrub invalidate stale schedules, request prepared
 Audio positioning/preroll, and resume only under the typed acknowledgement policy
 defined by ADR-068.
+
+Audio preparation resolves stable cooked asset/cue identity and retains an admitted
+media lease. Required missing/corrupt/incompatible media fails activation with
+`AudioTrackAssetUnavailable`; optional silence/skip must be authored and remains
+diagnostic. Not-yet-resident media uses bounded asynchronous preparation, never
+synchronous evaluation/callback I/O. Device/backend loss and missed schedule horizons
+retain Audio-owned typed outcomes and policy.
+
+This seam consumes [AUD-001.1 #525](https://github.com/abdullahbodur/horo-engine/issues/525)
+for runtime/callback ownership, [AUD-002.1 #537](https://github.com/abdullahbodur/horo-engine/issues/537)
+for cooked media/readiness, and [AUD-008.1 #607](https://github.com/abdullahbodur/horo-engine/issues/607)
+for sequence-to-sample correlation, transport, seek/preroll and acknowledgements.
+Cinematic does not duplicate or override those Audio decisions.
 
 ### 6. Sub-Sequence Track
 
@@ -843,6 +870,12 @@ These are required implementation acceptance tests, not tests added by this ADR:
   keyframes or applying the origin offset twice.
 - Async spawn tests cover AssetNotLoaded, cancellation, late completion and duplicate
   occurrence delivery without synchronous waits or unbounded retries.
+- EventTrack tests cover unknown/schema-incompatible bindings at cook, required/
+  optional missing handlers, commit-only canonical dispatch, exactly-once retry,
+  authority/backpressure/handler outcomes and isolation from EngineDataBus policy.
+- AudioTrack tests cover required/optional missing, corrupt, unloaded and replaced
+  media; bounded preparation; schedule/seek/preroll acknowledgements; device loss;
+  and native/middleware/Null adapters without sample/native identity in Sequencer.
 
 ## Related Documents
 
@@ -850,6 +883,7 @@ These are required implementation acceptance tests, not tests added by this ADR:
 - [ADR-117: Playback Ownership, Frame Order and Determinism](../../adr/117-playback-ownership-frame-order-and-determinism.md)
 - [ADR-118: Animation, Character and Gameplay Authority During Cinematics](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md)
 - [ADR-119: Camera Authority During Cinematics](../../adr/119-camera-authority-during-cinematics.md)
+- [ADR-120: Cinematic Event Dispatch and Audio Coupling Boundary](../../adr/120-cinematic-event-dispatch-and-audio-coupling-boundary.md)
 - [Cinematic Sequencer UI Reference](./cinematic-sequencer.html)
 - [Scene Runtime Architecture](./scene-runtime.md)
 - [Animation Architecture](./animation-architecture.md)
