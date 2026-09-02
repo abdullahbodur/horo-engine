@@ -247,6 +247,13 @@ best-effort evidence rather than a dump for every failure.
 Crash upload, consent, retention, and symbol handling are separate application
 and release policies.
 
+[ADR-048](../../adr/048-gpu-crash-and-device-loss-diagnostic-bundles.md) may add a
+minimal preallocated renderer incident slot containing only scalar session,
+renderer/device generation and last-frame/submission context. The Platform handler
+may seal that slot and notify the existing collector; it never calls renderer
+objects, performs native GPU queries or assembles a bundle. Out-of-process or
+next-launch code owns rich association and preserves best-effort/partial coverage.
+
 ## Threading
 
 Capabilities declare affinity:
