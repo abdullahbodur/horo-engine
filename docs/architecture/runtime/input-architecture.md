@@ -478,6 +478,12 @@ XROpenXR owns native apply/stop. Accepted, submitted and physically completed ar
 distinct states. Device/profile/session changes, timeout and shutdown cancel old work;
 no timer or callback outlives its owner generation.
 
+[ADR-161](../../adr/161-xr-interaction-runtime-ui-locomotion-and-accessibility-ownership.md)
+keeps an XR ray, direct point, proximity volume, Physics hit or gesture as evidence until
+normal Input routing admits the associated semantic action. Runtime UI owns UI focus and
+capture; gameplay owns use/grab/locomotion meaning; Character owns movement. The XR
+adapter cannot choose a player, bypass the consumption ledger or mutate either target.
+
 ## Data Bus Relationship
 
 High-frequency input does not travel through `EngineDataBus` or
