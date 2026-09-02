@@ -667,6 +667,36 @@ and preview controls; AudioModel owns schema/edit validation and AudioCook owns 
 compiled generator. Preview uses the ordinary AudioFrontend/voice/mixer path, and
 stale compile or diagnostic results are rejected by document revision.
 
+## VFX Effect Document Surface
+
+[ADR-129](../../adr/129-vfx-editor-document-live-preview-and-module-authoring.md)
+places every editable effect asset in a persistent `VfxEffectDocument` tab. The panel
+host owns route, placement, focus, visibility and surface lifecycle; document services
+own source revision, commands/history, dirty/save/recovery/conflict and derived compile
+or preview state. Opening the same asset focuses its existing writable tab. Create,
+import, templates, Save As and confirmation remain transient modal routes that open no
+tab until their application transaction succeeds.
+
+The baseline stack surface composes Horo module/property/curve/output controls. A
+future graph surface uses the shared node-editor adapter but keeps graph source commands
+and layout distinct. Both emit typed commands and display compiler diagnostics; neither
+validates or executes particle semantics during draw. If graph UI is unavailable, the
+host preserves the source or offers explicit read-only inspection rather than silently
+flattening it into the stack.
+
+The effect viewport is an isolated preview surface. It compiles an immutable document
+revision and consumes normal `VfxWorld`/Renderer output through a generation-fenced
+preview capability. Its camera, grid, seed, clock, fixture, selected module and runtime
+handles are presentation/preview state. Closing the document cancels derived work and
+retires resources; a hidden tab does not continue preview work without a separately
+admitted bounded background operation.
+
+Effect decal outputs use the same document tab. Scene-placed decal projection remains
+owned by SceneDocument. Box/OrientedBox manipulation shares viewport/gizmo capture,
+updates a transient overlay during drag and sends exactly one typed command to the
+owning document on commit. It never writes renderer state or maintains decal-specific
+history/persistence.
+
 ## Viewport Panel
 
 The viewport panel owns rendering of the active scene camera or game camera in
@@ -1045,6 +1075,13 @@ agnostic to editor UI structure so that:
 - editor layout changes do not require `Application` recompilation
 - a tab in any panel can communicate with a tab in any other panel without the
   host layer knowing either tab exists
+- VFX effect repeat-open focuses one writable persistent document tab; create failure
+  opens none, dirty close uses the common leave guard, and close/project teardown
+  cancels generation-fenced preview before resource retirement
+- stack authoring remains usable without graph UI; unavailable graphs preserve source
+  or open read-only and never flatten into stack state
+- VFX/decal gizmo drag, cancel and commit preserve pointer capture, transient preview
+  and exactly-one-command history across normal, modal interruption and stale revision
 
 The editor workspace is a higher-level concern composed on top of
 `Application`. Cross-panel notification flow lives entirely below

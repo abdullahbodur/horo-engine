@@ -38,6 +38,11 @@ places semantic event-to-effect bindings at the application boundary, requires
 allocation-free playback from prepared pools, unifies count/work/time/memory budgets
 and makes cosmetic overload plus sleep/wake explicit and deterministic.
 
+[ADR-129](../../adr/129-vfx-editor-document-live-preview-and-module-authoring.md)
+makes each effect asset a persistent document tab, keeps stack and graph as independent
+frontends, runs live preview through the ordinary cooked runtime pipeline and routes
+decal manipulation through the owning document command model.
+
 DCC workflows, full fluid solvers, atmospheric scattering and screen-space
 post-processing remain outside this subsystem; see
 [Advanced Rendering Architecture](./advanced-rendering-architecture.md).
@@ -682,6 +687,49 @@ StructuredBuffer<GpuParticleData>   CurrentParticles : register(t0);
 RWStructuredBuffer<GpuParticleData> NextParticles    : register(u0);
 ```
 
+## Editor Document And Runtime Preview
+
+Each editable effect asset opens as one persistent `VfxEffectDocument` rooted at its
+stable asset/source revision. `EditorWorkspaceController` and document services own
+revision, commands/history, dirty/save/autosave/recovery/conflict and derived compile/
+preview state; `EditorPanelHost` owns the tab route, placement, focus and presentation
+lifecycle. Reopening an asset focuses its one writable session. Creation, import,
+templates, Save As, destructive confirmation and conflict resolution are transient
+workflows that open a tab only after successful atomic publication.
+
+All source edits use typed `VfxEditorCommand` transactions. Widgets, providers,
+watchers, cook workers and preview runtime never mutate source directly or keep a
+second undo/save path. Existing particle-system assets migrate into this effect
+document schema. Effect-spawned and reusable decal outputs live in the effect document;
+scene-placed decal components remain `SceneDocument` state. Projection gizmo drags use
+transient overlays and commit one command to the owning document. A deliberate edit
+across both documents uses the staged multi-document transaction contract.
+
+The stack editor is the baseline authoring surface for ordered stage-valid modules,
+parameters/curves, typed edges, materials, outputs, fallbacks and finite costs. The
+graph editor owns typed nodes/ports and supported explicit edges and may ship later.
+Unavailable graph UI preserves source or offers read-only inspection; it never flattens
+or saves a graph as a stack. Both frontends use one captured catalog, the same semantic
+validator/lowering and ADR-126 compiled target. Shared controls do not make their source
+commands or layout metadata interchangeable.
+
+Live preview captures an immutable document revision and runs the ordinary VFX compiler
+into `CompiledVfxEffectDescriptor`. Unsaved source may use a transient cook envelope,
+but no stack/graph interpreter, preview-only kernel or permissive budget path exists.
+An isolated preview host then uses `VfxWorld`, normal domain resolution and CPU/GPU/Null
+simulators, immutable extraction, RenderFrontend and the selected backend. Preview-only
+transform/fixture/seed/clock/camera/profile inputs are explicit revisioned evidence;
+they cannot publish to live gameplay, Audio or event-binding authorities.
+
+Preview state and leases are disposable and generation-fenced by document/dependency/
+catalog/session/target/policy/capability revisions. Document edits cancel or supersede
+stale work. Close/project teardown cancels jobs before normal CPU/GPU retirement. A
+hidden tab performs no continuing preview work unless a separately admitted bounded
+background operation owns it. Preview parity requires matching compiled fingerprints,
+resolver/tick/seed/lifecycle/budget outcomes and extracted semantics against a runtime
+harness; GPU image/performance comparisons remain qualified, not cross-device bitwise
+claims.
+
 ## VFX Graph Asset & Compilation
 
 A VFX graph is an authored node graph that defines a complex effect composed of
@@ -960,6 +1008,16 @@ architecture-only change:
 - Compile equivalent stack/graph fixtures and require identical canonical descriptor/
   kernel fingerprints; layout/comments/selection and randomized cook scheduling must
   not alter output. Both runtime routes consume only `CompiledVfxEffectDescriptor`.
+- Exercise effect create/cancel/failure, repeat-open, one writable tab, typed command
+  symmetry, dirty close guard, recovery/external conflict and close/project teardown
+  while compile and preview work are in flight.
+- Run editor preview and a runtime harness from the same artifact; require matching
+  descriptor/kernel fingerprints, resolver choice, tick/seed inputs, CPU commits,
+  lifecycle/budget/fallback results, extracted semantics and typed diagnostics. Scan
+  preview/runtime reachability for source interpreters or editor-only VFX kernels.
+- Keep stack editing operational with graph UI absent; open graph source read-only or
+  unavailable without flattening/mutation. Verify effect/decal-only/scene decal
+  documents and projection-gizmo preview/commit/cancel with no second persistence path.
 - Reject every stage/domain/provider/resource/layout/cost/version violation before
   atomic publication. Exercise current/two-prior/too-old/newer/corrupt/wrong-target
   artifacts, failed reload last-good retention and active old artifact leases.
@@ -1006,6 +1064,8 @@ architecture-only change:
   Normative decal placement, lifetime, admission and rendering-path contract.
 - [ADR-128: VFX Spawn Event Mapping, Pooling and Budget Enforcement](../../adr/128-vfx-spawn-event-mapping-pooling-and-budget-enforcement.md):
   Normative semantic binding, allocation-free playback, budget, overload and sleep/wake contract.
+- [ADR-129: VFX Editor Document, Live Preview and Module Authoring](../../adr/129-vfx-editor-document-live-preview-and-module-authoring.md):
+  Normative effect document, stack/graph authoring, preview parity and decal editor contract.
 - [Particle Editor UI Reference](./particle-editor.html): Emitter stack, curve editing,
   and live preview panel.
 - [Material And Shader Model](./material-and-shader-model.md): Particle and decal materials.

@@ -390,6 +390,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [VFX Spawn Event Mapping, Pooling and Budget Enforcement](../adr/128-vfx-spawn-event-mapping-pooling-and-budget-enforcement.md):
   application-owned semantic bindings, allocation-free playback pools, one finite
   CPU/GPU budget ledger and deterministic cosmetic overload/sleep policy.
+- [VFX Editor Document, Live Preview and Module Authoring](../adr/129-vfx-editor-document-live-preview-and-module-authoring.md):
+  persistent effect document tabs, independent stack/graph frontends, ordinary
+  runtime-pipeline preview and shared decal document/command ownership.
 - [Post-Processing And Effects Architecture](./runtime/post-processing-and-effects-architecture.md):
   screen-space effects, HDR post chain, tonemapping, color grading, and
   accessibility pass ordering.
