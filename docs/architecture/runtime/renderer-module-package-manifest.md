@@ -200,8 +200,8 @@ extension-preserved document with the pinned release encoder and requires exact
 byte equality. It never normalizes a different byte sequence into acceptance.
 
 Parsing is streaming/token-based and applies the hard limits in ADR-053 before
-allocation or recursion: 1 MiB input, depth 16, 128 members per object, 8,192
-members total, 2,048 elements per array, 16,384 JSON values, 4 KiB ordinary
+allocation or recursion: 1 MiB input, depth 16, 128 members per object, 32,768
+members total, 4,096 elements per array, 65,536 JSON values, 4 KiB ordinary
 strings, 1,024-byte relative paths, 64 variants, 4,096 files, 256 runtime
 requirements, 256 licenses/extensions and 32 returned errors. Counts and byte
 sums use checked arithmetic. Cancellation, allocation failure, or any limit breach
