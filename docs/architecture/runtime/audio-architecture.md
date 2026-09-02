@@ -33,6 +33,9 @@ that lifecycle decision.
   listeners, buses, 2D/3D playback, streaming, basic effects, and profiling.
 - Procedural audio graphs, advanced spatial audio, and middleware integrations
   are extension/package boundaries unless explicitly promoted to core later.
+- Procedural graphs compile to separate immutable sound generators and reuse the
+  ordinary AudioFrontend, voice, spatialization, mixer routing, and lifecycle
+  contracts under [ADR-071](../../adr/071-procedural-audio-graph-ownership.md).
 
 ## Layer Model
 
@@ -250,14 +253,15 @@ playback source without exposing backend voice handles:
 
 ```cpp
 enum class AudioSourceKind : uint8_t {
-    NativeClip,
-    MiddlewareEvent
+    NativeClip = 0,
+    MiddlewareEvent = 1,
+    ProceduralGenerator = 2
 };
 
 struct AudioSourceComponent {
-    AudioSourceKind kind;           // NativeClip or MiddlewareEvent
-    AssetId sound;                  // valid when kind == NativeClip;
-                                    // may be an AudioClip or AudioVariationContainer
+    AudioSourceKind kind;           // clip/container, generator, or middleware event
+    AssetId sound;                  // valid for NativeClip or ProceduralGenerator;
+                                    // NativeClip may reference a variation container
     StableEventId event;            // valid when kind == MiddlewareEvent
     AudioBusId bus;
     AudioPlaybackMode playbackMode; // one-shot, loop, streamed
@@ -464,9 +468,54 @@ node audio, platform-specific spatial audio, and middleware DSP are package or
 extension features. The real-time callback may execute prevalidated DSP state,
 but it must not allocate, block, or invoke unbounded user code.
 
-A future MetaSounds-style procedural audio graph requires its own architecture
-document. The DSP node contract exists now so bus/submix effects can be extended
-without redesigning the mixer.
+[ADR-071](../../adr/071-procedural-audio-graph-ownership.md) is the single
+normative owner of procedural graph asset identity, compilation, deterministic
+inputs, extension nodes, editor boundaries, runtime limits and retirement. A
+procedural graph is a separate compiled sound generator for one voice; it is not a
+mixer graph, bus DSP chain, adaptive-music state machine or executable editor
+document.
+
+### Procedural Audio Graphs
+
+AST provides stable identity, dependencies, cache, staging and publication under
+ADR-064. AudioModel owns stable node/pin/link/parameter/trigger IDs and typed graph
+semantics; AudioCook validates an immutable source snapshot and emits a versioned
+`CompiledSoundGenerator`. Editor node position, selection, undo state, preview
+history and widget IDs are excluded from runtime semantics and cook identity.
+
+The baseline graph is an acyclic typed signal/control plan. Its compiler uses
+canonical node and link IDs for order, resolves dependencies, constants, layout/
+rate adapters and fixed instance/scratch storage, and rejects hidden/unbounded
+work. Random/noise nodes consume an explicit instance seed and stable stream ID;
+ambient entropy, wall time, thread ID and global random state are forbidden. The
+same artifact, format/block schedule, parameters/triggers, seed and resources must
+produce the profile's declared deterministic numerical result.
+
+Audio control prepares each generator instance outside the callback, pins its
+asset/provider generation, admits declared state/scratch/work/latency/tail/event
+and voice costs, then publishes it through the ordinary voice boundary. The
+callback writes the prepared generator into a borrowed ADR-063 output block and
+continues through normal voice gain, pitch, spatialization and ADR-065 bus routing.
+It cannot compile, allocate, perform I/O, discover services or mutate topology.
+
+Parameters and triggers use stable typed IDs and the normal generation-tagged,
+sample-boundary AudioFrontend scheduling path. Gameplay or an adaptive-music
+package may push values and create a generator voice, but the graph cannot read
+gameplay/ECS state, choose music transitions, schedule other voices or own a
+clock. It may receive admitted music phase/sample evidence only as an explicit
+typed input under ADR-068.
+
+Extension nodes use the closed versioned `audio.generator.node` family layered on
+ADR-069. Native callback code must satisfy the Audio RT ABI, trust, resource limit,
+fault and lease contracts; a generic extension callback or scripting/editor object
+cannot execute in the callback. A generator cannot create buses, sends, returns or
+effects, and a mixer DSP capability does not implicitly grant generator-node use.
+
+The Editor owns graph document lifecycle, node presentation, commands, undo/redo,
+localized diagnostics and preview controls. Audio owns schema validation,
+compilation, runtime admission and faults. Preview compiles a revision-pinned
+candidate and instantiates it through the same AudioFrontend/voice/mixer path used
+by packaged games; stale results are discarded when the document revision changes.
 
 ### Bus Sidechain And Auto-Ducking
 
@@ -500,7 +549,7 @@ a project needs broadcast-style auto-ducking.
 
 A voice represents one active playback instance with:
 
-- clip or stream handle
+- clip, stream, or prepared sound-generator handle
 - playback state and cursor
 - gain and pitch
 - loop policy
