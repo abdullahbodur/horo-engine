@@ -159,6 +159,18 @@ page packs, GPU variants, feedback and residency. Listen servers include them on
 the explicitly composed local graphical client scope. Cook/validation tools may use
 non-rendering VTX contracts without advertising server runtime support.
 
+## Settings, Tooling And Qualification
+
+[ADR-170: VTX Settings, Diagnostics, Capture and Qualification Ownership](../../adr/170-vtx-settings-diagnostics-capture-and-qualification-ownership.md)
+defines typed preflight, immutable VTX/Renderer snapshots, low-cardinality telemetry,
+authorized commands, finite private captures and native release evidence. UI, CLI and
+MCP use the same queries/commands and never inspect mutable/native state.
+
+Page/texture/cell identities are prohibited metric dimensions; detail uses paginated
+snapshots, sampled events or explicit captures. Captures exclude paths, payload bytes,
+raw camera trajectories and native handles by default. Null tests prove contracts only;
+Atlas/Sparse product claims require target/backend/tier native qualification.
+
 ## Capability And Product Scope
 
 VTX uses feature-local tiers:

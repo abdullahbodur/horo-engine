@@ -451,6 +451,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [VTX Producer, Terrain, World Streaming, Packaging and Server Ownership](../adr/169-vtx-producer-terrain-world-streaming-packaging-and-server-ownership.md):
   immutable producer seams, Terrain/source non-transfer, cell readiness, fallback
   reachability and dedicated/headless exclusion.
+- [VTX Settings, Diagnostics, Capture and Qualification Ownership](../adr/170-vtx-settings-diagnostics-capture-and-qualification-ownership.md):
+  typed preflight, immutable inspection, cardinality/privacy bounds, authorized control,
+  finite captures and native release evidence.
 - [Destruction And Fracture Architecture](./runtime/destruction-and-fracture-architecture.md):
   fracture assets, chunk physics, debris, authority, and network reconstruction.
 - [Destruction Ownership, Authority, State and Runtime Geometry Boundary](../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md):
