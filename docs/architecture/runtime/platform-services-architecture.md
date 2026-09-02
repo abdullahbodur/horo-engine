@@ -45,6 +45,11 @@ separates provider account, live subject capability, local profile, gameplay ide
 and presentation data; every user-scoped commit is fenced by session/access generation
 and every consent/restriction decision is enforced by a typed capability snapshot.
 
+[ADR-136](../../adr/136-platform-offline-queue-ownership-replay-and-cloud-intent-boundary.md)
+makes the Platform Offline Queue the single durable owner for eligible progression and
+opted-in expiring presence intent. Durable acceptance precedes provider submission,
+while cloud upload/delete remains exclusively in Save's coordinator journal.
+
 ## Scope
 
 Platform services covered here:
@@ -366,6 +371,13 @@ platform.provider.failed            -- admitted provider operation failed
 platform.progression.authority_denied -- fact lacks the definition's required authority
 platform.progression.idempotency_conflict -- mutation ID reused with another envelope
 platform.progression.unsafe_retry   -- algebra/provider cannot safely retry ambiguity
+platform.offline.ineligible         -- operation/provider semantics prohibit durability
+platform.offline.durable_unavailable -- queue storage cannot provide durable acceptance
+platform.offline.capacity_exceeded  -- finite queue/partition/byte budget exhausted
+platform.offline.storage_unknown    -- queue publication outcome requires recovery
+platform.offline.expired            -- finite replay age ended without remote success
+platform.offline.reconciliation_required -- remote outcome cannot safely auto-retry
+platform.offline.abandoned          -- authorized audited stop with no false rollback
 ```
 
 `platform.provider.failed` carries one normalized category: `Offline`, `NotSignedIn`,
@@ -840,49 +852,69 @@ generation/revision; stale completion evidence cannot publish into the replaceme
 
 ## Offline And Degraded Behavior
 
-PLS-007 owns the generic durable queue mechanics. It may admit only ADR-133 logical
-mutation envelopes whose algebra and effective provider/gateway capability make replay
-safe:
+The ADR-136 `PlatformOfflineQueue` is the only durable owner for replay-eligible
+progression and explicitly opted-in presence desired state. It stores canonical Horo
+logical intent, not ADR-130 requests or provider calls. `DurableUntilTerminal` commits
+the bounded record through qualified atomic storage before the first provider submit;
+only then may the producer observe durable acceptance. `VolatileAttempt` is explicitly
+process-lossy and never presented as queued.
 
-- qualified `UnlockOnce` and atomic `SetProgressMaximum`;
-- atomic `SetStatMaximum` / `SetStatMinimum`;
-- conditional stat/score replacement retaining its exact revision; and
-- `AddStatOnce` or other non-intrinsic effects only with durable provider/gateway
-  mutation-ID deduplication.
+Eligibility remains exhaustive:
 
-The progression coordinator allocates the mutation ID when the correct semantic
-authority accepts the fact, before the first provider attempt. The queue preserves the
-exact ID, payload, subject, authority/policy/registry and provider requirements across
-restart. It never allocates an ID during replay, retargets another account/session or
-turns an ambiguous unsafe attempt into “not attempted.”
+- ADR-133 intrinsic/atomic monotonic/best operations may persist only when the current
+  provider/gateway capability proves their exact semantics;
+- conditional stat/score replacement retains and reconciles its exact revision;
+- `AddStatOnce` or another non-intrinsic effect requires durable provider/gateway
+  mutation-ID deduplication;
+- presence may persist only as one consented, bounded and short-expiry latest desired
+  `Set`/`Clear` state per subject/purpose lane; and
+- reads, queries and cloud mutation are never admitted.
 
-When the backend reports normalized `Offline` or `NotSignedIn`, the frontend:
+The queue preserves the original progression mutation or presence intent identity,
+canonical payload, protected ADR-135 subject-binding partition, registry/policy/access
+requirements, expiry and attempt policy. It never allocates identity on replay,
+contains a live subject handle/raw provider identity or retargets the current account.
+Exact duplicates join one row; different payload reuse is a conflict.
 
-1. returns the ADR-130 typed attempt outcome to the progression coordinator;
-2. lets the single PLS-007 owner validate replay eligibility and persist the existing
-   logical envelope;
-3. joins an exact duplicate mutation ID or rejects a conflicting payload;
-4. keeps subject/session and authority generations partitioned; and
-5. schedules a new bounded request only after recovery/reconciliation and capability
-   revalidation.
+Durable states distinguish Pending, Dispatching, Reconciling, Suspended, Succeeded,
+PermanentlyFailed, Expired, Superseded and Abandoned. Terminal disposition is committed
+before observer success and later atomic compaction. A crash after remote commit but
+before local completion therefore retains the original intent in Reconciling rather
+than creating a fresh unsafe attempt. Corrupt/publication-unknown storage is
+quarantined; startup never silently creates an empty queue.
 
-Operations that cannot be safely replayed, such as cloud save reads or
-leaderboard/stat/achievement queries, are never durable progression intents. An
-AuthorityServer definition does not let an offline client manufacture a queued remote
-mutation; the server must later derive/accept the gameplay fact through its ordinary
-authority path.
+Ordering is per `(subject partition, semantic definition/purpose lane)`, not global
+FIFO. Conditional/non-commutative work serializes; ADR-133 monotonic/best operations
+coalesce only when every receipt/result is preserved. Presence keeps the latest desired
+state, but cannot erase an already ambiguous provider outcome. Unrelated lanes use
+bounded fair concurrency.
 
-Cloud archive writes/deletes are deliberately absent from this generic queue. Their
-immutable payload lease, slot lineage, expected provider revision, retry identity and
-profile-session scope are durably owned by ADR-115's `CloudSaveCoordinator`. After
-offline recovery it reconciles remote state before conditional mutation; it never
-replays a stale FIFO upload under a later local generation or different user.
+Startup validates storage without provider calls. Replay resumes only after proving
+the same subject binding and revalidating current session/access, authority/profile,
+registry/mapping and provider capability. Sign-out/account switch suspends the old
+partition. `AuthorityServer` records require a current server authority path; a client
+cannot manufacture or upgrade them.
 
-Detailed queue ordering, expiry, compaction, retention and shutdown are PLS-007 policy.
-Those mechanics cannot broaden the replay classes above. `Forbidden`, authority/
-subject mismatch, unsupported capability and permanent semantic failure never retry.
-A remote ambiguous outcome remains retained for reconciliation according to its
-algebra; it is not dropped as a generic failure or reported as success.
+Attempt count, jittered backoff, record/byte/partition/in-flight capacity and expiry
+are finite product policy within engine hard maxima. Expiry is a durable explicit
+failure and never resets on retry/restart. Full capacity rejects admission instead of
+dropping oldest or ambiguous work. Provider retry hints are bounded and clock anomalies
+cannot extend retention indefinitely or produce a retry storm.
+
+Expiry/attempt exhaustion applies only when no unresolved remote effect exists.
+Reconciling ambiguity remains retained until semantic resolution or an explicitly
+permissioned, audited Abandoned disposition; neither TTL nor cleanup can erase it.
+
+Cloud archive writes/deletes are deliberately absent. Their immutable payload lease,
+slot lineage, expected provider revision, retry identity and profile binding remain
+durably owned only by ADR-115/134 `CloudSaveCoordinator`. Both owners may use stateless
+deadline/backoff/error/atomic-storage helpers, but share no row, scheduler, outcome or
+FIFO. Reconnect may wake both coordinators independently.
+
+Shutdown closes admission/scheduling, durably checkpoints state, requests bounded
+best-effort cancellation and retains provider/module/credential dependencies until
+callbacks retire. It never deletes unresolved rows. Cancellation may remove a Pending
+intent only before provider commit is possible; ambiguity remains for reconciliation.
 
 The Null backend is a valid explicit headless/test/product composition. It reports all
 remote services unavailable with `NullProviderSelected`. Every read and write fails
@@ -1087,7 +1119,9 @@ platform.request.pending_count           -- in-flight requests
 platform.request.completed_count         -- completed by service and backend
 platform.request.failed_count            -- by error category
 platform.request.latency_ms              -- end-to-end latency
-platform.request.offline_queued_count    -- operations deferred offline
+platform.offline.pending                 -- aggregate pending by service/state
+platform.offline.reconciling             -- aggregate remote-ambiguity count
+platform.offline.storage_bytes           -- bounded queue storage utilization
 platform.session.signed_in               -- 0/1 gauge
 platform.capability.available            -- gauge per service per backend
 ```
@@ -1127,8 +1161,12 @@ Access: `Edit > Project Settings > Platform Services`
 |   [+ Add]                                                    |
 |                                                              |
 | Cloud Save                                                   |
-|   Conflict resolution: [ Most Recent               v ]       |
-|   [x] Persist offline queue across sessions                  |
+|   Conflict policy: [ Defer to Save Coordinator      v ]      |
+|                                                              |
+| Offline Delivery                                             |
+|   [x] Eligible progression durable delivery                  |
+|   [ ] Persist consented presence desired state               |
+|   Progression expiry: [ 7 days ]  Presence: [ 15 minutes ]  |
 |                                                              |
 | Timeouts And Retry                                           |
 |   Default timeout:  [ 30 ] seconds                           |
@@ -1144,8 +1182,8 @@ Access: `Window > Platform Diagnostics`
 +--------------------------------------------------------------+
 | Platform Diagnostics                                   [x]   |
 +--------------------------------------------------------------+
-| Session: Signed In                                           |
-| User:    PlayerOne#1234                                      |
+| Session: Active          Generation: 17                      |
+| Subject: Bound           Presentation: Consent granted       |
 | Backend: SteamBackend                                        |
 +--------------------------------------------------------------+
 | Service        | Available | Pending | Errors | Avg Latency |
@@ -1156,7 +1194,8 @@ Access: `Window > Platform Diagnostics`
 | Presence       |    [ ]    |    0    |   0  |      -      |
 | Friends        |    [x]    |    0    |   0  |    30 ms    |
 +--------------------------------------------------------------+
-| Offline Queue: 2 pending  |  Oldest: 4m 12s                |
+| Platform Queue: 2 pending | Reconciling: 0 | Oldest: 4m 12s |
+| Save Cloud Journal: 1 pending | Conflict: 0                  |
 +--------------------------------------------------------------+
 ```
 
@@ -1237,7 +1276,18 @@ Required tests cover:
   ambiguity reconciles without a second remote effect
 - max/min/best coalescing is result-preserving under every input order and retains an
   outcome for each logical receipt; conditional/additive operations never coalesce
-- offline queue persists and replays only eligible mutation classes
+- durable mode commits one queue row before first provider submit; volatile mode is
+  never reported as queued, and duplicate admission joins only an exact envelope
+- every ADR-133 replay class is accepted/rejected against qualified provider semantics;
+  cloud writes/deletes and all reads/queries can never enter the platform queue
+- crash/fault injection at queue admission, provider submit/commit, terminal commit and
+  compaction preserves the original intent/ambiguity without false success
+- per-subject/semantic-lane ordering, fair cross-lane scheduling and legal coalescing
+  retain every logical receipt; capacity exhaustion never evicts oldest/ambiguous work
+- backoff, rate limit, expiry, clock skew, attempt and storage limits are bounded;
+  expiry is a durable terminal failure and never resets across restart
+- presence persistence is opt-in/consented/short-lived, coalesces Set/Clear desired
+  state only within one exact lane and never becomes history
 - request cancellation does not leak state
 - stable ID registries reject unregistered names
 - stable ID golden vectors agree across hosts; malformed salts/encodings, stored/
@@ -1314,6 +1364,10 @@ Tests use the mock backend to verify:
   committed-after-timeout scripts with exact caller-owned reconciliation evidence
 - authentication-stage failure, account-switch/stale-callback and consent-revocation
   scripts with no cross-subject cache, observer or durable-replay publication
+- queue storage disk-full, permission, truncated/corrupt/version-skewed and publication-
+  unknown scripts plus repeated/partial shutdown and late callback retirement
+- concurrent Platform Offline Queue and Save cloud-journal recovery proves there is no
+  shared durable row, scheduler, outcome or cross-owner FIFO
 
 Platform-specific backend tests live in the private platform repositories.
 
@@ -1335,6 +1389,9 @@ Platform-specific backend tests live in the private platform repositories.
 - [ADR-135](../../adr/135-platform-identity-session-generation-privacy-and-consent.md):
   platform identity-domain separation, generation-fenced subject capabilities,
   consent/restriction authority and personal-data handling.
+- [ADR-136](../../adr/136-platform-offline-queue-ownership-replay-and-cloud-intent-boundary.md):
+  single-owner offline durability, admission/replay/expiry/shutdown semantics and the
+  Save-owned cloud intent boundary.
 - [Platform Services Config UI Reference](./platform-services-config.html): achievements, leaderboards, cloud saves, presence, and platform adapters panel.
 
 - [Audio Architecture](./audio-architecture.md)
