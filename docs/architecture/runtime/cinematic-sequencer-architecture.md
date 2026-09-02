@@ -21,6 +21,9 @@ validity and tiered transition/render contracts.
 [ADR-120](../../adr/120-cinematic-event-dispatch-and-audio-coupling-boundary.md)
 defines cooked typed EventTrack bindings, session-safe-point gameplay dispatch,
 failure outcomes and the AudioFrontend handoff governed by AUD-family decisions.
+[ADR-121](../../adr/121-cinematic-editor-document-and-authoring-context.md)
+defines persistent sequence documents/tabs, command and persistence ownership,
+detachable scene authoring context, stale-reference inspection and preview isolation.
 [ADR-068](../../adr/068-music-transport-and-cross-system-ownership.md) owns the
 AudioTrack handoff: Sequencer retains sequence clock, directed event traversal,
 seek/scrub and preroll intent while Audio alone maps accepted requests to sample
@@ -62,6 +65,9 @@ time and schedules the callback.
 - **One typed event path**: A session `CinematicEventDispatcher` invokes cooked,
   versioned gameplay adapters at destination owner boundaries. `EngineDataBus` is
   not gameplay EventTrack delivery, and AudioTrack submits intent through AudioFrontend.
+- **Document-owned authoring**: Sequence assets use persistent document tabs and the
+  shared typed command/history/save/conflict model. Scene context and preview are
+  detachable projections and never become a second source of authored truth.
 
 ## System Boundaries and Target Topology
 
@@ -743,7 +749,28 @@ The cinematic editor provides:
 
 ### Document and Asset Workflow
 
-Sequence assets are stored in the project's asset tree. Sequences reference scene objects by durable `StableObjectId`s, ensuring scene edits, renames, and reordering do not break sequence bindings.
+Sequence assets are stored in the project's asset tree and open as first-class
+`SequenceDocument` sessions in persistent document tabs. Create Sequence is a
+transient modal that atomically publishes the asset before opening the tab. Timeline,
+curve, recording and binding edits use typed Sequence commands, semantic transactions
+and the shared document history/dirty/save/autosave/recovery/external-conflict
+services. No sequencer-local undo stack, dirty flag or direct serializer save exists.
+
+An optional `SequenceAuthoringContext` attaches the document to one generation-
+checked SceneDocument snapshot for picking, property enumeration, recording and
+preview. The asset remains editable without it. Durable `StableObjectId`, component/
+property identity and schema expectations are never replaced by live handles.
+Rename/reorder can remain resolved; wrong scene, delete, component/schema change,
+reload or scene replacement produce derived typed stale states in tracks and binding
+inspection. They do not clear or retarget authored identity. Repair is an explicit
+undoable command.
+
+Scene mutations stay in SceneDocument history and sequence mutations stay in
+SequenceDocument history. Deliberate two-document edits use the editor's staged
+multi-document transaction. Preview players, cursors, leases, camera/audio/VFX state
+and viewport presentation are disposable revision-correlated state; closing the tab,
+changing context or committing a relevant edit cancels/fences them. ADR-121 owns the
+complete workflow and lifecycle.
 
 ## Evaluation Capacity And Admission
 
@@ -876,6 +903,9 @@ These are required implementation acceptance tests, not tests added by this ADR:
 - AudioTrack tests cover required/optional missing, corrupt, unloaded and replaced
   media; bounded preparation; schedule/seek/preroll acknowledgements; device loss;
   and native/middleware/Null adapters without sample/native identity in Sequencer.
+- Sequence editor tests cover atomic create/focus/close, shared command/history/dirty/
+  save/recovery/conflict behavior, no/wrong/replaced scene contexts, derived stale
+  binding states, explicit repair, cross-document atomicity and disposable preview.
 
 ## Related Documents
 
@@ -884,6 +914,7 @@ These are required implementation acceptance tests, not tests added by this ADR:
 - [ADR-118: Animation, Character and Gameplay Authority During Cinematics](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md)
 - [ADR-119: Camera Authority During Cinematics](../../adr/119-camera-authority-during-cinematics.md)
 - [ADR-120: Cinematic Event Dispatch and Audio Coupling Boundary](../../adr/120-cinematic-event-dispatch-and-audio-coupling-boundary.md)
+- [ADR-121: Cinematic Editor Document and Authoring Context](../../adr/121-cinematic-editor-document-and-authoring-context.md)
 - [Cinematic Sequencer UI Reference](./cinematic-sequencer.html)
 - [Scene Runtime Architecture](./scene-runtime.md)
 - [Animation Architecture](./animation-architecture.md)

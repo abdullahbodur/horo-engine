@@ -132,6 +132,7 @@ to the replacement.
 | [118](118-animation-character-and-gameplay-authority-during-cinematics.md) | Animation, Character and Gameplay Authority During Cinematics | Proposed | 2026-09-02 |
 | [119](119-camera-authority-during-cinematics.md) | Camera Authority During Cinematics | Proposed | 2026-09-02 |
 | [120](120-cinematic-event-dispatch-and-audio-coupling-boundary.md) | Cinematic Event Dispatch and Audio Coupling Boundary | Proposed | 2026-09-02 |
+| [121](121-cinematic-editor-document-and-authoring-context.md) | Cinematic Editor Document and Authoring Context | Proposed | 2026-09-02 |
 
 ## Conventions
 
