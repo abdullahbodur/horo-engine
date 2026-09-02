@@ -426,6 +426,16 @@ Persisted keys use stable world/dataset/cell/entity identity; PartitionEpoch and
 attempt generations are freshly issued, never restored from disk. Bounded spill
 chunks are leased through capture; save archives cannot depend on temporary spill paths.
 
+[ADR-140](../../adr/140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md)
+applies the same no-loss edge to Foliage. Cell-bound ephemeral overlays retire with the
+exact cell generation. Product-authorized durable baked-instance tombstones, spawns and
+updates must transfer from Terrain's active mutation root to the Persistent World ledger
+before the last live copy retires. Session/owner-bound ephemeral state needs separate
+bounded session ownership and is never silently converted to durable state. Failed dirty
+handoff blocks eviction and remains charged; it cannot drop foliage or force a user-slot
+save. This authority still chooses cells, while Terrain validates/applies foliage
+semantics and Runtime Save owns durable capture/restore.
+
 ## Multiplayer Authority And Editor Isolation
 
 Server authority decides gameplay cell relevance and replicated entity lifecycle.
@@ -939,6 +949,7 @@ See [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin
 - [Terrain And Foliage Architecture](./terrain-and-foliage-architecture.md): Terrain clipmap streaming and cell-aligned foliage clusters.
 - [ADR-137](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md): Terrain/Foliage data, tier, lifecycle, readiness and reservation ownership.
 - [ADR-138](../../adr/138-terrain-source-cooked-tile-cache-and-streaming-ownership.md): Terrain dataset/tile manifests, cache authorities, typed residency requests and seam-safe generation replacement.
+- [ADR-140](../../adr/140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md): Foliage state classification, durable delta handoff and no-loss cell eviction.
 - [Physics Architecture](./physics-architecture.md): Static mesh collider registration and scene binding.
 - [Networking Architecture](./networking-architecture.md): Server-authoritative cell relevance and replication.
 - [Concurrency And Job System](../foundation/concurrency-and-jobs.md): Job workers, cancellation tokens, and thread roles.

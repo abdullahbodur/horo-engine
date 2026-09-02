@@ -17,6 +17,9 @@ replacement contract.
 [ADR-139](../../adr/139-terrain-render-extraction-material-lod-and-tier-boundary.md)
 defines the render-candidate, material, per-view LOD/visibility, product-profile and
 core-1.0 versus post-1.0 GPU-driven boundary.
+[ADR-140](../../adr/140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md)
+defines deterministic placement, baked/ephemeral/durable state classification, mutation,
+capacity, persistence handoff and eviction ownership.
 
 ## Ownership And Data Boundaries
 
@@ -324,9 +327,15 @@ Foliage instances are placed procedurally based on configurable rules:
 - Clustering for variety (clump size, radius)
 - Random seed per foliage type for determinism
 
-Placement is computed offline at authoring time and baked into instance
-buffers. Runtime procedural spawning (e.g., grass growing during gameplay)
-is supported through the `FoliageSpawner` gameplay service:
+Placement is computed deterministically during Terrain cook from canonically sorted,
+versioned rule/source inputs. A specified PRNG seed tuple, quantization and tie policy
+produce stable ordered baked `FoliageInstanceId` records independent of locale, worker
+count and job order. Oversized placement fails or uses an explicitly authored/cooked
+lower-density variant; cook never truncates from host memory or camera distance. Exact
+rule, PRNG and quantization schemas are TRF-004.2 work.
+
+Runtime procedural spawning (for example, grass growing during gameplay) is supported
+through the Terrain mutation command boundary:
 
 ```cpp
 struct FoliageSpawnRequest {
@@ -342,13 +351,19 @@ struct FoliageSpawnRequest {
 };
 ```
 
-Runtime-spawned instances are stored in a **separate dynamic buffer** per
-foliage type. `TerrainRenderExtractor` merges the baked and dynamic buffers
-during extraction through one immutable revisioned snapshot. Dynamic and baked
-instances share the resolved finite plan budget. Capacity exhaustion rejects the
-command unless TRF-004 defines and the product explicitly selects a deterministic
-overflow/eviction policy. There is no implicit oldest-first or furthest-first deletion,
-and no partial command commit.
+Runtime-spawned instances live in a separate revisioned Terrain overlay; cooked cluster
+artifacts remain immutable. The lifetime is explicit: cell-, session- or owner-bound
+ephemeral state is excluded from slot saves, while a `DurableWorldDelta` creates an
+authorized base-relative canonical spawn/update/tombstone through the Runtime Save/
+Persistent World boundary. A baked removal references the exact base revision and stable
+`FoliageInstanceId`; durable spawns use a distinct persistent mutation identity. Runtime,
+render, Physics and Navigation handles never persist.
+
+`TerrainRenderExtractor` merges the baked base and active overlay through one immutable
+revisioned snapshot. Capacity exhaustion rejects atomically in the 1.0 baseline. Any
+optional replacement policy must be registered/versioned with an eligible state class,
+stable priority/tie order and persistence effect; it cannot evict baked/durable or another
+owner's state. There is no implicit oldest-, furthest- or visibility-based deletion.
 
 ### LOD And Billboard Impostors
 
@@ -441,6 +456,14 @@ runtime deformation/dynamic foliage uses a typed command with terrain generation
 expected mutation revision, bounded scope, gameplay authority, lifetime and overflow
 policy. The owner builds a separate overlay candidate and atomically advances mutation
 revision. Cooked data is never edited in place.
+
+Foliage state is classified before commit. Baked instances are immutable content;
+ephemeral overlays follow explicit cell/session/owner lifetime; durable mutations are
+base-relative canonical deltas captured exactly once by Runtime Save/Persistent World.
+Before cell eviction removes the last active dirty copy, Terrain publishes an immutable
+delta root into the Persistent World ledger at the owner safe point. Failure/capacity
+denial blocks retirement and keeps the source charged; it cannot drop state or force an
+implicit user-slot save.
 
 Shutdown closes admission, cancels/yields owned task groups, invalidates candidates,
 requests exact-generation renderer/physics/navigation retirement and retains assets,
@@ -554,6 +577,10 @@ Required coverage includes:
   generation/revision changes;
 - runtime mutation authority/revision/capacity/overflow cases with no partial update,
   cooked-source mutation or implicit foliage eviction;
+- deterministic placement across worker/order/locale variations, baked/ephemeral/durable
+  identity separation and base-relative save delta golden fixtures;
+- active-to-dormant dirty foliage handoff, SaveCaptureEpoch one-copy capture, base-remap
+  incompatibility and eviction pressure with no persistent state loss;
 - world-streaming reservation/growth/pressure accounting for staging, old/new and
   retiring generations without double charge or oversubscription;
 - source/cook/provider-byte/decoded/GPU/Physics/Navigation cache ownership, pinning and
@@ -594,3 +621,6 @@ Required coverage includes:
 - [ADR-139](../../adr/139-terrain-render-extraction-material-lod-and-tier-boundary.md):
   immutable render candidates, material/permutation boundary, renderer-owned per-view
   visibility/LOD, independent profile axes and CPU/GPU recipe split
+- [ADR-140](../../adr/140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md):
+  deterministic placement, immutable baked base, ephemeral overlays, durable canonical
+  deltas, capacity policy and no-loss cell eviction
