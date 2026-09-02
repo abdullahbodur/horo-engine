@@ -375,6 +375,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [VFX CPU Stage Order, Determinism and Gameplay Coupling](../adr/123-vfx-cpu-stage-order-determinism-and-gameplay-coupling.md):
   ordered CPU particle stages, atomic commit, counter-based per-particle RNG,
   qualified cross-platform reproduction and typed gameplay payload boundaries.
+- [VFX GPU Simulation, Readback and Compute Fallback](../adr/124-vfx-gpu-simulation-readback-and-compute-fallback.md):
+  visual-only GPU authority, cooked opt-in asynchronous readback, explicit
+  compute-less fallback and unified CPU/GPU/readback admission accounting.
 - [Post-Processing And Effects Architecture](./runtime/post-processing-and-effects-architecture.md):
   screen-space effects, HDR post chain, tonemapping, color grading, and
   accessibility pass ordering.

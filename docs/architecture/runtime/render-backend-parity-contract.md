@@ -285,6 +285,14 @@ GUI/private helper allocations are included, not exempted from host accounting.
 Null tests inject costs and completion schedules; native budget and fragmentation
 qualification still requires each actual backend.
 
+[ADR-124 VFX readback parity](../../adr/124-vfx-gpu-simulation-readback-and-compute-fallback.md)
+is a backend-neutral normalized schema/copy/result contract. Each backend reports
+effective asynchronous readback formats, alignments, byte/work and pending-result
+limits; it privately owns staging, map/cache rules and fences. Equivalent requests
+retain logical source-step/schema/generation identity and typed unavailable, degraded,
+lost or stale outcomes. Null/fakes validate bounds and delayed publication but cannot
+qualify native copy, mapping, synchronization or driver behavior.
+
 All backends additionally obey
 [ADR-041's renderer diagnostics model](../../adr/041-backend-neutral-renderer-diagnostics-model.md).
 Equivalent unsupported, invalid, degraded, lost and recovered conditions use the
