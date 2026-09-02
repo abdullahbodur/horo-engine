@@ -124,6 +124,7 @@ to the replacement.
 | [110](110-navigation-editor-surface-and-command-ownership.md) | Navigation Editor Surface and Command Ownership | Proposed | 2026-09-02 |
 | [111](111-gameplay-ai-document-panel-and-runtime-debug-ownership.md) | Gameplay AI Document, Panel and Runtime-Debug Ownership | Proposed | 2026-09-02 |
 | [112](112-save-archive-container-and-compatibility-policy.md) | Save Archive Container and Compatibility Policy | Proposed | 2026-09-02 |
+| [113](113-local-storage-user-profile-and-slot-ownership.md) | Local Storage, User Profile and Slot Ownership | Proposed | 2026-09-02 |
 
 ## Conventions
 

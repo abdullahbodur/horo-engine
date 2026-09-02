@@ -311,6 +311,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Save Archive Container and Compatibility Policy](../adr/112-save-archive-container-and-compatibility-policy.md):
   portable framing, canonical logical state, independent version axes, typed
   state/content/publication identities, release declarations and support horizon.
+- [Local Storage, User Profile and Slot Ownership](../adr/113-local-storage-user-profile-and-slot-ownership.md):
+  product/environment/user/profile namespaces, slot/category identity, path
+  authority, multi-user fallback and profile-switch fencing.
 - [Navigation And AI Architecture](./runtime/navigation-and-ai-architecture.md):
   NavMesh, pathfinding, dynamic obstacle overlays, perception, crowd, blackboard,
   and editor bake tooling.

@@ -209,8 +209,8 @@ endianness, hashes, signatures and generation conflict behavior.
 
 - Canonical codecs and migration registries need golden cross-platform fixtures.
 - Release composition must validate participant ranges and migration coverage.
-- Every durable publication must finalize metadata before hashing/signing and cannot
-  patch timestamps or catalog fields afterward.
+- Every durable publication must finalize archive metadata before hashing/signing;
+  mutable catalog labels/categories remain outside the archive transaction.
 
 ## Rejected Alternatives
 

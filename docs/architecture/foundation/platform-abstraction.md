@@ -105,6 +105,14 @@ Callers never build these paths from `$HOME`, `%APPDATA%`, or platform-specific
 string literals. Locations follow platform conventions and the storage policies
 in the owning architecture documents.
 
+Application state roots are opened for a validated `ProductStorageId`; product
+display name, executable path and current working directory are not storage identity.
+Platform Abstraction returns a root/container capability only. Under
+[ADR-113](../../adr/113-local-storage-user-profile-and-slot-ownership.md), the save
+storage adapter alone maps environment, local-user/game-profile or server owner and
+logical slot IDs beneath that capability. UI, gameplay and cloud backends never
+receive the resulting host path.
+
 ## Window And Event Pump
 
 Window creation is optional. A window owns:
@@ -305,6 +313,8 @@ Required tests cover:
 - [Concurrency And Job System](./concurrency-and-jobs.md)
 - [Input Architecture](../runtime/input-architecture.md)
 - [Android Platform Host](./android-platform-host.md)
+- [ADR-113](../../adr/113-local-storage-user-profile-and-slot-ownership.md): product
+  state roots and save namespace/path ownership.
 - [XR Architecture](../runtime/vr-ar-architecture.md)
 - [Release Security](../release/release-security.md)
 - [Extension System](../extensions/plugin-system.md)
