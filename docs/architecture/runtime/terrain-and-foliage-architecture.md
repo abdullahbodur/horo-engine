@@ -14,6 +14,9 @@ part of generic Foundation, RuntimeScene internals or a renderer backend.
 [ADR-138](../../adr/138-terrain-source-cooked-tile-cache-and-streaming-ownership.md)
 defines the complementary source, cook, tile-manifest, cache, residency and generation-
 replacement contract.
+[ADR-139](../../adr/139-terrain-render-extraction-material-lod-and-tier-boundary.md)
+defines the render-candidate, material, per-view LOD/visibility, product-profile and
+core-1.0 versus post-1.0 GPU-driven boundary.
 
 ## Ownership And Data Boundaries
 
@@ -147,10 +150,14 @@ Terrain is split into tiles at authoring time:
 
 - Each tile is `N x N` vertices (default 129×129, corresponding to
   128×128 quads)
-- Tiles are rasterized into GPU-friendly vertex/index buffers per LOD
-- LOD selection uses screen-space error relative to camera distance
-- Tile skirts prevent cracks between adjacent LOD levels
-- `TerrainLODSettings` controls LOD count, transition distance, and morph
+- Terrain Cook emits neutral bounded representation payloads and geometric-error,
+  seam, skirt/morph and neighbor-compatibility metadata per LOD
+- TerrainRuntime exposes only resident legal representations in its immutable snapshot
+- RenderFrontend selects a compatible LOD per view from screen-space error, projection,
+  output, hysteresis, profile and finite budget; distance alone is not the policy
+- Native vertex/index resources and draw execution remain renderer-owned
+- `TerrainLODSettings` contributes authored/cooked intent; it is not a backend command
+  or permission to invent an unavailable representation
 
 ```cpp
 struct TerrainLODSettings {
@@ -205,25 +212,30 @@ struct TerrainMaterialLayer {
 };
 ```
 
-GPU blending uses the vertex weight attributes and samples layer textures
-proportionally. The terrain shader permutation is selected based on active
-layer count, declared as a `TerrainLayerCount` feature flag in the shader
-manifest. Height-based blending, slope-based blending, and noise-based
-transitions are supported through the material-function graph.
+Terrain authoring/cook owns layer order, weight/hole encodings, material-function
+references and required blend semantics. Material/Shader cook validates those semantics
+and emits an explicit finite target permutation family. RenderFrontend selects only a
+cooked variant compatible with the active raster recipe, neutral Terrain payload layout,
+required features and effective limits; the backend realizes it without changing layer,
+hole or blend meaning. Height-, slope- and noise-based transitions are permitted only
+when declared by the material graph and cooked permutation contract. TRF-003.2 freezes
+the exact layer limit, key and blend rules.
 
 ## Foliage System
 
 ### Instanced Rendering
 
-Foliage uses GPU instancing with indirect draws dispatched through
-backend-neutral indirect draw batches. Backend-specific command names never
-appear in the terrain subsystem contract:
+Foliage exposes bounded neutral instance candidates. The core 1.0 renderer may group
+them into backend-neutral direct or instanced batches after CPU per-view visibility and
+LOD planning; it does not require compute, GPU Scene or indirect execution. A post-1.0
+GPU-driven recipe may use renderer-owned compute culling and generated indirect batches
+only after explicit capability, artifact, budget, fallback and backend qualification.
+Backend-specific command names never appear in the Terrain contract:
 
 - Each foliage type maps to one or more static meshes
-- Instance transforms are stored in structured GPU buffers
-- Culling (frustum, distance, occlusion) is performed via compute shader on
-  the GPU
-- Draw calls use the backend's indirect draw submission
+- TerrainRuntime owns baked/dynamic logical instance membership and immutable transforms
+- RenderFrontend owns native instance storage, per-view culling/LOD results and batching
+- the private backend owns native resources, commands and synchronization
 
 ```cpp
 struct FoliageType {
@@ -277,23 +289,22 @@ failure/absence remains conservative and observable.
 
 ### Render Extraction
 
-Terrain and foliage submit instances to the frame via `TerrainRenderExtractor`:
+`TerrainRenderExtractor` leases one immutable Terrain generation and publishes a bounded,
+view-independent `TerrainRenderExtractionSnapshot`. Tile and foliage candidates carry
+typed Terrain identities/revisions, neutral geometry/artifact references, bounds/
+transform inputs, material requirements, legal LOD/seam data, hole/visibility semantics,
+stable logical instance identity and finite cost estimates.
 
-```text
-TerrainRenderExtractor::Extract(RenderWorldSnapshot& snapshot)
-  1. Iterate CPU/streaming/frustum-visible terrain tile candidates
-  2. For each tile, push terrain draw commands to snapshot.opaque
-  3. Iterate CPU/streaming/frustum-visible foliage cluster candidates
-  4. For each cluster, push foliage draw commands:
-     - Opaque foliage (trunks, bark) → snapshot.opaque
-     - Masked/translucent foliage (leaves) → snapshot.transparent with SortMode::DistanceToCamera
-```
+The snapshot contains no selected per-view LOD, visible list, draw command, indirect
+argument, native handle, pipeline object or mutable Terrain pointer. Multiple views may
+consume it without advancing Terrain state. Capacity exhaustion fails extraction rather
+than truncating candidates.
 
-This follows the same `RenderInstance` snapshot model defined in
-rendering-architecture.md. The extractor emits candidates; a later render-graph
-GPU culling pass consumes those candidates and produces indirect draw lists for
-the backend. The extractor runs alongside `VfxRenderExtractor` and the main
-scene extractor.
+RenderFrontend derives generation-checked `RenderObjectId` values, performs per-view
+visibility/LOD/seam planning, resolves cooked material variants/resources and maps the
+candidates into ADR-036 pass classifications. Opaque, Masked, TransparentSorted and
+TransparentAdditive come from authored/cooked material semantics; “trunk” or “leaf” does
+not imply a pass. The private backend only translates the validated plan.
 
 ### Decal Interaction
 
@@ -347,6 +358,11 @@ Foliage LOD uses:
 - Billboard impostors for the farthest LOD
 - Cross-fade between LOD levels to avoid popping
 - Aggregate distance culling per foliage cluster
+
+These are legal cooked representations and transition rules owned by Terrain content.
+RenderFrontend selects among resident compatible representations per view. The 1.0
+baseline uses bounded CPU selection; post-1.0 GPU selection remains renderer-owned and
+cannot feed gameplay or World Streaming truth back synchronously.
 
 Impostors are pre-baked at authoring time. The baker renders the foliage
 mesh from multiple view angles and stores the result in a texture atlas.
@@ -528,6 +544,10 @@ Required coverage includes:
   no directory enumeration or mixed-generation tile admission;
 - every tier/cooked/provider capability combination, required failure and each declared
   fallback reason without silent clamp/drop/provider selection;
+- view-independent render-candidate extraction, deterministic capacity failure, multi-
+  view reuse and strict separation of residency, presentation visibility and gameplay;
+- Terrain tier/render profile independence, material/pass classification, CPU 1.0 LOD/
+  seam planning and optional post-1.0 GPU recipe admission/fallback;
 - candidate failure/cancellation and replacement at every Scene/streaming/render/
   physics/navigation prepare/commit/retirement boundary;
 - stale worker, snapshot, tile, GPU, collision and navigation evidence rejected across
@@ -571,3 +591,6 @@ Required coverage includes:
 - [ADR-138](../../adr/138-terrain-source-cooked-tile-cache-and-streaming-ownership.md):
   canonical source and deterministic tile cooking, cache authorities, World Streaming
   residency, seam-safe replacement and generation retirement
+- [ADR-139](../../adr/139-terrain-render-extraction-material-lod-and-tier-boundary.md):
+  immutable render candidates, material/permutation boundary, renderer-owned per-view
+  visibility/LOD, independent profile axes and CPU/GPU recipe split

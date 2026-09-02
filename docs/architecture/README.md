@@ -305,6 +305,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Terrain Source, Cooked Tile, Cache and Streaming Ownership](../adr/138-terrain-source-cooked-tile-cache-and-streaming-ownership.md):
   canonical Terrain import/cook ownership, deterministic dataset manifests, cache
   authorities, typed World Streaming residency and seam-safe generation replacement.
+- [Terrain Render Extraction, Material, LOD and Tier Boundary](../adr/139-terrain-render-extraction-material-lod-and-tier-boundary.md):
+  immutable Terrain/Foliage render candidates, material/permutation admission,
+  renderer-owned per-view LOD/visibility and core-1.0 versus post-1.0 GPU recipes.
 - [World Streaming Architecture](./runtime/world-streaming-architecture.md):
   streaming cells, volumes, priority, budgets, server authority, and editor
   world-composition tools.

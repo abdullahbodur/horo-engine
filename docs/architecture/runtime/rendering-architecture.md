@@ -1044,6 +1044,26 @@ the selected backend alone owns native buffers, culling commands, draws and defe
 GPU retirement. Rendering cannot mutate terrain residency/source/overlays, treat a
 native handle as Terrain identity or infer a Terrain tier from the backend name.
 
+[ADR-139](../../adr/139-terrain-render-extraction-material-lod-and-tier-boundary.md)
+refines that handoff. The Terrain adapter emits one bounded view-independent candidate
+snapshot with neutral geometry/artifact references, material requirements, legal LOD/
+seam data and finite costs. RenderFrontend derives `RenderObjectId` mappings and owns
+per-view visibility, compatible LOD/transition selection, material/permutation admission,
+resource realization, pass mapping and retirement. Residency, render visibility and
+gameplay relevance remain independent facts.
+
+Core 1.0 Terrain/Foliage uses deterministic bounded CPU frustum/distance/LOD/seam
+planning and backend-neutral direct or instanced batches. It does not require compute,
+GPU Scene, Hi-Z or indirect draws. A post-1.0 GPU-driven recipe may consume the same
+semantic candidates only through a separately admitted, cooked, budgeted and qualified
+renderer plan. Its GPU visibility/LOD results remain presentation-only and normal frames
+perform no readback to drive streaming or gameplay.
+
+`TerrainFeatureTier` and `RenderProductProfile` are distinct values even when labels
+match. An aggregate plan records both axes, exact variants/limits/revisions and every
+declared fallback. The renderer cannot use its profile to raise Terrain limits, discard
+required layers/holes/instances or invent a missing shader representation.
+
 The scene runtime produces frame-owned render data:
 
 ```cpp
@@ -1495,6 +1515,10 @@ Required tests cover:
 - upload cancellation and generation replacement
 - terrain/foliage extraction generation, tier/capability rejection and GPU-resource
   retirement without native identity leaking back to Terrain
+- Terrain view-independent candidate capacity/multi-view tests, CPU 1.0 per-view LOD/
+  seam selection and explicit post-1.0 GPU-recipe admission/fallback
+- Terrain material classification/permutation failure and Terrain-tier/render-profile
+  independence without silent layer, hole, instance or required-quality loss
 - resize, minimize, and target recreation
 - deferred destruction after frame completion
 - shader reflection/material validation
@@ -1521,3 +1545,4 @@ Required tests cover:
 - [Platform Abstraction](../foundation/platform-abstraction.md)
 - [XR Architecture](./vr-ar-architecture.md)
 - [ADR-137: Terrain and Foliage Ownership, Data, Tier and Lifecycle](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
+- [ADR-139: Terrain Render Extraction, Material, LOD and Tier Boundary](../../adr/139-terrain-render-extraction-material-lod-and-tier-boundary.md)
