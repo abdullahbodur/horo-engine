@@ -707,6 +707,28 @@ newer/incompatible packaged artifacts fail typed loading. Hot reload publishes a
 generation atomically while active instances retain old artifact/provider/resource
 leases until safe finish/restart and final retirement.
 
+### PCG Domain Graph And Cook Boundary
+
+[ADR-150](../../adr/150-pcg-graph-source-cooked-plan-cache-and-runtime-ownership.md)
+applies the generic-Assets/domain-semantics split to procedural generation graphs.
+Assets owns stable `AssetId`, accepted source/dependency snapshots, generic cook
+orchestration, cache storage, staged-generation manifests, atomic publication and
+immutable provider leases. It does not interpret nodes, lower graphs, evaluate plans
+or commit generated scene state.
+
+PCG Model owns graph/node/pin/edge semantics and PCG Cook deterministically lowers one
+closed input snapshot to the backend-neutral immutable `CookedPCGPlan`. The PCG cache
+extension includes normalized source semantics, every locked dependency, node-library
+catalog and referenced node-schema generations, seed/numeric policy, effective target
+capabilities/limits and all byte-affecting schema/compiler versions. Editor layout,
+selection, timestamps, paths and worker order are excluded.
+
+Fresh output and cache reuse pass the same generic envelope and PCG semantic validation
+before aggregate generation publication. Runtime consumes only an exact published
+plan through an Assets provider lease; it never interprets source or compiles a missing
+variant. Evaluation intermediates are operation-local, and generated outputs publish
+only through their target owners after a separate aggregate transaction.
+
 ### Audio Domain Import And Cook Boundary
 
 [ADR-064](../../adr/064-audio-asset-and-cook-boundary.md) is the single

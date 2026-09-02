@@ -456,6 +456,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Procedural Generation Architecture](./runtime/procedural-generation-architecture.md):
   PCG graphs, point clouds, validation, transactions, server authority, and
   streaming-cell ownership.
+- [PCG Graph Source, Cooked Plan, Cache and Runtime Ownership](../adr/150-pcg-graph-source-cooked-plan-cache-and-runtime-ownership.md):
+  one authored truth, deterministic lowering, disposable cache/intermediates, immutable
+  runtime-plan leases and target-owner output commit.
 - [Multiplayer Replication Architecture](./runtime/multiplayer-replication-architecture.md):
   replication roles, property deltas, RPCs, prediction, interest management,
   dedicated servers, and security.

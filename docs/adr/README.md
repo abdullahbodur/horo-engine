@@ -143,6 +143,25 @@ to the replacement.
 | [129](129-vfx-editor-document-live-preview-and-module-authoring.md) | VFX Editor Document, Live Preview and Module Authoring | Proposed | 2026-09-02 |
 | [130](130-platform-services-frontend-request-lifetime-timeout-null-and-error-semantics.md) | Platform Services Frontend, Request Lifetime, Timeout, Null and Error Semantics | Proposed | 2026-09-02 |
 | [131](131-platform-services-closed-sdk-extension-abi-package-and-composition-boundary.md) | Platform Services Closed SDK, Extension ABI, Package and Composition Boundary | Proposed | 2026-09-02 |
+| [132](132-platform-services-project-salt-stable-id-tombstone-and-provider-mapping.md) | Platform Services Project Salt, Stable ID, Tombstone and Provider Mapping | Proposed | 2026-09-02 |
+| [133](133-platform-progression-authority-trust-and-idempotency.md) | Platform Progression Authority, Trust and Idempotency | Proposed | 2026-09-02 |
+| [134](134-cloud-blob-transport-revision-precondition-and-offline-ownership.md) | Cloud Blob Transport, Revision Preconditions and Offline Ownership | Proposed | 2026-09-02 |
+| [135](135-platform-identity-session-generation-privacy-and-consent.md) | Platform Identity, Session Generation, Privacy and Consent | Proposed | 2026-09-02 |
+| [136](136-platform-offline-queue-ownership-replay-and-cloud-intent-boundary.md) | Platform Offline Queue Ownership, Replay and Cloud Intent Boundary | Proposed | 2026-09-02 |
+| [137](137-terrain-foliage-ownership-data-tier-and-lifecycle.md) | Terrain and Foliage Ownership, Data, Tier and Lifecycle | Proposed | 2026-09-02 |
+| [138](138-terrain-source-cooked-tile-cache-and-streaming-ownership.md) | Terrain Source, Cooked Tile, Cache and Streaming Ownership | Proposed | 2026-09-02 |
+| [139](139-terrain-render-extraction-material-lod-and-tier-boundary.md) | Terrain Render Extraction, Material, LOD and Tier Boundary | Proposed | 2026-09-02 |
+| [140](140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md) | Foliage Placement, Baked/Dynamic State and Eviction Ownership | Proposed | 2026-09-02 |
+| [141](141-terrain-foliage-cross-system-ownership-and-readiness.md) | Terrain/Foliage Cross-System Ownership and Readiness | Proposed | 2026-09-02 |
+| [142](142-terrain-foliage-document-tool-undo-and-preview-ownership.md) | Terrain/Foliage Document, Tool, Undo and Preview Ownership | Proposed | 2026-09-02 |
+| [143](143-terrain-foliage-scale-budgets-observability-and-feature-boundary.md) | Terrain/Foliage Scale Budgets, Observability and Feature Boundary | Proposed | 2026-09-02 |
+| [144](144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md) | Destruction Ownership, Authority, State and Runtime Geometry Boundary | Proposed | 2026-09-02 |
+| [145](145-destruction-source-chunk-geometry-collision-and-cook-ownership.md) | Destruction Source, Chunk Geometry, Collision and Cook Ownership | Proposed | 2026-09-02 |
+| [146](146-destruction-runtime-activation-physics-cleanup-and-rollback.md) | Destruction Runtime Activation, Physics, Cleanup and Rollback | Proposed | 2026-09-02 |
+| [147](147-destruction-event-and-cosmetic-consumer-ownership.md) | Destruction Event and Cosmetic Consumer Ownership | Proposed | 2026-09-02 |
+| [148](148-fracture-document-generator-undo-and-preview-ownership.md) | Fracture Document, Generator, Undo and Preview Ownership | Proposed | 2026-09-02 |
+| [149](149-destruction-persistence-replication-streaming-and-authority.md) | Destruction Persistence, Replication, Streaming and Authority | Proposed | 2026-09-02 |
+| [150](150-pcg-graph-source-cooked-plan-cache-and-runtime-ownership.md) | PCG Graph Source, Cooked Plan, Cache and Runtime Ownership | Proposed | 2026-09-02 |
 
 ## Conventions
 
