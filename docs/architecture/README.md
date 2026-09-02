@@ -199,6 +199,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Runtime UI Style Asset, Token and Inheritance](../adr/076-runtime-ui-style-asset-token-and-inheritance.md):
   typed runtime tokens, single-parent inheritance, element/state precedence,
   style cook/publication, accessibility overlay, and editor separation.
+- [Runtime UI Animation Clock and Time Domain](../adr/077-runtime-ui-animation-clock-and-time-domain.md):
+  simulation, unscaled, transition, preview, test and manual clocks; pause/rate,
+  lifecycle, cancellation, reduced motion, deterministic advance, and shutdown.
 - [Networking Architecture](./runtime/networking-architecture.md): optional
   handle-based transports, session/authentication runtime, bounded I/O, and
   remote security.
