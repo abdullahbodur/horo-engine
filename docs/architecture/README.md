@@ -308,6 +308,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Terrain Render Extraction, Material, LOD and Tier Boundary](../adr/139-terrain-render-extraction-material-lod-and-tier-boundary.md):
   immutable Terrain/Foliage render candidates, material/permutation admission,
   renderer-owned per-view LOD/visibility and core-1.0 versus post-1.0 GPU recipes.
+- [Foliage Placement, Baked/Dynamic State and Eviction Ownership](../adr/140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md):
+  deterministic baked placement, ephemeral runtime overlays, durable canonical deltas,
+  capacity policy, save handoff and no-loss World Streaming eviction.
 - [World Streaming Architecture](./runtime/world-streaming-architecture.md):
   streaming cells, volumes, priority, budgets, server authority, and editor
   world-composition tools.

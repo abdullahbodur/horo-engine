@@ -12,6 +12,10 @@ ADR-113 freezes product/environment/user/profile namespaces, logical slot addres
 and storage mapping for HORO-1425 #1425 [SAV-003.1].
 ADR-114 freezes authoring/runtime state composition and subsystem-owned canonical
 adapters for HORO-1438 #1438 [SAV-004.1].
+[ADR-140](../../adr/140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md)
+applies that single-authority model to baked, ephemeral and durable foliage mutations:
+Runtime Save/Persistent World owns canonical capture and dormant deltas, while Terrain
+defines and applies the semantic projection without a second persistence store.
 ADR-115 freezes local/cloud authority, provider revisions and conflict preservation
 for HORO-1466 #1466 [SAV-006.1].
 ADR-116 freezes save-source trust, bounded admission, tool capabilities, credentials
@@ -635,6 +639,15 @@ charged; it must not discard unsaved state merely because a cell becomes Unloade
 Eviction need not durably save a user slot on every cell change, but it must retain
 an owned recoverable-in-session representation of the delta.
 
+Foliage follows this protocol under ADR-140. The immutable cooked cluster is the base and
+is not repeated in a save. Product-authorized durable spawns, baked-instance tombstones
+and canonical updates enter the Persistent World ledger by stable world/dataset/base/
+cell/foliage identity. Cell/session/owner-bound ephemeral overlays, decoded instances,
+render buffers, Physics bodies and Navigation tiles are excluded. Terrain owns semantic
+validation/encoding and active application; it does not own another archive, spill store
+or dormant ledger. A dirty foliage handoff failure blocks eviction rather than dropping
+the delta or forcing an implicit slot save.
+
 Active-cell changes, inactive ledger entries and tombstones join the same coherent
 SaveCaptureEpoch. An entity/field has one authoritative record at that cut, not two
 copies from both live ECS and the ledger. Resident-but-unpublished provider candidates
@@ -1061,6 +1074,8 @@ documentation change:
   commit and asynchronous retirement under native fence delay.
 - Save/restore unloaded/resident/evicting cells, dropped-item/tombstone/cross-cell cases,
   bounded spill chunks, stale generations and changed base dataset revisions.
+- Save/restore baked-relative durable foliage spawn/update/tombstone deltas with one-copy
+  active/dormant capture, ephemeral/native exclusion and no-loss eviction failure.
 - Independent archive/save/participant migration paths, minimum support horizon,
   current/oldest/one-newer fixtures, stale consent and signed migration without
   signing authority; unchanged source on pre-publication failure.
@@ -1098,6 +1113,7 @@ and regression coverage.
 - [ADR-010](../../adr/010-job-waiting-and-operation-store-ownership.md): OperationStore and non-blocking work.
 - [ADR-012](../../adr/012-world-streaming-partition-authority-and-subsystem-boundaries.md): Cell authority and barriers.
 - [ADR-136](../../adr/136-platform-offline-queue-ownership-replay-and-cloud-intent-boundary.md): Platform offline queue ownership, replay guarantees and Save-owned cloud intent.
+- [ADR-140](../../adr/140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md): Foliage baked/ephemeral/durable classification, canonical deltas and eviction handoff.
 - [ADR-008](../../adr/008-error-model-exception-boundary-and-registry.md): Typed error propagation.
 - [ADR-112](../../adr/112-save-archive-container-and-compatibility-policy.md): Portable container, canonical state, version axes, identities and compatibility horizon.
 - [ADR-113](../../adr/113-local-storage-user-profile-and-slot-ownership.md): Product/user/profile namespaces, logical slot addressing and physical storage ownership.
