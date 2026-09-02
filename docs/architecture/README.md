@@ -190,6 +190,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Runtime UI Ownership, Scope and Update Order](../adr/073-runtime-ui-ownership-scope-and-update-order.md):
   game/player/scene/viewport scopes, lifecycle, frame phases, pause, input,
   extraction, unload, compatibility, and shutdown.
+- [Runtime UI Layout Units and Measure-Arrange](../adr/074-runtime-ui-layout-units-and-measure-arrange.md):
+  logical units, constraint precedence, anchors, intrinsic/flex/grid sizing,
+  deterministic two-phase layout, overflow, rounding, and compatibility.
 - [Networking Architecture](./runtime/networking-architecture.md): optional
   handle-based transports, session/authentication runtime, bounded I/O, and
   remote security.
