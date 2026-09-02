@@ -49,6 +49,11 @@ keeps passthrough, anchors, scene understanding, hit tests and light estimation 
 independent post-1.0 families with purpose-bound privacy. Native providers, Horo
 snapshots, derived domain realizations and durable storage remain separate owners.
 
+[ADR-163](../../adr/163-xr-tooling-diagnostics-privacy-and-qualification-ownership.md)
+separates portable project intent, effective runtime snapshots, editor tooling,
+Observability/captures and release evidence. Metrics use finite dimensions, and runtime
+compatibility never substitutes for physical-device qualification.
+
 ## Ownership
 
 ```text
@@ -523,6 +528,17 @@ code. They show loader/runtime discovery, system/session state, view
 configuration, interaction profile, optional extensions, permissions,
 swapchains, frame timing, tracking confidence, and redacted failure details.
 
+Setup view models show requested, effective, availability/reason and evidence level as
+separate fields. Editors validate drafts and invoke application commands; they never call
+native XR or persist local discovery/evidence into project settings. Metrics admit only
+finite dimensions such as registered backend/profile/phase/outcome classes—never device
+names, serials, native strings/paths, live IDs, poses, gaze or environment geometry.
+
+Detailed capture is an explicit bounded operation with channels, duration/frame/byte
+limits, privacy purpose, retention/export and a manifest recording completeness,
+truncation and drops. Sensitive channels are unavailable unless separately admitted;
+development build type is not consent.
+
 Support evidence is keyed by the full tuple:
 
 ```text
@@ -590,6 +606,7 @@ device release gate.
 - [XR Rendering, OpenXR Compositor and Renderer Ownership](../../adr/160-xr-rendering-openxr-compositor-and-renderer-ownership.md)
 - [XR Interaction, Runtime UI, Locomotion and Accessibility Ownership](../../adr/161-xr-interaction-runtime-ui-locomotion-and-accessibility-ownership.md)
 - [Mixed-Reality Ownership, Privacy and Capability Tier](../../adr/162-mixed-reality-ownership-privacy-and-capability-tier.md)
+- [XR Tooling, Diagnostics, Privacy and Qualification Ownership](../../adr/163-xr-tooling-diagnostics-privacy-and-qualification-ownership.md)
 - [XR Setup UI Reference](./xr-setup.html)
 - [Rendering Architecture](./rendering-architecture.md)
 - [Render Backend Parity Contract](./render-backend-parity-contract.md)
