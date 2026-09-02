@@ -7,6 +7,12 @@ subsystems for Horo Engine. It covers heightfield-based terrain, layer
 painting, instanced foliage rendering, wind simulation, LOD, collision,
 render extraction, streaming budget integration, and editor authoring tools.
 
+Virtual-texture integration follows
+[ADR-169](../../adr/169-vtx-producer-terrain-world-streaming-packaging-and-server-ownership.md).
+Terrain owns canonical source, dataset/tile semantics and runtime generations; a VTX
+adapter captures immutable exact-generation inputs and hints. Derived VTX pages never
+become Terrain truth, and VTX invalidation cannot mutate Terrain state or cell authority.
+
 [ADR-137](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
 is the foundation contract for this subsystem. Terrain is a backend-neutral runtime
 vertical slice with distinct `TerrainApi` and `TerrainRuntime` ownership; it is not
