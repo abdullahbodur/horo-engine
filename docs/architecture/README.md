@@ -462,6 +462,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [PCG Ownership, Authority, Tier and Lifecycle](../adr/151-pcg-ownership-authority-tier-and-lifecycle.md):
   pure evaluator ownership, external commit authority, deterministic capability classes,
   offline/preview/runtime/hybrid modes and headless/null lifecycle.
+- [PCG Spatial Input Snapshot and Node-Library Ownership](../adr/152-pcg-spatial-input-snapshot-and-node-library-ownership.md):
+  coherent immutable provider capture, stale-result fencing, canonical spatial queries,
+  core-node semantics and trusted catalog extensions.
 - [Multiplayer Replication Architecture](./runtime/multiplayer-replication-architecture.md):
   replication roles, property deltas, RPCs, prediction, interest management,
   dedicated servers, and security.
