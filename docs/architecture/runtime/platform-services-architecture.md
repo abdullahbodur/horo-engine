@@ -24,6 +24,11 @@ load/selection to distinct owners, constrains asynchronous provider exchange to 
 versioned C ABI and freezes explicit composition for development, headless, test,
 unsupported and certification profiles.
 
+[ADR-132](../../adr/132-platform-services-project-salt-stable-id-tombstone-and-provider-mapping.md)
+defines the one committed project identity ledger, byte-exact SHA-256 ID derivation,
+canonical encodings, permanent tombstones, key aliases, clone/fork migration and the
+private provider-mapping boundary used by all service categories.
+
 ## Scope
 
 Platform services covered here:
@@ -567,63 +572,148 @@ Absence of the capability is typed, not a silent empty list.
 
 ## Stable ID Registries
 
-Runtime code never passes strings for achievement, leaderboard, presence, or
-stat IDs. All names are resolved at project cook or package build time into
-stable numeric IDs.
+Runtime and gameplay never pass strings for achievement, leaderboard, stat or
+presence-status identity. All authoring keys resolve before cook publication to
+strong typed 64-bit Horo IDs. The kinds are not interchangeable with each other,
+runtime handles, provider identifiers or raw integers; `0` is invalid.
 
-Stable IDs are produced deterministically from the authoring name using a
-project-scoped hash so that the same name always yields the same numeric ID
-across clean builds and across developer machines:
+### Project identity authority
 
-```cpp
-struct StableId64 { uint64_t value; };
+The Project domain owns one committed `.horo/platform_services.ids.json` ledger. It
+contains all active and tombstoned primary entries and their authoring aliases. A
+service-specific definition document owns display/localization and behavior fields and
+references an ID from this ledger. Provider mapping documents and generated manifests
+consume it; neither can allocate or rewrite a Horo ID.
 
-AchievementId GenerateAchievementId(const std::string& projectSalt,
-                                    const std::string& name);
-LeaderboardId GenerateLeaderboardId(const std::string& projectSalt,
-                                    const std::string& name);
-```
+The ledger header binds schema `1`, the exact owning `projectId` and algorithm
+`horo.platform-services.stable-id.v1`. `.horo/project.json` is the sole authority for
+the 128-bit `platformServicesIdSalt`, serialized as `psid1:` plus 32 lowercase hex
+digits. The ledger does not duplicate the salt. It stores each derived numeric value
+as `sid1:` plus exactly 16 lowercase hex digits, including leading zeroes. JSON numbers
+and alternative spellings are rejected so 64-bit precision and canonical comparison
+do not depend on a parser.
 
-The salt is stored in the project configuration. It must not change after the
-first release that consumes platform IDs, because platform backends map stable
-IDs to platform-specific manifests.
+The salt is generated from the platform cryptographic random source together with a
+new project. Zero, short reads and random-source failure fail project creation. The
+salt is portable non-secret metadata committed with the project; environment, user
+preferences, provider packages and build profiles cannot override it. A project that
+predates the field obtains it once through a transactional migration, never as a
+read-only-open or cook side effect.
 
-The registries enforce uniqueness and traceability:
+### Canonical keys and deterministic derivation
 
-```cpp
-struct AchievementRegistry {
-    enum class RegisterResult { Ok, DuplicateName, DuplicateId };
+Each primary definition has one immutable 1–96 byte ASCII `canonicalKey` matching
+`^[a-z][a-z0-9_.-]{0,95}$`. The exact bytes are machine identity. They are not trimmed,
+case folded, localized or derived from a display name. Presentation renames therefore
+preserve identity.
 
-    Result<AchievementId, RegisterResult>
-    Register(const std::string& name);
-
-    std::optional<AchievementId> Find(const std::string& name) const;
-    std::optional<std::string> FindName(AchievementId id) const;
-};
-```
-
-- Registering the same name twice returns the existing ID and is treated as
-  idempotent during cook, but emits a diagnostic so authors notice accidental
-  reuse.
-- A hash collision between two different names is a cook error. The author must
-  rename one of the definitions.
-- Removed achievements are marked `deprecated` rather than deleted from the
-  registry. Their stable IDs remain reserved so they are never reused by a new
-  definition.
-
-The cook pipeline emits platform-specific manifest files:
+Version 1 hashes exactly:
 
 ```text
-achievements.json          -- Horo authoring source (stable IDs, display text)
-.deprecated_achievements   -- tombstone list for removed IDs
-steam/achievements.vdf     -- Steamworks manifest
-psn/trophy_pack/           -- PSN trophy pack
-xbox/achievements.json     -- Xbox Live manifest
+ASCII("horo.platform-services.stable-id.v1")
+0x00
+project salt                                      (16 raw bytes)
+kind                                              (uint8: achievement=1,
+                                                   leaderboard=2, stat=3,
+                                                   presence-status=4)
+canonical-key byte count                          (uint16, big-endian)
+canonical-key                                     (exact ASCII bytes)
 ```
 
-The same rules apply to leaderboards, stats, and presence status IDs.
+Horo computes SHA-256, takes digest bytes 0–7 and interprets them as an unsigned
+big-endian `uint64`. Cooked binary and the platform provider ABI also encode those
+eight bytes big-endian. Implementations use the shared golden-vector codec; they never
+use `std::hash`, host byte order or a provider hash.
 
-This is the same pattern used by the audio parameter and event registries.
+The ledger retains the derived value beside its key. Validation always recomputes it,
+rejects zero and rejects a stored/derived mismatch. Primary entries are canonically
+ordered by kind tag and then unsigned ID; aliases use exact ASCII byte order. A
+domain-separated SHA-256 of the canonical complete ledger is its snapshot fingerprint.
+
+### Active, tombstoned and aliased identity
+
+A primary entry is exactly `Active` or `Tombstoned`. Removing a definition preserves
+its kind, canonical key, ID, aliases and bounded removal provenance as a tombstone.
+Tombstones participate in key and numeric uniqueness forever under that project
+namespace. Ordinary authoring, cook and cleanup cannot prune them or allocate their
+identity to a new meaning.
+
+Re-adding a tombstoned key fails. A separately reviewed restore operation may reactivate
+the exact same semantics and ID only after provider mappings and product policy accept
+it; it is never implicit. New semantics require a new canonical key.
+
+An alias is another valid canonical-key spelling bound directly to exactly one primary
+entry of the same kind. It has no independently hashed value. Aliases support explicit
+authoring/import migrations while runtime/cooked references retain only the numeric
+ID. Primary keys and aliases are unique per kind across active and tombstoned entries.
+Chains, cycles, wildcard/case-insensitive lookup, cross-kind aliases and provider-native
+values used as Horo aliases are forbidden. Tombstoning retains all aliases.
+
+### Collision and candidate validation
+
+Candidate validation builds one numeric index across every active and tombstoned
+primary entry. Different primaries producing the same 64-bit value fail with
+`platform.identity.hash_collision`, even across kinds. No entry wins. Diagnostics
+name the algorithm, ID, both kind/key pairs and safe source locations.
+
+A new unpublished entry resolves a collision by selecting and reviewing a different
+canonical key. An existing published entry never changes. Incrementing the value,
+rehashing with a counter, insertion-order probing or silently widening one ID is
+forbidden because each would make results depend on authoring/merge order. Conflicting
+published histories require a declared project migration and cannot merge by guess.
+
+The application project service parses a bounded detached candidate and validates
+project/salt ownership, schema/algorithm, canonical encoding/order, key/alias
+uniqueness, stored derivations, global numeric uniqueness, states and all durable
+references before atomically publishing one immutable snapshot. Failure preserves the
+last valid snapshot and never partially mutates a provider registry.
+
+### Clone, fork and regeneration
+
+Filesystem copies, VCS clones/branches/checkouts, path moves and backups preserve
+`projectId`, salt, ledger and IDs because they are working copies of the same product.
+A Duplicate Project workflow must explicitly choose:
+
+- `PreserveIdentity` for a branch/port of the same product; or
+- `ForkIdentity` for an independent product, generating a new `projectId` and
+  cryptographic salt and executing a complete namespace migration.
+
+There is no path heuristic or automatic regeneration when a copy is detected. Salt
+regeneration is not a normal setting. Fork/regeneration first produces a dry-run with
+all active and tombstoned old-to-new IDs, aliases, durable references, provider
+mapping dispositions, offline operations and derived artifacts. It validates the full
+candidate before atomically updating project metadata, ledger and every owned durable
+reference, then invalidates affected manifests/caches/offline entries. Unknown or
+opaque references, incomplete mappings and collisions block with the old namespace
+intact.
+
+After an ID has shipped, entered remote state, saves/network protocols or another
+package, regeneration is prohibited by default. It requires a separately approved
+product migration with complete external transition evidence or an explicit
+incompatible new-product reset. Text aliases cannot bridge two numeric namespaces.
+
+### Provider mapping and cook/runtime projection
+
+A trusted provider adapter owns its mapping keyed by `(ProviderId, kind, Horo ID)`.
+Values such as Steam API names, trophy numbers and console manifest indexes remain
+bounded provider-private data. Required active entries have exactly one mapping for
+the selected target; optional absence is explicit product capability policy. Unknown,
+tombstoned, duplicate, wrong-kind or stale-ledger mapping rows fail provider manifest
+generation. Tombstoned remote values cannot be reassigned to new Horo definitions.
+
+Cook captures the project, algorithm, ledger fingerprint, service definitions,
+provider mapping revision and product/target profile as one generation. It resolves
+keys/aliases once and emits typed IDs into provider-neutral artifacts; provider
+manifests are deterministic derived outputs from that same snapshot. Any revision
+change invalidates the candidate.
+
+Runtime loads bounded sorted tables with the expected fingerprint and performs only
+typed numeric lookup. It never hashes strings, reads editor aliases or asks a provider
+to allocate identity. Registry generations remain pinned by admitted requests and
+durable offline entries until retirement/migration. Provider callback reverse lookup
+is private and immediately converts to the captured Horo ID. Gameplay, saves, scripts,
+offline queues and public telemetry never persist provider IDs or raw display strings
+as identity.
 
 ## Backend Interface
 
@@ -849,15 +939,15 @@ Access: `Edit > Project Settings > Platform Services`
 |   [ Steamworks                                     v ]       |
 |                                                              |
 | Achievements                                                 |
-|   ID      Name                  Hidden  Progress Steps       |
-|   --      ----                  ------  --------------       |
-|   1       first_blood           [ ]     1                     |
-|   2       kill_streak_10        [x]     10                    |
+|   Canonical Key             Display Name      Hidden  Steps |
+|   -------------             ------------      ------  ----- |
+|   campaign.first_blood      First Blood       [ ]     1     |
+|   combat.kill_streak_10     Ten in a Row      [x]     10    |
 |   [+ Add]                                                    |
 |                                                              |
 | Leaderboards                                                 |
-|   ID      Name                  Sort        Friends Only     |
-|   10      high_score            Descending  [x]               |
+|   Canonical Key             Sort        Friends Only        |
+|   score.high                Descending  [x]                  |
 |   [+ Add]                                                    |
 |                                                              |
 | Cloud Save                                                   |
@@ -964,6 +1054,12 @@ Required tests cover:
 - offline queue persists and replays in order
 - request cancellation does not leak state
 - stable ID registries reject unregistered names
+- stable ID golden vectors agree across hosts; malformed salts/encodings, stored/
+  derived mismatches, collisions, duplicate aliases and zero IDs fail closed
+- display rename/reorder and identity-preserving clones retain IDs; tombstones cannot
+  be silently reused and namespace-fork failure rolls back every reference
+- provider mapping generation rejects unknown, tombstoned, duplicate, wrong-kind and
+  stale-fingerprint rows; provider-native values never become gameplay identity
 - typed cloud-object addressing, provider revision propagation and no timestamp-based
   automatic winner selection
 - conditional write/delete and precondition failure; uncoordinated providers never
@@ -1018,6 +1114,11 @@ Platform-specific backend tests live in the private platform repositories.
 
 - [ADR-130](../../adr/130-platform-services-frontend-request-lifetime-timeout-null-and-error-semantics.md):
   frontend request ownership, lifecycle, callback, capability, Null and error baseline.
+- [ADR-131](../../adr/131-platform-services-closed-sdk-extension-abi-package-and-composition-boundary.md):
+  closed SDK packaging, extension ABI, provider lifecycle and product composition.
+- [ADR-132](../../adr/132-platform-services-project-salt-stable-id-tombstone-and-provider-mapping.md):
+  deterministic project IDs, canonical encoding, tombstones, aliases and provider
+  mapping ownership.
 - [Platform Services Config UI Reference](./platform-services-config.html): achievements, leaderboards, cloud saves, presence, and platform adapters panel.
 
 - [Audio Architecture](./audio-architecture.md)
