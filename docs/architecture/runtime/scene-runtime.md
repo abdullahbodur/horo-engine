@@ -317,9 +317,11 @@ exists so future parallelism does not require redesigning system ownership.
 Within a fixed tick,
 [ADR-061](../../adr/061-animation-ownership-update-order-and-clock.md) requires
 gameplay parameter commit before animation pre-physics evaluation, root-motion
-request admission before character-controller movement, physics next, and typed
-post-physics pose override/finalization before tick publication. These are
-dependencies within the existing phase graph, not new `RuntimePhase` values.
+request admission before Character platform/query movement, Physics next,
+Character support/transform finalization without a second move, and typed
+post-Physics pose override/finalization before tick publication. ADR-089 owns the
+Character-specific details. These are dependencies within the existing phase graph,
+not new `RuntimePhase` values.
 
 ## Runtime Save And Restore Integration
 

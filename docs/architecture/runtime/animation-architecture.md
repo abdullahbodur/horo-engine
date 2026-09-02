@@ -411,12 +411,15 @@ steps.
 
 ```text
 Attempted Fixed Tick
-  Gameplay and owner-admitted cinematic inputs stage animation parameters
+  Gameplay/AI/Nav and owner-admitted cinematic inputs stage parameters, movement,
+  desired heading and kinematic-platform targets
   Animation evaluates candidate pose, eligible IK, events, and root-motion delta
-  Character controller resolves desired movement plus root motion
-  Physics steps once and publishes typed body/pose overrides
+  Physics freezes Character query/support/platform-motion evidence
+  Character applies platform carry and resolves desired movement plus root motion
+  Physics applies staged commands, steps once and publishes body/pose overrides
+  Character finalizes support and its authoritative collision-root transform
   Animation composes admitted overrides and finalizes candidate pose
-  Tick commit publishes player state, events, and previous/current poses
+  Tick commit publishes Physics, Character/transforms, player state, events, and poses
 
 After FixedUpdate
   Presentation interpolates committed poses and applies presentation-only overlays
@@ -429,9 +432,11 @@ Interpolated cinematic overlays apply only to the render/preview snapshot after
 movement authority resolves. Only owner-admitted non-interpolated fixed-tick inputs
 participate in movement-producing evaluation.
 
-The character controller runs during the gameplay movement phase, before the
-physics world is stepped. This matches the ordering described in
-[Character Controller Architecture](./character-controller-architecture.md).
+The Character controller moves before Physics and performs only support/transform
+finalization after Physics; it never performs a hidden second move. Platform carry,
+capsule up/heading, root rotation and visual orientation ownership follow
+[ADR-089](../../adr/089-character-controller-ownership-implementation-and-update-order.md)
+and [Character Controller Architecture](./character-controller-architecture.md).
 
 ### Render Extraction
 

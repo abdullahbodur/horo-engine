@@ -297,15 +297,24 @@ Variable-rate update is not used for deterministic physics integration.
 One fixed tick executes:
 
 1. consume the input command state assigned to the tick
-2. run ordered pre-physics systems, including gameplay animation parameters,
-   animation pose/root-motion staging, and character-controller movement
-3. step physics
-4. publish physics results into scene transforms
-5. run post-physics and behavior systems, including typed animation pose
-   overrides and candidate pose finalization
-6. commit deferred entity/component changes
-7. atomically publish committed subsystem state, events, and previous/current
+2. stage Gameplay/AI/Nav movement/facing, animation parameters and kinematic-platform
+   targets
+3. evaluate authoritative Animation pose/root motion and freeze Physics-owned
+   Character query/support/platform-motion evidence
+4. run Horo Character platform carry and bounded query movement, staging its root
+   and Physics commands
+5. apply staged commands and step Physics once
+6. publish Physics results, then finalize Character support/attachment and its
+   authoritative collision-root transform without a second move
+7. compose typed post-Physics Animation pose overrides and candidate pose
+8. commit deferred entity/component changes
+9. atomically publish committed subsystem state, transforms, events, and previous/current
    state for interpolation
+
+[ADR-089](../../adr/089-character-controller-ownership-implementation-and-update-order.md)
+owns this Character-specific dependency order and the separate capsule up, desired
+heading, root rotation, platform angular carry and visual orientation authorities.
+Presentation frames neither accumulate root motion nor update collision state.
 
 [ADR-084](../../adr/084-canonical-physics-solver-units-and-tolerances.md) fixes the
 initial Physics step to pinned Jolt CanonicalV1 under one owner thread and serial
