@@ -205,6 +205,16 @@ neither required nor optional policy authorizes runtime bake, source I/O or a fa
 path. Dynamic obstacle/carving state is runtime-owned transient overlay state and
 cannot write back into the Scene or cooked base.
 
+[ADR-107](../../adr/107-navigation-query-consistency-and-snapshot-ownership.md)
+binds one `NavigationWorldId` and combined query-snapshot root to the exact active
+`SceneRuntimeId`. Scene unload/replacement closes old navigation admission and
+requests cancellation before commit, then publishes a never-reused world
+incarnation with the new Scene. Old read leases may keep provider bytes safe while
+workers finish, but their results are `InvalidWorld`/cancelled and cannot apply to
+the replacement. `CommitDeferredLifecycleChanges` makes prepared Scene/cell
+topology visible before the following owner-thread `NavIntentCommit`; workers never
+publish into Scene components.
+
 ## Runtime UI Scope Boundary
 
 [ADR-073](../../adr/073-runtime-ui-ownership-scope-and-update-order.md) makes

@@ -320,6 +320,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Navigation Bake Ownership, Transaction and Cache](../adr/106-navigation-bake-ownership-transaction-and-cache.md):
   shared application operation, latest-wins revision capture, workspace locking,
   complete cache identity, atomic publication, terminal states and recovery.
+- [Navigation Query Consistency and Snapshot Ownership](../adr/107-navigation-query-consistency-and-snapshot-ownership.md):
+  combined topology/overlay snapshots, immediate versus async queries, owner-thread
+  completion publication, coverage outcomes, staleness and lease-safe retirement.
 
 - [Cinematic Sequencer Architecture](./runtime/cinematic-sequencer-architecture.md):
   timeline, tracks, clock authority, typed property bindings, evaluation phase,
