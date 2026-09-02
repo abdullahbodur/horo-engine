@@ -99,13 +99,13 @@ Choose the shortest path for the task:
 | Reader or task | Read |
 |---|---|
 | Architecture or product review | This document through [Product Profiles](#product-profiles) |
-| Add a C++ log | [Logging](#logging), then the reference C++ API and level rules |
-| Add a metric | [Metrics](#metrics), then the reference metric descriptor and cardinality rules |
+| Add a C++ log | [Logging](./observability-logging.md), then the reference C++ API and level rules |
+| Add a metric | [Metrics](./observability-performance.md#metrics-architecture), then the reference metric descriptor and cardinality rules |
 | Instrument engine, game, or plugin code | [Developer Instrumentation Guide](./developer-instrumentation.md) |
-| Add profiler zones | [Profiling](#profiling), then the reference profiler capture contract |
-| Propagate request/job parameters | [Diagnostic Context](#diagnostic-context) |
+| Add profiler zones | [Profiling](./observability-performance.md#profiler-traces), then the reference profiler capture contract |
+| Propagate request/job parameters | [Diagnostic Context](./observability-logging.md#mapped-diagnostic-context) |
 | Build Console or Performance UI | [Ownership And Flow](#ownership-and-flow) |
-| Debug storage or support export | [Storage And Diagnostics](#storage-and-diagnostics) |
+| Debug storage or support export | [Storage And Diagnostics](./observability-logging.md#storage-locations) |
 | Implement or review tests | [Verification Strategy](#verification-strategy) |
 
 ## Signal Model
@@ -234,6 +234,8 @@ Supported operations include:
 - change effective log level or category filter;
 - enable or disable file/console/in-memory sinks where the product profile allows;
 - start, arm, stop, or abort a profiler capture;
+- start, arm, stop, cancel, inspect, or export a profile-allowed external graphics
+  capture through [ADR-047](../../adr/047-renderdoc-pix-and-metal-capture-integration.md);
 - capture next hitch;
 - export a diagnostic bundle;
 - open the current log or capture folder;
@@ -296,15 +298,15 @@ All implementation contracts, API specifications, and testing patterns are locat
 
 ## Product Profiles
 
-| Profile | Logs | Core metrics | Profiler |
-|---|---|---|---|
-| Local Debug/test | Trace compiled, Debug default | On | Available, off by default |
-| Local Release/profile | Trace compiled, Info default | On | Available, off by default |
-| Packaged HoroEditor | Debug compiled, Info default | On | Selected channels |
-| Game Development | Trace compiled, Debug default | On | Available, off by default |
-| Game Profile | Trace compiled, Info default | On | Available, off by default |
-| Game Shipping | Info and above | Low-rate bounded set | Compiled out |
-| Diagnostics build | Trace available | On | Explicit detailed channels |
+| Profile | Logs | Core metrics | Profiler | External graphics capture |
+|---|---|---|---|---|
+| Local Debug/test | Trace compiled, Debug default | On | Available, off by default | Explicit local request when a qualified provider is available |
+| Local Release/profile | Trace compiled, Info default | On | Available, off by default | Explicit local request when a qualified provider is available |
+| Packaged HoroEditor | Debug compiled, Info default | On | Selected channels | Entitlement/profile/provider gated; off by default |
+| Game Development | Trace compiled, Debug default | On | Available, off by default | Explicit local request; off by default |
+| Game Profile | Trace compiled, Info default | On | Available, off by default | Explicit local qualification request; off by default |
+| Game Shipping | Info and above | Low-rate bounded set | Compiled out | Disabled |
+| Diagnostics build | Trace available | On | Explicit detailed channels | Explicit entitlement/provider request; off by default |
 
 Shipping observability remains local. It does not enable automatic telemetry,
 arbitrary capture paths, source-path disclosure, or an unauthenticated profiler
@@ -314,11 +316,25 @@ listener.
 
 ## Storage Locations
 
-Log sessions, metric files, and profiler captures are stored under platform user-state directories:
+Log sessions, metric files and profiler captures use the existing log/session
+roots:
 
-- **macOS**: `~/Library/Logs/Horo/`
-- **Windows**: `%LOCALAPPDATA%\Horo\Logs\`
-- **Linux**: `${XDG_STATE_HOME:-~/.local/state}/horo/log/`
+- **macOS logs**: `~/Library/Logs/Horo/`
+- **Windows logs**: `%LOCALAPPDATA%\Horo\Logs\`
+- **Linux logs**: `${XDG_STATE_HOME:-~/.local/state}/horo/log/`
+
+ADR-047 Horo-owned graphics captures are large restricted native artifacts and use
+a separate Platform state subtree that log rotation/support-bundle scanners never
+traverse implicitly:
+
+- **macOS graphics captures**: `~/Library/Application Support/Horo/Diagnostics/GraphicsCaptures/`
+- **Windows graphics captures**: `%LOCALAPPDATA%\Horo\Diagnostics\GraphicsCaptures\`
+- **Linux graphics captures**: `${XDG_STATE_HOME:-~/.local/state}/horo/diagnostics/graphics-captures/`
+
+The Platform `UserDirectories` implementation resolves these logical roots;
+callers do not construct them from environment/home strings. Graphics captures
+have their own manifest and retention policy and are not ordinary profiler traces
+or automatic support-bundle inputs.
 
 The exact directory tree structures, file rotations, and retention configurations are defined in the [Storage Locations](./observability-logging.md#storage-locations) section of the logging contract.
 
@@ -344,6 +360,7 @@ python3 scripts/dev.py run editor
 ```
 
 All supported options and environment variables are detailed in:
+
 - [Logging configuration](./observability-logging.md#runtime-configuration)
 - [Metrics/profiler configuration](./observability-performance.md#metrics-and-profiler-configuration)
 
@@ -352,6 +369,7 @@ All supported options and environment variables are detailed in:
 ## Verification Strategy
 
 Observability logic is tested via isolated, deterministic seams:
+
 - **Logging Verification**: Covered in [observability-logging.md#testing](./observability-logging.md#testing).
 - **Metrics & Profiler Verification**: Covered in [observability-performance.md#testing](./observability-performance.md#testing).
 
