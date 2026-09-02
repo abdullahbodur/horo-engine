@@ -39,6 +39,7 @@ Character checkpoint.
 - **Opt-In Prediction**: NonPredicted is the baseline and constructs no history/replay machinery. LocalPrediction and RollbackResimulation require validated ADR-100 descriptors, bounded histories and owner-provided fixed-tick hooks.
 - **Network-Owned Scheduling**: One NetworkRuntime scheduler applies immutable renderer-independent project profiles, per-connection bandwidth/work/queue ledgers, bounded interest and weighted-deficit fairness.
 - **Typed Runtime Mode Plan**: ADR-102 separates package-supported modes from the one standalone, client, listen-server or dedicated-server plan selected before world publication. Gameplay receives world/session-generation-scoped roles and capabilities; process globals, locality and headless state never grant authority.
+- **Shared Typed Configuration**: ADR-103 applies ADR-009 once across editor, CLI, MCP, CI and packaged hosts. Project defaults, preview preferences, release role, host requests and credential bindings retain distinct owners; product capability/security floors constrain runtime selection.
 
 ## Target Topology and Module Ownership
 
@@ -470,6 +471,37 @@ unpublishes the client session view and cannot promote a client to standalone.
 Shutdown unpublishes views and invalidates grants before worlds, sessions,
 listeners or transports are destroyed.
 
+## Project Configuration and Product Capability
+
+[ADR-103](../../adr/103-network-project-configuration-and-build-profile-ownership.md)
+specializes the Foundation configuration resolver without creating a Network-local
+precedence implementation. The Network module contributes inert `network.*`
+descriptors and projects the resolved snapshot into one validated
+`EffectiveNetworkConfiguration`. Editor, CLI, MCP, CI and packaged hosts call the
+same application use case and receive the same typed diagnostics/provenance.
+
+Portable project policy owns protocol/profile/trust/provider intent; local user
+configuration owns preview-only preferences; the product release profile owns
+supported ADR-102 modes, exact targets/providers, security floors and qualification
+evidence; a host request selects only within that envelope. Renderer backend,
+device/quality tier, developer CMake profile and headless state cannot select a
+network mode, transport or ADR-101 scheduling profile.
+
+Packaging emits a safe versioned `NetworkProductCapabilityManifest`. It describes
+supported modes/providers, public compatibility/security evidence and permitted
+override bounds, but grants no authority. Project files and manifests contain no
+raw credential/private-key values or private credential bindings. They declare
+stable credential requirements; private host/CI input binds an opaque provider
+reference, and the consuming operation resolves a short-lived value/operation
+handle. Missing mode/provider/credential/trust capability fails explicitly without
+fallback.
+
+Every preview, release job and runtime activation pins the effective configuration
+revision. Migration is versioned and cannot infer network values from renderer
+tiers. Runtime mode/provider/exposure changes require ADR-102 host recomposition;
+existing sessions keep their negotiated generations until bounded replacement or
+shutdown.
+
 ## Optional Composition and Product Configurations
 
 Horo Engine products declare only the modes and network targets they can realize:
@@ -495,6 +527,8 @@ Networking integrates with Horo's diagnostic and metric infrastructure:
 The networking subsystem requires targeted automated verification:
 
 1. **Unit Tests (`tests/unit/runtime/networking/`)**:
+   - `NetworkConfigurationTests`: legal source/precedence matrix, security-floor constraints, cross-surface parity, renderer/build-profile isolation and unavailable capability errors.
+   - `NetworkArtifactPlanTests`: mode/provider target inventory, canonical manifest, migration and proof that credentials/private bindings never enter public outputs.
    - `NetworkAddressTests`: IPv4, IPv6, hostname, loopback, port parsing, serialization.
    - `TransportConnectionStateTests`: `Connect()` returns immediately; `Created` / `Resolving` / `Connecting` / `Connected`; invalid transitions; timeout.
    - `SessionStateMachineTests`: `Negotiating` / `Authenticating` / `Activating` / `Active`; only Active reaches gameplay dispatch.
@@ -537,6 +571,7 @@ The networking subsystem requires targeted automated verification:
 - [ADR-100: Prediction Capability Tiers and Determinism Policy](../../adr/100-prediction-capability-tiers-and-determinism-policy.md)
 - [ADR-101: Interest, Priority and Network Budget Model](../../adr/101-interest-priority-and-network-budget-model.md)
 - [ADR-102: Runtime Network Modes and Authority Exposure](../../adr/102-runtime-network-modes-and-authority-exposure.md)
+- [ADR-103: Network Project Configuration and Build-Profile Ownership](../../adr/103-network-project-configuration-and-build-profile-ownership.md)
 - [System Design](../foundation/system-design.md)
 - [Desired Project Trees](../desired-project-tree.md)
 - [Multiplayer Replication Architecture](./multiplayer-replication-architecture.md)

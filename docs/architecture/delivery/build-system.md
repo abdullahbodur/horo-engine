@@ -108,6 +108,16 @@ Local development defaults to the `editor` profile because most contributors wor
 on the editor and runtime together. Headless CI jobs default to the `cli`
 profile to minimize build time for tooling-only changes.
 
+Developer build profiles are not product roles. In particular, `runtime-only`,
+`cli`, a Release configuration, headless execution or renderer omission does not
+mean client, listen-server or dedicated-server. Under
+[ADR-103](../../adr/103-network-project-configuration-and-build-profile-ownership.md),
+the product release profile produces a typed `NetworkArtifactPlan` naming exact
+ADR-102 modes, targets, private providers, platform variants and qualification
+evidence. Configure/build/package consume that pinned plan and fail if required
+content is unavailable; they never infer network capability from a renderer/device
+tier or silently include a server/provider target.
+
 ### Adding A New Preset
 
 New presets must be reviewed if they change compiler flags, generator, or

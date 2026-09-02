@@ -65,6 +65,22 @@ Each profile declares:
 - update and patch eligibility
 - store/publication destination eligibility
 
+For a network-capable game profile,
+[ADR-103](../../adr/103-network-project-configuration-and-build-profile-ownership.md)
+also requires a typed network release profile naming supported ADR-102 modes,
+exact NetworkRuntime/private provider artifacts, protocol/schema compatibility,
+security/trust floors, allowed renderer-independent network project profiles,
+platform/provider variants, redistribution evidence and permitted runtime override
+bounds. The release job freezes those inputs into one `NetworkArtifactPlan` used
+by configure, build, cook, package and final verification.
+
+Packaging emits a safe `NetworkProductCapabilityManifest` describing supported
+modes/providers and public compatibility/security evidence. It grants no runtime
+authority and contains no credential value/reference, private key, authorization
+header, machine-local credential path or unrestricted environment value. Public
+credential requirements are stable IDs; the release operation resolves their
+private bindings through an injected provider only at the stage that needs them.
+
 For an Audio middleware profile, ADR-072 additionally requires the exact adapter
 package, SDK/runtime/native libraries, cooked banks and bindings, target variants,
 license/notice files, redistribution class, hashes and qualification evidence.

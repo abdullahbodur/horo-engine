@@ -269,6 +269,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Runtime Network Modes and Authority Exposure](../adr/102-runtime-network-modes-and-authority-exposure.md):
   package support versus runtime selection, standalone/client/listen/dedicated
   host plans, scoped role capabilities and generation-safe lifecycle.
+- [Network Project Configuration and Build-Profile Ownership](../adr/103-network-project-configuration-and-build-profile-ownership.md):
+  shared typed resolution, project/preview/release source boundaries, role-aware
+  product manifests, credential-provider isolation and migration.
 - [Asset Pipeline](./runtime/asset-pipeline.md): import, cook, package, runtime
   loading, cache, and hot reload.
 - [Prefab Architecture](./runtime/prefab-architecture.md): dual-role authoring

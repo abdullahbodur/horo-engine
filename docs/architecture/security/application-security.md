@@ -198,6 +198,15 @@ Horo principal; credential expiry or revocation closes the M0 session. Credentia
 proofs, trust secrets and transcript secret material never enter logs, metrics,
 errors, project data or diagnostic bundles.
 
+[ADR-103](../../adr/103-network-project-configuration-and-build-profile-ownership.md)
+requires portable network policy to name only a stable credential requirement.
+Private user/CI/host input binds that requirement to a credential-provider
+reference, which is resolved only inside the bounded consuming operation. Product
+capability manifests, project files, caches, ordinary environment summaries and
+safe provenance contain neither raw secret/private-key values nor machine-specific
+bindings. Missing provider capability fails explicitly and cannot select a weaker
+trust policy.
+
 Admission enforces finite pre-active connections, bytes, messages, fields, attempts,
 verification work, per-source rate and timeouts before expensive verification.
 Malformed, incompatible, replayed, downgraded, expired or hostile input fails
@@ -267,3 +276,4 @@ Required tests cover:
 - [Error And Diagnostics](../foundation/error-and-diagnostics.md)
 - [Networking Architecture](../runtime/networking-architecture.md)
 - [ADR-098: Protocol, Session and Trust Policy](../../adr/098-protocol-session-and-trust-policy.md)
+- [ADR-103: Network Project Configuration and Build-Profile Ownership](../../adr/103-network-project-configuration-and-build-profile-ownership.md)

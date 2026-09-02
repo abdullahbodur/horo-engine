@@ -44,6 +44,13 @@ Secrets are accessed through credential handles resolved at execution time.
 Persistent release requests, project files, manifests, logs, and job history do
 not contain raw secret values.
 
+ADR-103 network policy further separates public `CredentialRequirementId` values
+from private host/CI bindings. Project files and product capability manifests carry
+neither credential bindings nor machine-specific references. The consuming network
+or release operation resolves its private binding through an injected provider;
+hardware/remote providers may expose only an operation handle. Ordinary environment
+summaries, cache keys and provenance omit raw values and private references.
+
 Credential providers may include:
 
 - operating-system credential stores for local hosts
