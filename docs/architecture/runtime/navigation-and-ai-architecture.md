@@ -1405,7 +1405,7 @@ public:
    - Stale or invalid plans never replace the active runtime plan and log typed compiler diagnostics.
 
 1. **Save And Restore**:
-   - The AI subsystem contributes an `IGameplayStateProvider` to `RuntimeSaveService` and captures state only at the save snapshot safe point.
+   - Under ADR-114, the AI subsystem contributes one owned canonical state adapter to `RuntimeSaveService` and captures state only at the aggregate save snapshot safe point. Component reflection and Scene serialization are not alternate authorities.
    - Durable state includes plan asset/schema identity, bounded execution-frame stacks keyed by stable `DecisionNodeId`, serializable decorator/timer memory, and schema-approved blackboard values.
    - `JobHandle`, cancellation tokens, path/query handles, pointers, and cooked array indices are transient and never serialized. Restore resolves plans in staging and restarts asynchronous work only after atomic state application. Missing or incompatible plans reset the affected agent to its root with a typed diagnostic.
 
@@ -1435,8 +1435,8 @@ and executed by the navigation system.
 
 ### Perception Save And Restore
 
-The AI subsystem contributes a versioned perception chunk through
-`IGameplayStateProvider`. `PreserveMemory` captures durable sense/tag data,
+The AI subsystem's ADR-114 canonical adapter contributes its versioned perception
+state. `PreserveMemory` captures durable sense/tag data,
 stable source references where available, last-known position/velocity, strength,
 and simulation age; `ResetOnRestore` explicitly opts ambient agents out.
 
@@ -1783,6 +1783,7 @@ These are required downstream runtime/CI tests, not tests implemented by this AD
 - [Scene Runtime](./scene-runtime.md): Agent entity and component model
 - [Concurrency And Jobs](../foundation/concurrency-and-jobs.md): Parallel crowd and perception jobs
 - [Save Game And Persistence](./save-game-and-persistence.md): durable perception-memory capture and staged restore
+- [ADR-114: Canonical Runtime World Persistence Boundary](../../adr/114-canonical-runtime-world-persistence-boundary.md)
 - [Navigation Bake UI HTML Reference](./navigation-bake.html): non-normative
   static UI reference
 - [Debug Console And Overlays](./debug-console-and-overlays.md): AI debug visualization

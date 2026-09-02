@@ -10,6 +10,8 @@ ADR-112 freezes the portable archive, canonical state, identity and compatibilit
 policy for HORO-1410 #1410 [SAV-002.1].
 ADR-113 freezes product/environment/user/profile namespaces, logical slot addressing
 and storage mapping for HORO-1425 #1425 [SAV-003.1].
+ADR-114 freezes authoring/runtime state composition and subsystem-owned canonical
+adapters for HORO-1438 #1438 [SAV-004.1].
 
 - RuntimeSaveService coordinates one runtime save/restore authority under the
   application/session lifetime. It never retains an unleased reference to a scene
@@ -30,7 +32,7 @@ and storage mapping for HORO-1425 #1425 [SAV-003.1].
 
 | Domain | Authority | Stored content | Isolation |
 |---|---|---|---|
-| Runtime save (.horosave) | RuntimeSaveService | Dynamic ECS, stable entity identities, gameplay state, slot player state, persistent world deltas | User/server save namespace, never authored .horo files |
+| Runtime save (.horosave) | RuntimeSaveService plus subsystem canonical adapters | Stable entity structure and subsystem-owned canonical gameplay/world participants | User/server save namespace, never authored .horo files or runtime memory images |
 | Scene document (.horo) | SceneDocumentPersistence | Authored hierarchy/defaults/assets and editor semantics | Project asset tree; no runtime mutation on save/load |
 | Editor recovery (.horo_recovery) | ProjectSceneRecoveryRecord | Dirty document snapshot, revisions and recovery context | Bounded recovery namespace; cannot replace canonical data implicitly |
 | Project/workspace metadata | ProjectSession / Workspace | Project configuration and editor layout/state | Separate JSON schemas, authority and transactions |
@@ -72,6 +74,42 @@ Account/profile service -> separate account store (not restored by slot load)
 Editor document/recovery/workspace writers -> separate namespaces and schemas
 ```
 
+## Runtime State Classification And Composition
+
+Persistence is opt-in by semantic owner, not inferred from reflection, component
+membership, trivial copyability or object reachability:
+
+| State category | Owner | Runtime-save treatment |
+|---|---|---|
+| Authoring definition/default | SceneDocument, source asset and cook pipeline | Immutable compatible base reference; never rewritten by slot save/load |
+| Runtime canonical state | Scene or owning gameplay subsystem | One registered canonical adapter may capture it |
+| Derived/rebuildable | Owning runtime subsystem/cache | Excluded and rebuilt from base assets plus restored canonical state |
+| Transient execution | Scheduler/operation/subsystem runtime | Excluded unless the owner promotes a semantic value through a versioned schema |
+| Presentation | Renderer, Audio device/voice, Runtime UI | Excluded; gameplay/domain owner may persist semantic intent separately |
+| Asset/cooked content | Asset Registry and cook/package authorities | Stable identity/revision dependency only, not copied into runtime-state chunks |
+| Account/profile | Profile/account service | Separate store/transaction; slot restore cannot rewind it |
+| Platform/network external state | Platform/network authority | Excluded and revalidated/reconnected after restore |
+
+Restore resolves the compatible cooked Scene/world base, then applies saved state by
+stable identity. Authored entities without saved overrides use compatible defaults;
+declared overrides replace only owned fields; deletion is an explicit tombstone.
+Durable runtime spawns carry `PersistentEntityId`, declared archetype/prefab/definition
+identity and canonical owned values. A changed base requires declared migration or a
+typed incompatibility. Runtime state never writes back to SceneDocument/cooked assets.
+
+The Horo Scene adapter owns persistent entity existence, authored/spawn identity,
+tombstones, hierarchy/ownership, stable reference remaps and explicitly assigned core
+component fields. It does not walk arbitrary component memory or own gameplay,
+Physics, Character, AI or dormant world state. Each such subsystem owns its canonical
+participant; duplicate field/semantic ownership rejects composition.
+
+Always excluded unless a semantic owner defines a different canonical value are
+pointers/native objects, runtime handles/indices, container capacity, jobs/futures/
+cancellation/callbacks, pending queues/events, GPU/render extraction/fences, Audio
+voice/device/decoder/DSP state, native Physics solver/manifold/proxy/query state,
+Navigation queries/rebuild scratch, network connections/keys/packet queues, UI widget/
+focus/animation state and wall-clock progression.
+
 ## Authority, Lifetime And Public Operation Contract
 
 RuntimeSaveService is application-owned. SaveGameAuthority is its internal
@@ -83,11 +121,13 @@ A scene borrow is valid only inside its owner callback. Workers receive immutabl
 snapshots, candidates, asset/provider leases and generation-scoped completion data,
 never SceneRuntime references or callbacks capturing raw scene pointers.
 
-Gameplay provider descriptors are inert, stable-type-ID keyed metadata. Composition
-validates schemas, capture/restore roles, required/optional behavior, cost bounds
-and dependency DAG, then seals a registry revision. An operation pins that revision
-and module leases. Registry changes require an explicit host quiescent rebind; they
-cannot unload codecs under a worker or register through ambient service discovery.
+Canonical participant descriptors are inert, stable-type-ID keyed metadata.
+Composition binds one `ICanonicalStateAdapter` per participant, validates unique
+semantic ownership, schemas, scopes, capture/restore roles, required/optional
+behavior, cost bounds and dependency DAG, then seals a registry revision. An operation
+pins that revision and module leases. Registry changes require an explicit host
+quiescent rebind; they cannot unload codecs under a worker or register through ambient
+service discovery.
 
 Schematic interface shapes (not new installed headers):
 
@@ -135,7 +175,7 @@ struct SaveRequest {
 
 class RuntimeSaveService final {
 public:
-    RuntimeSaveService(IRuntimeSessionHost&, SaveProviderRegistry&,
+    RuntimeSaveService(IRuntimeSessionHost&, CanonicalStateParticipantRegistry&,
                        SaveStorageAdapter&, SaveNamespaceBinding&,
                        PlatformServices&, JobSystem&, OperationStore&);
     Result<SaveOperationHandle> SaveSlotAsync(
@@ -153,7 +193,7 @@ public:
 ```
 
 Initial `Result<SaveOperationHandle>` / `Result<RestoreOperationHandle>` reports only
-admission. Disk-full, signing, migration or provider failure later becomes Failed
+admission. Disk-full, signing, migration or participant-adapter failure later becomes Failed
 with the original typed cause in that operation's snapshot. It cannot retroactively
 change the return value of SaveSlotAsync. Handles use the application-owned ADR-010
 OperationStore/OperationId; no independent save job scheduler/store is created.
@@ -193,28 +233,29 @@ No worker invokes the pump, commits Scene state, calls UI, or waits on nested jo
 SaveLimits validates finite positive limits for archive/decoded bytes, chunk/string
 counts, snapshot/COW and candidate memory, queue/completion slots, per-pump work,
 retry counts and stage/readback/signing deadlines. Aggregate admission counts old
-and new snapshots/runtimes/retired resources together; declared local provider limits
-are not extra capacity. Exceeding a bound fails or defers explicitly, never silently
-unbounds a worker or guarantees a frame-time target.
+and new snapshots/runtimes/retired resources together; declared local participant
+limits are not extra capacity. Exceeding a bound fails or defers explicitly, never
+silently unbounds a worker or guarantees a frame-time target.
 Serialization, compression, hashing, signing, quota queries, directory scans, flush,
 AtomicReplace, deletion and cleanup run on admitted worker/storage roles. No normal
 owner/render/transport frame waits for them. ADR-010 governs allowed teardown drains.
 
 ## Coherent Immutable Capture
 
-RuntimeSaveSnapshot owns an EcsSaveSnapshot, provider snapshots, SlotPlayerState,
-PersistentWorldSnapshot, base asset/dataset revisions and a coherent SaveCaptureEpoch.
-It contains stable persisted identities and owned/copy-on-write payload leases,
-never EntityRef addresses, live component spans, renderer handles or editor objects.
+RuntimeSaveSnapshot owns a StableTypeId-sorted set of `OwnedCanonicalSnapshot` values,
+the core Scene identity snapshot, SlotPlayerState and PersistentWorld participants,
+base asset/dataset revisions and a coherent CanonicalCaptureEpoch. It contains stable
+persisted identities and owned/copy-on-write payload leases, never EntityRef addresses,
+live component spans, renderer handles or editor objects.
 
-At the owner safe point the session validates scene incarnation, provider registry
+At the owner safe point the session validates scene incarnation, participant registry
 revision and capture budget, then copies bounded state or pins a versioned immutable/
-COW root for **one logical tick**. Every required provider/world-delta root belongs
-to that same capture epoch. Independent native owners prepare immutable capture
-versions asynchronously before that boundary; unavailable coherent versions defer
-or fail capture instead of mixing ticks.
+COW root for **one logical tick**. Every required participant/world-delta root belongs
+to that same capture epoch. Independent native owners prepare immutable semantic
+capture versions asynchronously before that boundary; unavailable coherent versions
+defer or fail capture instead of mixing ticks.
 
-Capture never leaves live ECS pools, gameplay providers or streaming state locked or
+Capture never leaves live ECS pools, gameplay adapters or streaming state locked or
 frozen after the safe point. Workers serialize only the detached snapshot. Large
 captures require admitted COW/pages or versioned chunks with bounded owner work;
 naive partial copies across subsequent live ticks are not coherent snapshots. COW
@@ -310,10 +351,10 @@ JSON reserialized by the reader.
 |---|---|
 | header.json | Logical slot ID, `SlotGenerationId`, optional parent generation, producing `ProductSaveCompatibilityVersion`, project/world/account scope, baseSceneAsset and bounded provenance timestamps |
 | manifest.json | `SaveSchemaVersion`, `CanonicalStateHash`, StableTypeId-sorted participant/chunk IDs, each `ParticipantSchemaVersion`, required flags, lengths, codecs and per-chunk SHA-256 |
-| runtime_ecs.bin | Stable authored/spawn identities, dynamic components, tombstones and reference remap records |
-| gameplay module entries | Each registered module's versioned state |
-| slot_player_state.bin | Slot-scoped player state only; no global settings/achievements |
-| world_state.bin / cell delta entries | Persistent state of active and inactive cells with base dataset revision |
+| core Scene participant | Stable authored/spawn entity identities, owned core fields, tombstones, hierarchy and reference remaps |
+| subsystem participant entries | One canonical payload per registered owner/StableTypeId, including gameplay services/components |
+| slot-player participant | Slot-scoped player state only; no global settings/achievements or duplicated subsystem fields |
+| Persistent World participant/cell deltas | Persistent state of active and inactive cells with base dataset revision |
 | thumbnail.png | Optional bounded image; source capture/view metadata |
 
 These names describe entry roles, not directories to extract on disk. Header metadata
@@ -474,24 +515,26 @@ between durable save and registration. Completed means local durability; cloud s
    with all length/hash/schema/identity checks. Verify project/account/world scope and
    base AssetId/dataset/package dependencies. Browsing unverified headers shows
    untrusted metadata, not an authenticated playable slot.
-2. Migrate only detached staging data if needed. Workers deserialize ECS records,
-   provider state, SlotPlayerState and persistent world deltas into a private
-   PreparedRuntimeBundle. Pin provider registry and AssetRegistry revisions/leases.
+2. Migrate only detached staging data if needed. Workers decode the core Scene and
+   subsystem canonical participants, SlotPlayerState and persistent world deltas into
+   a private PreparedRuntimeBundle. Pin participant registry and AssetRegistry
+   revisions/leases.
    Persisted stable IDs are remapped to new runtime identities; old EntityRef and
    streaming epochs are never restored from disk.
 3. The owner queues RuntimeSceneService::QueuePreparation through the existing
-   scene activation admission path; heavy preparation still runs in background. Required provider PrepareRestore stages independent candidate
-   state on its declared worker/native role and returns Pending/Prepared or typed
-   failure. Native resources obey ADR-012/011 admission and retirement barriers.
+   scene activation admission path; heavy preparation still runs in background. Each
+   required adapter's PrepareRestore stages independent candidate state on its
+   declared worker/native role and returns Pending/Prepared or typed failure. Native
+   resources obey ADR-012/011 admission and retirement barriers.
    No worker creates a published RuntimeScene identity or mutates the live scene.
-4. Prepare the entire commit ticket: candidate Scene storage, gameplay/provider
+4. Prepare the entire commit ticket: candidate Scene storage, gameplay/participant
    roots, slot player state, persistent world ledger, reference remaps and admitted
    lifecycle events/retirement capacity. Required initial cells must reach their
    Ready/Prepared barrier; remaining dormant deltas need not load every world cell.
 
-Each provider exposes fallible PrepareRestore and a bounded no-fail PublishPrepared
+Each adapter exposes fallible PrepareRestore and a bounded no-fail PublishPrepared
 (or equivalent noexcept ownership transfer), plus asynchronous candidate retirement.
-A provider that can only mutate live state through a fallible commit cannot join an
+An adapter that can only mutate live state through a fallible commit cannot join an
 atomic required restore; reject the composition before accepting a load. Optional
 participants need an explicit validated absence/substitute policy, not a swallowed
 required failure. Account/profile services and unrelated external side effects do
@@ -505,14 +548,14 @@ This is a required extension of the commit integration, not a claim that SCN-001
 already supports a composite gameplay restore. The current one-pending-scene-operation
 rule remains enforced. The scene candidate must remain behind the shared bundle
 commit gate: its own readiness cannot trigger early automatic scene activation while
-a required gameplay provider is still Pending. A host lacking that integration
+a required gameplay participant is still Pending. A host lacking that integration
 rejects composite restore rather than applying the scene first.
 
 At CommitDeferredLifecycleChanges, under the exclusive owner mutation boundary,
 revalidate the operation cancellation gate, expected session/scene incarnation,
-source/archive and provider/asset registry revisions, and all Prepared acknowledgements.
+source/archive and participant/asset registry revisions, and all Prepared acknowledgements.
 A mismatch rejects the candidate before publication. Then publish Scene and all
-candidate provider/world/player roots as one unobservable-to-readers transaction.
+candidate participant/world/player roots as one unobservable-to-readers transaction.
 Publication performs only prevalidated ownership transfers: no allocation, I/O,
 blocking wait, arbitrary callback or new recoverable failure. Runtime identity is
 created/published by the Scene service at this boundary, not by a worker candidate.
@@ -525,7 +568,7 @@ Logical success may precede physical old-resource release, with all leases charg
 
 Cancellation wins only before the final commit gate. After publication, report
 Committed/Completed and TooLate for late cancel. Recoverable preparation failure
-retires the candidate and leaves the active bundle unchanged. An unexpected provider
+retires the candidate and leaves the active bundle unchanged. An unexpected adapter
 violation after publication is a host/session fault, not a fictional safe rollback;
 contain/fail the session under host policy and retain unsafe-to-free dependencies.
 The normal atomicity guarantee relies on validating the no-fail publish contract.
@@ -871,7 +914,7 @@ filesystem cause. Admission errors are distinct from later operation outcomes.
 | Write/full/signing failure before commit | Failed/NotCommitted; previous archive intact; owned temp eventually retired |
 | AtomicReplace or durability outcome uncertain | Failed/Unknown; reconcile/quarantine slot, no cloud publication or blind retry |
 | Corrupt archive-content hash/chunk / missing or invalid required signature | Failed before restore staging/publication |
-| Missing asset / incompatible schema / required provider failure | Retire candidate; active runtime preserved |
+| Missing asset / incompatible schema / required participant failure | Retire candidate; active runtime preserved |
 | Stale scene/registry/archive before commit | Reject candidate; never publish into a replacement incarnation |
 | Cancellation before commit gate | Cancelled/NotCommitted after owned work reaches safe terminal cleanup |
 | Cancellation after commit gate | TooLate; report actual commit success/failure/unknown outcome |
@@ -899,7 +942,7 @@ documentation change:
   failure, production/development/PIE/server separation and UI/cloud path opacity.
 - Duplicate/renamed display names, category reclassification, quicksave/autosave
   aliases and stable slot identity across overwrite.
-- Capture one tick across ECS/providers/world deltas; resume live mutation immediately
+- Capture one tick across Scene/subsystem adapters/world deltas; resume live mutation immediately
   after the safe point; race scene replacement, COW exhaustion and stale readbacks.
 - Byte fixtures for the 32-byte preamble, unsigned/signed trailer lengths, exact hash
   ranges and signature message. Tamper header, lengths, compressed bytes, raw chunks,
@@ -914,7 +957,7 @@ documentation change:
   cancellation races on both commit gates and no UI-thread filesystem calls.
 - Disk-full/flush/rename/directory-sync fault injection, especially rename-success plus
   sync-failure; process-crash recovery and no false old-file-preserved guarantee.
-- Restore all required providers from isolated candidates; fail each prepare stage;
+- Restore all required participants from isolated candidates; fail each prepare stage;
   prove no observer sees partial Scene/inventory/quest publication. Validate no-fail
   commit and asynchronous retirement under native fence delay.
 - Save/restore unloaded/resident/evicting cells, dropped-item/tombstone/cross-cell cases,
@@ -931,7 +974,7 @@ documentation change:
 - Shutdown while a save is past commit, while candidates hold modules/assets, and
   while optional GPU thumbnails are pending; no early free or silent incomplete unload.
 
-The v1 container's entry-table codec, provider/session commit integration, secure
+The v1 container's entry-table codec, participant/session commit integration, secure
 storage adapter and platform-specific durability qualification are implementation
 work under these contracts. They must be completed before enabling runtime saves;
 this specification does not claim that current Foundation/Scene APIs alone implement
@@ -954,4 +997,5 @@ and regression coverage.
 - [ADR-008](../../adr/008-error-model-exception-boundary-and-registry.md): Typed error propagation.
 - [ADR-112](../../adr/112-save-archive-container-and-compatibility-policy.md): Portable container, canonical state, version axes, identities and compatibility horizon.
 - [ADR-113](../../adr/113-local-storage-user-profile-and-slot-ownership.md): Product/user/profile namespaces, logical slot addressing and physical storage ownership.
+- [ADR-114](../../adr/114-canonical-runtime-world-persistence-boundary.md): Authoring/runtime composition, state classification and subsystem-owned canonical adapters.
 - [Application Security](../security/application-security.md): Trust and untrusted-input boundaries.

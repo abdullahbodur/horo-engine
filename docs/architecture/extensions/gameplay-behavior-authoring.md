@@ -882,9 +882,10 @@ schedulers or divergent blackboard structures:
      deterministic empty snapshot and cannot inspect another player's actions.
 
 7. **Decision State Persistence**:
-   - The AI subsystem participates in runtime save/restore through
-     `IGameplayStateProvider`. It serializes stable plan/node identity, compatible
-     execution frames, timers, and schema-approved blackboard values.
+   - Under ADR-114, the AI subsystem participates through its owned canonical state
+     adapter. It captures stable plan/node identity, compatible execution frames,
+     timers, and schema-approved blackboard values; component/graph serialization is
+     not a second runtime-save authority.
    - Runtime jobs, cancellation tokens, query handles, pointers, and cooked array
      indices are never persistent state; they are re-resolved or restarted after
      the restore transaction commits.
@@ -959,6 +960,8 @@ play-session or process restart rather than attempting unsafe live mutation.
 - [Gameplay Module Boundary](./gameplay-module-boundary.md)
 - [Gameplay Runtime Integration](./gameplay-runtime-integration.md)
 - [Save Game And Persistence](../runtime/save-game-and-persistence.md): durable behavior and AI state capture
+- [ADR-114](../../adr/114-canonical-runtime-world-persistence-boundary.md): canonical
+  state adapter and derived/transient exclusion policy.
 - [Editor Document Model](../editor/editor-document-model.md)
 - [Extension System](./plugin-system.md)
 - [Horo Package System](../packages/package-system.md): library-provided behaviors
