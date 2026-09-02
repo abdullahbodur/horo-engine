@@ -40,6 +40,11 @@ game-library, extension-only, hybrid and template packages. A package containing
 one or more `EditorExtension` or other approved extension contribution descriptors
 is an extension package; it is not a separate artifact kind or package authority.
 
+[ADR-083](083-ui-template-identity-schema-and-expansion.md) specializes Runtime UI
+template assets contributed by those packages. Package identity, verification,
+locking and lifecycle stay here; Runtime UI owns template schema/expansion and
+cannot infer install identity or trust from template content.
+
 `horo-package.toml` owns the durable package ID, package version, kind, source-
 independent compatibility, package dependency edges, contribution roots and
 license/security declarations. `files.manifest.json` owns the canonical signed

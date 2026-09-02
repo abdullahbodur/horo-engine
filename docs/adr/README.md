@@ -94,6 +94,7 @@ to the replacement.
 | [080](080-runtime-ui-presentation-scope-layer-and-route.md) | Runtime UI Presentation Scope, Layer and Route | Proposed | 2026-09-02 |
 | [081](081-runtime-ui-and-localization-ownership-boundary.md) | Runtime UI and Localization Ownership Boundary | Proposed | 2026-09-02 |
 | [082](082-runtime-ui-accessibility-capability-and-ownership.md) | Runtime UI Accessibility Capability and Ownership | Proposed | 2026-09-02 |
+| [083](083-ui-template-identity-schema-and-expansion.md) | UI Template Identity, Schema and Expansion | Proposed | 2026-09-02 |
 
 ## Conventions
 

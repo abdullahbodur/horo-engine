@@ -7,6 +7,12 @@ are authored, validated, and versioned as project assets, how prefab instances a
 placed and expanded in scenes, and how cooked prefabs are dynamically spawned at
 runtime by Gameplay and SceneRuntime systems.
 
+Runtime UI templates are a separate typed element/property domain governed by
+[ADR-083](../../adr/083-ui-template-identity-schema-and-expansion.md). They do not
+reuse prefab `EntityId`, component payload, transform, behavior callback or runtime
+spawn semantics; common stable-identity and deterministic-expansion principles do
+not merge their authorities.
+
 ## Core Decisions And Dual-Role Model
 
 Horo Engine resolves the tension between authoring convenience, static scene
@@ -411,6 +417,7 @@ spawn chains still need protection across queues, frame boundaries, and asynchro
 To support modular gameplay packages and project-specific C++ plugins:
 
 1. **Opaque Preservation Contract**:
+
    ```cpp
    struct RawComponentPayload {
        std::string componentTypeId;
@@ -418,6 +425,7 @@ To support modular gameplay packages and project-specific C++ plugins:
        std::vector<std::uint8_t> serializedBytes;
    };
    ```
+
 2. **Editor Roundtrip**: If an authored prefab or scene contains custom component types unknown to
    the base editor binary, the data is preserved in `RawComponentPayload` verbatim. Saving, cloning,
    or expanding the prefab preserves these components without truncation.

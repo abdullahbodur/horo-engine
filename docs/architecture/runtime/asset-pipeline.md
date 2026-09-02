@@ -732,6 +732,26 @@ overrides, `ImGuiStyle`, HoroEditor `Theme`, paths, callbacks and renderer/nativ
 handles are excluded from semantic inputs and output. Runtime consumes only the
 published cooked graph and cannot scan style source files or guess missing tokens.
 
+### Runtime UI Template Domain Import And Cook Boundary
+
+[ADR-083](../../adr/083-ui-template-identity-schema-and-expansion.md) gives Assets
+stable template asset identity, source/sidecar access, generic dependency/cook/
+cache/package scheduling, atomic artifact publication and immutable byte delivery.
+The Runtime UI Template domain owns local/parameter/slot/instance schemas, typed
+validation, nested-DAG expansion, semantic/interface fingerprints and compatibility.
+
+UI document cook resolves each exact accepted template revision from the locked
+asset/package graph and deterministically flattens linked instances into ordinary
+elements. Dependencies include nested templates and every referenced style, font,
+localization, binding schema and slot resource. Cache identity includes canonical
+arguments/slots, expansion algorithm/property/element schemas and all dependency
+digests.
+
+AST never interprets template parameters, reconciles updates or detaches instances;
+the Template domain never creates another asset ID, scheduler, cache, package lock
+or publication authority. Cooked output excludes source paths, editor state,
+runtime handles and source-template update behavior.
+
 ### Determinism And Failure Invariants
 
 A cooker receives an invocation-bounded immutable source input, immutable
