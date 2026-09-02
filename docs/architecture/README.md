@@ -218,6 +218,10 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Gameplay Module](./extensions/gameplay-module.md): overview for
   project-owned gameplay modules, behavior authoring, runtime integration, and
   verification.
+  - [Current Gameplay Module Contract Audit](./extensions/gameplay-module-contract-audit.md):
+    implementation snapshot for the exact SDK ABI, generated bundle, build and
+    publication path, ownership, reload, persistence, platform behavior, and
+    follow-up ownership.
   - [Gameplay Module Boundary](./extensions/gameplay-module-boundary.md):
     native module ABI, registration, capability context, services, hot reload,
     and diagnostics.
