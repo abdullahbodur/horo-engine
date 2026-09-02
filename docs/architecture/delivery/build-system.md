@@ -178,7 +178,7 @@ network/
     HoroEngine::NetworkApi
     HoroEngine::NetworkRuntime
     HoroEngine::NetworkTransportNull
-    HoroEngine::NetworkTransportENet
+    HoroEngine::NetworkTransportGNS
 
 asset/
     HoroEngine::Assets

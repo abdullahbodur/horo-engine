@@ -6,6 +6,7 @@
 - **Scope**: Network target topology, compile-time dependency directions, public API encapsulation, optional linking and composition, threading model, and deterministic lifecycle/shutdown.
 - **Issue**: [NET-001.1](https://github.com/abdullahbodur/horo-engine/issues/1098)
 - **Jira**: [HORO-1098](https://horo-engine.atlassian.net/browse/HORO-1098)
+- **Companion decision**: [ADR-097](097-default-real-time-transport-backend.md) replaces the ENet-specific concrete-backend selection while preserving this boundary
 - **Normative documents**:
   - [Networking Architecture](../architecture/runtime/networking-architecture.md)
   - [System Design](../architecture/foundation/system-design.md)
@@ -22,7 +23,7 @@ In addition, networking implementations typically depend on platform-specific so
 
 ## Decision
 
-**The network subsystem is structured into four distinct target tiers with strict compile-time boundaries: `HoroEngine::NetworkApi` (public backend-neutral interfaces and value types), `HoroEngine::NetworkRuntime` (session, authentication, and replication runtime), and private concrete transports (`HoroEngine::NetworkTransportENet`, `HoroEngine::NetworkTransportNull`). `INetworkTransport` is a handle-based packet-transport abstraction; protocol negotiation and authentication belong to `NetworkRuntime`. The host injects a unique `INetworkTransport` into the runtime. Public headers strictly encapsulate all native socket descriptors, TLS contexts, event loops, and third-party transport types. Networking is fully optional; applications and tools may link without network targets or compose `NetworkTransportNull`. Transports own cross-thread queues. Runtime observes inbound events only through `PollEvents()` during `NetworkPoll`, and submits outbound payloads during `NetworkFlush`.**
+**The network subsystem is structured into four distinct target tiers with strict compile-time boundaries: `HoroEngine::NetworkApi` (public backend-neutral interfaces and value types), `HoroEngine::NetworkRuntime` (session, authentication, and replication runtime), and private concrete transports (`HoroEngine::NetworkTransportGNS`, `HoroEngine::NetworkTransportNull`). `INetworkTransport` is a handle-based packet-transport abstraction; protocol negotiation and authentication belong to `NetworkRuntime`. The host injects a unique `INetworkTransport` into the runtime. Public headers strictly encapsulate all native socket descriptors, TLS contexts, event loops, and third-party transport types. Networking is fully optional; applications and tools may link without network targets or compose `NetworkTransportNull`. Transports own cross-thread queues. Runtime observes inbound events only through `PollEvents()` during `NetworkPoll`, and submits outbound payloads during `NetworkFlush`.**
 
 ### 1. Target Topology and Allowed Dependencies
 
@@ -33,7 +34,7 @@ The network subsystem is decomposed into four discrete CMake targets:
 | `HoroEngine::NetworkApi` | Backend-neutral public types, handles, traits, interfaces | `HoroEngine::Foundation` | Value types (`NetworkId`, `NetworkAddress`, `DeliveryPolicy`), generation handles (`ConnectionHandle`, `ListenerHandle`), error codes, message views, `INetworkTransport`, `TransportEvent`, replication traits |
 | `HoroEngine::NetworkRuntime` | Session management, protocol negotiation, authentication, replication | `HoroEngine::NetworkApi`, `HoroEngine::Foundation`, `HoroEngine::Runtime` | `NetworkRuntimeCoordinator`, `NetworkSession`, `SessionStateMachine`, `ReplicationManager`. Owns the injected `unique_ptr<INetworkTransport>` |
 | `HoroEngine::NetworkTransportNull` | Deterministic in-memory/loopback/null transport | `HoroEngine::NetworkApi`, `HoroEngine::Foundation` | `NullTransportBackend` factory / descriptor for testing, headless simulation, and network-disabled fallback. No Platform, sockets, or I/O thread |
-| `HoroEngine::NetworkTransportENet` | Concrete UDP transport implementation | `HoroEngine::NetworkApi`, `HoroEngine::Foundation`, `HoroEngine::Platform` | `ENetTransportBackend` factory / descriptor. Owns I/O thread and queues. All ENet headers, sockets, and platform dependencies are `PRIVATE` |
+| `HoroEngine::NetworkTransportGNS` | Concrete production direct-IP transport | `HoroEngine::NetworkApi`, `HoroEngine::Foundation`, `HoroEngine::Platform` | `GnsTransportBackend` factory / descriptor. Owns I/O thread and queues. All GNS, crypto, protobuf, socket and platform dependencies are `PRIVATE` |
 
 ```text
                +---------------------------+
@@ -49,7 +50,7 @@ The network subsystem is decomposed into four discrete CMake targets:
 +---------------------+----+   +-----+-------------------------+
 | HoroEngine::NetworkRuntime|   | Concrete Transports (Private) |
 | (depends also on Runtime) |   | - NetworkTransportNull        |
-+---------------------------+   | - NetworkTransportENet        |
++---------------------------+   | - NetworkTransportGNS         |
                                 +-------------------------------+
 ```
 
@@ -57,7 +58,7 @@ Rules:
 
 1. `HoroEngine::NetworkApi` depends **only** on `HoroEngine::Foundation`. It contains zero runtime logic, background threads, or socket code.
 2. `HoroEngine::NetworkRuntime` depends on `NetworkApi`, `Foundation`, and `Runtime`. It never links a concrete transport backend directly. The composition root instantiates the backend and transfers `std::unique_ptr<INetworkTransport>` into the runtime.
-3. `NetworkTransportNull` depends only on `NetworkApi` and `Foundation`. It does not depend on `Platform`, open OS sockets, or create I/O threads. `NetworkTransportENet` depends on `NetworkApi`, `Foundation`, and `Platform` (plus private third-party libraries). Transports do not depend on `NetworkRuntime` or `HoroEngine::Runtime`.
+3. `NetworkTransportNull` depends only on `NetworkApi` and `Foundation`. It does not depend on `Platform`, open OS sockets, or create I/O threads. `NetworkTransportGNS` depends on `NetworkApi`, `Foundation`, and `Platform` (plus private third-party libraries). Transports do not depend on `NetworkRuntime` or `HoroEngine::Runtime`.
 4. Feature modules, gameplay modules, and editor panels consume `NetworkApi` and `NetworkRuntime` interfaces; they **never** depend on concrete transport targets.
 5. Public `NetworkApi` exposes handle-based `INetworkTransport` only. `ITransportConnection` and `ITransportListener` are not public types.
 
@@ -69,7 +70,7 @@ Public headers under `include/Horo/Network/` and `include/Horo/Runtime/` MUST NO
 - Native socket descriptors or OS handles (`SOCKET`, `int fd`, file descriptors)
 - Cryptography / TLS context types (`SSL*`, `SSL_CTX*`, OpenSSL / mbedTLS headers)
 - Event loop types (libuv `uv_loop_t`, epoll, kqueue, IOCP handles)
-- Third-party transport types (`ENetHost`, `ENetPeer`, `ENetPacket`, `SteamNetworkingSockets`, etc.)
+- Third-party transport types (GNS interfaces, handles, messages, connection information, callbacks, configuration values, etc.)
 
 All OS and third-party types remain strictly internal to the private compilation units (`src/runtime/networking/backends/...`) and are encapsulated via interface implementations or Pimpl idioms. Addresses are represented by `Horo::Network::NetworkAddress` value types; connections and listeners are referenced by generation-checked `ConnectionHandle` and `ListenerHandle` identifiers.
 
@@ -79,14 +80,14 @@ Networking is an optional engine capability.
 
 - **Offline / Non-Networked Products**: Products (such as single-player offline games, command-line utilities like `horopak`, asset compilers, or headless tools) do not link `NetworkRuntime` or concrete transports. Core engine composition, ECS, asset loading, and renderer pipelines operate normally without networking libraries present in the link graph.
 - **Single-Player / Headless Simulation**: If a game project uses replication interfaces or network components locally, the host composition root injects `HoroEngine::NetworkTransportNull`. `NetworkTransportNull` simulates loopback transport in memory without opening OS sockets or creating network I/O threads.
-- **Multiplayer Desktop & Dedicated Server**: Composition roots (`HoroEditor`, `horo-engine server`, game client) explicitly instantiate the chosen transport (`NetworkTransportENet` or platform backend) during startup and transfer unique ownership into `NetworkRuntime`. No static discovery, shared_ptr sharing, or global registry side effects are allowed.
+- **Multiplayer Desktop & Dedicated Server**: Composition roots (`HoroEditor`, `horo-engine server`, game client) explicitly instantiate the chosen transport (`NetworkTransportGNS` or an explicitly composed optional provider) during startup and transfer unique ownership into `NetworkRuntime`. No static discovery, shared_ptr sharing, or global registry side effects are allowed.
 
 ### 4. Threading Model and Frame Lifecycle
 
 Network processing is cleanly partitioned between asynchronous I/O and frame-synchronized gameplay execution:
 
 ```text
-[ Background I/O Thread ]                 // ENet; Null has none
+[ Background I/O Thread ]                 // GNS; Null has none
   Socket poll / recv / frame
          |
          v
@@ -161,7 +162,7 @@ Network shutdown is deterministic, bounded, and resource-safe:
 ## Rejected Alternatives
 
 - **Monolithic `HoroEngine::Networking` Target**: Combining API, runtime, and concrete socket libraries into one library was rejected because it would force all engine consumers to link socket/transport dependencies and prevent optional headless or null configurations.
-- **Direct Sockets in Public APIs**: Exposing `SOCKET` handles, `<sys/socket.h>`, or `ENetHost*` in public headers was rejected as it violates Horo Engine's backend-neutral architecture and leaks third-party dependencies.
+- **Direct Sockets in Public APIs**: Exposing `SOCKET` handles, `<sys/socket.h>`, or GNS interface pointers in public headers was rejected as it violates Horo Engine's backend-neutral architecture and leaks third-party dependencies.
 - **Direct Callback Invocation on I/O Threads**: Allowing network read callbacks to invoke gameplay code directly was rejected because it introduces widespread concurrency bugs, thread-safety overhead across ECS components, and non-deterministic frame execution.
 - **Global / Ambient Network Service Locator**: Using a global singleton `GetNetworkService()` was rejected; network instances must be composed explicitly by the host application.
 - **Runtime-Owned Inbound I/O Queue**: Pushing transport receive callbacks directly into a runtime-owned queue was rejected. The transport owns inbound/outbound queues; runtime drains them only through `PollEvents()`.

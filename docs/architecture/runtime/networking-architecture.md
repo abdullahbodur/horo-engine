@@ -20,10 +20,11 @@ Character checkpoint.
 
 ## Core Decisions
 
-- **Strict Layered Architecture**: Networking is separated into target-level tiers: public contracts and types (`HoroEngine::NetworkApi`), session coordination and replication runtime (`HoroEngine::NetworkRuntime`), and private concrete transport backends (`HoroEngine::NetworkTransportNull`, `HoroEngine::NetworkTransportENet`).
+- **Strict Layered Architecture**: Networking is separated into target-level tiers: public contracts and types (`HoroEngine::NetworkApi`), session coordination and replication runtime (`HoroEngine::NetworkRuntime`), and private concrete transport backends (`HoroEngine::NetworkTransportNull`, `HoroEngine::NetworkTransportGNS`).
+- **Production Baseline**: ADR-097 selects open-source GameNetworkingSockets (GNS) for production direct-IP real-time transport. Null remains the deterministic/offline backend; ICE/P2P, relay and provider integrations require explicit optional composition.
 - **Transport vs Session Split**: `INetworkTransport` is a packet-transport abstraction. Protocol negotiation, authentication, replication, and `NetworkSession` live in `NetworkRuntime`. Transport backends do not implement application authentication.
 - **Handle-Based Public Transport API**: Public transport operations use `INetworkTransport` plus generation-checked `ConnectionHandle` / `ListenerHandle` values. `ITransportConnection` and `ITransportListener` are not public types.
-- **Complete Native Encapsulation**: Public headers expose zero OS socket descriptors (`SOCKET`, `int fd`), OS socket headers, TLS/OpenSSL contexts (`SSL*`), event loops, or third-party transport structures (`ENetHost`, `SteamNetworkingSockets`).
+- **Complete Native Encapsulation**: Public headers expose zero OS socket descriptors (`SOCKET`, `int fd`), OS socket headers, TLS/OpenSSL contexts (`SSL*`), event loops, or GNS/provider transport structures.
 - **Optional Link and Composition**: Single-player games, asset tools, and offline CLI utilities compile and run without linking transport backends. Products can compose `NetworkTransportNull` or omit the network runtime entirely.
 - **Host-Owned Injection**: The composition root instantiates a concrete transport and transfers unique ownership into `NetworkRuntime`. `NetworkRuntime` never links a concrete backend directly.
 - **Thread Isolation & Zero I/O State Mutation**: Network I/O executes on dedicated background worker threads owned by the concrete transport that needs them. I/O threads never directly mutate Scene, ECS, Entity, Component, Editor, or Gameplay state.
@@ -52,7 +53,7 @@ The network subsystem is organized into four distinct CMake targets with strict 
 +---------------------+----+   +-----+-------------------------+
 | HoroEngine::NetworkRuntime|   | Concrete Transports (Private) |
 | (depends also on Runtime) |   | - NetworkTransportNull        |
-+---------------------------+   | - NetworkTransportENet        |
++---------------------------+   | - NetworkTransportGNS         |
                                 +-------------------------------+
 ```
 
@@ -90,12 +91,13 @@ The network subsystem is organized into four distinct CMake targets with strict 
 - **Must Not Depend On**: `HoroEngine::Platform`, OS sockets, or a network I/O thread.
 - **Purpose**: Unit testing, CI verification, single-player offline simulation, and synthetic latency/loss testing harnesses. `PollEvents()` and `Send()` run on the caller thread against in-memory queues.
 
-### 4. `HoroEngine::NetworkTransportENet`
+### 4. `HoroEngine::NetworkTransportGNS`
 
-- **Role**: High-performance reliable and unreliable UDP transport implementation.
+- **Role**: Production direct-IP reliable and unreliable message transport implemented with open-source GameNetworkingSockets.
 - **Direct Dependencies**: `HoroEngine::NetworkApi`, `HoroEngine::Foundation`, `HoroEngine::Platform`.
-- **Encapsulation**: Links third-party ENet and platform socket libraries strictly as `PRIVATE`. No third-party headers or socket types leak into public includes.
-- **Owns**: I/O thread, native ENet/socket state, inbound event queue, and outbound send queue.
+- **Encapsulation**: Links GNS, its selected crypto provider, protobuf and platform socket libraries strictly as `PRIVATE`. No third-party headers, values or socket types leak into public includes.
+- **Owns**: I/O thread, native GNS/socket state and messages, inbound event queue, and outbound send queue.
+- **Baseline Features**: Direct IPv4/IPv6 only. ICE/P2P and Steam/provider-specific integration are disabled unless a product explicitly composes and qualifies them.
 
 ## Public Header Encapsulation
 
@@ -105,14 +107,14 @@ To maintain portability, compile speed, and memory safety, public headers under 
 2. **No Native Sockets / Handles**: Sockets are encapsulated as opaque integer handles or private members within backend `.cpp` files. Public APIs operate exclusively on `ConnectionHandle` and `ListenerHandle`.
 3. **No TLS / Crypto Contexts**: OpenSSL, mbedTLS, or native TLS context pointers (`SSL*`, `SSL_CTX*`) never appear in public interfaces.
 4. **No Native Event Loops**: Event loop primitives (libuv `uv_loop_t`, epoll file descriptors, kqueue, IOCP handles) remain private to backend implementations.
-5. **No Third-Party Types**: `ENetHost`, `ENetPeer`, `ENetPacket`, or Steam networking structs are strictly confined to concrete backend sources.
+5. **No Third-Party Types**: GNS interfaces, handles, messages, connection-info structures, configuration values, callbacks and Steam networking structures are strictly confined to concrete backend sources.
 
 ## Host Composition and Transport Ownership
 
-The host composition root selects and instantiates the backend. `NetworkRuntime` never links `NetworkTransportNull` or `NetworkTransportENet`.
+The host composition root selects and instantiates the backend. `NetworkRuntime` never links `NetworkTransportNull` or `NetworkTransportGNS`.
 
 ```cpp
-auto transport = CreateENetTransport(config); // or CreateNullTransport(config)
+auto transport = CreateGnsTransport(config); // or CreateNullTransport(config)
 NetworkRuntime runtime({
     .transport = std::move(transport),
 });
@@ -235,21 +237,21 @@ NetworkSession
 
 - **Transport `Created`**: Handle allocated; request validated. `Connect()` has already returned.
 - **Transport `Resolving`**: Asynchronous DNS for a hostname endpoint.
-- **Transport `Connecting`**: Native connect and transport-level handshake (for example ENet peer connect). No application token is exchanged here.
+- **Transport `Connecting`**: Native connect and transport-level handshake. No application token is exchanged here.
 - **Transport `Connected`**: Packets can flow. `NetworkRuntime` now creates a `NetworkSession`.
 - **Session `Negotiating`**: Schema/protocol version, compression, and MTU agreement.
 - **Session `Authenticating`**: `NetworkRuntime` validates application credentials. Tokens are runtime/session data, not `ConnectRequest` fields on the transport.
 - **Session `Active`**: Gameplay messages, RPCs, and replication are admitted.
 - **Closing / Closed / Failed**: Each layer tears down independently. Session close requests transport `Close()`. Transport `Failed` fails the associated session.
 
-Future transports (SteamNetworkingSockets, WebRTC, and similar) replace only the transport machine. They must not absorb session authentication.
+Future provider transports replace only the transport machine. They must not absorb session authentication.
 
 ## Queue Ownership
 
 Model A is normative:
 
 ```text
-Transport I/O thread (ENet) or caller thread (Null)
+Transport I/O thread (GNS) or caller thread (Null)
     -> transport-owned inbound event queue
     -> NetworkRuntime calls transport.PollEvents(consumer)
 
@@ -274,7 +276,7 @@ The transport owns:
 To prevent race conditions and frame stalls, network operations are strictly partitioned:
 
 ```text
-[ Background I/O Worker Thread ]          // ENet only; Null has none
+[ Background I/O Worker Thread ]          // GNS only; Null has none
   OS Socket Poll -> Recv Packets -> Framing
          |
          v
@@ -338,6 +340,17 @@ Messages consist of:
 
 Mismatched protocol versions or invalid authentication tokens fail the **session** with `NetworkErrorCode::IncompatibleProtocol` or `NetworkErrorCode::AuthenticationFailed`. The transport connection is then closed. Transport backends must not interpret authentication tokens.
 
+GNS connection encryption and packet integrity are private transport capabilities;
+they do not authenticate a Horo user, authorize a session or replace application
+protocol negotiation. `NetworkRuntime` owns credential/token exchange, peer trust,
+session admission and replication authority.
+
+NAT traversal is an optional capability boundary. A concrete adapter may own an
+ICE/STUN/TURN or provider-native mechanism, while `NetworkRuntime` and the host own
+signaling policy, credential acquisition and provider selection. The baseline GNS
+composition does not enable traversal, Steam signaling/authentication, Steam
+Datagram Relay, WebRTC or console-provider SDKs.
+
 ## Delivery Semantics and Backpressure
 
 [ADR-070](../../adr/070-capture-and-voice-io-ownership.md) keeps voice packet policy
@@ -364,14 +377,15 @@ All transport queues have bounded capacities:
 
 ## Deterministic Cancellation and Shutdown
 
-- **Cancellation**: Connect and resolve requests accept `CancellationToken`. Triggering cancellation immediately halts DNS lookups and connection attempts. The transport connection moves to `Failed` with `NetworkErrorCode::OperationCancelled`, reported through `PollEvents()`.
+- **Cancellation**: Connect and resolve requests accept `CancellationToken`. Triggering cancellation halts DNS lookups and connection attempts, closes any native attempt and reports exactly one terminal `NetworkErrorCode::OperationCancelled` event through `PollEvents()`. Generation checks discard late native callbacks.
 - **Graceful Teardown**: Session close asks the transport to `Close()`. The transport transmits a disconnect frame and starts a bounded drain timer. Upon expiry or peer ACK, native resources are reclaimed.
 - **Process Shutdown Sequence**:
   1. The host calls `NetworkRuntime::Shutdown()`.
   2. Runtime fails/closes all sessions and stops admitting gameplay messages.
-  3. Runtime calls `INetworkTransport::Shutdown()`: listeners stop accepting, connections send disconnect notices, I/O threads stop and join with a bounded timeout.
-  4. Runtime destroys the unique transport.
-  5. Session pools and dispatcher tables are freed.
+  3. Runtime calls `INetworkTransport::Shutdown()`: listeners stop accepting, pending connects are cancelled, connections send disconnect notices and perform only the bounded close drain.
+  4. The backend stops and joins its I/O thread, drains or explicitly discards native and normalized messages under the shutdown policy, then releases native library state.
+  5. Runtime destroys the unique transport. No callback may target it after destruction.
+  6. Session pools and dispatcher tables are freed.
 
 ## Optional Composition and Product Configurations
 
@@ -379,8 +393,8 @@ Horo Engine products compose networking according to their needs:
 
 | Configuration | Composed Targets | Behavior |
 |---|---|---|
-| **Editor / IDE** (`HoroEditor`) | `NetworkApi`, `NetworkRuntime`, `NetworkTransportENet` | Full multiplayer preview, network debugger panel, local test servers. |
-| **Dedicated Server** (`horo-engine server`) | `NetworkApi`, `NetworkRuntime`, `NetworkTransportENet` | Headless execution, high-tick simulation, no rendering or audio dependencies. |
+| **Editor / IDE** (`HoroEditor`) | `NetworkApi`, `NetworkRuntime`, `NetworkTransportGNS` | Direct-IP multiplayer preview, network debugger panel and local test servers. |
+| **Dedicated Server** (`horo-engine server`) | `NetworkApi`, `NetworkRuntime`, `NetworkTransportGNS` | Direct-IP headless execution and high-tick simulation without rendering or audio dependencies. |
 | **Offline Game Client** | `NetworkApi`, `NetworkRuntime`, `NetworkTransportNull` | Uses replication/session API locally; zero socket operations, Platform sockets, or I/O threads. |
 | **Tooling / Packager** (`horopak`) | *None* | Links zero network targets; compiles cleanly with minimal footprint. |
 
@@ -413,10 +427,18 @@ The networking subsystem requires targeted automated verification:
    - Cancellation during DNS and connect; `Connect()` already returned a handle.
    - Unique-ptr injection: runtime shutdown destroys the transport exactly once.
    - Process shutdown with active connections and pending queued messages without hangs or memory leaks.
+4. **GNS Adapter Contract Tests (`NetworkTransportGNSTests`)**:
+   - Successful direct-IP IPv4/IPv6 listen, connect, reliable/unreliable transfer, close and reconnect.
+   - Zero/max message, connection, listener, channel/lane and queue boundaries; unsupported capability combinations fail explicitly.
+   - Malformed, truncated, oversized, duplicate, reordered and flood input is rejected without unbounded allocation or runtime mutation.
+   - Cancellation racing native success/failure publishes one terminal event and cannot revive a stale handle.
+   - Shutdown before initialization, after partial failure and with active native callbacks/messages is bounded, idempotent and callback-free after destruction.
+   - Dependency builds and smoke tests cover every claimed platform/toolchain and crypto-provider configuration; sanitizer/fuzz evidence is retained where supported.
 
 ## Related Documents
 
 - [ADR-020: Network Target Ownership and Dependency Boundary](../../adr/020-network-target-ownership-and-dependency-boundary.md)
+- [ADR-097: Default Real-Time Transport Backend](../../adr/097-default-real-time-transport-backend.md)
 - [System Design](../foundation/system-design.md)
 - [Desired Project Trees](../desired-project-tree.md)
 - [Multiplayer Replication Architecture](./multiplayer-replication-architecture.md)

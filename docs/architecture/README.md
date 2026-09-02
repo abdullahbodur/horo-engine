@@ -251,6 +251,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Networking Architecture](./runtime/networking-architecture.md): optional
   handle-based transports, session/authentication runtime, bounded I/O, and
   remote security.
+- [Default Real-Time Transport Backend](../adr/097-default-real-time-transport-backend.md):
+  GameNetworkingSockets direct-IP baseline, private native encapsulation,
+  security/traversal ownership, bounded lifecycle and optional provider policy.
 - [Asset Pipeline](./runtime/asset-pipeline.md): import, cook, package, runtime
   loading, cache, and hot reload.
 - [Prefab Architecture](./runtime/prefab-architecture.md): dual-role authoring
