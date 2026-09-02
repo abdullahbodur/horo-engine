@@ -6,7 +6,7 @@ This document defines grounded navigation (NavMesh), pathfinding, tactical envir
 for Horo Engine. It covers navigation mesh generation, runtime pathfinding,
 dynamic obstacle avoidance, AI perception, behavior integration, crowd
 simulation, fixed-tick simulation phase ordering, network authority roles,
-and hardware-driven simulation budget profiles.
+and project-configured simulation budget profiles.
 
 ## Target Ownership And Architecture Boundaries
 
@@ -1441,38 +1441,55 @@ without applying wall-clock offline time.
 
 ## Crowd Simulation
 
-When an `INavigationCrowdBackend` is composed, group coordination may request:
+[ADR-109](../../adr/109-avoidance-crowd-and-renderer-independent-budget.md)
+separates route/corridor and preferred-velocity production, local safe-velocity
+computation and Character/Physics movement. NavigationRuntime owns logical agents,
+immutable fact batches, project-profile admission, stable scheduling and
+`NavIntentCommit` publication. An optional `INavigationCrowdBackend` owns only its
+private bounded safe-velocity kernel/state; Character/Physics remains final
+collision, velocity and transform authority.
+
+When that backend is composed, group coordination may request:
 
 - Local steering and dynamic avoidance
-- Formation movement (line, wedge, column, circle)
-- Lane formation in corridors
-- Density-based speed modulation
+- Safe-velocity evaluation for Gameplay-authored formation/lane preferred velocities
+- Bounded density facts used only by the local solver
 
 ```cpp
 struct CrowdAgentConfig {
-    float  neighborRadius;
-    float  maxNeighbors;
-    float  avoidanceRadius;
-    float  maxSpeed;
-    float  maxAcceleration;
-    bool   useFormations;
+    float    neighborRadius;
+    uint32_t maxNeighbors;
+    float    avoidanceRadius;
+    float    maxSpeed;
+    float    maxAcceleration;
 };
 ```
 
-NavigationRuntime owns logical agents, budgets, grouping, fixed-tick order and
-desired-velocity publication. The optional DetourCrowd adapter owns only private
-local path/steering/avoidance state and is initially best-effort rather than a
-qualified deterministic capability. Formation, density and corridor-formation
-policy remain Horo Gameplay/AI orchestration above the provider. Traffic/road lane
-graphs are a separate future navigation domain, not a crowd flag.
+The 1.0 best-effort provider is ADR-104's optional DetourCrowd adapter. Horo does
+not call it ORCA/RVO or promise collision-free motion, and it cannot satisfy the
+initial deterministic tier. Horo ships no separate ORCA/RVO kernel for 1.0.
+Deterministic simulations either compose a separately qualified provider, use the
+declared collision-safe no-avoidance policy or fail admission when avoidance is
+required.
 
-Crowd simulation runs as bounded jobs over admitted agent groups. Character/
-Physics retains final movement and transform authority. Products needing only
-grounded paths do not link or allocate DetourCrowd.
+Scale (`CrowdSmall`, `CrowdMedium`, `CrowdLarge`, `CrowdDedicated`) and quality
+(`AvoidanceOff`, `AvoidanceConservative`, `AvoidanceBalanced`, `AvoidanceDense`)
+are independent project dimensions with exact finite capacity, fact, work, memory,
+batch and result-age envelopes in ADR-109. Best-effort selection uses authored
+priority, deadline age and stable agent ID; camera visibility/render LOD and
+graphics backend are never inputs. Late/unselected work has bounded validated
+velocity reuse followed by the configured collision-safe fallback.
+
+Formation, density and corridor-formation policy remain Horo Gameplay/AI
+orchestration above the provider. Traffic/road lane graphs are a separate future
+navigation domain, not a crowd flag. Products needing only grounded paths do not
+link or allocate DetourCrowd.
 
 ## Asynchronous AI Tasks And Job System Integration
 
-Asynchronous AI workloads—such as NavMesh pathfinding, perception visibility raycasts, and tactical environment queries—must execute through the Foundation `JobSystem`:
+Asynchronous AI workloads—such as NavMesh pathfinding, best-effort crowd batches,
+perception visibility raycasts, and tactical environment queries—must execute
+through the Foundation `JobSystem`:
 
 - **Single Task Scheduler**: AI subsystems must not instantiate private worker thread pools or bespoke background task runners.
 - **Scene-Scoped Cancellation**: Every async AI job captures a `CancellationToken` bound to the active `SceneRuntime` generation. When a scene unloads or transitions, all active AI jobs are cancelled immediately.
@@ -1536,7 +1553,7 @@ variable-rate presentation bridge, not a seventh fixed-tick phase.
    - Selects agent actions, targets, and tactical states.
    - Invariant: Pure decision evaluation. Does NOT directly manipulate physics bodies, apply forces, or invoke rendering commands. Emits high-level movement/action intent.
 4. **`NavIntentCommit`**:
-   - Translates movement intent into concrete navigation actions: submits asynchronous pathfinding requests, follows active waypoints, and evaluates crowd/dynamic obstacle avoidance (RVO).
+   - Translates movement intent into concrete navigation actions: submits asynchronous pathfinding requests, follows active waypoints, and evaluates the selected local safe-velocity capability.
    - Computes desired kinematic horizontal/vertical velocity vectors for character locomotion.
    - Invariant: Submits desired velocity to character controllers without stepping the physics world directly.
 5. **`CharacterControllerLocomotion`**:
@@ -1605,7 +1622,10 @@ Client hosts in networked multiplayer run neither mode for remote AI; they perfo
 
 ## Gameplay AI Profiles And Simulation Budgets
 
-AI agent capacity, perception query fidelity, and pathfinding job allocations are configured through typed `GameplayAiProfile` definitions.
+Gameplay decision cadence and perception query fidelity are configured through
+typed `GameplayAiProfile` definitions. Navigation/crowd scale, quality, execution
+mode and fallback are selected independently through ADR-109
+`NavigationCrowdProfile`; dynamic-obstacle policy is owned by ADR-108.
 
 ```cpp
 enum class AiLodSchedulingPolicy : uint8_t {
@@ -1616,13 +1636,8 @@ enum class AiLodSchedulingPolicy : uint8_t {
 
 struct GameplayAiProfile {
     std::string_view profileName;
-    uint32_t         maxActiveNavMeshAgents;
-    uint32_t         maxDynamicObstacles;
     uint32_t         maxPerceptionQueriesPerTick;
-    uint32_t         pathfindingWorkerThreads;
     uint32_t         perceptionWorkerThreads;
-    bool             enableCrowdSimulation;
-    bool             enableHierarchicalPathfinding;
     AiLodSchedulingPolicy lodSchedulingPolicy;
     float            highFrequencyRadius;      // Distance (m) for full-rate evaluation
     float            mediumFrequencyRadius;    // Distance (m) for 1/2 rate evaluation
@@ -1635,13 +1650,8 @@ struct GameplayAiProfile {
 | Feature / Budget Parameter | `LowCpu` | `MediumCpu` | `HighCpu` | `DedicatedServer` |
 |---|---|---|---|---|
 | **Target CPU Threads** | 2–4 | 6–8 | 12+ | 16+ |
-| **Max Active NavMesh Agents** | 64 | 512 | 2,048 | 4,096 |
-| **Max Dynamic Obstacles** | 16 | 128 | 512 | 1,024 |
 | **Perception Queries / Tick** | 16 | 128 | 512 | 1,024 |
-| **Pathfinding Workers** | 1 | 2 | 4 | 8 |
 | **Perception Workers** | 1 | 2 | 4 | 4 |
-| **Crowd Simulation** | Enabled | Enabled | Enabled | Enabled |
-| **Hierarchical Pathfinding** | Disabled | Enabled | Enabled | Enabled |
 | **LOD Scheduling Policy** | `DistanceBands` | `DistanceBands` | `DistanceBands` | `PriorityAged` |
 | **High-Frequency Radius** | 15 m | 25 m | 35 m | 0 (unused) |
 | **Medium-Frequency Radius** | 35 m | 60 m | 90 m | 0 (unused) |
@@ -1667,8 +1677,9 @@ budget; any resulting LOS, overlap, or spatial lookup consumes one admitted quer
 - Host-role tests prove that dedicated servers do not depend on extraction and
   that clients cannot submit authoritative AI work for server-owned agents.
 - Profile fixtures initialize every field from the canonical table and reject
-  invalid worker counts, radius/policy combinations, and sight-raycast budgets
-  above the aggregate perception-query cap.
+  invalid perception worker counts, radius/policy combinations, and sight-raycast
+  budgets above the aggregate perception-query cap. ADR-109 fixtures separately
+  validate every navigation crowd scale/quality/mode/fallback envelope.
 - Shipping replication schema tests reject private blackboard and perception
   memory fields.
 
@@ -1678,16 +1689,18 @@ budget; any resulting LOS, overlap, or spatial lookup consumes one admitted quer
 
 - Selecting a higher-end graphics API (e.g. Vulkan vs OpenGL) does NOT increase AI agent limits or perception budgets.
 - Headless dedicated servers running with `NullRenderer` operate with full CPU/memory capacity and are not artificially throttled by presentation-tier checks.
-- AI budgets scale exclusively with host CPU core counts, worker thread availability, and project-configured memory limits.
+- AI/navigation budgets come exclusively from validated project/host-role profiles;
+  CPU and memory measurements inform those authored choices but do not silently
+  change authoritative capacity at runtime.
 
 ## Navigation Resource Guidance
 
-Navigation scaling depends on CPU/worker capacity and measured memory costs, not graphics
-features. The canonical `GameplayAiProfile` defaults above remain the authority for AI agent
-and obstacle limits. Earlier navigation-only 64/1,024/5,000+ agent and 1/8/32 MB cache figures
-were illustrative, not a second set of defaults. Navigation cache, scratch, worker, and queue
-limits must be finite validated host/project settings within the shared budgets; tuning
-changes require workload, platform, and measurement evidence, not a new ADR.
+Navigation scaling depends on measured CPU/worker/memory costs, not graphics
+features. ADR-109's `NavigationCrowdProfile` is the authority for logical/provider
+agent capacity and avoidance work/memory; ADR-108 owns dynamic-obstacle budgets.
+`GameplayAiProfile` does not duplicate either. Navigation cache, query scratch and
+path queues remain separate finite validated host/project settings. Tuning changes
+require workload, platform and measurement evidence, not a renderer label.
 
 ## Navigation Boundary And Integration Verification
 

@@ -6,6 +6,7 @@
 - **Scope**: AI simulation tick scheduling, perception-decision-navigation pipeline ordering, multiplayer host authority boundaries, simulation profiles and CPU budget allocation
 - **Issue**: [GAI-005.1](https://github.com/abdullahbodur/horo-engine/issues/1358)
 - **Jira**: [HORO-1358](https://horo-engine.atlassian.net/browse/HORO-1358)
+- **Related**: [ADR-109](109-avoidance-crowd-and-renderer-independent-budget.md)
 - **Normative documents**:
   - [Navigation And AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md)
   - [ADR-024: Perception Ownership, Sense Policy and Budget](024-perception-ownership-sense-policy-and-budget.md)
@@ -70,7 +71,7 @@ ownership, input/output contracts, and invariants:
 | Fixed phase 1 — `PerceptionSensePoll` | Polls sensory listeners defined by ADR-024 against event queues and spatial-query seams. | Sight line-of-sight candidates, hearing events, damage dispatches, touch/proximity overlaps, and team/affiliation events or bounded relay inputs | Staged `PerceivedStimulus` buffers per agent | Read-only with respect to blackboard and world transform states. Does not mutate behavior trees or blackboards. |
 | Fixed phase 2 — `BlackboardSync` | Ingests staged stimuli, applies memory decay, updates target references, adjusts alert levels, and synchronizes external gameplay events into agent knowledge. | Staged `PerceivedStimulus` buffers, agent configuration | Updated `AIBlackboard` state | Agent blackboard mutation is isolated to this phase; prevents mid-decision race conditions. |
 | Fixed phase 3 — `AiDecisionEvaluate` | Evaluates behavior trees, state machines, or utility AI against current blackboard state under ADR-025. | `AIBlackboard`, agent behavior definitions | High-level movement intent, combat actions, state transitions | Pure decision logic. Does not directly mutate physics bodies, move collision capsules, or perform rendering calls. |
-| Fixed phase 4 — `NavIntentCommit` | Dispatches pathfinding requests, evaluates path-following waypoints, resolves local dynamic obstacle avoidance (RVO/crowd), and computes kinematic movement vectors. | Movement intent, NavMesh spatial queries, dynamic obstacles | Kinematic velocity & direction vectors for character controllers | Submits steering commands to the character locomotion layer; does not step physics simulation directly. |
+| Fixed phase 4 — `NavIntentCommit` | Dispatches pathfinding requests, evaluates path-following waypoints, resolves the selected local safe-velocity capability, and computes kinematic movement vectors. | Movement intent, NavMesh spatial queries, dynamic obstacles | Kinematic velocity & direction vectors for character controllers | Submits steering commands to the character locomotion layer; does not step physics simulation directly. |
 | Common phase 5 — `AnimationPrePhysics` | Evaluates authoritative animation graphs, simulation-affecting IK and exact-tick root motion from staged AI/gameplay parameters. | Action/locomotion intent, committed animation state, fixed delta | Candidate pose, events and one root-motion request | Runs once per attempted fixed tick under ADR-061; presentation sampling never feeds locomotion. |
 | Common phase 6 — `CharacterControllerLocomotion` | Applies platform evidence and resolves Nav/Gameplay intent plus root motion with the bounded Horo query controller. | Movement/facing command, root motion, immutable Physics query/support snapshot | Candidate collision root, contacts and staged Physics commands | ADR-089 owns movement/orientation composition. It stages rather than commits transforms and never steps Physics directly. |
 | Common phase 7 — `PhysicsStep` | Applies staged platform/Character commands and advances rigid-body simulation once. | Candidate Character/kinematic commands, fixed Physics world | Body/contact/platform and pose-override results | One fixed quantum; Character does not move a second time after this step. |
@@ -128,7 +129,11 @@ Server perception data (sight frustums, hearing memory, target tracking weights)
 
 ### 3. Decoupling from Graphics Tiers: Gameplay AI Profiles
 
-AI agent capacities and perception workloads are governed exclusively by hardware compute capabilities (CPU worker threads, core count, cache hierarchy, and host memory budgets), completely decoupled from the active graphics backend.
+Gameplay decision cadence and perception workloads are governed by validated
+project/host-role configuration, completely decoupled from the active graphics
+backend. ADR-109 separately owns navigation crowd scale, quality, execution mode
+and no-avoidance policy; ADR-108 owns dynamic-obstacle policy. This profile does not
+duplicate either navigation authority.
 
 ```cpp
 enum class AiLodSchedulingPolicy : uint8_t {
@@ -139,13 +144,8 @@ enum class AiLodSchedulingPolicy : uint8_t {
 
 struct GameplayAiProfile {
     std::string_view profileName;
-    uint32_t         maxActiveNavMeshAgents;
-    uint32_t         maxDynamicObstacles;
     uint32_t         maxPerceptionQueriesPerTick;
-    uint32_t         pathfindingWorkerThreads;
     uint32_t         perceptionWorkerThreads;
-    bool             enableCrowdSimulation;
-    bool             enableHierarchicalPathfinding;
     AiLodSchedulingPolicy lodSchedulingPolicy;
     float            highFrequencyRadius;      // meters: full-rate evaluation
     float            mediumFrequencyRadius;    // meters: 1/2 rate evaluation
@@ -158,13 +158,8 @@ Standard engine profiles:
 | Field | `LowCpu` | `MediumCpu` | `HighCpu` | `DedicatedServer` |
 |---|---:|---:|---:|---:|
 | Target CPU threads | 2–4 | 6–8 | 12+ | 16+ |
-| `maxActiveNavMeshAgents` | 64 | 512 | 2,048 | 4,096 |
-| `maxDynamicObstacles` | 16 | 128 | 512 | 1,024 |
 | `maxPerceptionQueriesPerTick` | 16 | 128 | 512 | 1,024 |
-| `pathfindingWorkerThreads` | 1 | 2 | 4 | 8 |
 | `perceptionWorkerThreads` | 1 | 2 | 4 | 4 |
-| `enableCrowdSimulation` | `true` | `true` | `true` | `true` |
-| `enableHierarchicalPathfinding` | `false` | `true` | `true` | `true` |
 | `lodSchedulingPolicy` | `DistanceBands` | `DistanceBands` | `DistanceBands` | `PriorityAged` |
 | `highFrequencyRadius` | 15 m | 25 m | 35 m | 0 (unused) |
 | `mediumFrequencyRadius` | 35 m | 60 m | 90 m | 0 (unused) |
@@ -205,8 +200,10 @@ Client hosts running in networked multiplayer execute neither mode for remote AI
   clients cannot submit perception, blackboard, decision, or navigation authority
   for server-owned agents.
 - Profile fixtures initialize every field to the table values and reject invalid
-  worker counts, non-canonical radius/policy combinations, and perception budgets
-  where `maxSightRaycastsPerTick > maxPerceptionQueriesPerTick`.
+  perception worker counts, non-canonical radius/policy combinations, and
+  perception budgets where
+  `maxSightRaycastsPerTick > maxPerceptionQueriesPerTick`. ADR-109 fixtures own
+  navigation crowd scale/quality/mode/fallback validation.
 - Replication schema tests reject `AIBlackboard` and `PerceivedStimulus` fields in
   shipping client payloads.
 
@@ -216,7 +213,8 @@ Client hosts running in networked multiplayer execute neither mode for remote AI
 - **Dedicated Server Parity**: Dedicated servers running headless with `NullRenderer` can utilize the full CPU budget to host massive agent populations without artificial graphics-tier constraints.
 - **Deterministic Replay Safety**: Deterministic tick mode guarantees repeatable replay recording and regression test validation.
 - **Multiplayer Security**: Server-private blackboards and perception data prevent client-side reverse-engineering and cheating while minimizing network bandwidth consumption.
-- **Predictable Performance**: Typed `GameplayAiProfile` budgets prevent CPU starvation by explicitly capping parallel pathfinding and perception job submissions.
+- **Predictable Performance**: Typed `GameplayAiProfile` and independent ADR-109
+  navigation profiles prevent CPU starvation by explicitly bounding admitted work.
 
 ## Rejected Alternatives
 

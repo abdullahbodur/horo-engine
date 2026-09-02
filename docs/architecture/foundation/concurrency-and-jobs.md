@@ -436,6 +436,14 @@ acquire bounded resources:
 Resource acquisition is cancellation-aware and uses a globally documented order
 to prevent deadlocks.
 
+[ADR-109](../../adr/109-avoidance-crowd-and-renderer-independent-budget.md)
+applies this rule to crowd avoidance: scale profiles reserve finite provider
+memory, staging/output storage and Horo work units, while Foundation `JobSystem`
+remains the only worker pool. A crowd profile may bound concurrent batches but
+cannot request private worker threads or derive capacity from a renderer tier.
+Best-effort overload uses stable selection and a bounded safe fallback;
+deterministic admission fails when its complete declared work cannot run.
+
 When a job needs more than one bounded resource, it acquires them in this order:
 
 1. per-project or per-tool serialization lock
