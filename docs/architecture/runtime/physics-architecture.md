@@ -91,6 +91,28 @@ using ConstraintHandle = Handle<PhysicsConstraintTag>;
 Stale handles return typed errors or empty query results according to the API
 contract. They never alias newly created physics objects.
 
+## Shape Authoring, Cook And Runtime Boundary
+
+[ADR-085](../../adr/085-physics-shape-authoring-cook-and-runtime-boundary.md)
+separates typed authored collider descriptors, Physics-normalized cook input,
+target-keyed Horo cook artifacts and immutable runtime shape leases. Scene and
+gameplay data retain stable Horo asset/material/subshape IDs; source paths, native
+Jolt types, pointers and serialized solver state do not cross the boundary.
+
+Boxes, spheres, capsules and static planes use analytic descriptors. Convex hulls,
+triangle meshes, height fields and compounds use bounded canonical geometry and
+stable child/material mappings. Dynamic bodies accept primitives, convex hulls and
+convex compounds; triangle meshes, height fields and static planes remain static.
+Scale is validated and baked before cook rather than applied to runtime shapes.
+
+Cook identity binds semantic source and dependency digests to Horo shape/cooker
+schemas, the canonical tolerance profile, target platform and the exact private
+solver build fingerprint. Runtime activation consumes only validated artifacts;
+it never imports or cooks source and never silently substitutes a primitive.
+Shape replacement builds a candidate lease first and swaps body references only
+at the Physics pre-step safe point, retaining old leases until all readers and
+frames that can reference them have drained.
+
 ## Fixed-Step Pipeline
 
 One physics tick:

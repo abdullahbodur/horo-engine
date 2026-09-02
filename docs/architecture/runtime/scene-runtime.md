@@ -142,6 +142,21 @@ and authoring conveniences. Runtime modules do not parse it directly.
 `RuntimeSceneDefinition` contains validated, typed, backend-neutral data needed
 to instantiate a runtime scene.
 
+## Physics Shape Boundary
+
+[ADR-085](../../adr/085-physics-shape-authoring-cook-and-runtime-boundary.md)
+requires scene conversion to resolve every collider to an exact published Physics
+shape artifact and stable material/subshape bindings before activation. Runtime
+scene data carries Horo identities, expected artifact digests and body-motion
+intent, never source paths, raw geometry or solver-native handles.
+
+Scene preparation acquires immutable shape leases. Activation fails atomically
+when a required artifact is absent, incompatible or exceeds limits; Runtime does
+not import, cook or invent a fallback collider. Reload prepares candidate leases
+off to the side and commits body shape swaps only at the Physics pre-step safe
+point. Retired leases remain alive until scene, query and in-flight Physics readers
+have drained.
+
 ## Runtime UI Scope Boundary
 
 [ADR-073](../../adr/073-runtime-ui-ownership-scope-and-update-order.md) makes

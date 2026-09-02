@@ -321,6 +321,12 @@ imported meshes are not implemented by this slice. Process-local mesh resource
 IDs never enter the scene document; versioned descriptors remain the authored
 source of truth.
 
+[ADR-085](../../adr/085-physics-shape-authoring-cook-and-runtime-boundary.md)
+maps the built-in cube, sphere, capsule and plane collider descriptors to Physics'
+analytic box, sphere, capsule and static-plane source kinds. These descriptors use
+the same validation, scale-bake, cook-envelope and immutable runtime-lease boundary
+as imported collider assets; the catalog does not bypass Physics shape policy.
+
 ## CLI And MCP Integration
 
 CLI and MCP creation commands do not hardcode object types. They accept a

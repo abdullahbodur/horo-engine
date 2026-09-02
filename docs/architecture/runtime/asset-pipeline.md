@@ -752,6 +752,26 @@ the Template domain never creates another asset ID, scheduler, cache, package lo
 or publication authority. Cooked output excludes source paths, editor state,
 runtime handles and source-template update behavior.
 
+### Physics Shape Domain Import And Cook Boundary
+
+[ADR-085](../../adr/085-physics-shape-authoring-cook-and-runtime-boundary.md)
+gives Assets stable collider asset identity, source/sidecar access, generic
+dependency/cook/cache/package scheduling, atomic artifact publication and immutable
+byte delivery. The Physics Shape domain owns typed primitive, convex hull,
+triangle-mesh, height-field and compound schemas; geometry normalization; motion
+compatibility; material/subshape mapping; and solver-private payload construction.
+
+The cooker deterministically validates and canonicalizes geometry, bakes accepted
+local scale, resolves exact dependency revisions and publishes a bounded Horo
+envelope keyed by semantic digests, Physics schemas, tolerance/cooker profiles,
+target platform and the exact private solver build. Paths, editor state, runtime
+handles and raw authoring meshes are excluded from the artifact.
+
+Runtime Physics accepts only validated published artifacts and immutable shape
+leases. It cannot invoke import/cook work or substitute a fallback shape. The Shape
+domain does not create a parallel asset ID, scheduler, cache, package lock or
+publication authority.
+
 ### Determinism And Failure Invariants
 
 A cooker receives an invocation-bounded immutable borrowed source view, immutable
