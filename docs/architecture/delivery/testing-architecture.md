@@ -263,6 +263,26 @@ capability interfaces without constructing ImGui. GUI tests verify the thin
 adapter mapping, interaction behavior, and rendered result rather than
 re-testing the full business rule only through pixels.
 
+### Renderer Reference Image Tests
+
+[ADR-050](../../adr/050-cross-backend-reference-image-tests.md) owns renderer
+scene reference tests. They are distinct from editor GUI screenshots: renderer
+tests capture a named pre-compositor Horo render-graph point, while GUI tests
+exercise a windowed editor surface and interaction state.
+
+Every renderer case registers an immutable scene revision, fixed time/seeds/
+history, image contract, capability predicate, exact baseline key and bounded
+comparison policy. Canonical lossless SDR/HDR data is the oracle; preview images
+are artifacts only. Unsupported, missing/invalid baseline, capture failure,
+timeout, device loss, comparison failure, cancellation and infrastructure failure
+are separate typed results.
+
+CPU/Null fixtures cover normalization, comparator boundary math, manifests,
+budgets and lifecycle in default test runs. Native pixel qualification is opt-in
+locally and required only on the documented protected/scheduled GPU lanes. A
+developer must not report native reference tests as passed when only Null fixtures
+or compilation ran.
+
 Performance-sensitive event paths have focused microbenchmarks. Benchmarks
 report subscriber count, event type, allocation count, and dispatch duration;
 release thresholds are maintained per supported platform instead of relying on
@@ -610,7 +630,7 @@ python3 scripts/dev.py test --all --coverage
 python3 scripts/dev.py coverage-report
 ```
 
-Coverage reports are merged across compatible jobs. Coverage data is exclusively collected from **Unit**, **Integration**, and **Contract (CLI/MCP)** test layers. 
+Coverage reports are merged across compatible jobs. Coverage data is exclusively collected from **Unit**, **Integration**, and **Contract (CLI/MCP)** test layers.
 
 GUI test coverage is intentionally excluded from official metrics to prevent flaky line-hit variance (due to frame timings) and to avoid artificially inflating coverage numbers with UI layout execution.
 

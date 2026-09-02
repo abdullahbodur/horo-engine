@@ -224,17 +224,40 @@ GUI quality is measured through:
 
 Visual baselines are versioned strictly per renderer and platform. Screenshot tolerances are explicit and kept narrow.
 
+Renderer scene references follow
+[ADR-050](../../adr/050-cross-backend-reference-image-tests.md) and remain
+separate from editor screenshots. Pull-request fast lanes run comparator/schema/
+Null fixtures and an affected native subset only when a stable documented GPU
+lane is available. Protected branches require the bounded backend/platform scene
+matrix; scheduled qualification expands device/driver classes and cold-cache
+coverage.
+
+Required lane absence is an infrastructure failure or blocked check, never a
+visual pass. Image mismatch, timeout, device loss and unexpected unsupported
+capability are not retried. Failure artifacts include canonical reference/actual,
+diff/heatmap and a manifest identifying case, backend, environment, capability,
+capture operation and thresholds. Baseline promotion is a separate reviewed
+change; CI cannot overwrite or automatically approve candidate output.
+
 ### Flaky Test Policy
 
 GUI and visual tests are susceptible to flakiness. The CI policy is strict:
+
 - Any test that flips between pass/fail on the same commit is automatically marked as **Flaky** by the CI runner.
 - Flaky tests are immediately **quarantined** (they run, but do not fail the pipeline).
 - A tracking ticket is automatically generated for the owning team.
 - Quarantined tests must be fixed within 7 days. If a test proves consistently unreliable and cannot be stabilized within this window, it must be permanently deleted rather than left rotting in quarantine.
 
+For ADR-050 native renderer references, quarantine is explicit missing
+qualification rather than a pass. The affected backend/platform tuple remains
+`NotScheduled`/unqualified in packaged qualification reports until a stable
+required case replaces or restores the quarantined case. CI never retries an
+image mismatch to choose a passing sample or promotes either sample as a baseline.
+
 ### Performance Regression Testing
 
 CI tracks numerical regressions on protected branches against a **7-day rolling average baseline** to prevent noise from temporary infrastructure spikes:
+
 - **Build Time**: Alerts if a CMake target's compilation time increases by >10%.
 - **Test Duration**: Alerts if integration suites degrade in execution time.
 - **Frame Time / Memory**: Automated headless scenes run with observability metrics enabled. If `engine.frame.cpu_time` or `process.memory.resident` regressions exceed 5%, the build is flagged for review.
