@@ -148,6 +148,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Character Controller Ownership, Implementation and Update Order](../adr/089-character-controller-ownership-implementation-and-update-order.md):
   Horo-owned bounded query solver, per-scene Character world, fixed-tick command/
   root-motion cadence, platform/orientation composition and transform publication.
+- [Character Dynamic-Body Visibility, Push and Proxy Policy](../adr/090-character-dynamic-body-visibility-push-and-proxy-policy.md):
+  explicit disabled/obstacle/one-way/bidirectional modes, private kinematic
+  presence proxy, next-tick reaction and fail-closed capability fallback.
 - [Physics Architecture](./runtime/physics-architecture.md): fixed-step world
   ownership, transform authority, collision events, queries, and determinism.
 - [Canonical Physics Solver, Units and Tolerances](../adr/084-canonical-physics-solver-units-and-tolerances.md):

@@ -101,6 +101,7 @@ to the replacement.
 | [087](087-scene-to-physics-ownership-and-conversion.md) | Scene-to-Physics Ownership and Conversion | Proposed | 2026-09-02 |
 | [088](088-physics-determinism-capability-and-support-tiers.md) | Physics Determinism Capability and Support Tiers | Proposed | 2026-09-02 |
 | [089](089-character-controller-ownership-implementation-and-update-order.md) | Character Controller Ownership, Implementation and Update Order | Proposed | 2026-09-02 |
+| [090](090-character-dynamic-body-visibility-push-and-proxy-policy.md) | Character Dynamic-Body Visibility, Push and Proxy Policy | Proposed | 2026-09-02 |
 
 ## Conventions
 

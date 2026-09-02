@@ -158,6 +158,19 @@ kinematic targets and support point-velocity evidence. Physics then applies stag
 commands and steps once. Post-Physics Character work finalizes support/attachment
 and publishes the collision root with tick commit; it never performs a second move.
 
+[ADR-090](../../adr/090-character-dynamic-body-visibility-push-and-proxy-policy.md)
+separates dynamic query visibility, one-way staged impulses and optional solver
+visibility. In `BidirectionalProxy`, Physics privately owns one derived kinematic
+capsule proxy per admitted Character. The proxy collides only with selected dynamics,
+is not a public/authored body and never becomes transform authority. Physics reduces
+post-step proxy contacts into bounded stable Horo reaction evidence; Character may
+consume committed evidence on the next tick through its ordinary sweep solver.
+
+One-way impulses and proxy solver impulses are mutually exclusive for a pair. Proxy
+creation, target updates, filter/schema generations, contact evidence and retirement
+are part of the same scene/world/Character lifecycle and fail closed when the exact
+capability or qualified determinism tier is unavailable.
+
 ## Fixed-Step Pipeline
 
 One physics tick:

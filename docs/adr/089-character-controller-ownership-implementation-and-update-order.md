@@ -7,7 +7,7 @@
 - **Issue**: [CHR-001.1](https://github.com/abdullahbodur/horo-engine/issues/937)
 - **Jira**: [HORO-937](https://horo-engine.atlassian.net/browse/HORO-937)
 - **Parent**: [CHR-001](https://github.com/abdullahbodur/horo-engine/issues/930)
-- **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-022](022-ai-fixed-tick-order-authority-and-simulation-budget.md), [ADR-026](026-large-world-precision-and-floating-origin-strategy.md), [ADR-061](061-animation-ownership-update-order-and-clock.md), [ADR-084](084-canonical-physics-solver-units-and-tolerances.md), [ADR-086](086-collision-layer-profile-and-query-channel-policy.md), [ADR-087](087-scene-to-physics-ownership-and-conversion.md), [ADR-088](088-physics-determinism-capability-and-support-tiers.md)
+- **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-022](022-ai-fixed-tick-order-authority-and-simulation-budget.md), [ADR-026](026-large-world-precision-and-floating-origin-strategy.md), [ADR-061](061-animation-ownership-update-order-and-clock.md), [ADR-084](084-canonical-physics-solver-units-and-tolerances.md), [ADR-086](086-collision-layer-profile-and-query-channel-policy.md), [ADR-087](087-scene-to-physics-ownership-and-conversion.md), [ADR-088](088-physics-determinism-capability-and-support-tiers.md), [ADR-090](090-character-dynamic-body-visibility-push-and-proxy-policy.md)
 - **Normative documents**: [Character Controller Architecture](../architecture/runtime/character-controller-architecture.md), [Animation Architecture](../architecture/runtime/animation-architecture.md), [Physics Architecture](../architecture/runtime/physics-architecture.md), [Scene Runtime](../architecture/runtime/scene-runtime.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md)
 - **Upstream references**: [Jolt v5.6.0 character controllers](https://github.com/jrouwe/JoltPhysics/blob/v5.6.0/Docs/Architecture.md#character-controllers), [Jolt v5.6.0 CharacterVirtual](https://jrouwe.github.io/JoltPhysicsDocs/5.6.0/class_character_virtual.html)
 
@@ -304,7 +304,10 @@ ordering. A query callback only records bounded evidence; gameplay/contact polic
 does not execute inside native collectors.
 
 The solver stages impulses to dynamic bodies and any optional Character presence
-target through Physics commands. It never mutates bodies while iterating query hits.
+target through Physics commands. [ADR-090](090-character-dynamic-body-visibility-push-and-proxy-policy.md)
+assigns those paths to explicit interaction modes, prevents one-way/proxy double
+push and converts proxy reaction into bounded next-tick evidence. The solver never
+mutates bodies while iterating query hits.
 Controller-to-controller collision is unsupported in the initial profile until a
 CharacterWorld snapshot/order policy is specified; it is not delegated implicitly
 to `CharacterVirtual`.
