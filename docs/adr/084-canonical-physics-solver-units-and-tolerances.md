@@ -249,6 +249,10 @@ solver commit, compile-profile, Horo schema, target architecture, endianness and
 semantic source digests. A mismatch invalidates and recooks the cache. It is not
 migrated as save data or trusted across solver upgrades.
 
+[ADR-085](085-physics-shape-authoring-cook-and-runtime-boundary.md) defines that
+derived shape envelope, target key, bounded validation and immutable runtime lease
+contract while preserving the private solver boundary established here.
+
 Hot reload rebuilds a candidate world by default. Any policy preserving velocity,
 sleep or constraint state uses Horo typed values keyed by stable body identity and
 validates them before atomic activation; it never moves native objects between
