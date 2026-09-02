@@ -29,6 +29,11 @@ specializes the first-party OpenXR target/package boundary, verified loader inpu
 application composition and platform-specific loader policy. Loader discovery does not
 constitute product support, and the backend is not an ambient ExtensionHost plugin.
 
+[ADR-159](../../adr/159-xr-action-tracking-and-input-projection-ownership.md)
+specializes native action, tracking snapshot, Input projection, fixed-tick, gesture,
+haptic and privacy ownership. Input never polls OpenXR, and presentation-late tracking
+never rewrites committed simulation input.
+
 ## Ownership
 
 ```text
@@ -341,6 +346,25 @@ revocation, and session replacement neutralize affected actions immediately.
 Haptic requests have explicit owner, duration, cancellation, device generation,
 and capability fallback.
 
+Application/project policy declares canonical actions and XR profile requirements;
+Input owns semantic action IDs, contexts, player assignment, user overrides and
+consumption. XROpenXR compiles the admitted plan into native action sets/actions/spaces,
+synchronizes and locates them, and keeps native paths private. XRRuntime publishes one
+bounded generation-scoped snapshot, and the host-composed XR/Input adapter joins it to
+the normal Input snapshot transaction before the cutoff.
+
+Rendering-time view/head poses are a distinct predicted-frame snapshot. They may reduce
+visual latency but cannot overwrite the Input snapshot, a tick-assigned gameplay frame,
+recording or network command. Fixed simulation receives only immutable Horo values tied
+to an exact tick, player/input-user assignment and source sample; it never queries live
+XR state.
+
+Gesture recognition is an explicit host-composed derived provider. It consumes admitted
+immutable joints/poses/gaze, publishes bounded candidates before Input commit and owns
+no focus, routing, gameplay meaning or scene mutation. Haptic admission/cancellation is
+owned by the Input/application coordinator; XROpenXR owns native apply/stop and reports
+submission separately from physical completion.
+
 ## Interaction, Runtime UI, And Comfort
 
 XR interaction adapts ray, direct-touch, proximity, grab, and spatial hit
@@ -372,6 +396,11 @@ failure states.
 - Raw camera frames do not enter ordinary engine logs, captures, or public APIs.
 - Eye gaze, continuous poses, environment geometry, voice, and spatial anchors
   are privacy-sensitive diagnostic inputs.
+- Articulated hand joints and eye gaze require product policy, runtime capability,
+  applicable OS permission and purpose-bound consent. Discovery or permission alone is
+  insufficient.
+- Raw joints/gaze and continuous pose history are excluded from ordinary logs, crash
+  dumps, metrics, replay, analytics, AI context and support bundles.
 - Permission revocation removes derived capability state and invalidates
   outstanding work.
 - Persistent anchors identify localization state and failure; they do not imply
@@ -483,6 +512,7 @@ device release gate.
 
 - [XR Ownership, Runtime Composition and Capability Tier](../../adr/157-xr-ownership-runtime-composition-and-capability-tier.md)
 - [OpenXR Loader, Backend Packaging and Host Composition](../../adr/158-openxr-loader-backend-packaging-and-host-composition.md)
+- [XR Action, Tracking and Input-Projection Ownership](../../adr/159-xr-action-tracking-and-input-projection-ownership.md)
 - [XR Setup UI Reference](./xr-setup.html)
 - [Rendering Architecture](./rendering-architecture.md)
 - [Render Backend Parity Contract](./render-backend-parity-contract.md)

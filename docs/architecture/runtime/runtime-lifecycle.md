@@ -144,6 +144,14 @@ required by fixed simulation is committed before fixed steps begin. Destructive
 scene and renderer lifecycle changes are committed only at their documented
 safe points.
 
+[ADR-159](../../adr/159-xr-action-tracking-and-input-projection-ownership.md)
+adds no runtime phase. After native XR event handling and before `BuildInputSnapshot`
+commits, XRRuntime gets one bounded owner-thread action/tracking sample and the
+host-composed adapter joins it to Input's transaction. Results after the cutoff wait for
+the next frame. FixedUpdate consumes only its tick-assigned immutable Horo projection;
+presentation-late poses used during render execution cannot rewrite simulation input.
+Loss commits Input neutralization before a replacement XR generation is eligible.
+
 [ADR-033](../../adr/033-presentation-and-display-ownership.md) specializes these
 safe points for presentation: apply host/window intent and publish a revisioned
 pending output candidate through owner-thread commands before layout/extraction.

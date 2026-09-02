@@ -177,6 +177,14 @@ Personal/social presentation is bounded, untrusted and ephemeral by default. Gen
 logs, metrics, crash bundles, saves/journals and ordinary tools exclude raw account/
 handle values, friends graphs, display data, presence free text and credentials.
 
+[ADR-159](../../adr/159-xr-action-tracking-and-input-projection-ownership.md)
+applies the same intersection to articulated hand joints, eye gaze and their derived
+gesture/behavior signals. Runtime capability discovery and OS permission do not replace
+purpose-bound consent. An admitted consumer receives only its minimum typed derivation;
+raw joints/gaze and continuous pose history remain excluded from ordinary logs, crash
+bundles, metrics, replay, analytics, AI context and support capture. Revocation closes
+collection, invalidates snapshot generations and neutralizes dependent Input actions.
+
 ## Process Execution
 
 Process policy validates:
