@@ -160,6 +160,12 @@ Offline mode:
 - fails on missing packages
 - does not consult network registries, URLs, or Git remotes
 
+Offline mode filters the configured transport endpoints without changing source
+precedence or authority. It may satisfy a locked digest from verified cache,
+vendored content or an approved local/air-gapped mirror. It does not trust
+arbitrary directories, relax hash/signature checks or choose a different package
+version. Missing required bytes return `OfflineArtifactUnavailable`.
+
 ## Development Overrides
 
 Portable dependencies belong in `.horo/packages.json`. Local development
@@ -180,6 +186,10 @@ Overrides:
 - must not appear in committed project metadata
 - are shown in diagnostics so developers know the graph differs from portable
   restore
+- are explicitly enabled only for approved development profiles and validated as
+  transient ADR-057 bundles before use
+- make the active graph non-portable; lock generation resolves the portable
+  baseline separately or fails instead of recording override bytes
 
 ## Package Asset Reference Modes
 
