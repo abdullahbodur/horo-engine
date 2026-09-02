@@ -59,7 +59,7 @@ namespace Horo::Render {
                static_cast<std::size_t>(elementSize) * elementCount <= bufferSize;
     }
 
-    Result<std::uint64_t> RealizeResourceRequest(IRenderBackend &backend, Detail::RenderResourceRegistry &registry,
+    Result<std::uint64_t> RealizeResourceRequest(IRenderBackend &backend, const Detail::RenderResourceRegistry &registry,
                                                  const UploadRequest &request) {
         try {
             if (request.kind == UploadRequestKind::Buffer) {

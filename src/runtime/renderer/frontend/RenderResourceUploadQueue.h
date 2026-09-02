@@ -28,7 +28,7 @@ namespace Horo::Render::Detail {
         explicit RenderResourceUploadQueue(RenderResourceUploadLimits limits) : limits_(limits) {}
 
         [[nodiscard]] bool CanEnqueue(const std::size_t byteCount) const noexcept {
-            return byteCount <= limits_.maximumBytesPerDrain && byteCount <= limits_.maximumPendingBytes - pendingBytes_;
+            return pendingBytes_ <= limits_.maximumPendingBytes && byteCount <= limits_.maximumPendingBytes - pendingBytes_;
         }
 
         void EnqueueBuffer(const RenderResourceIdentity identity, const RenderBufferDescriptor &descriptor,

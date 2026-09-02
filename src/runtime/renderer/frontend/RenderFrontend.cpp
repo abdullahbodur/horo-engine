@@ -526,6 +526,9 @@ namespace Horo::Render {
     }
 
     bool RenderFrontend::IsMeshBufferLayoutCompatible(const RenderMeshDescriptor &descriptor) const noexcept {
+        if (descriptor.vertexBuffer.slot >= buffers_.size() || descriptor.indexBuffer.slot >= buffers_.size()) {
+            return false;
+        }
         const BufferRecord &vertex = buffers_[descriptor.vertexBuffer.slot];
         const BufferRecord &index = buffers_[descriptor.indexBuffer.slot];
         const std::uint32_t indexSize = descriptor.indexFormat == RenderIndexFormat::UInt16 ? 2U : 4U;

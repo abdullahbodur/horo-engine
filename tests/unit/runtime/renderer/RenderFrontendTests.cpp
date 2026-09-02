@@ -387,6 +387,15 @@ namespace {
         Check(frontend->ResourceState(first.Value().handle).Value() == RenderResourceState::Ready);
         Check(frontend->ResourceState(second.Value().handle).Value() == RenderResourceState::Pending);
         Check(frontend->ProcessResourceRequests().Value() == 1);
+
+        const std::array<std::byte, 12> oversizedForDrain{};
+        const auto admitted = frontend->CreateBuffer({.byteSize = oversizedForDrain.size(),
+                                                      .usage = RenderBufferUsage::Vertex,
+                                                      .access = RenderBufferAccess::DeviceLocal},
+                                                     oversizedForDrain);
+        Check(admitted.HasValue());
+        Check(frontend->ProcessResourceRequests().Value() == 1);
+        Check(frontend->ResourceState(admitted.Value().handle).Value() == RenderResourceState::Ready);
     }
 
     TEST_CASE("Frontend Rejects Unsupported And In-Frame Resource Mutations", "[unit][runtime][renderer][resource]") {
