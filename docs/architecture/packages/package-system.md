@@ -290,7 +290,7 @@ dependency assignments. Map/file enumeration does not define priority:
 {
   "sources": {
     "horo.public": {
-      "kind": "registry",
+      "kind": "public-registry",
       "registry": "official",
       "priority": 100
     },
@@ -324,6 +324,13 @@ dependency assignments. Map/file enumeration does not define priority:
   }
 }
 ```
+
+Fresh resolution with an explicit dependency source queries only that authority.
+An unassigned request snapshots every eligible source in its ordered search set
+before selection and compares the chosen package ID/exact version identity across
+that snapshot. A lower-priority digest mismatch is a hard conflict; unavailable
+required metadata makes the snapshot incomplete rather than silently converting
+resolution into first-match behavior.
 
 Mutable Git branches, unpinned URLs, and local absolute paths are not valid
 portable restore sources.
