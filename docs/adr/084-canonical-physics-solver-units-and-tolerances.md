@@ -227,10 +227,17 @@ identity includes engine build, pinned solver commit, all Jolt compile definitio
 compiler/architecture/FP mode, tolerance/solver profile, fixed delta, thread profile,
 initial cooked scene and ordered input/command stream.
 
-Within one qualified tuple, body/constraint insertion order, layer/filter tables,
-command/event sorting, seeds and job mode are stable. Tests compare exact discrete
-events/identities and declared numeric envelopes for continuous state. A native
+Baseline solver qualification keeps body/constraint insertion order, layer/filter
+tables, command/event sorting, seeds and job mode stable. Ordinary correctness tests
+compare exact discrete events/identities and declared numeric envelopes for
+continuous state; those tests alone are not determinism-tier evidence. A native
 upstream determinism statement does not override Horo's narrower qualification.
+
+[ADR-088](088-physics-determinism-capability-and-support-tiers.md) replaces an
+informal deterministic boolean with fail-closed typed tiers and exact fingerprints.
+CanonicalV1's normal build keeps `JPH_CROSS_PLATFORM_DETERMINISTIC` disabled and
+targets only future qualified `SameBuildSamePlatform`; a cross-platform profile is
+a distinct build/artifact/evidence set.
 
 Networking does not replicate or persist opaque solver state as authoritative truth.
 Projects needing rollback/lockstep require a future explicit state capture,

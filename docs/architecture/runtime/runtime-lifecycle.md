@@ -310,6 +310,14 @@ at 60 Hz), completes all native work before publishing transforms/events and nev
 measures render/wall time. Parallel solver jobs require a separately qualified
 private profile and must join before step publication.
 
+[ADR-088](../../adr/088-physics-determinism-capability-and-support-tiers.md)
+requires a stronger-than-`Unspecified` world to close one canonical tick-indexed
+input/Physics command frame before the step. Its exact tier/fingerprint/evidence are
+immutable for that world generation. Worker completion, process event order,
+variable update and wall time cannot select command order, streaming/origin commit
+tick or authoritative query results. A first divergence invalidates the stronger
+session and follows its explicit fail-closed policy.
+
 System ordering is declared by the scene runtime and validated before execution.
 The data bus is not used to establish per-tick system order.
 

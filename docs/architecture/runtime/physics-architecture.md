@@ -247,18 +247,32 @@ and every debug/event/query projection translates private indices back to Horo I
 
 ## Determinism
 
-The engine guarantees deterministic behavior only for a declared combination
-of:
+[ADR-088](../../adr/088-physics-determinism-capability-and-support-tiers.md)
+defines four fail-closed capability tiers: `Unspecified`, development-only
+`SameMachineDiagnostic`, the 1.0 target `SameBuildSamePlatform`, and future
+`CrossPlatformQualified`. The current architecture decision does not itself mark a
+shipping tuple qualified; PHY-007.2/.3/.5/.8 ordering, state, replay and evidence
+gates must pass first.
 
-- engine and physics format version
-- platform and architecture class
-- fixed timestep and solver configuration
-- initial scene definition
-- ordered input frames
+Compatibility is an exact versioned fingerprint over shipped participating module
+bytes, pinned solver source/defines, compiler/ABI/ISA/FP/job profile, Horo Physics
+algorithms/schemas, fixed delta, content/filter/shape/material/package manifests,
+initial state and ordered command protocol. Tier 2 requires identical fingerprints
+and a qualified platform class. Tier 3 uses separate member fingerprints plus one
+explicit pairwise-evidenced compatibility group; enabling Jolt's cross-platform
+define locally creates no claim.
 
-Iteration order, constraint order, random seeds, and floating-point policies are
-kept stable within that contract. Cross-platform bit-identical simulation is
-not claimed unless separately verified.
+Initial state and every mutation use stable Horo identity/order/seed and tick-indexed
+command frames. Included checkpoints, body/constraint state, events, writeback,
+origin and command results compare exact canonical encodings. Raw callback, native
+enumeration and broadphase query order are excluded; an authoritative Horo query
+must revalidate/canonicalize/sort results before it can influence simulation.
+
+CanonicalV1 remains serial and uses the normal non-cross-platform build. Parallel
+stepping or a future `CrossPlatformDeterministicV1` profile needs a new fingerprint,
+performance/support matrix and qualification. Determinism alone does not authorize
+rollback or lockstep; complete Horo snapshots, structural resimulation, history,
+side-effect and Network authority contracts remain separate.
 
 ## Threading
 

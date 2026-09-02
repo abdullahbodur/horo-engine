@@ -159,6 +159,11 @@ scene containing required Physics components/capabilities fails admission with
 `PhysicsCapabilityUnavailable`; RuntimeScene does not create a null world or ignore
 the components.
 
+[ADR-088](088-physics-determinism-capability-and-support-tiers.md) requires the host
+to negotiate the requested determinism tier and exact fingerprint/evidence before
+this participant publishes a candidate. Replacement capability mismatch fails the
+candidate and preserves the active scene/world under the same rollback invariant.
+
 ### 6. Conversion produces a closed immutable Physics scene plan
 
 `PhysicsScenePlanBuilder` performs all fallible semantic conversion before native
