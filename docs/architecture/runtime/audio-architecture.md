@@ -954,6 +954,14 @@ with the exact Character surface snapshot first. Audio receives an immutable,
 deduplicated cue intent with committed tick/correlation identity; it does not query
 Character/Physics, infer cadence or change simulation when admission fails.
 
+For destruction, [ADR-147](../../adr/147-destruction-event-and-cosmetic-consumer-ownership.md)
+requires an application-owned dispatcher to map a committed DFR fact through a captured
+cooked binding generation before Audio admission. Audio receives bounded cue/media
+intent with the destruction occurrence plus destination-layer identity. It alone owns
+media readiness, source-to-sample scheduling, voice/mixer/device state and callback
+observations. Missing media, virtualization, queue pressure or device loss cannot alter
+the committed destruction revision, and the Audio callback never invokes DFR/gameplay.
+
 The audio thread publishes bounded completion and device events through a
 lock-free or wait-free queue consumed by the owning main-thread service.
 

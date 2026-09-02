@@ -444,6 +444,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Destruction Runtime Activation, Physics, Cleanup and Rollback](../adr/146-destruction-runtime-activation-physics-cleanup-and-rollback.md):
   command and contact safe points, deterministic support loss, private chunk-body
   preparation, aggregate publication, policy-driven cleanup and rollback boundaries.
+- [Destruction Event and Cosmetic Consumer Ownership](../adr/147-destruction-event-and-cosmetic-consumer-ownership.md):
+  committed fact identity and retention, application-owned dispatch, safe-point fan-out,
+  deduplication and gameplay/VFX/Decal/Audio ownership boundaries.
 - [Procedural Generation Architecture](./runtime/procedural-generation-architecture.md):
   PCG graphs, point clouds, validation, transactions, server authority, and
   streaming-cell ownership.
