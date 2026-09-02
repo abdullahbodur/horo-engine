@@ -65,6 +65,14 @@ Each profile declares:
 - update and patch eligibility
 - store/publication destination eligibility
 
+For an Audio middleware profile, ADR-072 additionally requires the exact adapter
+package, SDK/runtime/native libraries, cooked banks and bindings, target variants,
+license/notice files, redistribution class, hashes and qualification evidence.
+A local SDK or successful editor preview is not redistribution authorization.
+Missing, mismatched, prohibited or unknown required content fails before signing
+or publication; release does not silently omit the integration or select another
+Audio model/backend.
+
 Editor and CLI releases may use Horo-owned update channels. Packaged games own
 their product identity, version, update channel, store integration, privacy
 policy, and patch policy.

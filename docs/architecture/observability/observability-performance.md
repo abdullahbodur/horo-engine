@@ -286,6 +286,25 @@ Tagged totals are continuously available when the owning allocator can account
 for them cheaply. Per-allocation callstacks, lifetime reconstruction, and leak
 queries belong to opt-in memory profiling, not always-on metrics.
 
+### Audio Middleware Metrics
+
+[ADR-072](../../adr/072-audio-middleware-integration-model.md) requires every
+middleware adapter to publish one normalized bounded snapshot. Common signals
+cover admitted/active/physical/virtual voices, event instances, command queue
+depth and lag, render/callback load, underruns/overruns, bank resident bytes,
+stream/decode pressure, dropped observations, faults and last sample timestamp
+when available. Each value includes
+adapter/model/runtime/content generation and provenance; unsupported and unknown
+are distinct from zero.
+
+Metric dimensions are bounded to stable adapter/model/profile categories. Vendor
+event or parameter strings, bank paths, playing IDs and per-instance handles are
+not dimensions. Per-event timelines require an explicit bounded profiler capture
+correlated by Horo stable IDs. Callback/vendor-real-time paths update preallocated
+counters only; control paths snapshot and format them. Vendor-specific metrics may
+appear in an integration panel when labeled with provenance, but they do not
+replace the common schema or become gameplay APIs.
+
 Memory views state their accounting boundary. Engine allocator totals are not
 added to process resident/committed values as if they were independent, and
 renderer/asset child tags are not double-counted in a parent total. Untracked

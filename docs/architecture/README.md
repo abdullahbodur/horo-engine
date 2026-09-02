@@ -179,6 +179,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Procedural Audio Graph Ownership](../adr/071-procedural-audio-graph-ownership.md):
   compiled sound-generator assets, deterministic typed graphs, frontend/mixer
   reuse, extension nodes, editor boundaries, runtime limits, and retirement.
+- [Audio Middleware Integration Model](../adr/072-audio-middleware-integration-model.md):
+  event-bridge versus backend-replacement ownership, stable frontend identities,
+  native coexistence, budgets, bank activation, profiling, and distribution.
 - [Input Architecture](./runtime/input-architecture.md): input snapshots, action
   maps, focus, capture, modal routing, and simulation input frames.
 - [Game UI And HUD](./runtime/game-ui-and-hud.md): runtime game menus, HUDs,
