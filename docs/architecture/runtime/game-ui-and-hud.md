@@ -12,8 +12,11 @@ tabs, modals, inspectors, or the editor design-system widgets.
 [ADR-073](../../adr/073-runtime-ui-ownership-scope-and-update-order.md) is the
 single normative owner of RuntimeUiService, game/player/scene/viewport scopes,
 instance lifecycle, frame update order, pause/suspension, input/presentation
-revisions, unload, compatibility and shutdown. This document owns the element,
-layout, authoring and product model and projects that lifecycle decision.
+revisions, unload, compatibility and shutdown.
+[ADR-074](../../adr/074-runtime-ui-layout-units-and-measure-arrange.md) owns the
+logical unit, box-model, constraint-precedence, measure/arrange, overflow and
+deterministic-rounding contract. This document projects both decisions into the
+element, authoring and product model.
 
 ```text
 HoroEditor UI:
@@ -187,17 +190,50 @@ Canvas
 
 Elements own stable authoring IDs. Layout is computed from typed constraints:
 
-- anchors
-- margins
-- padding
-- min/preferred/max size
-- alignment
-- layout direction
-- flex/grid policy
-- clipping policy
+- `Auto`, logical `Dip`, or same-axis `Percent` preferred lengths;
+- margins, border, padding and explicit content-box sizing;
+- min/preferred/max size and positive aspect ratio;
+- anchors, offsets and alignment;
+- flow, flex and grid allocation;
+- overflow, clipping and scroll policy.
 
-The layout engine produces an immutable layout snapshot for rendering and hit
-testing. Gameplay code does not mutate render quads directly.
+`Intrinsic` is a revisioned measurement source for `Auto`, not a serialized length
+kind. Runtime layout uses signed fixed-point `UiScalar` values at 1/64 DIP. Checked
+arithmetic, ties-to-even division and stable authored-order remainder distribution
+make logical boxes independent of frame rate, thread schedule and renderer backend.
+
+Constraint precedence is fixed: validate; take a parent-assigned or authored
+definite size; otherwise measure intrinsic `Auto`; derive the one remaining auto
+axis from aspect ratio; clamp min/max with minimum winning an inverted bound; then
+apply parent allocation/alignment and compute boxes/overflow. Property edit or
+serialization order never changes the result.
+
+Anchors define a containing segment. Two anchors plus auto stretch, one anchor plus
+auto uses intrinsic size, and definite size is aligned within the anchor segment.
+Absolute/anchored elements do not contribute to flex/grid flow but do contribute
+to post-arrange overflow.
+
+Layout has two logical phases:
+
+```text
+Measure(available range)
+  -> intrinsic min/preferred/max contributions
+Arrange(final content rectangle)
+  -> final boxes, overflow, clip chains and interaction geometry
+```
+
+An indefinite parent percentage behaves as auto during intrinsic measurement and
+may trigger one bounded arrange-time remeasure after the axis becomes definite.
+Further change is a typed non-convergence failure. Flow, flex and grid share the
+same unit/min/max/aspect precedence; flex freezes items at bounds while
+redistributing space, and grid resolves definite, intrinsic, then fractional tracks
+with stable remainder order.
+
+Arrangement publishes one complete immutable `UiLayoutSnapshot` for rendering and
+hit testing. Required failure publishes nothing and retains the prior last-good
+generation according to ADR-073. Gameplay code does not mutate boxes or render
+quads directly. Physical pixel snapping is downstream derived render data and
+cannot feed back into logical layout, scroll extent or serialized state.
 
 ## Panel And Frame Contract
 
