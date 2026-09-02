@@ -47,7 +47,7 @@ how installable packages contribute modules and extension-point descriptors.
 
 | Term | Meaning |
 |---|---|
-| Extension package | Installable distribution artifact with a manifest, binaries or scripts, resources, licenses, and contribution descriptors. |
+| Extension package | A `.horopkg` whose package manifest declares one or more extension contribution descriptors. |
 | Module | A code/lifecycle boundary inside a package or project. Native modules may be dynamic libraries; script modules may be interpreted or compiled by a host runtime. |
 | Contribution | A manifest-declared item added to a typed extension point, such as an asset importer or editor panel. |
 | Extension point | A host-owned slot with a public descriptor contract and registry validation rules. |
@@ -80,6 +80,10 @@ Use these names deliberately:
   contribution and registry concepts.
 - An extension package may contain one or more modules and one or more
   contributions.
+- `horo-package.toml`, `files.manifest.json` and the verified package install
+  record own package identity, files and cross-package dependencies;
+  `extension.json` is only a module/contribution descriptor. See
+  [ADR-054](../../adr/054-extension-and-package-authority-boundary.md).
 - Extension packages may be backend-only, frontend-only, or hybrid. GUI support
   is optional presentation over host-approved backend capabilities; it is not
   the definition of an extension.
@@ -103,14 +107,17 @@ Use these names deliberately:
 
 ```text
 User / Project
-  -> declares package requirements in .horo/plugins.json
+  -> declares package requirements in .horo/packages.json
 
-Extension Manager
-  -> discovers packages
-  -> validates manifests and package integrity
-  -> resolves versions and dependencies
-  -> checks local trust and permissions
-  -> loads modules through the proper ABI boundary
+PackageService / PackageLifecycleService / TrustService
+  -> resolve one package graph
+  -> verify package and file manifests, integrity and compatibility
+  -> evaluate local trust and contribution enablement
+  -> produce exact immutable extension activation candidates
+
+ExtensionHost
+  -> validates the selected module descriptor and ABI binding
+  -> loads only the artifact named by the verified install record
   -> builds a candidate contribution set
 
 Typed Registries
@@ -132,43 +139,64 @@ explicitly grants that authority.
 ## Package Layout
 
 ```text
-FbxImporter/
-  extension.json
-  bin/
-    macos-arm64/libhoro_fbx_importer.dylib
-    linux-x64/libhoro_fbx_importer.so
-    windows-x64/horo_fbx_importer.dll
-  resources/
-    icons/fbx.svg
+com.vendor.fbx-importer-1.2.0.horopkg
+  horo-package.toml
+  files.manifest.json
+  extensions/
+    com.vendor.fbx-importer.native/
+      extension.json
+      bin/
+        macos-arm64/libhoro_fbx_importer.dylib
+        linux-x64/libhoro_fbx_importer.so
+        windows-x64/horo_fbx_importer.dll
+      resources/
+        icons/fbx.svg
   licenses/
 ```
 
-Paths in the manifest are normalized and must remain inside the package root.
-Symlinks, `..` traversal, absolute paths, and platform-specific path tricks do
-not bypass containment checks.
+The package manifest declares the extension descriptor path and contribution
+root. The signed file manifest declares the descriptor, binaries and resources.
+Paths are normalized and must remain inside the verified package root. Symlinks,
+`..` traversal, absolute paths, undeclared executable files and platform-specific
+path tricks do not bypass containment checks.
 
-## Manifest Schema
+## Module Descriptor Schema
 
-The manifest separates package identity, modules, contributions, permissions,
-and marketplace metadata:
+`extension.json` separates one module's ABI/entry variants, contributions and
+requested permissions. Package identity, dependencies, sources, trust and
+enablement remain in the package system. Every path in the descriptor is relative
+to the verified package root, not to the descriptor directory:
 
 ```json
 {
-  "id": "com.vendor.fbx-importer",
-  "displayName": "FBX Importer",
-  "version": "1.2.0",
-  "apiVersion": 1,
-  "engineVersion": ">=0.8 <0.9",
-  "publisher": "Vendor",
-
-  "modules": [
-    {
-      "id": "com.vendor.fbx-importer.native",
-      "version": "2.0.0",
-      "kind": "native",
-      "entry": "bin/${platform}-${arch}/horo_fbx_importer"
-    }
-  ],
+  "schemaVersion": 1,
+  "ownerPackage": {
+    "id": "com.vendor.fbx-importer",
+    "version": "1.2.0"
+  },
+  "module": {
+    "id": "com.vendor.fbx-importer.native",
+    "version": "2.0.0",
+    "kind": "native",
+    "abi": "horo-extension-1",
+    "entries": [
+      {
+        "platform": "macos",
+        "architecture": "arm64",
+        "path": "extensions/com.vendor.fbx-importer.native/bin/macos-arm64/libhoro_fbx_importer.dylib"
+      },
+      {
+        "platform": "linux",
+        "architecture": "x86_64",
+        "path": "extensions/com.vendor.fbx-importer.native/bin/linux-x64/libhoro_fbx_importer.so"
+      },
+      {
+        "platform": "windows",
+        "architecture": "x86_64",
+        "path": "extensions/com.vendor.fbx-importer.native/bin/windows-x64/horo_fbx_importer.dll"
+      }
+    ]
+  },
 
   "contributions": [
     {
@@ -189,29 +217,28 @@ and marketplace metadata:
   "permissions": [
     "project.read",
     "project.write.generated"
-  ],
-
-  "licenses": ["licenses/LICENSE.txt"]
+  ]
 }
 ```
 
-Every module has its own canonical semantic version. When `version` is omitted
-from a module entry, the package version is inherited and becomes the module's
-effective version. Contribution registries snapshot both contribution version
-and effective module version; durable asset provenance records both so a module
-upgrade is distinguishable from an importer-contract upgrade.
+Every module has its own canonical semantic version. The package contribution
+points to exactly one descriptor; packages with multiple modules declare multiple
+descriptor paths. Contribution registries snapshot package, module and
+contribution versions so a module upgrade remains distinguishable from an
+importer-contract upgrade.
 
 Validation rules:
 
-- Package IDs, module IDs, and contribution IDs are globally canonical and
-  stable.
+- Package IDs come only from the verified package install record. Module and
+  contribution IDs are globally canonical and stable.
+- An optional `ownerPackage` binding must exactly match that install record.
 - Module IDs belong to exactly one package.
 - Contribution IDs are unique across all active packages and built-in
   contributions.
-- A contribution may only reference a module in the same package unless the
-  extension point explicitly allows cross-package composition.
-- Required permissions must be declared at package level and approved by trust
-  policy before load.
+- A contribution references the descriptor's module. Cross-package dependencies
+  are declared only in `horo-package.toml` and the resolved package graph.
+- Descriptor-requested permissions must be a subset of the package contribution
+  capability envelope and approved by trust policy before load.
 - Unknown manifest fields are preserved only in documented extension namespaces;
   unknown required fields reject the package.
 
@@ -357,37 +384,35 @@ requiring ImGui to exist in the process.
 
 Packages are discovered from:
 
-1. packaged built-in extension directory
-2. user-installed extension directory
-3. project-declared package requirements after trust approval
-4. explicit development package path
+1. built-in package install records composed by the product host
+2. verified user-installed package records
+3. the project package graph after restore and trust approval
+4. explicit package-system development overrides
 
-Arbitrary current-directory scanning is forbidden.
+Arbitrary current-directory and raw extension-root scanning are forbidden in the
+production activation path.
 
-Project requirements live in `.horo/plugins.json`:
+Project requirements live in `.horo/packages.json`:
 
 ```json
 {
-  "required": [
-    {
-      "id": "com.vendor.fbx-importer",
-      "version": "^1.2.0"
+  "dependencies": {
+    "com.vendor.fbx-importer": {
+      "registry": "official",
+      "version": "^1.2.0",
+      "contributions": ["editor", "tools"]
     }
-  ],
-  "optional": [
-    {
-      "id": "com.horo.network.enet",
-      "version": ">=0.3 <0.4"
-    }
-  ]
+  }
 }
 ```
 
 This file is portable project intent, not a trust grant and not a resolved local
-path. The Extension Manager resolves package IDs and versions against installed
-packages, development overrides, and optional marketplace metadata. Duplicate
-package IDs, conflicting version ranges, missing dependencies, or incompatible
-platform assets fail before any binary loads.
+path. `PackageResolver` resolves package IDs and versions once and pins the exact
+graph in `.horo/packages.lock`. `PackageLifecycleService` and `TrustService`
+produce activation candidates; ExtensionHost does not resolve another graph.
+Duplicate package IDs, conflicting version ranges, missing dependencies, owner
+binding mismatches or incompatible platform artifacts fail before any binary
+loads. Legacy `.horo/plugins.json` is migration input only under ADR-054.
 
 ## Trust And Permissions
 
@@ -781,7 +806,7 @@ When the activity bar icon is clicked, the bound drawer opens. The module owns
 the entire content area of that drawer. Horo provides two paths for building the
 panel UI:
 
-**1. Declarative field layout (preferred for data-driven panels)**
+#### 1. Declarative field layout (preferred for data-driven panels)
 
 Modules register a typed field schema. The host renders standard Horo form
 controls — text inputs, dropdowns, checkboxes, sliders, color pickers — without
@@ -804,7 +829,7 @@ struct CurveEditorFields {
 };
 ```
 
-**2. Custom ImGui rendering (for graphical or interactive panels)**
+#### 2. Custom ImGui rendering (for graphical or interactive panels)
 
 Modules receive an `EditorDrawerContext` with a dedicated ImGui container.
 They can draw any ImGui content — plots, node graphs, custom widgets — inside
@@ -872,8 +897,7 @@ Each package entry points to immutable GitHub Release artifacts:
   "latest": "1.2.0",
   "versions": {
     "1.2.0": {
-      "manifestUrl": "https://github.com/vendor/horo-fbx/releases/download/v1.2.0/extension.json",
-      "packageUrl": "https://github.com/vendor/horo-fbx/releases/download/v1.2.0/horo-fbx-1.2.0.zip",
+      "packageUrl": "https://github.com/vendor/horo-fbx/releases/download/v1.2.0/com.vendor.fbx-importer-1.2.0.horopkg",
       "sha256": "...",
       "signature": "...",
       "engineVersion": ">=0.8 <0.9",
@@ -925,7 +949,7 @@ private registry mirror with the same metadata schema.
 ## Lifecycle
 
 ```text
-Discovered -> Resolved -> Validated -> Trusted -> Loaded -> Registered -> Active
+Resolved -> Verified -> Installed -> Trusted -> Enabled -> Loaded -> Registered -> Active
 ```
 
 Disable, update, and removal operations are staged and applied on restart by
@@ -1008,6 +1032,15 @@ Artifact signatures, updates, dependency resolution, per-project requirements,
 removal, private-registry credentials, and live-safe contribution types remain
 future work.
 
+This inventory/manager is transitional and does not define the target package
+authority. The ADR-054 migration inventories top-level legacy `extension.json`
+directories without loading them, generates canonical package and file manifests
+in staging, obtains trust review for the generated digest, publishes one verified
+package install record and converts `.horo/plugins.json` requests into the package
+graph transactionally. After that cutover ExtensionHost accepts only immutable
+activation candidates from verified install records; direct directory loading is
+retained only in an explicitly marked development/test adapter until removed.
+
 ## Testing
 
 Required tests cover:
@@ -1038,6 +1071,10 @@ Required tests cover:
 - shutdown ordering and no host callbacks after module teardown
 - no STL, exceptions, or cross-allocator ownership in ABI fixtures
 - marketplace registry schema, SHA-256, signature, and release URL validation
+- extension-only and hybrid `.horopkg` authority fixtures
+- raw directory and undeclared descriptor/binary activation rejection
+- legacy directory and `.horo/plugins.json` migration dry-run, rollback and
+  idempotent resume
 
 The repository's executable reference fixture lives under
 `examples/extensions/asset-importer-basic`. Its automated contract test loads

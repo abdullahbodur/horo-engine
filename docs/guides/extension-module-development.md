@@ -26,15 +26,19 @@ compile previews through the approved backend capability.
 
 ```text
 com.vendor.shader-tools
-  extension.json
-  bin/
-    macos-arm64/libhoro_shader_tools.dylib
-    linux-x64/libhoro_shader_tools.so
-    windows-x64/horo_shader_tools.dll
-  schemas/
-    compile-preview.schema.json
-  resources/
-    icons/shader-tools.svg
+  horo-package.toml
+  files.manifest.json
+  extensions/
+    com.vendor.shader-tools.native/
+      extension.json
+      bin/
+        macos-arm64/libhoro_shader_tools.dylib
+        linux-x64/libhoro_shader_tools.so
+        windows-x64/horo_shader_tools.dll
+      schemas/
+        compile-preview.schema.json
+      resources/
+        icons/shader-tools.svg
 ```
 
 The package does not patch `EditorLayer`, does not subscribe directly to
@@ -47,16 +51,18 @@ permission checks, result storage, and teardown.
 
 1. Choose whether the package is backend-only, frontend-only, or hybrid.
 2. Choose the extension points.
-3. Declare package, module, permissions, settings, errors, events, and UI
-   contributions in `extension.json`.
-4. Implement the native module behind the Horo extension C ABI.
-5. Register factories for the declared contributions.
-6. Read engine and IDE data through approved query capabilities.
-7. Mutate engine/editor state only through typed commands or application use
+3. Declare package identity, dependencies and the extension descriptor path in
+   `horo-package.toml`.
+4. Declare module ABI/entries, permissions, settings, errors, events, and UI
+   contributions in the package-scoped `extension.json`.
+5. Implement the native module behind the Horo extension C ABI.
+6. Register factories for the declared contributions.
+7. Read engine and IDE data through approved query capabilities.
+8. Mutate engine/editor state only through typed commands or application use
    cases.
-8. Observe changes through `EditorDataBus` or approved process-event imports.
-9. Store only bounded presentation state under the contribution ID.
-10. Test registration, permission denial, event handling, workspace persistence,
+9. Observe changes through `EditorDataBus` or approved process-event imports.
+10. Store only bounded presentation state under the contribution ID.
+11. Test registration, permission denial, event handling, workspace persistence,
    and teardown.
 
 Every module and every importer contribution declares an independent canonical
@@ -68,25 +74,55 @@ unversioned contribution instead of publishing ambiguous provenance.
 
 ## Manifest
 
-A minimal manifest for the Shader Tools package:
+A minimal package manifest contribution points to the module descriptor:
+
+```toml
+[package]
+id = "com.vendor.shader-tools"
+version = "1.0.0"
+kind = "extension"
+
+[[contribution]]
+kind = "EditorExtension"
+id = "com.vendor.shader-tools.native"
+root = "extensions/com.vendor.shader-tools.native/"
+descriptor = "extensions/com.vendor.shader-tools.native/extension.json"
+required = false
+```
+
+The package-scoped module descriptor is below. Every path inside it is relative
+to the verified package root, not to the descriptor directory.
 
 ```json
 {
-  "id": "com.vendor.shader-tools",
-  "displayName": "Shader Tools",
-  "version": "1.0.0",
-  "apiVersion": 1,
-  "engineVersion": ">=0.8 <0.9",
-  "publisher": "Vendor",
-
-  "modules": [
-    {
-      "id": "com.vendor.shader-tools.native",
-      "version": "1.0.0",
-      "kind": "native",
-      "entry": "bin/${platform}-${arch}/horo_shader_tools"
-    }
-  ],
+  "schemaVersion": 1,
+  "ownerPackage": {
+    "id": "com.vendor.shader-tools",
+    "version": "1.0.0"
+  },
+  "module": {
+    "id": "com.vendor.shader-tools.native",
+    "version": "1.0.0",
+    "kind": "native",
+    "abi": "horo-extension-1",
+    "entries": [
+      {
+        "platform": "macos",
+        "architecture": "arm64",
+        "path": "extensions/com.vendor.shader-tools.native/bin/macos-arm64/libhoro_shader_tools.dylib"
+      },
+      {
+        "platform": "linux",
+        "architecture": "x86_64",
+        "path": "extensions/com.vendor.shader-tools.native/bin/linux-x64/libhoro_shader_tools.so"
+      },
+      {
+        "platform": "windows",
+        "architecture": "x86_64",
+        "path": "extensions/com.vendor.shader-tools.native/bin/windows-x64/horo_shader_tools.dll"
+      }
+    ]
+  },
 
   "contributions": [
     {
@@ -276,12 +312,15 @@ already validated from the manifest.
 For a complete compiling implementation, use
 `examples/extensions/asset-importer-basic`. It registers an `.hraw` importer,
 one preset-compatible boolean setting, a versioned editor payload, and an RGBA8
-preview callback. Its `extension.json` declares the same package, module, and
-contribution IDs returned through the binary boundary.
+preview callback. Its current top-level `extension.json` is a legacy development
+fixture; ADR-054 migration moves package identity into `horo-package.toml` and
+the module descriptor below `extensions/<module-id>/` without changing the
+module/contribution IDs returned through the binary boundary.
 
-Build it with `-DHORO_BUILD_EXAMPLES=ON`. CMake places `extension.json` beside
-the platform library, so the resulting absolute directory can be passed
-directly to `ExtensionManager::LoadExtension`.
+Build it with `-DHORO_BUILD_EXAMPLES=ON`. Until the package activation-candidate
+path is implemented, CMake places the legacy descriptor beside the platform
+library for the explicit development/test `ExtensionManager::LoadExtension`
+adapter. Production activation must not use that raw-directory path.
 
 Activation receives a module context containing only the capabilities approved by
 manifest, trust, project policy, and host availability.

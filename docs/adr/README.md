@@ -65,6 +65,7 @@ to the replacement.
 | [051](051-renderer-benchmark-and-regression-gates.md) | Renderer Benchmark and Regression Gates | Proposed | 2026-09-01 |
 | [052](052-first-party-renderer-component-scope.md) | First-Party Renderer Component Scope | Proposed | 2026-09-01 |
 | [053](053-renderer-module-manifest-parser.md) | Renderer Module Manifest Parser | Proposed | 2026-09-02 |
+| [054](054-extension-and-package-authority-boundary.md) | Extension and Package Authority Boundary | Proposed | 2026-09-02 |
 
 ## Conventions
 
