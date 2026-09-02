@@ -84,6 +84,7 @@ to the replacement.
 | [070](070-capture-and-voice-io-ownership.md) | Capture and Voice I/O Ownership | Proposed | 2026-09-02 |
 | [071](071-procedural-audio-graph-ownership.md) | Procedural Audio Graph Ownership | Proposed | 2026-09-02 |
 | [072](072-audio-middleware-integration-model.md) | Audio Middleware Integration Model | Proposed | 2026-09-02 |
+| [073](073-runtime-ui-ownership-scope-and-update-order.md) | Runtime UI Ownership, Scope and Update Order | Proposed | 2026-09-02 |
 
 ## Conventions
 

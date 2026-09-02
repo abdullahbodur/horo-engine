@@ -9,6 +9,12 @@ serialization, templates, editor authoring, and package boundaries.
 Game UI is runtime game content. It is not the same system as HoroEditor panels,
 tabs, modals, inspectors, or the editor design-system widgets.
 
+[ADR-073](../../adr/073-runtime-ui-ownership-scope-and-update-order.md) is the
+single normative owner of RuntimeUiService, game/player/scene/viewport scopes,
+instance lifecycle, frame update order, pause/suspension, input/presentation
+revisions, unload, compatibility and shutdown. This document owns the element,
+layout, authoring and product model and projects that lifecycle decision.
+
 ```text
 HoroEditor UI:
   editor tabs, panels, modals, inspector, asset browser, project browser
@@ -24,8 +30,8 @@ belongs to runtime scene/game content.
 ## Core Decisions
 
 - Game UI and HUD are runtime content, not editor UI.
-- The runtime owns a UI element tree, layout, focus, input routing, rendering,
-  serialization, and scene integration.
+- One game runtime owns `RuntimeUiService`; every UI instance has exactly one
+  game-instance, player, scene, or viewport semantic owner scope.
 - HoroEditor authoring tools invoke the same application/runtime UI creation use
   cases as CLI and MCP adapters.
 - Game UI input uses the input action system and supports keyboard, mouse, touch,
@@ -39,21 +45,77 @@ belongs to runtime scene/game content.
 ## Ownership Boundary
 
 ```text
-Scene / Game Runtime
-  +-- UiWorld
-      +-- UiCanvas
-      +-- UiScreen
-      +-- UiElementTree
-      +-- UiLayoutEngine
-      +-- UiFocusGraph
+Application / Game Runtime
+  +-- RuntimeUiService
+      +-- GameInstance scope
+      +-- Player scopes
+      +-- Scene scopes
+      +-- Viewport scopes and attachments
+      +-- UiDocument/runtime-instance registry
+      +-- UiLayout/interaction snapshots
       +-- UiInputRouter
       +-- UiRenderExtractor
       +-- UiBindingStore
 ```
 
-`UiWorld` is owned by the active game or scene runtime. HoroEditor owns only the
-authoring session, previews, inspector panels, and editor commands that modify
-serialized UI content.
+Each runtime instance chooses one scope and cannot silently migrate. Game-instance
+UI such as loading/main menus survives scene replacement. Player UI survives only
+with its generation-checked local player/session. Scene UI ends with its exact
+`SceneRuntimeId`. Viewport UI ends with that logical viewport attachment. Attaching
+game/player/scene UI to a viewport does not transfer semantic ownership.
+
+UI elements have stable authored `UiElementId` values and transient generation-
+checked runtime handles; they are not ordinary ECS entities. HoroEditor owns only
+authoring documents, previews, inspector state and revision-checked editor commands.
+It never owns or lends widget pointers to a game runtime instance.
+
+## Instance Lifecycle And Frame Order
+
+Documents, cooked data, mutable runtime trees, immutable interaction/layout
+snapshots and render snapshots are separate generations. Preparation validates and
+resolves every required dependency privately; activation publishes one complete
+tree at an owner-thread safe point. Failure retains the prior active/last-good
+generation. Scope create/destroy, document replacement and structural transactions
+commit only at ADR-073 lifecycle cutoffs, never during layout or rendering.
+
+Runtime UI uses the existing host phases:
+
+1. owner commands commit lifecycle/resource/structural work before simulation;
+2. fixed simulation publishes gameplay state but does not update the UI tree;
+3. VariableUpdate reads committed binding snapshots, routes input against the
+   last successfully presented interaction layout, applies bounded UI-local state,
+   advances declared UI time, resolves bindings/layout/focus/hit tests, and
+   publishes an immutable generation;
+4. RenderExtraction creates per-view `UiRenderSnapshot` values;
+5. RenderExecution composes world- and screen-space UI; `RenderGui` remains
+   editor/development GUI, not the game UI implementation;
+6. successful presentation adopts the next interaction revision, then deferred
+   lifecycle retirement releases old generations after frame leases close.
+
+UI actions are typed application/gameplay commands. A button handler cannot write
+ECS, renderer, asset or scheduler state directly. Failed or skipped presentation
+suppresses interaction for that viewport until a matching layout is presented, so
+the player cannot click geometry that was never visible.
+
+## Pause, Suspension And Teardown
+
+Gameplay pause stops fixed simulation, not Runtime UI lifecycle, input, layout or
+rendering. UI presentation time is explicitly `PresentationUnscaled`,
+`FollowGameplay` or `Manual`; menus/navigation default to unscaled. Pause/resume is
+requested through the application pause capability, not owned by a UI element.
+Single-step advances one fixed tick followed by one ordinary UI VariableUpdate.
+
+Host suspension skips UI variable/extraction/render work and releases interactive
+capture according to Input policy. Resume resets presentation delta and revalidates
+attachments without catching up suspended wall time. Focus loss is a separate
+product policy and does not automatically pause or destroy UI.
+
+Scene/player/viewport/game teardown closes command and input admission, cancels and
+joins preparation/binding work, releases focus/capture, publishes removal snapshots,
+waits for render/resource leases, destroys runtime state, then releases assets.
+Unrelated scopes survive. Shutdown retires all scopes before Renderer, Assets,
+Input, Localization or Platform dependencies disappear and is idempotent after
+partial activation.
 
 ## Core Runtime UI Primitives
 
@@ -90,6 +152,10 @@ A `UiCanvas` declares:
 - DPI/font scale policy
 - sorting layer and order
 - input scope
+
+The canvas does not choose semantic owner lifetime. Its containing runtime
+instance already names one ADR-073 owner scope, while each viewport attachment
+supplies logical extent, DPI, safe area, view identity and presented revision.
 
 ```cpp
 struct UiCanvasDescriptor {
@@ -189,7 +255,10 @@ Pause menu opens
 ```
 
 High-frequency pointer movement does not travel through data buses. The UI input
-router consumes input snapshots during the runtime frame.
+router consumes input snapshots during VariableUpdate through one per-player/
+viewport `RuntimeUiInputContextId`. It hit-tests the last successfully presented
+interaction revision. Split-screen focus/capture is independent unless an explicit
+game-instance modal policy blocks multiple contexts.
 
 ## Rendering Contract
 
@@ -214,7 +283,9 @@ The UI renderer supports:
 - screen-space and world-space canvas projection
 
 UI render data uses the renderer frontend. It does not call backend APIs from UI
-components.
+components. Viewport attachments and snapshots contain only Horo view/extent/DPI/
+safe-area/resource identities; native surfaces, swapchains, command buffers and
+editor GUI texture IDs remain private to Platform/Renderer adapters.
 
 ## Serialization
 
@@ -343,7 +414,9 @@ HoroEditor provides authoring tools for runtime UI:
 - play-mode preview
 
 The editor authoring UI uses HoroEditor panel/modal systems, but edited content
-remains runtime UI data.
+remains runtime UI data. Preview creates an isolated ordinary game runtime and
+ADR-073 scopes/attachments. Preview/play mutations apply back only through an
+explicit document-revision-checked editor command with undo.
 
 ## Core Vs Package Boundary
 
@@ -389,6 +462,11 @@ Metrics follow [Observability Metrics And Profiling](../observability/observabil
 
 Required tests cover:
 
+- game/player/scene/viewport scope lifetime and unrelated-scope persistence
+- lifecycle activation rollback, scene/viewport unload and repeated shutdown
+- canonical owner-command/VariableUpdate/layout/extraction/presentation order
+- last-presented hit testing across skipped/failed presentation
+- gameplay pause, single-step, UI time policy and host suspension/resume
 - layout determinism across reference resolutions
 - safe-area and scaling behavior
 - focus graph navigation with keyboard and gamepad
@@ -404,6 +482,8 @@ Required tests cover:
 
 - [UI Canvas Editor UI Reference](./ui-canvas-editor.html): widget palette, hierarchy, anchors, and design-time canvas preview panel.
 
+- [Runtime Lifecycle](./runtime-lifecycle.md): frame phases, pause, suspension and
+  shutdown order specialized by ADR-073.
 - [Input Architecture](./input-architecture.md): action maps, gamepad, focus, and
   interaction scopes.
 - [Rendering Architecture](./rendering-architecture.md): render extraction,

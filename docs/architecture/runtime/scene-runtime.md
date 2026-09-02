@@ -142,6 +142,26 @@ and authoring conveniences. Runtime modules do not parse it directly.
 `RuntimeSceneDefinition` contains validated, typed, backend-neutral data needed
 to instantiate a runtime scene.
 
+## Runtime UI Scope Boundary
+
+[ADR-073](../../adr/073-runtime-ui-ownership-scope-and-update-order.md) makes
+`RuntimeUiService` an application/game-runtime service rather than a SceneRuntime
+subsystem. A scene may declare scene-scoped UI documents and stable scene/object/
+component bindings, but the resulting UI elements are not ECS entities and the UI
+tree does not live in component pools.
+
+Scene UI preparation may accompany a scene candidate. Activation waits for the
+exact `SceneRuntimeId` generation and publishes before that scene's first eligible
+Runtime UI VariableUpdate/extraction. Bindings and world anchors are immutable
+generation-tagged snapshots; UI never retains component-pool pointers or performs
+world queries during layout/rendering.
+
+Scene unload closes its UI scope and input admission, cancels/joins pending UI
+work, publishes removal for attached views, waits for UI/render/resource leases,
+then releases scene UI state. Game-instance and persistent player UI survive scene
+replacement; viewport replacement does not transfer or destroy foreign semantic
+ownership. Late completions and stale references fail by generation.
+
 ## Runtime Identity
 
 ```cpp
