@@ -182,6 +182,7 @@ to the replacement.
 | [168](168-vtx-gpu-page-table-physical-cache-shader-and-material-ownership.md) | VTX GPU Page Table, Physical Cache, Shader and Material Ownership | Proposed | 2026-09-02 |
 | [169](169-vtx-producer-terrain-world-streaming-packaging-and-server-ownership.md) | VTX Producer, Terrain, World Streaming, Packaging and Server Ownership | Proposed | 2026-09-02 |
 | [170](170-vtx-settings-diagnostics-capture-and-qualification-ownership.md) | VTX Settings, Diagnostics, Capture and Qualification Ownership | Proposed | 2026-09-02 |
+| [171](171-android-host-target-and-ownership.md) | Android Host, Target and Ownership | Proposed | 2026-09-02 |
 
 ## Conventions
 

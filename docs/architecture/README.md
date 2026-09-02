@@ -80,6 +80,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Android Platform Host](./foundation/android-platform-host.md): Android
   activity lifecycle, replaceable native surfaces, permissions, storage,
   packaging, deployment, resource pressure, and standalone-XR prerequisites.
+- [Android Host, Target and Ownership](../adr/171-android-host-target-and-ownership.md):
+  GameActivity composition, initial API/ABI/Vulkan baseline, native-resource
+  ownership, lifecycle generations, packaging, migration, and qualification.
 - [Engine Data Bus](./foundation/engine-data-bus.md): process-scoped typed
   notifications.
 

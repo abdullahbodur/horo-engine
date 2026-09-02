@@ -93,6 +93,15 @@ Editor and CLI releases may use Horo-owned update channels. Packaged games own
 their product identity, version, update channel, store integration, privacy
 policy, and patch policy.
 
+Android product profiles additionally follow
+[ADR-171](../../adr/171-android-host-target-and-ownership.md). They freeze the
+minimum, compile and target API levels, CPU ABI, GameActivity dependency,
+renderer profile, permissions/features and device-qualification identity.
+Each ABI is configured and built independently; a multi-ABI package may combine
+only verified native artifacts and records their identities and hashes. Store
+target-level policy may advance without silently broadening the engine's API,
+ABI or graphics support claim.
+
 ## Service Model
 
 ```text

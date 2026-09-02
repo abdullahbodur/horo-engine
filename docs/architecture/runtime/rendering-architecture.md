@@ -185,6 +185,13 @@ portability-subset product support. These are downstream requirements, not a
 claim that a Vulkan backend target exists or that optional engine features are
 already implemented.
 
+[ADR-171](../../adr/171-android-host-target-and-ownership.md) owns the separate
+Android Vulkan baseline: API 29, production `arm64-v8a`, Vulkan 1.1 plus the
+Android Baseline profile, and a replaceable PlatformAndroid-owned native-window
+generation. Android Vulkan is a sibling backend specialization behind the same
+Horo contracts; ADR-031's desktop qualification does not qualify it. OpenGL ES
+is outside the initial Android product profile.
+
 [ADR-030](../../adr/030-metal-platform-and-feature-baseline.md) owns the `metal`
 component's native baseline: macOS 14.0+, Apple7 on native arm64 or Mac2 on native
 x86_64, explicit MSL 2.4 shaders, and conventional command-buffer/encoder APIs.

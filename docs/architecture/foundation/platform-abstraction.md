@@ -60,6 +60,11 @@ follow [Android Platform Host](./android-platform-host.md). Portable callers use
 the same capability model; they do not branch on Android APIs or lifecycle
 callbacks.
 
+[ADR-171](../../adr/171-android-host-target-and-ownership.md) fixes the initial
+Android composition and ownership boundary: a private GameActivity-based host
+owns lifecycle serialization, PlatformAndroid owns admitted native-window and
+Android-service lifetimes, and native types remain outside public Horo headers.
+
 ## Filesystem And Paths
 
 The engine uses structured path values:
