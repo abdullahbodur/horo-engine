@@ -7,7 +7,7 @@
 - **Issue**: [ANI-001.1](https://github.com/abdullahbodur/horo-engine/issues/454)
 - **Jira**: [HORO-454](https://horo-engine.atlassian.net/browse/HORO-454)
 - **Parent**: [ANI-001](https://github.com/abdullahbodur/horo-engine/issues/447)
-- **Related**: [ADR-014](014-sequencer-ownership-clock-authority-and-binding-boundary.md)
+- **Related**: [ADR-014](014-sequencer-ownership-clock-authority-and-binding-boundary.md), [ADR-077](077-runtime-ui-animation-clock-and-time-domain.md)
 - **Normative documents**: [Animation Architecture](../architecture/runtime/animation-architecture.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md), [Character Controller Architecture](../architecture/runtime/character-controller-architecture.md)
 
 ## Context
@@ -36,10 +36,12 @@ owner seams defined here.
 
 ### 1. Authority and ownership
 
-This ADR is the single normative owner of animation clock domains, authoritative
-update order, pose mutation/publication, root-motion timing, and animation/physics/
-render handoff. Animation Architecture summarizes this contract; Runtime Lifecycle
-owns host phases and fixed-tick production; Character Controller Architecture owns
+This ADR is the single normative owner of skeletal/pose animation clock domains,
+authoritative update order, pose mutation/publication, root-motion timing, and
+animation/physics/render handoff. ADR-077 separately owns Runtime UI style/property
+motion and cannot mutate skeletal animation state. Animation Architecture
+summarizes this contract; Runtime Lifecycle owns host phases and fixed-tick
+production; Character Controller Architecture owns
 collision-aware movement resolution. None defines a second animation clock or
 pose owner.
 
@@ -63,7 +65,7 @@ mutable arrays or cached pointers into a recyclable pose pool.
 
 ### 2. Evaluation domains and clocks
 
-Animation has three explicit evaluation domains:
+Skeletal/pose animation has three explicit evaluation domains:
 
 ```cpp
 enum class AnimationEvaluationDomain : std::uint8_t {

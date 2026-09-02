@@ -88,6 +88,7 @@ to the replacement.
 | [074](074-runtime-ui-layout-units-and-measure-arrange.md) | Runtime UI Layout Units and Measure-Arrange | Proposed | 2026-09-02 |
 | [075](075-runtime-ui-font-asset-family-and-fallback.md) | Runtime UI Font Asset, Family and Fallback | Proposed | 2026-09-02 |
 | [076](076-runtime-ui-style-asset-token-and-inheritance.md) | Runtime UI Style Asset, Token and Inheritance | Proposed | 2026-09-02 |
+| [077](077-runtime-ui-animation-clock-and-time-domain.md) | Runtime UI Animation Clock and Time Domain | Proposed | 2026-09-02 |
 
 ## Conventions
 
