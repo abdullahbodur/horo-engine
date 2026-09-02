@@ -23,6 +23,11 @@ specializes render output: every baseline blend class has one semantic pass/dept
 contract, translucent ordering uses stable per-view CPU/GPU plans, additive skips
 strict sorting and finite work/time budgets govern admission and diagnostics.
 
+[ADR-126](../../adr/126-vfx-graph-compilation-and-runtime-representation-convergence.md)
+makes stack and graph two authoring frontends for one `CompiledVfxEffectDescriptor`.
+Only deterministic cooked descriptors/kernel packages reach runtime; authoring graphs,
+arbitrary scripts and compiler IR never become parallel executable representations.
+
 DCC workflows, full fluid solvers, atmospheric scattering and screen-space
 post-processing remain outside this subsystem; see
 [Advanced Rendering Architecture](./advanced-rendering-architecture.md).
@@ -580,8 +585,10 @@ is not zero; repeated overruns can only inform an explicitly re-admitted later p
 
 ## Particle System Data Model
 
-A particle system is a template that describes how particles are spawned,
-simulated, rendered, and destroyed. The sortMode is validated against its output
+`ParticleSystemDescriptor` is the compiled emitter-unit foundation nested only in
+`CompiledVfxEffectDescriptor`; it is not a second top-level stack/graph runtime asset.
+It describes how particles are spawned, simulated, rendered and destroyed. The
+sortMode is validated against its output
 material: None/OldestFirst cannot override required back-to-front alpha ordering.
 Authored age order is allowed only for an output whose blend contract permits it.
 
@@ -681,12 +688,39 @@ Graph nodes:
 | `Light` | Spawns a temporary point light (bounded, tier-aware). |
 | `Audio` | Triggers an audio event on spawn or collision. |
 
-Graphs compile ahead-of-time (or at asset cook time) into runtime descriptors and
-optimized compute/CPU kernels. Compilation validates emitter dependency closure,
-CPU-mandatory conflicts, fallback compatibility, bounded parameters and peak cost.
-Asset versions migrate the previous domain field explicitly; cook diagnoses required
-unsupported nodes rather than silently dropping gameplay behavior. The graph runtime
-never interprets arbitrary scripts per particle.
+Stack documents and graph documents are authoring frontends for one deterministic
+cook pipeline. Both lower to exactly one root `CompiledVfxEffectDescriptor` containing
+the same bounded `ParticleSystemDescriptor` emitter units, typed parameters/edges,
+resources, capabilities, fallbacks, peak costs and fingerprint. Source kind may appear
+in diagnostics, but runtime loading, binding, simulation and rendering never branch on
+it. Compiler IR is invocation-local and is not serialized as another executable asset.
+
+Cook validates/migrates the source schema, canonicalizes stable semantic IDs/order,
+partitions emitter units, enforces ADR-123 stages/payloads, ADR-124 domain/readback/
+fallback contracts and ADR-125 render/sort rules, then emits prevalidated CPU stage
+plans and target GPU kernel packages. It also validates dependency closure, target/
+provider/kernel versions, bounded parameters/resources, checked layout/cost products
+and complete peak overlap. Unknown nodes, required unsupported features and unbounded
+behavior fail the candidate rather than being removed or defaulted.
+
+The generic Asset Pipeline owns source snapshots, cache keys, target selection,
+staging and atomic generation publication. The VFX fingerprint includes authoring and
+semantic schemas, compiler/lowering/provider/kernel versions, target capability
+fingerprint, ADR-owned plan schemas and all accepted dependency digests. Equivalent
+stack/graph semantics under identical inputs produce identical descriptor/kernel
+fingerprints; editor layout/comments/timestamps and worker order are excluded.
+
+Packaged runtime accepts only the validated cooked descriptor/kernel packages. It
+never parses source stack/graph nodes per particle, runs arbitrary script/bytecode,
+JITs missing variants or invokes an authoring plugin/compiler. CPU uses installed typed
+kernel IDs in bounded stage plans; GPU uses logical kernel IDs backed by the selected
+cook target. Missing variants follow typed fallback/failure, not source compilation.
+
+VFX validates current and explicitly supported prior payload/kernel schemas inside the
+generic envelope. Too-old artifacts require recook; newer, wrong-target, incompatible
+provider/kernel ABI or digest failures are rejected. Hot reload separately validates
+and admits a complete new generation; live instances pin the old lease until finish or
+authored safe restart and never reinterpret particle memory under a new layout.
 
 ## Decals
 
@@ -857,6 +891,15 @@ architecture-only change:
   backend switch, hidden node deletion or change to paired CPU gameplay outputs.
 - Saturate mixed CPU/GPU/shared/readback charges and replacement overlap. Preserve
   gameplay reserves and return readback/GPU credits only after final fence retirement.
+- Compile equivalent stack/graph fixtures and require identical canonical descriptor/
+  kernel fingerprints; layout/comments/selection and randomized cook scheduling must
+  not alter output. Both runtime routes consume only `CompiledVfxEffectDescriptor`.
+- Reject every stage/domain/provider/resource/layout/cost/version violation before
+  atomic publication. Exercise current/two-prior/too-old/newer/corrupt/wrong-target
+  artifacts, failed reload last-good retention and active old artifact leases.
+- Scan packaged/headless runtime reachability for source stack/graph parsers, authoring
+  node/plugin dependencies, arbitrary particle script/JIT paths or missing-variant
+  source compilation; none may be reachable from VFX execution.
 - Delay workers, GPU fences and snapshot readers across cell eviction and scene
   replacement. No early free/slot reuse, stale publication or lost accounting;
   Retired remains pending and teardown timeout retains dependencies safely.
@@ -873,6 +916,8 @@ architecture-only change:
   Normative GPU authority, observation, fallback and shared-admission contract.
 - [ADR-125: VFX Transparency, Sorting and Pass Placement](../../adr/125-vfx-transparency-sorting-and-pass-placement.md):
   Normative particle blend/pass, stable sorting and sort-budget contract.
+- [ADR-126: VFX Graph Compilation and Runtime Representation Convergence](../../adr/126-vfx-graph-compilation-and-runtime-representation-convergence.md):
+  Normative authoring convergence, compiled artifact and compatibility contract.
 - [Particle Editor UI Reference](./particle-editor.html): Emitter stack, curve editing,
   and live preview panel.
 - [Material And Shader Model](./material-and-shader-model.md): Particle and decal materials.

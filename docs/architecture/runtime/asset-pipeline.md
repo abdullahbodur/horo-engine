@@ -647,6 +647,38 @@ ownership, and C++ object ownership do not cross that ABI. The adapter must
 validate all output before it can enter the cache or a candidate cooked
 generation, so external and built-in contributions cannot bypass host invariants.
 
+### VFX Domain Import And Cook Boundary
+
+[ADR-126](../../adr/126-vfx-graph-compilation-and-runtime-representation-convergence.md)
+applies the same generic-Assets/domain-semantics split to stack and graph VFX assets.
+Assets owns stable `AssetId`, immutable source/metadata snapshots, generic cooker
+catalog/scheduling, `CacheKeyV1`, target selection, output bounds, staging, atomic
+generation publication, rollback and immutable runtime byte delivery. It does not
+interpret particle modules/nodes, select simulation domains, compile VFX kernels or
+define runtime parameter/render behavior.
+
+VFX Model/Cook owns both authoring schemas and one deterministic lowering pipeline to
+the backend-neutral `CompiledVfxEffectDescriptor` plus target CPU/GPU kernel packages.
+`ParticleSystemDescriptor` is the nested compiled emitter-unit foundation, not a
+parallel stack/graph runtime. VFX validation owns semantic IDs/order, stages, payloads,
+domain edges, readback/fallback, render/sort compatibility, resource dependencies,
+provider/kernel versions and peak costs. A compiler IR is invocation-local and never
+becomes a published executable representation.
+
+The VFX cache extension includes source/semantic/compiler/provider/kernel/plan schema
+versions, the effective target capability fingerprint and every accepted dependency
+digest. Stack/graph sources with equivalent semantics and identical locked inputs emit
+identical descriptor/kernel fingerprints. Editor layout, comments, timestamps, paths
+and worker completion are not semantic inputs.
+
+Runtime receives the published immutable envelope through the Assets provider, then
+VFX validates payload/kernel/target/provider versions and digests before admission.
+It never parses authoring nodes, invokes cookers/plugins, runs arbitrary particle
+scripts or compiles missing variants. Too-old artifacts recook in authoring hosts;
+newer/incompatible packaged artifacts fail typed loading. Hot reload publishes a new
+generation atomically while active instances retain old artifact/provider/resource
+leases until safe finish/restart and final retirement.
+
 ### Audio Domain Import And Cook Boundary
 
 [ADR-064](../../adr/064-audio-asset-and-cook-boundary.md) is the single

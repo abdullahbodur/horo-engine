@@ -381,6 +381,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [VFX Transparency, Sorting and Pass Placement](../adr/125-vfx-transparency-sorting-and-pass-placement.md):
   semantic particle pass/depth mapping, stable per-view CPU/GPU sorting, additive
   exemption, finite sort ceilings and measured frame-time targets.
+- [VFX Graph Compilation and Runtime Representation Convergence](../adr/126-vfx-graph-compilation-and-runtime-representation-convergence.md):
+  stack/graph authoring convergence on one compiled descriptor, offline-only
+  lowering, deterministic artifacts and explicit payload/kernel compatibility.
 - [Post-Processing And Effects Architecture](./runtime/post-processing-and-effects-architecture.md):
   screen-space effects, HDR post chain, tonemapping, color grading, and
   accessibility pass ordering.
