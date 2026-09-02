@@ -6,6 +6,8 @@ This document defines runtime save authority, coherent snapshot capture, durable
 archives, transactional restore, migration, host isolation and security for
 HORO-1391 #1391 [SAV-001.1]. These are normative implementation requirements; the
 complete save service/archive protocol is not claimed as implemented by this change.
+ADR-112 freezes the portable archive, canonical state, identity and compatibility
+policy for HORO-1410 #1410 [SAV-002.1].
 
 - RuntimeSaveService coordinates one runtime save/restore authority under the
   application/session lifetime. It never retains an unleased reference to a scene
@@ -13,8 +15,9 @@ complete save service/archive protocol is not claimed as implemented by this cha
 - Runtime state is never serialized through SceneDocument or the authoring AST.
 - Capture produces owned immutable data at a Scene lifecycle safe point; workers
   serialize, hash, sign and perform all durable file operations.
-- A save is one final immutable file. Its digest excludes the integrity trailer;
-  signing finishes before the one durable publication, never afterward.
+- A save is one final immutable file. Its `ArchiveContentHash` excludes the
+  integrity trailer; signing finishes before the one durable publication, never
+  afterward.
 - Restore prepares every required participant before a no-fail owner-boundary
   publication. A failed preparation leaves the active runtime unchanged.
 - Signature acceptance is trusted host policy, never a flag chosen by the archive.
@@ -90,6 +93,9 @@ Schematic interface shapes (not new installed headers):
 struct SaveGameSlotId { Uuid value; }; // nonzero opaque identity, never a path
 struct SaveOperationHandle { OperationId value; };
 struct RestoreOperationHandle { OperationId value; };
+struct CanonicalStateHash { Sha256 value; };
+struct ArchiveContentHash { Sha256 value; };
+struct SlotGenerationId { Opaque128 value; }; // nonzero, never time/hash-derived
 
 enum class SaveOperationPhase : uint8_t {
     Queued, CapturingSnapshot, Serializing, FinalizingArchive, WritingTemporary,
@@ -106,7 +112,9 @@ struct SaveOperationSnapshot {
     SaveCommitOutcome commitOutcome;
     float progress;
     OptionalError terminalError;
-    OptionalArchiveRevision archiveRevision;
+    OptionalSlotGenerationId slotGeneration;
+    OptionalCanonicalStateHash canonicalState;
+    OptionalArchiveContentHash archiveContent;
 };
 struct SaveRequest {
     BoundedUtf8 displayName;       // metadata only, never a filename
@@ -219,6 +227,40 @@ Optional thumbnails are omitted on timeout, stale scene or headless execution.
 An explicitly required thumbnail may fail the save after its configured finite
 deadline, without blocking the owner. Late readbacks only retire their own resources.
 
+## Canonical Logical State
+
+Every required participant produces a canonical logical byte stream before entry
+packing, compression, signing or publication metadata. The whole-save canonical
+stream contains the stable project/world/base-scene and base-dataset identities,
+`SaveSchemaVersion`, then participant ID, `ParticipantSchemaVersion` and canonical
+payload tuples sorted by `StableTypeId` bytes. Optional participant presence is part
+of the logical stream when its state participates in restore.
+
+Canonical participant codecs use stable numeric field IDs and schema-defined
+presence/default rules. Integers have explicit widths and signed representation;
+booleans are 0 or 1; enums use declared stable values. Declared IEEE 754 floats are
+encoded explicitly, normalize negative zero to positive zero and reject non-finite
+values unless that schema defines one exact canonical representation. Strings are
+length-delimited validated UTF-8 scalar sequences with no locale or implicit
+normalization. Maps and sets sort by canonical encoded key bytes and reject duplicate
+canonical keys; sequences retain schema-defined semantic order.
+
+Compiler padding, pointer/native-handle values, native enum widths, unordered
+iteration, wall/capture timestamps, play duration, display name, slot/generation,
+entry layout, codec/compression and signature metadata never enter canonical state.
+Changing a canonical rule requires a `SaveSchemaVersion` or owning
+`ParticipantSchemaVersion` change and migration. The identity is:
+
+```text
+CanonicalStateHash = SHA256(
+    ASCII("HoroSave.CanonicalState.v1") || 0x00 || canonicalSaveState)
+```
+
+`CanonicalStateHash` establishes logical equivalence under the same schemas and
+semantic dependencies. It is not a file-integrity value, conflict generation or
+authentication proof. Readers validate it from decoded canonical participant state;
+they do not reconstruct it by reserializing metadata JSON with a local library.
+
 ## Single-File Archive And Integrity Envelope
 
 A durable .horosave is **one regular file**, never a live directory bundle. Payload
@@ -255,8 +297,8 @@ JSON reserialized by the reader.
 
 | Logical payload entry | Content |
 |---|---|
-| header.json | Slot/archive revision, project/world/account scope, baseSceneAsset, timestamps, display name and slot kind |
-| manifest.json | Stable module/chunk IDs, each module schema version, required flags, lengths, codecs and per-chunk SHA-256 |
+| header.json | Logical slot ID, `SlotGenerationId`, optional parent generation, producing `ProductSaveCompatibilityVersion`, project/world/account scope, baseSceneAsset, timestamps, display name and slot kind |
+| manifest.json | `SaveSchemaVersion`, `CanonicalStateHash`, StableTypeId-sorted participant/chunk IDs, each `ParticipantSchemaVersion`, required flags, lengths, codecs and per-chunk SHA-256 |
 | runtime_ecs.bin | Stable authored/spawn identities, dynamic components, tombstones and reference remap records |
 | gameplay module entries | Each registered module's versioned state |
 | slot_player_state.bin | Slot-scoped player state only; no global settings/achievements |
@@ -266,14 +308,14 @@ JSON reserialized by the reader.
 These names describe entry roles, not directories to extract on disk. Header metadata
 has no checksum field; manifest has no archiveSignature field. Manifest per-chunk
 hashes cover raw decoded **data** entries only, not header/manifest themselves.
-The outer digest authenticates all stored metadata and compressed bytes. After
+`ArchiveContentHash` authenticates all stored metadata and compressed bytes. After
 outer verification, bounded decode checks each data entry's raw digest and length.
 Every required entry has exactly one manifest record; unknown required data fails.
 
 The trailer is encoded in this exact order:
 
 ```text
-payloadSha256       32 bytes
+archiveContentHash  32 bytes
 signatureAlgorithm   2 bytes (uint16: 0 None, 1 Ed25519)
 signerKeyId         16 bytes (opaque key ID; all zero only for None)
 signatureByteLength  2 bytes (uint16: 0 or 64)
@@ -290,22 +332,25 @@ Hash/signature inputs are normative (`||` concatenates bytes; each ASCII tag
 includes exactly one terminating zero byte):
 
 ```text
-payloadSha256 = SHA256(
-    ASCII("HoroSave.Payload.v1") || 0x00 || preamble || payload)
+ArchiveContentHash = SHA256(
+    ASCII("HoroSave.ArchiveContent.v1") || 0x00 || preamble || payload)
 
 signatureMessage =
     ASCII("HoroSave.Signature.v1") || 0x00 ||
     uint16LE(signatureAlgorithm) || signerKeyId ||
-    uint16LE(signatureByteLength) || payloadSha256
+    uint16LE(signatureByteLength) || ArchiveContentHash
 
 signature = Ed25519.Sign(trustedHostPrivateKey, signatureMessage)
 ```
 
-This is Ed25519 over the framed message, not Ed25519ph. Neither digest nor signature
-is part of its own input. Choose the signature scheme/length before constructing
-the preamble, hash the final preamble/payload once, then append the complete trailer.
-No header/manifest/archive bytes are patched after durable publication. Changing
-metadata, chunks or compression requires a new digest/signature and a new transaction.
+This is Ed25519 over the framed message, not Ed25519ph. `ArchiveContentHash` is the
+typed identity of the final immutable preamble/payload bytes; the self-referential
+integrity trailer that carries it is excluded. Neither that hash nor the signature
+is part of its own input. Choose the signature scheme/length before constructing the
+preamble, hash the final preamble/payload once, then append the complete trailer. No
+header/manifest/archive bytes are patched after durable publication. Changing slot
+generation, timestamps, metadata, chunks or compression requires a new hash/signature
+and a new transaction, even when `CanonicalStateHash` is unchanged.
 
 ### Trusted Signature Policy
 
@@ -323,16 +368,17 @@ Optional and Required modes. The file cannot choose or weaken it.
 
 The host binds trusted key IDs to project, account/server/world scope and permitted
 algorithm. Public keys/trust roots are not supplied by the archive. Signed headers
-bind these identities and ArchiveRevision; load compares them to the requested
-namespace. Required signing failure or unavailable signer fails the save before
-publication; ordinary clients hold no server private key and cannot invent a local
-unsigned substitute. A trusted asynchronous signer may be injected with bounded
-timeout, but no signing network call blocks the simulation thread.
+bind these identities, the logical slot and `SlotGenerationId`; load compares them
+to the requested namespace. Required signing failure or unavailable signer fails the
+save before publication; ordinary clients hold no server private key and cannot
+invent a local unsigned substitute. A trusted asynchronous signer may be injected
+with bounded timeout, but no signing network call blocks the simulation thread.
 
 No mode stores credentials/private keys in saves. Digests are not authentication;
 a valid signature also does not prevent replay of an old valid save. Titles needing
-anti-rollback require separately trusted revision/anti-replay state, not a timestamp
-inside the attacker-controlled file. The archive is not encrypted by this protocol.
+anti-rollback require separately trusted generation/anti-replay state, not a
+timestamp inside the attacker-controlled file. The archive is not encrypted by this
+protocol.
 
 ## Save Pipeline, Publication And Cancellation
 
@@ -340,11 +386,12 @@ inside the attacker-controlled file. The archive is not encrypted by this protoc
 Admit operation and namespace/slot mutation lease
     -> capture coherent immutable snapshot at owner lifecycle safe point
     -> worker serialize/compress, per-chunk hashes and final payload
-    -> compute outer digest, required/optional signing, append final trailer
+    -> allocate SlotGenerationId and finalize publication metadata
+    -> compute ArchiveContentHash, required/optional signing, append final trailer
     -> write unique sibling temporary file and flush final bytes
     -> enter non-cancellable commit gate
     -> worker AtomicReplace plus required directory/container durability
-    -> publish owner catalog/result and cloud-sync intent for exact archive revision
+    -> publish owner catalog/result and cloud-sync intent for exact slot generation
     -> Completed (local durable success)
 ```
 
@@ -384,9 +431,10 @@ already exposes richer outcomes.
   TooLate; cloud upload failure cannot undo the local save.
 - OutcomeUnknown yields Failed with commitOutcome Unknown, quarantines further slot
   mutation/sync, and retains a recovery diagnostic/transaction record. Reopen/validate
-  the destination under the lease, compare its archive revision/digest with old/new
-  expectations and retry durability where supported. Do not delete a possibly
-  published archive or blindly retry over it. Report old/new/unresolved truthfully.
+  the destination under the lease, compare its `SlotGenerationId` and
+  `ArchiveContentHash` with old/new expectations and retry durability where supported.
+  Do not delete a possibly published archive or blindly retry over it. Report
+  old/new/unresolved truthfully.
   Reconciliation has a separate operation/catalog revision; it does not rewrite the
   original immutable Failed/Unknown result into a retroactive success.
 
@@ -398,9 +446,10 @@ Temporary or migration files are never catalogued as save slots. Cleanup is not 
 from a synchronous EnumerateSaveSlots call. No portable crash guarantee is assumed
 for an unqualified filesystem/platform container.
 
-Cloud registration occurs only for the final validated local archive revision after
-PublishedDurable. It pins that version or revalidates its digest before transfer so
-a concurrent later save cannot be uploaded under an older revision ID. A bounded
+Cloud registration occurs only for the final validated local slot generation after
+PublishedDurable. It pins that generation or revalidates its `ArchiveContentHash`
+before transfer so a concurrent later save cannot be uploaded under an older
+generation. A bounded
 pending-sync record is reconstructed from the catalog on restart if the process dies
 between durable save and registration. Completed means local durability; cloud state
 (Pending/Synced/Failed) is separate and cannot turn local success into false rollback.
@@ -410,10 +459,10 @@ between durable save and registration. Completed means local durability; cloud s
 ### Prepare Without Mutating The Active Runtime
 
 1. Pin a read lease/version of the source archive. Bound/check the framing and outer
-   digest, enforce trusted signature policy, then decode metadata/chunks with all
-   length/hash/schema/identity checks. Verify project/account/world scope and base
-   AssetId/dataset/package dependencies. Browsing unverified headers shows untrusted
-   metadata, not an authenticated playable slot.
+   `ArchiveContentHash`, enforce trusted signature policy, then decode metadata/chunks
+   with all length/hash/schema/identity checks. Verify project/account/world scope and
+   base AssetId/dataset/package dependencies. Browsing unverified headers shows
+   untrusted metadata, not an authenticated playable slot.
 2. Migrate only detached staging data if needed. Workers deserialize ECS records,
    provider state, SlotPlayerState and persistent world deltas into a private
    PreparedRuntimeBundle. Pin provider registry and AssetRegistry revisions/leases.
@@ -526,23 +575,32 @@ peer quiescence/relevance and resynchronization policy are explicit prerequisite
 a server restore; old replication messages are fenced by the new runtime/session
 incarnation. Local cosmetic/client state must not overwrite server gameplay state.
 
-## Archive And Module Versioning
+## Archive, Schema And Product Compatibility
 
-Version axes are independent:
+The four version axes are independent:
 
 | Version | Authority / use |
 |---|---|
-| archiveFormatVersion | Envelope/container codec; preflight framing and archive migration |
-| moduleSchemaVersion | StableTypeId-keyed module payload codec, including ECS and slot player state |
-| base asset/dataset revision | Dependency/delta compatibility; not a module version |
-| engineVersion / projectBuildId | Bounded diagnostic metadata; not schema authority |
+| `ArchiveFormatVersion` | Horo-owned envelope, entry table and trailer codec; framing preflight and archive migration |
+| `SaveSchemaVersion` | Whole-save canonical root, required roles and cross-participant composition |
+| `ParticipantSchemaVersion` | StableTypeId-keyed participant payload codec and independent migration chain, including ECS and slot player state |
+| `ProductSaveCompatibilityVersion` | Product release's declared compatibility matrix/policy epoch; never a codec selector |
 
-SaveGameManifest contains a StableTypeId-sorted list of module entries with explicit
-schemaVersion, required flag and chunk IDs. It is not a string-keyed map of engine
-version aliases. Header metadata contains stable project/baseSceneAsset/slot/archive
-IDs; display names never select codecs or resolve base assets.
+Base asset/dataset revisions are semantic dependency identities, not schemas.
+`engineVersion`, `projectBuildId` and product semantic version are bounded diagnostic
+provenance; none determines readability. A newer engine build is not rejected solely
+by its build string.
 
-The inert SaveMigrationRegistry has two distinct step kinds:
+SaveGameManifest contains `SaveSchemaVersion`, `CanonicalStateHash` and a
+StableTypeId-sorted list of participant entries with explicit
+`ParticipantSchemaVersion`, required flag and chunk IDs. It is not a string-keyed map
+of engine-version aliases. Header metadata contains stable project, base-scene,
+logical-slot and `SlotGenerationId` values. Display names and timestamps never select
+codecs, resolve assets, establish causality or participate in logical-state identity.
+The header also records the producing `ProductSaveCompatibilityVersion` as policy
+provenance, never as a participant codec selector.
+
+The inert SaveMigrationRegistry has three distinct step kinds:
 
 ```cpp
 struct ArchiveMigrationStep {
@@ -550,46 +608,77 @@ struct ArchiveMigrationStep {
     ArchiveFormatVersion to;
     ArchiveMigrationFn migrate;
 };
-struct ModuleMigrationStep {
-    StableTypeId module;
-    ModuleSchemaVersion from;
-    ModuleSchemaVersion to;
-    ModuleMigrationFn migrate;
+struct SaveSchemaMigrationStep {
+    SaveSchemaVersion from;
+    SaveSchemaVersion to;
+    SaveSchemaMigrationFn migrate;
+};
+struct ParticipantMigrationStep {
+    StableTypeId participant;
+    ParticipantSchemaVersion from;
+    ParticipantSchemaVersion to;
+    ParticipantMigrationFn migrate;
 };
 ```
 
-Composition validates unique edges, supported deterministic paths, bounded resource
-costs and declared cross-module dependencies. Registry functions operate only on
-staging readers/writers, never on live ECS, account profiles or source files. Archive
-migration changes container structure; module migration advances only that module's
-schema (e.g. quests 7 -> 8 independently of inventory 2 -> 5). A newer engine build
-is not rejected solely by its build string: unsupported archive/required-module
-versions or missing migration paths determine compatibility. No implicit backward
-schema downgrade is permitted.
+Composition validates unique edges, complete deterministic paths, bounded resource
+costs and declared cross-participant dependencies, then seals a migration-catalog
+identity. Registry functions operate only on staging readers/writers, never on live
+ECS, account profiles or source files. Archive migration changes container structure;
+save-schema migration changes root composition; participant migration advances only
+that participant (for example quests 7 -> 8 independently of inventory 2 -> 5). No
+implicit backward schema downgrade is permitted.
+
+Compatibility preflight proceeds through framing/limits, archive version, outer
+integrity/signature, save schema, required participant set/schema, then semantic
+dependency identities and decoded hashes. Direct load is allowed only when every
+required axis is in the release manifest's inclusive direct-readable range. Migration
+is allowed only when every required axis is in a declared migration-source range and
+the sealed registry has one complete path to current directly readable writer
+versions. Unknown optional participants may be skipped only when no required
+participant depends on them. Missing/unknown required participants reject.
+
+Any newer archive format, save schema, required participant schema or product
+compatibility version outside the declared range fails with a typed unsupported-newer
+result before live mutation. Readers do not best-effort interpret forward input.
 
 Verify the original archive under its trusted signature policy **before** migration.
 Migrate into operation-owned staging and validate the output. For restore, an in-memory
-candidate may use a trusted deterministic migration of an authenticated source;
-that does not make newly serialized bytes carry the old signature. A durable upgraded
-archive always gets new hashes/signature and traverses the same finalize/flush/commit
-pipeline. Required signing without an authorized signer forbids durable replacement;
-it may still permit host-approved in-memory restore migration. Never copy the old
-signature onto changed payload or weaken Required to produce an upgrade.
+candidate may use a trusted deterministic migration of an authenticated source; that
+does not make newly serialized bytes carry the old signature. A durable upgraded
+archive always gets a new `SlotGenerationId`, `ArchiveContentHash`, signature and the
+current writer versions, then traverses the same finalize/flush/commit pipeline.
+`CanonicalStateHash` remains unchanged only if logical state and semantic dependency
+identities remain equivalent. Required signing without an authorized signer forbids
+durable replacement; it may still permit host-approved in-memory restore migration.
+Never copy the old signature onto changed payload or weaken Required for an upgrade.
 
 Original slots remain unchanged unless explicit user confirmation or captured host
-auto-upgrade policy authorizes replacement. Consent binds source archive revision,
-migration plan and destination namespace; revalidate under the slot lease before
-commit so a new save/cloud update is not overwritten by stale consent. Migration
-failure/cancellation only retires its staging. Unique sibling migration temporaries
-are not save slots and follow the same lease-aware cleanup/crash reconciliation.
+auto-upgrade policy authorizes replacement. Consent binds the source
+`SlotGenerationId`, `ArchiveContentHash`, migration plan and destination namespace;
+revalidate them under the slot lease before commit so a new save/cloud update is not
+overwritten by stale consent. Migration failure/cancellation only retires its staging.
+Unique sibling migration temporaries are not save slots and follow the same
+lease-aware cleanup/crash reconciliation.
 
-Legacy proposed checksumSha256/archiveSignature and player_profile.bin layouts have
-no mechanically valid implicit v1 interpretation. A supported older implementation
-needs an explicit versioned reader/migration with bounded verification and policy;
-otherwise reject UnsupportedArchiveVersion. Never guess whether self-referential
+Before product 1.0, each shipped preview declares exact supported ranges and retains
+fixtures for every claimed version; compatibility is not inferred across previews.
+From product 1.0, every stable release migrates saves from at least the previous two
+stable minor release lines and for at least 12 months after each source line's last
+release, whichever is longer. Patch releases cannot narrow ranges or remove migration
+paths. Later removal requires deprecation in two preceding stable minor release lines,
+release notes and a final bridge release. A security-blocked vulnerable decoder may
+shorten this only through an explicit release-manifest exception and typed security
+diagnostic, never a false corrupt-save result.
+
+Legacy proposed `checksumSha256`/`archiveSignature`, generic archive-revision,
+single-`saveFormatVersion` and `player_profile.bin` layouts have no mechanically valid
+implicit v1 interpretation. A supported older implementation needs an explicit
+versioned reader/migration with bounded verification and declared release policy;
+otherwise reject `UnsupportedArchiveVersion`. Never guess whether self-referential
 hashing or signature stripping was intended. Account-global data in an old slot is
-not restored into the account store; any explicit import is a separate user-authorized
-account migration with conflict/merge policy.
+not restored into the account store; any explicit import is a separate
+user-authorized account migration with conflict/merge policy.
 
 ## Storage Namespace And Path Safety
 
@@ -643,9 +732,11 @@ achievement/cloud-account APIs. Account policy may merge monotonic progression, 
 that is never an automatic rewind from slot_player_state.bin.
 
 Cloud adapters receive only final signed/unsigned archives allowed by the namespace
-policy. Conflict detection uses archive revision/content identity; timestamps are
-presentation metadata, not authority to overwrite local data. Conflict UI or headless
-host policy consumes typed local/remote revisions, times and play duration. Optional
+policy. Conflict detection compares `SlotGenerationId` lineage and
+`ArchiveContentHash`; `CanonicalStateHash` may show logical equivalence but cannot win
+a compare-and-swap. Timestamps are presentation metadata, not causality or authority
+to overwrite local data. Conflict UI or headless host policy consumes typed
+local/remote generations, content/state hashes, times and play duration. Optional
 game-specific summaries come from a bounded host presenter; engine code does not
 assume character levels or a Main Menu.
 
@@ -676,7 +767,7 @@ operation outcomes.
 | Capture budget/coherence failure | Defer under bounded policy or Failed; no live ECS freeze |
 | Write/full/signing failure before commit | Failed/NotCommitted; previous archive intact; owned temp eventually retired |
 | AtomicReplace or durability outcome uncertain | Failed/Unknown; reconcile/quarantine slot, no cloud publication or blind retry |
-| Corrupt digest/chunk / missing or invalid required signature | Failed before restore staging/publication |
+| Corrupt archive-content hash/chunk / missing or invalid required signature | Failed before restore staging/publication |
 | Missing asset / incompatible schema / required provider failure | Retire candidate; active runtime preserved |
 | Stale scene/registry/archive before commit | Reject candidate; never publish into a replacement incarnation |
 | Cancellation before commit gate | Cancelled/NotCommitted after owned work reaches safe terminal cleanup |
@@ -704,6 +795,10 @@ documentation change:
 - Byte fixtures for the 32-byte preamble, unsigned/signed trailer lengths, exact hash
   ranges and signature message. Tamper header, lengths, compressed bytes, raw chunks,
   trailer, algorithm/key ID and trailing data; verify no self-reference or post-commit edit.
+- Cross-platform/compiler golden canonical-state vectors, map ordering, negative zero,
+  non-finite policy and proof that timestamps/display/compression/generation do not
+  change `CanonicalStateHash` while covered archive-byte changes do change
+  `ArchiveContentHash`.
 - Required signature stripping, wrong project/account/world, untrusted key, signer
   timeout, malformed inputs, decompression bombs and unsupported schema versions.
 - Snapshot admission versus eventual worker failure, per-operation sticky outcomes,
@@ -715,8 +810,11 @@ documentation change:
   commit and asynchronous retirement under native fence delay.
 - Save/restore unloaded/resident/evicting cells, dropped-item/tombstone/cross-cell cases,
   bounded spill chunks, stale generations and changed base dataset revisions.
-- Independent archive/module migration paths, stale consent and signed migration
-  without signing authority; unchanged source on pre-publication failure.
+- Independent archive/save/participant migration paths, minimum support horizon,
+  current/oldest/one-newer fixtures, stale consent and signed migration without
+  signing authority; unchanged source on pre-publication failure.
+- Repeated equivalent-state publications with distinct `SlotGenerationId` values,
+  replica preservation, parent-generation compare-and-swap and timestamp skew.
 - Slot ID/path attack cases, symlink/reparse races, active-temp cleanup exclusion,
   other-process mutation, named-slot import and signed conflict-copy identity mapping.
 - Busy autosave coalescing, bounded retry exhaustion, rotation only after success,
@@ -745,4 +843,5 @@ and regression coverage.
 - [ADR-010](../../adr/010-job-waiting-and-operation-store-ownership.md): OperationStore and non-blocking work.
 - [ADR-012](../../adr/012-world-streaming-partition-authority-and-subsystem-boundaries.md): Cell authority and barriers.
 - [ADR-008](../../adr/008-error-model-exception-boundary-and-registry.md): Typed error propagation.
+- [ADR-112](../../adr/112-save-archive-container-and-compatibility-policy.md): Portable container, canonical state, version axes, identities and compatibility horizon.
 - [Application Security](../security/application-security.md): Trust and untrusted-input boundaries.
