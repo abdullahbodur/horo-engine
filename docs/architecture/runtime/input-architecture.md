@@ -137,13 +137,25 @@ available only where policy allows it.
 Contexts are pushed and removed through RAII tokens. A destroyed tab, modal,
 tool, or play session cannot leave an active context behind.
 
-[ADR-073](../../adr/073-runtime-ui-ownership-scope-and-update-order.md) adds
-generation-checked `RuntimeUiInputContextId` values per interactive player/
-viewport attachment. In a packaged game, the top eligible runtime UI modal/route
-precedes its associated gameplay context. In editor play, native dialogs, editor
-modals and the focused editor widget/tool precede Runtime UI; the game UI context
-is eligible only when its embedded game viewport owns focus. Runtime UI cannot
-consume editor shortcuts from an unfocused viewport.
+[ADR-078](../../adr/078-runtime-ui-input-context-and-player-routing.md) specializes
+the ADR-073 UI ownership boundary with generation-checked
+`RuntimeUiInputContextId` values. Device, input user, local player, logical viewport
+and UI context remain distinct identities joined by immutable assignment and
+attachment revisions. A context declares one single-player, shared-player, game-
+instance or unassigned-join audience plus a typed viewport policy.
+
+In a packaged game, host-critical dialogs, game-instance modals, player/viewport
+modals and ordinary UI routes precede their associated gameplay context. In editor
+play, native dialogs, editor modals and the focused editor widget/tool precede
+Runtime UI; the game UI context is eligible only when its embedded game viewport
+owns focus. Runtime UI cannot consume editor shortcuts from an unfocused viewport.
+
+Each action transition is consumed at most once and recorded in an immutable
+`InputConsumptionLedger`. Non-exclusive UI blocks only handled transitions;
+Viewport, Player and GameInstance exclusive modals block associated lower contexts
+even when unhandled, except for a finite host-owned safety/global passthrough list.
+Gameplay input frames consume only the ledger-filtered projection for their exact
+player/tick mapping.
 
 Runtime UI pointer/focus routing uses the last successfully presented
 `UiInteractionSnapshot`, not an unpublished layout. Failed/skipped presentation,
@@ -152,6 +164,13 @@ and shutdown neutralize the context and release capture. Split-screen players ke
 independent focus/capture unless an explicit game-instance modal policy blocks
 them. UI actions are typed application/gameplay commands for owner safe points,
 not direct ECS mutations from input handlers.
+
+Device assignment changes publish transactionally, neutralize held input/capture
+under the old owner and start the new owner from an explicit neutral snapshot.
+Per-player/context modality (`KeyboardMouse`, `Gamepad`, `Touch`, `Pen`,
+`Accessibility`, `Unknown`) changes only from routing-eligible meaningful evidence
+after deadzone/noise filtering. Modality drives presentation/glyphs but never
+reassigns a device or grants routing priority.
 
 ## Focus And Capture
 

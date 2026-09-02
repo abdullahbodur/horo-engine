@@ -202,6 +202,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Runtime UI Animation Clock and Time Domain](../adr/077-runtime-ui-animation-clock-and-time-domain.md):
   simulation, unscaled, transition, preview, test and manual clocks; pause/rate,
   lifecycle, cancellation, reduced motion, deterministic advance, and shutdown.
+- [Runtime UI Input Context and Player Routing](../adr/078-runtime-ui-input-context-and-player-routing.md):
+  device/user/player/viewport separation, UI/gameplay priority, modal exclusivity,
+  consumption, assignment, focus/capture, modality, and editor-play routing.
 - [Networking Architecture](./runtime/networking-architecture.md): optional
   handle-based transports, session/authentication runtime, bounded I/O, and
   remote security.
