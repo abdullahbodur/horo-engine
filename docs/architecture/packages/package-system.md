@@ -608,6 +608,22 @@ Validation checks:
 - size limits are respected
 - signatures and hashes verify
 
+### Audio Middleware Packages
+
+[ADR-072](../../adr/072-audio-middleware-integration-model.md) governs middleware
+package activation. An integration package declares one exact event-bridge or
+backend-replacement capability plus adapter/SDK/runtime versions, native modules,
+platform variants, cooked banks and bindings, limits, permissions, license files
+and redistribution facts. Package discovery and trust do not make that contribution
+an active Audio backend.
+
+Audio preflights the adapter, complete binding manifest, all required banks,
+effective capabilities and budgets as one private candidate. Any missing version,
+bank, mapping, target, trust, permission, license fact or dependency rolls back the
+candidate. Runtime never scans vendor directories or loads whichever banks happen
+to be present, and package disable/update cannot unload code or banks while Audio
+event, callback, tail, queue or profiler leases survive.
+
 ## Service Boundaries
 
 | Service | Responsibility |
