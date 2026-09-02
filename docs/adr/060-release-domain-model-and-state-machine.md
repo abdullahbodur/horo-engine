@@ -38,6 +38,7 @@ The domain uses distinct bounded identities:
 
 ```cpp
 struct ReleaseJobId;
+struct ReleaseGroupId;
 struct ReleaseTargetId;
 struct ReleaseStageAttemptId;
 struct ReleaseCandidateId;
@@ -79,10 +80,35 @@ struct ReleaseRequest {
     ReleaseDiagnosticsOptions diagnostics;
 };
 
+enum class ReleaseGroupRequirement {
+    Required,
+    Optional,
+};
+
+struct ReleaseGroupMemberRequest {
+    ReleaseRequest request;
+    ReleaseGroupRequirement requirement;
+};
+
+struct ReleaseGroupRequest {
+    std::vector<ReleaseGroupMemberRequest> members;
+};
+
+struct ReleaseGroupMembership {
+    ReleaseGroupId group;
+    ReleaseGroupRequirement requirement;
+};
+
 struct ReleaseSubmission {
     ReleaseJobId job;
     OperationId operation;
+    std::optional<ReleaseGroupMembership> group;
     ReleaseSnapshotRevision initialRevision;
+};
+
+struct ReleaseGroupSubmission {
+    ReleaseGroupId group;
+    std::vector<ReleaseSubmission> jobs;
 };
 ```
 
@@ -94,8 +120,14 @@ input freeze are owned by
 
 `ReleaseService::Submit` validates bounded request shape, allocates the job and
 operation records, publishes the initial snapshot, and then admits execution. A
-returned `ReleaseSubmission` is a value handle for queries and cancellation; its
-destruction does not cancel or release the job.
+standalone submission has no group membership. `ReleaseService::SubmitGroup`
+validates a bounded non-empty member set, allocates one service-owned
+`ReleaseGroupId`, and atomically creates every independent job with immutable
+required/optional membership. An adapter never invents a group ID or reconstructs
+membership from target labels, request order, timestamps or paths.
+
+A returned `ReleaseSubmission` or `ReleaseGroupSubmission` is a value handle for
+queries and cancellation; its destruction does not cancel or release any job.
 
 ### 3. Job state and stage state are separate
 
@@ -113,9 +145,11 @@ enum class ReleaseJobState {
 ```
 
 One `ReleaseJobId` executes exactly one frozen `ReleaseTargetId`. A target matrix
-submission produces independent jobs and returns one `ReleaseSubmission` per
-matrix cell. Matrix summaries are derived from those job snapshots; they do not
-replace, merge or rewrite per-target terminal results.
+submission produces one group plus independent jobs, each with immutable
+required/optional membership. Matrix summaries query by `ReleaseGroupId` and are
+derived from the complete membership set and job snapshots; they do not replace,
+merge or rewrite per-target terminal results. Adapters cannot aggregate arbitrary
+jobs or omit a required member.
 
 Pipeline work uses a separate ordered stage model:
 
@@ -155,17 +189,19 @@ Job state accepts only:
 
 | From | Legal next states |
 | --- | --- |
-| `Queued` | `Running`, `Cancelling`, `Failed` |
+| `Queued` | `Running`, `Cancelled`, `Failed` |
 | `Running` | `Cancelling`, `Succeeded`, `Failed` |
 | `Cancelling` | `Cancelled`, `Failed` |
 | `Succeeded` | none |
 | `Failed` | none |
 | `Cancelled` | none |
 
-A queued job cancelled before start transitions through `Cancelling` so
-cancellation intent and acknowledgement remain observable. A start/admission
-failure may transition directly from `Queued` to `Failed` with no fabricated
-running stage.
+A queued job whose worker admission has not committed may transition directly to
+`Cancelled`, atomically storing its cancellation result; it owns no pipeline
+resource that requires asynchronous cleanup. If admission wins the serialized
+race, the job is `Running` and cancellation must proceed through `Cancelling`
+until cleanup acknowledges cancellation or fails. A start/admission failure may
+transition directly from `Queued` to `Failed` with no fabricated running stage.
 
 Stage attempts accept only:
 
@@ -249,6 +285,7 @@ path or delete candidate bytes when an observer disappears.
 struct ReleaseJobSnapshot {
     ReleaseJobId id;
     OperationId operation;
+    std::optional<ReleaseGroupMembership> group;
     ReleaseSnapshotRevision revision;
     ReleaseJobState state;
     ReleaseRequestSummary request;
@@ -263,6 +300,11 @@ Every successful mutation increments a job-local monotonic revision. Querying by
 job ID returns one internally consistent snapshot; observers never assemble state
 from independent mutable fields. Collections and diagnostic summaries have fixed
 service limits and deterministic ordering.
+
+Querying a `ReleaseGroupId` returns its immutable complete membership plus the
+latest snapshot for every member in canonical target-ID order. Group success is a
+pure derived result: every required member succeeded and no required member is
+missing; optional failures remain visible but do not rewrite any job result.
 
 Submission, active, recent and retained terminal queries all use the same domain
 snapshot. Retention/archival may remove a completed snapshot only under explicit
@@ -332,7 +374,8 @@ The domain/state-store contract suite covers at least:
 - success, stage failure, pre-stage failure, cancellation and cleanup failure;
 - cancel/completion, failure/cancel and shutdown/completion races under controlled
   scheduling;
-- mixed independent target-job results and required-matrix aggregation;
+- formal group identity/membership, mixed independent target-job results and
+  required/optional matrix aggregation;
 - result preservation of target, stage, attempt, error and diagnostic identities;
 - candidate finalized, final-verified, verification-failed and publication-failed
   outcomes;
@@ -390,5 +433,5 @@ REL-001 tickets.
 | Treat progress events as authoritative state | Event loss, coalescing and subscriber timing would create inconsistent results. |
 | Use one string status/result map | Cannot enforce legal transitions, terminal invariants or stable failure identity. |
 | Overwrite a stage result on retry | Destroys evidence and makes diagnostics/artifacts unattributable to the attempt that produced them. |
-| Make cancellation immediately terminal | Resources and child work may still be active; `Cancelling` must remain observable until cleanup or failure commits. |
+| Make running-job cancellation immediately terminal | Resources and child work may still be active; `Cancelling` must remain observable until cleanup or failure commits. Queued jobs not yet admitted may commit `Cancelled` directly. |
 | Delete a candidate when publication fails | Publication is separate from immutable candidate construction; retry must not rebuild verified bytes. |

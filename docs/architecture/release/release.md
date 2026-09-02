@@ -141,8 +141,7 @@ Queued -> Running -> Succeeded
    |         |   -> Failed
    |         -> Cancelling -> Cancelled
    |                         -> Failed
-   -> Cancelling -> Cancelled
-                  -> Failed
+   -> Cancelled
    -> Failed
 ```
 
@@ -165,7 +164,9 @@ Each stage is a distinct attempt with `NotStarted`, `Running`, `Succeeded`,
 `Failed`, `Cancelled`, or preplanned `NotApplicable` state. An attempt never
 rewrites a previous attempt, and the job terminal result commits exactly once.
 `Cancelling` remains non-terminal until cleanup acknowledges cancellation or
-reports failure.
+reports failure. A queued job not yet admitted to a worker owns no pipeline
+resources and may atomically commit `Cancelled`; an admission/cancel race is
+serialized by the release service.
 
 Stage contracts:
 
@@ -223,9 +224,11 @@ Local GUI and CLI invocations may execute one or more jobs, but each job remains
 independent and validates its own toolchain. Cross-compilation is allowed only
 when an explicit compatible toolchain profile is configured.
 
-CI creates a matrix of independent release jobs and aggregates their verified
-outputs. A failed target cannot be represented as a successful multi-platform
-release.
+CI creates a service-owned `ReleaseGroupId` with immutable required/optional
+membership for a matrix of independent release jobs and aggregates their verified
+outputs by that identity. Adapters never infer a matrix from labels, timestamps,
+paths or request order. A failed required target cannot be represented as a
+successful multi-platform release.
 
 ## Output Layout
 
