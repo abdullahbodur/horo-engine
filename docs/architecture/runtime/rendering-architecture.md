@@ -1081,6 +1081,14 @@ state. A policy that needs presented snapped hit geometry returns it as a new
 generation-correlated interaction revision; the backend never patches the logical
 snapshot or becomes layout authority.
 
+[ADR-075](../../adr/075-runtime-ui-font-asset-family-and-fallback.md) keeps font
+family/face matching, fallback order, coverage and logical metrics in Runtime UI.
+Immutable positioned text runs name Horo `FontFaceInstanceId` and glyph identities.
+Renderer may own rasterization strategy, atlas residency, upload and deferred GPU
+retirement, but atlas miss/eviction/backend replacement cannot choose another face,
+change metrics or line breaking, or expose parser/rasterizer/native font handles in
+the UI snapshot.
+
 World-space canvases project as ordinary view-dependent render instances under
 declared depth/visibility policy. Screen-space canvases are frontend-owned passes
 composed after world/display transform unless an explicit render plan declares an
