@@ -154,6 +154,22 @@ input snapshot:
 Generation nodes do not create scene objects as an evaluation side effect. Partial,
 failed, cancelled, stale or over-budget evaluations publish no external state.
 
+### Generated Output Ownership
+
+[ADR-153](../../adr/153-pcg-pure-evaluation-commit-and-generated-output-ownership.md)
+is the normative owner of candidate provenance, target preparation, aggregate commit,
+regeneration, cleanup and ownership transfer. Every output belongs to a stable
+generated-set lineage and per-object identity. RuntimeScene, Terrain/Foliage, Physics,
+Navigation, Render or the applicable gameplay owner stores exact provenance beside its
+committed state and remains authoritative for current existence/ownership.
+
+Regeneration computes create/update/retain/retire/conflict operations against one exact
+prior ownership generation, prepares new state beside old state and commits atomically.
+Cleanup names the exact lineage, set revision, scope, layer and ownership generation;
+it never scans by graph ID, display name, tag, folder, hierarchy, component shape or
+spatial bounds. Hand-authored, explicitly adopted and differently owned content cannot
+be removed by stale PCG cleanup.
+
 ```cpp
 struct PCGExecutionContext {
     PCGGraphId             graphId;
@@ -278,6 +294,7 @@ intermediate, output and target-preparation costs are reserved before admission.
 - [PCG Ownership, Authority, Tier and Lifecycle](../../adr/151-pcg-ownership-authority-tier-and-lifecycle.md)
 - [PCG Graph Source, Cooked Plan, Cache and Runtime Ownership](../../adr/150-pcg-graph-source-cooked-plan-cache-and-runtime-ownership.md)
 - [PCG Spatial Input Snapshot and Node-Library Ownership](../../adr/152-pcg-spatial-input-snapshot-and-node-library-ownership.md)
+- [PCG Pure Evaluation, Commit and Generated-Output Ownership](../../adr/153-pcg-pure-evaluation-commit-and-generated-output-ownership.md)
 - [PCG Graph Editor UI Reference](./pcg-graph-editor.html)
 
 - [Scene Runtime](./scene-runtime.md): generated objects as entities

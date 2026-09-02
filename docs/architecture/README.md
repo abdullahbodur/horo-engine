@@ -465,6 +465,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [PCG Spatial Input Snapshot and Node-Library Ownership](../adr/152-pcg-spatial-input-snapshot-and-node-library-ownership.md):
   coherent immutable provider capture, stale-result fencing, canonical spatial queries,
   core-node semantics and trusted catalog extensions.
+- [PCG Pure Evaluation, Commit and Generated-Output Ownership](../adr/153-pcg-pure-evaluation-commit-and-generated-output-ownership.md):
+  immutable generation candidates, target-owner aggregate commit, exact provenance,
+  atomic regeneration and cleanup that preserves hand-authored/adopted content.
 - [Multiplayer Replication Architecture](./runtime/multiplayer-replication-architecture.md):
   replication roles, property deltas, RPCs, prediction, interest management,
   dedicated servers, and security.
