@@ -257,6 +257,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Protocol, Session and Trust Policy](../adr/098-protocol-session-and-trust-policy.md):
   transport-to-session admission gate, compatibility, exposure-specific peer
   trust, bounded credential verification and active-session publication.
+- [Replication Ownership, Authority and Compatibility](../adr/099-replication-ownership-authority-and-compatibility.md):
+  explicit world roles, stable schema/FieldId identity, owner-safe capture/apply,
+  compatibility, object generations and prohibited ambient replication.
 - [Asset Pipeline](./runtime/asset-pipeline.md): import, cook, package, runtime
   loading, cache, and hot reload.
 - [Prefab Architecture](./runtime/prefab-architecture.md): dual-role authoring
