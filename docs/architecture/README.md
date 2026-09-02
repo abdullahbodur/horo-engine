@@ -354,6 +354,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Cinematic Sequencer Architecture](./runtime/cinematic-sequencer-architecture.md):
   timeline, tracks, clock authority, typed property bindings, evaluation phase,
   and playback integration.
+- [Playback Ownership, Frame Order and Determinism](../adr/117-playback-ownership-frame-order-and-determinism.md):
+  runtime-service player lifetime, stable activation identity, immutable evaluation
+  batches, replay/headless evidence and random-access seek.
 - [Post-Processing And Effects Architecture](./runtime/post-processing-and-effects-architecture.md):
   screen-space effects, HDR post chain, tonemapping, color grading, and
   accessibility pass ordering.
