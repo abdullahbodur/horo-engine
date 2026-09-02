@@ -24,7 +24,7 @@ Early documentation drafts introduced two architectural defects that require rat
 
 ## Decision
 
-**AI simulation is strictly decoupled from graphics backends and executes six mutation phases inside each fixed simulation tick (`PerceptionSensePoll -> BlackboardSync -> AiDecisionEvaluate -> NavIntentCommit -> CharacterControllerLocomotion -> AnimationRigUpdate`). After the tick commits, a variable-rate `RenderExtraction` presentation bridge consumes immutable snapshots. In networked topologies, dedicated servers retain exclusive authority over AI decisions, perception, and blackboards, while clients receive replicated transforms and animation targets for presentation-only interpolation. AI simulation budgets are governed exclusively by typed `GameplayAiProfile` specifications based on available CPU worker threads and memory constraints.**
+**AI simulation is strictly decoupled from graphics backends. Its four intent phases (`PerceptionSensePoll -> BlackboardSync -> AiDecisionEvaluate -> NavIntentCommit`) feed the common fixed-tick locomotion order (`AnimationPrePhysics -> CharacterControllerLocomotion -> PhysicsStep -> CharacterFinalize -> AnimationPostPhysics`). After tick commit, variable-rate `RenderExtraction` consumes immutable snapshots. In networked topologies, dedicated servers retain exclusive authority over AI decisions, perception and blackboards, while clients receive replicated transforms and animation targets for presentation-only interpolation. AI budgets are governed exclusively by typed `GameplayAiProfile` CPU/memory specifications.**
 
 ### 1. Simulation Tick Phase Order
 
@@ -43,11 +43,20 @@ Fixed-tick AI simulation executes in a strict, deterministic sequence within the
 4. NavIntentCommit
      | (pathfinding queries, steering & avoidance velocity)
      v
-5. CharacterControllerLocomotion (Physics Integration)
-     | (resolved world transforms & velocities)
+5. AnimationPrePhysics
+     | (candidate pose, simulation IK & exact tick root motion)
      v
-6. AnimationRigUpdate
-     | (skeletal pose evaluation)
+6. CharacterControllerLocomotion
+     | (platform carry, bounded query movement & staged Physics commands)
+     v
+7. PhysicsStep
+     | (rigid-body/contact/platform results)
+     v
+8. CharacterFinalize
+     | (support, attachment & authoritative collision-root transform)
+     v
+9. AnimationPostPhysics
+     | (typed pose overrides & final candidate pose)
      v
 Presentation bridge (variable-rate): RenderExtraction
      | (immutable presentation snapshot)
@@ -62,8 +71,11 @@ ownership, input/output contracts, and invariants:
 | Fixed phase 2 — `BlackboardSync` | Ingests staged stimuli, applies memory decay, updates target references, adjusts alert levels, and synchronizes external gameplay events into agent knowledge. | Staged `PerceivedStimulus` buffers, agent configuration | Updated `AIBlackboard` state | Agent blackboard mutation is isolated to this phase; prevents mid-decision race conditions. |
 | Fixed phase 3 — `AiDecisionEvaluate` | Evaluates behavior trees, state machines, or utility AI against current blackboard state under ADR-025. | `AIBlackboard`, agent behavior definitions | High-level movement intent, combat actions, state transitions | Pure decision logic. Does not directly mutate physics bodies, move collision capsules, or perform rendering calls. |
 | Fixed phase 4 — `NavIntentCommit` | Dispatches pathfinding requests, evaluates path-following waypoints, resolves local dynamic obstacle avoidance (RVO/crowd), and computes kinematic movement vectors. | Movement intent, NavMesh spatial queries, dynamic obstacles | Kinematic velocity & direction vectors for character controllers | Submits steering commands to the character locomotion layer; does not step physics simulation directly. |
-| Fixed phase 5 — `CharacterControllerLocomotion` | Executes kinematic character controller updates within the physics tick. Resolves terrain contact, collisions, stepping, and slope limits. | Kinematic velocity vectors, physics collision geometry | Committed world transforms, contact normals, linear/angular velocities | Physics collision and transform updates become authoritative for the current simulation tick. |
-| Fixed phase 6 — `AnimationRigUpdate` | Evaluates skeletal animation blend trees, locomotion state machines, and procedural IK based on committed locomotion velocity and action states. | Committed transforms, locomotion velocities, action state tags | Final bone pose transforms and animation curves | Operates on committed simulation output. Does not feed back into physics locomotion within the same tick. |
+| Common phase 5 — `AnimationPrePhysics` | Evaluates authoritative animation graphs, simulation-affecting IK and exact-tick root motion from staged AI/gameplay parameters. | Action/locomotion intent, committed animation state, fixed delta | Candidate pose, events and one root-motion request | Runs once per attempted fixed tick under ADR-061; presentation sampling never feeds locomotion. |
+| Common phase 6 — `CharacterControllerLocomotion` | Applies platform evidence and resolves Nav/Gameplay intent plus root motion with the bounded Horo query controller. | Movement/facing command, root motion, immutable Physics query/support snapshot | Candidate collision root, contacts and staged Physics commands | ADR-089 owns movement/orientation composition. It stages rather than commits transforms and never steps Physics directly. |
+| Common phase 7 — `PhysicsStep` | Applies staged platform/Character commands and advances rigid-body simulation once. | Candidate Character/kinematic commands, fixed Physics world | Body/contact/platform and pose-override results | One fixed quantum; Character does not move a second time after this step. |
+| Common phase 8 — `CharacterFinalize` | Finalizes support/platform attachment, bounded Character events and authoritative collision-root transform. | Candidate Character movement plus Physics step results | Final Character state/transform for tick commit | Updates next-tick platform evidence only; no post-Physics movement sweep. |
+| Common phase 9 — `AnimationPostPhysics` | Applies typed Physics pose overrides and finalizes the candidate skeletal pose. | Candidate pose, committed Character root, Physics overrides | Final bone pose transforms and animation curves | Does not feed back into same-tick Character/Physics movement. All common state publishes atomically at tick commit. |
 | Variable-rate bridge — `RenderExtraction` | Extracts immutable presentation snapshots of interpolated transforms and bone matrices for presentation rendering. | Previous and current committed simulation poses, interpolation $\alpha$ | Immutable `RenderSceneSnapshot` | Not a fixed-tick phase. Read-only and completely decoupled from fixed-tick mutation. |
 
 ### 2. Network Authority And Host Roles
@@ -76,14 +88,16 @@ AI execution and knowledge ownership vary strictly by host role:
   - Authoritative BlackboardSync (PRIVATE)
   - Authoritative AiDecisionEvaluate (PRIVATE)
   - Authoritative NavIntentCommit & Avoidance
+  - Authoritative AnimationPrePhysics root-motion/IK when configured
   - Authoritative CharacterControllerLocomotion
+  - Authoritative PhysicsStep, CharacterFinalize & AnimationPostPhysics
          |
          | (Replicated Transforms, Velocity, Public Action Tags)
          v [ Network Transport ]
 [ Remote Client ]
   - Presentation-only state receipt
   - Transform Interpolation (alpha)
-  - Client AnimationRigUpdate (visual blending)
+  - Client presentation Animation sampling/blending
   - RenderExtraction -> Viewport Presentation
   (NO perception queries, NO blackboard, NO decision evaluation)
 ```
@@ -91,17 +105,17 @@ AI execution and knowledge ownership vary strictly by host role:
 #### Host Roles
 
 - **Standalone Host (Single-Player / Local Preview)**:
-  - Executes all six fixed-tick phases locally, followed by the variable-rate `RenderExtraction` bridge in the same process.
+  - Executes all four AI intent phases and all five common authoritative locomotion phases locally, followed by the variable-rate `RenderExtraction` bridge in the same process.
   - The local simulation is the single authority for both gameplay decisions and presentation.
 - **Dedicated Server Host (Headless Server-Authoritative Multiplayer)**:
-  - Executes phases 1 through 5 (`PerceptionSensePoll` through `CharacterControllerLocomotion`) as the sole authoritative simulation owner.
+  - Executes phases 1 through 9 as the sole authoritative simulation owner; authoritative Animation stages remain required when root motion, simulation IK, hitboxes or pose-driven Physics participate.
   - Generates network replication snapshots containing public agent state: `NetworkId`, committed `Transform`, linear/angular velocity, active public animation state tags, and gameplay health.
-  - Headless dedicated servers omit fixed phase 6 and the presentation bridge, except that skeletal LOD may run when authoritative hitboxes require it.
+  - Headless dedicated servers omit only the presentation bridge and purely visual pose work.
   - Dedicated servers operate identically regardless of whether `NullRenderer` or a mock device is attached.
 - **Client Host (Connected Multiplayer Client)**:
   - Acts strictly as a presentation-only consumer for server-replicated AI agents.
   - Receives replicated network snapshots and applies buffer interpolation over network jitter buffers.
-  - Executes client-side `AnimationRigUpdate` and the variable-rate `RenderExtraction` bridge for visual presentation; neither grants authority over server-owned AI.
+  - Executes presentation-only Animation sampling/blending and the variable-rate `RenderExtraction` bridge; neither grants authority over server-owned AI.
   - **Forbidden on Client**: Clients NEVER execute `PerceptionSensePoll`, `BlackboardSync`, `AiDecisionEvaluate`, or `NavIntentCommit` for server-owned AI agents. Clients never invent authoritative movement or state transitions for AI.
 
 #### Privacy and Security Boundary

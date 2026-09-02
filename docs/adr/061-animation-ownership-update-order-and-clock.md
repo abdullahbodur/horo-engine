@@ -7,7 +7,7 @@
 - **Issue**: [ANI-001.1](https://github.com/abdullahbodur/horo-engine/issues/454)
 - **Jira**: [HORO-454](https://horo-engine.atlassian.net/browse/HORO-454)
 - **Parent**: [ANI-001](https://github.com/abdullahbodur/horo-engine/issues/447)
-- **Related**: [ADR-014](014-sequencer-ownership-clock-authority-and-binding-boundary.md), [ADR-077](077-runtime-ui-animation-clock-and-time-domain.md)
+- **Related**: [ADR-014](014-sequencer-ownership-clock-authority-and-binding-boundary.md), [ADR-077](077-runtime-ui-animation-clock-and-time-domain.md), [ADR-089](089-character-controller-ownership-implementation-and-update-order.md)
 - **Normative documents**: [Animation Architecture](../architecture/runtime/animation-architecture.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md), [Character Controller Architecture](../architecture/runtime/character-controller-architecture.md)
 
 ## Context
@@ -51,7 +51,7 @@ pose owner.
 | Graph instance, player cursors, transition/event state, and pose working memory | Animation runtime | One scene/runtime generation; mutation only through admitted animation stages |
 | Mutable local/model pose buffers and palette preparation | Animation runtime | Never shared for external mutation; allocated from bounded instance/frame storage |
 | Gameplay parameters and movement intent | Gameplay owner | Typed per-tick snapshot committed before animation evaluation |
-| Character transform and collision result | Character controller / physics owner | Root motion is a request; animation never writes the authoritative transform |
+| Character collision-root transform and movement result | Scene-owned Horo `CharacterWorld` | Physics supplies query/platform evidence; root motion is a request and Animation never writes the authoritative root |
 | Ragdoll/body transforms | Physics runtime | Published as a typed post-physics override; physics never writes animation storage |
 | Render pose and joint palette view | Render extraction snapshot | Immutable, frame-owned projection of committed pose state |
 | Timeline preview pose | Editor preview runtime | Separate instance/storage; cannot mutate play/runtime animation state |
@@ -165,20 +165,24 @@ The authoritative non-AI path is a validated dependency order inside the existin
 ```text
 Apply queued owner-thread commands before FixedUpdate
 For each attempted fixed tick:
-  1. Input/gameplay/cinematic owners stage animation parameters and movement intent
+  1. Input/gameplay/AI/Nav/cinematic owners stage animation parameters, movement
+     intent, desired heading, stance/jump, and kinematic-platform targets
   2. Animation pre-physics evaluation stages graph state, pose, eligible IK,
      events, and the exact directed root-motion delta
-  3. Character controller admits desired movement plus root-motion request,
-     resolves collision, and publishes the kinematic transform
-  4. Physics steps once at the fixed quantum
-  5. Physics publishes body transforms and typed pose-override results
-  6. Animation post-physics composition applies admitted overrides and finalizes
+  3. Physics freezes the exact Character query/support/platform-motion evidence
+  4. Character applies platform carry, admits desired movement plus root motion,
+     resolves collision, and stages its collision-root transform/Physics commands
+  5. Physics applies staged commands and steps once at the fixed quantum
+  6. Physics publishes body/contact/platform and typed pose-override results
+  7. Character finalizes support/attachment state and its authoritative transform;
+     it does not perform a second movement pass
+  8. Animation post-physics composition applies admitted overrides and finalizes
      the candidate committed pose
-  7. Tick commit publishes animation instance state, previous/current pose
-     generations, and bounded event occurrences atomically
+  9. Tick commit publishes Physics, Character/transforms, animation instance state,
+     previous/current pose generations, and bounded events atomically
 After all catch-up ticks:
-  8. Presentation interpolation/overlays build an immutable render pose
-  9. Render extraction consumes that pose and its joint palette
+  10. Presentation interpolation/overlays build an immutable render pose
+  11. Render extraction consumes that pose and its joint palette
 ```
 
 Simulation-affecting IK that contributes to hit shapes or movement belongs in
@@ -207,6 +211,13 @@ and the resulting kinematic transform. Ignoring or clipping root motion does not
 rewind the animation cursor. The resolution may be observed on the next tick to
 adjust locomotion state, but animation cannot resample the same interval after
 physics merely to force visual distance to match.
+
+[ADR-089](089-character-controller-ownership-implementation-and-update-order.md)
+defines the exact translation modes and heading composition. There is no render-
+frame accumulator: zero attempted ticks produce no request, catch-up produces one
+distinct request per tick, and a failed tick discards the request with the staged
+animation/controller state. Root pitch/roll remains visual; only the admitted twist
+about Character's owned up basis can affect collision heading.
 
 One `(scene, animation instance, simulation tick, root-motion generation)` request
 can be consumed at most once. A stale, duplicate, preview, presentation, or

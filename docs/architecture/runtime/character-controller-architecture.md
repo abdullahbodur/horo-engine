@@ -48,6 +48,32 @@ Not covered:
 - Surface materials drive friction, footstep audio, VFX, and gameplay events.
 - Root motion from animation may feed into the controller as a delta request,
   but the controller decides the final transform.
+- [ADR-089](../../adr/089-character-controller-ownership-implementation-and-update-order.md)
+  makes Horo's bounded query/sweep pipeline the semantic implementation. Private
+  Jolt narrowphase queries supply collision evidence; no native Character class or
+  replaceable backend ABI owns public behavior.
+- Each active scene generation owns one `CharacterWorld` paired with its exact
+  Physics world/filter/origin generations.
+- Character updates exactly once per attempted fixed tick and publishes the
+  collision-root transform only with successful tick commit.
+
+## Implementation And Ownership
+
+The first `Horo::Character` implementation lives behind `HoroEngine::Physics`.
+`CharacterWorld` owns controller slots/state, tick command admission, support
+attachments, fixed-capacity query/contact/impulse/event scratch and immutable debug
+snapshots for one scene generation. The host publishes it with the exact Physics
+world in ADR-087's aggregate scene transaction.
+
+The Horo algorithm performs bounded overlap recovery, support classification,
+platform carry, capsule sweep/slide, guarded step-up/forward/down, vertical motion,
+ground snap and contact canonicalization. It borrows one read-only world/tick-
+affine `CharacterPhysicsQueryContext`; the private adapter maps Horo queries and
+staged impulses to Jolt. It never mutates bodies from a native collector.
+
+`JPH::Character` and `JPH::CharacterVirtual` are not state or behavior authorities.
+There is no public backend selector. Replacing the private Physics query adapter
+must pass the same Horo golden, determinism and performance qualification.
 
 ## Character Controller Component
 
@@ -64,26 +90,45 @@ struct CharacterControllerDescriptor {
 };
 ```
 
-The component attaches to a scene object. The transform component owns position
-and orientation. The controller reads and writes the transform each frame.
+The component attaches to a scene object. While active, `CharacterWorld` owns the
+authoritative collision-root position, capsule up basis and heading. Scene Transform
+is the committed projection; arbitrary systems do not write it. Gameplay owns
+desired heading, Animation owns root-motion rotation/visual pose and Physics owns
+platform motion evidence under ADR-089.
 
 ## Update Order
 
 ```text
 Attempted Fixed Tick
-  Gameplay stages desired movement and animation parameters
-  Animation evaluates and stages the exact tick's root motion request
-  Character controller resolves movement
-  Character transform and moving-platform result are published
-  Physics steps once
-  Post-physics animation pose override/finalization runs
-  Tick commit publishes previous/current state
+  Gameplay/AI/Nav stage movement, facing, animation parameters and platform targets
+  Animation evaluates and stages the exact tick's root-motion request
+  Physics freezes the Character query/platform-motion snapshot
+  Character applies platform carry and resolves intent/root motion with Horo sweeps
+  Physics applies staged commands and steps once
+  Physics publishes rigid-body/contact/platform results
+  Character finalizes support and the authoritative collision-root transform
+  Post-Physics animation pose override/finalization runs
+  Tick commit publishes Physics, Character, transforms, poses and events atomically
 ```
 
-The controller runs once after animation root motion is staged and before each
-physics fixed step. Catch-up repeats the complete sequence; it does not reuse one
-render-frame root delta. This ensures gameplay-driven movement is resolved into a
-final transform before physics reacts during the same attempted tick.
+The controller moves once after animation root motion/query evidence is staged and
+before each Physics fixed step. Post-Physics Character work finalizes support and
+publication only; it never performs a hidden second move. Catch-up repeats the
+complete sequence and never reuses or accumulates a render-frame root delta.
+
+## Collision And Visual Orientation
+
+`CharacterWorld` owns a finite unit capsule up basis and collision heading twist.
+Gameplay owns optional absolute desired heading. Animation owns local root-motion
+rotation and visual pose. Physics owns platform angular evidence. Presentation owns
+visual lean/aim overlays.
+
+Character applies optional platform twist about its up basis, then an explicit
+Gameplay desired heading, then admitted root-motion twist. Root `Override` ignores
+Gameplay desired heading for that tick and applies root twist to the carried
+heading. Root translation uses the pre-root heading. Platform tilt and root/visual
+pitch or roll never rotate the capsule; changing the up basis is a typed safe-point
+command with clearance validation.
 
 ## Movement Resolution
 
@@ -91,13 +136,17 @@ final transform before physics reacts during the same attempted tick.
 
 ```cpp
 struct MovementRequest {
+    SimulationTick tick;
     Vec3 desiredVelocity;       // world-space, meters/second
     Quat desiredOrientation;
     bool jumpRequested;
     bool crouchRequested;
-    FixedDeltaTime deltaTime;
 };
 ```
+
+The controller consumes `FixedStepContext::fixedDelta`; callers cannot provide a
+different delta. Desired translation/facing use explicit presence and root-motion
+composition modes, not zero-vector/epsilon inference.
 
 ### Output
 
@@ -118,9 +167,12 @@ struct MovementResult {
     SurfaceMaterialId groundSurface;  // never invalid; falls back to defaultMaterial
     Vec3 groundNormal;
     bool hitCeiling;
-    std::vector<SurfaceContact> contacts;
+    BoundedContactView contacts;
 };
 ```
+
+The view borrows one immutable tick-result generation owned by `CharacterWorld`.
+Steady fixed ticks do not allocate a result vector.
 
 ### Collision Pass
 
@@ -205,8 +257,13 @@ Rules:
 
 - attachment is established on ground contact with a platform body
 - local offset is stored in platform space
-- next frame, the character is moved by platform delta before its own movement
-- platform angular velocity may rotate the character
+- on the next attempted fixed tick, stage-3 evidence supplies the admitted
+  kinematic target or committed dynamic point velocity
+- platform carry is swept before the character's own movement
+- full platform rotation transports the attachment point; only twist about the
+  Character-owned up basis affects heading when explicitly enabled
+- the final post-Physics platform result updates next-tick attachment evidence and
+  never causes a hidden second move in the current tick
 - detachment happens when the character leaves the platform, becomes airborne, or
   is teleported
 
@@ -275,8 +332,10 @@ Animation root motion may provide a movement delta.
 
 ```cpp
 enum class RootMotionPriority {
-    Suggest,     // root motion is applied only if gameplay input is zero
-    Override     // root motion replaces gameplay input for this fixed tick
+    GameplayOnly,
+    Suggest,     // root motion is used only when gameplay declares no translation
+    Additive,    // root and gameplay translations are summed before collision
+    Override     // root motion replaces gameplay translation for this fixed tick
 };
 
 struct RootMotionRequest {
@@ -288,9 +347,10 @@ struct RootMotionRequest {
 };
 ```
 
-The controller treats root motion as a movement request and resolves it through
-the same collision passes. This ensures that animation-driven movement still
-respects walls, slopes, and steps.
+The controller treats root motion as one tick-addressed movement request and
+resolves it through the same collision passes. Animation produces it directly from
+the authoritative fixed-tick interval; presentation frames never accumulate root
+motion. This ensures animation-driven movement respects walls, slopes, and steps.
 
 The request identifies its scene, animation instance, simulation tick, and root-
 motion generation and can be consumed at most once. Presentation/editor-preview,
@@ -299,10 +359,12 @@ may submit the inverse directed delta when animation and gameplay policy admit i
 the controller still performs ordinary forward collision resolution and does not
 reverse physics.
 
-If root motion and gameplay input conflict, gameplay input takes precedence
-unless the root motion request has `RootMotionPriority::Override`. The animation
-or gameplay system that produces the request decides the priority; the
-controller only resolves the resulting movement.
+Gameplay selects the admitted translation/rotation mode before command closure.
+`Suggest` uses an explicit gameplay-translation presence bit, not a velocity
+epsilon. Platform carry applies first. Desired gameplay heading establishes the
+pre-root basis, root translation is rotated by that basis, and admitted root twist
+then composes under ADR-089. Root pitch/roll remains visual and never tilts the
+capsule.
 
 ## Physics Material Query
 
@@ -319,17 +381,11 @@ valid material ID; the fallback from `QuerySurfaceMaterial` to the descriptor's
 
 ## Collider Filtering
 
-The controller uses collision layers and masks:
-
-- character controller layer
-- static world layer
-- dynamic body layer
-- platform layer
-- trigger/volume layer (ignored by movement sweeps; trigger enter/exit events are
-  handled by the gameplay volume system or physics callbacks, not controller
-  surface events)
-
-Layer membership is declared on the collider, not on the controller.
+The controller selects one stable project `PhysicsQueryChannelId` and explicit
+typed selectors under ADR-086. Collider profiles answer that channel with
+`Ignore`, `Overlap` or `Block`; serialized/native layer masks are not controller
+identity. Trigger inclusion is explicit. Trigger enter/exit events remain owned by
+the gameplay volume/Physics event contract, not controller surface events.
 
 ## Crouching And Size Changes
 
@@ -343,7 +399,10 @@ The controller supports runtime size changes:
   step behavior, the gameplay system must use a separate controller descriptor or
   override the movement request accordingly
 
-Size changes are gradual unless configured as immediate.
+Size changes are fixed-tick commands. A gradual transition advances once per
+committed tick under a typed profile; presentation delta never changes collision
+height. Every intermediate capsule requires clearance or the command reports its
+declared hold/reject result.
 
 ## Validation And Safety
 
@@ -352,7 +411,9 @@ Size changes are gradual unless configured as immediate.
   a budget; otherwise it reports an error.
 - Teleports bypass collision but flag the controller as needing ground
   re-evaluation. A teleport also detaches the character from any moving platform.
-- Extreme velocities are clamped before sweeping to avoid tunneling.
+- Out-of-profile velocity/displacement returns a typed safety failure. An explicit
+  profile may define deterministic saturation and reports the applied value; no
+  silent clamp is permitted.
 
 ## Diagnostics
 
@@ -381,6 +442,10 @@ Runtime variables:
 - Root motion collision tests.
 - Root motion duplicate/stale generation and reverse-policy tests.
 - Determinism tests for fixed-step playback under different render/catch-up grouping.
+- Platform carry point rotation, dynamic point-velocity prediction, optional heading
+  twist and no post-Physics second move.
+- Capsule up, Gameplay desired heading, root twist and visual pitch/roll ownership.
+- Private Physics-query adapter parity against Horo controller golden fixtures.
 - Performance tests for many concurrent controllers.
 
 ## Related Documents

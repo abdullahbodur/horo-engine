@@ -145,6 +145,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Character Controller Architecture](./runtime/character-controller-architecture.md):
   kinematic capsule controller, slopes, steps, moving platforms, surface
   materials, and surface events.
+- [Character Controller Ownership, Implementation and Update Order](../adr/089-character-controller-ownership-implementation-and-update-order.md):
+  Horo-owned bounded query solver, per-scene Character world, fixed-tick command/
+  root-motion cadence, platform/orientation composition and transform publication.
 - [Physics Architecture](./runtime/physics-architecture.md): fixed-step world
   ownership, transform authority, collision events, queries, and determinism.
 - [Canonical Physics Solver, Units and Tolerances](../adr/084-canonical-physics-solver-units-and-tolerances.md):

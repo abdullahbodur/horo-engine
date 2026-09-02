@@ -139,6 +139,25 @@ work and final generation/budget validation succeed. Replacement failure destroy
 only the candidate and leaves the prior scene/world/query state unchanged. The
 first Physics tick occurs after the complete bundle is authoritative.
 
+## Character Query Boundary
+
+[ADR-089](../../adr/089-character-controller-ownership-implementation-and-update-order.md)
+keeps the Horo Character domain behind the initial `HoroEngine::Physics` target but
+does not expose Jolt Character classes or add a replaceable backend ABI. One scene-
+owned `CharacterWorld` implements the bounded Horo overlap/support/carry/sweep/
+slide/step/ground algorithm against a read-only, tick/world-generation-affine
+`CharacterPhysicsQueryContext`.
+
+The private adapter maps Horo capsule queries, filter/material evidence and staged
+impulses/presence targets to Jolt narrowphase/body commands. Native collectors do
+not run gameplay or mutate bodies. A private adapter/solver replacement must
+reproduce Horo golden semantics and requalify determinism/performance.
+
+Character movement stages before the Physics step from committed bodies, admitted
+kinematic targets and support point-velocity evidence. Physics then applies staged
+commands and steps once. Post-Physics Character work finalizes support/attachment
+and publishes the collision root with tick commit; it never performs a second move.
+
 ## Fixed-Step Pipeline
 
 One physics tick:
