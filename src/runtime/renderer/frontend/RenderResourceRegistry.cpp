@@ -31,62 +31,20 @@ namespace Horo::Render::Detail {
 
     Result<ResourceReservation> RenderResourceRegistry::Reserve(const RenderResourceClass resourceClass,
                                                                 const std::span<const RenderResourceIdentity> dependencies) {
-        if (!acceptingRequests_) {
-            return Result<ResourceReservation>::Failure(
-                RegistryError(FrontendErrors::ResourceRegistryStopped, "Resource creation is disabled during frontend shutdown."));
+        if (const Result<void> admitted = ValidateReservationAdmission(); admitted.HasError()) {
+            return Result<ResourceReservation>::Failure(admitted.ErrorValue());
         }
-        if (pendingRequests_ >= limits_.maximumPendingRequests) {
-            return Result<ResourceReservation>::Failure(
-                RegistryError(FrontendErrors::ResourceQueueFull, "The bounded renderer resource request queue is full."));
+        if (const Result<void> validDependencies = ValidateDependencies(dependencies); validDependencies.HasError()) {
+            return Result<ResourceReservation>::Failure(validDependencies.ErrorValue());
         }
-        for (std::size_t dependencyIndex = 0; dependencyIndex < dependencies.size(); ++dependencyIndex) {
-            const RenderResourceIdentity dependency = dependencies[dependencyIndex];
-            for (std::size_t earlierIndex = 0; earlierIndex < dependencyIndex; ++earlierIndex) {
-                if (dependencies[earlierIndex] == dependency) {
-                    return Result<ResourceReservation>::Failure(
-                        RegistryError(FrontendErrors::ResourceHandleMalformed,
-                                      "A resource dependency generation is listed more than once."));
-                }
-            }
-            const Entry *entry = FindExact(dependency);
-            if (entry == nullptr || entry->state != RenderResourceState::Ready) {
-                return Result<ResourceReservation>::Failure(
-                    RegistryError(FrontendErrors::ResourceDependencyNotReady, "A resource dependency is foreign, stale, or not ready."));
-            }
-            if (entry->dependentPins == std::numeric_limits<std::uint32_t>::max()) {
-                return Result<ResourceReservation>::Failure(
-                    RegistryError(FrontendErrors::ResourceCapacityExhausted, "A renderer resource dependency pin count is exhausted."));
-            }
+        if (const Result<void> resultCapacity = EnsureOperationResultCapacity(); resultCapacity.HasError()) {
+            return Result<ResourceReservation>::Failure(resultCapacity.ErrorValue());
         }
-        if (nextOperation_ == 0) {
-            return Result<ResourceReservation>::Failure(
-                RegistryError(FrontendErrors::ResourceCapacityExhausted, "The renderer resource operation identity space is exhausted."));
+        auto acquiredSlot = AcquireSlot();
+        if (acquiredSlot.HasError()) {
+            return Result<ResourceReservation>::Failure(acquiredSlot.ErrorValue());
         }
-        while (operations_.size() >= limits_.maximumOperationResults) {
-            const auto completed = std::ranges::find_if(operations_, &OperationRecord::complete);
-            if (completed == operations_.end()) {
-                return Result<ResourceReservation>::Failure(
-                    RegistryError(FrontendErrors::ResourceQueueFull, "The bounded renderer resource result store is full."));
-            }
-            operations_.erase(completed);
-        }
-
-        std::size_t slot = 0;
-        for (std::size_t candidate = 1; candidate < entries_.size(); ++candidate) {
-            const Entry &entry = entries_[candidate];
-            if (entry.state == RenderResourceState::Retired && !entry.generationExhausted) {
-                slot = candidate;
-                break;
-            }
-        }
-        if (slot == 0) {
-            if (entries_.size() - 1 >= limits_.maximumSlots) {
-                return Result<ResourceReservation>::Failure(
-                    RegistryError(FrontendErrors::ResourceCapacityExhausted, "The renderer resource slot pool is exhausted."));
-            }
-            entries_.push_back({});
-            slot = entries_.size() - 1;
-        }
+        const std::size_t slot = acquiredSlot.Value();
         Entry &entry = entries_[slot];
         entry.resourceClass = resourceClass;
         entry.state = RenderResourceState::Pending;
@@ -102,6 +60,70 @@ namespace Horo::Render::Detail {
         ++pendingRequests_;
         return Result<ResourceReservation>::Success(
             ResourceReservation{.identity = {owner_, static_cast<std::uint32_t>(slot), entry.generation}, .operation = entry.operation});
+    }
+
+    Result<void> RenderResourceRegistry::ValidateReservationAdmission() const {
+        if (!acceptingRequests_) {
+            return Result<void>::Failure(
+                RegistryError(FrontendErrors::ResourceRegistryStopped, "Resource creation is disabled during frontend shutdown."));
+        }
+        if (pendingRequests_ >= limits_.maximumPendingRequests) {
+            return Result<void>::Failure(
+                RegistryError(FrontendErrors::ResourceQueueFull, "The bounded renderer resource request queue is full."));
+        }
+        if (nextOperation_ == 0) {
+            return Result<void>::Failure(
+                RegistryError(FrontendErrors::ResourceCapacityExhausted, "The renderer resource operation identity space is exhausted."));
+        }
+        return Result<void>::Success();
+    }
+
+    Result<void> RenderResourceRegistry::ValidateDependencies(const std::span<const RenderResourceIdentity> dependencies) const {
+        for (std::size_t dependencyIndex = 0; dependencyIndex < dependencies.size(); ++dependencyIndex) {
+            const RenderResourceIdentity dependency = dependencies[dependencyIndex];
+            const auto earlierDependencies = dependencies.first(dependencyIndex);
+            if (std::ranges::find(earlierDependencies, dependency) != earlierDependencies.end()) {
+                return Result<void>::Failure(
+                    RegistryError(FrontendErrors::ResourceHandleMalformed, "A resource dependency generation is listed more than once."));
+            }
+            const Entry *entry = FindExact(dependency);
+            if (entry == nullptr || entry->state != RenderResourceState::Ready) {
+                return Result<void>::Failure(
+                    RegistryError(FrontendErrors::ResourceDependencyNotReady, "A resource dependency is foreign, stale, or not ready."));
+            }
+            if (entry->dependentPins == std::numeric_limits<std::uint32_t>::max()) {
+                return Result<void>::Failure(
+                    RegistryError(FrontendErrors::ResourceCapacityExhausted, "A renderer resource dependency pin count is exhausted."));
+            }
+        }
+        return Result<void>::Success();
+    }
+
+    Result<void> RenderResourceRegistry::EnsureOperationResultCapacity() {
+        while (operations_.size() >= limits_.maximumOperationResults) {
+            const auto completed = std::ranges::find_if(operations_, &OperationRecord::complete);
+            if (completed == operations_.end()) {
+                return Result<void>::Failure(
+                    RegistryError(FrontendErrors::ResourceQueueFull, "The bounded renderer resource result store is full."));
+            }
+            operations_.erase(completed);
+        }
+        return Result<void>::Success();
+    }
+
+    Result<std::size_t> RenderResourceRegistry::AcquireSlot() {
+        for (std::size_t slot = 1; slot < entries_.size(); ++slot) {
+            const Entry &entry = entries_[slot];
+            if (entry.state == RenderResourceState::Retired && !entry.generationExhausted) {
+                return Result<std::size_t>::Success(slot);
+            }
+        }
+        if (entries_.size() - 1 >= limits_.maximumSlots) {
+            return Result<std::size_t>::Failure(
+                RegistryError(FrontendErrors::ResourceCapacityExhausted, "The renderer resource slot pool is exhausted."));
+        }
+        entries_.push_back({});
+        return Result<std::size_t>::Success(entries_.size() - 1);
     }
 
     Result<void> RenderResourceRegistry::Publish(const RenderResourceClass resourceClass, const RenderResourceIdentity identity,

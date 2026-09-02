@@ -94,6 +94,10 @@ namespace Horo::Render::Detail {
         };
 
         [[nodiscard]] Result<std::size_t> Validate(RenderResourceClass resourceClass, RenderResourceIdentity identity) const;
+        [[nodiscard]] Result<void> ValidateReservationAdmission() const;
+        [[nodiscard]] Result<void> ValidateDependencies(std::span<const RenderResourceIdentity> dependencies) const;
+        [[nodiscard]] Result<void> EnsureOperationResultCapacity();
+        [[nodiscard]] Result<std::size_t> AcquireSlot();
         [[nodiscard]] Entry *FindExact(RenderResourceIdentity identity) noexcept;
         [[nodiscard]] const Entry *FindExact(RenderResourceIdentity identity) const noexcept;
         void Retire(std::size_t slot) noexcept;
