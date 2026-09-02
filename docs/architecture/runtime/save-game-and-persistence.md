@@ -38,6 +38,15 @@ inventory, health, transform, local progression and similar slot-scoped state.
 Each field belongs to one persistence owner; gameplay modules and slot player data
 must not store two authoritative copies of the same field.
 
+[ADR-068](../../adr/068-music-transport-and-cross-system-ownership.md) applies the
+same rule to Audio. Gameplay/narrative/adaptive-music owners may persist semantic
+music state, definition/section identity, transition variables, and an admitted
+stable musical/content position. Audio may contribute that owned checkpoint at the
+save barrier, but live voice/bus/stream/provider handles, callback/device epochs,
+raw output sample indices, queues, decoder/DSP state, ring buffers, and native
+objects never enter a save. Restore resolves current localized/cooked content and
+prepares a new Audio transport generation before publication.
+
 ```text
 SceneDocument -> one-way RuntimeSceneDefinition conversion
     -> application/session runtime ownership

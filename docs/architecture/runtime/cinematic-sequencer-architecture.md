@@ -9,6 +9,10 @@ The goal is to provide a bounded, data-oriented cinematic runtime capable of dri
 ## Normative Decision Reference
 
 This subsystem is governed by [ADR-014: Sequencer Ownership, Clock Authority and Binding Boundary Decision](../../adr/014-sequencer-ownership-clock-authority-and-binding-boundary.md).
+[ADR-068](../../adr/068-music-transport-and-cross-system-ownership.md) owns the
+AudioTrack handoff: Sequencer retains sequence clock, directed event traversal,
+seek/scrub and preroll intent while Audio alone maps accepted requests to sample
+time and schedules the callback.
 
 ## Core Decisions
 
@@ -226,6 +230,14 @@ struct AudioTrackKeyframe {
     bool                loop;
 };
 ```
+
+Audio-track evaluation emits one bounded generation-tagged schedule/cancel/seek
+bundle through the application Audio/Cinematic adapter. It carries stable player,
+track, keyframe and traversal identities plus `SequenceTime`; it never stores a
+voice handle or computes a device sample index. Render-frame sampling and editor
+scrub do not replay cues. Seek/scrub invalidate stale schedules, request prepared
+Audio positioning/preroll, and resume only under the typed acknowledgement policy
+defined by ADR-068.
 
 ### 6. Sub-Sequence Track
 
