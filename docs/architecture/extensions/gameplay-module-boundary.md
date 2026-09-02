@@ -277,6 +277,21 @@ certification APIs directly. See
 [Platform Abstraction](../foundation/platform-abstraction.md) for path,
 directory, atomic file, and platform-service contracts.
 
+### Cinematic Control Outcomes
+
+[ADR-118](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md)
+requires gameplay modules to submit ordinary typed animation-parameter, movement,
+heading, stance and action commands even while a cinematic runs. The receiving owner
+resolves each channel against the tick's immutable authority claims and returns
+`AcceptedGameplay`, `AcceptedForOwnerBlend`, `SuppressedByCinematic`,
+`StaleAuthority` or `AuthorityDenied` as appropriate.
+
+Modules do not poll a global cinematic flag, write poses/transforms directly or queue
+suppressed edge actions until a sequence stops. Unclaimed channels and unrelated
+simulation continue when fixed ticks run. Whole-game pause attempts no Gameplay,
+Animation, Character or Physics tick; collision-aware cinematic movement instead
+uses scoped control transfer while simulation remains active.
+
 ## Services
 
 A game module may create project- or runtime-scoped services through explicit
@@ -413,3 +428,6 @@ game.<project>.save
 - [Ownership And Resource Lifetime](../foundation/ownership-and-resource-lifetime.md)
 - [ADR-114](../../adr/114-canonical-runtime-world-persistence-boundary.md): canonical
   runtime-state adapters and single semantic ownership.
+- [ADR-118](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md):
+  cinematic control claims, typed gameplay suppression and owner-preserving pose/
+  movement integration.

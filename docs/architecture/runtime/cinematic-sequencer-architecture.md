@@ -12,6 +12,9 @@ This subsystem is governed by [ADR-014: Sequencer Ownership, Clock Authority and
 [ADR-117](../../adr/117-playback-ownership-frame-order-and-determinism.md)
 refines live-player ownership, activation identity, multi-player batch order,
 replay/headless evidence, numeric determinism and random-access seek.
+[ADR-118](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md)
+defines Animation, Character and Gameplay authority while those players target
+skeletal pose or actor control.
 [ADR-068](../../adr/068-music-transport-and-cross-system-ownership.md) owns the
 AudioTrack handoff: Sequencer retains sequence clock, directed event traversal,
 seek/scrub and preroll intent while Audio alone maps accepted requests to sample
@@ -44,6 +47,9 @@ time and schedules the callback.
   by domain, descending priority and stable identity. Exact cross-platform float bits
   are not promised; identities/time/event order are exact and samples use declared
   tolerances across build/platform fingerprints.
+- **Owner-issued cinematic authority**: Animation composes per-joint pose claims,
+  Character resolves exclusive cinematic movement, and Gameplay returns typed
+  suppression/acceptance. Whole-game pause never moves an authoritative Character.
 
 ## System Boundaries and Target Topology
 
@@ -501,6 +507,45 @@ Unscaled/wall/external players similarly use presentation/service boundaries unl
 an authorized destination explicitly stages an effect for a later simulation tick.
 A physics-owned transform cannot be a presentation write target.
 
+## Animation, Character And Gameplay Authority
+
+Before activation, a player declares required/optional actor claims for skeletal
+pose/joint masks, animation parameters, Character translation/heading/stance and
+gameplay actions. The application obtains one aggregate generation-scoped authority
+plan from Animation, Character and Gameplay owners. Required conflicts fail and
+unwind activation; optional tracks disable with typed diagnostics. There is no global
+`cinematicActive` flag and Cinematic Runtime never writes pose or transform storage.
+
+Animation remains the mutable pose owner. It evaluates the underlying graph on every
+attempted simulation tick, then applies admitted cinematic `Override` or `Blend`
+contributions in the ADR-117 player order. Override masks only declared
+AnimationDriven joints; Blend uses finite owner-applied per-joint weights.
+PresentationOverlay affects only the render/preview pose and cannot produce root
+motion, hit shapes, events or later simulation input. PhysicsDriven joints retain
+final authority; required overlap fails unless their owner first admits a safe-point
+mode transition.
+
+Character admits either GameplayControlled or CinematicControlled input for each
+claimed channel. CinematicControlled is exclusive: Character consumes the winning
+tick-addressed cinematic command through ordinary platform-carry, root-motion,
+sweep/collision and Physics seams. Gameplay commands for claimed channels return
+`SuppressedByCinematic`; unclaimed channels remain `AcceptedGameplay`. Suppressed
+edge actions are not queued for release-time replay. Arbitrary gameplay/cinematic
+movement vectors are not summed.
+
+Host gameplay pause stops fixed ticks, so authoritative Animation, Character,
+Physics and Gameplay hold. Only admitted presentation/camera/Audio/UI work may use an
+unscaled/external clock. A cutscene that needs collision-aware actor movement keeps
+simulation running and transfers selected control channels through leases; it does
+not request whole-game pause. Resume never converts elapsed presentation time into a
+Character move or graph catch-up interval.
+
+All proposals identify exact session, scene, player, actor/instance, tick/boundary and
+generation. Stop, binding loss, scene travel, authority transfer and shutdown close
+admission before owner-safe-point lease release; late results cannot restore old
+control. Client playback cannot gain authority over server-owned actors. The full
+composition, conflict and qualification contract is ADR-118.
+
 ## Object Binding Resolution: `SequenceBindingAuthority`
 
 ### Identity Mapping
@@ -752,6 +797,10 @@ These are required implementation acceptance tests, not tests added by this ADR:
   mismatch rather than claiming bit identity.
 - Headless replay uses the production service with manual recorded clocks/Null
   adapters and reports missing activation, wall/provider or async evidence explicitly.
+- Per-joint cinematic Override/Blend/PresentationOverlay, Physics authority conflict,
+  GameplayControlled/CinematicControlled arbitration and typed suppression.
+- Whole-game pause produces no authoritative pose/root-motion/Character movement or
+  gameplay backlog; running-simulation control transfer keeps ordinary owners ticking.
 - Validate all clock/pause/dilation combinations, nested pause-token release, menu
   plus cinematic pause, host resume, provider capability/loss and discontinuities.
 - Value samples are history-independent; event tests cover forward/reverse endpoints,
@@ -771,6 +820,7 @@ These are required implementation acceptance tests, not tests added by this ADR:
 
 - [ADR-014: Sequencer Ownership, Clock Authority and Binding Boundary Decision](../../adr/014-sequencer-ownership-clock-authority-and-binding-boundary.md)
 - [ADR-117: Playback Ownership, Frame Order and Determinism](../../adr/117-playback-ownership-frame-order-and-determinism.md)
+- [ADR-118: Animation, Character and Gameplay Authority During Cinematics](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md)
 - [Cinematic Sequencer UI Reference](./cinematic-sequencer.html)
 - [Scene Runtime Architecture](./scene-runtime.md)
 - [Animation Architecture](./animation-architecture.md)

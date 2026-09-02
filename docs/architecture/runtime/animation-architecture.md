@@ -52,6 +52,9 @@ Not covered:
 - Root motion is explicit: animation stages the exact fixed-tick interval delta;
   gameplay selects consumption policy and the character controller owns final
   collision-aware movement.
+- Cinematic skeletal tracks are owner-admitted per-joint contributions. Animation
+  continues to own/evaluate the graph and composes Override/Blend before Physics'
+  final per-joint authority; presentation overlays never feed simulation.
 - Retargeting is a cook/import-time process where possible. Runtime retargeting
   is supported but more expensive.
 - GPU skinning is the default for skinned meshes. CPU skinning is a fallback for
@@ -110,6 +113,33 @@ Rules:
   poses remain valid until presentation and render leases retire.
 - Render extraction receives a frame-owned immutable pose/palette projection
   tagged with scene, instance, tick, and pose-generation identity.
+
+### Cinematic Pose Authority
+
+[ADR-118](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md)
+defines cinematic pose composition. A sequence player submits immutable generation-
+checked contributions through the Animation adapter; it never receives mutable pose
+storage. Activation validates stable skeleton/joint-mask identity, required/optional
+claims, player priority/order, evaluation seam, finite weights and handoff policy.
+
+For every attempted fixed tick, Animation evaluates the underlying graph first. It
+then applies cinematic `Override` (weight 1 on declared AnimationDriven joints) or
+`Blend` contributions in canonical ADR-117 player/joint order. The graph is not
+suspended merely because its output is masked, so cursor/state/event progression
+remains tied to actual simulation ticks. Cut or bounded blend handoff begins from the
+last committed pose and cannot restore a stale pre-cinematic snapshot.
+
+PhysicsDriven joints reject required cinematic ownership unless Physics/Animation
+first perform an explicit safe-point authority transition. Existing `Blended` Physics
+authority composes over the graph-plus-cinematic Animation-side candidate after the
+step. A `PresentationOverlay` modifies only the immutable presentation pose and is
+excluded from root motion, events, hit shapes, colliders and later fixed-tick input.
+
+Gameplay animation-parameter commands targeting an exclusive cinematic claim return
+`SuppressedByCinematic`; unclaimed parameters remain admitted and declared blend
+parameters are owner-composed. Suppressed commands are not reported as success or
+queued until release. Stop, scene/actor generation loss and authority change close
+contribution admission before owner-safe-point handoff/lease retirement.
 
 ## Animation Clip
 
@@ -539,6 +569,8 @@ committed pose. Animation-to-physics handoff is explicit and generation-checked.
 - Retargeting tests comparing source and target poses.
 - Visual regression tests for skinned mesh playback.
 - Root-motion duplicate/stale request and physics-override authority tests.
+- Cinematic per-joint Override/Blend/PresentationOverlay, continuing underlying graph,
+  entry/exit handoff, PhysicsDriven conflict and typed gameplay-parameter suppression.
 - Preview/play isolation, stale pose lease, reload, scene replacement, and shutdown tests.
 - Performance tests for joint palette upload and GPU skinning throughput.
 
@@ -550,6 +582,7 @@ committed pose. Animation-to-physics handoff is explicit and generation-checked.
   extraction and joint palette binding.
 - [Cinematic Sequencer Architecture](./cinematic-sequencer-architecture.md): timeline,
   tracks, clock authority, and evaluation phase integration.
+- [ADR-118: Animation, Character and Gameplay Authority During Cinematics](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md)
 - [Physics Architecture](./physics-architecture.md): ragdoll, hit detection, and
   animation/physics handoff.
 - [Asset Pipeline](./asset-pipeline.md): clip import, compression, and cook.
