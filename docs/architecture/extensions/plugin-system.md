@@ -164,7 +164,8 @@ path tricks do not bypass containment checks.
 
 `extension.json` separates one module's ABI/entry variants, contributions and
 requested permissions. Package identity, dependencies, sources, trust and
-enablement remain in the package system:
+enablement remain in the package system. Every path in the descriptor is relative
+to the verified package root, not to the descriptor directory:
 
 ```json
 {
@@ -182,17 +183,17 @@ enablement remain in the package system:
       {
         "platform": "macos",
         "architecture": "arm64",
-        "path": "bin/macos-arm64/libhoro_fbx_importer.dylib"
+        "path": "extensions/com.vendor.fbx-importer.native/bin/macos-arm64/libhoro_fbx_importer.dylib"
       },
       {
         "platform": "linux",
         "architecture": "x86_64",
-        "path": "bin/linux-x64/libhoro_fbx_importer.so"
+        "path": "extensions/com.vendor.fbx-importer.native/bin/linux-x64/libhoro_fbx_importer.so"
       },
       {
         "platform": "windows",
         "architecture": "x86_64",
-        "path": "bin/windows-x64/horo_fbx_importer.dll"
+        "path": "extensions/com.vendor.fbx-importer.native/bin/windows-x64/horo_fbx_importer.dll"
       }
     ]
   },
