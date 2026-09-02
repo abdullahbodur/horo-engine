@@ -81,6 +81,12 @@ uses the simulation clock (explicit start and duration), not device playback sta
 Localization resolves stable keys using a locale snapshot captured by the UI for
 that frame; audio callbacks never format or own localized strings.
 
+[ADR-068](../../adr/068-music-transport-and-cross-system-ownership.md) fixes the
+cross-system handoff. The semantic producer fans the same stable cue ID separately
+to Audio and captions. Audio may publish actual timing observations keyed by that
+ID, but the presenter merges rather than duplicates them, and mute, virtualization,
+missing media/device, or Audio failure never suppresses required caption delivery.
+
 ```cpp
 enum class CaptionEventType : uint8_t {
     Dialogue,        // Spoken voice lines

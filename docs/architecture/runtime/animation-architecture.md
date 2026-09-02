@@ -350,6 +350,14 @@ identity. Events do not directly spawn gameplay objects; they enter bounded owne
 queues for a later permitted boundary. Reverse and large-interval traversal follow
 ADR-061's eligibility and atomic preflight rules.
 
+When an application maps an occurrence to sound, the Audio adapter preserves the
+animation player generation, event ID, traversal/loop ordinal, direction, and
+committed tick/time under
+[ADR-068](../../adr/068-music-transport-and-cross-system-ownership.md). Audio owns
+mapping that committed timestamp to its current sample epoch and deduplicating the
+stable occurrence. Presentation pose sampling, editor scrub, or a failed tick never
+submits Audio work, and callback completion cannot change Animation's event cursor.
+
 ## Skinning
 
 Skinning transforms mesh vertices by joint matrices.
