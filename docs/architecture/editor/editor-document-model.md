@@ -459,6 +459,30 @@ Persistent World foliage deltas remain independent. High-fidelity preview activa
 ordinary Terrain runtime contracts in an isolated generation-fenced session and never
 mutates the document or a live gameplay world.
 
+## Fracture Asset Documents
+
+[ADR-148](../../adr/148-fracture-document-generator-undo-and-preview-ownership.md)
+specializes this contract for fracture assets. One persistent `FractureAssetDocument`
+owns the unsaved working recipe/source/graph intent, revision, typed operations, bounded
+semantic history, dirty/saved identity, recovery/conflict and derived generator/cook/
+preview status. Assets remains the durable source and cooked-generation publication
+authority. Panels, tree/graph views, inspectors and viewport tools own no source or
+history.
+
+Import and procedural generation capture one immutable exact-revision input snapshot
+and produce a reserved detached candidate in a document-owned task group. Completion
+returns to the owner and changes no document state. An explicit accept operation applies
+the candidate's authored semantic patch atomically and records exact before/after values
+or immutable source-section checkpoints. Undo/redo never reruns a generator or retains
+production cooked meshes, Physics shapes/bodies or GPU resources.
+
+High-fidelity preview cooks a captured source/candidate in a transient non-published
+namespace and activates normal DFR/RuntimeScene/Physics/Render contracts in an isolated
+`FracturePreviewSession`. Its world, bodies, events and resources cannot enter production
+PhysicsWorld, DestructionWorld, streaming, persistence, replication or Assets current-
+generation state. Save, production cook and preview each advance only their own typed
+revision/status.
+
 ## Runtime Conversion
 
 The document converts to `RuntimeSceneDefinition` through an editor service.
@@ -567,6 +591,14 @@ Required tests cover:
   history, cook or live runtime state across edit, reload, close or project shutdown
 - terrain source save, autosave/recovery, preview cook, published cook and Runtime Save
   foliage persistence advance independently
+- fracture editor surfaces share one typed document operation path and cannot directly
+  mutate source, dirty state, history or artifact publication
+- fracture generation candidates are detached, bounded and revision-fenced; completion
+  alone cannot commit, dirty, save or publish them
+- fracture undo/redo restores exact authored patches/checkpoints without rerunning the
+  generator or storing production derived/native products
+- fracture preview uses an isolated normal runtime composition and cannot mutate
+  production Physics, Destruction, streaming, persistence or replication state
 
 ## Related Documents
 

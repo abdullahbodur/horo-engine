@@ -26,6 +26,11 @@ defines what happens afterward. Destruction appends bounded typed facts to its c
 journal; an application-owned dispatcher maps them to gameplay, VFX, Decal, Audio and
 accessibility requests at destination safe points. Consumers own mapping realization,
 admission, playback/simulation and native lifetime and cannot change DFR success.
+[ADR-148](../../adr/148-fracture-document-generator-undo-and-preview-ownership.md)
+specializes editor ownership. A persistent fracture asset document owns working source,
+typed operations, bounded history and dirty state; generator workers produce detached
+candidates; Assets owns durable source/cooked publication; high-fidelity preview uses an
+isolated runtime/Physics world and never production state.
 
 ## Ownership
 
@@ -251,6 +256,26 @@ Fracture authoring tools:
 - Chunk connectivity visualization
 - Damage threshold and behavior configuration
 
+Each asset opens as one persistent `FractureAssetDocument` rooted at stable asset and
+accepted source revision. The document owns working recipe/source/graph intent, typed
+operation execution, history, dirty/saved state and derived candidate/preview status.
+Panels, inspectors, tree/graph views and viewport gizmos own presentation/input only and
+cannot mutate source, history or artifact publication directly.
+
+Import and procedural generation capture an immutable exact-revision input snapshot and
+write a bounded detached candidate in a document-owned cancellable operation. Completion
+does not dirty or publish. Only an explicit accept operation may atomically apply the
+candidate's authored semantic patch and record exact before/after history. Undo/redo
+replays those patches or immutable source-section checkpoints; it never reruns the
+generator or stores production cooked/native products.
+
+Source save publishes through Assets and alone advances saved state. Production cook is
+a separate Assets-owned ADR-145 generation. Preview cook is transient and activates the
+ordinary DFR/RuntimeScene/Physics/Render contracts inside a generation-fenced
+`FracturePreviewSession`; its Physics world, events, persistence-disabled state and
+resources are distinct from production. Preview observations write back only through a
+new explicit document operation.
+
 ## Feature Tiers
 
 Tiers are provider-neutral product preference profiles. They do not name a graphics API,
@@ -304,7 +329,8 @@ transition, deterministic contact ordering, cooked chunk closure, proof that cor
 perform no runtime geometry/collision cook, aggregate consumer rollback/replacement,
 capacity and durable cleanup, save/restore, late join, authoritative/cosmetic motion,
 headless/Null/all interactive backends, committed fact ordering, journal gaps, consumer
-dedup/overload independence, cancellation and repeated shutdown.
+dedup/overload independence, typed editor operations, exact history, stale generator
+work, preview isolation, cancellation and repeated shutdown.
 
 ## Related Documents
 
@@ -331,3 +357,6 @@ dedup/overload independence, cancellation and repeated shutdown.
 - [ADR-147](../../adr/147-destruction-event-and-cosmetic-consumer-ownership.md):
   committed fact identity/journal, application dispatch, destination safe points,
   deduplication and gameplay/VFX/Decal/Audio ownership
+- [ADR-148](../../adr/148-fracture-document-generator-undo-and-preview-ownership.md):
+  persistent document, typed operations, detached generation, exact bounded history,
+  Assets publication and isolated preview ownership

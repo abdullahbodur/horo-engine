@@ -854,6 +854,15 @@ Workers produce immutable candidates in the Asset operation namespace; only Asse
 verify and atomically publish. Runtime loads exact validated DFR plus required dependent
 artifacts and cannot import, repair, fracture or cook a missing product.
 
+[ADR-148](../../adr/148-fracture-document-generator-undo-and-preview-ownership.md)
+keeps editor generation and publication distinct. `FractureAssetDocument` owns only an
+unsaved working source candidate plus semantic history. Generator workers return bounded
+detached candidates to that document; completion cannot write source, cache entries or a
+current generation. Source save asks Assets to durably publish one exact accepted
+document revision. Production cook then consumes that Assets revision through the
+ordinary ADR-145 operation. Preview cook uses a transient non-published namespace and
+cannot satisfy production readiness, enter a package or clear document dirty state.
+
 ### Navigation Domain Capture And Cook Boundary
 
 [ADR-105](../../adr/105-navigation-asset-and-scene-ownership-boundary.md)
