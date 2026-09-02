@@ -7,10 +7,12 @@ Horo Engine. It covers PCG graphs, node-based generation pipelines, spatial
 queries, point-based generation, runtime vs offline generation, and editor
 authoring tools.
 
-[ADR-150](../../adr/150-pcg-graph-source-cooked-plan-cache-and-runtime-ownership.md)
-is the normative owner of graph source, cooked-plan, cache, evaluation-intermediate,
-publication, replacement and destruction boundaries. The structures below describe
-domain semantics; they do not authorize runtime source interpretation or direct scene
+[ADR-151](../../adr/151-pcg-ownership-authority-tier-and-lifecycle.md) is the
+normative owner of subsystem authority, execution modes, determinism classes, feature
+tiers, headless/null composition and lifecycle. [ADR-150](../../adr/150-pcg-graph-source-cooked-plan-cache-and-runtime-ownership.md)
+owns graph source, cooked-plan, cache, evaluation-intermediate, publication,
+replacement and destruction boundaries. The structures below describe domain
+semantics; they do not authorize runtime source interpretation or direct scene
 mutation from graph nodes.
 
 ## Authority And Artifact Model
@@ -31,6 +33,12 @@ PCG separates four representations with different owners and lifetimes:
 Offline bake, live preview and runtime generation evaluate the same validated cooked
 plan. Runtime never parses graph source, invokes a compiler, repairs a plan or chooses
 a cache entry as active content.
+
+PCG owns plan validation and pure evaluation, not generated feature truth. Product
+gameplay/server authority permits semantic runtime requests; a host transaction
+coordinator revalidates authority and target revisions, while RuntimeScene,
+Terrain/Foliage, Physics, Navigation and Render each prepare and own their committed
+state. Successful evaluation alone never grants publication authority.
 
 ## PCG Model
 
@@ -159,6 +167,22 @@ exact immutable cooked-plan generation. Publishing or evicting a cook-cache entr
 not replace a live plan; old plans and their dependencies remain leased until every
 evaluation and generated-output candidate drains.
 
+The closed execution modes are:
+
+- **Offline bake**: evaluates accepted authoring inputs and returns a detached bake
+  candidate for an explicit document/asset transaction.
+- **Editor preview**: publishes only into an isolated replaceable preview session.
+- **Runtime**: prepares an aggregate candidate that requires product/server authority
+  and target-owner commit.
+- **Hybrid**: keeps baked base and runtime overlay provenance separate; the overlay
+  cannot rewrite baked/source truth.
+- **Validation only**: returns diagnostics, costs and readiness without output
+  preparation or commit capability.
+
+A headless host may install the real deterministic evaluator without Editor or Render.
+`PCGNull` advertises no evaluation capability and completes requests with typed
+unavailability; it never returns a fabricated empty success.
+
 ## Determinism And Reproducibility
 
 PCG is designed for determinism:
@@ -171,6 +195,19 @@ PCG is designed for determinism:
 - Determinism enables re-generation (modify graph, re-run, get consistent
   results)
 - Non-deterministic inputs (e.g., gameplay state) are explicitly marked
+
+Plans and requests select one explicit determinism class:
+
+- **Portable deterministic**: canonical output matches across every certified host for
+  the declared semantic/numeric policy and is eligible for canonical bake or
+  authoritative runtime state.
+- **Profile deterministic**: output matches only inside one exact certified platform/
+  toolchain/capability profile and is limited to product uses that pin that profile.
+- **Best-effort preview**: invariants and bounds hold without output equivalence; it is
+  restricted to isolated preview or explicitly cosmetic disposable output.
+
+Determinism class is independent of workload tier. Runtime never silently downgrades a
+request when a node, target or numeric policy cannot meet the required class.
 
 ## Integration
 
@@ -196,6 +233,12 @@ The PCG editor provides a node-graph editing surface:
 
 ## Feature Tiers
 
+The names below are product-profile labels, not renderer APIs or authority levels. At
+composition/cook time they resolve to an immutable Horo-owned profile containing
+supported modes, node/output families, determinism classes and finite graph, point,
+memory, work, concurrency and overlap limits. Unknown cost is not zero; complete input,
+intermediate, output and target-preparation costs are reserved before admission.
+
 | Feature              | `es3`      | `dx11` / `dx12_vulkan` | `high_end` |
 | -------------------- | ----------- | ------------- | ------------ |
 | PCG offline bake     | Yes         | Yes           | Yes          |
@@ -207,6 +250,7 @@ The PCG editor provides a node-graph editing surface:
 
 ## Related Documents
 
+- [PCG Ownership, Authority, Tier and Lifecycle](../../adr/151-pcg-ownership-authority-tier-and-lifecycle.md)
 - [PCG Graph Source, Cooked Plan, Cache and Runtime Ownership](../../adr/150-pcg-graph-source-cooked-plan-cache-and-runtime-ownership.md)
 - [PCG Graph Editor UI Reference](./pcg-graph-editor.html)
 

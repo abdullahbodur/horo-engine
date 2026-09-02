@@ -162,6 +162,7 @@ to the replacement.
 | [148](148-fracture-document-generator-undo-and-preview-ownership.md) | Fracture Document, Generator, Undo and Preview Ownership | Proposed | 2026-09-02 |
 | [149](149-destruction-persistence-replication-streaming-and-authority.md) | Destruction Persistence, Replication, Streaming and Authority | Proposed | 2026-09-02 |
 | [150](150-pcg-graph-source-cooked-plan-cache-and-runtime-ownership.md) | PCG Graph Source, Cooked Plan, Cache and Runtime Ownership | Proposed | 2026-09-02 |
+| [151](151-pcg-ownership-authority-tier-and-lifecycle.md) | PCG Ownership, Authority, Tier and Lifecycle | Proposed | 2026-09-02 |
 
 ## Conventions
 
