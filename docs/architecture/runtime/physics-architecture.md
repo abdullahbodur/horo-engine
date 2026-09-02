@@ -167,6 +167,14 @@ transition, publishes them privately at its safe point and returns typed readine
 the aggregate Scene commit. Core 1.0 performs no runtime mesh cutting, convex
 decomposition, collision cook or fallback-shape invention.
 
+[ADR-145](../../adr/145-destruction-source-chunk-geometry-collision-and-cook-ownership.md)
+places canonical chunk geometry/connectivity and solver-neutral convex inputs in the DFR
+artifact, not in Physics. Physics consumes one exact artifact/chunk/subshape revision,
+validates dynamic-convex and mass/material/filter policy, and cooks a separately keyed
+solver/profile/platform-private immutable shape artifact under ADR-085. It cannot alter
+chunk topology/identity or substitute a box/mesh/recomputed hull; Destruction cannot
+serialize Jolt data or claim a native shape ready.
+
 ## Character Query Boundary
 
 [ADR-089](../../adr/089-character-controller-ownership-implementation-and-update-order.md)
@@ -441,3 +449,4 @@ Required tests cover:
 - [ADR-137: Terrain and Foliage Ownership, Data, Tier and Lifecycle](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
 - [ADR-141: Terrain/Foliage Cross-System Ownership and Readiness](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md)
 - [ADR-144: Destruction Ownership, Authority, State and Runtime Geometry Boundary](../../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md)
+- [ADR-145: Destruction Source, Chunk Geometry, Collision and Cook Ownership](../../adr/145-destruction-source-chunk-geometry-collision-and-cook-ownership.md)

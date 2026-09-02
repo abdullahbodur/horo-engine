@@ -832,6 +832,28 @@ leases. It cannot invoke import/cook work or substitute a fallback shape. The Sh
 domain does not create a parallel asset ID, scheduler, cache, package lock or
 publication authority.
 
+### Destruction Domain Source And Cook Boundary
+
+[ADR-145](../../adr/145-destruction-source-chunk-geometry-collision-and-cook-ownership.md)
+gives Assets tracked mesh/recipe identity, immutable input delivery, dependency-aware
+scheduling, physical content-addressed cache/package storage, operation staging and
+atomic publication. Destruction Cook owns fracture semantics: normalized input
+validation, deterministic chunk generation/import mapping, canonical exterior/interior
+geometry, material slots, hierarchy/support/connectivity and solver-neutral convex input.
+
+One canonical DFR artifact is the portable chunk-membership/topology authority. It has a
+complete source/recipe/algorithm/seed/policy/schema/toolchain fingerprint and contains
+no native Physics shape, renderer resource, path, editor state or runtime handle.
+Physics consumes its exact chunk collision inputs to publish separately keyed solver-
+private shape artifacts under ADR-085. Mesh/Render consumes its exact geometry to publish
+separately keyed render products. Solver/backend changes invalidate only their derived
+products unless DFR semantics changed.
+
+Destruction Cook creates no private cache, current-generation pointer or package root.
+Workers produce immutable candidates in the Asset operation namespace; only Assets may
+verify and atomically publish. Runtime loads exact validated DFR plus required dependent
+artifacts and cannot import, repair, fracture or cook a missing product.
+
 ### Navigation Domain Capture And Cook Boundary
 
 [ADR-105](../../adr/105-navigation-asset-and-scene-ownership-boundary.md)

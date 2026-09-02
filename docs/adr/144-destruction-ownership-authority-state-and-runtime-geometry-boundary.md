@@ -174,10 +174,10 @@ be explicitly predictive and disposable; it is never canonical success.
 ### 6. Core 1.0 activates only pre-cooked geometry
 
 The core path consumes an immutable validated fracture artifact containing stable chunk
-graph identity, hierarchy/support relations, chunk render payload references, interior
-surface/material mapping, pre-cooked convex Physics shapes/mass properties, bounds and
-finite activation costs. Exact schemas and limits belong to DFR-001.2/.3 and the asset-
-cook decision.
+graph identity, hierarchy/support relations, canonical chunk/interior geometry,
+solver-neutral convex inputs and references to separately Physics-cooked shape artifacts,
+bounds and finite activation costs. Exact schemas and limits belong to DFR-001.2/.3 and
+the asset-cook decision in ADR-145.
 
 At runtime Destruction may select a bounded subset of existing chunks, update semantic
 membership, and coordinate activation/retirement of their pre-cooked representations.
