@@ -369,6 +369,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Cinematic Editor Document and Authoring Context](../adr/121-cinematic-editor-document-and-authoring-context.md):
   persistent sequence asset tabs, shared command/save/conflict ownership, detachable
   scene authoring context, stale-reference inspection and disposable preview state.
+- [Cinematic Trigger Sources and Capability Policy](../adr/122-cinematic-trigger-sources-and-capability-policy.md):
+  common typed start admission for gameplay, scene, event and tooling sources;
+  capability/trust/authority checks, packaged-build gating and typed denials.
 - [Post-Processing And Effects Architecture](./runtime/post-processing-and-effects-architecture.md):
   screen-space effects, HDR post chain, tonemapping, color grading, and
   accessibility pass ordering.

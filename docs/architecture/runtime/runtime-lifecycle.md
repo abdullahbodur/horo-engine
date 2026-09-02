@@ -205,6 +205,15 @@ Handlers cannot reenter the active sequence batch or imply same-tick mutation.
 AudioTrack bundles follow ADR-062's existing Audio control/callback publication
 boundaries and ADR-068 sample correlation; render interpolation never emits them.
 
+[ADR-122](../../adr/122-cinematic-trigger-sources-and-capability-policy.md) adds no
+phase and no direct player-construction path. Every gameplay, scene-autoplay, event or
+tooling source enqueues the same typed start request. Owner commands validate the
+complete principal/profile/trust/capability/approval/session/world/effect plan before
+the next eligible Cinematic batch; denial publishes no player or domain side effect.
+Scene autoplay becomes eligible only after aggregate scene activation, and gameplay-
+event starts only after their source occurrence commits. Late approval/preparation
+results join a later boundary only when every request generation remains current.
+
 [ADR-078](../../adr/078-runtime-ui-input-context-and-player-routing.md) also adds no
 phase. `BuildInputSnapshot` publishes device/action/assignment evidence; Runtime UI
 VariableUpdate applies one ordered context stack against the last presented

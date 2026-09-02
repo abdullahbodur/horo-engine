@@ -292,6 +292,22 @@ simulation continue when fixed ticks run. Whole-game pause attempts no Gameplay,
 Animation, Character or Physics tick; collision-aware cinematic movement instead
 uses scoped control transfer while simulation remains active.
 
+### Cinematic Playback Capability
+
+[ADR-122](../../adr/122-cinematic-trigger-sources-and-capability-policy.md)
+forbids gameplay modules and scripts from discovering `CinematicRuntimeService` or
+constructing players. A module that declares and receives
+`cinematic.playback.start` gets a narrow `ICinematicPlaybackCapability` in its runtime
+context. Requests are scoped to the caller principal, runtime session, world role,
+allowed sequence/effect set and owner authority; knowing an asset ID is not a grant.
+
+The same typed application admission serves native/script gameplay, cooked scene
+autoplay and committed gameplay-event adapters in development and packaged profiles.
+A client capability cannot acquire server-owned Character/gameplay/Physics/pause
+authority. Module/script unload and grant revocation close admission and generation-
+fence late preparation/start results. Denial returns a typed result and creates no
+player, lease, event, Audio/VFX request or partial effect.
+
 ## Services
 
 A game module may create project- or runtime-scoped services through explicit
