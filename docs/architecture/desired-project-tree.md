@@ -661,7 +661,7 @@ horo-engine/
 │   │   │   │   ├── SendPayloadLifetimeTests.cpp
 │   │   │   │   ├── ReplicationManagerTests.cpp
 │   │   │   │   ├── NetworkTransportNullTests.cpp
-│   │   │   │   ├── NetworkTransportENetTests.cpp
+│   │   │   │   ├── NetworkTransportGNSTests.cpp
 │   │   │   │   └── NetworkLifecycleAndShutdownTests.cpp
 │   │   │   ├── game_ui/
 │   │   │   ├── debug/

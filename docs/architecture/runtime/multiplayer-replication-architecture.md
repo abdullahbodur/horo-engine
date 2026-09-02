@@ -184,13 +184,23 @@ public:
 };
 ```
 
-Transport implementations:
+Transport policy follows
+[ADR-097](../../adr/097-default-real-time-transport-backend.md) and the
+[Networking Architecture](./networking-architecture.md):
 
-- **UDP**: Default transport with reliability layer (acks, sequencing)
-- **ENet**: Optional reliable UDP library
-- **WebRTC**: Browser-based clients
-- **Steam Networking**: Steamworks integration
-- **Console**: Platform-specific networking (PSN, Xbox Live)
+- **GameNetworkingSockets**: The production direct-IP baseline, implemented only
+  by private `NetworkTransportGNS` and projected through Horo-owned transport
+  capabilities and events.
+- **Null**: The deterministic/offline backend used for contract tests, CI and
+  products that intentionally run the network runtime without native I/O.
+- **Optional providers**: ICE/P2P, relay, WebRTC, Steam and console integrations
+  are future product-specific compositions. They are not mandatory 1.0 targets
+  and cannot be selected as silent fallback behavior.
+
+Replication does not depend on a native transport or provider identity. Session
+authentication, protocol negotiation, authority and bandwidth policy remain in
+`NetworkRuntime`; GNS packet encryption does not replace them. All transports must
+honor the same bounded queues, cancellation, malformed-input and shutdown contract.
 
 ## Bandwidth Management
 
@@ -216,6 +226,7 @@ Replication bandwidth is managed:
 ## Related Documents
 
 - [Networking Architecture](./networking-architecture.md): transport layer and connection model
+- [ADR-097: Default Real-Time Transport Backend](../../adr/097-default-real-time-transport-backend.md): production baseline and optional provider policy
 - [Scene Runtime](./scene-runtime.md): object lifecycle and network identity
 - [Physics Architecture](./physics-architecture.md): server-side physics and prediction
 - [Save Game And Persistence](./save-game-and-persistence.md): server-side save state

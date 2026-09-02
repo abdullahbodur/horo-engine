@@ -301,7 +301,7 @@ HoroEngine::AudioNull
 HoroEngine::NetworkApi
 HoroEngine::NetworkRuntime
 HoroEngine::NetworkTransportNull
-HoroEngine::NetworkTransportENet
+HoroEngine::NetworkTransportGNS
 HoroEngine::NavigationApi
 HoroEngine::NavigationRuntime
 HoroEngine::NavigationRecastDetour
@@ -349,8 +349,8 @@ horopak
 ```
 
 `AudioPlatform` selects only the native implementation for the target platform;
-native audio headers remain private to that target. `NetworkTransportENet` owns the
-optional native UDP socket and ENet implementation and remains separate from typed
+native audio headers remain private to that target. `NetworkTransportGNS` owns the
+optional native socket and private GNS implementation and remains separate from typed
 session/protocol/authentication coordination in `NetworkRuntime`. `NetworkTransportNull` provides
 deterministic in-memory/null transport for headless runs, mock testing, and offline modes; it depends on `NetworkApi` and `Foundation` only, not `Platform`. The host composition root transfers unique `INetworkTransport` ownership into `NetworkRuntime`. `GameplayApi` owns the public
 registration, descriptor, behavior, and runtime-capability contracts used by
