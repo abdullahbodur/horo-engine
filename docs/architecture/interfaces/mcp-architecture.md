@@ -253,6 +253,15 @@ Transport threads must not block indefinitely waiting for long-running engine
 work. The application use case creates jobs and operation records; MCP reports
 operation progress through declared protocol messages or explicit query tools.
 
+[ADR-106](../../adr/106-navigation-bake-ownership-transaction-and-cache.md)
+requires the navigation-bake tool to validate project-write/cook capability and
+project-contained typed IDs, then submit the same application
+`NavigationBakeService` request as GUI, CLI and release cook. It returns the
+accepted or joined `operationId` and observes the shared operation result. The MCP
+controller owns only protocol/request lifetime; disconnect follows the declared
+detach/cancel policy and cannot destroy a detached bake, release its publication
+lock, mutate cache/staging or call `INavigationMeshBuilder` directly.
+
 ## Request Cancellation
 
 Every accepted MCP request owns or joins a cancellation token. If the client

@@ -822,6 +822,12 @@ Visible as the Workspace panel with the following tabs:
     `OperationStore` owns bounded lifecycle snapshots and terminal retention.
   - Empty projections and dropped terminal-history counts are visible presentation
     states, not inferred from log text.
+  - Navigation bake rows are projections of the application-owned
+    `NavigationBakeService` defined by
+    [ADR-106](../../adr/106-navigation-bake-ownership-transaction-and-cache.md).
+    A navigation panel/menu may submit or request cancellation, but panel closure,
+    docking and workspace restoration never own the operation, builder, staging,
+    publication lock or artifact lifetime.
 
 - **MCP tab**: MCP command history and activity.
   - Owner: `McpTab`

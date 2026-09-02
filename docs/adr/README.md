@@ -117,6 +117,7 @@ to the replacement.
 | [103](103-network-project-configuration-and-build-profile-ownership.md) | Network Project Configuration and Build-Profile Ownership | Proposed | 2026-09-02 |
 | [104](104-default-navigation-provider-and-recast-detour-adoption.md) | Default Navigation Provider and Recast-Detour Adoption | Proposed | 2026-09-02 |
 | [105](105-navigation-asset-and-scene-ownership-boundary.md) | Navigation Asset and Scene Ownership Boundary | Proposed | 2026-09-02 |
+| [106](106-navigation-bake-ownership-transaction-and-cache.md) | Navigation Bake Ownership, Transaction and Cache | Proposed | 2026-09-02 |
 
 ## Conventions
 

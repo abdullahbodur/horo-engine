@@ -317,6 +317,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Navigation Asset and Scene Ownership Boundary](../adr/105-navigation-asset-and-scene-ownership-boundary.md):
   authored definition/Scene intent, immutable bake capture, cooked artifact
   provenance, runtime topology ownership, migration and missing-data policy.
+- [Navigation Bake Ownership, Transaction and Cache](../adr/106-navigation-bake-ownership-transaction-and-cache.md):
+  shared application operation, latest-wins revision capture, workspace locking,
+  complete cache identity, atomic publication, terminal states and recovery.
 
 - [Cinematic Sequencer Architecture](./runtime/cinematic-sequencer-architecture.md):
   timeline, tracks, clock authority, typed property bindings, evaluation phase,
