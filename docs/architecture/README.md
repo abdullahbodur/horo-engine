@@ -266,6 +266,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Interest, Priority and Network Budget Model](../adr/101-interest-priority-and-network-budget-model.md):
   renderer-independent network profiles, immutable relevancy facts,
   per-connection ledgers, weighted fairness and bounded overload behavior.
+- [Runtime Network Modes and Authority Exposure](../adr/102-runtime-network-modes-and-authority-exposure.md):
+  package support versus runtime selection, standalone/client/listen/dedicated
+  host plans, scoped role capabilities and generation-safe lifecycle.
 - [Asset Pipeline](./runtime/asset-pipeline.md): import, cook, package, runtime
   loading, cache, and hot reload.
 - [Prefab Architecture](./runtime/prefab-architecture.md): dual-role authoring

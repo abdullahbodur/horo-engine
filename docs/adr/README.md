@@ -113,6 +113,7 @@ to the replacement.
 | [099](099-replication-ownership-authority-and-compatibility.md) | Replication Ownership, Authority and Compatibility | Proposed | 2026-09-02 |
 | [100](100-prediction-capability-tiers-and-determinism-policy.md) | Prediction Capability Tiers and Determinism Policy | Proposed | 2026-09-02 |
 | [101](101-interest-priority-and-network-budget-model.md) | Interest, Priority and Network Budget Model | Proposed | 2026-09-02 |
+| [102](102-runtime-network-modes-and-authority-exposure.md) | Runtime Network Modes and Authority Exposure | Proposed | 2026-09-02 |
 
 ## Conventions
 

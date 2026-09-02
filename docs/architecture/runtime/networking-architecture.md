@@ -38,6 +38,7 @@ Character checkpoint.
 - **Deterministic Cancellation and Shutdown**: Every connection reaches a definitive terminal state. Disconnections, timeouts, cancellations, and engine shutdown follow bounded, leak-free teardown protocols.
 - **Opt-In Prediction**: NonPredicted is the baseline and constructs no history/replay machinery. LocalPrediction and RollbackResimulation require validated ADR-100 descriptors, bounded histories and owner-provided fixed-tick hooks.
 - **Network-Owned Scheduling**: One NetworkRuntime scheduler applies immutable renderer-independent project profiles, per-connection bandwidth/work/queue ledgers, bounded interest and weighted-deficit fairness.
+- **Typed Runtime Mode Plan**: ADR-102 separates package-supported modes from the one standalone, client, listen-server or dedicated-server plan selected before world publication. Gameplay receives world/session-generation-scoped roles and capabilities; process globals, locality and headless state never grant authority.
 
 ## Target Topology and Module Ownership
 
@@ -441,15 +442,44 @@ All transport queues have bounded capacities:
   5. Runtime destroys the unique transport. No callback may target it after destruction.
   6. Session pools and dispatcher tables are freed.
 
+## Runtime Network Modes and Authority Exposure
+
+[ADR-102](../../adr/102-runtime-network-modes-and-authority-exposure.md)
+separates the immutable modes supported by a product artifact from the one mode
+selected for a host generation. Runtime flags and project configuration can select
+only a declared mode; they cannot add a missing target/backend or synthesize
+server authority.
+
+| Runtime mode | World composition | Network service ownership | Gameplay authority exposure |
+|---|---|---|---|
+| `Standalone` | One standalone world | Omitted by default; an explicit Null facade remains inert | Normal local Scene/Gameplay ownership without a network session, grant or authority epoch |
+| `Client` | One client world | Outbound attempts and Active sessions owned by `NetworkRuntime`; no listener | Autonomous/simulated capabilities only through the current admitted session and object grants |
+| `ListenServer` | Separate authority-server and local-client worlds | Server listener/admission plus an explicitly admitted loopback client session | Server authority appears only in the server world; locality never grants the client world authority |
+| `DedicatedServer` | One authority-server world | Server listener, admission and sessions; no outbound gameplay client | Server-world authority with no local player, renderer, audio, input or window requirement |
+
+The host validates the whole world/listener/outbound/local-player matrix before
+publishing a world. Gameplay receives an immutable `GameplayNetworkRoleView`
+scoped by plan, host, scene and optional session/authority generations. Privileged
+operations revalidate those generations at the owner safe point. A process-global
+`IsServer`, listener presence, local player, loopback address, executable name,
+headless state or service-locator result is never authority.
+
+Mode is fixed for one host generation. Travel replaces world/authority generations
+without changing mode; reconnect creates a new session generation. Disconnect
+unpublishes the client session view and cannot promote a client to standalone.
+Shutdown unpublishes views and invalidates grants before worlds, sessions,
+listeners or transports are destroyed.
+
 ## Optional Composition and Product Configurations
 
-Horo Engine products compose networking according to their needs:
+Horo Engine products declare only the modes and network targets they can realize:
 
 | Configuration | Composed Targets | Behavior |
 |---|---|---|
-| **Editor / IDE** (`HoroEditor`) | `NetworkApi`, `NetworkRuntime`, `NetworkTransportGNS` | Direct-IP multiplayer preview, network debugger panel and local test servers. |
-| **Dedicated Server** (`horo-engine server`) | `NetworkApi`, `NetworkRuntime`, `NetworkTransportGNS` | Direct-IP headless execution and high-tick simulation without rendering or audio dependencies. |
-| **Offline Game Client** | `NetworkApi`, `NetworkRuntime`, `NetworkTransportNull` | Uses replication/session API locally; zero socket operations, Platform sockets, or I/O threads. |
+| **Editor / IDE** (`HoroEditor`) | `NetworkApi`, `NetworkRuntime`, `NetworkTransportGNS`, optional Null test backend | Validates an explicit standalone/client/listen/dedicated preview plan; no editor-only authority role. |
+| **Network-capable game artifact** | `NetworkApi`, `NetworkRuntime`, selected qualified transport(s) | May support client/listen/dedicated modes according to its cooked product capability declaration. |
+| **Standalone artifact** | Network targets omitted by default; optional `NetworkApi`, `NetworkRuntime`, `NetworkTransportNull` test facade | Standalone role only; the optional facade creates no listener, session, replication or authority epoch. |
+| **Dedicated-server artifact** | `NetworkApi`, `NetworkRuntime`, `NetworkTransportGNS` | Headless dedicated plan without renderer, audio, input, window or local-player dependencies. |
 | **Tooling / Packager** (`horopak`) | *None* | Links zero network targets; compiles cleanly with minimal footprint. |
 
 ## Observability and Diagnostics
@@ -478,6 +508,10 @@ The networking subsystem requires targeted automated verification:
    - `PollEvents()` drains the transport-owned in-memory queue on the caller thread.
    - Graceful disconnect and timeout handling.
 3. **Integration & Lifecycle Tests**:
+   - Complete standalone/client/listen/dedicated plan matrix, including unsupported package modes and incompatible world/listener/outbound/local-player capabilities.
+   - World-scoped role exposure rejects authority inferred from flags, headless state, listeners, local players, loopback or same-process pointers.
+   - Listen-server worlds remain isolated through admitted loopback, travel and local-client disconnect; client disconnect never promotes to standalone.
+   - Travel/reconnect replace scene, authority and session generations; stale grants, role views and late work cannot mutate or republish state.
    - Full client-server connect, session authenticate, transfer, and disconnect sequences.
    - Connected peers sending early gameplay never reach gameplay/replication callbacks.
    - Loopback, LAN and remote valid flows; wrong pins/roots, unauthenticated encryption, invalid/expired/revoked credentials and downgrade/replay attempts.
@@ -502,6 +536,7 @@ The networking subsystem requires targeted automated verification:
 - [ADR-099: Replication Ownership, Authority and Compatibility](../../adr/099-replication-ownership-authority-and-compatibility.md)
 - [ADR-100: Prediction Capability Tiers and Determinism Policy](../../adr/100-prediction-capability-tiers-and-determinism-policy.md)
 - [ADR-101: Interest, Priority and Network Budget Model](../../adr/101-interest-priority-and-network-budget-model.md)
+- [ADR-102: Runtime Network Modes and Authority Exposure](../../adr/102-runtime-network-modes-and-authority-exposure.md)
 - [System Design](../foundation/system-design.md)
 - [Desired Project Trees](../desired-project-tree.md)
 - [Multiplayer Replication Architecture](./multiplayer-replication-architecture.md)

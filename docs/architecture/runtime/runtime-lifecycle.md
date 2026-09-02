@@ -19,6 +19,9 @@ for editor and game runtimes.
 - Shutdown is ordered, idempotent, and stops producers before dependencies.
 - Headless execution follows the same lifecycle without window, input, GUI, or
   graphics capabilities unless requested.
+- Network-capable hosts validate one ADR-102 standalone/client/listen/dedicated
+  mode plan before world publication. Runtime mode stays fixed for the host
+  generation and gameplay authority remains world/session-generation scoped.
 
 ## Runtime Owners
 
@@ -70,18 +73,41 @@ Startup order:
 2. initialize emergency diagnostics and platform directories
 3. start observability and emit build/system identity
 4. resolve configuration
-5. construct platform, jobs, data bus, and asset services
-6. initialize the requested omitted/null/device audio composition through ADR-062
-7. initialize requested renderer and window capabilities
-8. initialize the selected omitted/model-only/rendered Runtime UI composition
-9. construct application services
-10. load project and initial scene through application use cases
-11. start optional runtime console, MCP, and GUI adapters
-12. enter `Ready`, then `Running`
+5. validate product capabilities and resolve one ADR-102 runtime network plan
+6. construct platform, jobs, data bus, and asset services
+7. initialize the requested network runtime/transport and local-player composition
+8. initialize the requested omitted/null/device audio composition through ADR-062
+9. initialize requested renderer and window capabilities
+10. initialize the selected omitted/model-only/rendered Runtime UI composition
+11. construct application services and unpublished world candidates with exact roles
+12. load and atomically publish the initial scene/world composition
+13. start optional runtime console, MCP, and GUI adapters
+14. enter `Ready`, then `Running`
 
 Arguments, environment, and persisted settings are resolved through
 [Configuration System](../foundation/configuration-system.md). Startup failures return
 typed errors and retain enough diagnostics for CLI or GUI presentation.
+
+### Runtime network mode lifecycle
+
+[ADR-102](../../adr/102-runtime-network-modes-and-authority-exposure.md) separates
+the modes supported by an artifact from the one plan selected for a host
+generation. Unsupported requests and incompatible listener/outbound/local-player/
+world-role combinations fail before any world or authority view is published.
+Standalone omits networking by default; client, listen-server and dedicated-server
+plans compose only their declared services.
+
+Transport `Connected` is not a gameplay lifecycle transition. A client role view
+gains a session generation only after ADR-098 activation. Listen-server authority
+and local-client worlds publish as distinct roles even in one process. Dedicated
+mode omits presentation/local-player services without changing server authority.
+
+Travel preserves mode while replacing scene and authority generations; listen-
+server travel commits compatible server/client candidates together. Reconnect
+repeats admission under a new session generation. Disconnect unpublishes the
+client session view and cannot silently turn the world into standalone. Changing
+runtime network mode requires bounded host recomposition rather than a scene
+transition or global-flag mutation.
 
 ## Frame Phases
 
@@ -486,20 +512,22 @@ Canonical shutdown:
 
 1. transition host to `Stopping`
 2. stop external request acceptance and close modal workflows
-3. stop play simulation and unload active scenes
-4. cancel and join host-scoped jobs
-5. stop MCP, networking, and other transports
-6. drain owner-thread continuations
-7. close Runtime UI command/input admission, retire every scope/attachment, join
+3. unpublish ADR-102 gameplay network role/session views, invalidate grants and
+   stop local-player/input producers
+4. stop play simulation and unload active scenes
+5. cancel and join host-scoped jobs
+6. stop MCP, networking, and other transports
+7. drain owner-thread continuations
+8. close Runtime UI command/input admission, retire every scope/attachment, join
    UI work, and release UI render/resource leases
-8. release GUI and editor sessions
-9. wait for renderer idle as required and destroy GPU resources
-10. stop audio producers, quiesce/detach the callback, reconcile terminal outcomes,
+9. release GUI and editor sessions
+10. wait for renderer idle as required and destroy GPU resources
+11. stop audio producers, quiesce/detach the callback, reconcile terminal outcomes,
    and release device-owned resources under ADR-062
-11. destroy application and engine services
-12. stop job and platform services
-13. flush observability and write clean-shutdown marker
-14. transition to `Stopped`
+12. destroy application and engine services
+13. stop job and platform services
+14. flush observability and write clean-shutdown marker
+15. transition to `Stopped`
 
 Shutdown may be requested more than once but executes its transitions once.
 
@@ -537,6 +565,10 @@ Required tests cover:
 - headless lifecycle without GUI or graphics
 - Runtime UI phase order across zero/multiple fixed ticks, gameplay pause/step,
   suspension, failed presentation, scene/viewport teardown and shutdown
+- standalone/client/listen/dedicated network plan startup, admission, aggregate
+  listen-server travel, disconnect/reconnect generation replacement and shutdown
+- rejection of incompatible role capabilities and of authority inferred from
+  process flags, locality, local players, listeners, headless state or build kind
 
 ## Related Documents
 
@@ -546,6 +578,7 @@ Required tests cover:
 - [Physics Architecture](./physics-architecture.md)
 - [Audio Architecture](./audio-architecture.md)
 - [Networking Architecture](./networking-architecture.md)
+- [ADR-102: Runtime Network Modes and Authority Exposure](../../adr/102-runtime-network-modes-and-authority-exposure.md)
 - [Asset Pipeline](./asset-pipeline.md)
 - [Runtime Debug Console And Development Overlays](./debug-console-and-overlays.md)
 - [Concurrency And Job System](../foundation/concurrency-and-jobs.md)
