@@ -20,6 +20,49 @@ debugging for Horo Engine.
 - Physics queries use explicit snapshots or world affinity.
 - Backend-independent engine contracts do not expose solver implementation
   details.
+- [ADR-084](../../adr/084-canonical-physics-solver-units-and-tolerances.md)
+  selects pinned Jolt v5.6.0 as the one private initial solver; it does not create
+  a runtime multi-solver ABI.
+- [ADR-086](../../adr/086-collision-layer-profile-and-query-channel-policy.md)
+  separates stable project collision layers, reusable profiles and query channels
+  from generation-scoped packed/native filter representations.
+
+## Canonical Solver, Units And Tolerance Profile
+
+CanonicalV1 pins Jolt `v5.6.0` at commit
+`e77f175595e64cb44218cc9d9d56fc365ad0e36a`, float precision and a serial Horo-
+owned job profile. Jolt types, handles, listeners, locks, allocators, job objects
+and binary state stay private to `HoroEngine::Physics`; public/scene/gameplay
+contracts expose only Horo values and generation-checked handles.
+
+Physics uses SI units: meters, seconds, kilograms, radians, newtons and derived SI
+units. It shares Scene Math's right-handed, `+Y`-up, `-Z`-forward, column-vector
+convention without a hidden axis/unit conversion. Default gravity is
+`(0, -9.81, 0) m/s²`. Foreign content normalizes at import; Physics never guesses
+centimeters or per-body scale.
+
+The ADR-026 local float cluster has a hard half-extent of `8192 m` and a qualified
+high-fidelity dynamic-contact radius of `4096 m`. Canonical ordinary dynamic
+objects are `0.1..10 m`, static objects `0.1..2000 m`, and speeds `0..500 m/s`.
+Out-of-profile data is diagnosed/rejected, not silently clamped.
+
+`PhysicsToleranceProfileId::CanonicalV1` pins collision tolerance `1e-4 m`,
+manifold tolerance `1e-3 m`, speculative distance and penetration slop `0.02 m`,
+maximum correction `0.2 m`, warm-contact distance `0.01 m`, sleep velocity
+`0.03 m/s`, sleep time `0.5 s`, and solver iterations `10/2`. Exact identities,
+events, layers and serialization never use these as a generic epsilon.
+
+Initial Horo qualification covers macOS 14+ arm64/x86_64, Windows 11 x86_64 and
+Ubuntu 24.04 x86_64, including headless compositions. Android, iOS, WebAssembly,
+other architectures and consoles remain unqualified/unsupported for shipped Horo
+Physics until their explicit matrix exists. Upstream build support alone is not a
+Horo support claim.
+
+Jolt is distributed under MIT with pinned license/notice/SBOM inputs. Solver
+upgrades are dedicated compatibility changes reviewing release/API/default drift,
+compile definitions, derived-cache invalidation, platform qualification,
+performance and rollback. Horo never persists Jolt binary state as project/save
+authority.
 
 ## Ownership
 
@@ -50,6 +93,137 @@ using ConstraintHandle = Handle<PhysicsConstraintTag>;
 
 Stale handles return typed errors or empty query results according to the API
 contract. They never alias newly created physics objects.
+
+## Shape Authoring, Cook And Runtime Boundary
+
+[ADR-085](../../adr/085-physics-shape-authoring-cook-and-runtime-boundary.md)
+separates typed authored collider descriptors, Physics-normalized cook input,
+target-keyed Horo cook artifacts and immutable runtime shape leases. Scene and
+gameplay data retain stable Horo asset/material/subshape IDs; source paths, native
+Jolt types, pointers and serialized solver state do not cross the boundary.
+
+Boxes, spheres, capsules and static planes use analytic descriptors. Convex hulls,
+triangle meshes, height fields and compounds use bounded canonical geometry and
+stable child/material mappings. Dynamic bodies accept primitives, convex hulls and
+convex compounds; triangle meshes, height fields and static planes remain static.
+Scale is validated and baked before cook rather than applied to runtime shapes.
+
+Cook identity binds semantic source and dependency digests to Horo shape/cooker
+schemas, the canonical tolerance profile, target platform and the exact private
+solver build fingerprint. Runtime activation consumes only validated artifacts;
+it never imports or cooks source and never silently substitutes a primitive.
+Shape replacement builds a candidate lease first and swaps body references only
+at the Physics pre-step safe point, retaining old leases until all readers and
+frames that can reference them have drained.
+
+## Scene Conversion And Activation Ownership
+
+[ADR-087](../../adr/087-scene-to-physics-ownership-and-conversion.md) makes
+authored rigid-body components explicit body producers, collider components
+explicit contributors to one named body shape and constraint components explicit
+links between named body slots. Colliders, render meshes, primitives and hierarchy
+never create implicit bodies; authoring conveniences persist complete component
+bundles.
+
+Physics owns `PhysicsScenePlanBuilder`, which consumes immutable typed scene data
+and resolves body graphs, transforms, shape/material/filter dependencies,
+constraints and stable writeback mappings without editor or native types. The host
+injects Physics as a scene activation participant. It builds a closed detached
+world candidate; neither workers nor editor code mutate the active world or publish
+handles.
+
+`RuntimeSceneService` owns the aggregate candidate and sole activation path.
+`CommitDeferredLifecycleChanges` atomically publishes ECS storage, resource leases,
+the Physics world and its generation-scoped binding table only after all fallible
+work and final generation/budget validation succeed. Replacement failure destroys
+only the candidate and leaves the prior scene/world/query state unchanged. The
+first Physics tick occurs after the complete bundle is authoritative.
+
+[ADR-137](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
+keeps terrain/foliage collision on this ownership path. Terrain supplies immutable
+cooked shape-install descriptors tagged with exact dataset/tile/content generations;
+Physics prepares and owns bodies, native shapes, thread affinity and retirement.
+Terrain observes typed readiness/leases only and cannot mutate an active body or claim
+collision ready from visual residency. Replacement publishes through the aggregate
+scene/cell barrier and retains old Physics resources until Physics acknowledges release.
+
+[ADR-141](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md)
+defines the receipt protocol for that barrier. Terrain lends a bounded immutable neutral
+collision snapshot with exact Terrain/content/mutation/cell/request/origin evidence.
+Physics validates and prepares its own shapes, bodies, filters and material mappings, then
+returns generation-tagged Ready/Prepared/Published/Retired receipts. Prepared publication
+executes at the Physics pre-step safe point into activation-scoped routing; ordinary
+queries cannot discover it until RuntimeScene/World Streaming commits the aggregate root.
+A stale snapshot/receipt or required Physics failure rolls back the candidate, never the
+old collision world. Physics alone acknowledges retirement after steps, queries and shape/
+body readers drain.
+
+[ADR-144](../../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md)
+keeps fracture semantics outside Physics. Contacts are bounded tick/generation evidence;
+they cannot mutate health, chunk membership or Scene structure from a solver callback.
+Destruction consumes eligible evidence after the step and may stage a later transition.
+Physics prepares only the exact pre-cooked convex chunk shapes/bodies named by that
+transition, publishes them privately at its safe point and returns typed readiness to
+the aggregate Scene commit. Core 1.0 performs no runtime mesh cutting, convex
+decomposition, collision cook or fallback-shape invention.
+
+[ADR-145](../../adr/145-destruction-source-chunk-geometry-collision-and-cook-ownership.md)
+places canonical chunk geometry/connectivity and solver-neutral convex inputs in the DFR
+artifact, not in Physics. Physics consumes one exact artifact/chunk/subshape revision,
+validates dynamic-convex and mass/material/filter policy, and cooks a separately keyed
+solver/profile/platform-private immutable shape artifact under ADR-085. It cannot alter
+chunk topology/identity or substitute a box/mesh/recomputed hull; Destruction cannot
+serialize Jolt data or claim a native shape ready.
+
+[ADR-146](../../adr/146-destruction-runtime-activation-physics-cleanup-and-rollback.md)
+defines the runtime body transaction. Contact callbacks append only bounded immutable
+evidence; Destruction consumes it after the step and plans a later transition. Physics
+prepares exact pre-cooked chunk bodies privately, applies staged initial impulses and
+installs them at the pre-step safe point into transition-ticket routing. Ordinary queries
+continue to resolve the old root until RuntimeScene aggregate commit. Before that commit,
+cancel/failure retires only the candidate after readers drain; after it, recovery is a
+new transaction rather than restoration of old native handles. Solver sleep cannot
+authorize canonical chunk cleanup.
+
+## Character Query Boundary
+
+[ADR-089](../../adr/089-character-controller-ownership-implementation-and-update-order.md)
+keeps the Horo Character domain behind the initial `HoroEngine::Physics` target but
+does not expose Jolt Character classes or add a replaceable backend ABI. One scene-
+owned `CharacterWorld` implements the bounded Horo overlap/support/carry/sweep/
+slide/step/ground algorithm against a read-only, tick/world-generation-affine
+`CharacterPhysicsQueryContext`.
+
+The private adapter maps Horo capsule queries, filter/material evidence and staged
+impulses/presence targets to Jolt narrowphase/body commands. Native collectors do
+not run gameplay or mutate bodies. A private adapter/solver replacement must
+reproduce Horo golden semantics and requalify determinism/performance.
+
+Character movement stages before the Physics step from committed bodies, admitted
+kinematic targets and support point-velocity evidence. Physics then applies staged
+commands and steps once. Post-Physics Character work finalizes support/attachment
+and publishes the collision root with tick commit; it never performs a second move.
+
+[ADR-090](../../adr/090-character-dynamic-body-visibility-push-and-proxy-policy.md)
+separates dynamic query visibility, one-way staged impulses and optional solver
+visibility. In `BidirectionalProxy`, Physics privately owns one derived kinematic
+capsule proxy per admitted Character. The proxy collides only with selected dynamics,
+is not a public/authored body and never becomes transform authority. Physics reduces
+post-step proxy contacts into bounded stable Horo reaction evidence; Character may
+consume committed evidence on the next tick through its ordinary sweep solver.
+
+One-way impulses and proxy solver impulses are mutually exclusive for a pair. Proxy
+creation, target updates, filter/schema generations, contact evidence and retirement
+are part of the same scene/world/Character lifecycle and fail closed when the exact
+capability or qualified determinism tier is unavailable.
+
+[ADR-092](../../adr/092-character-controller-determinism-and-state-composition.md)
+requires every Character checkpoint to bind one exact committed Physics/world
+checkpoint, tick, origin, structure and determinism fingerprint. Stable support-body
+bindings resolve against that detached Physics candidate during restore. Character
+cannot restore independently or persist Jolt bodies, proxy state, manifolds, query
+caches or native IDs. Aggregate failure leaves the active Scene/Physics/Character
+bundle unchanged.
 
 ## Fixed-Step Pipeline
 
@@ -114,6 +288,12 @@ Events are stored in a world-owned bounded buffer and consumed during the
 declared post-physics phase. They are not individually published to the
 process-wide data bus.
 
+An immersive editor agent admitted under
+[ADR-172](../../adr/172-immersive-agent-ownership-authoring-mode-and-risk.md)
+may consume bounded, generation-checked query or contact summaries as context.
+Physics events remain simulation facts: contact, overlap, grab and throw evidence
+never grants agent intent, proposal approval or solver-mutation authority.
+
 If overflow occurs, the world records a metric and emits one diagnostic summary.
 
 ## Queries
@@ -123,7 +303,7 @@ Supported queries include ray, shape cast, overlap, and point tests.
 Queries declare:
 
 - target world and scene generation
-- filter layers and masks
+- one stable project query channel plus explicit typed selectors where applicable
 - whether triggers are included
 - maximum result count
 - ordering guarantee
@@ -134,26 +314,57 @@ staleness.
 
 ## Layers And Filtering
 
-Collision layers are stable project configuration. The physics world resolves
-them into efficient masks at scene activation.
+[ADR-086](../../adr/086-collision-layer-profile-and-query-channel-policy.md)
+defines separate opaque 128-bit `CollisionLayerId`, `CollisionProfileId` and
+`PhysicsQueryChannelId` values. They are project-stable identities; display names,
+list positions, serialized bitmasks and Jolt object-layer values are not identity.
 
-Unknown layers, asymmetric invalid matrices, and unsupported runtime changes
-produce diagnostics. Layer display names are not serialized as runtime identity.
+The committed project collision schema owns one complete symmetric layer-pair
+matrix. `Ignore` rejects simulation, `Overlap` detects without solver response and
+`Block` admits contact solving. Every complete reusable profile selects exactly one
+simulation layer and an explicit `Ignore`/`Overlap`/`Block` response for every
+query channel. Simulation and query responses are distinct enum types and cannot
+be substituted for one another.
+
+Scene preparation validates exact profile/channel references and acquires an
+immutable schema generation. The world deterministically compiles dense indices,
+bitsets, broadphase partitions and native adapters as private state. Immediate
+queries use the active generation; snapshot queries lease the captured generation.
+Unknown IDs, missing/asymmetric entries and unsupported runtime changes fail with
+typed diagnostics rather than using the project's authoring default.
+
+Semantic schema changes build complete candidate tables and publish atomically at
+the Physics pre-step safe point. Bodies retain typed IDs plus schema generation,
+and every debug/event/query projection translates private indices back to Horo IDs.
 
 ## Determinism
 
-The engine guarantees deterministic behavior only for a declared combination
-of:
+[ADR-088](../../adr/088-physics-determinism-capability-and-support-tiers.md)
+defines four fail-closed capability tiers: `Unspecified`, development-only
+`SameMachineDiagnostic`, the 1.0 target `SameBuildSamePlatform`, and future
+`CrossPlatformQualified`. The current architecture decision does not itself mark a
+shipping tuple qualified; PHY-007.2/.3/.5/.8 ordering, state, replay and evidence
+gates must pass first.
 
-- engine and physics format version
-- platform and architecture class
-- fixed timestep and solver configuration
-- initial scene definition
-- ordered input frames
+Compatibility is an exact versioned fingerprint over shipped participating module
+bytes, pinned solver source/defines, compiler/ABI/ISA/FP/job profile, Horo Physics
+algorithms/schemas, fixed delta, content/filter/shape/material/package manifests,
+initial state and ordered command protocol. Tier 2 requires identical fingerprints
+and a qualified platform class. Tier 3 uses separate member fingerprints plus one
+explicit pairwise-evidenced compatibility group; enabling Jolt's cross-platform
+define locally creates no claim.
 
-Iteration order, constraint order, random seeds, and floating-point policies are
-kept stable within that contract. Cross-platform bit-identical simulation is
-not claimed unless separately verified.
+Initial state and every mutation use stable Horo identity/order/seed and tick-indexed
+command frames. Included checkpoints, body/constraint state, events, writeback,
+origin and command results compare exact canonical encodings. Raw callback, native
+enumeration and broadphase query order are excluded; an authoritative Horo query
+must revalidate/canonicalize/sort results before it can influence simulation.
+
+CanonicalV1 remains serial and uses the normal non-cross-platform build. Parallel
+stepping or a future `CrossPlatformDeterministicV1` profile needs a new fingerprint,
+performance/support matrix and qualification. Determinism alone does not authorize
+rollback or lockstep; complete Horo snapshots, structural resimulation, history,
+side-effect and Network authority contracts remain separate.
 
 ## Threading
 
@@ -230,6 +441,15 @@ Required tests cover:
 - core collider shape primitives resolve correctly from the primitive catalog
 - origin shift position translation without velocity or momentum alterations
 - sleeping island preservation across origin rebasing transactions
+- terrain/foliage collision descriptor generation, aggregate activation, stale
+  replacement rejection and Physics-owned retirement
+- Terrain collision snapshot/receipt generations, adversarial owner-safe-point order,
+  required/optional failure and no partial query visibility before aggregate commit
+- destruction contacts remain immutable post-step evidence, while pre-cooked chunk
+  bodies prepare/rollback/publish/retire through Physics safe points without runtime
+  geometry or collision cooking
+- destruction body receipts remain transition/world/binding-generation scoped; private
+  publication is not query visibility, and aggregate commit is the rollback boundary
 
 ## Related Documents
 
@@ -244,3 +464,8 @@ Required tests cover:
 - [Built-In Scene Primitives](./built-in-scene-primitives.md)
 - [Ownership And Resource Lifetime](../foundation/ownership-and-resource-lifetime.md)
 - [Observability Metrics And Profiling](../observability/observability-performance.md)
+- [ADR-137: Terrain and Foliage Ownership, Data, Tier and Lifecycle](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
+- [ADR-141: Terrain/Foliage Cross-System Ownership and Readiness](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md)
+- [ADR-144: Destruction Ownership, Authority, State and Runtime Geometry Boundary](../../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md)
+- [ADR-145: Destruction Source, Chunk Geometry, Collision and Cook Ownership](../../adr/145-destruction-source-chunk-geometry-collision-and-cook-ownership.md)
+- [ADR-146: Destruction Runtime Activation, Physics, Cleanup and Rollback](../../adr/146-destruction-runtime-activation-physics-cleanup-and-rollback.md)

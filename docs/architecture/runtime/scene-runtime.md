@@ -142,6 +142,97 @@ and authoring conveniences. Runtime modules do not parse it directly.
 `RuntimeSceneDefinition` contains validated, typed, backend-neutral data needed
 to instantiate a runtime scene.
 
+## Physics Shape Boundary
+
+[ADR-085](../../adr/085-physics-shape-authoring-cook-and-runtime-boundary.md)
+requires scene conversion to resolve every collider to an exact published Physics
+shape artifact and stable material/subshape bindings before activation. Runtime
+scene data carries Horo identities, expected artifact digests and body-motion
+intent, never source paths, raw geometry or solver-native handles.
+
+Scene preparation acquires immutable shape leases. Activation fails atomically
+when a required artifact is absent, incompatible or exceeds limits; Runtime does
+not import, cook or invent a fallback collider. Reload prepares candidate leases
+off to the side and commits body shape swaps only at the Physics pre-step safe
+point. Retired leases remain alive until scene, query and in-flight Physics readers
+have drained.
+
+[ADR-086](../../adr/086-collision-layer-profile-and-query-channel-policy.md)
+also requires scene conversion to resolve each collider's stable project
+`CollisionProfileId` against the exact locked collision-schema fingerprint.
+Candidate preparation acquires one immutable filter-schema generation and compiles
+private runtime/native tables; scene data never stores display names, bit positions
+or solver object layers. Missing or stale profile/channel IDs block activation
+rather than using the project's authoring default.
+
+[ADR-087](../../adr/087-scene-to-physics-ownership-and-conversion.md) defines the
+owning conversion and activation transaction. Scene Model carries explicit typed
+rigid-body, collider and constraint intent; Physics alone validates semantics and
+builds a canonical `PhysicsScenePlan` plus detached world candidate. A collider
+never infers a body from hierarchy/render data, and a constraint never binds a
+runtime entity handle or creates a missing endpoint.
+
+The host injects Physics through the generic scene activation-participant seam;
+RuntimeScene does not interpret solver semantics or discover services. The one
+`RuntimeSceneService::QueuePreparation` candidate owns detached ECS storage and
+all participant candidates. At `CommitDeferredLifecycleChanges`, ECS, resource
+leases, Physics world and the private generation-scoped binding table publish as a
+single no-fail bundle. Any earlier failure/cancellation destroys only candidate
+state, consumes no public identities and preserves the prior active scene/world.
+
+[ADR-144](../../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md)
+uses the same aggregate seam for destruction. Scene data carries only stable
+destructible/fracture-asset/policy binding intent. The scene-scoped Destruction owner
+commits canonical health, semantic phase and chunk/support membership; Physics and
+Render prepare pre-cooked chunk representations privately. RuntimeScene exposes the
+new semantic revision, entity/component set, intact/chunk visibility and required
+bodies only through one complete activation root. Core 1.0 never generates missing
+mesh topology or collision during scene activation.
+
+[ADR-146](../../adr/146-destruction-runtime-activation-physics-cleanup-and-rollback.md)
+specializes that seam for intact-to-chunk transitions and cleanup. One transition ticket
+closes the exact semantic snapshot, ECS batch, Physics/Render receipts, leases and peak
+reservation. Participant-private publication remains unreachable through ordinary
+Scene/Physics/Render queries; `CommitDeferredLifecycleChanges` is the sole public
+visibility and rollback boundary. Pre-commit failure preserves the old root, while
+post-commit restore, dormancy or recovery requires a new revisioned aggregate
+transaction. RuntimeScene never infers fracture from a body or rewinds native handles.
+
+## Navigation Authoring And Runtime Boundary
+
+[ADR-105](../../adr/105-navigation-asset-and-scene-ownership-boundary.md)
+requires `SceneDocument` to store typed navigation intent only. Stable Scene
+object/component/contribution IDs identify explicit surface, geometry-source,
+modifier, grounded-link and dynamic-obstacle declarations that reference a tracked
+`NavigationDefinition` AssetId. Components never serialize generated triangles,
+polygons, adjacency, tiles, provider refs/blobs or runtime topology handles.
+
+The application bake operation captures one immutable, revision-consistent view of
+the Scene intent and exact accepted geometry artifacts. That
+`NavigationBakeInputSnapshot` is derived operation state, not a Scene revision or
+asset. Asset Pipeline publishes its validated `GroundedNavMeshArtifact`; generated
+data never modifies document dirty state, undo history or source serialization.
+
+Scene conversion resolves each required definition/profile/scope to an exact
+published artifact identity and expected digest. Navigation prepares a detached
+generation-scoped topology candidate through the activation-participant seam. The
+candidate publishes atomically with the Scene; missing, stale, corrupt or
+unsupported required navigation rejects activation and preserves the old Scene.
+An explicitly optional capability may activate with typed `NoNavigationData`, but
+neither required nor optional policy authorizes runtime bake, source I/O or a fake
+path. Dynamic obstacle/carving state is runtime-owned transient overlay state and
+cannot write back into the Scene or cooked base.
+
+[ADR-107](../../adr/107-navigation-query-consistency-and-snapshot-ownership.md)
+binds one `NavigationWorldId` and combined query-snapshot root to the exact active
+`SceneRuntimeId`. Scene unload/replacement closes old navigation admission and
+requests cancellation before commit, then publishes a never-reused world
+incarnation with the new Scene. Old read leases may keep provider bytes safe while
+workers finish, but their results are `InvalidWorld`/cancelled and cannot apply to
+the replacement. `CommitDeferredLifecycleChanges` makes prepared Scene/cell
+topology visible before the following owner-thread `NavIntentCommit`; workers never
+publish into Scene components.
+
 ## Runtime UI Scope Boundary
 
 [ADR-073](../../adr/073-runtime-ui-ownership-scope-and-update-order.md) makes
@@ -217,8 +308,14 @@ Components are typed state carriers. They:
 - avoid hidden thread synchronization
 - do not invoke GUI or transport services
 - do not own system scheduling
-- declare serialization and runtime-only status
+- declare authoring-schema and runtime persistence participation metadata
 - use stable asset and entity references
+
+Components do not self-serialize arbitrary memory for runtime saves. Under
+[ADR-114](../../adr/114-canonical-runtime-world-persistence-boundary.md), exactly one
+subsystem-owned canonical adapter owns each durable semantic field. Reflection and
+component storage support authoring/runtime access but do not grant persistence
+authority.
 
 Polymorphic gameplay behavior is owned through explicit behavior components
 registered by the gameplay module boundary, not hidden in arbitrary component
@@ -279,23 +376,39 @@ exists so future parallelism does not require redesigning system ownership.
 Within a fixed tick,
 [ADR-061](../../adr/061-animation-ownership-update-order-and-clock.md) requires
 gameplay parameter commit before animation pre-physics evaluation, root-motion
-request admission before character-controller movement, physics next, and typed
-post-physics pose override/finalization before tick publication. These are
-dependencies within the existing phase graph, not new `RuntimePhase` values.
+request admission before Character platform/query movement, Physics next,
+Character support/transform finalization without a second move, and typed
+post-Physics pose override/finalization before tick publication. ADR-089 owns the
+Character-specific details. These are dependencies within the existing phase graph,
+not new `RuntimePhase` values.
 
 ## Runtime Save And Restore Integration
 
 [Runtime persistence](./save-game-and-persistence.md) is coordinated by an
 application/session-owned service, not a service retaining a replaceable scene
 reference. Capture hands workers an owned immutable, revision-consistent snapshot;
-live ECS pools are not held frozen after the lifecycle safe point. Slot restore
-prepares a private bundle of Scene, gameplay, slot player and persistent world state
-through the existing QueuePreparation admission seam. CommitDeferredLifecycleChanges
-publishes all prepared roots without fallible work or intermediate observers. Its scene
-candidate cannot auto-activate while the composite bundle gate is pending; account
-settings/achievements remain outside that transaction. This composite commit is an
-implementation requirement beyond SCN-001, not a second public activation path.
-Old scene/provider resources retire asynchronously with their leases preserved.
+live ECS pools are not held frozen after the lifecycle safe point. ADR-114 assigns the
+core Scene adapter only persistent entity existence, authored/spawn identity,
+tombstones, hierarchy/reference remaps and explicitly owned core fields. Gameplay,
+Physics/Character and Persistent World adapters retain their own canonical semantics;
+Scene never reflects over their component memory.
+
+Slot restore resolves a compatible cooked authoring base, composes stable-ID keyed
+overrides/spawns/tombstones and prepares a private bundle of Scene, gameplay, slot
+player and persistent world state through the existing QueuePreparation admission
+seam. It never edits SceneDocument or cooked assets. CommitDeferredLifecycleChanges
+publishes all prepared roots without fallible work or intermediate observers. Its
+scene candidate cannot auto-activate while the composite bundle gate is pending;
+account settings/achievements remain outside that transaction. This composite commit
+is an implementation requirement beyond SCN-001, not a second public activation path.
+Old scene/participant resources retire asynchronously with their leases preserved.
+
+[ADR-092](../../adr/092-character-controller-determinism-and-state-composition.md)
+requires the Character provider snapshot to share the exact committed tick, scene/
+structural revision, origin, determinism fingerprint and paired Physics checkpoint.
+Restore resolves all stable support/controller bindings inside the detached aggregate
+candidate; a standalone, partial or mixed-generation Character restore cannot enter
+the publication gate.
 
 ## Runtime Scene Definition
 
@@ -317,6 +430,21 @@ string property bags for built-in component behavior.
 Prefab references placed in the authoring document are expanded before the
 runtime scene is built. Runtime modules see only the expanded objects, never raw
 prefab paths. See [Prefab Architecture](./prefab-architecture.md).
+
+[ADR-096](../../adr/096-prefab-external-reference-and-binding-slot-contract.md)
+requires prefab-local references to resolve inside the complete expanded candidate
+and forbids prefab source from retaining scene IDs, `EntityRef`, pointers, paths or
+name queries to external scene objects. Static prefab instance bindings live in the
+containing `SceneDocument`, keyed by stable typed slot ID and stable scene target.
+Conversion resolves required/optional bindings against one immutable document
+snapshot before publishing `RuntimeSceneDefinition`.
+
+Runtime binding tables contain scene-qualified generation-checked references and
+do not own target lifetime. A missing required, duplicate, stale or incompatible
+binding rejects activation; omitted optional bindings become typed `Unbound`.
+Target destruction after activation makes access unavailable without retargeting a
+reused entity slot. Scene reload rebuilds the table as part of its detached
+candidate and never carries raw addresses from the previous runtime generation.
 
 ## Load State Machine
 
@@ -342,6 +470,8 @@ after:
 
 - definition validation succeeds
 - required assets and capabilities are available
+- any requested Physics determinism tier/fingerprint/evidence is qualified under
+  [ADR-088](../../adr/088-physics-determinism-capability-and-support-tiers.md)
 - systems initialize successfully
 - physics and render bindings are ready
 - startup hooks succeed
@@ -362,7 +492,8 @@ Reload strategy is explicit per state category:
 | Physics state | Rebuild unless preservation contract exists |
 
 Reload does not copy arbitrary component memory by type name. Preservation uses
-typed adapters and stable object IDs.
+typed adapters and stable object IDs. Development hot-reload/restart preservation is
+not automatically a durable ADR-114 participant or save-schema promise.
 
 ## Scene References
 
@@ -399,6 +530,25 @@ discarded when that ID no longer matches the active runtime. Editor selection is
 owned as logical `SceneObjectId`: it resolves to the replacement scene when the
 object remains and is cleared when the authored object was deleted. Editor state
 does not retain an old runtime's `EntityRef`.
+
+## Replication Ownership Boundary
+
+[ADR-099](../../adr/099-replication-ownership-authority-and-compatibility.md)
+keeps canonical component/gameplay values and mutation safe points in Scene and
+their declaring systems. `NetworkRuntime` may invoke a registered capture adapter
+with a validated read-only owner-thread view at the network capture safe point; it
+never scans component memory or infers wire fields from ECS layout.
+
+Received replication is a bounded typed apply command carrying scene/entity,
+authority, object and schema generations. Scene revalidates them at the owner safe
+point and invokes the declaring owner's apply adapter. The adapter commits one
+valid mutation or fails without partial visibility; NetworkRuntime cannot write a
+component pool directly. Scene reload/destruction changes generation/authority
+epoch so late records cannot target reused entity slots.
+
+Standalone, authority-server, autonomous-client and simulated-client roles are
+explicit host/world capabilities. Entity locality, possession, input device and
+same-process listen-server composition never grant Scene write authority.
 
 ## Data Bus Relationship
 
@@ -450,6 +600,10 @@ Required tests cover:
 - nested reference cancellation and cycle detection
 - scene unload with jobs, physics, and render leases
 - binary format corruption and version behavior
+- destruction binding conversion and aggregate semantic/entity/render/Physics chunk
+  publication with no runtime geometry fallback
+- destruction transition-ticket isolation, pre-commit rollback, post-commit compensating
+  transactions and dormancy cleanup with no partial query visibility
 
 ## Related Documents
 
@@ -462,3 +616,6 @@ Required tests cover:
 - [Rendering Architecture](./rendering-architecture.md)
 - [Editor Document Model](../editor/editor-document-model.md)
 - [Save Game And Persistence](./save-game-and-persistence.md)
+- [Destruction And Fracture](./destruction-and-fracture-architecture.md)
+- [ADR-114](../../adr/114-canonical-runtime-world-persistence-boundary.md): canonical
+  state classification, Scene base/override composition and adapter ownership.

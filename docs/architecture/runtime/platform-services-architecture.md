@@ -12,6 +12,44 @@ The goal is a single backend-neutral frontend that gameplay code can use
 without caring which platform the game is running on, while the actual
 platform SDK implementations live in separate, optionally loaded backends.
 
+[ADR-130](../../adr/130-platform-services-frontend-request-lifetime-timeout-null-and-error-semantics.md)
+is the normative baseline for frontend-owned request records, admission, state and
+result publication, deferred callback dispatch, capability truth, Null behavior,
+timeout and provider-error normalization. Later service decisions specialize this
+contract rather than creating another request lifecycle.
+
+[ADR-131](../../adr/131-platform-services-closed-sdk-extension-abi-package-and-composition-boundary.md)
+keeps proprietary SDKs in separately built private packages, assigns discovery/trust/
+load/selection to distinct owners, constrains asynchronous provider exchange to a
+versioned C ABI and freezes explicit composition for development, headless, test,
+unsupported and certification profiles.
+
+[ADR-132](../../adr/132-platform-services-project-salt-stable-id-tombstone-and-provider-mapping.md)
+defines the one committed project identity ledger, byte-exact SHA-256 ID derivation,
+canonical encodings, permanent tombstones, key aliases, clone/fork migration and the
+private provider-mapping boundary used by all service categories.
+
+[ADR-133](../../adr/133-platform-progression-authority-trust-and-idempotency.md)
+separates gameplay facts from remote projection, selects local or server authority per
+definition and makes retry/replay depend on typed mutation algebra plus qualified
+provider deduplication/atomicity rather than a blanket “idempotent write” assumption.
+
+[ADR-134](../../adr/134-cloud-blob-transport-revision-precondition-and-offline-ownership.md)
+ratifies Platform Services as authenticated opaque-object transport: complete
+revision-consistent reads, conditional atomic mutations, finite quota/transfer limits,
+whole-blob integrity and partial/ambiguous outcomes while the ADR-115 coordinator stays
+the only durable cloud-intent owner.
+
+[ADR-135](../../adr/135-platform-identity-session-generation-privacy-and-consent.md)
+separates provider account, live subject capability, local profile, gameplay identity
+and presentation data; every user-scoped commit is fenced by session/access generation
+and every consent/restriction decision is enforced by a typed capability snapshot.
+
+[ADR-136](../../adr/136-platform-offline-queue-ownership-replay-and-cloud-intent-boundary.md)
+makes the Platform Offline Queue the single durable owner for eligible progression and
+opted-in expiring presence intent. Durable acceptance precedes provider submission,
+while cloud upload/delete remains exclusively in Save's coordinator journal.
+
 ## Scope
 
 Platform services covered here:
@@ -31,6 +69,16 @@ Deliberately out of scope:
 - In-app purchase and DLC entitlement validation (owned by release/DRM flow)
 - Platform OS abstractions such as filesystem, window, or process
   (`platform-abstraction.md`)
+- XR loader/runtime/system/session/device/capability and mixed-reality permission state
+  ([XR Architecture](./vr-ar-architecture.md) and
+  [ADR-157](../../adr/157-xr-ownership-runtime-composition-and-capability-tier.md));
+  Platform Services account identity or presence never grants XR authority or consent
+
+[ADR-162](../../adr/162-mixed-reality-ownership-privacy-and-capability-tier.md)
+also keeps passthrough, anchors, environment geometry, hit tests, light estimation and
+their consent/access generations outside Platform Services. A future shared/cloud anchor
+requires a separate trust, account-mapping and sharing contract; ordinary account login,
+presence or cloud-save availability does not provide one.
 
 ## Core vs Modular
 
@@ -55,6 +103,69 @@ What the core provides:
 Concrete backends live in separate platform packages such as
 `horo-platform-steam`, `horo-platform-ps5`, `horo-platform-xbox`, and are
 loaded by the runtime like any other extension package.
+
+No public/core target includes, links, delay-loads, fetches or generates from a closed
+SDK. Public CI builds the frontend, Null, Mock and ABI conformance fixtures without SDK
+paths. A private provider package owns SDK initialization, native objects/callbacks,
+credentials, error translation and certification policy and exposes only the Horo
+`platform.services.provider` C ABI profile.
+
+## Provider Package And Composition Boundary
+
+Provider discovery reads only verified `.horopkg` install records and inert manifests;
+it never probes PATH or loads candidates to discover capabilities. Package/Trust
+services resolve integrity, signature, permissions, license and enablement. ExtensionHost
+then loads the exact target binary, negotiates ABI and creates a candidate without
+mutating live capability state. The application composition root validates the copied
+Horo capability/limit snapshot and selects exactly one provider generation or explicit
+Null before frontend admission opens.
+
+The transaction is:
+
+```text
+verified package graph
+  -> exact module/entry and ABI negotiation
+  -> private SDK candidate initialization
+  -> copied capability/limit/error descriptor validation
+  -> product-policy selection and frontend reservation
+  -> atomic provider generation publication
+```
+
+Failure before publication revokes candidate sinks, destroys partial SDK state,
+unloads the candidate and releases package leases in reverse order while preserving an
+old active generation. Replacement prepares the new candidate at full overlap, closes
+and drains the old ADR-130 frontend generation at a safe point, then unloads old code
+only after native operations and callback epochs retire. Timeout retains the module
+lease rather than force-unloading code with possible callbacks.
+
+The versioned C ABI carries fixed-width values/enums, sized structs, canonical Horo
+IDs, call-borrowed byte/string spans, host-owned bounded sinks, adapter-scoped context/
+operation tokens and Horo request/result/error envelopes. It carries no STL/C++ object,
+exception, allocator ownership, retained borrowed span, SDK/native handle, credential,
+raw account identity or unrestricted provider payload. Context/operation tokens remain
+inside the private host adapter and never become frontend/gameplay identity.
+
+Provider callbacks translate native state inside the package and copy bounded Horo
+completion into a host sink tagged with provider generation. They never call gameplay
+or observers, retain sink buffers or publish after sink revocation. Both sides catch
+exceptions at the ABI edge; ABI status represents call validity, while valid operation
+failure uses the ADR-130 typed result envelope.
+
+Composition policy is explicit:
+
+- development/editor may use one locally trusted exact provider or Null;
+- tests use Mock/Null and public ABI fixtures;
+- headless defaults to Null unless a server-capable provider is explicitly manifested;
+- unsupported targets report typed optional unavailability or fail required startup,
+  never load a closest variant; and
+- certification builds freeze package/module hashes, ABI, SDK runtime, entitlement,
+  capability and selection in the signed product manifest, with marketplace/update,
+  arbitrary local providers, Mock and development fallback excluded.
+
+Gameplay uses only narrow Horo frontend capabilities. It cannot discover/select a
+provider, invoke the extension ABI or observe SDK types/tokens. Provider mapping and
+SDK evolution remain private; new gameplay semantics require a versioned public Horo
+contract rather than a native property escape.
 
 ## High-Level Architecture
 
@@ -87,61 +198,108 @@ calling thread on network I/O.
 
 ```cpp
 template <typename T>
-class PlatformServiceRequest {
+class PlatformRequestHandle {
 public:
-    RequestId Id() const;
-    RequestState State() const;
-    bool IsPending() const;
-    bool IsComplete() const;
-    bool WasCancelled() const;
-
-    void OnComplete(std::function<void(Result<T>)> callback);
-    void Cancel();
+    PlatformRequestId Id() const;
+    FrontendGeneration Frontend() const;
 };
 
 class PlatformServicesFrontend {
 public:
-    PlatformServiceRequest<AchievementUnlockResult>
+    Result<PlatformRequestHandle<AchievementUnlockResult>>
     UnlockAchievement(AchievementId id);
 
-    PlatformServiceRequest<LeaderboardEntries>
+    Result<PlatformRequestHandle<LeaderboardEntries>>
     GetLeaderboardEntries(LeaderboardId id, const LeaderboardQuery& query);
 
-    PlatformServiceRequest<CloudSaveMetadata>
-    ReadCloudSave(SaveSlotId slot);
+    Result<PlatformRequestHandle<CloudBlobReadResult>>
+    ReadCloudSave(CloudBlobReadRequest request);
 
-    PlatformServiceRequest<void>
-    WriteCloudSave(SaveSlotId slot, std::span<const std::byte> data);
+    Result<PlatformRequestHandle<CloudMutationResult>>
+    WriteCloudSave(CloudBlobWriteRequest request);
 
-    PlatformServiceRequest<void>
+    Result<PlatformRequestHandle<CloudMutationResult>>
+    DeleteCloudSave(CloudBlobDeleteRequest request);
+
+    Result<PlatformRequestHandle<void>>
     SetPresence(const PresenceState& state);
+
+    template <typename T>
+    Result<PlatformRequestSnapshot<T>> Query(PlatformRequestHandle<T> request) const;
+    template <typename T>
+    Result<PlatformRequestSubscription> Subscribe(
+        PlatformRequestHandle<T> request,
+        PlatformCompletionExecutor executor,
+        PlatformTerminalObserver<T> observer);
+    template <typename T>
+    Result<void> Cancel(PlatformRequestHandle<T> request);
 };
 ```
 
+Pre-admission validation, permission, lifecycle, capability, session and bounded-
+capacity failure returns `Result` with no request record or provider call. Once admitted,
+the frontend owns the request record independently of every handle and subscription.
+Handles contain only typed request/frontend identity; they never own provider objects.
+
+The authoritative snapshot state is exhaustive:
+
+```cpp
+enum class PlatformRequestState : uint8_t {
+    Queued,
+    Running,
+    Cancelling,
+    Succeeded,
+    Failed,
+    Cancelled,
+    TimedOut
+};
+```
+
+| From | Legal next states |
+|---|---|
+| `Queued` | `Running`, `Cancelling`, `Failed`, `TimedOut` |
+| `Running` | `Cancelling`, `Succeeded`, `Failed`, `TimedOut` |
+| `Cancelling` | `Succeeded`, `Failed`, `Cancelled`, `TimedOut` |
+| `Succeeded`, `Failed`, `Cancelled`, `TimedOut` | none |
+
+Exactly one terminal result publishes atomically with the terminal state. Success owns
+one immutable value; Failed, Cancelled and TimedOut own one typed Error matching the
+state. Non-terminal snapshots contain no terminal result.
+
 ### Request Lifetime
 
-1. Caller invokes a frontend method and receives a `PlatformServiceRequest`.
-2. The frontend assigns a unique `RequestId`, validates inputs, and routes the
-   call to the active backend service.
-3. The backend performs the platform call asynchronously. It may complete
-   immediately, queue work on an SDK thread, or schedule a network operation.
-4. When the backend reports completion, the frontend transitions the request to
-   `Complete` and dispatches the caller's callback on an engine job or main
-   thread.
-5. The request handle remains valid after completion; `OnComplete` may be
-   invoked synchronously if the request has already finished.
+1. The frontend validates and either returns an admission error or atomically creates
+   a `Queued` record with request, provider, session, policy and deadline generations.
+2. Provider submission moves the record to `Running`; failure after admission commits
+   `Failed` without inventing provider progress.
+3. The provider performs asynchronous work and enqueues bounded generation-tagged
+   evidence. SDK threads never mutate frontend state or invoke user code.
+4. The frontend owner lane validates evidence and commits at most one terminal state/
+   result before scheduling observer notification.
+5. The record remains queryable under finite count/time retention after completion and
+   until provider/callback retirement permits reclamation.
+
+Dropping the last handle or subscription does not cancel an admitted request, erase a
+write or free provider work. Explicit `Cancel(typedHandle)` or owner shutdown policy is
+required. Querying expired or stale identity returns `platform.request.expired` or
+`platform.request.stale`; it does not fabricate a replacement terminal result.
 
 ### Cancellation
 
-`Cancel()` asks the frontend to abort the operation. Cancellation is best-effort:
+`Cancel()` posts cancellation intent to the frontend owner. It never invokes the
+provider or an observer inline. Cancellation is best-effort:
 
-- If the request has not left the frontend queue, it is removed and the caller
-  receives `request_cancelled`.
-- If the backend is already executing, the frontend forwards the cancellation.
-  The backend may ignore it if the SDK does not support cancellation.
-- A completed request cannot be cancelled retroactively.
+- An accepted queued/running request moves to `Cancelling` and closes new retries.
+- Provider acknowledgement with no committed effect publishes `Cancelled` and
+  `platform.request.cancelled`.
+- A provider success already committed or completed despite cancellation may publish
+  `Succeeded`; provider failure may publish `Failed`.
+- Deadline expiry may still publish `TimedOut`. A terminal request cannot be cancelled
+  retroactively.
 
-Multiple `Cancel()` calls are idempotent. Only one final state is published.
+Multiple `Cancel()` calls are idempotent. Cancellation intent is recorded separately
+from the one final state; `Cancelled` does not promise rollback unless a service-
+specific contract provides that guarantee.
 
 ### Threading
 
@@ -150,36 +308,57 @@ SDK thread. Backends must not call frontend completion handlers directly; they
 notify the frontend through an internal completion queue that the frontend
 drains on an appropriate engine thread.
 
-Gameplay code may call frontend methods from any thread, but request handles
-and callbacks should be owned by systems that understand the engine's threading
-rules. The frontend itself is thread-safe.
+The authoritative observation API is snapshot query plus optional subscription.
+Subscription returns a move-only RAII token and each token receives at most one
+terminal notification. Destroying it prevents future delivery without cancelling the
+request. Callbacks never run inline from submit, subscribe, cancel, provider callback,
+queue drain/state mutation or while a frontend/provider lock is held. The frontend
+commits terminal state first, then posts immutable request ID/terminal snapshot to the
+declared engine executor for a later dispatch turn. Subscribing after retained terminal
+completion schedules the same deferred delivery rather than invoking synchronously.
+
+Gameplay code may submit from permitted threads through bounded ingress, but the
+frontend serializes request mutation on its declared owner lane. Re-entering from a
+later completion callback may enqueue new work; it cannot recursively drain completion
+or change the published terminal record. Callback exceptions are caught at the engine
+executor boundary and do not change the platform request result.
 
 ### Timeouts, Retry, And Throttling
 
-The frontend applies a per-service timeout policy. If a backend does not
-complete a request in time, the frontend treats it as `platform_error` and
-cancels the underlying operation.
+The frontend captures one finite monotonic deadline at admission. Valid completion
+evidence observed no later than the deadline is processed before deadline evaluation.
+Otherwise the frontend commits `TimedOut` with `platform.request.timed_out`, requests
+best-effort provider cancellation and closes caller-visible completion. Later native
+completion is retirement/reconciliation evidence only and cannot replace the result.
+Provider resources remain alive until acknowledged safe; timeout is not proof of
+physical cancellation.
 
-Retry is controlled by the frontend, not by gameplay code:
+Retry is controlled by the owning frontend/service policy, not gameplay code, and all
+attempts fit within the original request deadline:
 
-- Idempotent writes such as stat updates may be retried a bounded number of
-  times before surfacing an error.
-- Reads and queries are not retried automatically unless the project policy
-  explicitly allows it.
-- When the backend reports `offline` or `not_signed_in`, retriable writes move
-  to the offline queue instead of being retried immediately.
+- Only ADR-133 operations whose declared algebra and effective provider/gateway
+  capability prove retry safety may be retried.
+- Every attempt preserves the exact progression mutation ID, payload, subject,
+  authority/policy/session/provider generations and precondition. Timeout never
+  allocates a replacement logical mutation.
+- Reads and queries receive a bounded in-memory retry only when project policy allows;
+  they never become durable progression replay intents.
+- When the backend reports normalized `Offline` or `NotSignedIn`, retriable writes move
+  to the PLS-007 durable owner only when their ADR-133 replay class and captured
+  subject/session are eligible.
 
 High-frequency writes are throttled and coalesced:
 
-- `SetStat` calls for the same stat are coalesced to the most recent value
-  within a configured debounce window. The frontend emits one backend write per
-  window, not one per gameplay call.
-- `SubmitScore` calls are debounced, not coalesced: only the most recent score
-  for a leaderboard is submitted after the debounce interval, but scores are
-  not merged.
-- Achievement unlock and progress updates are not throttled because they are
-  infrequent, but duplicate unlocks for the same achievement are suppressed in
-  memory before entering the queue.
+- maximum/minimum progress or stat intents may reduce to the strongest value only
+  within one subject/policy generation;
+- `SubmitBestScore` may reduce to the mathematical best under the definition's
+  declared ordering, never the most recent arrival;
+- exact duplicate progression mutation IDs join one logical intent; and
+- conditional snapshots/replacements and `AddStatOnce` are never coalesced.
+
+Every accepted logical mutation retains an individual receipt/outcome even when a
+result-preserving aggregate uses one provider operation. Arrival or provider completion
+order never becomes stat/score conflict policy.
 
 Throttling metrics:
 
@@ -190,33 +369,43 @@ platform.leaderboards.deferred_submits -- submissions delayed by debounce
 
 ### Result And Errors
 
-Requests return typed `Result<T>`. Errors are normalized so gameplay code does
-not need platform-specific error handling:
+Submission and terminal snapshots use typed `Result`/`Error` contracts. Errors are
+normalized so gameplay code does not need platform-specific error handling:
 
 ```text
-offline           -- no network or platform session
-not_signed_in     -- no authenticated user
-forbidden         -- platform policy or user consent blocks the call
-not_supported     -- the active backend does not implement this service
-rate_limited      -- call must be retried later
-platform_error    -- backend-specific error, diagnostic detail available
-request_cancelled -- caller cancelled
-timeout           -- frontend timeout before backend completion
+platform.frontend.unavailable       -- frontend not active for admission
+platform.capability.unavailable     -- selected real provider lacks the service
+platform.provider.null              -- explicit Null composition; no operation accepted
+platform.request.capacity_exceeded  -- bounded admission/observation capacity exhausted
+platform.request.cancelled          -- acknowledged cancellation terminal outcome
+platform.request.timed_out          -- frontend deadline terminal outcome
+platform.request.expired            -- terminal observation retention ended
+platform.request.stale              -- request/frontend/provider/session generation mismatch
+platform.provider.failed            -- admitted provider operation failed
+platform.progression.authority_denied -- fact lacks the definition's required authority
+platform.progression.idempotency_conflict -- mutation ID reused with another envelope
+platform.progression.unsafe_retry   -- algebra/provider cannot safely retry ambiguity
+platform.offline.ineligible         -- operation/provider semantics prohibit durability
+platform.offline.durable_unavailable -- queue storage cannot provide durable acceptance
+platform.offline.capacity_exceeded  -- finite queue/partition/byte budget exhausted
+platform.offline.storage_unknown    -- queue publication outcome requires recovery
+platform.offline.expired            -- finite replay age ended without remote success
+platform.offline.reconciliation_required -- remote outcome cannot safely auto-retry
+platform.offline.abandoned          -- authorized audited stop with no false rollback
 ```
+
+`platform.provider.failed` carries one normalized category: `Offline`, `NotSignedIn`,
+`Forbidden`, `RateLimited`, `PreconditionFailed`, `QuotaExceeded`, `InvalidResponse`,
+`TransientFailure` or `PermanentFailure`. Bounded redacted native codes may appear as
+diagnostic/cause evidence but never as branching identity. Capability absence, Null,
+cancellation and timeout are never remapped into provider failure.
 
 ### Ordering And Coalescing
 
-Independent requests may complete out of order. Dependent operations must be
-chained explicitly by the caller:
-
-```cpp
-frontend.ReadCloudSave(slot)
-    .OnComplete([&](Result<CloudSaveMetadata> meta) {
-        if (meta) {
-            frontend.WriteCloudSave(slot, newData);
-        }
-    });
-```
+Independent requests may complete out of order. Dependent operations are chained by
+their owning coordinator. In particular, cloud mutation always carries the exact
+provider revision returned by the reconciled read/list (or create-if-absent); generic
+callers cannot turn a read completion into an unconditional write.
 
 Presence updates are coalesced. If `SetPresence` is called many times before
 the backend finishes the previous update, only the most recent state is sent.
@@ -226,126 +415,229 @@ the backend finishes the previous update, only the most recent state is sent.
 ### Achievements
 
 Achievements are authored once in project configuration and cooked into
-platform-specific manifests.
+platform-specific manifests. Each definition uses an ADR-132 `AchievementId`, typed
+progress schema and immutable `LocalProduct` or `AuthorityServer` policy. Display text
+is presentation and provider names remain mapping data.
 
 ```cpp
-struct AchievementId { uint64_t value; };  // stable, numeric
-
 struct AchievementDefinition {
     AchievementId id;
-    std::string displayName;
-    std::string description;
-    bool hidden;
-    uint32_t progressSteps;  // 0 or 1 for binary, >1 for progress
+    ProgressionAuthorityMode authority;
+    AchievementProgressSchema progress;
+    LocalizedAchievementPresentation presentation;
 };
 
-class IAchievementService {
-public:
-    virtual PlatformServiceRequest<AchievementUnlockResult>
-    Unlock(AchievementId id) = 0;
-
-    virtual PlatformServiceRequest<AchievementProgressResult>
-    SetProgress(AchievementId id, uint32_t current, uint32_t total) = 0;
-
-    virtual PlatformServiceRequest<std::vector<AchievementState>>
-    QueryState() = 0;
-};
+using AchievementMutation =
+    std::variant<UnlockOnce, SetProgressMaximum>;
 ```
 
-The frontend validates that `current <= total` and that the achievement ID is
-registered. Runtime code never passes raw strings or platform-specific IDs.
+Gameplay submits a committed typed fact through `IProgressionIntentSink`; it never
+calls a provider service. The product progression router validates the definition,
+value and authority. Server-mode clients send ordinary gameplay input/commands; the
+server gameplay owner derives the achievement fact and its server-only progression
+commit capability submits it. A client cannot send a privileged “unlock” conclusion.
+
+`UnlockOnce` makes unlocked true and is intrinsically idempotent only after provider
+qualification proves repeated unlock has the same effect. `SetProgressMaximum` is
+monotonic and retryable only when the provider/gateway atomically implements maximum-
+or-equal. Reset/decrement is not a runtime operation. The remote platform owns its
+account projection; querying that projection does not make it trusted gameplay state.
 
 ### Leaderboards And Stats
 
 Leaderboards are also authored once and mapped to platform backends at cook
-time.
+time. Definitions fix typed numeric domain/range, score ordering, mutation algebra and
+local/server authority before runtime composition.
 
 ```cpp
-struct LeaderboardId { uint64_t value; };
-struct StatName { StableString name; };
-
-enum class LeaderboardSort {
-    Ascending,
-    Descending
+enum class ProgressionMutationKind : std::uint8_t {
+    UnlockOnce,
+    SetProgressMaximum,
+    SetStatMaximum,
+    SetStatMinimum,
+    SetStatSnapshot,
+    AddStatOnce,
+    SubmitBestScore,
+    ReplaceScoreAtRevision,
 };
 
-struct LeaderboardQuery {
-    uint32_t rangeStart;
-    uint32_t rangeCount;
-    bool friendsOnly;
-};
-
-class ILeaderboardService {
-public:
-    // The backend receives an idempotency key so duplicate submissions from
-    // retry or offline replay do not create multiple leaderboard entries.
-    virtual PlatformServiceRequest<void>
-    SubmitScore(LeaderboardId id,
-                int64_t score,
-                IdempotencyKey key) = 0;
-
-    virtual PlatformServiceRequest<LeaderboardEntries>
-    GetEntries(LeaderboardId id, const LeaderboardQuery& query) = 0;
-
-    virtual PlatformServiceRequest<void>
-    SetStat(StatName name, int64_t value) = 0;
-
-    virtual PlatformServiceRequest<std::optional<int64_t>>
-    GetStat(StatName name) = 0;
+struct ProgressionMutationEnvelope {
+    ProgressionMutationId mutation;
+    ProgressionSubjectScope subject;
+    ProgressionDefinitionId definition;
+    ProgressionMutationKind kind;
+    ProgressionValue value;
+    ProgressionPrecondition precondition;
+    ProgressionAuthorityEvidence authority;
+    ProgressionPolicyRevision policy;
 };
 ```
 
-`IdempotencyKey` is generated by the frontend from a monotonic write sequence
-and the stable operation identity. The same key is reused across frontend
-retries and offline queue replay. The backend must treat the second call with
-an identical key as a no-op and return the same result.
+The correct semantic authority allocates one nonzero 128-bit
+`ProgressionMutationId` when it first accepts a logical fact. The exact canonical
+envelope follows that intent through retries, durable replay and reconciliation. An
+exact duplicate joins the existing intent; reuse of the ID with different fields is
+`platform.progression.idempotency_conflict`. A key is deduplication identity, not
+authentication.
 
-Stats are server-authoritative where the platform allows. The frontend keeps a
-read-through local cache for stats that gameplay reads frequently, but writes
-always go to the backend.
+Maximum/minimum stats and best-score submissions retry only with matching atomic
+provider semantics. Snapshot/score replacement requires an exact opaque revision and
+atomic precondition. `AddStatOnce` requires durable mutation-ID dedupe in the provider
+or trusted gateway. Horo never emulates these with read-then-unconditional-write. A
+provider without the required primitive reports the operation unavailable rather than
+silently weakening it.
+
+Timeout or transport loss after submission can leave `RemoteOutcomeUnknown`. The
+original ADR-130 request remains `TimedOut`; safe algebra may resubmit the same
+envelope, conditional operations query/reconcile revision, and an unsafe non-deduped
+operation stops automatic retry. Late provider evidence may resolve coordinator
+reconciliation but never rewrites the terminal request or invokes observers twice.
+
+Stat and leaderboard queries return bounded provider/account projections at a captured
+generation/revision. Leaderboard order is provider-owned under the cooked definition.
+These values support UI and local hints; clients cannot use them as authority for
+shared economy, rewards, simulation or access control.
 
 ### Cloud Save
 
-Cloud save is platform-managed synchronization of save data blobs. It is not a
-replacement for the local save system; it is an upload/download layer on top of
-local save files.
+Cloud save is authenticated transport of opaque complete objects. It is not a
+replacement for the local save system and owns no local generation, archive parsing,
+lineage, merge, winner, retention or conflict policy.
 
 ```cpp
-struct SaveSlotId { StableString value; };
+struct CloudSaveObjectKey { BoundedOpaqueBytes value; };
+struct CloudSaveObjectPrefix { BoundedOpaqueBytes value; };
+struct CloudListCursor { BoundedOpaqueBytes value; };
+struct CloudBlobOwnedBytes { BoundedArray<std::byte> value; };
+struct CloudBlobSourceHandle { UInt128 value; };
+struct ProviderObjectRevision { BoundedOpaqueBytes value; };
+struct CloudBlobDigest { Sha256Digest value; };
+struct CloudMutationId { UInt128 value; };
 
-struct CloudSaveMetadata {
-    SaveSlotId slot;
-    Timestamp modifiedTime;
-    uint64_t sizeBytes;
+struct CreateIfAbsent {};
+struct MatchProviderRevision { ProviderObjectRevision revision; };
+struct CloudListRequest {
+    CloudSaveObjectPrefix prefix;
+    std::optional<CloudListCursor> cursor;
 };
 
-class ICloudSaveService {
+enum class CloudMutationAtomicity : std::uint8_t {
+    ConditionalAtomicObject,
+    UncoordinatedBlob,
+};
+
+struct CloudObjectHead {
+    CloudSaveObjectKey key;
+    ProviderObjectRevision revision;
+    std::uint64_t sizeBytes;
+    std::optional<CloudBlobDigest> transportDigest;
+    OptionalProviderTimestamp modifiedForPresentation;
+};
+
+struct CloudObjectPage {
+    BoundedArray<CloudObjectHead> objects;
+    std::optional<CloudListCursor> next;
+};
+
+struct CloudBlobReadRequest {
+    CloudSaveObjectKey key;
+};
+
+struct CloudBlobReadResult {
+    CloudObjectHead head;
+    CloudBlobOwnedBytes bytes;
+};
+
+struct CloudBlobReadSource {
+    CloudBlobSourceHandle source;
+};
+
+struct CloudMutationResult {
+    CloudSaveObjectKey key;
+    CloudMutationId mutation;
+    std::optional<CloudObjectHead> committedObject; // absent after successful delete
+};
+
+using CloudWritePrecondition =
+    Variant<CreateIfAbsent, MatchProviderRevision>;
+
+struct CloudBlobWriteRequest {
+    CloudSaveObjectKey key;
+    CloudBlobReadSource source;
+    std::uint64_t exactSizeBytes;
+    CloudBlobDigest expectedDigest;
+    CloudWritePrecondition precondition;
+    CloudMutationId mutation;
+};
+
+struct CloudBlobDeleteRequest {
+    CloudSaveObjectKey key;
+    ProviderObjectRevision expectedRevision;
+    CloudMutationId mutation;
+};
+
+class ICloudBlobTransport {
 public:
-    virtual PlatformServiceRequest<CloudSaveMetadata>
-    List() = 0;
-
-    virtual PlatformServiceRequest<std::vector<std::byte>>
-    Read(SaveSlotId slot) = 0;
-
-    virtual PlatformServiceRequest<void>
-    Write(SaveSlotId slot, std::span<const std::byte> data) = 0;
-
-    virtual PlatformServiceRequest<void>
-    Delete(SaveSlotId slot) = 0;
+    virtual Result<PlatformRequestHandle<CloudObjectPage>>
+    List(CloudListRequest request) = 0;
+    virtual Result<PlatformRequestHandle<CloudBlobReadResult>>
+    Read(CloudBlobReadRequest request) = 0;
+    virtual Result<PlatformRequestHandle<CloudMutationResult>>
+    Write(CloudBlobWriteRequest request) = 0;
+    virtual Result<PlatformRequestHandle<CloudMutationResult>>
+    Delete(CloudBlobDeleteRequest request) = 0;
 };
 ```
 
-Conflict resolution is configured per project:
+Under ADR-113, gameplay and UI never create `CloudSaveObjectKey` from a string. The
+coordinator derives it from the typed product/environment/profile/slot address and
+private authenticated provider-user context. It is not a path, display name, raw
+account ID or erased `SaveGameSlotId`. `ProviderObjectRevision` is bounded opaque bytes
+scoped to one provider/session/key and compared only for exact equality; it is not
+ordered, portable, a timestamp or a save generation.
 
-```text
-prefer_local   -- local save wins, upload overwrites cloud
-prefer_cloud   -- cloud save wins, download overwrites local
-most_recent    -- compare timestamps, newer wins
-manual         -- prompt the player (UI owns the choice)
-```
+The immutable cloud capability snapshot declares finite object/namespace bytes, object
+count, key/revision length, list page, chunk and concurrent-transfer limits plus list/
+read consistency, conditional create/replace/delete, durable mutation-ID dedupe,
+digest/progress and cancellation behavior. Quota usage is advisory and can change
+after observation; `QuotaExceeded` remains possible after preflight and cannot trigger
+automatic deletion/truncation/splitting.
 
-The engine calls `Read` at game start and `Write` after the local save system
-commits a new save. Cloud save never directly edits the local save format.
+List is bounded/cursor-based. Because provider lists may not be snapshot-consistent,
+the coordinator re-reads an exact key before deciding. Successful read returns one
+complete immutable byte owner and `CloudObjectHead` for the same revision. Separate
+metadata/byte APIs must revision-check around transfer; a change is
+`platform.cloud.revision_changed`, never mixed success. Host-owned sinks enforce exact
+length, checked chunk/byte bounds and SHA-256 transport digest before publication; no
+partial span escapes.
+
+Automatic mutation requires qualified `ConditionalAtomicObject`. Create requires
+absence; replace/delete requires the exact current revision. Success atomically exposes
+all new bytes or deletion and returns required revision/digest evidence. A stale value
+is `PreconditionFailed`; the coordinator refetches/reclassifies and never retries
+unconditionally. `UncoordinatedBlob` disables automatic write/delete while local
+save/load and explicit policy-approved import/export remain usable.
+
+Provider-native multipart/temp objects remain private and never become visible at the
+public key. Failure/cancel/timeout exposes no partial result or success; staging cleanup
+is best effort and keeps provider code leased until callbacks/parts retire. Upload
+pulls bounded call-borrowed chunks from a coordinator-owned immutable archive lease;
+download pushes to request-owned bounded staging. Progress is deferred observational
+data and never proves commit.
+
+`CloudSaveCoordinator` allocates and durably owns one `CloudMutationId`, exact payload
+digest/size, precondition, generation/lineage, source lease, retry and reconciliation
+state. Platform Services owns only an in-memory ADR-130 request and never writes cloud
+upload/delete into the generic PLS-007 queue. Frontend retry preserves the exact
+request inside its original deadline. Timeout/late commit remains an ambiguous durable
+intent until the coordinator reads the key and recognizes matching content, retries
+the still-uncommitted precondition or enters ADR-115 conflict handling.
+
+Authentication, TLS, provider ownership and a matching transport digest do not make
+archive bytes trusted. The coordinator still applies ADR-116 framing, archive hash,
+signature/scope, compatibility, semantic, namespace and local lease/generation gates.
+The provider cannot inspect save contents, select a trust root or reinterpret failure
+as empty/not-found/older success.
 
 ### Presence
 
@@ -354,21 +646,27 @@ updates and coalesces them into the most recent state.
 
 ```cpp
 struct PresenceState {
-    std::string statusId;          // stable ID, mapped at cook time
-    std::string detail;            // optional free text
-    std::string largeImageKey;     // stable art key
-    std::string smallImageKey;     // stable art key
+    PresenceStatusId status;
+    std::optional<BoundedUtf8> detail;
+    std::optional<PlatformPresenceArtId> largeImage;
+    std::optional<PlatformPresenceArtId> smallImage;
 };
 
 class IPresenceService {
 public:
-    virtual PlatformServiceRequest<void>
-    SetPresence(const PresenceState& state) = 0;
+    virtual Result<PlatformRequestHandle<void>>
+    SetPresence(PlatformSubjectHandle subject, const PresenceState& state) = 0;
 
-    virtual PlatformServiceRequest<void>
-    ClearPresence() = 0;
+    virtual Result<PlatformRequestHandle<void>>
+    ClearPresence(PlatformSubjectHandle subject) = 0;
 };
 ```
+
+`PresenceStatusId` and art IDs are project-owned typed identities resolved through the
+ADR-132 registry/mapping pipeline. Optional detail is bounded untrusted presentation
+data. Publication requires a current subject plus `PresencePublish` access, and the
+captured session/access generations are revalidated before provider submission and
+observable completion.
 
 ### Friends
 
@@ -376,80 +674,178 @@ Friends access is read-only in core. Invites and friend management UI are
 platform-owned.
 
 ```cpp
-struct PlatformUserHandle {
-    std::string platformUserId;
-    std::string displayName;
+struct PlatformSocialSubjectHandle {
+    UInt128 nonce;
+    ProviderGeneration providerGeneration;
+    PlatformSessionGeneration sessionGeneration;
+    PlatformAccessPolicyRevision accessRevision;
+};
+
+struct PlatformUserPresentation {
+    PlatformSocialSubjectHandle subject;
+    BoundedUtf8 displayName;
+    std::optional<ProviderApprovedAvatarToken> avatar;
+    PlatformPresentationSource source;
+    PlatformPresentationFreshness freshness;
 };
 
 class IFriendsService {
 public:
-    virtual PlatformServiceRequest<std::vector<PlatformUserHandle>>
-    GetFriends() = 0;
+    virtual Result<PlatformRequestHandle<BoundedArray<PlatformUserPresentation>>>
+    GetFriends(PlatformSubjectHandle subject) = 0;
 };
 ```
 
 Friends access requires explicit user consent and platform policy support.
-Absence of the capability is typed, not a silent empty list.
+Absence of the capability is typed, not a silent empty list. Social handles are
+ephemeral, scoped to the requesting session/access revision and distinct from the
+local subject capability. Display/avatar fields are bounded consent-scoped
+presentation, never account, gameplay or durable storage identity.
 
 ## Stable ID Registries
 
-Runtime code never passes strings for achievement, leaderboard, presence, or
-stat IDs. All names are resolved at project cook or package build time into
-stable numeric IDs.
+Runtime and gameplay never pass strings for achievement, leaderboard, stat or
+presence-status identity. All authoring keys resolve before cook publication to
+strong typed 64-bit Horo IDs. The kinds are not interchangeable with each other,
+runtime handles, provider identifiers or raw integers; `0` is invalid.
 
-Stable IDs are produced deterministically from the authoring name using a
-project-scoped hash so that the same name always yields the same numeric ID
-across clean builds and across developer machines:
+### Project identity authority
 
-```cpp
-struct StableId64 { uint64_t value; };
+The Project domain owns one committed `.horo/platform_services.ids.json` ledger. It
+contains all active and tombstoned primary entries and their authoring aliases. A
+service-specific definition document owns display/localization and behavior fields and
+references an ID from this ledger. Provider mapping documents and generated manifests
+consume it; neither can allocate or rewrite a Horo ID.
 
-AchievementId GenerateAchievementId(const std::string& projectSalt,
-                                    const std::string& name);
-LeaderboardId GenerateLeaderboardId(const std::string& projectSalt,
-                                    const std::string& name);
-```
+The ledger header binds schema `1`, the exact owning `projectId` and algorithm
+`horo.platform-services.stable-id.v1`. `.horo/project.json` is the sole authority for
+the 128-bit `platformServicesIdSalt`, serialized as `psid1:` plus 32 lowercase hex
+digits. The ledger does not duplicate the salt. It stores each derived numeric value
+as `sid1:` plus exactly 16 lowercase hex digits, including leading zeroes. JSON numbers
+and alternative spellings are rejected so 64-bit precision and canonical comparison
+do not depend on a parser.
 
-The salt is stored in the project configuration. It must not change after the
-first release that consumes platform IDs, because platform backends map stable
-IDs to platform-specific manifests.
+The salt is generated from the platform cryptographic random source together with a
+new project. Zero, short reads and random-source failure fail project creation. The
+salt is portable non-secret metadata committed with the project; environment, user
+preferences, provider packages and build profiles cannot override it. A project that
+predates the field obtains it once through a transactional migration, never as a
+read-only-open or cook side effect.
 
-The registries enforce uniqueness and traceability:
+### Canonical keys and deterministic derivation
 
-```cpp
-struct AchievementRegistry {
-    enum class RegisterResult { Ok, DuplicateName, DuplicateId };
+Each primary definition has one immutable 1–96 byte ASCII `canonicalKey` matching
+`^[a-z][a-z0-9_.-]{0,95}$`. The exact bytes are machine identity. They are not trimmed,
+case folded, localized or derived from a display name. Presentation renames therefore
+preserve identity.
 
-    Result<AchievementId, RegisterResult>
-    Register(const std::string& name);
-
-    std::optional<AchievementId> Find(const std::string& name) const;
-    std::optional<std::string> FindName(AchievementId id) const;
-};
-```
-
-- Registering the same name twice returns the existing ID and is treated as
-  idempotent during cook, but emits a diagnostic so authors notice accidental
-  reuse.
-- A hash collision between two different names is a cook error. The author must
-  rename one of the definitions.
-- Removed achievements are marked `deprecated` rather than deleted from the
-  registry. Their stable IDs remain reserved so they are never reused by a new
-  definition.
-
-The cook pipeline emits platform-specific manifest files:
+Version 1 hashes exactly:
 
 ```text
-achievements.json          -- Horo authoring source (stable IDs, display text)
-.deprecated_achievements   -- tombstone list for removed IDs
-steam/achievements.vdf     -- Steamworks manifest
-psn/trophy_pack/           -- PSN trophy pack
-xbox/achievements.json     -- Xbox Live manifest
+ASCII("horo.platform-services.stable-id.v1")
+0x00
+project salt                                      (16 raw bytes)
+kind                                              (uint8: achievement=1,
+                                                   leaderboard=2, stat=3,
+                                                   presence-status=4)
+canonical-key byte count                          (uint16, big-endian)
+canonical-key                                     (exact ASCII bytes)
 ```
 
-The same rules apply to leaderboards, stats, and presence status IDs.
+Horo computes SHA-256, takes digest bytes 0–7 and interprets them as an unsigned
+big-endian `uint64`. Cooked binary and the platform provider ABI also encode those
+eight bytes big-endian. Implementations use the shared golden-vector codec; they never
+use `std::hash`, host byte order or a provider hash.
 
-This is the same pattern used by the audio parameter and event registries.
+The ledger retains the derived value beside its key. Validation always recomputes it,
+rejects zero and rejects a stored/derived mismatch. Primary entries are canonically
+ordered by kind tag and then unsigned ID; aliases use exact ASCII byte order. A
+domain-separated SHA-256 of the canonical complete ledger is its snapshot fingerprint.
+
+### Active, tombstoned and aliased identity
+
+A primary entry is exactly `Active` or `Tombstoned`. Removing a definition preserves
+its kind, canonical key, ID, aliases and bounded removal provenance as a tombstone.
+Tombstones participate in key and numeric uniqueness forever under that project
+namespace. Ordinary authoring, cook and cleanup cannot prune them or allocate their
+identity to a new meaning.
+
+Re-adding a tombstoned key fails. A separately reviewed restore operation may reactivate
+the exact same semantics and ID only after provider mappings and product policy accept
+it; it is never implicit. New semantics require a new canonical key.
+
+An alias is another valid canonical-key spelling bound directly to exactly one primary
+entry of the same kind. It has no independently hashed value. Aliases support explicit
+authoring/import migrations while runtime/cooked references retain only the numeric
+ID. Primary keys and aliases are unique per kind across active and tombstoned entries.
+Chains, cycles, wildcard/case-insensitive lookup, cross-kind aliases and provider-native
+values used as Horo aliases are forbidden. Tombstoning retains all aliases.
+
+### Collision and candidate validation
+
+Candidate validation builds one numeric index across every active and tombstoned
+primary entry. Different primaries producing the same 64-bit value fail with
+`platform.identity.hash_collision`, even across kinds. No entry wins. Diagnostics
+name the algorithm, ID, both kind/key pairs and safe source locations.
+
+A new unpublished entry resolves a collision by selecting and reviewing a different
+canonical key. An existing published entry never changes. Incrementing the value,
+rehashing with a counter, insertion-order probing or silently widening one ID is
+forbidden because each would make results depend on authoring/merge order. Conflicting
+published histories require a declared project migration and cannot merge by guess.
+
+The application project service parses a bounded detached candidate and validates
+project/salt ownership, schema/algorithm, canonical encoding/order, key/alias
+uniqueness, stored derivations, global numeric uniqueness, states and all durable
+references before atomically publishing one immutable snapshot. Failure preserves the
+last valid snapshot and never partially mutates a provider registry.
+
+### Clone, fork and regeneration
+
+Filesystem copies, VCS clones/branches/checkouts, path moves and backups preserve
+`projectId`, salt, ledger and IDs because they are working copies of the same product.
+A Duplicate Project workflow must explicitly choose:
+
+- `PreserveIdentity` for a branch/port of the same product; or
+- `ForkIdentity` for an independent product, generating a new `projectId` and
+  cryptographic salt and executing a complete namespace migration.
+
+There is no path heuristic or automatic regeneration when a copy is detected. Salt
+regeneration is not a normal setting. Fork/regeneration first produces a dry-run with
+all active and tombstoned old-to-new IDs, aliases, durable references, provider
+mapping dispositions, offline operations and derived artifacts. It validates the full
+candidate before atomically updating project metadata, ledger and every owned durable
+reference, then invalidates affected manifests/caches/offline entries. Unknown or
+opaque references, incomplete mappings and collisions block with the old namespace
+intact.
+
+After an ID has shipped, entered remote state, saves/network protocols or another
+package, regeneration is prohibited by default. It requires a separately approved
+product migration with complete external transition evidence or an explicit
+incompatible new-product reset. Text aliases cannot bridge two numeric namespaces.
+
+### Provider mapping and cook/runtime projection
+
+A trusted provider adapter owns its mapping keyed by `(ProviderId, kind, Horo ID)`.
+Values such as Steam API names, trophy numbers and console manifest indexes remain
+bounded provider-private data. Required active entries have exactly one mapping for
+the selected target; optional absence is explicit product capability policy. Unknown,
+tombstoned, duplicate, wrong-kind or stale-ledger mapping rows fail provider manifest
+generation. Tombstoned remote values cannot be reassigned to new Horo definitions.
+
+Cook captures the project, algorithm, ledger fingerprint, service definitions,
+provider mapping revision and product/target profile as one generation. It resolves
+keys/aliases once and emits typed IDs into provider-neutral artifacts; provider
+manifests are deterministic derived outputs from that same snapshot. Any revision
+change invalidates the candidate.
+
+Runtime loads bounded sorted tables with the expected fingerprint and performs only
+typed numeric lookup. It never hashes strings, reads editor aliases or asks a provider
+to allocate identity. Registry generations remain pinned by admitted requests and
+durable offline entries until retirement/migration. Provider callback reverse lookup
+is private and immediately converts to the captured Horo ID. Gameplay, saves, scripts,
+offline queues and public telemetry never persist provider IDs or raw display strings
+as identity.
 
 ## Backend Interface
 
@@ -457,129 +853,316 @@ The backend is a capability bundle. A platform may implement all, some, or none
 of the services.
 
 ```cpp
-struct PlatformServiceCapabilities {
-    bool achievements;
-    bool leaderboards;
-    bool cloudSave;
-    bool presence;
-    bool friends;
+enum class PlatformServiceAvailability : uint8_t {
+    Available,
+    Unavailable
+};
+
+enum class PlatformServiceUnavailableReason : uint8_t {
+    NoProviderSelected,
+    NullProviderSelected,
+    ServiceUnsupported,
+    HostPolicyDenied,
+    ProviderInitializationFailed
+};
+
+struct PlatformServiceCapability {
+    PlatformServiceKind service;
+    PlatformServiceAvailability availability;
+    PlatformServiceLimits limits;
+    std::optional<PlatformServiceBindingId> binding;
+    std::optional<PlatformServiceUnavailableReason> unavailableReason;
+};
+
+struct PlatformServiceCapabilitySnapshot {
+    ProviderGeneration providerGeneration;
+    BoundedArray<PlatformServiceCapability> services;
 };
 
 class IPlatformServicesBackend {
 public:
     virtual ~IPlatformServicesBackend() = default;
 
-    virtual PlatformServiceCapabilities Capabilities() const = 0;
-
-    virtual void Initialize(const PlatformServicesConfig& config) = 0;
-    virtual void Shutdown() = 0;
-
-    virtual IAchievementService* Achievements() = 0;
-    virtual ILeaderboardService* Leaderboards() = 0;
-    virtual ICloudSaveService* CloudSave() = 0;
-    virtual IPresenceService* Presence() = 0;
-    virtual IFriendsService* Friends() = 0;
+    virtual Result<PlatformServiceCapabilitySnapshot>
+    Initialize(const PlatformServicesConfig& config) = 0;
+    virtual Result<ProviderOperationId>
+    Submit(const PlatformProviderRequest& request,
+           PlatformProviderCompletionSink& completions) = 0;
+    virtual Result<void> RequestCancel(ProviderOperationId operation) = 0;
+    virtual Result<void> Shutdown() = 0;
 };
 ```
 
-Backends return `nullptr` for services they do not implement. The frontend
-returns `not_supported` for calls to unavailable services.
+The validated capability snapshot is the sole availability truth. `Available` has
+exactly one compatible private binding; `Unavailable` has no binding and exactly one
+reason. Missing, duplicate or mismatched bindings fail composition. Public callers do
+not inspect provider pointers, backend names or SDK flags.
+
+Installed/provider capability and effective subject access are distinct immutable
+snapshots; admission intersects them instead of collapsing them into a boolean.
+Connectivity and rate-limit state remain dynamic request preconditions. Provider
+reload, session replacement or access-policy change increments the applicable
+generation/revision; stale completion evidence cannot publish into the replacement.
 
 ## Offline And Degraded Behavior
 
-The frontend maintains a persistent local queue for operations that can be
-safely retried:
+The ADR-136 `PlatformOfflineQueue` is the only durable owner for replay-eligible
+progression and explicitly opted-in presence desired state. It stores canonical Horo
+logical intent, not ADR-130 requests or provider calls. `DurableUntilTerminal` commits
+the bounded record through qualified atomic storage before the first provider submit;
+only then may the producer observe durable acceptance. `VolatileAttempt` is explicitly
+process-lossy and never presented as queued.
 
-- achievement unlocks
-- achievement progress updates
-- leaderboard score submissions
-- stat writes
-- cloud save writes
+Eligibility remains exhaustive:
 
-Each queued operation carries an `IdempotencyKey`. The key is generated once
-when the operation enters the frontend and is preserved across persistence,
-retry, and replay. This prevents a retry + queue replay combination from
-producing duplicate backend effects.
+- ADR-133 intrinsic/atomic monotonic/best operations may persist only when the current
+  provider/gateway capability proves their exact semantics;
+- conditional stat/score replacement retains and reconciles its exact revision;
+- `AddStatOnce` or another non-intrinsic effect requires durable provider/gateway
+  mutation-ID deduplication;
+- presence may persist only as one consented, bounded and short-expiry latest desired
+  `Set`/`Clear` state per subject/purpose lane; and
+- reads, queries and cloud mutation are never admitted.
 
-When the backend reports `offline` or `not_signed_in`, the frontend:
+The queue preserves the original progression mutation or presence intent identity,
+canonical payload, protected ADR-135 subject-binding partition, registry/policy/access
+requirements, expiry and attempt policy. It never allocates identity on replay,
+contains a live subject handle/raw provider identity or retargets the current account.
+Exact duplicates join one row; different payload reuse is a conflict.
 
-1. assigns an idempotency key if the operation does not already have one
-2. persists the operation to the local queue
-3. deduplicates against the queue using the operation type, target ID, and key
-4. emits an `offline_queued` metric
-5. returns a result indicating queued state
-6. replays the queue in order when the platform session becomes active
+Durable states distinguish Pending, Dispatching, Reconciling, Suspended, Succeeded,
+PermanentlyFailed, Expired, Superseded and Abandoned. Terminal disposition is committed
+before observer success and later atomic compaction. A crash after remote commit but
+before local completion therefore retains the original intent in Reconciling rather
+than creating a fresh unsafe attempt. Corrupt/publication-unknown storage is
+quarantined; startup never silently creates an empty queue.
 
-Operations that cannot be safely replayed, such as cloud save reads or
-leaderboard queries, fail immediately with the appropriate error.
+Ordering is per `(subject partition, semantic definition/purpose lane)`, not global
+FIFO. Conditional/non-commutative work serializes; ADR-133 monotonic/best operations
+coalesce only when every receipt/result is preserved. Presence keeps the latest desired
+state, but cannot erase an already ambiguous provider outcome. Unrelated lanes use
+bounded fair concurrency.
 
-Replay rules:
+Startup validates storage without provider calls. Replay resumes only after proving
+the same subject binding and revalidating current session/access, authority/profile,
+registry/mapping and provider capability. Sign-out/account switch suspends the old
+partition. `AuthorityServer` records require a current server authority path; a client
+cannot manufacture or upgrade them.
 
-- Queue order is preserved per user account.
-- If a queued operation fails with a non-retriable error (for example,
-  `forbidden`), it is removed from the queue and the failure is surfaced.
-- If the backend accepts an idempotent operation, the queue advances.
-- Duplicate keys are ignored: the frontend checks the queue file and the set of
-  in-flight requests before submitting.
+Attempt count, jittered backoff, record/byte/partition/in-flight capacity and expiry
+are finite product policy within engine hard maxima. Expiry is a durable explicit
+failure and never resets on retry/restart. Full capacity rejects admission instead of
+dropping oldest or ambiguous work. Provider retry hints are bounded and clock anomalies
+cannot extend retention indefinitely or produce a retry storm.
 
-The null backend is always available. It:
+Expiry/attempt exhaustion applies only when no unresolved remote effect exists.
+Reconciling ambiguity remains retained until semantic resolution or an explicitly
+permissioned, audited Abandoned disposition; neither TTL nor cleanup can erase it.
 
-- reports no capabilities
-- returns `not_supported` for all reads
-- accepts and silently discards all writes after logging a metric
-- never leaves the local queue in an inconsistent state
+Cloud archive writes/deletes are deliberately absent. Their immutable payload lease,
+slot lineage, expected provider revision, retry identity and profile binding remain
+durably owned only by ADR-115/134 `CloudSaveCoordinator`. Both owners may use stateless
+deadline/backoff/error/atomic-storage helpers, but share no row, scheduler, outcome or
+FIFO. Reconnect may wake both coordinators independently.
+
+Shutdown closes admission/scheduling, durably checkpoints state, requests bounded
+best-effort cancellation and retains provider/module/credential dependencies until
+callbacks retire. It never deletes unresolved rows. Cancellation may remove a Pending
+intent only before provider commit is possible; ambiguity remains for reconciliation.
+
+The Null backend is a valid explicit headless/test/product composition. It reports all
+remote services unavailable with `NullProviderSelected`. Every read and write fails
+admission with `platform.provider.null`; it creates no request, offline queue entry,
+idempotency record or provider mutation. In particular, it never accepts or silently
+discards achievements, stats, scores, cloud writes or presence. Optional
+application intent may be explicitly suppressed before submission, but that is not a
+successful Null operation. Tests needing success use the capability-accurate mock.
 
 ## Authentication And Session Boundary
 
-Platform services do not own the game user account. They expose a platform user
-handle that the game identity layer can map to its own player profile.
+Platform account locator, live platform subject, ADR-113 local storage/profile,
+gameplay/network player and user presentation are distinct identity domains. Equal
+display text never links them. Provider account/native identity stays inside the
+private provider/identity adapter; gameplay and broad services receive only a typed
+live capability:
 
 ```cpp
-struct PlatformSessionState {
-    bool signedIn;
-    PlatformUserHandle currentUser;
+struct PlatformSubjectHandle {
+    UInt128 nonce;
+    ProviderGeneration providerGeneration;
+    PlatformSessionGeneration sessionGeneration;
+};
+
+enum class PlatformSessionPhase : std::uint8_t {
+    NoSubject,
+    Authenticating,
+    Active,
+    Closing,
+    Failed,
+};
+
+struct PlatformSessionSnapshot {
+    PlatformSessionPhase phase;
+    PlatformSessionGeneration generation;
+    std::optional<PlatformSubjectHandle> subject;
+    PlatformAccessPolicyRevision accessRevision;
+    PlatformSessionCapabilities capabilities;
+    NormalizedSessionReason reason;
 };
 ```
 
-The backend reports session changes through an observer interface:
+The subject nonce is nonzero/non-reused 128-bit cryptographic randomness allocated by
+the frontend identity broker after authenticated binding. It is equality-only,
+non-guessable and valid only for its exact provider/session generations. It is not a
+provider ID, persistent account key, authorization secret or display value and is never
+serialized/logged. Gameplay cannot construct or enumerate handles.
+
+`Active` has exactly one subject and immutable effective access snapshot. Other phases
+have none for admission; there is no second `signedIn` bool or nullable provider object.
+A restricted account may be Active while individual operations are unavailable. The
+session generation increases on bind, sign-out, account switch/invalidation and
+provider replacement. Subject-preserving access changes increment the access revision;
+identity uncertainty closes/rebinds a new generation.
+
+The private identity/profile service maps a provider stable authenticated subject to a
+pseudonymous product/provider-scoped binding, ADR-113 `LocalUserStorageId` and explicit
+`GameProfileId`. Raw account ID, gamertag, email, native handle or credentials do not
+enter portable project/save/cloud/progression/offline state. If no stable provider
+subject exists, the provider advertises installation-local/single-user capability and
+cloud/linking remains unavailable; mutable personal text is never hashed as fallback.
+
+Every user-scoped admission captures subject, session, provider/frontend and access-
+policy generations plus its semantic profile/authority generation. Every result,
+cache, event, observer, journal/offline or synced-state commit revalidates the captured
+session and applicable access revision. Mismatch is `platform.session.stale`; old
+provider work may retire privately but cannot publish into a new account.
+
+Durable intent stores a protected pseudonymous subject-binding partition and policy
+requirements, never a live handle. Replay first verifies the same binding under a new
+active session and reauthorizes the operation. “Current account” cannot retarget it.
+
+### Sign-in, sign-out and account switch
+
+Sign-in prepares provider authentication, stable-subject/private profile mapping,
+restrictions/consent, capability limits and a fresh handle as a detached candidate,
+then atomically publishes Active. Authentication UI completion is evidence, not
+publication authority. Failure destroys candidate handles/credentials with no partial
+capability.
+
+Sign-out/account switch closes old admission and invalidates its generation before
+cancelling/retiring native work, stopping cache/observer publication and suspending old
+durable partitions. Credentials/handles release only after callback safety. A switch
+then prepares a wholly new binding; it never mutates a global user pointer in place or
+publishes old profile state with a new account. Failure leaves explicit NoSubject/
+Failed; reopening old state is a fresh transaction.
+
+Single/current/multiple-user support remains explicit. Multiple users have separate
+sessions, handles and request partitions. Listen-server locality, UI selection or
+provider login never changes gameplay/server authority.
+
+### Consent and restricted access
+
+Each operation declares a finite Horo purpose/data-class set such as cloud sync,
+achievement projection, leaderboard read, friends read or presence publish. Effective
+access is the intersection of provider capability/session, platform/parental/child
+restriction, region/legal/product policy, OS/provider permission and versioned product
+consent where required:
 
 ```cpp
-class IPlatformSessionObserver {
-public:
-    virtual void OnSessionStateChanged(const PlatformSessionState& state) = 0;
+enum class PlatformAccessState : std::uint8_t {
+    Granted,
+    ConsentRequired,
+    Denied,
+    Restricted,
+    Revoked,
+    Unavailable,
+};
+
+struct PlatformServiceAccess {
+    PlatformServiceOperation operation;
+    PlatformAccessState state;
+    PlatformAccessReason reason;
+    PlatformPurposeId purpose;
+    PlatformDataClassMask dataClasses;
+    ConsentPolicyVersion consentVersion;
 };
 ```
 
-The frontend dispatches these changes to gameplay systems that care about sign
-in/out. Cloud save sync and offline queue replay are triggered by sign-in
-events.
+Only Granted admits work; every other state has one typed reason and no usable binding
+for that operation. UI/overlay presents localized disclosure and submits an expected-
+revision decision to the consent authority. UI cannot grant itself; closing a prompt
+is not consent, provider permission does not replace required product consent and a
+checkbox cannot override parental/restricted policy.
+
+Consent is purpose/data-class/version specific, revocable and finitely retained. A
+policy/restriction change closes affected admission, advances access revision, blocks
+stale in-flight publication and triggers bounded service cache/observer cleanup.
+Unrelated operations continue only when their captured decision/data classes remain
+valid. Revocation does not claim already committed provider effects were rolled back.
+
+### Personal and display data
+
+`PlatformUserPresentation` and social-subject handles are bounded, untrusted,
+consent-scoped projections separate from identity. Display names, avatars, presence
+and friend data never authorize, route, identify storage or compare accounts. Text/
+images are validated/escaped before rendering. By default they remain only in bounded
+memory until request/session/consent retention expires.
+
+Durable cache, analytics/export or user-generated presence requires a separate
+declared purpose, schema, retention/deletion policy and consent. General logs, metrics,
+crash bundles, project/save files, journals, scripts and ordinary CLI/MCP results
+contain no raw account/native IDs, live/social handle bytes, personal display data,
+friends graph, presence free text, credentials or private binding locators. Safe
+observability uses aggregate counts, typed state/reason/generations and ephemeral
+non-account-derived correlation IDs.
+
+## Shutdown And Late Completion
+
+Shutdown closes frontend admission and increments generation before requesting
+policy-permitted cancellation. It then drains accepted owner-lane evidence, commits at
+most one terminal result per admitted request, stops subscriptions/executor delivery
+and waits within the declared bound for provider operation and callback epochs. Safe
+retirement, not terminal publication or dropped handles, permits provider/package and
+borrowed-buffer release.
+
+If native work does not retire within the bound, shutdown reports typed failure and
+retains the required dependencies rather than unloading provider code early. Late
+callbacks carry the closed provider/session/frontend generation, may complete private
+retirement bookkeeping and cannot publish a new terminal result or invoke user code.
+Shutdown is idempotent after partial initialization and repeated calls return the
+recorded outcome without duplicating cancellation or native teardown.
 
 ## Security And Trust
 
 - Closed platform SDK implementations live in private repositories. The public
   engine repository contains only interfaces, registries, the null backend, and
   the mock backend.
-- Achievements and stats are unlocked/submitted through gameplay systems. For
-  competitive or online games, critical stats should be validated by the game
-  server before the client calls the platform backend, or the backend should be
-  invoked from a trusted server path. See
-  [Release Security](../release/release-security.md) for the broader trust and
-  signing model that governs backend packages.
-- Cloud save data is opaque to the platform service layer. Encryption and
-  tamper detection are the responsibility of the local save system.
-- Friends and presence data are subject to platform privacy policies and user
-  consent. The frontend does not cache or expose this data beyond what the
-  backend provides.
+- ADR-133 progression definitions select local or server authority; competitive
+  clients never submit privileged conclusions and idempotency does not provide
+  authentication/anti-cheat.
+- Cloud save data is opaque untrusted input to the platform service layer. Transport
+  authentication does not establish archive trust. Integrity, signature/scope,
+  compatibility and optional confidentiality policy belong to Runtime Save and the
+  host-selected save security profile under ADR-116.
+- Provider tokens and account credentials remain inside the backend's short-lived
+  credential lease. They never enter archive bytes, coordinator journals, tool
+  results, logs or conflict metadata.
+- ADR-135 live subject handles are non-persistent generation capabilities; personal/
+  social presentation is separate bounded data and every operation passes typed
+  purpose, consent and restriction policy before admission/commit.
 
 ## Privacy And Compliance
 
-- Friends and presence require explicit user consent where the platform
-  requires it.
-- Presence free text must not include PII or user-generated content that has
-  not been reviewed.
-- Cloud save retention follows platform policy; the engine does not control it.
-- Children's accounts and restricted platforms may disable social features.
-  The frontend surfaces this as `forbidden` or `not_supported`.
+- Friends, presence and any other personal-data operation declare purpose/data class,
+  product retention and required provider/OS/product consent explicitly.
+- Child, parental, region and platform restriction is an operation capability state,
+  not UI-only visibility or a generic successful empty result.
+- Presence free text and display/social data are untrusted user/provider content;
+  retention/export/analytics requires separate consent and policy.
+- Cloud provider retention/backup is external evidence; Horo's local journal/recovery
+  retention and deletion intent remain product/coordinator policy.
+- Consent denial/revocation is typed, closes affected publication and cannot be
+  bypassed by debug tooling, configuration or development builds.
 
 ## Observability
 
@@ -590,7 +1173,9 @@ platform.request.pending_count           -- in-flight requests
 platform.request.completed_count         -- completed by service and backend
 platform.request.failed_count            -- by error category
 platform.request.latency_ms              -- end-to-end latency
-platform.request.offline_queued_count    -- operations deferred offline
+platform.offline.pending                 -- aggregate pending by service/state
+platform.offline.reconciling             -- aggregate remote-ambiguity count
+platform.offline.storage_bytes           -- bounded queue storage utilization
 platform.session.signed_in               -- 0/1 gauge
 platform.capability.available            -- gauge per service per backend
 ```
@@ -618,20 +1203,24 @@ Access: `Edit > Project Settings > Platform Services`
 |   [ Steamworks                                     v ]       |
 |                                                              |
 | Achievements                                                 |
-|   ID      Name                  Hidden  Progress Steps       |
-|   --      ----                  ------  --------------       |
-|   1       first_blood           [ ]     1                     |
-|   2       kill_streak_10        [x]     10                    |
+|   Canonical Key             Display Name      Hidden  Steps |
+|   -------------             ------------      ------  ----- |
+|   campaign.first_blood      First Blood       [ ]     1     |
+|   combat.kill_streak_10     Ten in a Row      [x]     10    |
 |   [+ Add]                                                    |
 |                                                              |
 | Leaderboards                                                 |
-|   ID      Name                  Sort        Friends Only     |
-|   10      high_score            Descending  [x]               |
+|   Canonical Key             Sort        Friends Only        |
+|   score.high                Descending  [x]                  |
 |   [+ Add]                                                    |
 |                                                              |
 | Cloud Save                                                   |
-|   Conflict resolution: [ Most Recent               v ]       |
-|   [x] Persist offline queue across sessions                  |
+|   Conflict policy: [ Defer to Save Coordinator      v ]      |
+|                                                              |
+| Offline Delivery                                             |
+|   [x] Eligible progression durable delivery                  |
+|   [ ] Persist consented presence desired state               |
+|   Progression expiry: [ 7 days ]  Presence: [ 15 minutes ]  |
 |                                                              |
 | Timeouts And Retry                                           |
 |   Default timeout:  [ 30 ] seconds                           |
@@ -647,8 +1236,8 @@ Access: `Window > Platform Diagnostics`
 +--------------------------------------------------------------+
 | Platform Diagnostics                                   [x]   |
 +--------------------------------------------------------------+
-| Session: Signed In                                           |
-| User:    PlayerOne#1234                                      |
+| Session: Active          Generation: 17                      |
+| Subject: Bound           Presentation: Consent granted       |
 | Backend: SteamBackend                                        |
 +--------------------------------------------------------------+
 | Service        | Available | Pending | Errors | Avg Latency |
@@ -659,7 +1248,8 @@ Access: `Window > Platform Diagnostics`
 | Presence       |    [ ]    |    0    |   0  |      -      |
 | Friends        |    [x]    |    0    |   0  |    30 ms    |
 +--------------------------------------------------------------+
-| Offline Queue: 2 pending  |  Oldest: 4m 12s                |
+| Platform Queue: 2 pending | Reconciling: 0 | Oldest: 4m 12s |
+| Save Cloud Journal: 1 pending | Conflict: 0                  |
 +--------------------------------------------------------------+
 ```
 
@@ -696,13 +1286,14 @@ Configuration authority lives in Project Settings:
 
 - active platform backend selection
 - achievement, leaderboard, stat, and presence stable ID tables
-- cloud save conflict resolution policy
+- cloud save capability, timeout and retry policy; conflict resolution authority is
+  owned by the save/cloud coordinator
 - per-service timeout and retry policy
 - offline queue persistence settings
 
 The Platform Diagnostics panel shows runtime state:
 
-- signed-in user and session state
+- session phase/generations and consent-safe presentation availability
 - backend capability availability (per service)
 - pending request count and recent errors by category
 - offline queue depth and oldest pending operation
@@ -716,15 +1307,78 @@ by Horo UI. Horo only authors the configuration and observes the state.
 
 Required tests cover:
 
-- null backend accepts writes without crashing
+- admission failure creates no request/provider call/callback, while dropping every
+  handle/subscription leaves an admitted operation owned until terminal retirement
+- every legal and illegal request-state transition, with terminal state/result atomic
+  and exactly once under completion/cancel/timeout/shutdown races
+- callbacks are never inline or under frontend/provider locks; late subscription is
+  deferred, token destruction suppresses delivery and re-entry cannot recursively
+  drain completion
+- timeout uses one monotonic admission deadline across retries, wins only when no
+  eligible pre-deadline completion exists and remains terminal after late provider work
+- Null rejects every read and write with `platform.provider.null` and creates no
+  request, offline entry or idempotency record
 - mock backend replays scripted responses
 - frontend routes calls to the correct backend service
-- offline queue persists and replays in order
+- local/server authority routing exposes no server commit capability to clients or the
+  listen-server client world; prediction replay emits one logical mutation
+- every achievement/stat/leaderboard operation exercises its exact algebra and
+  capability requirement, including provider variants without safe primitives
+- exact mutation duplicates join, conflicting payload reuse fails and every retry/
+  durable replay preserves envelope identity and scope
+- timeout/late completion races preserve ADR-130 terminal state while progression
+  ambiguity reconciles without a second remote effect
+- max/min/best coalescing is result-preserving under every input order and retains an
+  outcome for each logical receipt; conditional/additive operations never coalesce
+- durable mode commits one queue row before first provider submit; volatile mode is
+  never reported as queued, and duplicate admission joins only an exact envelope
+- every ADR-133 replay class is accepted/rejected against qualified provider semantics;
+  cloud writes/deletes and all reads/queries can never enter the platform queue
+- crash/fault injection at queue admission, provider submit/commit, terminal commit and
+  compaction preserves the original intent/ambiguity without false success
+- per-subject/semantic-lane ordering, fair cross-lane scheduling and legal coalescing
+  retain every logical receipt; capacity exhaustion never evicts oldest/ambiguous work
+- backoff, rate limit, expiry, clock skew, attempt and storage limits are bounded;
+  expiry is a durable terminal failure and never resets across restart
+- presence persistence is opt-in/consented/short-lived, coalesces Set/Clear desired
+  state only within one exact lane and never becomes history
 - request cancellation does not leak state
 - stable ID registries reject unregistered names
-- cloud save conflict resolution strategies
-- session sign-in/out triggers queue replay and state callbacks
-- unavailable services return `not_supported`
+- stable ID golden vectors agree across hosts; malformed salts/encodings, stored/
+  derived mismatches, collisions, duplicate aliases and zero IDs fail closed
+- display rename/reorder and identity-preserving clones retain IDs; tombstones cannot
+  be silently reused and namespace-fork failure rolls back every reference
+- provider mapping generation rejects unknown, tombstoned, duplicate, wrong-kind and
+  stale-fingerprint rows; provider-native values never become gameplay identity
+- typed cloud-object addressing, provider revision propagation and no timestamp-based
+  automatic winner selection
+- conditional write/delete and precondition failure; uncoordinated providers never
+  receive background mutations
+- list/read revision consistency, exact length/digest and malformed/partial/oversized
+  transfer rejection with no partial bytes published
+- atomic create/replace/delete races and native multipart failure/cancel/timeout with
+  no staging object visible as the public key
+- object/count/namespace/staging/concurrency quota boundaries and no destructive
+  transport-owned cleanup
+- cloud mutation-ID replay/conflict plus committed/uncommitted/conflicting ambiguity
+  reconciliation; exactly one ADR-115 journal and no generic queue copy
+- cloud archive writes/deletes never enter the generic offline queue
+- authenticated-provider downloads remain untrusted until local bounded admission;
+  malformed/oversized results cannot publish or replace a local generation
+- cloud credential/provider metadata is redacted from save diagnostics and tools
+- sign-in candidate failure, sign-out/account-switch/provider-reload races and stale
+  callbacks never publish across subject/session generations
+- same-binding reauthorization may resume an eligible durable partition; a newly
+  current account never retargets old progression or cloud intent
+- every consent/restriction state and access-revision change is enforced at admission
+  and commit, including child/parental/region policy and UI/debug bypass attempts
+- social handles and bounded presentation expire with session/access scope; malformed
+  personal data and raw-ID/PII leakage into logs, metrics, crashes or tools fail closed
+- typed capability snapshot and private binding agree; missing/duplicate/mismatched
+  bindings fail composition and unavailable services return
+  `platform.capability.unavailable`
+- Null, capability absence, cancellation, timeout and provider failure have distinct
+  stable codes; provider categories/native evidence never replace frontend identity
 - presence updates coalesce to the most recent state
 
 ### Mock Backend
@@ -755,18 +1409,53 @@ Tests use the mock backend to verify:
 
 - correct request routing and error translation
 - timeout handling when `delay` exceeds the policy
-- offline queue behavior when the backend returns `offline`
-- idempotency key stability across retries and replay
-- stat coalescing and leaderboard debounce logic
+- offline eligibility when the backend returns normalized `Offline`
+- progression mutation ID/envelope stability across retry, replay and reconciliation
+- stat max/min and leaderboard best-score coalescing under reordered inputs
+- conditional revision, durable dedupe, unsupported operation and ambiguous-outcome
+  provider capability variants
+- cloud list/read consistency, partial transfer, atomic revision CAS, quota and
+  committed-after-timeout scripts with exact caller-owned reconciliation evidence
+- authentication-stage failure, account-switch/stale-callback and consent-revocation
+  scripts with no cross-subject cache, observer or durable-replay publication
+- queue storage disk-full, permission, truncated/corrupt/version-skewed and publication-
+  unknown scripts plus repeated/partial shutdown and late callback retirement
+- concurrent Platform Offline Queue and Save cloud-journal recovery proves there is no
+  shared durable row, scheduler, outcome or cross-owner FIFO
 
 Platform-specific backend tests live in the private platform repositories.
 
 ## Related Documents
 
+- [ADR-130](../../adr/130-platform-services-frontend-request-lifetime-timeout-null-and-error-semantics.md):
+  frontend request ownership, lifecycle, callback, capability, Null and error baseline.
+- [ADR-131](../../adr/131-platform-services-closed-sdk-extension-abi-package-and-composition-boundary.md):
+  closed SDK packaging, extension ABI, provider lifecycle and product composition.
+- [ADR-132](../../adr/132-platform-services-project-salt-stable-id-tombstone-and-provider-mapping.md):
+  deterministic project IDs, canonical encoding, tombstones, aliases and provider
+  mapping ownership.
+- [ADR-133](../../adr/133-platform-progression-authority-trust-and-idempotency.md):
+  achievement/stat/leaderboard authority, trust, typed mutation algebra, retry and
+  ambiguity policy.
+- [ADR-134](../../adr/134-cloud-blob-transport-revision-precondition-and-offline-ownership.md):
+  authenticated opaque blobs, revision CAS, quota/integrity/partial transfer and
+  caller-owned durable cloud intent.
+- [ADR-135](../../adr/135-platform-identity-session-generation-privacy-and-consent.md):
+  platform identity-domain separation, generation-fenced subject capabilities,
+  consent/restriction authority and personal-data handling.
+- [ADR-136](../../adr/136-platform-offline-queue-ownership-replay-and-cloud-intent-boundary.md):
+  single-owner offline durability, admission/replay/expiry/shutdown semantics and the
+  Save-owned cloud intent boundary.
 - [Platform Services Config UI Reference](./platform-services-config.html): achievements, leaderboards, cloud saves, presence, and platform adapters panel.
 
 - [Audio Architecture](./audio-architecture.md)
 - [Input Architecture](./input-architecture.md)
 - [Platform Abstraction Architecture](../foundation/platform-abstraction.md)
+- [ADR-113](../../adr/113-local-storage-user-profile-and-slot-ownership.md): product,
+  user/profile and logical-slot addressing across local and cloud boundaries.
+- [ADR-115](../../adr/115-cloud-save-authority-revision-and-conflict-policy.md): local
+  authority, provider preconditions, offline journal and conflict preservation.
+- [ADR-116](../../adr/116-save-data-threat-model-and-trust-policy.md): untrusted cloud
+  bytes, bounded local admission, credential isolation and save tool policy.
 - [Extension System](../extensions/plugin-system.md)
 - [Release Security](../release/release-security.md)

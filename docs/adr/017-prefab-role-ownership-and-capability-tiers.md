@@ -6,6 +6,7 @@
 - **Scope**: Prefab asset definition, authoring templates, runtime spawnable templates (`CookedPrefab`), capability tiers (Tier 0, Tier 1, Tier 2), asset identity, project versioning, unknown component preservation, and lifecycle safety
 - **Issue**: [PFB-001.1](https://github.com/abdullahbodur/horo-engine/issues/1008)
 - **Jira**: [HORO-1008](https://horo-engine.atlassian.net/browse/HORO-1008)
+- **Related**: [ADR-093](093-prefab-override-property-identity-and-delta-operations.md), [ADR-094](094-prefab-nested-composition-and-variant-inheritance.md)
 - **Normative document**: [Prefab Architecture](../architecture/runtime/prefab-architecture.md)
 
 ## Context
@@ -92,6 +93,7 @@ Capability delivery is partitioned into three discrete tiers:
 - Asset Pipeline cooks `.prefab` source assets into platform-optimized, immutable binary `CookedPrefab` artifacts (`core.prefab` asset type).
 - Cooked prefabs participate in the standard `AssetRegistry` and `CookCatalog`, loaded via `IAssetProvider`.
 - Two APIs, one contract, reconciled with [ADR-018](018-command-registration-permissions-threading-and-packaged-build-policy.md) (threading policy) and [ADR-010](010-job-waiting-and-operation-store-ownership.md) (`OperationStore`):
+
   ```cpp
   class SceneCommandBuffer {
   public:
@@ -105,14 +107,15 @@ Capability delivery is partitioned into three discrete tiers:
       Result<SpawnedPrefabHandle, PrefabError> SpawnPrefab(const PrefabSpawnRequest& request);
   };
   ```
+
   `SceneCommandBuffer::RequestSpawnPrefab` is the planned gameplay admission seam; successful admission returns an `OperationId`, while a full queue/store or closed scene returns a typed error without creating an operation. A host-composed spawn coordinator exclusively mutates the authoritative `OperationStore`. `SceneRuntimeAccess::SpawnPrefab` is the internal owner-thread drain, never a gameplay bypass. This Tier 1 extension adds a thread-safe admission facade without making existing SCN-001 owner-thread command-buffer methods thread-safe.
 - Spawn staging uses the existing scene allocator for fresh generation-checked `EntityId`s, copies component data, and establishes hierarchy before **commit**. `OnCreate` runs after commit, then `OnEnable` if enabled; `OnStart` runs once after first enable and before the first eligible fixed update. Created-disabled behaviors defer `OnEnable`/`OnStart` until enabled, as required by Gameplay Behavior Authoring.
 - Fail-safe: missing catalog entries, corrupted or version-mismatched cooked blobs, unregistered component types, component allocation failure, or spawn recursion return typed `PrefabError` without publishing entities or invoking behavior hooks.
 
 #### Tier 2: Live Variant Inheritance & Dynamic Override Tracking (Deferred)
 
-- Prefab Variants allow creating specialized prefabs that inherit from a base prefab asset and record delta overrides (property overrides, added/removed components, extra child entities).
-- Multi-tier variant inheritance chains (`Base -> VariantA -> VariantB`) evaluated as a directed acyclic graph (DAG).
+- Prefab variants specialize exactly one immediate parent and record ADR-093 property/component deltas. V1 rejects multiple parents and hierarchy add/remove/reparent deltas; [ADR-094](094-prefab-nested-composition-and-variant-inheritance.md) owns the detailed capability boundary.
+- Multi-tier variant inheritance chains (`Base -> VariantA -> VariantB`) and nested-placement edges are validated together as one bounded acyclic graph.
 - Editor workspace listens for base prefab mutation events and propagates updates in real time to open variant documents and active viewport previews.
 - Deep per-property override inspection, reverting, and pushing back to base prefab.
 

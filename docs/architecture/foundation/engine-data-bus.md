@@ -32,9 +32,18 @@ It is **not**:
 
 - a request/response mechanism
 - a state authority (it does not own `SceneDocument`, project model, or assets)
+- a gameplay command/event-occurrence dispatcher; required cinematic events use the
+  session `CinematicEventDispatcher` and typed destination adapters under
+  [ADR-120](../../adr/120-cinematic-event-dispatch-and-audio-coupling-boundary.md)
 - a substitute for direct parent/child UI callbacks
 - a logging, profiler, or telemetry buffer (those systems own bounded queryable
   stores and publish availability notifications)
+
+The bus may carry a coalesced availability/revision notification after a cinematic
+event result is recorded. It never carries the authoritative EventTrack payload,
+selects a gameplay handler, establishes timeline ordering or determines dispatch
+success. Bus subscribers and dead-event/backpressure policy therefore cannot change
+cinematic gameplay behavior.
 
 ## Ownership
 
@@ -621,6 +630,13 @@ Events that require guaranteed delivery, such as a durable operation result,
 must not rely on this lossy notification queue. Their authoritative result lives
 in the owning job/use-case state and remains queryable after a progress event is
 dropped.
+
+The same rule applies to committed destruction facts under
+[ADR-147](../../adr/147-destruction-event-and-cosmetic-consumer-ownership.md).
+`EngineDataBus` may coalesce a destruction-journal revision notification, but gameplay,
+VFX, Decal, Audio and accessibility adapters read the owner-retained fact by cursor.
+Bus loss, duplication or subscriber order cannot define occurrence order, delivery
+success or destruction state.
 
 ```mermaid
 sequenceDiagram

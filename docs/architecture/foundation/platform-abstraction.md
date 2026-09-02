@@ -60,6 +60,11 @@ follow [Android Platform Host](./android-platform-host.md). Portable callers use
 the same capability model; they do not branch on Android APIs or lifecycle
 callbacks.
 
+[ADR-171](../../adr/171-android-host-target-and-ownership.md) fixes the initial
+Android composition and ownership boundary: a private GameActivity-based host
+owns lifecycle serialization, PlatformAndroid owns admitted native-window and
+Android-service lifetimes, and native types remain outside public Horo headers.
+
 ## Filesystem And Paths
 
 The engine uses structured path values:
@@ -104,6 +109,14 @@ temporary
 Callers never build these paths from `$HOME`, `%APPDATA%`, or platform-specific
 string literals. Locations follow platform conventions and the storage policies
 in the owning architecture documents.
+
+Application state roots are opened for a validated `ProductStorageId`; product
+display name, executable path and current working directory are not storage identity.
+Platform Abstraction returns a root/container capability only. Under
+[ADR-113](../../adr/113-local-storage-user-profile-and-slot-ownership.md), the save
+storage adapter alone maps environment, local-user/game-profile or server owner and
+logical slot IDs beneath that capability. UI, gameplay and cloud backends never
+receive the resulting host path.
 
 ## Window And Event Pump
 
@@ -226,6 +239,14 @@ defined by the [Extension System](../extensions/plugin-system.md) and
 [Gameplay Module Boundary](../extensions/gameplay-module-boundary.md). Raw
 dynamic-library handles do not escape into ordinary engine modules.
 
+The optional first-party OpenXR backend follows
+[ADR-158](../../adr/158-openxr-loader-backend-packaging-and-host-composition.md).
+Platform may resolve a product-approved bundled or platform-provided loader artifact
+and lend bounded open/symbol/close plus native-host initialization capabilities.
+XROpenXR alone owns loader API calls and dispatch. Platform does not scan runtime
+manifests, select an XR runtime, create OpenXR objects or treat a successfully opened
+library as product support.
+
 ## Crash And Emergency Services
 
 The crash service installs the smallest safe platform handlers required to:
@@ -305,6 +326,8 @@ Required tests cover:
 - [Concurrency And Job System](./concurrency-and-jobs.md)
 - [Input Architecture](../runtime/input-architecture.md)
 - [Android Platform Host](./android-platform-host.md)
+- [ADR-113](../../adr/113-local-storage-user-profile-and-slot-ownership.md): product
+  state roots and save namespace/path ownership.
 - [XR Architecture](../runtime/vr-ar-architecture.md)
 - [Release Security](../release/release-security.md)
 - [Extension System](../extensions/plugin-system.md)

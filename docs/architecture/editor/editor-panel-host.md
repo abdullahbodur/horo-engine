@@ -68,6 +68,8 @@ EditorLayer
     |                       +-- McpTab
     |                       +-- PerformanceTab
     |                       +-- RenderInspectorTab (registered, closed by default)
+    |                       +-- NavigationTab (registered, closed by default)
+    |                       +-- GameplayAiTab (registered, closed by default)
     |
     +-- EditorModalHost          exclusive modal workflows above the workspace
 ```
@@ -666,6 +668,36 @@ and preview controls; AudioModel owns schema/edit validation and AudioCook owns 
 compiled generator. Preview uses the ordinary AudioFrontend/voice/mixer path, and
 stale compile or diagnostic results are rejected by document revision.
 
+## VFX Effect Document Surface
+
+[ADR-129](../../adr/129-vfx-editor-document-live-preview-and-module-authoring.md)
+places every editable effect asset in a persistent `VfxEffectDocument` tab. The panel
+host owns route, placement, focus, visibility and surface lifecycle; document services
+own source revision, commands/history, dirty/save/recovery/conflict and derived compile
+or preview state. Opening the same asset focuses its existing writable tab. Create,
+import, templates, Save As and confirmation remain transient modal routes that open no
+tab until their application transaction succeeds.
+
+The baseline stack surface composes Horo module/property/curve/output controls. A
+future graph surface uses the shared node-editor adapter but keeps graph source commands
+and layout distinct. Both emit typed commands and display compiler diagnostics; neither
+validates or executes particle semantics during draw. If graph UI is unavailable, the
+host preserves the source or offers explicit read-only inspection rather than silently
+flattening it into the stack.
+
+The effect viewport is an isolated preview surface. It compiles an immutable document
+revision and consumes normal `VfxWorld`/Renderer output through a generation-fenced
+preview capability. Its camera, grid, seed, clock, fixture, selected module and runtime
+handles are presentation/preview state. Closing the document cancels derived work and
+retires resources; a hidden tab does not continue preview work without a separately
+admitted bounded background operation.
+
+Effect decal outputs use the same document tab. Scene-placed decal projection remains
+owned by SceneDocument. Box/OrientedBox manipulation shares viewport/gizmo capture,
+updates a transient overlay during drag and sends exactly one typed command to the
+owning document on commit. It never writes renderer state or maintains decal-specific
+history/persistence.
+
 ## Viewport Panel
 
 The viewport panel owns rendering of the active scene camera or game camera in
@@ -758,6 +790,20 @@ directly. Singular parents, non-finite input, and unrepresentable transform
 updates terminate the transient preview through a typed error; they must not
 substitute identity axes or commit a partial result.
 
+Terrain/Foliage viewport tools follow
+[ADR-142](../../adr/142-terrain-foliage-document-tool-undo-and-preview-ownership.md).
+Their controllers own routed pointer capture, brush/spline visualization and an
+ephemeral revision-fenced stroke accumulator only. The foliage palette owns active type
+and filters as workspace presentation state. Tools submit typed edit intent to the
+active asset-rooted document; they cannot write canonical samples/placements, dirty
+state, history, cooked tiles, TerrainRuntime or renderer/physics/navigation state.
+
+The viewport may render a disposable interaction overlay or an immutable isolated
+preview-session result. Modal capture, tool/document switch, revision change, capacity
+denial, panel detachment or shutdown cancels the interaction without a document edit.
+Pointer release submits at most one bounded operation whose exact affected tile/patch
+closure and before/after history are owned by the document executor.
+
 ### Right Dock
 
 Visible as the Properties panel.
@@ -823,6 +869,38 @@ Visible as the Workspace panel with the following tabs:
     `OperationStore` owns bounded lifecycle snapshots and terminal retention.
   - Empty projections and dropped terminal-history counts are visible presentation
     states, not inferred from log text.
+  - Navigation bake rows are projections of the application-owned
+    `NavigationBakeService` defined by
+    [ADR-106](../../adr/106-navigation-bake-ownership-transaction-and-cache.md).
+    A navigation panel/menu may submit or request cancellation, but panel closure,
+    docking and workspace restoration never own the operation, builder, staging,
+    publication lock or artifact lifetime.
+
+- **Navigation tab**: navigation authoring readiness, bake actions/diagnostics and
+  bounded runtime inspection.
+  - Owner: `NavigationTab`, registered closed by default.
+  - Queries: document/definition readiness, artifact/currentness,
+    `IOperationQuery` and immutable `INavigationInspectionQuery` snapshots.
+  - Executes: typed document commands, ADR-106 bake submission/control and
+    separately authorized runtime-debug commands through narrow capabilities.
+  - Owns only filters, selection, focused `OperationId`, overlay interest and
+    other bounded presentation state. Hide/close stops polling and releases
+    presentation leases; it never cancels a bake, ends play, changes runtime
+    lifetime or accesses provider/native state.
+  - Provider/extension detail uses validated host-rendered schema under ADR-110
+    and ADR-056, not arbitrary plugin ImGui.
+
+- **Gameplay AI tab**: selected-agent blackboard, active plan/node/task, perception,
+  EQS and budget inspection.
+  - Owner: `GameplayAiTab`, registered closed by default.
+  - Queries: bounded immutable `IGameplayAiInspectionQuery` pages carrying world,
+    agent, plan/schema and tick generations.
+  - Executes: document-open actions and separately authorized typed runtime-debug
+    commands through safe-point capabilities.
+  - Owns only presentation selection, filters and paging. Hide/close stops polling
+    and releases leases; it never cancels a task, query, simulation or PIE session.
+  - Provider detail uses ADR-111/ADR-056 host-rendered schema, never runtime/native
+    pointers or arbitrary plugin ImGui.
 
 - **MCP tab**: MCP command history and activity.
   - Owner: `McpTab`
@@ -1001,6 +1079,10 @@ Required coverage:
   modal blocks their interaction
 - viewport panels receive a render-target view without owning backend resources
 - transform editing publishes one document event only after transaction commit
+- terrain/foliage gestures commit at most one bounded document operation and cancel
+  exactly across modal capture, tool/document switch, stale revision and panel detach
+- terrain palettes/overlays own no canonical source/history/runtime state, and isolated
+  preview close rejects stale work before retiring generation-owned resources
 
 ## Why Not Put This in Application?
 
@@ -1012,6 +1094,13 @@ agnostic to editor UI structure so that:
 - editor layout changes do not require `Application` recompilation
 - a tab in any panel can communicate with a tab in any other panel without the
   host layer knowing either tab exists
+- VFX effect repeat-open focuses one writable persistent document tab; create failure
+  opens none, dirty close uses the common leave guard, and close/project teardown
+  cancels generation-fenced preview before resource retirement
+- stack authoring remains usable without graph UI; unavailable graphs preserve source
+  or open read-only and never flatten into stack state
+- VFX/decal gizmo drag, cancel and commit preserve pointer capture, transient preview
+  and exactly-one-command history across normal, modal interruption and stale revision
 
 The editor workspace is a higher-level concern composed on top of
 `Application`. Cross-panel notification flow lives entirely below

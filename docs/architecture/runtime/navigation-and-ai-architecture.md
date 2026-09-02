@@ -2,11 +2,11 @@
 
 ## Purpose
 
-This document defines the navigation (NavMesh), pathfinding, tactical environment queries, and AI subsystems
+This document defines grounded navigation (NavMesh), pathfinding, tactical environment queries, and AI subsystems
 for Horo Engine. It covers navigation mesh generation, runtime pathfinding,
 dynamic obstacle avoidance, AI perception, behavior integration, crowd
 simulation, fixed-tick simulation phase ordering, network authority roles,
-and hardware-driven simulation budget profiles.
+and project-configured simulation budget profiles.
 
 ## Target Ownership And Architecture Boundaries
 
@@ -38,6 +38,22 @@ CMake target. These dependencies provide `WorldCoordinate64`, `Vec3`, `Aabb`, an
 `Quaternion`; navigation does not invent another math library. Asset, world-streaming,
 and scene adapters are composed by the host; they do not add reverse dependencies
 from these four navigation targets to application, Gameplay, Rendering, or GUI.
+
+### Default Provider And Module Profile
+
+[ADR-104](../../adr/104-default-navigation-provider-and-recast-detour-adoption.md)
+selects `recastnavigation/recastnavigation` commit
+`9f4ce64458dfae86e1239c525ddc219c4e9e06f1` as the first production
+grounded NavMesh provider. Detour is the required real runtime query/topology
+baseline. Recast is required only in bake/cook compositions. DetourTileCache is
+the optional `DynamicTileCarving` capability and DetourCrowd is the optional
+`DetourLocalAvoidance` capability; neither is implied by selecting real pathfinding.
+DebugUtils, RecastDemo and examples are absent from product targets/packages.
+
+The exact commit, private 64-bit poly-reference build and other locked native
+options form the provider fingerprint. Public and durable identity remains Horo-
+owned; a provider pin or option change invalidates matching derived caches and
+requires the ADR-104 upgrade/recook/qualification process.
 
 ### NavigationApi: Consumer Contracts
 
@@ -93,6 +109,12 @@ owned query/topology/crowd interfaces into the coordinator. Selection happens be
 activation. Stop admission, cancel/drain outstanding work under ADR-010, release snapshots,
 then destroy providers before unloading their module; no callback or lease may outlive it.
 
+Recast tile builds own separate contexts, intermediate data and allocator domains.
+Each Detour query job exclusively leases one `dtNavMeshQuery` and scratch/node
+pool against a pinned immutable mesh snapshot. Mutable native topology,
+`dtTileCache` and `dtCrowd` instances have one owner/writer per batch. The provider
+creates no thread pool; all admission and execution use Foundation JobSystem.
+
 ### NavigationNull: Feature Absent, Not Fake Navigation
 
 `src/runtime/navigation/backends/null/` implements neutral capability absence.
@@ -122,9 +144,34 @@ spatial evaluation. Gameplay consumes typed admission/query interfaces, and navi
 includes behavior nodes or script bindings. Host adapters bridge Assets, World Streaming,
 and scene lifetime without making them providers' dependencies.
 
+[ADR-137](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
+keeps Terrain/Foliage on that decoupled boundary. Terrain produces immutable,
+generation-tagged cooked topology/source or runtime-overlay evidence; Navigation owns
+tile preparation, provider objects, query consistency, publication and retirement.
+Visual terrain or a committed hole/deformation cannot mutate live NavMesh state or
+imply navigation readiness. ADR-108 conservative exclusion plus explicit recook/rebuild
+governs topology change, and aggregate scene/cell activation checks exact generations.
+
 ## Navigation Integration Contracts
 
 ### Submission, Jobs, And Publication
+
+[ADR-107](../../adr/107-navigation-query-consistency-and-snapshot-ownership.md)
+requires one atomically published `NavigationWorldSnapshot` combining exact Scene/
+world incarnation, topology and tile generations, streaming fences, logical
+obstacle overlay, filter/profile configuration, origin epoch, coverage and private
+provider leases. `NavigationReadSnapshot` keeps referenced memory valid but does
+not keep it logically current or resident. A tile/root candidate publishes wholly
+at a safe point; readers observe the complete old or new root, never a partial
+replacement.
+
+Queries declare `ExactSnapshot`, `CurrentAtPublish` or bounded `CurrentOrRetry`
+consistency independently from `RequireComplete`/`AllowPartial` coverage. Immediate
+queries are owner-thread, allocation/I/O/wait-free kernels with hard work/output
+bounds. Full, hierarchical and multi-tile paths use the bounded coordinator and
+Foundation JobSystem. Workers receive one immutable read lease and exclusive
+scratch, enqueue owned completion records and never complete a handle or mutate
+gameplay inline.
 
 `NavigationCoordinator` admits owned typed requests with captured navigation-world/scene
 incarnation, caller authority, cancellation, configuration, topology/obstacle revision, target
@@ -138,7 +185,7 @@ immutable input leases. Completion enqueues data, never a callback that writes l
 state. Owner-thread `NavIntentCommit` consumes eligible results in stable request/agent order,
 rechecks incarnation, handle generation, authority, cancellation, and relevant revisions, and
 publishes paths/desired velocities before character locomotion. Stale results return
-`StaleTopology` or `InvalidHandle` and may be resubmitted within budget; they are never applied
+`StaleSnapshot` or `InvalidHandle` and may be resubmitted within budget; they are never applied
 to replacement agents or tiles. A held path/corridor must be revalidated before later use too.
 
 ADR-018 `OwnerThreadNextFrame` console handlers submit typed navigation commands for this
@@ -161,6 +208,14 @@ stop, never an incomplete new result. Completion timing is not an authority over
 Scene teardown closes admission, cancels pending work, rejects late results, then retires
 resources after readers finish. Query cancellation before publication prevents result
 application; cancellation after publication does not retroactively undo an applied intent.
+
+Only the simulation/Navigation owner publishes asynchronous terminal results at
+`NavIntentCommit`, in stable request order. It revalidates handle, cancellation,
+world/Scene authority and every topology/tile/overlay/filter/origin dependency.
+Results distinguish `CompletePath`, opt-in `PartialPath`, proven `NoPath`,
+unavailable `NoNavigationData`, `StaleSnapshot`, invalid identity, cancellation,
+capacity, unsupported capability and provider failure. Missing/evicted coverage is
+never `NoPath`; retained paths revalidate before later movement use.
 
 ### Obstacle And Provider State Synchronization
 
@@ -225,6 +280,17 @@ forced-eviction commands (ADR-018 / WST-010.8) enter the same world state machin
 scenes without World Streaming use a host asset-lifetime adapter with the same snapshot and
 lease rules; neither case adds a concrete WorldStreaming dependency to NavigationRuntime.
 
+[ADR-141](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md)
+applies the aggregate receipt protocol to Terrain/Foliage navigation. Terrain lends a
+bounded immutable neutral grounded-surface/hole/obstacle/link snapshot tagged with exact
+Terrain/content/mutation/cell/request/origin evidence. Navigation owns artifact/provider
+validation, candidate topology, query-root publication and native/provider-affine
+retirement. Its Ready/Prepared/Published receipt names the resulting topology revision;
+ordinary queries cannot reach the activation-scoped candidate until the aggregate Scene/
+cell root commits. Missing/stale receipts do not imply coverage, and a retained old tile
+cannot satisfy a new generation. Retired is acknowledged only after query/tile leases and
+provider resources release.
+
 Global locations use `WorldCoordinate64`; provider-local coordinates use SceneMath conversions
 with a captured origin epoch. ADR-026 rebases translate dynamic paths/obstacles consistently.
 A late result from an old origin is converted or rejected before application; rebasing alone
@@ -283,7 +349,8 @@ NavMesh is generated from scene collision geometry:
 
 - Static mesh colliders are voxelized and used to build a navigation mesh
 - NavMesh generation runs as an offline asset cook step or background tooling job
-- Generated NavMesh is stored as an immutable cooked `NavMeshData` asset referenced by AssetId
+- Generated NavMesh is stored as immutable cooked `NavMeshData` under the source
+  definition AssetId and its typed scope/profile partitions
 
 ```cpp
 struct NavMeshBuildSettings {
@@ -297,17 +364,38 @@ struct NavMeshBuildSettings {
 };
 ```
 
-Multiple NavMesh surfaces can exist for different agent types (human, large creature, flying).
+Multiple grounded NavMesh surfaces can exist for profiles such as humans, large
+creatures and ground vehicles. Flying, swimming and space traversal require a
+future volumetric provider/artifact; they are not ordinary grounded profiles.
 
 ### NavMesh Asset And Cook Contract
 
-`NavMeshData` is the immutable cooked payload/view. An authoring NavMesh definition contains
-build settings, agent profiles, source geometry references, areas/off-mesh links, and a stable
-Asset Registry `AssetId` assigned in its sidecar. Moving/renaming source preserves that ID.
-The host's Asset Pipeline adapter registers the canonical `core.navmesh` type and its cooker,
-writes immutable artifacts to `CookCatalog`, and loads them through `IAssetProvider` /
-`AssetLoadService`. NavMeshData itself does not import the registry/provider implementation;
-the adapter associates AssetId/type with the neutral payload and pins its lifetime.
+[ADR-105](../../adr/105-navigation-asset-and-scene-ownership-boundary.md)
+separates four one-way representations: durable `NavigationDefinition` plus typed
+Scene navigation intent, an ephemeral immutable `NavigationBakeInputSnapshot`, a
+published `GroundedNavMeshArtifact` exposed as neutral `NavMeshData`, and a
+generation-scoped runtime `NavigationTopologySnapshot`. Generated polygons, tiles,
+provider sections, topology handles and carved results never become authored Scene
+truth or flow back into a definition.
+
+The `NavigationDefinition` uses the stable Asset Registry `AssetId` assigned in its
+sidecar and owns grounded profiles, build/tile policy, areas and bake-scope policy.
+Typed Scene components reference it and contribute explicit accepted collision
+sources, modifiers, grounded off-mesh links and dynamic-obstacle intent through
+stable Scene object/component/contribution IDs. Moving or renaming source preserves
+those identities. Render geometry is not implicit input; every geometry contribution
+names an exact validated source/collision artifact.
+
+Bake captures one bounded revision-consistent snapshot with exact project, Scene,
+definition, registry, package, geometry, profile, settings, coordinate, schema,
+cooker and provider provenance. The host's Asset Pipeline adapter registers the
+canonical navigation type and cooker, writes immutable artifacts to `CookCatalog`,
+and loads them through `IAssetProvider` / `AssetLoadService`. `NavMeshData` itself
+does not import the registry/provider implementation; the adapter associates the
+definition AssetId, scope/profile/tile role and neutral payload while pinning its
+lifetime. Generated scope/profile/tile partitions live inside the cook product
+rooted at the definition AssetId and do not receive new authoring AssetIds or
+sidecars.
 
 Source definitions/settings follow `HoroProjectVersion` migration. Cooked bytes carry an
 independent `navMeshFormatVersion` and the standard artifact envelope, including actual-byte
@@ -328,6 +416,48 @@ are private cooked sections decoded by that provider, never exposed as public ve
 The host chooses a compatible payload/provider pairing or returns `UnsupportedCookedVersion`.
 Cell packaging reuses the same cooked content through ADR-023's NavigationMesh payload; it
 must not create competing AssetIds or an independent residency/cook authority.
+
+Scene conversion resolves required definition/profile/scope references to exact
+published artifact identities and digests. Runtime validates and materializes a
+detached topology candidate; Scene or cell activation publishes it atomically.
+Missing/stale/corrupt required data blocks activation, while explicit optional use
+reports `NoNavigationData`. Runtime never opens source, bakes, migrates or selects an
+inactive prior generation. Dynamic carving derives a new runtime topology generation
+without mutating the published artifact; a persistent change edits authored intent
+and requires recook.
+
+### Navigation Bake Operation And Publication
+
+[ADR-106](../../adr/106-navigation-bake-ownership-transaction-and-cache.md)
+makes one application-owned `NavigationBakeService` the admission and lifetime
+authority for Editor, CLI, MCP, play and release-cook requests. Presentation
+adapters submit typed project/definition/scope/profile/target requests, observe the
+shared `OperationStore` and request cooperative cancellation. A panel, transport
+session or private builder never owns the accepted operation.
+
+Each attempt pins the complete ADR-105 immutable input and computes a canonical
+fingerprint before cache/build work. Requests coalesce by project, definition,
+scope, grounded profile set and target/profile: identical fingerprints join; a
+different request supersedes the active or one bounded pending successor. Only the
+latest request generation may cross the final adoption barrier. Tile/profile jobs
+use Foundation `JobSystem` and bounded host-owned memory/output writers; the
+provider creates no scheduler, cache or publication path.
+
+Navigation uses a versioned dependency-aware cache key covering definition/Scene/
+contributor/geometry digests, project and schema revisions, grounded semantic
+tables, coordinate/tile/build policy, catalog/cooker/provider fingerprints,
+target/profile and payload/envelope formats. Cache hits receive the same validation
+as fresh output and do not become active merely by existing.
+
+Unique same-filesystem staging plus a process resource lease and Platform
+`ExclusiveFileLock` serialize every writer to one canonical publication key across
+Editor/CLI/CI processes. The operation assembles and verifies a complete immutable
+generation, then atomically replaces `current.json` last. Failure, cancellation,
+timeout, supersession or crash before that point preserves the prior generation.
+Recovery validates the current pointer or an explicit successful receipt; it never
+selects the newest directory. Accepted operations end exactly `Succeeded`,
+`Failed`, `Cancelled`, `Superseded` or `TimedOut`, with the latter two projected to
+the shared operation model using typed causes.
 
 ### NavMesh Data
 
@@ -384,12 +514,32 @@ For large worlds, hierarchical pathfinding is used:
 
 ## Dynamic Obstacles
 
-Moving obstacles (other agents, vehicles, doors) affect navigation:
+[ADR-108](../../adr/108-dynamic-overlay-carving-and-tile-rebuild-policy.md)
+separates local avoidance, logical blocker/link/modifier overlays, optional
+`DynamicTileCarving`, optional `RuntimeGroundedTileRebuild`, authored recook and
+World Streaming tile transactions. These mechanisms are not fallbacks with
+equivalent authority: cooked `NavMeshData` is immutable, and every runtime topology
+change stages and atomically publishes a new ADR-107 combined generation.
 
-- Dynamic obstacles are applied as a scene-scoped runtime avoidance overlay; cooked `NavMeshData` is not mutated
-- Carving uses cylindrical or box-shaped cutouts
-- Carving is local to the affected NavMesh tiles
-- Paths are re-computed when an agent's path intersects a new obstacle
+Moving navigation agents use path following plus bounded local avoidance/safe
+velocity; Character/Physics owns movement. They are never carved per transform.
+Large moving bodies and newly added simple blockers publish a conservative logical
+overlay first. Normal doors use stable `NavigationLinkId` gate state and an optional
+threshold blocker. Declared modifiers use typed overlay/filter revisions rather
+than direct polygon/provider-flag writes.
+
+When `DynamicTileCarving` and retained admitted tile layers are available, supported
+finite box/cylinder blockers may produce a detached affected-tile candidate. Missing
+capability/layers or unsupported shapes leave the conservative overlay visible and
+return a typed disposition. Removing a blocker restores only topology represented
+by the retained base layers.
+
+Arbitrary terrain, destruction or new-static-geometry changes require ADR-106
+authored recook, or a separately composed `RuntimeGroundedTileRebuild` capability
+over an immutable authoritative geometry snapshot. That runtime capability is not
+in the 1.0 baseline and its output remains transient; it cannot update Asset
+Registry, cook cache, `current.json` or Scene source. Streamed geometry installs/
+removes already cooked cell tiles only through World Streaming.
 
 ```cpp
 struct DynamicObstacle {
@@ -400,6 +550,13 @@ struct DynamicObstacle {
     ObstaclePriority   priority;
 };
 ```
+
+Adding/closing a blocker targets the next eligible `NavIntentCommit` and fails
+closed before asynchronous carve/rebuild work. Opening new reachability waits for a
+validated gate/topology generation. Overlay, carving, rebuild, recook and residency
+each have separate queue/work/memory/staging/retired budgets and typed outcomes;
+graphics tiers never choose them. Paths intersecting a changed dependency are
+invalidated and re-requested under ADR-107 consistency policy.
 
 ## AI Perception
 
@@ -1105,6 +1262,13 @@ AI decision making is authored as dedicated graph assets that compile into flat,
 
 ### Graph Asset Model And UI Independence
 
+[ADR-111](../../adr/111-gameplay-ai-document-panel-and-runtime-debug-ownership.md)
+maps blackboard schemas, the three decision graph kinds and EQS templates to
+explicit asset-document routes. Decision/EQS graph tabs reuse the shared Horo
+`GraphViewSnapshot`/`GraphEditCommand` surface, while subsystem document
+controllers own semantic validation, history, save/conflict and compilation.
+Cooked plans and live Scene-owned instances never become editor document state.
+
 1. **Pure Semantic Graph Assets**:
    - Persisted graph identity is established by typed assets: `BehaviorTreeAsset` (`.horo_bt`), `StateMachineAsset` (`.horo_sm`), and `UtilityAiAsset` (`.horo_utility`).
    - Assets contain only semantic topology: stable `GraphId`, `NodeId`, `PinId`, `PropertyId`, schema versions, node type identifiers, property bindings, and blackboard key bindings.
@@ -1260,7 +1424,7 @@ public:
    - Stale or invalid plans never replace the active runtime plan and log typed compiler diagnostics.
 
 1. **Save And Restore**:
-   - The AI subsystem contributes an `IGameplayStateProvider` to `RuntimeSaveService` and captures state only at the save snapshot safe point.
+   - Under ADR-114, the AI subsystem contributes one owned canonical state adapter to `RuntimeSaveService` and captures state only at the aggregate save snapshot safe point. Component reflection and Scene serialization are not alternate authorities.
    - Durable state includes plan asset/schema identity, bounded execution-frame stacks keyed by stable `DecisionNodeId`, serializable decorator/timer memory, and schema-approved blackboard values.
    - `JobHandle`, cancellation tokens, path/query handles, pointers, and cooked array indices are transient and never serialized. Restore resolves plans in staging and restarts asynchronous work only after atomic state application. Missing or incompatible plans reset the affected agent to its root with a typed diagnostic.
 
@@ -1290,8 +1454,8 @@ and executed by the navigation system.
 
 ### Perception Save And Restore
 
-The AI subsystem contributes a versioned perception chunk through
-`IGameplayStateProvider`. `PreserveMemory` captures durable sense/tag data,
+The AI subsystem's ADR-114 canonical adapter contributes its versioned perception
+state. `PreserveMemory` captures durable sense/tag data,
 stable source references where available, last-known position/velocity, strength,
 and simulation age; `ResetOnRestore` explicitly opts ambient agents out.
 
@@ -1303,30 +1467,55 @@ without applying wall-clock offline time.
 
 ## Crowd Simulation
 
-For groups of agents, crowd simulation provides:
+[ADR-109](../../adr/109-avoidance-crowd-and-renderer-independent-budget.md)
+separates route/corridor and preferred-velocity production, local safe-velocity
+computation and Character/Physics movement. NavigationRuntime owns logical agents,
+immutable fact batches, project-profile admission, stable scheduling and
+`NavIntentCommit` publication. An optional `INavigationCrowdBackend` owns only its
+private bounded safe-velocity kernel/state; Character/Physics remains final
+collision, velocity and transform authority.
 
-- Local avoidance (reciprocal velocity obstacles)
-- Formation movement (line, wedge, column, circle)
-- Lane formation in corridors
-- Density-based speed modulation
+When that backend is composed, group coordination may request:
+
+- Local steering and dynamic avoidance
+- Safe-velocity evaluation for Gameplay-authored formation/lane preferred velocities
+- Bounded density facts used only by the local solver
 
 ```cpp
 struct CrowdAgentConfig {
-    float  neighborRadius;
-    float  maxNeighbors;
-    float  avoidanceRadius;
-    float  maxSpeed;
-    float  maxAcceleration;
-    bool   useFormations;
+    float    neighborRadius;
+    uint32_t maxNeighbors;
+    float    avoidanceRadius;
+    float    maxSpeed;
+    float    maxAcceleration;
 };
 ```
 
-Crowd simulation runs as a parallel job over agent groups. Agents within a
-group share avoidance data; groups are independent.
+The 1.0 best-effort provider is ADR-104's optional DetourCrowd adapter. Horo does
+not call it ORCA/RVO or promise collision-free motion, and it cannot satisfy the
+initial deterministic tier. Horo ships no separate ORCA/RVO kernel for 1.0.
+Deterministic simulations either compose a separately qualified provider, use the
+declared collision-safe no-avoidance policy or fail admission when avoidance is
+required.
+
+Scale (`CrowdSmall`, `CrowdMedium`, `CrowdLarge`, `CrowdDedicated`) and quality
+(`AvoidanceOff`, `AvoidanceConservative`, `AvoidanceBalanced`, `AvoidanceDense`)
+are independent project dimensions with exact finite capacity, fact, work, memory,
+batch and result-age envelopes in ADR-109. Best-effort selection uses authored
+priority, deadline age and stable agent ID; camera visibility/render LOD and
+graphics backend are never inputs. Late/unselected work has bounded validated
+velocity reuse followed by the configured collision-safe fallback.
+
+Formation, density and corridor-formation policy remain Horo Gameplay/AI
+orchestration above the provider. Traffic/road lane graphs are a separate future
+navigation domain, not a crowd flag. Products needing only grounded paths do not
+link or allocate DetourCrowd.
 
 ## Asynchronous AI Tasks And Job System Integration
 
-Asynchronous AI workloads—such as NavMesh pathfinding, perception visibility raycasts, and tactical environment queries—must execute through the Foundation `JobSystem`:
+Asynchronous AI workloads—such as NavMesh pathfinding, best-effort crowd batches,
+perception visibility raycasts, and tactical environment queries—must execute
+through the Foundation `JobSystem`:
 
 - **Single Task Scheduler**: AI subsystems must not instantiate private worker thread pools or bespoke background task runners.
 - **Scene-Scoped Cancellation**: Every async AI job captures a `CancellationToken` bound to the active `SceneRuntime` generation. When a scene unloads or transitions, all active AI jobs are cancelled immediately.
@@ -1334,11 +1523,31 @@ Asynchronous AI workloads—such as NavMesh pathfinding, perception visibility r
 
 ## Debugging And Visualization
 
+[ADR-110](../../adr/110-navigation-editor-surface-and-command-ownership.md)
+maps navigation tooling onto the shared editor architecture. A persistent
+`NavigationDefinitionDocument` and ordinary `SceneDocument` commands own authored
+definition/Scene intent. The dockable `NavigationTab` is a closed-by-default query
+and action projection; ADR-106 `NavigationBakeService`/`OperationStore` owns every
+accepted bake, so panel hide/close never cancels work or publishes an artifact.
+
+Live inspection uses a bounded backend-neutral `INavigationInspectionQuery` over
+immutable world/topology/overlay/profile generations. Viewport overlays consume
+neutral debug primitives and own presentation state only. UI callbacks and provider
+extensions receive no mutable runtime/provider/native object; authorized debug
+actions use typed application/runtime commands at declared safe points. Navigation
+surfaces use the shared design system and localization catalogs.
+
 - NavMesh visualization overlay (walkable areas, obstacles, off-mesh links)
 - Path visualization (active paths with waypoints)
 - Perception visualization (sight cones, hearing radii, known stimuli)
 - AI debug panel (blackboard inspector, behavior tree state, active path)
 - NavMesh generation diagnostics (build time, coverage percentage)
+
+The closed-by-default `GameplayAiTab` reads bounded immutable, generation-scoped
+runtime snapshots. Hiding/closing it stops polling and releases leases only; it
+cannot cancel tasks, EQS work, simulation or PIE. Authorized developer mutations
+are typed, permissioned runtime commands committed at fixed-tick safe points, never
+direct widget writes. Provider UI remains inert metadata/host-rendered schema.
 
 ## Simulation Lifecycle And Fixed-Tick Phase Ordering
 
@@ -1390,7 +1599,7 @@ variable-rate presentation bridge, not a seventh fixed-tick phase.
    - Selects agent actions, targets, and tactical states.
    - Invariant: Pure decision evaluation. Does NOT directly manipulate physics bodies, apply forces, or invoke rendering commands. Emits high-level movement/action intent.
 4. **`NavIntentCommit`**:
-   - Translates movement intent into concrete navigation actions: submits asynchronous pathfinding requests, follows active waypoints, and evaluates crowd/dynamic obstacle avoidance (RVO).
+   - Translates movement intent into concrete navigation actions: submits asynchronous pathfinding requests, follows active waypoints, and evaluates the selected local safe-velocity capability.
    - Computes desired kinematic horizontal/vertical velocity vectors for character locomotion.
    - Invariant: Submits desired velocity to character controllers without stepping the physics world directly.
 5. **`CharacterControllerLocomotion`**:
@@ -1459,7 +1668,10 @@ Client hosts in networked multiplayer run neither mode for remote AI; they perfo
 
 ## Gameplay AI Profiles And Simulation Budgets
 
-AI agent capacity, perception query fidelity, and pathfinding job allocations are configured through typed `GameplayAiProfile` definitions.
+Gameplay decision cadence and perception query fidelity are configured through
+typed `GameplayAiProfile` definitions. Navigation/crowd scale, quality, execution
+mode and fallback are selected independently through ADR-109
+`NavigationCrowdProfile`; dynamic-obstacle policy is owned by ADR-108.
 
 ```cpp
 enum class AiLodSchedulingPolicy : uint8_t {
@@ -1470,13 +1682,8 @@ enum class AiLodSchedulingPolicy : uint8_t {
 
 struct GameplayAiProfile {
     std::string_view profileName;
-    uint32_t         maxActiveNavMeshAgents;
-    uint32_t         maxDynamicObstacles;
     uint32_t         maxPerceptionQueriesPerTick;
-    uint32_t         pathfindingWorkerThreads;
     uint32_t         perceptionWorkerThreads;
-    bool             enableCrowdSimulation;
-    bool             enableHierarchicalPathfinding;
     AiLodSchedulingPolicy lodSchedulingPolicy;
     float            highFrequencyRadius;      // Distance (m) for full-rate evaluation
     float            mediumFrequencyRadius;    // Distance (m) for 1/2 rate evaluation
@@ -1489,13 +1696,8 @@ struct GameplayAiProfile {
 | Feature / Budget Parameter | `LowCpu` | `MediumCpu` | `HighCpu` | `DedicatedServer` |
 |---|---|---|---|---|
 | **Target CPU Threads** | 2–4 | 6–8 | 12+ | 16+ |
-| **Max Active NavMesh Agents** | 64 | 512 | 2,048 | 4,096 |
-| **Max Dynamic Obstacles** | 16 | 128 | 512 | 1,024 |
 | **Perception Queries / Tick** | 16 | 128 | 512 | 1,024 |
-| **Pathfinding Workers** | 1 | 2 | 4 | 8 |
 | **Perception Workers** | 1 | 2 | 4 | 4 |
-| **Crowd Simulation** | Enabled | Enabled | Enabled | Enabled |
-| **Hierarchical Pathfinding** | Disabled | Enabled | Enabled | Enabled |
 | **LOD Scheduling Policy** | `DistanceBands` | `DistanceBands` | `DistanceBands` | `PriorityAged` |
 | **High-Frequency Radius** | 15 m | 25 m | 35 m | 0 (unused) |
 | **Medium-Frequency Radius** | 35 m | 60 m | 90 m | 0 (unused) |
@@ -1521,8 +1723,9 @@ budget; any resulting LOS, overlap, or spatial lookup consumes one admitted quer
 - Host-role tests prove that dedicated servers do not depend on extraction and
   that clients cannot submit authoritative AI work for server-owned agents.
 - Profile fixtures initialize every field from the canonical table and reject
-  invalid worker counts, radius/policy combinations, and sight-raycast budgets
-  above the aggregate perception-query cap.
+  invalid perception worker counts, radius/policy combinations, and sight-raycast
+  budgets above the aggregate perception-query cap. ADR-109 fixtures separately
+  validate every navigation crowd scale/quality/mode/fallback envelope.
 - Shipping replication schema tests reject private blackboard and perception
   memory fields.
 
@@ -1532,16 +1735,18 @@ budget; any resulting LOS, overlap, or spatial lookup consumes one admitted quer
 
 - Selecting a higher-end graphics API (e.g. Vulkan vs OpenGL) does NOT increase AI agent limits or perception budgets.
 - Headless dedicated servers running with `NullRenderer` operate with full CPU/memory capacity and are not artificially throttled by presentation-tier checks.
-- AI budgets scale exclusively with host CPU core counts, worker thread availability, and project-configured memory limits.
+- AI/navigation budgets come exclusively from validated project/host-role profiles;
+  CPU and memory measurements inform those authored choices but do not silently
+  change authoritative capacity at runtime.
 
 ## Navigation Resource Guidance
 
-Navigation scaling depends on CPU/worker capacity and measured memory costs, not graphics
-features. The canonical `GameplayAiProfile` defaults above remain the authority for AI agent
-and obstacle limits. Earlier navigation-only 64/1,024/5,000+ agent and 1/8/32 MB cache figures
-were illustrative, not a second set of defaults. Navigation cache, scratch, worker, and queue
-limits must be finite validated host/project settings within the shared budgets; tuning
-changes require workload, platform, and measurement evidence, not a new ADR.
+Navigation scaling depends on measured CPU/worker/memory costs, not graphics
+features. ADR-109's `NavigationCrowdProfile` is the authority for logical/provider
+agent capacity and avoidance work/memory; ADR-108 owns dynamic-obstacle budgets.
+`GameplayAiProfile` does not duplicate either. Navigation cache, query scratch and
+path queues remain separate finite validated host/project settings. Tuning changes
+require workload, platform and measurement evidence, not a renderer label.
 
 ## Navigation Boundary And Integration Verification
 
@@ -1549,7 +1754,8 @@ changes require workload, platform, and measurement evidence, not a new ADR.
 |---|---|
 | Api-only consumer uses SceneMath | Builds through Foundation without invented SceneMath target |
 | Runtime linked without a concrete provider | Builds; host injection supplies capabilities |
-| Runtime-only server without builder/graphics | Real queries/crowd work; no bake or graphics link requirement |
+| Runtime-only server without builder/graphics | Real queries and optional crowd only when selected; no bake or graphics link requirement |
+| Pinned Recast/Detour source/options/modules | Exact commit/fingerprint, no floating/system source; Detour runtime and Recast bake baselines with TileCache/Crowd opt-in only |
 | Direct/transitive vendor include or public vendor type | Boundary negative fixture fails; no ABI leak |
 | Concurrent queries, obstacle edits, and carving | Immutable revisions; no shared mutable vendor instance races |
 | Unrelated region changes / contributing tile changes | Unrelated cache entries may survive; affected entries and late paths cannot publish stale topology |
@@ -1563,6 +1769,7 @@ changes require workload, platform, and measurement evidence, not a new ADR.
 | Cooked version/digest/indices invalid | Typed failure before tile installation |
 | Provider allocation failure / destruction | Tracked bounded failure; no leaks, partial publication, or hook-lifetime violation |
 | Origin rebase with a query in flight | Dynamic coordinates converted/rejected consistently; static topology identity unchanged |
+| Flying/swimming/space or traffic/lane request | Explicit distinct-capability unsupported result; never coerced into a grounded agent profile/area flag |
 
 These are required downstream runtime/CI tests, not tests implemented by this ADR-only change.
 
@@ -1579,6 +1786,7 @@ These are required downstream runtime/CI tests, not tests implemented by this AD
 - [World Streaming](./world-streaming-architecture.md)
 - [Header Visibility and Ownership](../foundation/header-visibility-and-ownership.md)
 - [ADR-016: Navigation Target Ownership and Dependency Boundary](../../adr/016-navigation-target-ownership-and-dependency-boundary.md)
+- [ADR-104: Default Navigation Provider and Recast-Detour Adoption](../../adr/104-default-navigation-provider-and-recast-detour-adoption.md)
 - [Navigation Bake UI Reference](./navigation-bake.html)
 
 - [ADR-021: Gameplay AI Ownership, Scheduling and Behavior Boundary](../../adr/021-gameplay-ai-ownership-scheduling-and-behavior-boundary.md)
@@ -1594,6 +1802,9 @@ These are required downstream runtime/CI tests, not tests implemented by this AD
 - [Scene Runtime](./scene-runtime.md): Agent entity and component model
 - [Concurrency And Jobs](../foundation/concurrency-and-jobs.md): Parallel crowd and perception jobs
 - [Save Game And Persistence](./save-game-and-persistence.md): durable perception-memory capture and staged restore
+- [ADR-114: Canonical Runtime World Persistence Boundary](../../adr/114-canonical-runtime-world-persistence-boundary.md)
+- [ADR-137: Terrain and Foliage Ownership, Data, Tier and Lifecycle](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
+- [ADR-141: Terrain/Foliage Cross-System Ownership and Readiness](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md)
 - [Navigation Bake UI HTML Reference](./navigation-bake.html): non-normative
   static UI reference
 - [Debug Console And Overlays](./debug-console-and-overlays.md): AI debug visualization

@@ -685,6 +685,23 @@ Tests have implied performance budgets:
 
 Slow tests must be tagged `[slow]` and excluded from the local fast suite.
 
+Terrain/Foliage performance qualification follows
+[ADR-143](../../adr/143-terrain-foliage-scale-budgets-observability-and-feature-boundary.md).
+Versioned `TerrainCore1_0` and `TerrainHighEnd1_0` descriptors fix active scale, tile
+shape, steady/staging/retiring memory, per-epoch publication, cold cook throughput,
+editor latency, headless overhead and the CPU-selected render recipe. Tests at the exact
+boundary and one unit over must verify success versus typed denial without content
+drops, budget overshoot or recipe changes.
+
+Interactive runs use ADR-051 warm-up, measurement, seven-iteration cohort and sample-
+validity rules. Cold cook starts from an empty Terrain cache namespace; warm reuse is a
+different diagnostic workload. Editor iterations run fixed input/patch traces, and
+headless iterations use fixed ticks with no render adapter. Every absolute gate and the
+matching relative/stability gate must pass. Missing required measurements, mismatched
+cohorts, stale generations, dropped samples, hidden fallback or GPU-driven work under a
+version-1 CPU workload invalidates the result rather than being skipped or recorded as
+zero.
+
 *Note on CI routing: While individual integration tests (< 1 s) have a faster budget than contract tests (< 5 s), integration tests are deferred out of the CI PR Fast Lane. This is because their cross-module fan-out creates higher variance and non-local failure risks. Fast contract tests are kept in the PR Fast Lane to ensure the immediate module's boundaries remain strictly intact.*
 
 ## Debugging Failed Tests

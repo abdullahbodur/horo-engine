@@ -9,6 +9,24 @@ The goal is to provide a bounded, data-oriented cinematic runtime capable of dri
 ## Normative Decision Reference
 
 This subsystem is governed by [ADR-014: Sequencer Ownership, Clock Authority and Binding Boundary Decision](../../adr/014-sequencer-ownership-clock-authority-and-binding-boundary.md).
+[ADR-117](../../adr/117-playback-ownership-frame-order-and-determinism.md)
+refines live-player ownership, activation identity, multi-player batch order,
+replay/headless evidence, numeric determinism and random-access seek.
+[ADR-118](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md)
+defines Animation, Character and Gameplay authority while those players target
+skeletal pose or actor control.
+[ADR-119](../../adr/119-camera-authority-during-cinematics.md) defines per-view
+runtime, PIE and editor camera authority, cinematic cut handoff, frame-commit
+validity and tiered transition/render contracts.
+[ADR-120](../../adr/120-cinematic-event-dispatch-and-audio-coupling-boundary.md)
+defines cooked typed EventTrack bindings, session-safe-point gameplay dispatch,
+failure outcomes and the AudioFrontend handoff governed by AUD-family decisions.
+[ADR-121](../../adr/121-cinematic-editor-document-and-authoring-context.md)
+defines persistent sequence documents/tabs, command and persistence ownership,
+detachable scene authoring context, stale-reference inspection and preview isolation.
+[ADR-122](../../adr/122-cinematic-trigger-sources-and-capability-policy.md)
+defines the common typed start request and capability/trust/authority/product-profile
+policy for gameplay, scene autoplay, event, editor, MCP and remote trigger sources.
 [ADR-068](../../adr/068-music-transport-and-cross-system-ownership.md) owns the
 AudioTrack handoff: Sequencer retains sequence clock, directed event traversal,
 seek/scrub and preroll intent while Audio alone maps accepted requests to sample
@@ -34,6 +52,28 @@ time and schedules the callback.
 - **Coordinate and capacity contracts**: Local transform tracks use durable parent
   or sequence anchors. Typed CPU/memory budgets bound players, nested tracks,
   events, binding retries and per-boundary work independently of graphics APIs.
+- **Runtime-service player ownership**: Scene components are inert authored start
+  descriptors. One session-owned service retains live players, tokens, leases,
+  nested instances, event cursors and late-completion fences.
+- **Stable batch order and qualified determinism**: Boundary snapshots order players
+  by domain, descending priority and stable identity. Exact cross-platform float bits
+  are not promised; identities/time/event order are exact and samples use declared
+  tolerances across build/platform fingerprints.
+- **Owner-issued cinematic authority**: Animation composes per-joint pose claims,
+  Character resolves exclusive cinematic movement, and Gameplay returns typed
+  suppression/acceptance. Whole-game pause never moves an authoritative Character.
+- **Per-view camera authority**: Runtime and PIE Camera services resolve gameplay
+  plus cinematic proposals independently; the editor viewport controller retains
+  authoring-camera authority. One immutable selection covers one rendered frame.
+- **One typed event path**: A session `CinematicEventDispatcher` invokes cooked,
+  versioned gameplay adapters at destination owner boundaries. `EngineDataBus` is
+  not gameplay EventTrack delivery, and AudioTrack submits intent through AudioFrontend.
+- **Document-owned authoring**: Sequence assets use persistent document tabs and the
+  shared typed command/history/save/conflict model. Scene context and preview are
+  detachable projections and never become a second source of authored truth.
+- **Capability-gated triggers**: Every source submits the same typed application start
+  request. Authored Shipping triggers remain product behavior; debug/MCP/remote start
+  adapters are omitted from Retail Shipping and cannot be enabled by runtime flags.
 
 ## System Boundaries and Target Topology
 
@@ -63,6 +103,66 @@ time and schedules the callback.
 | `HoroEngine::EditorServices` | Presentation / Tooling | Timeline workspace controllers, property recording, curve editing services, track solo/mute adapters, and Problems panel integration. | `CinematicRuntime`, `CinematicModel`, `SceneModel`, `EditorModel` |
 
 `HoroEngine::CinematicRuntime` contains zero dependencies on `HoroEngine::EditorServices`, `HoroEngine::Gui`, or ImGui.
+
+## Player Ownership And Lifetime
+
+`CinematicRuntimeService` is owned by one application/runtime session and owns every
+live `SequencePlayer`. Its registry retains clocks, event cursors, binding caches,
+nested-player trees, capacity reservations, asset/provider leases, domain tokens and
+queued-effect lifetime. It closes before Scene/Runtime dependencies and no player
+survives the session.
+
+An optional scene `SequencePlaybackComponent` contains only authored configuration:
+sequence asset identity, stable activation identity, settings, priority, autoplay and
+`SceneBound`/`ApplicationBound` scope. Runtime conversion submits a typed request and
+receives a generation-checked handle; the component does not embed a player or retain
+callbacks into its own memory. Application/gameplay starts use the same service API.
+
+SceneBound players stop before their `SceneRuntimeId` is replaced. ApplicationBound
+players survive travel only when the descriptor has no required old-scene binding and
+every retained adapter admits travel. Preview, PIE and packaged runtime use separate
+session registries. Component removal, UI close or dropping a handle requests stop;
+only the service retires tokens, leases and queued effects at an owning boundary.
+
+Preparation validates assets/nesting, compiles the plan, reserves aggregate capacity,
+resolves required adapters and acquires tokens before the player enters a batch. Stop
+closes admission, removes it from a later batch, releases only its tokens, cancels
+owned work where possible and ignores late completions by session/player generation.
+Nested players are registry-owned children identified by root activation plus stable
+track/key/instance path; they cannot acquire an independent session or budget pool.
+
+Root activation IDs come from stable scene object/playback-slot identity, a recorded
+gameplay command/event occurrence or a recorded application operation identity.
+Allocation order, pointers, thread arrival, worker completion, unordered-map order and
+process-random hash seeds are never player identity or tie-breakers.
+
+## Trigger Sources And Admission
+
+Gameplay scripts/native behaviors, scene-load autoplay descriptors, committed
+gameplay events, editor UI/preview, MCP/agent tools, local debug/CLI and authenticated
+remote/server adapters all submit one bounded `SequenceStartRequest` through an
+injected `ICinematicPlaybackCapability`. No caller constructs a player or discovers a
+global service. Admission validates source/principal, build profile, project/package
+trust, capability grant, session/scene/world authority, cooked asset revision, full
+effect capability plan and shared budgets before acquiring any player/domain state.
+
+Gameplay and cooked scene/event triggers are ordinary product behavior and may ship
+when their modules/assets and effect plans are admitted. Scene autoplay begins only
+after successful aggregate scene activation. Event-triggered starts occur after the
+source occurrence commits and use occurrence-derived stable activation identity;
+cycles/nesting share ADR-117 capacity. Client requests cannot gain server authority.
+
+Editor preview is isolated; PIE uses PIE world authority. MCP/agent/debug/remote
+adapters reuse their existing tool schema, project trust, permission, product-profile,
+server-authority, revision-bound approval and audit infrastructure. Authentication or
+localhost is not authorization. Retail Shipping omits these tooling start descriptors;
+a runtime flag cannot restore them. Dedicated Server admits only explicitly registered,
+authenticated `Restricted`, server-authoritative and headless-compatible operations.
+
+Denial creates no player, cursor, lease/token or downstream Audio/VFX/event request.
+Stable results distinguish unsupported source/adapter, product-profile/trust/
+capability/approval/world denial, unavailable asset, effect denial, conflict, capacity
+and headless incompatibility. ADR-122 owns the complete source matrix and lifecycle.
 
 ## Sequencer Data Model
 
@@ -178,19 +278,37 @@ Coordinates the active rendering camera and cinematic camera transitions:
 struct CameraCutKeyframe {
     SequenceTime        time;
     StableObjectId      cameraObject;       // Target camera entity
-    float               blendDuration;      // Cross-fade duration into next camera
-    CameraBlendCurve    blendCurve;         // Linear, EaseIn, EaseOut, EaseInOut
+    CameraTransitionTier transitionTier;    // HardCut, SingleViewBlend, or DualViewCrossFade
+    CameraTransitionFallback fallback;      // Explicit admitted fallback or Fail
+    SequenceTime        transitionDuration; // Zero for HardCut; finite otherwise
+    CameraBlendCurve    transitionCurve;    // Used only by a blending tier
 };
 ```
 
 Camera cuts carry camera identity and blend metadata, not world-space positions.
 A host-injected typed camera adapter requests an owner-issued, generation-safe
-cinematic override token. The Camera subsystem resolves the final active camera
-from gameplay proposals and admitted cinematic requests; the sequencer never writes
-a global active-camera pointer. Conflicts use explicit priority then stable player
-identity, independent of update order. Stop, cancellation, binding loss, scene
-replacement and failed activation release only this player's token. Restoring an
-older gameplay camera pointer is forbidden: the owner resolves the current proposal.
+override lease for one `CameraViewContextId`. Runtime and PIE sessions own isolated
+Camera services; the editor viewport controller retains its authoring camera and
+admits preview only through an editor-scoped proposal. The sequencer never writes a
+global active-camera pointer or takes editor viewport authority.
+
+The track has no effective override before its first cut. Its compiled end policy is
+either the default `HoldLastUntilPlayerEnd` or explicit `ReleaseAtTrackEnd`. Stop,
+cancellation, completion, binding loss, scene replacement and context destruction
+close proposal admission and release only that player's lease at the owner safe
+point. The owner then resolves the current gameplay, cinematic or editor proposal;
+restoring an older pointer is forbidden. Conflicts use descending priority then
+stable player identity, independent of evaluation order.
+
+The Camera owner commits one immutable selection after `VariableUpdate` and before
+`RenderExtraction`; late changes apply to the next rendered frame. The baseline is a
+one-view `HardCut`. `SingleViewBlend` is a Camera-owned backend-neutral pose/
+projection interpolation, while `DualViewCrossFade` requires an explicitly admitted
+two-view frontend capability and budget. Fallback to a hard cut must be authored;
+transition modes are never silently substituted. Rendering consumes the resulting
+camera snapshot, selection epoch and generic discontinuity evidence without choosing
+camera authority or exposing backend APIs to Cinematic Runtime. ADR-119 owns the
+complete contract.
 
 ### 4. Event Track
 
@@ -205,16 +323,24 @@ struct EventKeyframe {
 };
 ```
 
-Host composition maps each binding to a narrow gameplay/audio/VFX adapter. Cook
-and activation reject missing adapters, incompatible payload schemas or insufficient
-capabilities. The evaluation queue contains fixed-size occurrence records and
-payload handles, with asset residency retained until drain/cancellation. Neither
-string lookup nor dynamic payload-map construction occurs during sampling.
+Host composition registers versioned descriptors and maps each cooked binding to a
+narrow gameplay/application adapter. Cook rejects unknown qualified names, duplicate
+or colliding identities, incompatible payload schemas, oversized payloads and
+forbidden build contexts. Activation rejects a required missing handler/capability;
+an optional binding may disable only under its explicit policy.
 
-Camera and event requests use typed domain queues, not `EngineDataBus` dispatch.
-ADR-015 restricts accessibility traffic specifically; it does not reserve the whole
-bus for accessibility. The broader bus principle still forbids using it to establish
-per-tick ordering or carry high-frequency timeline data.
+After the source tick commits, one session `CinematicEventDispatcher` drains fixed-
+size occurrence records at each destination owner's next safe point and invokes the
+registered adapter in canonical occurrence order. The handler may submit an ordinary
+domain command or application operation; it cannot reenter active sequence
+evaluation. Occurrence IDs provide exactly-once/idempotent retry identity, and every
+admission, authority, target, backpressure or handler outcome is typed and retained
+within bounded generation-scoped result storage.
+
+Gameplay EventTrack delivery never uses `EngineDataBus`. The bus may announce that
+result state changed, but subscribers, dead-event policy and bus backpressure cannot
+alter delivery/order/success. Neither string lookup nor dynamic payload-map
+construction occurs during sampling or dispatch. ADR-120 owns the full boundary.
 
 ### 5. Audio Track
 
@@ -238,6 +364,19 @@ voice handle or computes a device sample index. Render-frame sampling and editor
 scrub do not replay cues. Seek/scrub invalidate stale schedules, request prepared
 Audio positioning/preroll, and resume only under the typed acknowledgement policy
 defined by ADR-068.
+
+Audio preparation resolves stable cooked asset/cue identity and retains an admitted
+media lease. Required missing/corrupt/incompatible media fails activation with
+`AudioTrackAssetUnavailable`; optional silence/skip must be authored and remains
+diagnostic. Not-yet-resident media uses bounded asynchronous preparation, never
+synchronous evaluation/callback I/O. Device/backend loss and missed schedule horizons
+retain Audio-owned typed outcomes and policy.
+
+This seam consumes [AUD-001.1 #525](https://github.com/abdullahbodur/horo-engine/issues/525)
+for runtime/callback ownership, [AUD-002.1 #537](https://github.com/abdullahbodur/horo-engine/issues/537)
+for cooked media/readiness, and [AUD-008.1 #607](https://github.com/abdullahbodur/horo-engine/issues/607)
+for sequence-to-sample correlation, transport, seek/preroll and acknowledgements.
+Cinematic does not duplicate or override those Audio decisions.
 
 ### 6. Sub-Sequence Track
 
@@ -369,6 +508,15 @@ establishes stricter guarantees. Same committed ticks, assets, settings and orde
 inputs reproduce semantic samples and event order regardless of render cadence.
 Wall/external histories must be recorded explicitly to reproduce their inputs.
 
+Within one qualified determinism fingerprint (engine/schema, cooked asset digest,
+evaluation policy, compiler/CPU/FP mode and adapter versions), replay requires exact
+player/time/order/event identity and repeatable float outputs. Across supported
+platform/build fingerprints, exact IDs, interval membership and order still hold, but
+float/vector/quaternion outputs compare with declared absolute/relative/ULP tolerances.
+Bit-identical cross-platform sampling is not a baseline claim because interpolation
+and receiving systems use floating-point operations without a closed deterministic-
+math profile.
+
 Event dispatch is stateful directed-interval processing:
 
 - Forward advance crosses `(previous, current]`; reverse crosses `[current, previous)`
@@ -385,6 +533,12 @@ Event dispatch is stateful directed-interval processing:
 - Preflight the complete bounded interval before applying values or advancing the
   cursor. If the event/loop work budget cannot admit it, return `EvaluationBudgetExceeded`
   and hold the player without partial effects. Never silently drop authoritative events.
+
+Seek maps target/loop/nested time directly and samples by indexed lookup. It never
+steps from the current cursor or replays from zero. The complete seek result is staged
+and published at one owner boundary; failure preserves the prior cursor/values. Audio,
+VFX and other stateful destinations receive typed seek/resynchronize intent or
+Unsupported rather than historical side-effect playback.
 
 ## Frame Evaluation Phase
 
@@ -443,6 +597,45 @@ It samples values without gameplay callbacks, physics stepping or event replay.
 Unscaled/wall/external players similarly use presentation/service boundaries unless
 an authorized destination explicitly stages an effect for a later simulation tick.
 A physics-owned transform cannot be a presentation write target.
+
+## Animation, Character And Gameplay Authority
+
+Before activation, a player declares required/optional actor claims for skeletal
+pose/joint masks, animation parameters, Character translation/heading/stance and
+gameplay actions. The application obtains one aggregate generation-scoped authority
+plan from Animation, Character and Gameplay owners. Required conflicts fail and
+unwind activation; optional tracks disable with typed diagnostics. There is no global
+`cinematicActive` flag and Cinematic Runtime never writes pose or transform storage.
+
+Animation remains the mutable pose owner. It evaluates the underlying graph on every
+attempted simulation tick, then applies admitted cinematic `Override` or `Blend`
+contributions in the ADR-117 player order. Override masks only declared
+AnimationDriven joints; Blend uses finite owner-applied per-joint weights.
+PresentationOverlay affects only the render/preview pose and cannot produce root
+motion, hit shapes, events or later simulation input. PhysicsDriven joints retain
+final authority; required overlap fails unless their owner first admits a safe-point
+mode transition.
+
+Character admits either GameplayControlled or CinematicControlled input for each
+claimed channel. CinematicControlled is exclusive: Character consumes the winning
+tick-addressed cinematic command through ordinary platform-carry, root-motion,
+sweep/collision and Physics seams. Gameplay commands for claimed channels return
+`SuppressedByCinematic`; unclaimed channels remain `AcceptedGameplay`. Suppressed
+edge actions are not queued for release-time replay. Arbitrary gameplay/cinematic
+movement vectors are not summed.
+
+Host gameplay pause stops fixed ticks, so authoritative Animation, Character,
+Physics and Gameplay hold. Only admitted presentation/camera/Audio/UI work may use an
+unscaled/external clock. A cutscene that needs collision-aware actor movement keeps
+simulation running and transfers selected control channels through leases; it does
+not request whole-game pause. Resume never converts elapsed presentation time into a
+Character move or graph catch-up interval.
+
+All proposals identify exact session, scene, player, actor/instance, tick/boundary and
+generation. Stop, binding loss, scene travel, authority transfer and shutdown close
+admission before owner-safe-point lease release; late results cannot restore old
+control. Client playback cannot gain authority over server-owned actors. The full
+composition, conflict and qualification contract is ADR-118.
 
 ## Object Binding Resolution: `SequenceBindingAuthority`
 
@@ -592,7 +785,28 @@ The cinematic editor provides:
 
 ### Document and Asset Workflow
 
-Sequence assets are stored in the project's asset tree. Sequences reference scene objects by durable `StableObjectId`s, ensuring scene edits, renames, and reordering do not break sequence bindings.
+Sequence assets are stored in the project's asset tree and open as first-class
+`SequenceDocument` sessions in persistent document tabs. Create Sequence is a
+transient modal that atomically publishes the asset before opening the tab. Timeline,
+curve, recording and binding edits use typed Sequence commands, semantic transactions
+and the shared document history/dirty/save/autosave/recovery/external-conflict
+services. No sequencer-local undo stack, dirty flag or direct serializer save exists.
+
+An optional `SequenceAuthoringContext` attaches the document to one generation-
+checked SceneDocument snapshot for picking, property enumeration, recording and
+preview. The asset remains editable without it. Durable `StableObjectId`, component/
+property identity and schema expectations are never replaced by live handles.
+Rename/reorder can remain resolved; wrong scene, delete, component/schema change,
+reload or scene replacement produce derived typed stale states in tracks and binding
+inspection. They do not clear or retarget authored identity. Repair is an explicit
+undoable command.
+
+Scene mutations stay in SceneDocument history and sequence mutations stay in
+SequenceDocument history. Deliberate two-document edits use the editor's staged
+multi-document transaction. Preview players, cursors, leases, camera/audio/VFX state
+and viewport presentation are disposable revision-correlated state; closing the tab,
+changing context or committing a relevant edit cancels/fences them. ADR-121 owns the
+complete workflow and lifecycle.
 
 ## Evaluation Capacity And Admission
 
@@ -621,7 +835,19 @@ Binary key lookup bounds sample work by active tracks and keys per track. Cubic
 segments require monotonic time tangents and a fixed iteration limit, not an
 unbounded numeric solver. Event/loop preflight enforces runtime interval limits.
 
-Aggregate evaluation visits admitted players in priority then stable-ID order.
+Before each fixed or service/presentation boundary, the service drains commands up to
+the cutoff and snapshots one immutable eligible batch. Late commands join the next
+corresponding boundary. Root order is evaluation seam/domain, priority descending,
+then `SequencePlayerId` ascending stable byte order. Nested players follow their root
+by track ID, key ID, instance ordinal and recursion path. Parallel jobs merge only
+through preassigned order slots; completion order cannot change output.
+
+Exclusive target owners select the highest-priority contribution and use the lowest
+stable player ID as the declared equal-priority tie-break. Registered reducers/blends
+consume contributions in canonical order. Global occurrences order by destination
+seam, directed crossing time, player order, track ID and keyframe ID. Iteration order
+is never a conflict resolver.
+
 Gameplay-authoritative sampling is never skipped according to elapsed wall time;
 if deterministic work cannot be admitted, reject/hold with a typed outcome. Optional
 presentation-only work may use an explicit lower sampling rate, without changing
@@ -673,6 +899,26 @@ These are required implementation acceptance tests, not tests added by this ADR:
 
 - Compare identical committed tick/input histories under 30/60/144 Hz presentation;
   authoritative values/event order match under documented numeric tolerances.
+- Component/application players share one service registry; test component removal,
+  dropped handles, scene travel, preview/PIE isolation, nested stop and late completion
+  fencing without leaked or prematurely destroyed state.
+- Randomize allocation, container, command-arrival-before-cutoff and worker completion
+  order; immutable batches, priority/stable-ID winners and event order stay identical.
+- Same-fingerprint replays require exact time/identity/order/events and repeatable
+  floats; cross-platform fingerprints use declared numeric tolerances and report the
+  mismatch rather than claiming bit identity.
+- Headless replay uses the production service with manual recorded clocks/Null
+  adapters and reports missing activation, wall/provider or async evidence explicitly.
+- Per-joint cinematic Override/Blend/PresentationOverlay, Physics authority conflict,
+  GameplayControlled/CinematicControlled arbitration and typed suppression.
+- Whole-game pause produces no authoritative pose/root-motion/Character movement or
+  gameplay backlog; running-simulation control transfer keeps ordinary owners ticking.
+- Runtime, PIE and editor view contexts retain isolated camera owners; exercise first/
+  last cut handoff, both track-end policies, current-proposal restoration and every
+  stop/cancel/binding-loss/scene-replacement path without stale camera state.
+- Camera selection commits once before render extraction; test multiple cuts between
+  rendered frames, before/after-cutoff arrival, hard cut, single-view blend and
+  admitted/denied two-view cross-fade with explicit fallback and Null adapters.
 - Validate all clock/pause/dilation combinations, nested pause-token release, menu
   plus cinematic pause, host resume, provider capability/loss and discontinuities.
 - Value samples are history-independent; event tests cover forward/reverse endpoints,
@@ -687,10 +933,28 @@ These are required implementation acceptance tests, not tests added by this ADR:
   keyframes or applying the origin offset twice.
 - Async spawn tests cover AssetNotLoaded, cancellation, late completion and duplicate
   occurrence delivery without synchronous waits or unbounded retries.
+- EventTrack tests cover unknown/schema-incompatible bindings at cook, required/
+  optional missing handlers, commit-only canonical dispatch, exactly-once retry,
+  authority/backpressure/handler outcomes and isolation from EngineDataBus policy.
+- AudioTrack tests cover required/optional missing, corrupt, unloaded and replaced
+  media; bounded preparation; schedule/seek/preroll acknowledgements; device loss;
+  and native/middleware/Null adapters without sample/native identity in Sequencer.
+- Sequence editor tests cover atomic create/focus/close, shared command/history/dirty/
+  save/recovery/conflict behavior, no/wrong/replaced scene contexts, derived stale
+  binding states, explicit repair, cross-document atomicity and disposable preview.
+- Trigger tests cover every gameplay/scene/event/editor/MCP/debug/remote source across
+  product profiles, trust/capability/approval/world authority, Shipping descriptor
+  absence, server headless policy, revocation and zero-side-effect typed denial.
 
 ## Related Documents
 
 - [ADR-014: Sequencer Ownership, Clock Authority and Binding Boundary Decision](../../adr/014-sequencer-ownership-clock-authority-and-binding-boundary.md)
+- [ADR-117: Playback Ownership, Frame Order and Determinism](../../adr/117-playback-ownership-frame-order-and-determinism.md)
+- [ADR-118: Animation, Character and Gameplay Authority During Cinematics](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md)
+- [ADR-119: Camera Authority During Cinematics](../../adr/119-camera-authority-during-cinematics.md)
+- [ADR-120: Cinematic Event Dispatch and Audio Coupling Boundary](../../adr/120-cinematic-event-dispatch-and-audio-coupling-boundary.md)
+- [ADR-121: Cinematic Editor Document and Authoring Context](../../adr/121-cinematic-editor-document-and-authoring-context.md)
+- [ADR-122: Cinematic Trigger Sources and Capability Policy](../../adr/122-cinematic-trigger-sources-and-capability-policy.md)
 - [Cinematic Sequencer UI Reference](./cinematic-sequencer.html)
 - [Scene Runtime Architecture](./scene-runtime.md)
 - [Animation Architecture](./animation-architecture.md)

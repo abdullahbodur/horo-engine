@@ -7,45 +7,136 @@ subsystems for Horo Engine. It covers heightfield-based terrain, layer
 painting, instanced foliage rendering, wind simulation, LOD, collision,
 render extraction, streaming budget integration, and editor authoring tools.
 
+Virtual-texture integration follows
+[ADR-169](../../adr/169-vtx-producer-terrain-world-streaming-packaging-and-server-ownership.md).
+Terrain owns canonical source, dataset/tile semantics and runtime generations; a VTX
+adapter captures immutable exact-generation inputs and hints. Derived VTX pages never
+become Terrain truth, and VTX invalidation cannot mutate Terrain state or cell authority.
+
+[ADR-137](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
+is the foundation contract for this subsystem. Terrain is a backend-neutral runtime
+vertical slice with distinct `TerrainApi` and `TerrainRuntime` ownership; it is not
+part of generic Foundation, RuntimeScene internals or a renderer backend.
+[ADR-138](../../adr/138-terrain-source-cooked-tile-cache-and-streaming-ownership.md)
+defines the complementary source, cook, tile-manifest, cache, residency and generation-
+replacement contract.
+[ADR-139](../../adr/139-terrain-render-extraction-material-lod-and-tier-boundary.md)
+defines the render-candidate, material, per-view LOD/visibility, product-profile and
+core-1.0 versus post-1.0 GPU-driven boundary.
+[ADR-140](../../adr/140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md)
+defines deterministic placement, baked/ephemeral/durable state classification, mutation,
+capacity, persistence handoff and eviction ownership.
+[ADR-141](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md)
+defines immutable consumer snapshots, typed readiness receipts, owner-safe-point
+publication, aggregate activation, rollback and reverse-DAG retirement.
+[ADR-142](../../adr/142-terrain-foliage-document-tool-undo-and-preview-ownership.md)
+defines persistent authoring documents, typed tool routing, bounded tile-patch history,
+isolated preview and distinct source-save/cook/runtime-persistence boundaries.
+[ADR-143](../../adr/143-terrain-foliage-scale-budgets-observability-and-feature-boundary.md)
+defines versioned core/high-end 1.0 scale and performance workloads, required
+measurements and the explicit post-1.0 GPU-driven qualification boundary.
+
+## Ownership And Data Boundaries
+
+`HoroEngine::TerrainApi` owns public typed identities, revisions, handles,
+descriptors and narrow command/query/snapshot interfaces. `HoroEngine::TerrainRuntime`
+owns live dataset/tile/cluster generations, mutable overlays, preparation, snapshot
+publication and retirement. Hosts compose it with Assets, Scene, World Streaming,
+Render, Physics and Navigation through backend-neutral ports.
+
+The data path is explicit:
+
+```text
+authored terrain/foliage assets and document commands
+  -> deterministic target/tier-keyed cook
+  -> immutable bounded dataset/tile/cluster payloads
+  -> typed RuntimeScene binding
+  -> TerrainRuntime generation and immutable snapshots
+  -> leased render/physics/navigation/streaming projections
+```
+
+Editor documents own source mutation and undo. Assets/Pipeline own import, cook and
+atomic artifact publication. RuntimeScene owns entity/binding lifetime. World
+Streaming owns cell demand and aggregate reservations. Render, Physics and Navigation
+own their realized resources and native-thread retirement. UI, CLI, MCP and gameplay
+use typed application/Terrain capabilities and never mutate buffers directly.
+
+Stable `TerrainDatasetId`, `TerrainTileId`, `FoliageTypeId`, `FoliageClusterId` and
+`FoliageInstanceId` values are distinct from runtime handles, revisions, `AssetId`,
+entity/cell IDs and native handles. TRF-001.2 freezes their exact encoding. Content,
+residency, mutation and capability revisions advance independently so consumers check
+the state they actually use.
+
 ## Terrain System
 
 ### Heightfield Model
 
-Terrain is a heightfield defined on a regular grid:
+Terrain heightfield source/cooked metadata describes a bounded regular grid. Bulk
+samples remain inside an authored document transaction, immutable asset lease or
+operation-owned decode candidate; the public runtime contract does not expose a
+mutable owning vector for the whole terrain:
 
 ```cpp
-struct TerrainHeightfield {
-    uint32_t  tilesPerSide;
-    float     metersPerTile;
-    float     heightScale;
-    std::vector<float> heights;   // row-major
+struct TerrainHeightfieldDescriptor {
+    TerrainDatasetId dataset;
+    AssetId sourceAsset;
+    TerrainSourceRevision sourceRevision;
+    TerrainTileGrid grid;
+    TerrainSampleEncoding encoding;
+    SceneBounds bounds;
+    TerrainDescriptorLimits limits;
 };
 ```
 
 ### Terrain Component
 
-A `TerrainComponent` attaches to an entity:
+A Scene entity carries only a typed binding to a cooked dataset and product feature
+policy. Decoded tiles, layer arrays and dependent-system resources remain outside the
+component:
 
 ```cpp
-struct TerrainComponent {
-    AssetId             heightfieldAsset;
-    TerrainMaterialLayer layers[16];
-    uint8_t             activeLayerCount;
-    TerrainLODSettings   lod;
+struct TerrainSceneBinding {
+    TerrainDatasetId dataset;
+    AssetId cookedDataset;
+    TerrainSceneTransform transform;
+    TerrainFeatureRequirements requiredFeatures;
+    TerrainTierPolicy tierPolicy;
 };
 ```
 
-**Layer count across tiers**: The `layers[16]` array size is the struct
-maximum across all tiers. At runtime, `activeLayerCount` is clamped to the
-tier's limit: the engine never writes to `layers[i]` for `i >= tierCap`.
-The terrain shader permutation for active layer count is declared as a
-`TerrainLayerCount` feature flag in the shader manifest, following the
-`ShaderPermutationKey` model in material-and-shader-model.md. Lower-tier
-permutations are compiled with the smaller layer counts and those shader
-variants are selected when the tier clamps `activeLayerCount`.
+Layer definitions live in a bounded authored/cooked layer-set asset. The selected
+Terrain plan validates its exact finite layer limit and a compatible cooked shader
+variant before activation. Required content exceeding the resolved limit fails;
+optional reduction is allowed only through an explicitly authored/cooked product
+fallback and is never a runtime clamp that drops layers silently.
 
 Heightfield assets are authored in the editor or imported from external
 formats (heightmap PNG/EXR, RAW16, GeoTIFF, Houdini HeightField).
+
+### Source, Cook And Dataset Ownership
+
+External files are untrusted import inputs, not canonical terrain identity or runtime
+data. Assets/Application owns tracked source bytes, `AssetId`, generic importer/cooker
+orchestration, dependency scheduling, immutable cache storage, generation staging and
+atomic publication. Terrain Import/Model owns format interpretation and the canonical
+authored height/layer/hole/coordinate semantics; Terrain Cook owns deterministic tiling,
+seams, LOD/mips, foliage clustering and Terrain artifact schemas. Neither contribution
+creates a parallel asset graph, cache root, scheduler or publication pointer.
+
+One immutable `CookedTerrainDatasetManifest` binds the selected content revision, tier,
+coordinate profile, bounds, dependency fingerprint and canonically sorted tile/cluster
+entries. Every entry declares stable typed address, exact bounds, seam/dependency
+signatures, artifact identity, digest, byte/peak-work bounds and required neutral
+consumer payloads. Tile artifacts are independently readable and verifiable, but the
+verified manifest is the only membership authority; runtime never infers a dataset by
+enumerating files.
+
+The Terrain cook fingerprint includes the exact canonical source revision/digest, every
+accepted dependency artifact, tiling/seam/LOD/compression policy, effective tier/limits,
+Terrain schemas and algorithm versions, and generic target/toolchain envelope identity.
+Paths, timestamps, locale, job order and runtime/provider handles are excluded. Native
+GPU resources, solver objects and navigation-provider tiles remain separately keyed and
+owned by Render, Physics and Navigation.
 
 ### Terrain Collision
 
@@ -56,8 +147,8 @@ time:
   collision resolution (typically coarser than the visual resolution)
 - Collision tiles are fed to the physics system as static concave mesh
   colliders
-- When a terrain tile streams in, its collision tile streams in alongside
-  the visual data
+- A cell prepares required collision and optional/required visual payloads under the
+  same generation-tagged aggregate activation; headless visual absence is explicit
 - Hole-carved vertices are excluded from the collision mesh; the physics
   system treats those areas as passthrough
 - NavMesh generation respects the hole mask: holed areas are excluded from
@@ -77,10 +168,14 @@ Terrain is split into tiles at authoring time:
 
 - Each tile is `N x N` vertices (default 129×129, corresponding to
   128×128 quads)
-- Tiles are rasterized into GPU-friendly vertex/index buffers per LOD
-- LOD selection uses screen-space error relative to camera distance
-- Tile skirts prevent cracks between adjacent LOD levels
-- `TerrainLODSettings` controls LOD count, transition distance, and morph
+- Terrain Cook emits neutral bounded representation payloads and geometric-error,
+  seam, skirt/morph and neighbor-compatibility metadata per LOD
+- TerrainRuntime exposes only resident legal representations in its immutable snapshot
+- RenderFrontend selects a compatible LOD per view from screen-space error, projection,
+  output, hysteresis, profile and finite budget; distance alone is not the policy
+- Native vertex/index resources and draw execution remain renderer-owned
+- `TerrainLODSettings` contributes authored/cooked intent; it is not a backend command
+  or permission to invent an unavailable representation
 
 ```cpp
 struct TerrainLODSettings {
@@ -100,17 +195,32 @@ The editor terrain tools support:
 - Hole carving (per-vertex visibility mask)
 - Spline-based path/road deformation
 
-Paint operations use the terrain data model with undo support. Undo captures
-the terrain data model state change (height/weight snapshot), not brush
-settings. Brush parameters (radius, falloff, strength) are transient UI
-state preserved per-session in the editor workspace state; the undo stack
-does not scroll brush settings. Changing the brush mid-session does not
-invalidate prior undo entries.
+Paint operations use the terrain authoring document and typed edit-operation path from
+[ADR-142](../../adr/142-terrain-foliage-document-tool-undo-and-preview-ownership.md).
+Before mutation, the document executor freezes and reserves the exact canonical set of
+affected tile/patch rectangles, including seam/apron and placement dependencies. One
+atomic history entry owns lossless bounded `before` and `after` patch snapshots. A full
+heightfield/dataset copy per edit and partial tile-by-tile commit are prohibited.
+
+Undo/redo restores those committed patches and never reruns brush/noise/scatter
+algorithms or reads current tool settings. Brush radius, falloff, strength, active layer
+and foliage type are transient per-session workspace state; changing them does not alter
+prior entries. A continuous gesture owns one revision-fenced preview overlay and commits
+at most one operation, while cancellation restores the exact committed view.
 
 Hole carving sets a per-vertex visibility flag in the terrain data. Holes
 propagate to collision (excluded from collision mesh) and NavMesh (excluded
 from walkable area). Characters and physics objects pass through holed
 regions.
+
+[ADR-108](../../adr/108-dynamic-overlay-carving-and-tile-rebuild-policy.md)
+requires persistent/editor height, hole and spline changes to recook affected
+collision/navigation tiles through their owning application operations. Runtime
+terrain deformation cannot mutate cooked NavMesh or use simple obstacle carving as
+general polygonization. It first makes the affected region conservatively
+unavailable, then requires an explicitly composed transactional runtime grounded-
+tile rebuild capability; the 1.0 runtime baseline returns
+`UnsupportedDynamicChange` and keeps the safe exclusion until recook/replacement.
 
 ### Material Blending
 
@@ -126,28 +236,35 @@ struct TerrainMaterialLayer {
 };
 ```
 
-GPU blending uses the vertex weight attributes and samples layer textures
-proportionally. The terrain shader permutation is selected based on active
-layer count, declared as a `TerrainLayerCount` feature flag in the shader
-manifest. Height-based blending, slope-based blending, and noise-based
-transitions are supported through the material-function graph.
+Terrain authoring/cook owns layer order, weight/hole encodings, material-function
+references and required blend semantics. Material/Shader cook validates those semantics
+and emits an explicit finite target permutation family. RenderFrontend selects only a
+cooked variant compatible with the active raster recipe, neutral Terrain payload layout,
+required features and effective limits; the backend realizes it without changing layer,
+hole or blend meaning. Height-, slope- and noise-based transitions are permitted only
+when declared by the material graph and cooked permutation contract. TRF-003.2 freezes
+the exact layer limit, key and blend rules.
 
 ## Foliage System
 
 ### Instanced Rendering
 
-Foliage uses GPU instancing with indirect draws dispatched through
-backend-neutral indirect draw batches. Backend-specific command names never
-appear in the terrain subsystem contract:
+Foliage exposes bounded neutral instance candidates. The core 1.0 renderer may group
+them into backend-neutral direct or instanced batches after CPU per-view visibility and
+LOD planning; it does not require compute, GPU Scene or indirect execution. A post-1.0
+GPU-driven recipe may use renderer-owned compute culling and generated indirect batches
+only after explicit capability, artifact, budget, fallback and backend qualification.
+Backend-specific command names never appear in the Terrain contract:
 
 - Each foliage type maps to one or more static meshes
-- Instance transforms are stored in structured GPU buffers
-- Culling (frustum, distance, occlusion) is performed via compute shader on
-  the GPU
-- Draw calls use the backend's indirect draw submission
+- TerrainRuntime owns baked/dynamic logical instance membership and immutable transforms
+- RenderFrontend owns native instance storage, per-view culling/LOD results and batching
+- the private backend owns native resources, commands and synchronization
 
 ```cpp
 struct FoliageType {
+    FoliageTypeId         id;
+    FoliageDefinitionRevision revision;
     AssetId               meshId;
     FoliagePlacementRules placement;
     FoliageCullingRules   culling;
@@ -159,12 +276,11 @@ struct FoliageType {
 };
 ```
 
-**Instance limits**: `instanceLimit` is a tier-enforced hard cap per
-foliage type. The engine does not silently truncate instances. When the
-limit is exceeded, a typed diagnostic is emitted and instances beyond the
-limit are culled from the draw list (furthest-first). The foliage baker
-warns before baking if the placement density would exceed the target tier's
-cap. Tier caps: `es3` 16K, `dx11` 256K, `dx12_vulkan` 2M, `high_end` 10M+.
+**Instance limits**: `instanceLimit` is validated against the selected finite
+provider-neutral Terrain tier during cook and runtime admission. Required content above
+the limit fails with a typed result. Horo does not silently truncate, hide furthest
+instances or infer limits from a graphics API name. An optional lower-density cooked
+variant must be explicitly authored and selected by declared fallback policy.
 
 ### Foliage Collision
 
@@ -189,25 +305,30 @@ physics system as static bodies. NavMesh carving at runtime (dynamic
 obstacle removal) is not supported for foliage; foliage collision is
 baked into the initial NavMesh generation.
 
+Removing/destructing baked navigation-blocking foliage does not automatically open
+walkability. It requires authored affected-tile recook or the explicit ADR-108
+runtime rebuild capability over authoritative post-change geometry. Adding a
+runtime blocker may use the logical overlay and supported optional carving, but
+failure/absence remains conservative and observable.
+
 ### Render Extraction
 
-Terrain and foliage submit instances to the frame via `TerrainRenderExtractor`:
+`TerrainRenderExtractor` leases one immutable Terrain generation and publishes a bounded,
+view-independent `TerrainRenderExtractionSnapshot`. Tile and foliage candidates carry
+typed Terrain identities/revisions, neutral geometry/artifact references, bounds/
+transform inputs, material requirements, legal LOD/seam data, hole/visibility semantics,
+stable logical instance identity and finite cost estimates.
 
-```
-TerrainRenderExtractor::Extract(RenderWorldSnapshot& snapshot)
-  1. Iterate CPU/streaming/frustum-visible terrain tile candidates
-  2. For each tile, push terrain draw commands to snapshot.opaque
-  3. Iterate CPU/streaming/frustum-visible foliage cluster candidates
-  4. For each cluster, push foliage draw commands:
-     - Opaque foliage (trunks, bark) → snapshot.opaque
-     - Masked/translucent foliage (leaves) → snapshot.transparent with SortMode::DistanceToCamera
-```
+The snapshot contains no selected per-view LOD, visible list, draw command, indirect
+argument, native handle, pipeline object or mutable Terrain pointer. Multiple views may
+consume it without advancing Terrain state. Capacity exhaustion fails extraction rather
+than truncating candidates.
 
-This follows the same `RenderInstance` snapshot model defined in
-rendering-architecture.md. The extractor emits candidates; a later render-graph
-GPU culling pass consumes those candidates and produces indirect draw lists for
-the backend. The extractor runs alongside `VfxRenderExtractor` and the main
-scene extractor.
+RenderFrontend derives generation-checked `RenderObjectId` values, performs per-view
+visibility/LOD/seam planning, resolves cooked material variants/resources and maps the
+candidates into ADR-036 pass classifications. Opaque, Masked, TransparentSorted and
+TransparentAdditive come from authored/cooked material semantics; “trunk” or “leaf” does
+not imply a pass. The private backend only translates the validated plan.
 
 ### Decal Interaction
 
@@ -227,26 +348,43 @@ Foliage instances are placed procedurally based on configurable rules:
 - Clustering for variety (clump size, radius)
 - Random seed per foliage type for determinism
 
-Placement is computed offline at authoring time and baked into instance
-buffers. Runtime procedural spawning (e.g., grass growing during gameplay)
-is supported through the `FoliageSpawner` gameplay service:
+Placement is computed deterministically during Terrain cook from canonically sorted,
+versioned rule/source inputs. A specified PRNG seed tuple, quantization and tie policy
+produce stable ordered baked `FoliageInstanceId` records independent of locale, worker
+count and job order. Oversized placement fails or uses an explicitly authored/cooked
+lower-density variant; cook never truncates from host memory or camera distance. Exact
+rule, PRNG and quantization schemas are TRF-004.2 work.
+
+Runtime procedural spawning (for example, grass growing during gameplay) is supported
+through the Terrain mutation command boundary:
 
 ```cpp
 struct FoliageSpawnRequest {
-    FoliageTypeId  foliageType;
+    TerrainRuntimeHandle terrain;
+    TerrainMutationRevision expectedRevision;
+    FoliageTypeId foliageType;
     WorldCoordinate position;
-    float          scale;
-    uint32_t       seed;
-    float          lifetime;       // 0 = permanent
+    FoliageScale scale;
+    FoliagePlacementSeed seed;
+    FoliageLifetimePolicy lifetime;
+    FoliageOverflowPolicy overflow;
+    GameplayAuthorityContext authority;
 };
 ```
 
-Runtime-spawned instances are stored in a **separate dynamic buffer** per
-foliage type. `TerrainRenderExtractor` merges the baked and dynamic buffers
-during extraction: dynamic instances are appended to the visible instance
-list after baked instances. Dynamic instances respect the same tier cap
-as baked instances; if the combined total exceeds `instanceLimit`, dynamic
-instances are evicted first (oldest-first by spawn time).
+Runtime-spawned instances live in a separate revisioned Terrain overlay; cooked cluster
+artifacts remain immutable. The lifetime is explicit: cell-, session- or owner-bound
+ephemeral state is excluded from slot saves, while a `DurableWorldDelta` creates an
+authorized base-relative canonical spawn/update/tombstone through the Runtime Save/
+Persistent World boundary. A baked removal references the exact base revision and stable
+`FoliageInstanceId`; durable spawns use a distinct persistent mutation identity. Runtime,
+render, Physics and Navigation handles never persist.
+
+`TerrainRenderExtractor` merges the baked base and active overlay through one immutable
+revisioned snapshot. Capacity exhaustion rejects atomically in the 1.0 baseline. Any
+optional replacement policy must be registered/versioned with an eligible state class,
+stable priority/tie order and persistence effect; it cannot evict baked/durable or another
+owner's state. There is no implicit oldest-, furthest- or visibility-based deletion.
 
 ### LOD And Billboard Impostors
 
@@ -256,6 +394,11 @@ Foliage LOD uses:
 - Billboard impostors for the farthest LOD
 - Cross-fade between LOD levels to avoid popping
 - Aggregate distance culling per foliage cluster
+
+These are legal cooked representations and transition rules owned by Terrain content.
+RenderFrontend selects among resident compatible representations per view. The 1.0
+baseline uses bounded CPU selection; post-1.0 GPU selection remains renderer-owned and
+cannot feed gameplay or World Streaming truth back synchronously.
 
 Impostors are pre-baked at authoring time. The baker renders the foliage
 mesh from multiple view angles and stores the result in a texture atlas.
@@ -308,15 +451,110 @@ Terrain and foliage authoring tools are registered through the
 The `EditorToolbar` only produces typed results; terrain/foliage domain
 operations are performed by the registered tools consuming those results.
 
+Each canonical dataset and its dataset-local foliage placement source are edited through
+one persistent asset-rooted authoring document. Reusable foliage-type definitions remain
+separate referenced asset documents. The panel host owns route/focus/lifetime; document
+services own source identity, revision, command/history, dirty/save/recovery/conflict
+and derived preview state. Viewport tools, the foliage palette and overlays own input
+and presentation only. They submit revision-checked `TerrainEditOperation` intent and
+cannot mutate source, cooked tiles, TerrainRuntime or consumer-native state directly.
+
+Interactive brush feedback is a disposable document interaction overlay. Higher-
+fidelity preview captures one immutable source revision, uses the ordinary Terrain cook
+contract and activates through an isolated generation-fenced preview session. Preview
+success never clears dirty state, and stale results cannot become current by matching a
+tile coordinate. Closing the document cancels owned work and retains its leases until
+preview/runtime consumers acknowledge retirement.
+
+Canonical source save is the shared atomic document-save path. Asset cook/publication,
+editor autosave/recovery and ADR-140 Runtime Save foliage deltas are separate owners and
+states. An intentional edit spanning a Scene binding and terrain/foliage source uses a
+staged multi-document application transaction rather than two UI callbacks.
+
+## Runtime Lifecycle And Readiness
+
+TerrainRuntime uses the exhaustive aggregate states `Absent`, `Preparing`, `Prepared`,
+`Active`, `Replacing`, `Suspended`, `Retiring` and `Failed`. Preparation validates the
+Scene binding/effective plan, reserves all peak work and builds a detached candidate.
+Workers return generation-tagged evidence only; the Terrain owner lane publishes the
+candidate at the RuntimeScene safe point after every required participant is Prepared.
+
+Terrain projects one revision-consistent leased source root into bounded consumer-specific
+snapshots. Render receives ADR-139 candidates; Physics receives neutral collision shape/
+material/subshape/hole inputs; Navigation receives neutral grounded-surface/hole/obstacle/
+link inputs. Every snapshot carries Terrain/content/residency/mutation/capability, world/
+cell/fence/request and origin evidence. It contains no mutable Terrain pointer or consumer-
+native handle. TRF-005.2 freezes the exact collision/navigation projection schemas.
+
+Each consumer prepares private state under its own worker/native affinity and returns an
+immutable typed receipt through `Pending`, `Staged`/`StagedFallback`, `Prepared`,
+`Published`, `Retiring` and `Retired` (or explicit `Unavailable`/`Failed`). `Prepared`
+means all fallible work is complete and a no-fail owner-safe-point publication is ready;
+it does not make state live. Render, Physics, Navigation and Terrain publish private roots
+addressed only by one `ActivationTicket`. RuntimeScene/World Streaming exposes them only
+after every required receipt matches and one aggregate root commits.
+
+Readiness is an immutable generation-scoped snapshot with separate logical, streaming,
+visual, collision, navigation and mutation dimensions. Each dimension is
+`NotRequested`, `Preparing`, `Ready`, `Unavailable`, `Failed`, `Suspended` or
+`Retiring`. Optional visual absence is valid for a headless server, while required
+collision/navigation cannot be inferred from visual tile residency.
+
+Failure or cancellation before publication destroys only candidate-owned state and
+leaves the old Active generation unchanged. Cancellation after publication is an
+explicit unload/replacement. Replacement retains the old dataset, snapshots, tiles,
+GPU work, collision/navigation installs and module/provider dependencies until every
+lease/fence retires; stale worker or participant evidence cannot publish by matching a
+slot, coordinate or asset.
+
+Required, Optional and Degradable criticality is frozen in the validated plan. Optional
+absence is explicit; Degradable requires an exact predeclared substitute; a missing or
+stale receipt is never success. After aggregate activation, required consumer/device loss
+becomes a new Suspended/Failed/recovery or eviction transition rather than retroactive
+rollback. Gameplay queries the committed aggregate capability and never probes a Physics
+body, NavMesh, render result or decoded tile to infer another dimension's readiness.
+
+Authored mutation goes through document/application commands and recook. Optional
+runtime deformation/dynamic foliage uses a typed command with terrain generation,
+expected mutation revision, bounded scope, gameplay authority, lifetime and overflow
+policy. The owner builds a separate overlay candidate and atomically advances mutation
+revision. Cooked data is never edited in place.
+
+Foliage state is classified before commit. Baked instances are immutable content;
+ephemeral overlays follow explicit cell/session/owner lifetime; durable mutations are
+base-relative canonical deltas captured exactly once by Runtime Save/Persistent World.
+Before cell eviction removes the last active dirty copy, Terrain publishes an immutable
+delta root into the Persistent World ledger at the owner safe point. Failure/capacity
+denial blocks retirement and keeps the source charged; it cannot drop state or force an
+implicit user-slot save.
+
+Shutdown closes admission, cancels/yields owned task groups, invalidates candidates,
+requests exact-generation renderer/physics/navigation retirement and retains assets,
+reservations and dependencies until all consumers acknowledge release. A deadline may
+report `terrain.shutdown.incomplete`; it cannot force-free possibly referenced state.
+
 ## Memory And Streaming
 
-Terrain tiles and foliage instance data are streamed based on camera
-proximity:
+World Streaming converts camera, gameplay, network and preload demand into typed,
+generation-scoped Terrain residency requests. Terrain executes admitted work as a
+bounded `Queued -> Reading -> Validating -> Decoding -> PreparingConsumers -> Prepared`
+pipeline using immutable provider byte leases and cancellation tokens. It cannot create
+a private camera-distance queue or begin allocation before the shared reservation is
+accepted. Foliage clusters use the same authority and lifecycle.
 
-- Terrain height and weight data uses a tile cache with LRU eviction
-- Foliage instance buffers are loaded per-cluster with distance-based
-  priority
-- Streaming uses the asset pipeline's async I/O with cancellation tokens
+“Terrain cache” must identify its owner. Assets owns immutable cook-cache entries and
+published cooked generations; the Assets provider owns leased artifact/chunk bytes;
+TerrainRuntime owns Horo-neutral decoded tile/cluster data; Render owns GPU residency;
+Physics owns solver artifacts/bodies; Navigation owns provider artifacts and installed
+query tiles. Each allocation has one charge and one release acknowledgement. Evicting
+one class never implies release of another.
+
+World Streaming owns the global cell priority queue and aggregate CPU/GPU/staging/
+retirement ledger. Terrain owns only its provider-local cache policy within an admitted
+slice. It cannot maintain a competing cell-demand scheduler, evict an activation-
+critical pinned cell, borrow another feature's reservation or allocate before budget
+growth is accepted. Every old/new replacement generation, decode/upload copy and
+retiring resource remains accounted until its owner releases it.
 
 ### Streaming Budget
 
@@ -325,36 +563,144 @@ the world-streaming system's `StreamingBudget`:
 
 ```cpp
 struct TerrainStreamingBudget {
-    size_t   maxResidentTerrainMemoryMB;   // ≤ StreamingBudget.terrainMemoryReservationMB
-    size_t   maxResidentFoliageMemoryMB;   // ≤ StreamingBudget.foliageMemoryReservationMB
+    ByteCount maxResidentTerrainBytes;
+    ByteCount maxResidentFoliageBytes;
     uint32_t maxConcurrentTileLoads;
+    uint32_t maxConcurrentRetirements;
 };
 ```
 
 The world-streaming `StreamingBudget` owns the total memory cap and reserves
-slices for terrain and foliage via `terrainMemoryReservationMB` and
-`foliageMemoryReservationMB`. Terrain operates within its allocated slice;
-if the terrain tile cache exceeds its reservation, terrain evicts internally
-without coordinating with the world-streaming system. Foliage instance
-buffers are loaded per-cluster with distance-based priority. Terrain
-tiles and foliage clusters are payloads within `StreamingCell` objects.
-Load priority is coordinated through the world-streaming priority queue;
-terrain does not maintain an independent priority system.
+slices for terrain and foliage. The resolved byte/count budget is a capability token,
+not an additional allowance. Terrain may evict only disposable provider-local detail
+inside its allocated slice; pressure involving a pinned/activation-critical cell is a
+typed request to World Streaming. Foliage instance buffers are loaded per-cluster with
+the priority assigned by World Streaming. Terrain tiles and foliage clusters are
+payloads within `StreamingCell` objects. Active cells, replacement candidates, immutable
+snapshots and consumer installs pin their exact dataset generation and leases.
+
+Hot replacement validates a complete candidate generation before publication. A changed
+tile expands to its manifest-declared seam/dependency closure; exact-signature matches
+may reuse old immutable payloads, while incompatible neighbors prepare together. World
+Streaming commits the aggregate cell only after every required Terrain, Render, Physics
+and Navigation participant is prepared. Failure or cancellation discards candidate-
+owned state and preserves the prior Active generation. Old generations retire only
+after all byte, snapshot, native-resource and provider leases acknowledge release.
 
 ## Feature Tiers
 
-| Feature              | `es3`      | `dx11`      | `dx12_vulkan` | `high_end`   |
-| -------------------- | ----------- | ----------- | -------------- | ------------ |
-| Terrain sculpting    | Read only   | Full editor | Full editor    | Full editor  |
-| Terrain layers       | 4           | 8           | 16             | 16           |
-| Foliage instances    | 16K         | 256K        | 2M             | 10M+         |
-| GPU culling          | CPU only    | GPU (CS)    | GPU (CS)       | GPU (CS)     |
-| Wind animation       | Vertex only | Vertex      | Vertex + CS    | Vertex + CS  |
-| Billboard impostors  | No          | Manual      | Baked          | Baked + GPU  |
-| Terrain LOD          | 2 levels    | 4 levels    | 6 levels       | 8 levels     |
-| Foliage collision    | No          | Optional    | Optional       | Optional     |
-| Runtime spawning     | No          | Yes         | Yes            | Yes          |
-| Hole carving         | No          | Yes         | Yes            | Yes          |
+Terrain tiers are provider-neutral product preference profiles: `Baseline`,
+`Standard`, `High` and `Ultra`. They do not name graphics APIs, platforms, shader
+models or devices and do not grant capability.
+
+Resolution intersects the exact cooked variants with TerrainRuntime, World Streaming,
+Render, Physics, Navigation, host-mode and product-policy capabilities. The immutable
+result records the selected tier, exact finite layer/LOD/instance/byte/work limits,
+enabled algorithms, all provider/cooked revisions and every explicit fallback reason.
+TRF-001.3 owns the versioned numeric table and shared validator.
+
+| Capability family | Baseline | Standard | High | Ultra |
+|---|---|---|---|---|
+| Heightfield/layer/LOD scale | Minimal product-required cooked path | Increased finite authored/cooked limits | Higher finite quality limits | Highest qualified finite product limits |
+| Foliage scale/culling | Bounded required representation with declared CPU/GPU path | Larger qualified plan and optional GPU culling | High-density qualified GPU path where supported | Maximum explicitly qualified plan, never “unlimited” |
+| Wind/impostor quality | Minimal cooked/vertex path when required | Optional cooked impostor and richer wind variants | Higher qualified visual recipe | Highest qualified optional recipe |
+| Collision/navigation | Independently required or unavailable by scene/host policy | Same ownership; quality may use a higher cooked variant | Same | Same |
+| Runtime deformation/spawn | Explicit optional capability, not implied | Explicit optional capability | Explicit optional capability | Explicit optional capability |
+| Editor authoring | Application/editor permission and host capability, not runtime tier | Same | Same | Same |
+
+Required content that cannot fit the selected plan fails cook/activation with a typed
+result. Optional reduction occurs only when the product declares an ordered fallback
+and the compatible cooked variant exists. Runtime never silently clamps layers, drops
+instances, removes collision, changes renderer/provider or switches CPU/GPU algorithms
+to make a tier appear successful.
+
+### Qualification Profiles And Budgets
+
+Feature tiers are not benchmark profiles. ADR-143 defines two version-1 qualification
+workloads that fix content, host/recipe, environment cohort and measurements:
+
+| Required envelope | `TerrainCore1_0` | `TerrainHighEnd1_0` |
+|---|---:|---:|
+| Tile interior/stored samples | 128 x 128 quads / 129 x 129 samples | same |
+| Simultaneously Active terrain tiles | 256 | 1,024 |
+| Active foliage clusters / instances | 1,024 / 262,144 | 8,192 / 2,097,152 |
+| Terrain/Foliage steady resident bytes | 256 MiB / 256 MiB | 1,024 MiB / 1,024 MiB |
+| Staging / retiring allowance | 128 MiB / 128 MiB | 512 MiB / 512 MiB |
+| Newly committed resident payload per frame/tick epoch | 4 MiB | 16 MiB |
+
+Both qualify ADR-139's bounded CPU-selected visibility/LOD/seam and direct/instanced
+render recipe. GPU Scene, compute selection and indirect command generation are outside
+these workload identities. Post-1.0 GPU-driven support requires a new explicit recipe,
+capacities, overflow/synchronization/fallback rules and backend cohorts; it cannot
+silently satisfy or alter a version-1 result.
+
+Cold cook floors are 16/64 published terrain tiles per second and 250,000/1,000,000
+deterministically evaluated foliage placements per second for core/high-end protected
+runner cohorts. Standard editor gestures require p95 overlay/commit latency no greater
+than 16.67/100 ms for core and 8.33/50 ms for high-end. Headless fixed-tick Terrain
+owner work is capped at p95 0.50/1.50 ms; visual CPU work, GPU bytes and draw/dispatch/
+submit counts are exactly zero. Required metric absence invalidates qualification rather
+than becoming zero.
+
+These numbers are workload gates, not automatic runtime allowances or TRF-001.3
+descriptor maxima. World Streaming retains aggregate admission, every byte is charged
+once through its existing ledger, and the high-end envelope requires an explicitly
+larger product/runner global budget.
+
+## Verification
+
+Required coverage includes:
+
+- target/dependency checks for backend-neutral TerrainApi/Runtime and no native/editor/
+  service-locator leakage;
+- strong-type separation for dataset/tile/type/cluster/instance identity, runtime
+  handles, content/residency/mutation/capability revisions and leases;
+- malformed, oversized and incompatible source/cooked/scene descriptors with bounded
+  decode and no mutable whole-dataset buffer crossing the public boundary;
+- canonical dataset membership/order, tile digest/bounds/seam/dependency validation,
+  complete cook-key invalidation and byte-identical deterministic recook/cache reuse;
+- independent corruption/missing-artifact rejection and package-time verification with
+  no directory enumeration or mixed-generation tile admission;
+- every tier/cooked/provider capability combination, required failure and each declared
+  fallback reason without silent clamp/drop/provider selection;
+- view-independent render-candidate extraction, deterministic capacity failure, multi-
+  view reuse and strict separation of residency, presentation visibility and gameplay;
+- Terrain tier/render profile independence, material/pass classification, CPU 1.0 LOD/
+  seam planning and optional post-1.0 GPU recipe admission/fallback;
+- candidate failure/cancellation and replacement at every Scene/streaming/render/
+  physics/navigation prepare/commit/retirement boundary;
+- stale worker, snapshot, tile, GPU, collision and navigation evidence rejected across
+  generation/revision changes;
+- runtime mutation authority/revision/capacity/overflow cases with no partial update,
+  cooked-source mutation or implicit foliage eviction;
+- deterministic placement across worker/order/locale variations, baked/ephemeral/durable
+  identity separation and base-relative save delta golden fixtures;
+- active-to-dormant dirty foliage handoff, SaveCaptureEpoch one-copy capture, base-remap
+  incompatibility and eviction pressure with no persistent state loss;
+- consumer-specific immutable snapshot and typed receipt state machines, stale/duplicate/
+  out-of-order evidence, criticality/fallback matrices and aggregate activation roots;
+- adversarial Render/Physics/Navigation/Terrain safe-point ordering with no partial live
+  state, complete pre-commit rollback and post-commit runtime failure transitions;
+- world-streaming reservation/growth/pressure accounting for staging, old/new and
+  retiring generations without double charge or oversubscription;
+- source/cook/provider-byte/decoded/GPU/Physics/Navigation cache ownership, pinning and
+  release tests, including pressure and replacement seam-closure cases;
+- headless, dedicated server, editor preview, Null Render and every interactive backend
+  consuming the same Horo contract; and
+- bounded owner/worker/native-thread handoff, frame-hot allocation/I/O checks, device
+  loss, world unload, repeated shutdown and retirement timeout;
+- exact bounded affected-patch planning for every authoring tool, no whole-heightfield
+  history entry, deterministic apply/undo/redo symmetry and one commit per gesture;
+- authoring failure/cancel/stale completion preserving source revision, dirty state,
+  history and notifications at every staged boundary; and
+- source save, autosave/recovery, transient preview cook, published cook and Runtime Save
+  state separation, including isolated preview teardown and stale-result rejection;
+- exact core/high-end active-count, resident/staging/retirement and per-epoch streaming
+  boundaries, including one-over-limit denial with checked accounting;
+- protected-cohort cold cook, editor p95 and headless overhead gates with required metric
+  availability, fixed fixtures and no invalid sample removal; and
+- CPU-selected 1.0 recipe enforcement plus rejection of undeclared GPU-driven/fallback
+  work under the same workload identity.
 
 ## Related Documents
 
@@ -378,3 +724,24 @@ terrain does not maintain an independent priority system.
   registration as `ViewportPanel` overlays and `EditorTab` panels
 - [Editor Document Model](../editor/editor-document-model.md): undo system and
   terrain data model snapshots
+- [ADR-137](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md):
+  module/data authorities, typed identity and revisions, provider-neutral tier plan,
+  aggregate lifecycle, readiness and shutdown baseline
+- [ADR-138](../../adr/138-terrain-source-cooked-tile-cache-and-streaming-ownership.md):
+  canonical source and deterministic tile cooking, cache authorities, World Streaming
+  residency, seam-safe replacement and generation retirement
+- [ADR-139](../../adr/139-terrain-render-extraction-material-lod-and-tier-boundary.md):
+  immutable render candidates, material/permutation boundary, renderer-owned per-view
+  visibility/LOD, independent profile axes and CPU/GPU recipe split
+- [ADR-140](../../adr/140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md):
+  deterministic placement, immutable baked base, ephemeral overlays, durable canonical
+  deltas, capacity policy and no-loss cell eviction
+- [ADR-141](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md):
+  consumer snapshots and receipts, owner-safe-point staging, aggregate readiness,
+  rollback, runtime failure and reverse-dependency retirement
+- [ADR-142](../../adr/142-terrain-foliage-document-tool-undo-and-preview-ownership.md):
+  persistent authoring documents, typed tool routing, bounded tile-patch undo/redo,
+  isolated preview and source-save/cook/runtime-persistence separation
+- [ADR-143](../../adr/143-terrain-foliage-scale-budgets-observability-and-feature-boundary.md):
+  core/high-end scale, memory, streaming, cook, editor and headless gates, required
+  observability and core-1.0 versus post-1.0 recipe qualification

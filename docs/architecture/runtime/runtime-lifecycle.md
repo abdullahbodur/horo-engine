@@ -19,6 +19,9 @@ for editor and game runtimes.
 - Shutdown is ordered, idempotent, and stops producers before dependencies.
 - Headless execution follows the same lifecycle without window, input, GUI, or
   graphics capabilities unless requested.
+- Network-capable hosts validate one ADR-102 standalone/client/listen/dedicated
+  mode plan before world publication. Runtime mode stays fixed for the host
+  generation and gameplay authority remains world/session-generation scoped.
 
 ## Runtime Owners
 
@@ -70,18 +73,41 @@ Startup order:
 2. initialize emergency diagnostics and platform directories
 3. start observability and emit build/system identity
 4. resolve configuration
-5. construct platform, jobs, data bus, and asset services
-6. initialize the requested omitted/null/device audio composition through ADR-062
-7. initialize requested renderer and window capabilities
-8. initialize the selected omitted/model-only/rendered Runtime UI composition
-9. construct application services
-10. load project and initial scene through application use cases
-11. start optional runtime console, MCP, and GUI adapters
-12. enter `Ready`, then `Running`
+5. validate product capabilities and resolve one ADR-102 runtime network plan
+6. construct platform, jobs, data bus, and asset services
+7. initialize the requested network runtime/transport and local-player composition
+8. initialize the requested omitted/null/device audio composition through ADR-062
+9. initialize requested renderer and window capabilities
+10. initialize the selected omitted/model-only/rendered Runtime UI composition
+11. construct application services and unpublished world candidates with exact roles
+12. load and atomically publish the initial scene/world composition
+13. start optional runtime console, MCP, and GUI adapters
+14. enter `Ready`, then `Running`
 
 Arguments, environment, and persisted settings are resolved through
 [Configuration System](../foundation/configuration-system.md). Startup failures return
 typed errors and retain enough diagnostics for CLI or GUI presentation.
+
+### Runtime network mode lifecycle
+
+[ADR-102](../../adr/102-runtime-network-modes-and-authority-exposure.md) separates
+the modes supported by an artifact from the one plan selected for a host
+generation. Unsupported requests and incompatible listener/outbound/local-player/
+world-role combinations fail before any world or authority view is published.
+Standalone omits networking by default; client, listen-server and dedicated-server
+plans compose only their declared services.
+
+Transport `Connected` is not a gameplay lifecycle transition. A client role view
+gains a session generation only after ADR-098 activation. Listen-server authority
+and local-client worlds publish as distinct roles even in one process. Dedicated
+mode omits presentation/local-player services without changing server authority.
+
+Travel preserves mode while replacing scene and authority generations; listen-
+server travel commits compatible server/client candidates together. Reconnect
+repeats admission under a new session generation. Disconnect unpublishes the
+client session view and cannot silently turn the world into standalone. Changing
+runtime network mode requires bounded host recomposition rather than a scene
+transition or global-flag mutation.
 
 ## Frame Phases
 
@@ -118,6 +144,14 @@ required by fixed simulation is committed before fixed steps begin. Destructive
 scene and renderer lifecycle changes are committed only at their documented
 safe points.
 
+[ADR-159](../../adr/159-xr-action-tracking-and-input-projection-ownership.md)
+adds no runtime phase. After native XR event handling and before `BuildInputSnapshot`
+commits, XRRuntime gets one bounded owner-thread action/tracking sample and the
+host-composed adapter joins it to Input's transaction. Results after the cutoff wait for
+the next frame. FixedUpdate consumes only its tick-assigned immutable Horo projection;
+presentation-late poses used during render execution cannot rewrite simulation input.
+Loss commits Input neutralization before a replacement XR generation is eligible.
+
 [ADR-033](../../adr/033-presentation-and-display-ownership.md) specializes these
 safe points for presentation: apply host/window intent and publish a revisioned
 pending output candidate through owner-thread commands before layout/extraction.
@@ -153,6 +187,52 @@ simulation, unscaled, screen-transition, preview, deterministic-test and manual
 domains and evaluates every active UI timeline exactly once before style/layout
 publication. Render extraction/execution never advances them.
 
+[ADR-117](../../adr/117-playback-ownership-frame-order-and-determinism.md) refines
+Cinematic Runtime without adding a phase. Before each fixed or permitted service/
+presentation boundary, the session-owned service drains commands through that
+boundary's cutoff and publishes one immutable player batch ordered by domain,
+descending priority and stable identity. Commands or worker completions after the
+cutoff cannot alter the active batch. Failed attempted ticks discard staged cinematic
+cursors/values/occurrences; tick commit advances them and releases occurrences.
+
+[ADR-119](../../adr/119-camera-authority-during-cinematics.md) adds no runtime phase.
+After `VariableUpdate` and before `RenderExtraction`, each live camera-view context
+drains eligible gameplay/cinematic/editor proposals and commits one immutable camera
+selection. Every pass for that rendered frame consumes that selection; a cut, stop,
+cancel or late completion after the cutoff is eligible only for the next commit.
+Multiple fixed ticks may cross multiple cut keys, but only the final eligible
+selection at this boundary is promised a rendered frame. Context teardown retires
+the snapshot only after frame consumers complete.
+
+[ADR-120](../../adr/120-cinematic-event-dispatch-and-audio-coupling-boundary.md)
+also adds no phase. Cinematic EventTrack evaluation stages bounded occurrences; only
+a successfully committed source tick makes authoritative gameplay occurrences
+eligible. The session dispatcher drains them at each destination owner's next
+permitted boundary, where a typed adapter may submit a normal command/operation.
+Handlers cannot reenter the active sequence batch or imply same-tick mutation.
+AudioTrack bundles follow ADR-062's existing Audio control/callback publication
+boundaries and ADR-068 sample correlation; render interpolation never emits them.
+
+[ADR-122](../../adr/122-cinematic-trigger-sources-and-capability-policy.md) adds no
+phase and no direct player-construction path. Every gameplay, scene-autoplay, event or
+tooling source enqueues the same typed start request. Owner commands validate the
+complete principal/profile/trust/capability/approval/session/world/effect plan before
+the next eligible Cinematic batch; denial publishes no player or domain side effect.
+Scene autoplay becomes eligible only after aggregate scene activation, and gameplay-
+event starts only after their source occurrence commits. Late approval/preparation
+results join a later boundary only when every request generation remains current.
+
+[ADR-123](../../adr/123-vfx-cpu-stage-order-determinism-and-gameplay-coupling.md)
+specializes each gameplay-coupled VFX fixed step without adding a host phase. Within
+the VFX scheduler node, one candidate runs Spawn, Initialize, Forces, Integrate,
+Collide and Kill in order against the tick's immutable inputs/query snapshots. After
+successful candidate commit, read-only Extract publishes immutable output without
+adding another host phase. The
+candidate particle generation and bounded gameplay occurrences publish only with
+successful tick commit. RenderExtraction later reads the committed post-Kill state.
+Failure/cancel discards all stages, and gameplay consumes committed output at its next
+permitted owner boundary rather than reentering the source tick.
+
 [ADR-078](../../adr/078-runtime-ui-input-context-and-player-routing.md) also adds no
 phase. `BuildInputSnapshot` publishes device/action/assignment evidence; Runtime UI
 VariableUpdate applies one ordered context stack against the last presented
@@ -167,6 +247,33 @@ Runtime UI freezes a compatible set during VariableUpdate and emits expected-
 revision writes as commands for provider-owner safe points. Provider revocation
 closes admission and drains snapshot/command/UI leases through deferred lifecycle
 retirement before player/scene/game/module storage or code disappears.
+
+[ADR-080](../../adr/080-runtime-ui-presentation-scope-layer-and-route.md) prepares
+route operations privately and commits complete stack generations at the same
+ADR-073 lifecycle cutoff. VariableUpdate evaluates route-generation transitions,
+then extraction publishes immutable per-view presentation plans. Removed routes
+retire only after interaction, snapshot, render and transition leases close.
+
+[ADR-081](../../adr/081-runtime-ui-and-localization-ownership-boundary.md) starts
+Localization before Runtime UI consumers and publishes immutable catalog/locale
+snapshots. Runtime UI freezes one compatible snapshot during VariableUpdate and
+publishes text/font/layout as one generation. Locale/catalog replacement may retain
+last-good UI until preparation completes; shutdown retires UI leases before
+catalogs, formatter strategies, namespaces or Assets disappear.
+
+[ADR-082](../../adr/082-runtime-ui-accessibility-capability-and-ownership.md)
+publishes semantic snapshots from that same UI/interaction generation and admits
+native exposure only after matching presentation. Platform dispatch is bounded and
+thread-affine; native actions return as revision-checked commands for a later
+VariableUpdate. Shutdown closes action/dispatch admission and retires semantic/
+native leases before Platform, Localization, Input or Configuration disappear.
+
+[ADR-083](../../adr/083-ui-template-identity-schema-and-expansion.md) keeps template
+insert/rebase/detach in authoring document transactions. UI cook resolves accepted
+template revisions and flattens linked instances into ordinary cooked elements;
+packaged runtime activation therefore follows ADR-073 without source-template or
+live-propagation phases. Preview replacement prepares a complete candidate and
+retains last-good UI on expansion/dependency failure.
 
 ## Time Model
 
@@ -270,15 +377,48 @@ Variable-rate update is not used for deterministic physics integration.
 One fixed tick executes:
 
 1. consume the input command state assigned to the tick
-2. run ordered pre-physics systems, including gameplay animation parameters,
-   animation pose/root-motion staging, and character-controller movement
-3. step physics
-4. publish physics results into scene transforms
-5. run post-physics and behavior systems, including typed animation pose
-   overrides and candidate pose finalization
-6. commit deferred entity/component changes
-7. atomically publish committed subsystem state, events, and previous/current
+2. stage Gameplay/AI/Nav and owner-admitted Cinematic movement/facing, animation
+   parameters and kinematic-platform targets under the effective authority snapshot
+3. evaluate authoritative Animation pose/root motion and freeze Physics-owned
+   Character query/support/platform-motion evidence
+4. run Horo Character platform carry and bounded query movement, staging its root
+   and Physics commands
+5. apply staged commands and step Physics once
+6. publish Physics results, then finalize Character support/attachment and its
+   authoritative collision-root transform without a second move
+7. compose typed post-Physics Animation pose overrides and candidate pose
+8. commit deferred entity/component changes
+9. atomically publish committed subsystem state, transforms, events, and previous/current
    state for interpolation
+
+[ADR-089](../../adr/089-character-controller-ownership-implementation-and-update-order.md)
+owns this Character-specific dependency order and the separate capsule up, desired
+heading, root rotation, platform angular carry and visual orientation authorities.
+Presentation frames neither accumulate root motion nor update collision state.
+
+[ADR-084](../../adr/084-canonical-physics-solver-units-and-tolerances.md) fixes the
+initial Physics step to pinned Jolt CanonicalV1 under one owner thread and serial
+private job adapter. Physics consumes only the host fixed delta (default qualified
+at 60 Hz), completes all native work before publishing transforms/events and never
+measures render/wall time. Parallel solver jobs require a separately qualified
+private profile and must join before step publication.
+
+[ADR-088](../../adr/088-physics-determinism-capability-and-support-tiers.md)
+requires a stronger-than-`Unspecified` world to close one canonical tick-indexed
+input/Physics command frame before the step. Its exact tier/fingerprint/evidence are
+immutable for that world generation. Worker completion, process event order,
+variable update and wall time cannot select command order, streaming/origin commit
+tick or authoritative query results. A first divergence invalidates the stronger
+session and follows its explicit fail-closed policy.
+
+[ADR-092](../../adr/092-character-controller-determinism-and-state-composition.md)
+captures Character only from the atomically committed stage-9 state and pairs it
+with the exact Scene/Physics/world tick, structure, origin and determinism
+fingerprint. The lifecycle safe point lends immutable owned checkpoint data to
+workers; it never exposes candidate state or blocks simulation on hashing/storage.
+Restore prepares the complete aggregate and publishes at
+`CommitDeferredLifecycleChanges`; no standalone or partial Character state becomes
+visible.
 
 System ordering is declared by the scene runtime and validated before execution.
 The data bus is not used to establish per-tick system order.
@@ -350,6 +490,14 @@ subsystem order; it does not consume accumulated wall time. Authoritative animat
 therefore holds during pause and advances once during a successful step. Isolated
 editor preview may advance only under its separate preview controls.
 
+Under [ADR-118](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md),
+whole-game pause also means no authoritative cinematic pose advance, root-motion
+request, Character movement, Physics step or gameplay-action backlog. Permitted
+unscaled/external cinematic work is presentation/service-only. A cutscene that must
+move collision-aware actors leaves fixed simulation running and acquires scoped
+Gameplay/Animation/Character control claims; it does not use pause as selective input
+suppression. Resume cannot apply elapsed presentation motion as a catch-up tick.
+
 Runtime UI continues its ordinary VariableUpdate/input/layout/render path while
 gameplay is paused. Menus/navigation/accessibility feedback use declared unscaled
 presentation time by default; `FollowGameplay` UI animation freezes and `Manual`
@@ -373,6 +521,14 @@ See [Runtime Debug Console And Development Overlays](./debug-console-and-overlay
 Scene load, reload, unload, and replacement use the state model in
 [Scene Runtime](./scene-runtime.md). Worker preparation may occur
 asynchronously; final activation happens at a runtime safe point.
+
+[ADR-087](../../adr/087-scene-to-physics-ownership-and-conversion.md) requires
+Physics to join the one aggregate scene candidate through an explicitly injected
+activation participant. Core ECS storage, resource leases, the detached Physics
+world and its binding table publish together at
+`CommitDeferredLifecycleChanges` only after all fallible conversion/native startup
+work succeeds. A failed replacement leaves the prior active scene and Physics world
+unchanged; the new world's first fixed tick occurs after publication.
 
 A stale completed load cannot replace a newer request. Transition requests
 carry runtime session and generation identities.
@@ -422,21 +578,23 @@ Canonical shutdown:
 
 1. transition host to `Stopping`
 2. stop external request acceptance and close modal workflows
-3. stop play simulation and unload active scenes
-4. cancel and join host-scoped jobs
-5. stop MCP, networking, and other transports
-6. drain owner-thread continuations
-7. close Runtime UI command/input admission, retire every scope/attachment, join
+3. unpublish ADR-102 gameplay network role/session views, invalidate grants and
+   stop local-player/input producers
+4. stop play simulation and unload active scenes
+5. cancel and join host-scoped jobs
+6. stop MCP, networking, and other transports
+7. drain owner-thread continuations
+8. close Runtime UI command/input admission, retire every scope/attachment, join
    UI work, and release UI render/resource leases
-8. release GUI and editor sessions
-9. destroy scene/project/application services after closing their renderer and
+9. release GUI and editor sessions
+10. destroy scene/project/application services after closing their renderer and
    audio producer ports
-10. wait for renderer idle as required and destroy GPU resources
-11. quiesce/detach the audio callback, reconcile terminal outcomes,
+11. wait for renderer idle as required and destroy GPU resources
+12. stop remaining audio producers, quiesce/detach the callback, reconcile terminal outcomes,
    and release device-owned resources under ADR-062
-12. destroy remaining asset, data-bus, job, and platform services
-13. flush observability and write clean-shutdown marker
-14. transition to `Stopped`, unless a subsystem's documented fatal-retention path
+13. destroy remaining asset, data-bus, job, and platform services
+14. flush observability and write clean-shutdown marker
+15. transition to `Stopped`, unless a subsystem's documented fatal-retention path
     requires immediate process termination without normal reclamation
 
 Shutdown may be requested more than once but executes its transitions once.
@@ -460,6 +618,8 @@ Required tests cover:
 - startup success and partial-initialization failure unwind
 - fixed-step accumulator and catch-up bounds
 - fixed-state determinism under 30, 60, and 144 Hz variable frame cadences
+- cinematic immutable-batch cutoff/order, failed-tick discard and same-history replay
+  across zero/one/multiple fixed ticks per presentation frame
 - interpolation alpha at equivalent accumulator positions
 - presentation gating after extraction, execution, and GUI failures
 - dropped-time and clamp counter observability
@@ -475,6 +635,10 @@ Required tests cover:
 - headless lifecycle without GUI or graphics
 - Runtime UI phase order across zero/multiple fixed ticks, gameplay pause/step,
   suspension, failed presentation, scene/viewport teardown and shutdown
+- standalone/client/listen/dedicated network plan startup, admission, aggregate
+  listen-server travel, disconnect/reconnect generation replacement and shutdown
+- rejection of incompatible role capabilities and of authority inferred from
+  process flags, locality, local players, listeners, headless state or build kind
 
 ## Related Documents
 
@@ -484,6 +648,9 @@ Required tests cover:
 - [Physics Architecture](./physics-architecture.md)
 - [Audio Architecture](./audio-architecture.md)
 - [Networking Architecture](./networking-architecture.md)
+- [ADR-117: Playback Ownership, Frame Order and Determinism](../../adr/117-playback-ownership-frame-order-and-determinism.md)
+- [ADR-118: Animation, Character and Gameplay Authority During Cinematics](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md)
+- [ADR-102: Runtime Network Modes and Authority Exposure](../../adr/102-runtime-network-modes-and-authority-exposure.md)
 - [Asset Pipeline](./asset-pipeline.md)
 - [Runtime Debug Console And Development Overlays](./debug-console-and-overlays.md)
 - [Concurrency And Job System](../foundation/concurrency-and-jobs.md)

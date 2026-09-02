@@ -253,6 +253,15 @@ Transport threads must not block indefinitely waiting for long-running engine
 work. The application use case creates jobs and operation records; MCP reports
 operation progress through declared protocol messages or explicit query tools.
 
+[ADR-106](../../adr/106-navigation-bake-ownership-transaction-and-cache.md)
+requires the navigation-bake tool to validate project-write/cook capability and
+project-contained typed IDs, then submit the same application
+`NavigationBakeService` request as GUI, CLI and release cook. It returns the
+accepted or joined `operationId` and observes the shared operation result. The MCP
+controller owns only protocol/request lifetime; disconnect follows the declared
+detach/cancel policy and cannot destroy a detached bake, release its publication
+lock, mutate cache/staging or call `INavigationMeshBuilder` directly.
+
 ## Request Cancellation
 
 Every accepted MCP request owns or joins a cancellation token. If the client
@@ -383,7 +392,51 @@ Secrets, credentials, raw file contents, and large payloads are never retained
 in history by default. History retention is policy-bounded by count, age, and
 storage budget.
 
+## Save Tool Boundary
+
+MCP save tools follow
+[ADR-116](../../adr/116-save-data-threat-model-and-trust-policy.md). Inspect, import,
+export, migrate, load, delete and conflict resolution declare separate capabilities,
+side-effect policy, confirmation policy and shipping-profile availability. Project
+trust or an authenticated MCP session does not imply access to another product,
+environment, user, profile, server-world or slot namespace.
+
+Tool handlers pass typed addresses or explicitly admitted external-file handles to
+application-owned save use cases. They do not call archive codecs, read arbitrary
+paths, select trust roots, access provider/signing credentials, retain leases or
+publish runtime/catalog state from an MCP thread. Every source, including a local save
+path or authenticated cloud result, follows bounded untrusted-input admission.
+
+Inspection results contain bounded allowlisted metadata, verification state and safe
+diagnostics. Raw archive/participant content, unrestricted paths, credentials and
+private provider identity are excluded from request history and ordinary results.
+Development-only raw export requires a distinct local capability and cannot be
+enabled by a remote caller or archive field.
+
 ## Security
+
+[ADR-172](../../adr/172-immersive-agent-ownership-authoring-mode-and-risk.md)
+specializes immersive editor-agent tools. Multimodal input is bounded evidence,
+not MCP authorization: voice, gaze, pointing, contact and physical interaction
+cannot approve a tool plan. Mutating plans require a local proposal-bound approval
+and still pass through application validation and an atomic editor transaction.
+Mode, document, project or XR-session replacement invalidates approval; remote MCP
+identity cannot impersonate locally present physical approval.
+
+[ADR-122](../../adr/122-cinematic-trigger-sources-and-capability-policy.md)
+specializes cinematic start/control tools. A registered tool remains an MCP adapter
+over the common application `ICinematicPlaybackCapability`; it never receives the
+runtime service. Mutating start requires authenticated/scoped caller identity where
+applicable, trusted project, exact capability, target-world authority and the existing
+operation approval. Authentication, localhost access or project trust alone is not
+authorization, and approval is bound to the visible request/revision rather than
+stored in sequence/project content.
+
+Cinematic MCP start tools are Editor/local-development tooling by default and are
+absent from Retail Shipping builds. Remote policy below still applies; a non-loopback
+transport cannot widen the tool set. Denial uses the application typed result, creates
+no player/effects and is redacted/audited without disclosing unavailable sequence or
+world details.
 
 - MCP transport does not accept anonymous remote connections in production.
 - The SSE transport requires authentication when exposed beyond localhost.
@@ -426,6 +479,8 @@ Required additional coverage:
 - rate-limit and body-size enforcement
 - bounded query pagination and stable ordering
 - history redaction of secrets and large payloads
+- save inspect/import/export/migrate/load/delete/conflict capability separation,
+  hostile-input budgets, shipping remote denial and no raw save/path/credential history
 
 Run MCP tests:
 
@@ -488,5 +543,8 @@ import logic, build behavior, or release policy.
 - [Release Security](../release/release-security.md): transport and signing trust.
 - [Application Security](../security/application-security.md): runtime authentication,
   capability, project trust, rate-limit, and remote-binding policy.
+- [Save Game And Persistence](../runtime/save-game-and-persistence.md): save authority,
+  archive admission, transactional publication and cloud coordination.
+- [ADR-116: Save Data Threat Model and Trust Policy](../../adr/116-save-data-threat-model-and-trust-policy.md)
 - [Observability Architecture](../observability/observability.md): levels, categories, MDC,
   storage, and protocol-log redaction.

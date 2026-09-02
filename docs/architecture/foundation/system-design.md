@@ -10,6 +10,14 @@ Horo Engine has two supported hosts:
 Both hosts expose MCP. MCP is a standard engine capability, not a separate
 product mode.
 
+Standalone, client, listen-server and dedicated-server are typed runtime network
+plans selected by a host, not additional executables or ambient process modes.
+The product artifact declares which plans it can support; one invocation validates
+and activates exactly one plan before world/application publication. Gameplay
+observes only its world-scoped, generation-checked role view under
+[ADR-102](../../adr/102-runtime-network-modes-and-authority-exposure.md), never an
+executable-name, headless-state or process-global authority flag.
+
 `horopak` is a purpose-built packaging executable, not a third engine host. It
 composes pipeline and platform capabilities for deterministic package creation
 and does not expose the full application surface, an interactive runtime, or an
@@ -252,6 +260,9 @@ src/
     backends/
       recast_detour/    target-private Recast & Detour implementation
       null/             explicit capability absence, shared publication timing
+  terrain/
+    api/                backend-neutral terrain/foliage IDs, revisions, descriptors, commands and snapshots
+    runtime/            dataset/tile/cluster lifecycle, overlays, preparation, readiness and retirement
   render/
     api/                backend-neutral contracts and value types
     frontend/           render submission and resource coordination
@@ -301,11 +312,16 @@ HoroEngine::AudioNull
 HoroEngine::NetworkApi
 HoroEngine::NetworkRuntime
 HoroEngine::NetworkTransportNull
-HoroEngine::NetworkTransportENet
+HoroEngine::NetworkTransportGNS
 HoroEngine::NavigationApi
 HoroEngine::NavigationRuntime
 HoroEngine::NavigationRecastDetour
 HoroEngine::NavigationNull
+HoroEngine::TerrainApi
+HoroEngine::TerrainRuntime
+HoroEngine::XRApi
+HoroEngine::XRRuntime
+HoroEngine::XROpenXR
 HoroEngine::RenderApi
 HoroEngine::RenderFrontend
 HoroEngine::RenderModuleAbi
@@ -349,8 +365,8 @@ horopak
 ```
 
 `AudioPlatform` selects only the native implementation for the target platform;
-native audio headers remain private to that target. `NetworkTransportENet` owns the
-optional native UDP socket and ENet implementation and remains separate from typed
+native audio headers remain private to that target. `NetworkTransportGNS` owns the
+optional native socket and private GNS implementation and remains separate from typed
 session/protocol/authentication coordination in `NetworkRuntime`. `NetworkTransportNull` provides
 deterministic in-memory/null transport for headless runs, mock testing, and offline modes; it depends on `NetworkApi` and `Foundation` only, not `Platform`. The host composition root transfers unique `INetworkTransport` ownership into `NetworkRuntime`. `GameplayApi` owns the public
 registration, descriptor, behavior, and runtime-capability contracts used by
@@ -395,6 +411,33 @@ leased resources and consumes committed revisions. Background jobs publish via
 and implementation gates are defined by
 [ADR-016](../../adr/016-navigation-target-ownership-and-dependency-boundary.md).
 
+[ADR-137](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
+makes Terrain/Foliage a runtime vertical slice rather than generic Foundation,
+RuntimeScene internals or renderer-backend code. `TerrainApi` owns Horo-only IDs,
+revisions, handles, descriptors and narrow command/query/snapshot contracts;
+`TerrainRuntime` owns live dataset/tile/cluster generations, overlays, preparation,
+readiness and retirement. RuntimeScene holds typed bindings, World Streaming owns
+aggregate cell admission/budgets, and Render/Physics/Navigation own their realized
+resources. Hosts compose narrow integration ports without reverse dependencies or
+native handles in the Terrain API.
+
+[ADR-157](../../adr/157-xr-ownership-runtime-composition-and-capability-tier.md)
+makes XR another runtime vertical slice. `XRApi` owns Horo-only typed identities,
+capabilities, snapshots and narrow interfaces; `XRRuntime` owns engine-visible
+runtime/session/frame/space/view generations and coordination; `XROpenXR` privately
+owns loader and native OpenXR instance/system/session/action/space/swapchain/layer state.
+Application selects the XR/Platform/Renderer/Input tuple before activation. Renderer
+owns GPU work/external resources, Input owns canonical actions and Platform supplies OS
+host primitives; none owns the XR session. Native types never enter `XRApi`.
+
+[ADR-158](../../adr/158-openxr-loader-backend-packaging-and-host-composition.md)
+makes `XROpenXR` an optional first-party product component rather than an ambient
+ExtensionHost plugin. Package/install services verify the exact backend/loader artifact
+record, Platform supplies only library and native-host primitives, XROpenXR owns loader
+dispatch, and the application composes one immutable XR/Platform/Renderer/Input plan.
+Component installation, backend composition, loader/runtime availability, system
+support, session activation and capability availability remain distinct typed states.
+
 [ADR-054](../../adr/054-extension-and-package-authority-boundary.md) keeps
 extension package composition in the application boundary. Package resolution,
 verified install records, trust and durable enablement are application/package
@@ -430,10 +473,14 @@ assets / scene-model / render-api / audio-api /
 network-api / navigation-api / gameplay-api /
 extension-api ------------------------------------------> foundation
 
-physics / audio-runtime / network-runtime /
-navigation-runtime / render-frontend / pipeline --------> neutral APIs and models
+terrain-api --------------------------------------------> assets + foundation
 
-runtime-scene -------------------------------------------> runtime + assets + foundation
+physics / audio-runtime / network-runtime /
+navigation-runtime / terrain-runtime /
+render-frontend / pipeline ------------------------------> neutral APIs and models
+
+runtime-scene -------------------------------------------> runtime + assets + terrain-api
+                                                          + foundation
 
 audio-platform / audio-null /
 network-transport-null / network-transport-enet /
@@ -453,7 +500,7 @@ apps ---------------------------------------------------> runtime + adapters + p
 
 Required rules:
 
-- Foundation does not depend on platform, scene, renderer, editor, MCP, or UI.
+- Foundation does not depend on platform, scene, terrain, renderer, editor, MCP, or UI.
 - The foundation logging facade and structured record model do not depend on
   GUI, editor, transport, or a concrete sink backend.
 - Foundation metric descriptors, aggregation, and profiler instrumentation do

@@ -9,6 +9,12 @@ serialization, templates, editor authoring, and package boundaries.
 Game UI is runtime game content. It is not the same system as HoroEditor panels,
 tabs, modals, inspectors, or the editor design-system widgets.
 
+[ADR-161](../../adr/161-xr-interaction-runtime-ui-locomotion-and-accessibility-ownership.md)
+keeps XR world-space interaction inside this same Runtime UI authority. XR adapters
+supply generation-scoped ray/direct/proximity evidence, but Runtime UI owns presented
+hit testing, focus, capture, semantic action and command production. Renderer owns
+per-view projection/occlusion/pixels, and neither can create a second XR widget tree.
+
 [ADR-073](../../adr/073-runtime-ui-ownership-scope-and-update-order.md) is the
 single normative owner of RuntimeUiService, game/player/scene/viewport scopes,
 instance lifecycle, frame update order, pause/suspension, input/presentation
@@ -124,6 +130,30 @@ waits for render/resource leases, destroys runtime state, then releases assets.
 Unrelated scopes survive. Shutdown retires all scopes before Renderer, Assets,
 Input, Localization or Platform dependencies disappear and is idempotent after
 partial activation.
+
+## Presentation Scope, Bands And Routes
+
+[ADR-080](../../adr/080-runtime-ui-presentation-scope-layer-and-route.md) keeps
+semantic owner scope, input audience, route-stack membership, presentation band
+and visibility as independent typed dimensions. Persistence derives only from the
+ADR-073 GameInstance/Player/Scene/Viewport owner; moving content between visual
+bands or covering it never transfers ownership or extends lifetime.
+
+Core presentation order is fixed from World, HUD, Screen and Overlay through Modal,
+Loading and Debug. Backends may batch within the published plan but cannot reorder
+these semantic bands. Game, player, scene and viewport route stacks remain
+independent, with explicit cross-stack cover/arbitration for modal and loading
+presentation instead of implicit process-global z values.
+
+Push, pop, replace and cross-stack operations prepare privately, then commit or
+roll back atomically at ADR-073 lifecycle cutoffs. Routes move through Entering,
+Visible, Covered, Suppressed, Suspended, Exiting and Retiring visibility states
+without making visibility a lifetime alias. A route becomes input-eligible only
+after its matching interaction revision is successfully presented.
+
+Transition loading is GameInstance-owned so it survives scene replacement and can
+cover recovery. Debug presentation is profile-gated, non-authoritative and cannot
+gain hidden input or gameplay mutation authority.
 
 ## Core Runtime UI Primitives
 
@@ -314,6 +344,50 @@ passthrough list may bypass them. Assignment change neutralizes old held/capture
 input before a new player/context activates. Focus, restoration, capture and active
 device modality remain per context/audience rather than process global.
 
+An XR pointer is another generation-scoped Input source for the exact player/viewport
+context. It hit-tests the last successfully presented interaction snapshot. Switching
+ray/direct modes, tracking or session loss, assignment change, modal/route exclusion,
+presentation-revision loss and source destruction release capture and neutralize the
+source. A Physics/Renderer hit is evidence only; it cannot set focus or invoke a widget.
+
+## Runtime Accessibility Semantics
+
+[ADR-082](../../adr/082-runtime-ui-accessibility-capability-and-ownership.md) makes
+Runtime UI authoritative for typed roles, accessible state/actions/relationships,
+semantic focus and immutable semantic snapshots. Each snapshot records the exact
+localization/style/layout/route/interaction generation, and nodes become native-
+visible only after matching presentation succeeds.
+
+Native accessibility requests return as revision-checked input commands through
+the owning player/audience context; Platform cannot mutate widgets or gameplay.
+Configuration owns preferences, ADR-081 owns localized accessible text, and
+Renderer owns pixels only. Hidden/modal/covered/offscreen exposure is explicit and
+cannot leave lower routes natively actionable.
+
+Support is reported per capability. Keyboard/gamepad navigation and semantic/model-
+only output do not imply native screen-reader support. Null reports Unsupported;
+Recording is test-only; each native Supported claim requires platform-specific
+interoperability evidence.
+
+## Runtime Localization Boundary
+
+[ADR-081](../../adr/081-runtime-ui-and-localization-ownership-boundary.md) keeps
+catalog, namespace, locale normalization/policy evidence, typed formatting and
+translation fallback in Localization. Runtime UI serializes typed message keys and
+argument values, freezes one immutable localization snapshot during VariableUpdate
+and publishes resolved text with the matching font/shaping/layout revisions.
+
+Localization returns bounded Unicode text, semantic spans and locale evidence;
+Runtime UI Text owns segmentation, bidi, shaping, line breaking and layout. Locale
+change events carry revision identity rather than pointers/callbacks. A required
+replacement failure retains the last-good complete UI generation instead of mixing
+languages or layout revisions in one frame.
+
+Translation, font and localized visual/audio asset fallback remain independent.
+Localization supplies the normalized locale chain, ADR-075 selects font faces,
+Assets delivers declared stable asset variants, and the owning UI document chooses
+Required, UseNeutral or Omit presentation policy.
+
 ## Runtime Text And Font Contract
 
 Runtime text/style documents reference stable `FontFamilyAssetId` or typed semantic
@@ -501,8 +575,28 @@ and schema projections, not live runtime pointers or editor widgets.
 
 ## Templates And Presets
 
-Templates are authoring conveniences over core primitives. They do not add new
-runtime element kinds unless explicitly declared by a package.
+[ADR-083](../../adr/083-ui-template-identity-schema-and-expansion.md) makes
+templates first-class Assets-backed authoring fragments over core/registered UI
+elements. Stable template-local element, parameter, slot and document-instance IDs
+are distinct from runtime handles and display/path/index values. Templates do not
+add runtime element kinds or execute callbacks.
+
+Parameters target exact typed registered properties; named slots admit bounded
+typed document-owned child fragments. Arbitrary string property paths and deep
+linked-instance overrides are not supported. Nested templates form a finite
+acyclic dependency graph and expand deterministically under complete identity,
+schema, dependency and budget validation.
+
+Insert expands into fresh ordinary document-owned elements and retains no update
+relationship. Linked instance serializes the asset, accepted semantic revision,
+public arguments and slot content while its subtree remains a derived projection.
+Template updates mark UpdateAvailable and require an explicit previewed atomic
+rebase; they never patch documents or running UI on source save.
+
+Detach materializes fresh persisted element IDs and removes the link. Cook resolves
+exact accepted/locked dependencies and flattens linked instances into ordinary
+`CookedUiDocument` elements, so packaged Runtime UI has no source-template,
+propagation or detach authority.
 
 Core templates may include:
 

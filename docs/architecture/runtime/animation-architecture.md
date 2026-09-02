@@ -52,6 +52,9 @@ Not covered:
 - Root motion is explicit: animation stages the exact fixed-tick interval delta;
   gameplay selects consumption policy and the character controller owns final
   collision-aware movement.
+- Cinematic skeletal tracks are owner-admitted per-joint contributions. Animation
+  continues to own/evaluate the graph and composes Override/Blend before Physics'
+  final per-joint authority; presentation overlays never feed simulation.
 - Retargeting is a cook/import-time process where possible. Runtime retargeting
   is supported but more expensive.
 - GPU skinning is the default for skinned meshes. CPU skinning is a fallback for
@@ -110,6 +113,33 @@ Rules:
   poses remain valid until presentation and render leases retire.
 - Render extraction receives a frame-owned immutable pose/palette projection
   tagged with scene, instance, tick, and pose-generation identity.
+
+### Cinematic Pose Authority
+
+[ADR-118](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md)
+defines cinematic pose composition. A sequence player submits immutable generation-
+checked contributions through the Animation adapter; it never receives mutable pose
+storage. Activation validates stable skeleton/joint-mask identity, required/optional
+claims, player priority/order, evaluation seam, finite weights and handoff policy.
+
+For every attempted fixed tick, Animation evaluates the underlying graph first. It
+then applies cinematic `Override` (weight 1 on declared AnimationDriven joints) or
+`Blend` contributions in canonical ADR-117 player/joint order. The graph is not
+suspended merely because its output is masked, so cursor/state/event progression
+remains tied to actual simulation ticks. Cut or bounded blend handoff begins from the
+last committed pose and cannot restore a stale pre-cinematic snapshot.
+
+PhysicsDriven joints reject required cinematic ownership unless Physics/Animation
+first perform an explicit safe-point authority transition. Existing `Blended` Physics
+authority composes over the graph-plus-cinematic Animation-side candidate after the
+step. A `PresentationOverlay` modifies only the immutable presentation pose and is
+excluded from root motion, events, hit shapes, colliders and later fixed-tick input.
+
+Gameplay animation-parameter commands targeting an exclusive cinematic claim return
+`SuppressedByCinematic`; unclaimed parameters remain admitted and declared blend
+parameters are owner-composed. Suppressed commands are not reported as success or
+queued until release. Stop, scene/actor generation loss and authority change close
+contribution admission before owner-safe-point handoff/lease retirement.
 
 ## Animation Clip
 
@@ -342,9 +372,9 @@ struct AnimationEvent {
 };
 ```
 
-Event types:
+Example event types:
 
-- `Footstep` — spawn sound, VFX, decal
+- `Footstep.Left` / `Footstep.Right` — authoritative locomotion presentation timing
 - `WeaponSwing` — enable/disable hit box
 - `ReloadComplete` — gameplay notification
 - `SpawnProjectile` — fire event
@@ -363,6 +393,13 @@ committed tick/time under
 mapping that committed timestamp to its current sample epoch and deduplicating the
 stable occurrence. Presentation pose sampling, editor scrub, or a failed tick never
 submits Audio work, and callback completion cannot change Animation's event cursor.
+
+[ADR-091](../../adr/091-footstep-and-locomotion-event-ownership.md) specializes
+footstep ownership. Animation publishes the typed committed marker occurrence but
+does not query a surface or call Audio/VFX. After tick commit, an application-owned
+adapter correlates it with the exact same-tick Character surface snapshot and
+deduplicates one semantic request. Character never synthesizes missing footstep
+timing, and stale/missing support evidence suppresses presentation.
 
 ## Skinning
 
@@ -411,12 +448,15 @@ steps.
 
 ```text
 Attempted Fixed Tick
-  Gameplay and owner-admitted cinematic inputs stage animation parameters
+  Gameplay/AI/Nav and owner-admitted cinematic inputs stage parameters, movement,
+  desired heading and kinematic-platform targets
   Animation evaluates candidate pose, eligible IK, events, and root-motion delta
-  Character controller resolves desired movement plus root motion
-  Physics steps once and publishes typed body/pose overrides
+  Physics freezes Character query/support/platform-motion evidence
+  Character applies platform carry and resolves desired movement plus root motion
+  Physics applies staged commands, steps once and publishes body/pose overrides
+  Character finalizes support and its authoritative collision-root transform
   Animation composes admitted overrides and finalizes candidate pose
-  Tick commit publishes player state, events, and previous/current poses
+  Tick commit publishes Physics, Character/transforms, player state, events, and poses
 
 After FixedUpdate
   Presentation interpolates committed poses and applies presentation-only overlays
@@ -429,9 +469,11 @@ Interpolated cinematic overlays apply only to the render/preview snapshot after
 movement authority resolves. Only owner-admitted non-interpolated fixed-tick inputs
 participate in movement-producing evaluation.
 
-The character controller runs during the gameplay movement phase, before the
-physics world is stepped. This matches the ordering described in
-[Character Controller Architecture](./character-controller-architecture.md).
+The Character controller moves before Physics and performs only support/transform
+finalization after Physics; it never performs a hidden second move. Platform carry,
+capsule up/heading, root rotation and visual orientation ownership follow
+[ADR-089](../../adr/089-character-controller-ownership-implementation-and-update-order.md)
+and [Character Controller Architecture](./character-controller-architecture.md).
 
 ### Render Extraction
 
@@ -543,6 +585,8 @@ through binary floating point.
 - Retargeting tests comparing source and target poses.
 - Visual regression tests for skinned mesh playback.
 - Root-motion duplicate/stale request and physics-override authority tests.
+- Cinematic per-joint Override/Blend/PresentationOverlay, continuing underlying graph,
+  entry/exit handoff, PhysicsDriven conflict and typed gameplay-parameter suppression.
 - Preview/play isolation, stale pose lease, reload, scene replacement, and shutdown tests.
 - Performance tests for joint palette upload and GPU skinning throughput.
 
@@ -554,6 +598,7 @@ through binary floating point.
   extraction and joint palette binding.
 - [Cinematic Sequencer Architecture](./cinematic-sequencer-architecture.md): timeline,
   tracks, clock authority, and evaluation phase integration.
+- [ADR-118: Animation, Character and Gameplay Authority During Cinematics](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md)
 - [Physics Architecture](./physics-architecture.md): ragdoll, hit detection, and
   animation/physics handoff.
 - [Asset Pipeline](./asset-pipeline.md): clip import, compression, and cook.

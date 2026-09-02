@@ -25,7 +25,20 @@ budget changes; the manager never maintains a competing residency cache.
 | Scene Runtime | Detached ECS candidates and transactional structural commit | Cell relevance, topology or load priority |
 | Asset Pipeline | Registry/catalog, cooked bytes, validation and bounded I/O | Camera/relevance policy or entity activation |
 | Feature providers | Domain-specific candidate resources, native affinity, readiness/retirement acknowledgement | Independent world-cell loads, residency decisions or budget expansion |
+| Virtual Texturing | Feature-local page demand, selection and eviction within an admitted reservation | Cell relevance, aggregate budgets, activation barriers or independent cell eviction |
 | Editor | Authoring document, independent paging/pins, offline bake and isolated preview | Destructive coupling to runtime cell eviction |
+
+Virtual Texturing participates through the feature-provider boundary defined by
+[ADR-164](../../adr/164-virtual-texturing-ownership-product-scope-and-capability-tier.md).
+Its page readiness may contribute to a cell barrier, but it cannot run a competing
+world scheduler or turn page pressure into an implicit cell transition.
+
+[ADR-166](../../adr/166-vtx-feature-local-residency-and-eviction-within-global-reservations.md)
+specializes this boundary: the authority grants a generation-scoped multidimensional
+reservation and aggregate priority/criticality; VTX orders and evicts pages only inside
+that slice. Shared pages use explicit consumer leases and one charge identity. A VTX
+pressure shortfall returns here for global deferral/fallback/cell policy, and reserved
+capacity is released only after provider, worker and GPU retirement acknowledgements.
 
 ```mermaid
 flowchart TD
@@ -302,6 +315,36 @@ cannot discard activation-critical resources beneath an Active cell. They reques
 cell eviction or an admitted fallback transition through the authority. Navigation
 scratch and tile leases likewise remain within its share, including retired tiles.
 
+[ADR-137](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
+applies this authority to Terrain/Foliage: TerrainRuntime owns provider-local tile/
+cluster semantics and disposable cache policy only inside its admitted slice, while
+this authority retains cell demand, priority, aggregate reservation and commit/evict
+barriers. Terrain readiness is generation-scoped and multi-dimensional; a cell cannot
+infer required collision/navigation/visual readiness from decoded height data alone.
+Old/new dataset generations, staging/upload copies and dependent-system retirement stay
+charged until their respective owners release the shared reservation identity.
+
+[ADR-138](../../adr/138-terrain-source-cooked-tile-cache-and-streaming-ownership.md)
+defines the concrete asset/residency handoff. This authority issues typed cell- and
+generation-scoped tile/cluster requests with an accepted reservation token; Terrain
+performs provider reads, manifest/digest validation, decode and consumer preparation.
+The verified dataset manifest, not directory contents or a Terrain-private camera queue,
+defines membership. Terrain may evict disposable decoded detail inside its slice, but
+Active/pinned cells and candidate/native leases remain charged. Changed tiles replace
+with their manifest-declared seam/dependency closure, and this authority commits only
+after the aggregate required readiness barrier succeeds.
+
+[ADR-141](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md)
+defines how that barrier composes distinct owner safe points. Terrain supplies bounded
+immutable consumer snapshots; Render, Physics and Navigation return typed request/
+incarnation/revision/fence receipts. Ready is private staging, Prepared means a no-fail
+owner-safe-point publication is ready, and Published remains activation-ticket-scoped.
+Only after every required/degradable receipt matches does RuntimeScene publish the
+aggregate root and this authority mark the cell Active. Optional absence is explicit;
+stale/missing evidence is not success. Rollback retains the old root and retires every
+started candidate, while eviction releases the shared reservation only after all owners
+acknowledge Retired.
+
 ## Streaming Volumes, Priority And Retry Policy
 
 Camera, Gameplay, NetworkRelevance and Preload volumes create bounded residency
@@ -362,11 +405,42 @@ cell loader. Standalone navigation without World Streaming keeps its existing ho
 asset-lifetime adapter. This introduces no concrete WorldStreaming dependency into
 NavigationRuntime. The two ADRs describe the same authority boundary.
 
+[ADR-105](../../adr/105-navigation-asset-and-scene-ownership-boundary.md) makes each
+cell NavigationMesh block a packaging/residency projection of a published grounded
+NavMesh cook, not an independently authored asset. It retains the source definition
+AssetId, bake-scope/profile/tile identity, exact input provenance and artifact
+digest. Generated cell tiles receive no new sidecars or authoring AssetIds, and
+streaming/runtime state never writes back to the Scene, definition or cooked base.
+A missing required block prevents cell activation; temporary nonresidency may only
+produce the existing bounded residency request plus typed partial/no-data outcome.
+
+[ADR-107](../../adr/107-navigation-query-consistency-and-snapshot-ownership.md)
+requires a navigation query snapshot to record the exact PartitionEpoch,
+StreamingGeneration and tile generations it observed. Cell activation/replacement
+publishes the complete navigation coverage root or none; Resident staging is not
+queryable. Eviction first removes coverage logically, making affected late results
+stale, then waits for query leases before physical reclamation and budget release.
+Missing coverage may create only a bounded authority request here. Complete queries
+return `NoNavigationData`, while explicitly partial queries carry missing coverage;
+neither Navigation nor a held lease performs direct loading or turns absence into
+`NoPath`.
+
+[ADR-108](../../adr/108-dynamic-overlay-carving-and-tile-rebuild-policy.md)
+classifies streamed geometry strictly as cooked cell tile installation/removal.
+Navigation cannot rebuild from streamed Render/Physics geometry, use TileCache as a
+second loader or keep an evicted tile logically active. Cell-bound obstacle overlays
+and carve/rebuild candidates carry the exact cell generation and are revoked on
+eviction; late completions are stale. Session-persistent semantic obstacles are
+reprojected only after replacement cell topology becomes Active. All staging,
+retired layers and query leases remain charged to the existing world ledger.
+
 ## Runtime Save And Dormant Cell State
 
 [Runtime persistence](./save-game-and-persistence.md) captures a coherent revision of
 active ECS plus session-owned persistent cell deltas/tombstones, including Unloaded
-cells. That ledger is not another residency authority. Before releasing the last live
+cells. Under ADR-114, Persistent World is the sole canonical adapter owner for those
+deltas; the core Scene adapter does not serialize a second copy from components or
+resident cells. That ledger is not another residency authority. Before releasing the last live
 copy during eviction, providers publish dirty state under the same owner safe point
 and registered retirement DAG. Failed delta capture/admission retains the source and
 keeps retirement charged; it cannot silently discard a dropped item or deletion.
@@ -375,6 +449,26 @@ through Ready/Prepared barriers and applies other deltas on later normal admissi
 Persisted keys use stable world/dataset/cell/entity identity; PartitionEpoch and cell
 attempt generations are freshly issued, never restored from disk. Bounded spill
 chunks are leased through capture; save archives cannot depend on temporary spill paths.
+
+[ADR-140](../../adr/140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md)
+applies the same no-loss edge to Foliage. Cell-bound ephemeral overlays retire with the
+exact cell generation. Product-authorized durable baked-instance tombstones, spawns and
+updates must transfer from Terrain's active mutation root to the Persistent World ledger
+before the last live copy retires. Session/owner-bound ephemeral state needs separate
+bounded session ownership and is never silently converted to durable state. Failed dirty
+handoff blocks eviction and remains charged; it cannot drop foliage or force a user-slot
+save. This authority still chooses cells, while Terrain validates/applies foliage
+semantics and Runtime Save owns durable capture/restore.
+
+[ADR-149](../../adr/149-destruction-persistence-replication-streaming-and-authority.md)
+applies the edge to destruction. A destructible retains its cooked stable owning cell
+even when active Physics chunks move across cell boundaries. Before last-copy eviction,
+DFR freezes exact content/revision/seed/chunk/support state and Persistent World returns
+a generation-scoped durable handoff receipt. Unsupported active motion, stale revision,
+capacity denial or handoff failure blocks retirement. Later admission applies compatible
+dormant state before aggregate Scene/DFR/Physics/Render publication. World Streaming
+still owns residency; neither DFR nor a server semantic revision can skip local provider
+readiness and budgets.
 
 ## Multiplayer Authority And Editor Isolation
 
@@ -867,6 +961,7 @@ Cancel/error before commit -> Evicting -> acknowledged resource retirement
 World streaming in Horo Engine operates on a global coordinate grid backed by 64-bit precision, avoiding single-precision float truncation over vast distances:
 
 - **Canonical Global Coordinates**: `Math::WorldCoordinate64` (`IntVector3 cellIndex` + `IntVector3 cellOffsetMm`) serves as the immutable coordinate authority for spatial cell boundaries, streaming volume queries, persistent level saves, and server multiplayer replication. The stored offset is integer millimeters, not fp32.
+- **Physics Shape Readiness**: A cell candidate acquires every exact published Physics shape artifact and immutable runtime lease required by its bodies before activation. Missing, incompatible or over-limit artifacts fail candidate preparation; streaming never cooks source or substitutes fallback collision. Retiring cells release leases only after Physics bodies, snapshots, queries and in-flight readers drain, as specified by [ADR-085](../../adr/085-physics-shape-authoring-cook-and-runtime-boundary.md).
 - **Floating Origin Rebasing**: When the active player/camera exceeds a configured threshold from the active floating origin ($R_{\text{threshold}} = 1000\,\text{m}$), `OriginRebaseCoordinator` executes an atomic two-phase rebase (`PrepareRebase` -> `CommitRebase`).
 - **Subsystem Synchronization**: The resulting `OriginRebaseEvent` translates local simulation frames across Physics, Audio, VFX, Camera, and Navigation without velocity spikes, particle destruction, or Doppler glitching.
 - **GPU Compatibility**: GPU shaders remain 32-bit `fp32` across all backends. Camera-relative transformations $(P_{\text{world}} - C_{\text{camera}})$ are computed on the CPU during render extraction.
@@ -879,12 +974,18 @@ See [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin
 - [ADR-017: Prefab Ownership](../../adr/017-prefab-role-ownership-and-capability-tiers.md): Offline expansion versus runtime spawn admission.
 - [ADR-018: Command Policy](../../adr/018-command-registration-permissions-threading-and-packaged-build-policy.md): wst/network authority and owner-thread dispatch.
 - [ADR-023: World Index and Cell Format](../../adr/023-world-index-and-cell-format-architecture-decision.md): Unchanged canonical wire formats.
+- [ADR-114: Canonical Runtime World Persistence Boundary](../../adr/114-canonical-runtime-world-persistence-boundary.md): persistent-world adapter ownership and derived/transient exclusions.
 - [ADR-010: Job and Operation Ownership](../../adr/010-job-waiting-and-operation-store-ownership.md): Bounded lifecycle drains and shared OperationStore.
 
 - [ADR-012: World Streaming Partition Authority and Subsystem Boundaries](../../adr/012-world-streaming-partition-authority-and-subsystem-boundaries.md): Partition ownership, provider barriers and resource admission.
 - [Scene Runtime](./scene-runtime.md): ECS entity storage, candidate preparation, and transactional structural mutations.
 - [Asset Pipeline](./asset-pipeline.md): Streaming cell assets, chunked package archives, and async I/O with `CancellationToken`.
 - [Terrain And Foliage Architecture](./terrain-and-foliage-architecture.md): Terrain clipmap streaming and cell-aligned foliage clusters.
+- [ADR-137](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md): Terrain/Foliage data, tier, lifecycle, readiness and reservation ownership.
+- [ADR-138](../../adr/138-terrain-source-cooked-tile-cache-and-streaming-ownership.md): Terrain dataset/tile manifests, cache authorities, typed residency requests and seam-safe generation replacement.
+- [ADR-140](../../adr/140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md): Foliage state classification, durable delta handoff and no-loss cell eviction.
+- [ADR-141](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md): Terrain consumer snapshots, typed receipts, aggregate activation and reverse-DAG retirement.
+- [ADR-149](../../adr/149-destruction-persistence-replication-streaming-and-authority.md): Destruction canonical state, server authority, durable cell handoff and late-join/streaming compatibility.
 - [Physics Architecture](./physics-architecture.md): Static mesh collider registration and scene binding.
 - [Networking Architecture](./networking-architecture.md): Server-authoritative cell relevance and replication.
 - [Concurrency And Job System](../foundation/concurrency-and-jobs.md): Job workers, cancellation tokens, and thread roles.

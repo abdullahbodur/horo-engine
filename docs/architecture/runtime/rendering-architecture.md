@@ -28,6 +28,18 @@ The equal first-class obligations of interactive backend modules are defined by
 - The active renderer backend is selected by configuration or command-line
   override at host startup. Runtime scene, editor, asset, gameplay, and MCP code
   do not branch on concrete backend types.
+- Virtual Texturing owns logical page demand, selection and residency intent under
+  [ADR-164](../../adr/164-virtual-texturing-ownership-product-scope-and-capability-tier.md).
+  Renderer owns admitted physical atlas/sparse resources, uploads, mappings, graph
+  passes and GPU-safe retirement; it does not become logical page authority.
+- Under [ADR-167](../../adr/167-vtx-feedback-readback-prediction-and-camera-data-ownership.md),
+  Renderer also owns VTX feedback/compaction/copy passes, native resources and delayed
+  readback lifetime. It publishes bounded immutable observations; it neither predicts
+  page demand nor waits for same-frame CPU consumption.
+- [ADR-168](../../adr/168-vtx-gpu-page-table-physical-cache-shader-and-material-ownership.md)
+  gives Renderer complete ownership of VTX page-table/atlas/sparse resources, uploads,
+  mappings, descriptors, graph synchronization and retirement. VTX supplies only
+  finite logical revision intent, and each frame sees one immutable binding snapshot.
 
 ## Layer Model
 
@@ -172,6 +184,13 @@ system loader, and actual-surface admission on Windows/Linux desktop. It defers
 portability-subset product support. These are downstream requirements, not a
 claim that a Vulkan backend target exists or that optional engine features are
 already implemented.
+
+[ADR-171](../../adr/171-android-host-target-and-ownership.md) owns the separate
+Android Vulkan baseline: API 29, production `arm64-v8a`, Vulkan 1.1 plus the
+Android Baseline profile, and a replaceable PlatformAndroid-owned native-window
+generation. Android Vulkan is a sibling backend specialization behind the same
+Horo contracts; ADR-031's desktop qualification does not qualify it. OpenGL ES
+is outside the initial Android product profile.
 
 [ADR-030](../../adr/030-metal-platform-and-feature-baseline.md) owns the `metal`
 component's native baseline: macOS 14.0+, Apple7 on native arm64 or Mac2 on native
@@ -1011,6 +1030,68 @@ remain pending and must not be represented as implemented UI behavior.
 
 ## Render Snapshot
 
+### Cinematic camera selection boundary
+
+[ADR-119](../../adr/119-camera-authority-during-cinematics.md) keeps active-camera
+selection outside the renderer. Runtime and PIE Camera services each resolve their
+view-context proposals, while the editor viewport controller owns its authoring
+camera. After `VariableUpdate` and before extraction, each owner publishes one
+generation-checked immutable `CameraSelectionSnapshot`. All passes and outputs for
+that rendered frame use the same selection; render execution cannot query sequence
+state or replace the camera mid-frame.
+
+Extraction projects the selection into frame-owned backend-neutral camera/view data.
+The projection includes stable view/scene generations, camera identity, selection
+epoch, transform and projection/lens values, transition state and generic
+discontinuity evidence. It never retains a scene-component pointer or includes a
+native graphics handle. Hard cuts publish one destination view. Camera-owned
+single-view blends publish one interpolated view. An advanced two-view cross-fade is
+accepted only through a declared frontend capability, qualified budget and explicit
+fallback policy; no backend may silently change the selected transition mode.
+
+Camera cuts and incompatible transitions change the generic selection epoch/
+discontinuity evidence. Reconstruction, exposure, motion and other temporal
+consumers apply their own history policy from that evidence. Cinematic Runtime never
+calls backend/provider-specific reset hooks, and rendering never decides whether a
+gameplay, cinematic or editor proposal wins.
+
+[ADR-137](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
+applies the same boundary to Terrain/Foliage. TerrainRuntime publishes a bounded,
+immutable, generation/revision-tagged extraction snapshot and retains its lease through
+frame extraction. RenderFrontend owns conversion to RenderApi resources/graph work;
+the selected backend alone owns native buffers, culling commands, draws and deferred
+GPU retirement. Rendering cannot mutate terrain residency/source/overlays, treat a
+native handle as Terrain identity or infer a Terrain tier from the backend name.
+
+[ADR-139](../../adr/139-terrain-render-extraction-material-lod-and-tier-boundary.md)
+refines that handoff. The Terrain adapter emits one bounded view-independent candidate
+snapshot with neutral geometry/artifact references, material requirements, legal LOD/
+seam data and finite costs. RenderFrontend derives `RenderObjectId` mappings and owns
+per-view visibility, compatible LOD/transition selection, material/permutation admission,
+resource realization, pass mapping and retirement. Residency, render visibility and
+gameplay relevance remain independent facts.
+
+Core 1.0 Terrain/Foliage uses deterministic bounded CPU frustum/distance/LOD/seam
+planning and backend-neutral direct or instanced batches. It does not require compute,
+GPU Scene, Hi-Z or indirect draws. A post-1.0 GPU-driven recipe may consume the same
+semantic candidates only through a separately admitted, cooked, budgeted and qualified
+renderer plan. Its GPU visibility/LOD results remain presentation-only and normal frames
+perform no readback to drive streaming or gameplay.
+
+`TerrainFeatureTier` and `RenderProductProfile` are distinct values even when labels
+match. An aggregate plan records both axes, exact variants/limits/revisions and every
+declared fallback. The renderer cannot use its profile to raise Terrain limits, discard
+required layers/holes/instances or invent a missing shader representation.
+
+[ADR-141](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md)
+places renderer preparation inside the aggregate Terrain/Scene/cell transaction.
+RenderFrontend returns typed request/incarnation/Terrain/resource revision receipts;
+Ready resources remain private, Prepared publication is prevalidated for RenderSafePoint,
+and Published resources remain activation-ticket-scoped until the aggregate root commits.
+Failure/cancellation retires the candidate while old frames/resources remain valid. Render
+alone acknowledges Retired after uploads, frames, GPU work and dependencies drain; visual
+readiness cannot be inferred from decoded Terrain or native resource existence.
+
 The scene runtime produces frame-owned render data:
 
 ```cpp
@@ -1096,6 +1177,12 @@ identities. Renderer may convert linear colors, resolve resources and batch equa
 paint state, but cannot read editor/ImGui styles, select state overrides, inherit a
 property, replace a token or mutate a computed-style generation.
 
+[ADR-080](../../adr/080-runtime-ui-presentation-scope-layer-and-route.md) gives
+Renderer one immutable `UiPresentationPlan` per view. Its semantic World, HUD,
+Screen, Overlay, Modal, Loading and Debug band order is fixed; a backend may batch
+compatible draws within the plan but cannot reorder bands. Runtime UI and the host
+own loading/debug availability, coverage and authority policy, never a backend.
+
 World-space canvases project as ordinary view-dependent render instances under
 declared depth/visibility policy. Screen-space canvases are frontend-owned passes
 composed after world/display transform unless an explicit render plan declares an
@@ -1121,7 +1208,34 @@ encoding, graph resource barriers and fence-based deferred retirement remain ren
 responsibilities. Retained snapshot and GPU leases may outlive logical scene teardown
 but cannot reference destroyed scene storage or publish into a new incarnation.
 
+[ADR-124](../../adr/124-vfx-gpu-simulation-readback-and-compute-fallback.md)
+adds only cooked, bounded VFX readback intent. The frontend validates its normalized
+schema and reservation, schedules an asynchronous post-compute copy and returns a
+generation-tagged delayed observation. The backend privately owns staging, mapping,
+cache maintenance and fences. No renderer path waits for same-frame VFX data, grants
+it gameplay authority, chooses an effect fallback or changes the selected backend.
+
+[ADR-125](../../adr/125-vfx-transparency-sorting-and-pass-placement.md) fixes the
+VFX mapping inside every raster recipe: opaque/masked outputs join standard depth and
+opaque work; sorted translucent forward reads but does not write completed depth; and
+the scene-linear additive band follows it without per-particle distance sorting. The
+frontend owns per-view stable CPU/GPU sort plans, aggregate work admission and overrun
+evidence. Assets/backends cannot name/reorder these semantic passes or depth policies.
+
+[ADR-127](../../adr/127-vfx-decal-projection-lifetime-and-rendering-path-policy.md)
+keeps logical decal placement/lifetime in VfxWorld while the frontend resolves a
+deferred-preferred or explicitly compatible forward path with the raster recipe.
+Renderer owns physical atlas storage and native passes only. `RequireDeferred` never
+silently remaps; forward-only tiers need an admitted forward variant, and neither path
+writes scene depth or renders the same decal twice in one view.
+
 ## XR Views And External Presentation Targets
+
+[ADR-160](../../adr/160-xr-rendering-openxr-compositor-and-renderer-ownership.md)
+is normative for the XR/Renderer handoff. XROpenXR owns native frame, swapchain, image
+and composition calls; Renderer owns Horo extraction, graph/GPU work, external-resource
+registration and completion evidence. The private bridge translates native resources
+without becoming a second owner.
 
 XR supplies a bounded runtime-driven set of view descriptors and
 generation-scoped runtime-owned image identities. Renderer does not assume that
@@ -1134,6 +1248,12 @@ and configuration identity so later quad-view or foveated-inset execution does
 not require a public API migration. An unsupported view configuration is
 rejected before resource acquisition and is never silently truncated.
 
+For `XRProjection1_0`, that first production admission is exactly one primary opaque
+stereo configuration with exactly two runtime views. One-view input is limited to an
+explicit simulator/test profile. Any greater-than-two configuration is retained as
+discovery evidence but fails admission before swapchain-image acquisition until the
+complete N-view path is implemented and qualified.
+
 Runtime-owned images enter the graph as typed external resources with declared:
 
 - format, extent, array/view index, and permitted uses;
@@ -1142,12 +1262,41 @@ Runtime-owned images enter the graph as typed external resources with declared:
 - synchronization and frames-in-flight lifetime;
 - session, swapchain, image, and configuration generations.
 
+An XR image and imported `RenderResourceId` are correlated, non-interchangeable
+identities. Renderer borrows the allocation for one external lease and never destroys
+it. XROpenXR releases/reuses it only after Renderer supplies completion evidence for all
+covered queue references; CPU command recording alone is insufficient. The descriptor
+also carries physical allocation extent versus active render rectangle, typed color
+representation and initial/final external synchronization state.
+
 Dynamic resolution, fixed or gaze-driven foveation, variable-rate shading,
 density maps, depth submission, and motion inputs are renderer capabilities.
 They are negotiated before frame execution. Foveation is not modeled as a
 generic post-process, and Horo does not implement runtime-owned asynchronous
 reprojection. Ordinary projection-layer rendering is the explicit fallback
 when optional features are unavailable.
+
+One immutable XR render-quality plan separates swapchain extent, render rectangle,
+dynamic scale/controller, fixed or gaze-driven foveation, Renderer VRS versus runtime
+density-map mechanism, privacy revision and fallback. Scale/plan changes occur at a safe
+point and invalidate/migrate histories by explicit policy; they do not recreate a
+swapchain every frame. Space-warp depth/motion/timing inputs require their own declared
+semantics and cannot be substituted with generic motion-blur data.
+
+XRRuntime supplies one complete frame and backend-neutral layer intent. Renderer returns
+typed submission/completion evidence but never calls native image release or end-frame.
+XROpenXR validates and encodes native layers after required targets complete. Runtime
+asynchronous reprojection, distortion, scan-out and guardian/chaperone remain outside
+the Horo graph. A desktop mirror is an independent ADR-033 output, not proof that the XR
+compositor presented successfully.
+
+[ADR-162](../../adr/162-mixed-reality-ownership-privacy-and-capability-tier.md)
+keeps mixed-reality providers outside Renderer. Passthrough arrives only as an admitted
+backend-neutral compositor-layer plan; Renderer owns virtual pixels/depth/occlusion but
+receives no raw camera stream or permission handle. Bounded light estimates are optional
+inputs with provider/spatial/access generations and cannot rewrite authored lights,
+exposure or color authority. Observed room geometry reaches GPU resources only through
+an explicit destination-owned derived adapter, never a provider callback.
 
 See [XR Architecture](./vr-ar-architecture.md) for session, view, capability,
 privacy, and qualification ownership.
@@ -1433,6 +1582,12 @@ Required tests cover:
 - deterministic pass ordering
 - stale resource handle rejection
 - upload cancellation and generation replacement
+- terrain/foliage extraction generation, tier/capability rejection and GPU-resource
+  retirement without native identity leaking back to Terrain
+- Terrain view-independent candidate capacity/multi-view tests, CPU 1.0 per-view LOD/
+  seam selection and explicit post-1.0 GPU-recipe admission/fallback
+- Terrain material classification/permutation failure and Terrain-tier/render-profile
+  independence without silent layer, hole, instance or required-quality loss
 - resize, minimize, and target recreation
 - deferred destruction after frame completion
 - shader reflection/material validation
@@ -1458,3 +1613,6 @@ Required tests cover:
 - [Ownership And Resource Lifetime](../foundation/ownership-and-resource-lifetime.md)
 - [Platform Abstraction](../foundation/platform-abstraction.md)
 - [XR Architecture](./vr-ar-architecture.md)
+- [ADR-137: Terrain and Foliage Ownership, Data, Tier and Lifecycle](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
+- [ADR-139: Terrain Render Extraction, Material, LOD and Tier Boundary](../../adr/139-terrain-render-extraction-material-lod-and-tier-boundary.md)
+- [ADR-141: Terrain/Foliage Cross-System Ownership and Readiness](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md)

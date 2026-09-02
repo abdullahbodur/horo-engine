@@ -26,6 +26,26 @@ project-authored UI use project-owned namespaces.
 - Layout and components must tolerate expansion, right-to-left text, and font
   fallback.
 
+## Runtime UI Boundary
+
+[ADR-081](../../adr/081-runtime-ui-and-localization-ownership-boundary.md) makes
+Localization the authority for catalog schemas, namespaces, locale resolution,
+typed formatting, translation fallback and immutable localization snapshots.
+Application/game policy selects the requested/default/source locale; Runtime UI
+stores typed localized references but never owns a second active locale or opens
+catalog files.
+
+Localization returns owned Unicode text, typed spans and locale evidence. Runtime
+UI Text owns segmentation, bidi, shaping, line breaking, ADR-075 font fallback and
+ADR-074 measurement/layout. Translation fallback, font fallback and localized
+visual/audio asset fallback are distinct decisions with separate identities and
+failure policy.
+
+Locale/catalog publication is immutable and revisioned. Runtime UI pins one exact
+snapshot per text/font/layout generation and may retain its last-good presentation
+while a replacement prepares. Editor GUI localization and isolated game preview
+use separate locale contexts; neither silently mutates the other.
+
 ## Editor Adoption And Dynamic Text Extraction
 
 The editor migration replaces user-facing hardcoded sentences with semantic
@@ -70,6 +90,13 @@ resolved through the source fallback catalog so the control remains usable when
 switching languages.
 
 ### Initial migration boundary
+
+ADR-110 navigation surfaces use editor-owned stable message keys for visible
+document/panel/modal labels, actions, tooltips, empty/loading/stale/error states,
+validation messages and accessibility names. Asset names, profile IDs, provider
+fingerprints, paths and error codes remain typed technical data. Navigation UI
+implementation changes update `en-US` and `tr-TR` catalogs together and test long
+localized text in narrow dock/modal layouts.
 
 The first migration covers editor-owned visible labels, buttons, tabs, tooltips,
 placeholders, modal status text, and user-facing validation/error text. It does

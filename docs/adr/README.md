@@ -91,6 +91,99 @@ to the replacement.
 | [077](077-runtime-ui-animation-clock-and-time-domain.md) | Runtime UI Animation Clock and Time Domain | Proposed | 2026-09-02 |
 | [078](078-runtime-ui-input-context-and-player-routing.md) | Runtime UI Input Context and Player Routing | Proposed | 2026-09-02 |
 | [079](079-runtime-ui-binding-provider-schema-identity-and-lifetime.md) | Runtime UI Binding Provider Schema, Identity and Lifetime | Proposed | 2026-09-02 |
+| [080](080-runtime-ui-presentation-scope-layer-and-route.md) | Runtime UI Presentation Scope, Layer and Route | Proposed | 2026-09-02 |
+| [081](081-runtime-ui-and-localization-ownership-boundary.md) | Runtime UI and Localization Ownership Boundary | Proposed | 2026-09-02 |
+| [082](082-runtime-ui-accessibility-capability-and-ownership.md) | Runtime UI Accessibility Capability and Ownership | Proposed | 2026-09-02 |
+| [083](083-ui-template-identity-schema-and-expansion.md) | UI Template Identity, Schema and Expansion | Proposed | 2026-09-02 |
+| [084](084-canonical-physics-solver-units-and-tolerances.md) | Canonical Physics Solver, Units and Tolerances | Proposed | 2026-09-02 |
+| [085](085-physics-shape-authoring-cook-and-runtime-boundary.md) | Physics Shape Authoring, Cook and Runtime Boundary | Proposed | 2026-09-02 |
+| [086](086-collision-layer-profile-and-query-channel-policy.md) | Collision Layer, Profile and Query Channel Policy | Proposed | 2026-09-02 |
+| [087](087-scene-to-physics-ownership-and-conversion.md) | Scene-to-Physics Ownership and Conversion | Proposed | 2026-09-02 |
+| [088](088-physics-determinism-capability-and-support-tiers.md) | Physics Determinism Capability and Support Tiers | Proposed | 2026-09-02 |
+| [089](089-character-controller-ownership-implementation-and-update-order.md) | Character Controller Ownership, Implementation and Update Order | Proposed | 2026-09-02 |
+| [090](090-character-dynamic-body-visibility-push-and-proxy-policy.md) | Character Dynamic-Body Visibility, Push and Proxy Policy | Proposed | 2026-09-02 |
+| [091](091-footstep-and-locomotion-event-ownership.md) | Footstep and Locomotion Event Ownership | Proposed | 2026-09-02 |
+| [092](092-character-controller-determinism-and-state-composition.md) | Character Controller Determinism and State Composition | Proposed | 2026-09-02 |
+| [093](093-prefab-override-property-identity-and-delta-operations.md) | Prefab Override Property Identity and Delta Operations | Proposed | 2026-09-02 |
+| [094](094-prefab-nested-composition-and-variant-inheritance.md) | Prefab Nested Composition and Variant Inheritance | Proposed | 2026-09-02 |
+| [095](095-prefab-cook-boundary-and-artifact-model.md) | Prefab Cook Boundary and Artifact Model | Proposed | 2026-09-02 |
+| [096](096-prefab-external-reference-and-binding-slot-contract.md) | Prefab External Reference and Binding Slot Contract | Proposed | 2026-09-02 |
+| [097](097-default-real-time-transport-backend.md) | Default Real-Time Transport Backend | Proposed | 2026-09-02 |
+| [098](098-protocol-session-and-trust-policy.md) | Protocol, Session and Trust Policy | Proposed | 2026-09-02 |
+| [099](099-replication-ownership-authority-and-compatibility.md) | Replication Ownership, Authority and Compatibility | Proposed | 2026-09-02 |
+| [100](100-prediction-capability-tiers-and-determinism-policy.md) | Prediction Capability Tiers and Determinism Policy | Proposed | 2026-09-02 |
+| [101](101-interest-priority-and-network-budget-model.md) | Interest, Priority and Network Budget Model | Proposed | 2026-09-02 |
+| [102](102-runtime-network-modes-and-authority-exposure.md) | Runtime Network Modes and Authority Exposure | Proposed | 2026-09-02 |
+| [103](103-network-project-configuration-and-build-profile-ownership.md) | Network Project Configuration and Build-Profile Ownership | Proposed | 2026-09-02 |
+| [104](104-default-navigation-provider-and-recast-detour-adoption.md) | Default Navigation Provider and Recast-Detour Adoption | Proposed | 2026-09-02 |
+| [105](105-navigation-asset-and-scene-ownership-boundary.md) | Navigation Asset and Scene Ownership Boundary | Proposed | 2026-09-02 |
+| [106](106-navigation-bake-ownership-transaction-and-cache.md) | Navigation Bake Ownership, Transaction and Cache | Proposed | 2026-09-02 |
+| [107](107-navigation-query-consistency-and-snapshot-ownership.md) | Navigation Query Consistency and Snapshot Ownership | Proposed | 2026-09-02 |
+| [108](108-dynamic-overlay-carving-and-tile-rebuild-policy.md) | Dynamic Overlay, Carving and Tile-Rebuild Policy | Proposed | 2026-09-02 |
+| [109](109-avoidance-crowd-and-renderer-independent-budget.md) | Avoidance, Crowd and Renderer-Independent Budget | Proposed | 2026-09-02 |
+| [110](110-navigation-editor-surface-and-command-ownership.md) | Navigation Editor Surface and Command Ownership | Proposed | 2026-09-02 |
+| [111](111-gameplay-ai-document-panel-and-runtime-debug-ownership.md) | Gameplay AI Document, Panel and Runtime-Debug Ownership | Proposed | 2026-09-02 |
+| [112](112-save-archive-container-and-compatibility-policy.md) | Save Archive Container and Compatibility Policy | Proposed | 2026-09-02 |
+| [113](113-local-storage-user-profile-and-slot-ownership.md) | Local Storage, User Profile and Slot Ownership | Proposed | 2026-09-02 |
+| [114](114-canonical-runtime-world-persistence-boundary.md) | Canonical Runtime World Persistence Boundary | Proposed | 2026-09-02 |
+| [115](115-cloud-save-authority-revision-and-conflict-policy.md) | Cloud Save Authority, Revision and Conflict Policy | Proposed | 2026-09-02 |
+| [116](116-save-data-threat-model-and-trust-policy.md) | Save Data Threat Model and Trust Policy | Proposed | 2026-09-02 |
+| [117](117-playback-ownership-frame-order-and-determinism.md) | Playback Ownership, Frame Order and Determinism | Proposed | 2026-09-02 |
+| [118](118-animation-character-and-gameplay-authority-during-cinematics.md) | Animation, Character and Gameplay Authority During Cinematics | Proposed | 2026-09-02 |
+| [119](119-camera-authority-during-cinematics.md) | Camera Authority During Cinematics | Proposed | 2026-09-02 |
+| [120](120-cinematic-event-dispatch-and-audio-coupling-boundary.md) | Cinematic Event Dispatch and Audio Coupling Boundary | Proposed | 2026-09-02 |
+| [121](121-cinematic-editor-document-and-authoring-context.md) | Cinematic Editor Document and Authoring Context | Proposed | 2026-09-02 |
+| [122](122-cinematic-trigger-sources-and-capability-policy.md) | Cinematic Trigger Sources and Capability Policy | Proposed | 2026-09-02 |
+| [123](123-vfx-cpu-stage-order-determinism-and-gameplay-coupling.md) | VFX CPU Stage Order, Determinism and Gameplay Coupling | Proposed | 2026-09-02 |
+| [124](124-vfx-gpu-simulation-readback-and-compute-fallback.md) | VFX GPU Simulation, Readback and Compute Fallback | Proposed | 2026-09-02 |
+| [125](125-vfx-transparency-sorting-and-pass-placement.md) | VFX Transparency, Sorting and Pass Placement | Proposed | 2026-09-02 |
+| [126](126-vfx-graph-compilation-and-runtime-representation-convergence.md) | VFX Graph Compilation and Runtime Representation Convergence | Proposed | 2026-09-02 |
+| [127](127-vfx-decal-projection-lifetime-and-rendering-path-policy.md) | VFX Decal Projection, Lifetime and Rendering Path Policy | Proposed | 2026-09-02 |
+| [128](128-vfx-spawn-event-mapping-pooling-and-budget-enforcement.md) | VFX Spawn Event Mapping, Pooling and Budget Enforcement | Proposed | 2026-09-02 |
+| [129](129-vfx-editor-document-live-preview-and-module-authoring.md) | VFX Editor Document, Live Preview and Module Authoring | Proposed | 2026-09-02 |
+| [130](130-platform-services-frontend-request-lifetime-timeout-null-and-error-semantics.md) | Platform Services Frontend, Request Lifetime, Timeout, Null and Error Semantics | Proposed | 2026-09-02 |
+| [131](131-platform-services-closed-sdk-extension-abi-package-and-composition-boundary.md) | Platform Services Closed SDK, Extension ABI, Package and Composition Boundary | Proposed | 2026-09-02 |
+| [132](132-platform-services-project-salt-stable-id-tombstone-and-provider-mapping.md) | Platform Services Project Salt, Stable ID, Tombstone and Provider Mapping | Proposed | 2026-09-02 |
+| [133](133-platform-progression-authority-trust-and-idempotency.md) | Platform Progression Authority, Trust and Idempotency | Proposed | 2026-09-02 |
+| [134](134-cloud-blob-transport-revision-precondition-and-offline-ownership.md) | Cloud Blob Transport, Revision Preconditions and Offline Ownership | Proposed | 2026-09-02 |
+| [135](135-platform-identity-session-generation-privacy-and-consent.md) | Platform Identity, Session Generation, Privacy and Consent | Proposed | 2026-09-02 |
+| [136](136-platform-offline-queue-ownership-replay-and-cloud-intent-boundary.md) | Platform Offline Queue Ownership, Replay and Cloud Intent Boundary | Proposed | 2026-09-02 |
+| [137](137-terrain-foliage-ownership-data-tier-and-lifecycle.md) | Terrain and Foliage Ownership, Data, Tier and Lifecycle | Proposed | 2026-09-02 |
+| [138](138-terrain-source-cooked-tile-cache-and-streaming-ownership.md) | Terrain Source, Cooked Tile, Cache and Streaming Ownership | Proposed | 2026-09-02 |
+| [139](139-terrain-render-extraction-material-lod-and-tier-boundary.md) | Terrain Render Extraction, Material, LOD and Tier Boundary | Proposed | 2026-09-02 |
+| [140](140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md) | Foliage Placement, Baked/Dynamic State and Eviction Ownership | Proposed | 2026-09-02 |
+| [141](141-terrain-foliage-cross-system-ownership-and-readiness.md) | Terrain/Foliage Cross-System Ownership and Readiness | Proposed | 2026-09-02 |
+| [142](142-terrain-foliage-document-tool-undo-and-preview-ownership.md) | Terrain/Foliage Document, Tool, Undo and Preview Ownership | Proposed | 2026-09-02 |
+| [143](143-terrain-foliage-scale-budgets-observability-and-feature-boundary.md) | Terrain/Foliage Scale Budgets, Observability and Feature Boundary | Proposed | 2026-09-02 |
+| [144](144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md) | Destruction Ownership, Authority, State and Runtime Geometry Boundary | Proposed | 2026-09-02 |
+| [145](145-destruction-source-chunk-geometry-collision-and-cook-ownership.md) | Destruction Source, Chunk Geometry, Collision and Cook Ownership | Proposed | 2026-09-02 |
+| [146](146-destruction-runtime-activation-physics-cleanup-and-rollback.md) | Destruction Runtime Activation, Physics, Cleanup and Rollback | Proposed | 2026-09-02 |
+| [147](147-destruction-event-and-cosmetic-consumer-ownership.md) | Destruction Event and Cosmetic Consumer Ownership | Proposed | 2026-09-02 |
+| [148](148-fracture-document-generator-undo-and-preview-ownership.md) | Fracture Document, Generator, Undo and Preview Ownership | Proposed | 2026-09-02 |
+| [149](149-destruction-persistence-replication-streaming-and-authority.md) | Destruction Persistence, Replication, Streaming and Authority | Proposed | 2026-09-02 |
+| [150](150-pcg-graph-source-cooked-plan-cache-and-runtime-ownership.md) | PCG Graph Source, Cooked Plan, Cache and Runtime Ownership | Proposed | 2026-09-02 |
+| [151](151-pcg-ownership-authority-tier-and-lifecycle.md) | PCG Ownership, Authority, Tier and Lifecycle | Proposed | 2026-09-02 |
+| [152](152-pcg-spatial-input-snapshot-and-node-library-ownership.md) | PCG Spatial Input Snapshot and Node-Library Ownership | Proposed | 2026-09-02 |
+| [153](153-pcg-pure-evaluation-commit-and-generated-output-ownership.md) | PCG Pure Evaluation, Commit and Generated-Output Ownership | Proposed | 2026-09-02 |
+| [154](154-pcg-cross-system-authority-readiness-and-commit-boundary.md) | PCG Cross-System Authority, Readiness and Commit Boundary | Proposed | 2026-09-02 |
+| [155](155-pcg-graph-document-preview-bake-and-undo-ownership.md) | PCG Graph Document, Preview, Bake and Undo Ownership | Proposed | 2026-09-02 |
+| [156](156-pcg-scale-budgets-trust-and-release-scope.md) | PCG Scale Budgets, Trust and Release Scope | Proposed | 2026-09-02 |
+| [157](157-xr-ownership-runtime-composition-and-capability-tier.md) | XR Ownership, Runtime Composition and Capability Tier | Proposed | 2026-09-02 |
+| [158](158-openxr-loader-backend-packaging-and-host-composition.md) | OpenXR Loader, Backend Packaging and Host Composition | Proposed | 2026-09-02 |
+| [159](159-xr-action-tracking-and-input-projection-ownership.md) | XR Action, Tracking and Input-Projection Ownership | Proposed | 2026-09-02 |
+| [160](160-xr-rendering-openxr-compositor-and-renderer-ownership.md) | XR Rendering, OpenXR Compositor and Renderer Ownership | Proposed | 2026-09-02 |
+| [161](161-xr-interaction-runtime-ui-locomotion-and-accessibility-ownership.md) | XR Interaction, Runtime UI, Locomotion and Accessibility Ownership | Proposed | 2026-09-02 |
+| [162](162-mixed-reality-ownership-privacy-and-capability-tier.md) | Mixed-Reality Ownership, Privacy and Capability Tier | Proposed | 2026-09-02 |
+| [163](163-xr-tooling-diagnostics-privacy-and-qualification-ownership.md) | XR Tooling, Diagnostics, Privacy and Qualification Ownership | Proposed | 2026-09-02 |
+| [164](164-virtual-texturing-ownership-product-scope-and-capability-tier.md) | Virtual Texturing Ownership, Product Scope and Capability Tier | Proposed | 2026-09-02 |
+| [165](165-virtual-texture-source-cooked-artifact-page-store-and-cache-ownership.md) | Virtual Texture Source, Cooked Artifact, Page Store and Cache Ownership | Proposed | 2026-09-02 |
+| [166](166-vtx-feature-local-residency-and-eviction-within-global-reservations.md) | VTX Feature-Local Residency and Eviction Within Global Reservations | Proposed | 2026-09-02 |
+| [167](167-vtx-feedback-readback-prediction-and-camera-data-ownership.md) | VTX Feedback, Readback, Prediction and Camera-Data Ownership | Proposed | 2026-09-02 |
+| [168](168-vtx-gpu-page-table-physical-cache-shader-and-material-ownership.md) | VTX GPU Page Table, Physical Cache, Shader and Material Ownership | Proposed | 2026-09-02 |
+| [169](169-vtx-producer-terrain-world-streaming-packaging-and-server-ownership.md) | VTX Producer, Terrain, World Streaming, Packaging and Server Ownership | Proposed | 2026-09-02 |
+| [170](170-vtx-settings-diagnostics-capture-and-qualification-ownership.md) | VTX Settings, Diagnostics, Capture and Qualification Ownership | Proposed | 2026-09-02 |
+| [171](171-android-host-target-and-ownership.md) | Android Host, Target and Ownership | Proposed | 2026-09-02 |
+| [172](172-immersive-agent-ownership-authoring-mode-and-risk.md) | Immersive Agent Ownership, Authoring Mode and Risk | Proposed | 2026-09-02 |
 
 ## Conventions
 

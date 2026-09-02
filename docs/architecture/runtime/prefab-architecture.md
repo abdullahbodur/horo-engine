@@ -7,6 +7,12 @@ are authored, validated, and versioned as project assets, how prefab instances a
 placed and expanded in scenes, and how cooked prefabs are dynamically spawned at
 runtime by Gameplay and SceneRuntime systems.
 
+Runtime UI templates are a separate typed element/property domain governed by
+[ADR-083](../../adr/083-ui-template-identity-schema-and-expansion.md). They do not
+reuse prefab `EntityId`, component payload, transform, behavior callback or runtime
+spawn semantics; common stable-identity and deterministic-expansion principles do
+not merge their authorities.
+
 ## Core Decisions And Dual-Role Model
 
 Horo Engine resolves the tension between authoring convenience, static scene
@@ -123,14 +129,122 @@ own those delivery decisions:
 
 ### Tier 2: Live Variant Inheritance & Dynamic Override Tracking (Deferred)
 
-- **Prefab Variants**: A variant `.prefab` references a parent base prefab `AssetId` and stores
-  only delta overrides (modified property fields, added/removed components, extra child objects).
-- **Variant Inheritance DAG**: Multi-level variant chains (`Base -> VariantA -> VariantB`) validated
-  for acyclicity.
+[ADR-093](../../adr/093-prefab-override-property-identity-and-delta-operations.md)
+fixes the property/component identity and delta foundation used by this tier, and
+[ADR-094](../../adr/094-prefab-nested-composition-and-variant-inheritance.md)
+fixes nested-placement, single-parent variant and resolution semantics. Neither
+decision moves the tier into the implemented baseline; delivery and UI remain
+their owning work.
+
+- **Prefab Variants**: A variant `.prefab` references exactly one immediate parent `AssetId` and
+  stores only ADR-093 property/component deltas. V1 rejects multiple parents and hierarchy
+  add/remove/reparent operations.
+- **Combined Semantic Graph**: Multi-level variant chains (`Base -> VariantA -> VariantB`) and
+  nested-placement edges are validated together for acyclicity and explicit bounds.
 - **Live Editor Propagation**: When a base prefab is modified and saved, open variant documents,
   scenes referencing the prefab, and active viewport sessions update in real time.
 - **Granular Override Management**: Deep per-property diffing, revert-to-prefab, and apply-to-prefab
   workflows in the Inspector panel.
+
+### Stable Override Identity And Delta Algebra
+
+Overrides address the exact source `AssetId`/revision, nested `LocalObjectId` scope,
+target `LocalObjectId`, registered `ComponentTypeId`, persisted
+`ComponentInstanceId` and typed `PropertyId` path. Built-in and project/package
+components use the same schema registry. Display/localization/JSON/C++ names,
+offsets, reflection/component order and collection indexes are never durable
+identity.
+
+Collections declare `Atomic`, `StableElements` or `CanonicalMap`. An unkeyed
+sequence accepts only whole-property assignment. Granular element operations use a
+persisted `CollectionElementId` or canonical typed map key and stable move anchors.
+
+V1's closed operations are `AssignValue`, `InsertElement`, `RemoveElement`,
+`MoveElement`, `AssignElementValue`, `AddComponent` and `RemoveComponent`. Revert
+removes the corresponding record through an Editor command; it is not a serialized
+operation. Hierarchy add/remove/reparent remains a separate decision and is rejected
+by this algebra.
+
+Records carry exact source/schema revision and canonical expected-value/component
+digests. They sort canonically by object scope, local object, component type/
+instance, property path, target class and operation rank. Duplicate/conflicting
+same-layer operations fail rather than using serialized last-write-wins order.
+
+Schema canonical bytes own equality. The comparison default is the exact effective
+immediate source-layer value, not the current registry default or Inspector string.
+Equal assignments are removed as redundant; added components store a complete
+validated payload so later default changes cannot reinterpret them.
+
+Source updates produce a detached deterministic three-way rebase candidate.
+Simultaneous incompatible changes become explicit conflicts; missing/retyped/
+unresolvable targets become losslessly preserved orphans. IDs retarget only through
+registered ProjectVersion/schema migrations. Opening, saving or package unload
+never guesses or drops records.
+
+Apply, revert, conflict resolution, rebase and apply-to-prefab run through typed
+document/application transactions with undo/history, revision, dirty-state and
+atomic-save semantics. Inspector/file-watcher/serializer code does not mutate the
+document or `.prefab` file directly.
+
+### Nested Composition And Variant Resolution
+
+[ADR-094](../../adr/094-prefab-nested-composition-and-variant-inheritance.md)
+defines two and only two prefab semantic edges. A concrete prefab may own bounded
+`NestedPlacement` edges, each identified by a unique persisted `LocalObjectId` slot.
+A variant owns exactly one `VariantParent` edge and an ADR-093 override set. Resource
+dependencies are not composition edges. Multiple inheritance, mixins, conditional
+parents, construction scripts and V1 hierarchy add/remove/reparent deltas are
+rejected.
+
+Resolution uses one immutable Asset Registry snapshot. A concrete asset materializes
+its authored objects, recursively resolves each nested source, applies the
+placement-local override and mounts it at the placement slot. A variant resolves
+its single immediate parent and then applies its delta. A scene instance resolves
+its selected asset and applies its instance delta last. This recursive algorithm,
+not serialized order, defines precedence and emits bounded per-object/property
+provenance for the Editor.
+
+The combined graph includes `NestedPlacement` and `VariantParent` edges and must be
+acyclic even when a cycle crosses edge kinds. Variant paths are limited to 8 edges,
+nested-placement paths to 16 edges and one concrete document to 256 direct nested
+placements; existing expanded hierarchy/object/component/payload bounds still
+apply. Validation, re-resolution and ADR-093 rebase produce detached candidates.
+Cycle, revision, conflict, bound, cancellation or stale-snapshot failure publishes
+nothing and preserves the previous document/projection.
+
+Cook consumes the complete resolved candidate. Its dependency-aware key includes
+edge kinds, placement IDs, reachable source revisions and override digests, then it
+flattens the hierarchy. Packaged runtime does not traverse authoring inheritance or
+composition graphs and never runs construction behavior to produce prefab data.
+
+### External Reference Boundary And Binding Slots
+
+[ADR-096](../../adr/096-prefab-external-reference-and-binding-slot-contract.md)
+permits only stable prefab-local object/component references, typed `AssetId`
+references and references to declared binding slots. Direct serialized scene object
+IDs, runtime `EntityRef`, ECS/component addresses, pointers, paths and name/tag
+queries are invalid in prefab source, variants, overrides and cooked templates.
+
+A concrete prefab may declare at most 64 stable `PrefabBindingSlotId` interfaces,
+each typed as an external scene object or registered component and marked Required
+or Optional. Variants inherit declarations unchanged. Bindings are separate from
+ADR-093 overrides and spawn initialization values: they map one declared interface
+to an external identity for one placement/spawn and have no default comparison,
+apply/revert or property operation semantics.
+
+Static scene instances bind slots to stable scene-authoring targets. Nested
+placements may bind an inner slot to a containing prefab-local target or re-expose
+it through an exactly compatible outer slot; they cannot capture a scene target.
+Dynamic spawn requests carry bounded copied `EntityRef` bindings that are
+revalidated for target scene, generation, component schema, uniqueness and required
+coverage at owner-thread commit. Missing required or invalid supplied optional
+bindings fail transactionally. Omitted optional slots become typed `Unbound` with no
+search or fallback.
+
+Create-from-selection classifies every known reference. Internal targets become
+stable local references, assets retain `AssetId`, and every external/opaque crossing
+is reported for explicit include, expose-slot or cancel action. The transaction
+never silently nulls, copies or captures an external scene object.
 
 ---
 
@@ -193,6 +307,12 @@ namespace Horo::Prefab {
     inline constexpr std::size_t MaximumPrefabObjectCount    = 256;
     inline constexpr std::size_t MaximumPrefabPayloadBytes   = 4 * 1024 * 1024; // 4 MiB
     inline constexpr std::size_t MaximumPrefabComponentsPerObject = 64;
+    inline constexpr std::size_t MaximumVariantInheritanceDepth = 8;
+    inline constexpr std::size_t MaximumNestedPrefabDepth = 16;
+    inline constexpr std::size_t MaximumDirectNestedPlacements = 256;
+    inline constexpr std::size_t MaximumPrefabBindingSlots = 64;
+    inline constexpr std::size_t MaximumPrefabBindingUses = 256;
+    inline constexpr std::size_t MaximumPrefabInstanceBindings = 64;
     inline constexpr std::size_t MaximumRuntimeSpawnDepth = 8; // inherited lineage, including target
 }
 ```
@@ -204,11 +324,13 @@ validate incrementally before expansion exceeds allocation limits. Limits are en
 save/import/placement, at cook (no artifact on failure), and before runtime staging.
 
 Runtime validates the artifact envelope and actual table offsets, lengths, alignment, parent
-indices, component counts, and hierarchy; header counts alone are not trusted. Require exactly
-one root, unique local IDs, valid parents, and an acyclic connected hierarchy. Invalid authored
-graphs return `InvalidHierarchy`; malformed cooked encoding returns `CorruptedPayload`;
-well-formed over-limit input returns the relevant bounds error. Static nested-inclusion cycles
-return `CyclicReferenceDetected` at authoring/cook time.
+indices, component counts, and hierarchy; header counts alone are not trusted. A concrete source
+requires exactly one root, unique local IDs, valid parents, and an acyclic connected hierarchy;
+it may own nested placements but no variant parent. A variant owns no parallel object or placement
+hierarchy and requires exactly one immediate parent. Invalid authored graphs return
+`InvalidHierarchy`; malformed cooked encoding returns `CorruptedPayload`; well-formed over-limit
+input returns the relevant bounds error. Combined nested/inheritance cycles return
+`CyclicComposition` at authoring/cook time.
 
 ### Authoring Document Structure (`PrefabDocument`)
 
@@ -230,10 +352,28 @@ struct PrefabObjectNode {
     std::vector<Gameplay::BehaviorAttachmentDefinition> behaviors;
 };
 
+struct NestedPrefabPlacementV1 {
+    LocalObjectId placementLocalId; // Persisted scope segment, never an array index
+    std::optional<LocalObjectId> parentLocalId;
+    Assets::AssetId sourcePrefab;
+    PrefabSourceRevision authoredAgainst;
+    Transform localRootTransform;
+    PrefabOverrideSetV1 overrides;
+};
+
+struct PrefabVariantInheritanceV1 {
+    Assets::AssetId immediateParent; // Exactly one parent for a variant
+    PrefabSourceRevision authoredAgainst;
+    PrefabOverrideSetV1 overrides;
+};
+
 struct PrefabDocument {
     HoroProjectVersion projectVersion; // Unified authoring version, not a prefab schema counter
     Assets::AssetId assetId;
-    std::vector<PrefabObjectNode> objects; // first node is root; local IDs are persisted, possibly sparse
+    std::vector<PrefabObjectNode> objects; // concrete only; first node is root; IDs may be sparse
+    std::vector<NestedPrefabPlacementV1> nestedPlacements; // concrete assets only
+    std::optional<PrefabVariantInheritanceV1> variant; // variant assets only
+    std::vector<PrefabBindingSlotDeclarationV1> bindingSlots; // concrete assets only
     std::vector<Assets::AssetId> referencedAssets;
 };
 ```
@@ -243,6 +383,35 @@ struct PrefabDocument {
 ## Runtime Cooked Prefab (`CookedPrefab`)
 
 The Asset Pipeline cooks source `.prefab` files into immutable `CookedPrefab` artifacts.
+
+### Cook Boundary And Artifact Roles
+
+[ADR-095](../../adr/095-prefab-cook-boundary-and-artifact-model.md) separates four
+representations. Project-owned `PrefabDocument` source is migrated before cook and
+is not a runtime artifact. ADR-094's immutable `EffectivePrefabCandidateV1` is the
+only nested/variant expansion result consumed by viewport, Scene Cook and Prefab
+Cook; it is never edited, registered, packaged or loaded by runtime.
+
+Scene Cook embeds static placements as ordinary entity/component definitions in
+the cooked scene's `RuntimeSceneDefinition`. Prefab Cook emits a separate flat
+`CookedPrefab` only for declared dynamic-spawn roots. Both invoke the same Prefab
+resolver; neither generic Assets nor Scene Runtime re-expands the graph. AssetCook
+owns bounded scheduling, cache validation, staging, deterministic manifests and
+atomic generation publication, while the Prefab/Scene domains own semantic
+resolution and their typed output schemas.
+
+The dependency-aware key covers exact source and transitive revisions/digests,
+ProjectVersion, package/schema/resolver revisions, semantic edges/placement IDs,
+override digests, contribution/output/envelope versions, target/profile and—per
+role—scene placement/conversion or dynamic-spawn format policy. Candidate failure,
+cancellation, corruption, stale completion or publication failure leaves the prior
+`current.json` and provider generation active.
+
+Standard releases ship no raw `.prefab`, sidecar, effective candidate or editor
+provenance. Static-only prefab content appears only in the cooked scene. A
+`CookedPrefab` and its resource closure ship only when reachable from a declared
+dynamic-spawn root. Developer source profiles may include sources explicitly, but
+they never become runtime parsing authority.
 
 Source `.prefab` files share `ProjectVersion` and its migration pipeline. Cooked blobs do **not**.
 The header carries a distinct `cookedFormatVersion`. Runtime never migrates cooked bytes.
@@ -259,6 +428,12 @@ Source migrations, dependency/target/settings changes, and cooker/format changes
 output. `UnsupportedCookedVersion` fails the runtime operation; only authoring/build tools
 recook and republish a compatible catalog/artifact. Runtime neither migrates nor recooks.
 `CorruptedPayload` is a separate envelope, magic, digest, or structural validation failure.
+
+Development hot reload activates a fully validated replacement generation. Later
+spawns use its `CookedPrefab`; already spawned entities remain unchanged. Static
+source changes produce a new cooked scene candidate and require the normal Scene
+Runtime activation transaction. Asset reload never patches scene-owned entities or
+falls back to source parsing.
 
 ### Binary Layout
 
@@ -300,6 +475,8 @@ namespace Horo::Runtime {
         Assets::AssetId prefabAssetId;
         Transform spawnTransform;
         std::optional<EntityRef> parentEntity{std::nullopt};
+        BoundedVector<PrefabRuntimeBindingV1> externalBindings;
+        PrefabInitializationValuesV1 initialization;
     };
 
     struct SpawnedPrefabHandle {
@@ -411,19 +588,28 @@ spawn chains still need protection across queues, frame boundaries, and asynchro
 To support modular gameplay packages and project-specific C++ plugins:
 
 1. **Opaque Preservation Contract**:
+
    ```cpp
    struct RawComponentPayload {
-       std::string componentTypeId;
+       ComponentTypeId componentType;
+       ComponentInstanceId componentInstance;
        std::uint32_t schemaVersion{1};
        std::vector<std::uint8_t> serializedBytes;
    };
    ```
+
 2. **Editor Roundtrip**: If an authored prefab or scene contains custom component types unknown to
    the base editor binary, the data is preserved in `RawComponentPayload` verbatim. Saving, cloning,
    or expanding the prefab preserves these components without truncation.
 3. **Runtime Spawning Safety**: If an unregistered component type is encountered during runtime
    spawn, the transaction aborts before publishing entities or invoking behavior lifecycle hooks.
    Staging discards unpublished storage (no gameplay behavior instance was constructed) and returns `PrefabError::ComponentTypeUnregistered`.
+
+Unknown override records for that component preserve their stable component/property
+envelope and original bounded canonical bytes as ADR-093 orphans. Package unload,
+round-trip save or source rebase cannot translate them through display names or
+discard them. Cook/runtime expansion remains blocked until the schema is available
+and the records validate or an explicit transaction deletes them.
 
 ---
 
@@ -442,6 +628,13 @@ enum class PrefabError : std::uint32_t {
     ObjectCountExceeded,        // Template exceeds MaximumPrefabObjectCount (256)
     PayloadTooLarge,            // Template exceeds MaximumPrefabPayloadBytes (4 MiB)
     CyclicReferenceDetected,    // Nested prefab inclusion contains a cycle (authoring/cook)
+    CyclicComposition,          // Combined nested-placement/variant graph contains a cycle
+    MissingPrefabSource,        // Semantic edge references no available source revision
+    InvalidPlacement,           // Placement ID, parent, transform or scope is invalid
+    MultipleVariantParents,     // Variant does not have exactly one immediate parent
+    VariantDepthExceeded,       // More than 8 variant-parent edges in one path
+    CompositionDepthExceeded,   // More than 16 nested-placement edges in one path
+    CompositionEdgeLimitExceeded, // More than 256 direct placements in one concrete source
     SpawnRecursionDetected,     // Requested AssetId repeats in inherited spawn lineage
     SpawnDepthExceeded,         // Lineage exceeds MaximumRuntimeSpawnDepth
     AdmissionRejected,         // Queue/store capacity exhausted or admission closed
@@ -452,8 +645,14 @@ enum class PrefabError : std::uint32_t {
     InvalidHierarchy,          // Duplicate local IDs, invalid parents, roots, or graph
     ComponentCountExceeded,    // More than MaximumPrefabComponentsPerObject (64)
     EntityAllocationExhausted,  // Scene runtime ran out of available EntityIds
-    ComponentTypeUnregistered,  // Cooked template references an unavailable component type
-    ComponentAllocationFailed   // Memory allocation failed for component pool
+    ComponentTypeUnregistered, // Cooked template references an unavailable component type
+    ComponentAllocationFailed, // Memory allocation failed for component pool
+    InvalidReference,          // Unsupported or unresolved persisted reference class
+    DuplicateOrConflictingOverride, // One layer contains competing semantic operations
+    BindingSlotInvalid,        // Declaration/use/re-exposure schema is invalid
+    RequiredBindingMissing,    // Required instance/spawn slot has no binding
+    BindingTargetInvalid,      // Supplied target is stale, cross-scene or incompatible
+    BindingLimitExceeded       // Declaration/use/instance-binding bound exceeded
 };
 ```
 
@@ -494,12 +693,39 @@ enum class PrefabError : std::uint32_t {
 | **Lifecycle** | Created-disabled behavior | `OnCreate` runs; `OnEnable`/`OnStart` wait for first enable |
 | **Lifecycle** | Post-commit behavior construction or hook fault | Structural spawn remains committed; fault reported; normal teardown |
 | **Cook** | Nested dependency, target, settings, or version changes | Full canonical cache key changes; no stale artifact reuse |
+| **Identity** | Built-in/project component and property renamed or reordered | Stable IDs retain target; labels/offsets/order are irrelevant |
+| **Identity** | Same component type appears twice on one object | Persisted `ComponentInstanceId` selects the exact occurrence |
+| **Identity** | Source inserts before an overridden collection element | Stable element ID remains targeted; unkeyed numeric path is rejected |
+| **Valid** | Assign/insert/remove/move/add-component/remove-component override | Canonical typed delta resolves in stable order |
+| **Malformed** | Duplicate/conflicting operation targets in one layer | Reject; no last-write-wins or partial candidate |
+| **Lifecycle** | Source and override change the same value incompatibly | Preserve explicit three-way conflict and original override bytes |
+| **Lifecycle** | Source deletes/retypes target or package schema unloads | Preserve orphan/opaque record; cook blocked until explicit resolution |
+| **Lifecycle** | Revert/rebase/apply-to-prefab fails or is cancelled | Document/source/override/history remain unchanged |
+| **Valid** | Same variant is nested twice under distinct placement IDs | Two distinct scopes with identical inherited values and independent placement overrides |
+| **Valid** | Base -> VariantA -> VariantB plus scene override | Oldest-to-newest variant precedence, then scene-instance override |
+| **Boundary** | Variant depth 8 and nested-placement depth 16 | Exact bounds resolve and cook |
+| **Malformed** | Variant depth 9, nested depth 17, or 257 direct placements | Typed graph limit; no candidate/artifact publication |
+| **Malformed** | Nested A -> B plus variant parent B -> A | `CyclicComposition` with canonical edge path; prior projection remains active |
+| **Malformed** | Variant has two parents or owns hierarchy deltas | Explicit rejection; no serialized-order merge or guessed topology |
+| **Lifecycle** | Source changes during descendant re-resolution | Stale completion cannot replace newer registry/document snapshot |
+| **Capability** | Construction callback could affect composition | Callback is never invoked; unsupported request is rejected |
+| **Valid** | Local object/component and AssetId references | Stable identities resolve without path/index dependence |
+| **Valid** | Required static/dynamic typed binding supplied | Conversion/spawn validates before atomic publication |
+| **Valid** | Optional binding omitted | Canonical typed `Unbound`; no discovery or fallback |
+| **Malformed** | Prefab stores scene ID, EntityRef, pointer, path or name query | `InvalidReference`; source/artifact rejected |
+| **Malformed** | Missing required or invalid supplied optional binding | Transaction fails; no partial scene/entities/hooks |
+| **Lifecycle** | Create-from-selection crosses boundary | Explicit include/expose/cancel report; no silent null/copy/capture |
+| **Lifecycle** | Bound target is destroyed/reused | Typed unavailable/stale result; never retargeted |
 
 ---
 
 ## Related Documents
 
 - [ADR-017: Prefab Role, Ownership and Capability-Tier Decision](../../adr/017-prefab-role-ownership-and-capability-tiers.md)
+- [ADR-093: Prefab Override Property Identity and Delta Operations](../../adr/093-prefab-override-property-identity-and-delta-operations.md)
+- [ADR-094: Prefab Nested Composition and Variant Inheritance](../../adr/094-prefab-nested-composition-and-variant-inheritance.md)
+- [ADR-095: Prefab Cook Boundary and Artifact Model](../../adr/095-prefab-cook-boundary-and-artifact-model.md)
+- [ADR-096: Prefab External Reference and Binding Slot Contract](../../adr/096-prefab-external-reference-and-binding-slot-contract.md)
 - [ADR-018: Command Registration, Permissions, Threading and Packaged-Build Policy](../../adr/018-command-registration-permissions-threading-and-packaged-build-policy.md)
 - [ADR-010: Job Waiting and Operation Store Ownership](../../adr/010-job-waiting-and-operation-store-ownership.md)
 - [Scene Runtime Architecture](./scene-runtime.md)

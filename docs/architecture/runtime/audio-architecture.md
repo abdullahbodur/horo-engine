@@ -884,6 +884,24 @@ create action before the feature can create valid runtime data.
 
 ## Real-Time Command Queue
 
+[ADR-120](../../adr/120-cinematic-event-dispatch-and-audio-coupling-boundary.md)
+specializes the cinematic producer seam without changing Audio ownership. EventTrack
+gameplay occurrences use the application-owned `CinematicEventDispatcher`; an
+AudioTrack instead submits a bounded generation-tagged schedule/cancel/seek/preroll
+bundle through the Audio/Cinematic adapter into `AudioFrontend`. Sequencer supplies
+stable occurrence identity, source `SequenceTime` and intent. Audio alone validates
+prepared media, correlates source time to sample time, admits the schedule, publishes
+callback commands, owns voice/transport lifetime and reports actual observations.
+
+The seam consumes AUD-001.1/ADR-062 for runtime/callback phases,
+AUD-002.1/ADR-064 for cooked media and readiness, and AUD-008.1/ADR-068 for transport,
+sequence-to-sample mapping, seek/preroll, late policy and acknowledgement. CIN does
+not create alternate Audio rules. Required unavailable media fails cinematic
+activation with a typed result. Optional silence/skip must be authored; unloaded media
+uses bounded asynchronous preparation. No missing-media path performs synchronous I/O
+on sequence evaluation or the callback, substitutes a filename/clip, or reports an
+implicit successful silent voice.
+
 Audio commands may originate from gameplay systems, animation events, timeline
 playback, editor preview, asset hot reload, streaming services, scene unload, or
 device lifecycle services. These producers do not write directly into the audio
@@ -929,6 +947,20 @@ Commands in the same `ScheduledCommandBatch` with the same timestamp are applied
 atomically at the same buffer boundary. Timeline systems and animation-event
 systems use this to start multiple voices in sync without adding a separate
 real-time API.
+
+For footsteps, [ADR-091](../../adr/091-footstep-and-locomotion-event-ownership.md)
+requires an application-owned post-commit adapter to join the Animation occurrence
+with the exact Character surface snapshot first. Audio receives an immutable,
+deduplicated cue intent with committed tick/correlation identity; it does not query
+Character/Physics, infer cadence or change simulation when admission fails.
+
+For destruction, [ADR-147](../../adr/147-destruction-event-and-cosmetic-consumer-ownership.md)
+requires an application-owned dispatcher to map a committed DFR fact through a captured
+cooked binding generation before Audio admission. Audio receives bounded cue/media
+intent with the destruction occurrence plus destination-layer identity. It alone owns
+media readiness, source-to-sample scheduling, voice/mixer/device state and callback
+observations. Missing media, virtualization, queue pressure or device loss cannot alter
+the committed destruction revision, and the Audio callback never invokes DFR/gameplay.
 
 The audio thread publishes bounded completion and device events through a
 lock-free or wait-free queue consumed by the owning main-thread service.

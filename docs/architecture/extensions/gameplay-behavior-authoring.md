@@ -206,6 +206,30 @@ behaviors in an "Add Behavior" or "Add Component" flow and attach them to any
 compatible scene object. The generic inspector edits the behavior's declarative
 authoring fields. Custom inspectors still belong to the editor extension contract.
 
+### Replication Declaration Boundary
+
+[ADR-099](../../adr/099-replication-ownership-authority-and-compatibility.md)
+requires gameplay/behavior owners that opt into replication to contribute inert
+stable schema/`FieldId` descriptors plus canonical bounded codecs and capture/apply
+adapters through the generated module contribution seam. C++ member names, editor
+property paths, serialized field order, reflection offsets and raw instance memory
+never become wire identity.
+
+The behavior remains canonical state/mutation owner. Its capture adapter receives a
+read-only owner-thread view and emits declared fields; its apply adapter validates
+and commits a bounded typed command at the Scene safe point. Neither adapter owns
+sessions, transport, interest or baselines, and neither may retain component views
+or bypass behavior invariants. Publishing an ordinary gameplay event does not
+replicate it; inputs/RPCs require separate direction-scoped schemas.
+
+Prediction is separately opt-in under
+[ADR-100](../../adr/100-prediction-capability-tiers-and-determinism-policy.md).
+Gameplay owners contribute a validated descriptor and tier-required fixed-tick
+input/candidate or capture/restore/simulate/reconcile hooks. Ordinary behavior
+fields/events are never predicted automatically. Irreversible effects are
+server-authoritative; speculative presentation requires stable bounded occurrence
+identity so replay cannot duplicate it.
+
 ### Native C++ Behavior Example
 
 A native behavior is ordinary gameplay code compiled into the project gameplay
@@ -410,6 +434,20 @@ its activation dependencies are ready. In play-in-editor, the sequence runs on
 the runtime clone, not on the authoring document. See
 [Prefab Architecture](../runtime/prefab-architecture.md).
 
+[ADR-096](../../adr/096-prefab-external-reference-and-binding-slot-contract.md)
+keeps external prefab bindings distinct from serialized behavior fields and spawn
+initialization values. A behavior field may persist a prefab-local stable reference,
+an `AssetId` reference or a declared `PrefabBindingSlotId`; it cannot persist a
+scene-local `EntityRef`, ECS/component address, pointer, path or name/tag query.
+
+After structural commit, `BehaviorContext` exposes a read-only typed binding view
+for the attachment's declared slot uses. Required coverage and target component
+compatibility are validated before any behavior instance or hook is published.
+Optional absence is typed `Unbound`; invalid supplied optional input is still an
+error. Bindings grant neither undeclared component access nor ownership of the
+target. Target destruction yields `BindingUnavailable`, and behavior code must
+handle that reference-loss path without discovery or automatic retargeting.
+
 Behavior code mutates scene state only through `BehaviorContext`, declared
 component access, and the scene command buffer. It may change component values
 when its descriptor declares write access. Entity creation, destruction, and
@@ -487,6 +525,14 @@ gizmos, or ImGui presentation belong to the editor extension contract and
 are not linked into packaged runtime modules.
 
 ## Editor Separation
+
+[ADR-111](../../adr/111-gameplay-ai-document-panel-and-runtime-debug-ownership.md)
+requires gameplay-AI blackboard, decision and EQS authoring to reuse the shared
+multi-document/graph command contracts. Live debug panels consume immutable
+Scene-generation snapshots and do not own behavior/task/node lifetime. Any runtime
+debug mutation is a permissioned typed safe-point command; provider extensions
+contribute inert metadata or host-rendered schema, not ImGui or mutable runtime
+objects.
 
 Game code may expose metadata used by generic editor property and scene tools.
 Editor-specific presentation extensions belong to the editor extension
@@ -836,9 +882,10 @@ schedulers or divergent blackboard structures:
      deterministic empty snapshot and cannot inspect another player's actions.
 
 7. **Decision State Persistence**:
-   - The AI subsystem participates in runtime save/restore through
-     `IGameplayStateProvider`. It serializes stable plan/node identity, compatible
-     execution frames, timers, and schema-approved blackboard values.
+   - Under ADR-114, the AI subsystem participates through its owned canonical state
+     adapter. It captures stable plan/node identity, compatible execution frames,
+     timers, and schema-approved blackboard values; component/graph serialization is
+     not a second runtime-save authority.
    - Runtime jobs, cancellation tokens, query handles, pointers, and cooked array
      indices are never persistent state; they are re-resolved or restarted after
      the restore transaction commits.
@@ -913,6 +960,8 @@ play-session or process restart rather than attempting unsafe live mutation.
 - [Gameplay Module Boundary](./gameplay-module-boundary.md)
 - [Gameplay Runtime Integration](./gameplay-runtime-integration.md)
 - [Save Game And Persistence](../runtime/save-game-and-persistence.md): durable behavior and AI state capture
+- [ADR-114](../../adr/114-canonical-runtime-world-persistence-boundary.md): canonical
+  state adapter and derived/transient exclusion policy.
 - [Editor Document Model](../editor/editor-document-model.md)
 - [Extension System](./plugin-system.md)
 - [Horo Package System](../packages/package-system.md): library-provided behaviors

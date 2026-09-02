@@ -403,6 +403,13 @@ Rules:
 
 See [Editor Modal Host](./editor-modal-host.md).
 
+ADR-110 navigation documents, panels, operation projections and transient modals
+reuse these fields, tables, badges, buttons, split panes, progress/status and modal
+shells. Navigation/provider code does not draw feature-local pills or pass raw
+ImGui through a provider extension. Long profile/asset/fingerprint values, narrow
+docks and every disabled/loading/stale/error state retain the shared typography,
+focus, scale and accessibility rules.
+
 ## Theme Model
 
 The editor `Theme` and design tokens in this section style HoroEditor only.
@@ -624,6 +631,12 @@ ImGui backend cannot expose a complete native accessibility tree. Keyboard
 access, visible focus, tooltips, accessible names, and test-visible metadata are
 required baseline behavior from the first implementation. Native screen-reader
 integration may be added per platform without changing component props.
+
+[ADR-082](../../adr/082-runtime-ui-accessibility-capability-and-ownership.md)
+applies the same truthful capability principle to Runtime UI: semantic metadata,
+recording tests and native assistive-technology integration are distinct evidence
+levels. Editor validation uses the versioned semantic schema but does not own or
+patch live runtime nodes, settings, focus or platform dispatch.
 
 The design system supports:
 

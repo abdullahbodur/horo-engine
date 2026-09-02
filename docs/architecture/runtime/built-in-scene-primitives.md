@@ -321,6 +321,25 @@ imported meshes are not implemented by this slice. Process-local mesh resource
 IDs never enter the scene document; versioned descriptors remain the authored
 source of truth.
 
+[ADR-085](../../adr/085-physics-shape-authoring-cook-and-runtime-boundary.md)
+maps the built-in cube, sphere, capsule and plane collider descriptors to Physics'
+analytic box, sphere, capsule and static-plane source kinds. These descriptors use
+the same validation, scale-bake, cook-envelope and immutable runtime-lease boundary
+as imported collider assets; the catalog does not bypass Physics shape policy.
+
+When an authoring command adds one of these colliders, it records the project's
+explicit default `CollisionProfileId` (or the command's explicit profile) under
+[ADR-086](../../adr/086-collision-layer-profile-and-query-channel-policy.md).
+Runtime conversion never resolves a missing profile by primitive kind, display
+name, array index or fallback mask.
+
+Under [ADR-087](../../adr/087-scene-to-physics-ownership-and-conversion.md), a
+primitive mesh descriptor alone remains visual data and creates no body. An
+authoring action that offers a collider convenience persists an explicit rigid-
+body + collider component bundle with stable slots in one document transaction.
+Runtime conversion never repeats that inference or publishes scene entities before
+the required Physics candidate is ready.
+
 ## CLI And MCP Integration
 
 CLI and MCP creation commands do not hardcode object types. They accept a

@@ -80,6 +80,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Android Platform Host](./foundation/android-platform-host.md): Android
   activity lifecycle, replaceable native surfaces, permissions, storage,
   packaging, deployment, resource pressure, and standalone-XR prerequisites.
+- [Android Host, Target and Ownership](../adr/171-android-host-target-and-ownership.md):
+  GameActivity composition, initial API/ABI/Vulkan baseline, native-resource
+  ownership, lifecycle generations, packaging, migration, and qualification.
 - [Engine Data Bus](./foundation/engine-data-bus.md): process-scoped typed
   notifications.
 
@@ -145,8 +148,35 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Character Controller Architecture](./runtime/character-controller-architecture.md):
   kinematic capsule controller, slopes, steps, moving platforms, surface
   materials, and surface events.
+- [Character Controller Ownership, Implementation and Update Order](../adr/089-character-controller-ownership-implementation-and-update-order.md):
+  Horo-owned bounded query solver, per-scene Character world, fixed-tick command/
+  root-motion cadence, platform/orientation composition and transform publication.
+- [Character Dynamic-Body Visibility, Push and Proxy Policy](../adr/090-character-dynamic-body-visibility-push-and-proxy-policy.md):
+  explicit disabled/obstacle/one-way/bidirectional modes, private kinematic
+  presence proxy, next-tick reaction and fail-closed capability fallback.
+- [Footstep and Locomotion Event Ownership](../adr/091-footstep-and-locomotion-event-ownership.md):
+  Animation-owned footstep timing, Character-owned committed surface/facts and
+  bounded post-commit Audio/VFX presentation correlation.
+- [Character Controller Determinism and State Composition](../adr/092-character-controller-determinism-and-state-composition.md):
+  complete canonical Character state/codec, aggregate Physics/world checkpoints,
+  exact hashes, diagnostic tolerances and bounded restore/resimulation history.
 - [Physics Architecture](./runtime/physics-architecture.md): fixed-step world
   ownership, transform authority, collision events, queries, and determinism.
+- [Canonical Physics Solver, Units and Tolerances](../adr/084-canonical-physics-solver-units-and-tolerances.md):
+  pinned Jolt baseline, private native boundary, SI/right-handed Y-up conventions,
+  fp32 local clusters, tolerance/scale profile, platforms, licensing, and upgrades.
+- [Physics Shape Authoring, Cook and Runtime Boundary](../adr/085-physics-shape-authoring-cook-and-runtime-boundary.md):
+  typed collider descriptors, deterministic target-keyed cook artifacts, immutable
+  runtime shape leases, motion compatibility, limits, and replacement semantics.
+- [Collision Layer, Profile and Query Channel Policy](../adr/086-collision-layer-profile-and-query-channel-policy.md):
+  project-stable typed filter identities, symmetric simulation responses, complete
+  reusable profiles, query intent and private generation-scoped compiled tables.
+- [Scene-to-Physics Ownership and Conversion](../adr/087-scene-to-physics-ownership-and-conversion.md):
+  explicit authored body/collider/constraint producers, Physics-owned scene plans,
+  detached world candidates and atomic aggregate activation/rollback.
+- [Physics Determinism Capability and Support Tiers](../adr/088-physics-determinism-capability-and-support-tiers.md):
+  fail-closed tier negotiation, exact execution fingerprints, same-build/platform
+  support target, future cross-platform groups, exclusions and evidence gates.
 - [Audio Architecture](./runtime/audio-architecture.md): ADR-backed ownership,
   clocks, formats, assets, mixer, spatial, devices, tooling and explicit 1.0 versus
   Post-1.0 product boundaries.
@@ -208,13 +238,59 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Runtime UI Binding Provider Schema, Identity and Lifetime](../adr/079-runtime-ui-binding-provider-schema-identity-and-lifetime.md):
   typed provider/property schemas, scoped instances, immutable read snapshots,
   owner-validated writes, registration/revocation, module unload, and compatibility.
+- [Runtime UI Presentation Scope, Layer and Route](../adr/080-runtime-ui-presentation-scope-layer-and-route.md):
+  orthogonal owner/audience/route/band/visibility dimensions, fixed presentation
+  bands, transactional scoped stacks, loading/debug policy, input, transitions,
+  and immutable rendering plans.
+- [Runtime UI and Localization Ownership Boundary](../adr/081-runtime-ui-and-localization-ownership-boundary.md):
+  catalog/locale/formatting authority, localized references, shaping/layout,
+  translation/font/asset fallback, snapshots, change notification, and unload.
+- [Runtime UI Accessibility Capability and Ownership](../adr/082-runtime-ui-accessibility-capability-and-ownership.md):
+  semantic nodes, settings projection, native platform bridges, capability truth,
+  editor validation, qualification evidence, lifecycle, and unsupported behavior.
+- [UI Template Identity, Schema and Expansion](../adr/083-ui-template-identity-schema-and-expansion.md):
+  template/local/instance identity, typed parameters and slots, insertion versus
+  linked instancing, deterministic expansion, explicit rebase, detach, and cook.
 - [Networking Architecture](./runtime/networking-architecture.md): optional
   handle-based transports, session/authentication runtime, bounded I/O, and
   remote security.
+- [Default Real-Time Transport Backend](../adr/097-default-real-time-transport-backend.md):
+  GameNetworkingSockets direct-IP baseline, private native encapsulation,
+  security/traversal ownership, bounded lifecycle and optional provider policy.
+- [Protocol, Session and Trust Policy](../adr/098-protocol-session-and-trust-policy.md):
+  transport-to-session admission gate, compatibility, exposure-specific peer
+  trust, bounded credential verification and active-session publication.
+- [Replication Ownership, Authority and Compatibility](../adr/099-replication-ownership-authority-and-compatibility.md):
+  explicit world roles, stable schema/FieldId identity, owner-safe capture/apply,
+  compatibility, object generations and prohibited ambient replication.
+- [Prediction Capability Tiers and Determinism Policy](../adr/100-prediction-capability-tiers-and-determinism-policy.md):
+  non-predicted baseline, local candidates, qualified rollback provider closure,
+  bounded histories/replay, correction and side-effect reconciliation.
+- [Interest, Priority and Network Budget Model](../adr/101-interest-priority-and-network-budget-model.md):
+  renderer-independent network profiles, immutable relevancy facts,
+  per-connection ledgers, weighted fairness and bounded overload behavior.
+- [Runtime Network Modes and Authority Exposure](../adr/102-runtime-network-modes-and-authority-exposure.md):
+  package support versus runtime selection, standalone/client/listen/dedicated
+  host plans, scoped role capabilities and generation-safe lifecycle.
+- [Network Project Configuration and Build-Profile Ownership](../adr/103-network-project-configuration-and-build-profile-ownership.md):
+  shared typed resolution, project/preview/release source boundaries, role-aware
+  product manifests, credential-provider isolation and migration.
 - [Asset Pipeline](./runtime/asset-pipeline.md): import, cook, package, runtime
   loading, cache, and hot reload.
 - [Prefab Architecture](./runtime/prefab-architecture.md): dual-role authoring
   templates, runtime dynamic spawning (`CookedPrefab`), and capability tiers.
+- [Prefab Override Property Identity and Delta Operations](../adr/093-prefab-override-property-identity-and-delta-operations.md):
+  stable component/property/element addressing, typed delta algebra, canonical
+  equality/order, transactional rebase and lossless conflict/orphan preservation.
+- [Prefab Nested Composition and Variant Inheritance](../adr/094-prefab-nested-composition-and-variant-inheritance.md):
+  stable nested-placement edges, single-parent variants, deterministic precedence,
+  combined-graph validation, transactional propagation and flattened cook output.
+- [Prefab Cook Boundary and Artifact Model](../adr/095-prefab-cook-boundary-and-artifact-model.md):
+  single prefab resolver, expanded-scene versus spawnable-template artifacts,
+  complete cache identity, generation retention, hot reload and shipping policy.
+- [Prefab External Reference and Binding Slot Contract](../adr/096-prefab-external-reference-and-binding-slot-contract.md):
+  portable local/asset references, rejected scene capture, stable typed external
+  slots, explicit instance bindings and transactional boundary validation.
 - [Built-In Scene Primitives](./runtime/built-in-scene-primitives.md): core
   procedural meshes, collider shapes, and scene object primitives available
   without external packages.
@@ -226,6 +302,27 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Terrain And Foliage Architecture](./runtime/terrain-and-foliage-architecture.md):
   heightfields, terrain layers, instanced foliage, wind, LOD, collision,
   streaming, and editor tools.
+- [Terrain and Foliage Ownership, Data, Tier and Lifecycle](../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md):
+  public/runtime module boundaries, authored/cooked/live data strata, typed identity
+  and revisions, provider-neutral tier resolution, aggregate lifecycle and retirement.
+- [Terrain Source, Cooked Tile, Cache and Streaming Ownership](../adr/138-terrain-source-cooked-tile-cache-and-streaming-ownership.md):
+  canonical Terrain import/cook ownership, deterministic dataset manifests, cache
+  authorities, typed World Streaming residency and seam-safe generation replacement.
+- [Terrain Render Extraction, Material, LOD and Tier Boundary](../adr/139-terrain-render-extraction-material-lod-and-tier-boundary.md):
+  immutable Terrain/Foliage render candidates, material/permutation admission,
+  renderer-owned per-view LOD/visibility and core-1.0 versus post-1.0 GPU recipes.
+- [Foliage Placement, Baked/Dynamic State and Eviction Ownership](../adr/140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md):
+  deterministic baked placement, ephemeral runtime overlays, durable canonical deltas,
+  capacity policy, save handoff and no-loss World Streaming eviction.
+- [Terrain/Foliage Cross-System Ownership and Readiness](../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md):
+  immutable producer snapshots, typed Render/Physics/Navigation receipts, owner-safe-
+  point staging, aggregate activation, rollback and reverse-dependency retirement.
+- [Terrain/Foliage Document, Tool, Undo and Preview Ownership](../adr/142-terrain-foliage-document-tool-undo-and-preview-ownership.md):
+  persistent authoring documents, typed tool routing, bounded tile-patch history,
+  isolated preview and distinct source-save/cook/runtime-persistence boundaries.
+- [Terrain/Foliage Scale Budgets, Observability and Feature Boundary](../adr/143-terrain-foliage-scale-budgets-observability-and-feature-boundary.md):
+  versioned core/high-end active scale, memory, streaming, cook, editor/headless gates,
+  required measurements and core-1.0 versus post-1.0 recipe qualification.
 - [World Streaming Architecture](./runtime/world-streaming-architecture.md):
   streaming cells, volumes, priority, budgets, server authority, and editor
   world-composition tools.
@@ -235,13 +332,97 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Save Game And Persistence](./runtime/save-game-and-persistence.md): runtime
   save state, slot format, migration, cloud save, integrity, and secure archive
   loading.
+- [Save Archive Container and Compatibility Policy](../adr/112-save-archive-container-and-compatibility-policy.md):
+  portable framing, canonical logical state, independent version axes, typed
+  state/content/publication identities, release declarations and support horizon.
+- [Local Storage, User Profile and Slot Ownership](../adr/113-local-storage-user-profile-and-slot-ownership.md):
+  product/environment/user/profile namespaces, slot/category identity, path
+  authority, multi-user fallback and profile-switch fencing.
+- [Canonical Runtime World Persistence Boundary](../adr/114-canonical-runtime-world-persistence-boundary.md):
+  authoring-base/runtime-override composition, state classification,
+  subsystem-owned canonical adapters and aggregate capture/restore.
+- [Cloud Save Authority, Revision and Conflict Policy](../adr/115-cloud-save-authority-revision-and-conflict-policy.md):
+  local authority, provider CAS/lease revisions, offline lineage classification,
+  conflict preservation and coordinator-owned resolution.
+- [Save Data Threat Model and Trust Policy](../adr/116-save-data-threat-model-and-trust-policy.md):
+  untrusted save sources, bounded admission, integrity/authenticity/replay policy,
+  tool capabilities, credentials and development/shipping profiles.
 - [Navigation And AI Architecture](./runtime/navigation-and-ai-architecture.md):
   NavMesh, pathfinding, dynamic obstacle overlays, perception, crowd, blackboard,
   and editor bake tooling.
+- [Default Navigation Provider and Recast-Detour Adoption](../adr/104-default-navigation-provider-and-recast-detour-adoption.md):
+  exact Recast/Detour pin, private module/build profile, threading/determinism,
+  optional tile-cache/crowd capabilities and grounded-only scope.
+- [Navigation Asset and Scene Ownership Boundary](../adr/105-navigation-asset-and-scene-ownership-boundary.md):
+  authored definition/Scene intent, immutable bake capture, cooked artifact
+  provenance, runtime topology ownership, migration and missing-data policy.
+- [Navigation Bake Ownership, Transaction and Cache](../adr/106-navigation-bake-ownership-transaction-and-cache.md):
+  shared application operation, latest-wins revision capture, workspace locking,
+  complete cache identity, atomic publication, terminal states and recovery.
+- [Navigation Query Consistency and Snapshot Ownership](../adr/107-navigation-query-consistency-and-snapshot-ownership.md):
+  combined topology/overlay snapshots, immediate versus async queries, owner-thread
+  completion publication, coverage outcomes, staleness and lease-safe retirement.
+- [Dynamic Overlay, Carving and Tile-Rebuild Policy](../adr/108-dynamic-overlay-carving-and-tile-rebuild-policy.md):
+  change-category ownership across avoidance, blockers/gates, optional carving,
+  runtime rebuild, authored recook and streamed cooked tiles.
+- [Avoidance, Crowd and Renderer-Independent Budget](../adr/109-avoidance-crowd-and-renderer-independent-budget.md):
+  path/safe-velocity/movement ownership, optional best-effort DetourCrowd,
+  deterministic admission, independent project scale/quality and safe overload.
+- [Navigation Editor Surface and Command Ownership](../adr/110-navigation-editor-surface-and-command-ownership.md):
+  definition/Scene documents, bake operation projection, dockable inspection,
+  transient modals, viewport overlays and provider UI limits.
+- [Gameplay AI Document, Panel and Runtime-Debug Ownership](../adr/111-gameplay-ai-document-panel-and-runtime-debug-ownership.md):
+  blackboard/decision/EQS document routes, shared graph commands, derived compile
+  state, immutable live inspection and safe-point debug actions.
 
 - [Cinematic Sequencer Architecture](./runtime/cinematic-sequencer-architecture.md):
   timeline, tracks, clock authority, typed property bindings, evaluation phase,
   and playback integration.
+- [Playback Ownership, Frame Order and Determinism](../adr/117-playback-ownership-frame-order-and-determinism.md):
+  runtime-service player lifetime, stable activation identity, immutable evaluation
+  batches, replay/headless evidence and random-access seek.
+- [Animation, Character and Gameplay Authority During Cinematics](../adr/118-animation-character-and-gameplay-authority-during-cinematics.md):
+  per-joint pose override/blend, Character collision-root authority, gameplay control
+  leases, typed suppression and whole-game pause semantics.
+- [Camera Authority During Cinematics](../adr/119-camera-authority-during-cinematics.md):
+  per-view runtime/PIE/editor authority, cut entry and exit handoff, immutable
+  frame selection, tiered transitions and backend-neutral render snapshots.
+- [Cinematic Event Dispatch and Audio Coupling Boundary](../adr/120-cinematic-event-dispatch-and-audio-coupling-boundary.md):
+  cooked typed EventTrack bindings, application-owned safe-point dispatch, explicit
+  failure outcomes and AudioFrontend coupling through AUD-family authority.
+- [Cinematic Editor Document and Authoring Context](../adr/121-cinematic-editor-document-and-authoring-context.md):
+  persistent sequence asset tabs, shared command/save/conflict ownership, detachable
+  scene authoring context, stale-reference inspection and disposable preview state.
+- [Cinematic Trigger Sources and Capability Policy](../adr/122-cinematic-trigger-sources-and-capability-policy.md):
+  common typed start admission for gameplay, scene, event and tooling sources;
+  capability/trust/authority checks, packaged-build gating and typed denials.
+- [VFX CPU Stage Order, Determinism and Gameplay Coupling](../adr/123-vfx-cpu-stage-order-determinism-and-gameplay-coupling.md):
+  ordered CPU particle stages, atomic commit, counter-based per-particle RNG,
+  qualified cross-platform reproduction and typed gameplay payload boundaries.
+- [VFX GPU Simulation, Readback and Compute Fallback](../adr/124-vfx-gpu-simulation-readback-and-compute-fallback.md):
+  visual-only GPU authority, cooked opt-in asynchronous readback, explicit
+  compute-less fallback and unified CPU/GPU/readback admission accounting.
+- [VFX Transparency, Sorting and Pass Placement](../adr/125-vfx-transparency-sorting-and-pass-placement.md):
+  semantic particle pass/depth mapping, stable per-view CPU/GPU sorting, additive
+  exemption, finite sort ceilings and measured frame-time targets.
+- [VFX Graph Compilation and Runtime Representation Convergence](../adr/126-vfx-graph-compilation-and-runtime-representation-convergence.md):
+  stack/graph authoring convergence on one compiled descriptor, offline-only
+  lowering, deterministic artifacts and explicit payload/kernel compatibility.
+- [VFX Decal Projection, Lifetime and Rendering Path Policy](../adr/127-vfx-decal-projection-lifetime-and-rendering-path-policy.md):
+  typed box placement, tagged lifetime/removal authority, finite count admission
+  and deferred-default with compatible forward-tier fallback.
+- [VFX Spawn Event Mapping, Pooling and Budget Enforcement](../adr/128-vfx-spawn-event-mapping-pooling-and-budget-enforcement.md):
+  application-owned semantic bindings, allocation-free playback pools, one finite
+  CPU/GPU budget ledger and deterministic cosmetic overload/sleep policy.
+- [VFX Editor Document, Live Preview and Module Authoring](../adr/129-vfx-editor-document-live-preview-and-module-authoring.md):
+  persistent effect document tabs, independent stack/graph frontends, ordinary
+  runtime-pipeline preview and shared decal document/command ownership.
+- [Platform Services Frontend, Request Lifetime, Timeout, Null and Error Semantics](../adr/130-platform-services-frontend-request-lifetime-timeout-null-and-error-semantics.md):
+  frontend-owned asynchronous requests, exactly-once terminal publication, deferred
+  callbacks, typed capability truth and distinct Null/timeout/provider failures.
+- [Platform Services Closed SDK, Extension ABI, Package and Composition Boundary](../adr/131-platform-services-closed-sdk-extension-abi-package-and-composition-boundary.md):
+  SDK-free public targets, manifest/trust-selected private providers, C ABI value and
+  callback rules, transactional activation and profile-specific composition.
 - [Post-Processing And Effects Architecture](./runtime/post-processing-and-effects-architecture.md):
   screen-space effects, HDR post chain, tonemapping, color grading, and
   accessibility pass ordering.
@@ -253,13 +434,73 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Decal System Architecture](./runtime/decal-system-architecture.md): deferred
   decals, forward fallbacks, material domain, pooling, ownership, and lifetime.
 - [Virtual Texturing Architecture](./runtime/virtual-texturing-architecture.md):
-  page tables, feedback, streaming, asset-provider cache, and backend-neutral
-  resources.
+  logical page demand/residency, typed asset and renderer integration, capability
+  tiers, lifecycle and Post-1.0 scope.
+- [Virtual Texturing Ownership, Product Scope and Capability Tier](../adr/164-virtual-texturing-ownership-product-scope-and-capability-tier.md):
+  VTX/Assets/Materials/World Streaming/Renderer/producer ownership, typed composition,
+  Atlas/Sparse admission and unsupported-path policy.
+- [Virtual Texture Source, Cooked Artifact, Page Store and Cache Ownership](../adr/165-virtual-texture-source-cooked-artifact-page-store-and-cache-ownership.md):
+  canonical source/cook authority, immutable root-plus-pack generations, bounded
+  exact-generation reads, layered integrity and distinct cache lifetimes.
+- [VTX Feature-Local Residency and Eviction Within Global Reservations](../adr/166-vtx-feature-local-residency-and-eviction-within-global-reservations.md):
+  global versus feature-local scheduling, multidimensional reservation slices, typed
+  pins, shared-page charging, two-phase eviction and pressure accounting.
+- [VTX Feedback, Readback, Prediction and Camera-Data Ownership](../adr/167-vtx-feedback-readback-prediction-and-camera-data-ownership.md):
+  Renderer-owned feedback/readback resources, immutable delayed observations, typed
+  camera/producer hints, bounded prediction and non-authoritative demand evidence.
+- [VTX GPU Page Table, Physical Cache, Shader and Material Ownership](../adr/168-vtx-gpu-page-table-physical-cache-shader-and-material-ownership.md):
+  logical mapping intent versus Renderer realization, Atlas/Sparse semantic parity,
+  atomic frame bindings, material slots and offline sampling variants.
+- [VTX Producer, Terrain, World Streaming, Packaging and Server Ownership](../adr/169-vtx-producer-terrain-world-streaming-packaging-and-server-ownership.md):
+  immutable producer seams, Terrain/source non-transfer, cell readiness, fallback
+  reachability and dedicated/headless exclusion.
+- [VTX Settings, Diagnostics, Capture and Qualification Ownership](../adr/170-vtx-settings-diagnostics-capture-and-qualification-ownership.md):
+  typed preflight, immutable inspection, cardinality/privacy bounds, authorized control,
+  finite captures and native release evidence.
 - [Destruction And Fracture Architecture](./runtime/destruction-and-fracture-architecture.md):
   fracture assets, chunk physics, debris, authority, and network reconstruction.
+- [Destruction Ownership, Authority, State and Runtime Geometry Boundary](../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md):
+  canonical semantic state and commands, cooked chunk activation, aggregate publication,
+  provider-neutral tiers and the post-1.0 runtime mesh-cutting boundary.
+- [Destruction Source, Chunk Geometry, Collision and Cook Ownership](../adr/145-destruction-source-chunk-geometry-collision-and-cook-ownership.md):
+  normalized source/recipe inputs, canonical DFR geometry/connectivity, solver-neutral
+  collision records, Assets publication and separate Physics/Render derived products.
+- [Destruction Runtime Activation, Physics, Cleanup and Rollback](../adr/146-destruction-runtime-activation-physics-cleanup-and-rollback.md):
+  command and contact safe points, deterministic support loss, private chunk-body
+  preparation, aggregate publication, policy-driven cleanup and rollback boundaries.
+- [Destruction Event and Cosmetic Consumer Ownership](../adr/147-destruction-event-and-cosmetic-consumer-ownership.md):
+  committed fact identity and retention, application-owned dispatch, safe-point fan-out,
+  deduplication and gameplay/VFX/Decal/Audio ownership boundaries.
+- [Fracture Document, Generator, Undo and Preview Ownership](../adr/148-fracture-document-generator-undo-and-preview-ownership.md):
+  persistent authoring document, detached generator transactions, exact bounded history,
+  Assets source/cook publication and production-isolated preview.
+- [Destruction Persistence, Replication, Streaming and Authority](../adr/149-destruction-persistence-replication-streaming-and-authority.md):
+  canonical reconstruction state, server authority, paired Physics motion, snapshot-first
+  late join, durable cell handoff and stable-identity compatibility.
 - [Procedural Generation Architecture](./runtime/procedural-generation-architecture.md):
   PCG graphs, point clouds, validation, transactions, server authority, and
   streaming-cell ownership.
+- [PCG Graph Source, Cooked Plan, Cache and Runtime Ownership](../adr/150-pcg-graph-source-cooked-plan-cache-and-runtime-ownership.md):
+  one authored truth, deterministic lowering, disposable cache/intermediates, immutable
+  runtime-plan leases and target-owner output commit.
+- [PCG Ownership, Authority, Tier and Lifecycle](../adr/151-pcg-ownership-authority-tier-and-lifecycle.md):
+  pure evaluator ownership, external commit authority, deterministic capability classes,
+  offline/preview/runtime/hybrid modes and headless/null lifecycle.
+- [PCG Spatial Input Snapshot and Node-Library Ownership](../adr/152-pcg-spatial-input-snapshot-and-node-library-ownership.md):
+  coherent immutable provider capture, stale-result fencing, canonical spatial queries,
+  core-node semantics and trusted catalog extensions.
+- [PCG Pure Evaluation, Commit and Generated-Output Ownership](../adr/153-pcg-pure-evaluation-commit-and-generated-output-ownership.md):
+  immutable generation candidates, target-owner aggregate commit, exact provenance,
+  atomic regeneration and cleanup that preserves hand-authored/adopted content.
+- [PCG Cross-System Authority, Readiness and Commit Boundary](../adr/154-pcg-cross-system-authority-readiness-and-commit-boundary.md):
+  host-composed target adapters, exact readiness receipts, aggregate rollback and
+  preserved TRF/WST/NAV/Scene/VFX/network/persistence authority.
+- [PCG Graph Document, Preview, Bake and Undo Ownership](../adr/155-pcg-graph-document-preview-bake-and-undo-ownership.md):
+  persistent typed-command graph documents, semantic history, isolated ordinary-path
+  preview and explicit provenance-aware bake/undo transactions.
+- [PCG Scale Budgets, Trust and Release Scope](../adr/156-pcg-scale-budgets-trust-and-release-scope.md):
+  exact operational profile ceilings and overload behavior, hostile-input/privacy
+  boundaries, qualification workloads and closed 1.0 versus post-1.0 scope.
 - [Multiplayer Replication Architecture](./runtime/multiplayer-replication-architecture.md):
   replication roles, property deltas, RPCs, prediction, interest management,
   dedicated servers, and security.
@@ -267,6 +508,9 @@ dependency direction in [System Design](./foundation/system-design.md).
   runtime-driven view configurations, renderer/input boundaries, interaction,
   mixed reality, privacy, standalone Android dependencies, and evidence-based
   device qualification.
+- [XR Ownership, Runtime Composition and Capability Tier](../adr/157-xr-ownership-runtime-composition-and-capability-tier.md):
+  XRApi/XRRuntime/OpenXR ownership, explicit host composition, typed profile admission,
+  deliberate Platform/Renderer/Input non-owners and closed 1.0 versus post-1.0 scope.
 
 ## Extensions
 
@@ -342,6 +586,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Editor AI Agent Architecture](./editor/editor-ai-agent-architecture.md):
   editor-integrated conversational agent, viewport inline editing, MCP tool-calling,
   magic AI tools, conversation persistence, and privacy model.
+- [Immersive Agent Ownership, Authoring Mode and Risk](../adr/172-immersive-agent-ownership-authoring-mode-and-risk.md):
+  developer-only XR authoring, Edit/Simulate/Play admission, multimodal evidence,
+  proposal-bound approval, transaction authority and privacy/risk boundaries.
 - [Project Model](./editor/project-model.md): project directory, settings, workspace
   persistence, scene documents, and asset index.
 

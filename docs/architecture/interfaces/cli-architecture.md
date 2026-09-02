@@ -168,6 +168,13 @@ horo-engine package restore
 horo-engine package verify
 horo-engine package cache list
 horo-engine package cache clean
+horo-engine save inspect
+horo-engine save import
+horo-engine save export
+horo-engine save migrate
+horo-engine save load
+horo-engine save delete
+horo-engine save resolve-conflict
 horo-engine build
 horo-engine release
 horo-engine test
@@ -179,6 +186,22 @@ horopak verify
 
 Duplicate command paths and option names are startup errors. Help is generated
 from the typed registry.
+
+### Save Command Boundary
+
+Save commands are application adapters under
+[ADR-116](../../adr/116-save-data-threat-model-and-trust-policy.md), not direct
+filesystem or codec utilities. `inspect`, `import`, `export`, `migrate`, `load`,
+`delete` and conflict resolution use distinct capabilities and host confirmation
+policy. A command receives a typed save address or an explicitly admitted external
+file handle; archive bytes cannot choose their destination root, trust policy or
+credential binding.
+
+Inspection applies fixed framing/parser/work budgets and returns bounded allowlisted
+metadata plus safe diagnostics. It grants no load, migration or publication authority.
+Raw participant export is development-only, requires a separate capability and a
+validated output root, and is absent from shipping profiles unless the product
+explicitly admits it. `horopak` never parses or mutates runtime `.horosave` files.
 
 ## Command Contributions & Adapter Equivalence
 
@@ -269,6 +292,16 @@ own use-case logic, transactions, and state invariants. They must never place
 business logic, scene mutation paths, asset import logic, or build algorithms
 inside CLI handlers.
 
+[ADR-106](../../adr/106-navigation-bake-ownership-transaction-and-cache.md)
+applies this equivalence contract to `horo-engine navigation bake`. The CLI
+descriptor parses a project-contained definition/scope, grounded profile set,
+target/profile and output mode, then invokes the application-owned
+`NavigationBakeService`. It may join/observe an existing identical operation or
+wait through the CLI host's bounded operation pump; it never calls a provider
+builder, chooses a workspace path, writes a cache/generation, owns a lock or
+implements supersession/recovery. Text, JSON and JSONL are presentations of the
+same operation terminal result used by GUI, MCP and release cook.
+
 ## Separation of Concerns: CLI, Debug Console, and MCP
 
 CLI commands, Runtime Debug Console commands (`DBG-001`), and MCP tools (`MCP-001`)
@@ -330,6 +363,8 @@ Rules:
 - response/config files require an explicit supported format
 - paths are normalized by the platform adapter
 - credentials are never accepted in positional arguments
+- external save inputs are untrusted and use the same bounded application admission
+  pipeline as GUI/MCP; a canonical save-directory path does not skip verification
 
 Common options such as project, output format, logging, and non-interactive mode
 use shared descriptors.
@@ -435,7 +470,6 @@ records only when requested.
 
 Progress is bounded and never delays the operation because a consumer is slow.
 
-
 ## Cancellation And Signals
 
 ### Signal Ownership Chain
@@ -468,7 +502,6 @@ Cancellation:
 - returns the cancellation exit category
 
 The CLI does not leave background jobs running after process exit.
-
 
 ## Input Sources
 
@@ -580,6 +613,9 @@ Required tests cover:
 - redaction of arguments and credentials in logs and diagnostics
 - headless commands executing without GUI or renderer targets
 - equivalence of GUI, CLI, and MCP use-case results
+- save inspect/import/export/migrate/load/delete/resolve-conflict capability
+  separation, bounded hostile input, shipping-profile denial and raw-state/path/
+  credential redaction
 - `horopak` isolation (absence of GUI/RenderApi linkage)
 
 ## Related Documents
@@ -590,6 +626,8 @@ Required tests cover:
 - [Error And Diagnostics](../foundation/error-and-diagnostics.md)
 - [Configuration System](../foundation/configuration-system.md)
 - [Concurrency And Job System](../foundation/concurrency-and-jobs.md)
+- [Save Game And Persistence](../runtime/save-game-and-persistence.md)
+- [ADR-116: Save Data Threat Model and Trust Policy](../../adr/116-save-data-threat-model-and-trust-policy.md)
 - [MCP Architecture](./mcp-architecture.md)
 - [Runtime Debug Console And Development Overlays](../runtime/debug-console-and-overlays.md)
 - [Application Security](../security/application-security.md)

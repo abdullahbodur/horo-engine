@@ -143,6 +143,11 @@ performs no OS effects and reports unsupported; a distinct test-only
 `RecordingPlatformAccessibilityBridge` captures bounded deterministic output.
 Neither is evidence of native screen-reader functionality.
 
+[ADR-082](082-runtime-ui-accessibility-capability-and-ownership.md) specializes
+this boundary for Runtime UI semantic snapshots, presentation-correlated native
+exposure, platform capability negotiation, editor validation and evidence-backed
+support manifests without changing the per-datum authorities above.
+
 The audio callback performs no allocation, blocking locks, I/O or text formatting.
 Input accessibility processing has no per-event allocations or unbounded waits.
 Render accessibility passes add no synchronous CPU/GPU readback. UI submission is

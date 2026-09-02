@@ -253,6 +253,14 @@ Product updates may require migration of user-level state:
 - plugin resolution cache
 - update state records
 
+Runtime save archives are governed separately by the release manifest's
+`saveCompatibility` contract and
+[ADR-112](../../adr/112-save-archive-container-and-compatibility-policy.md). Update
+activation does not rewrite save slots. Save migration verifies the source archive,
+uses detached staging, preserves the original unless captured product/user policy
+authorizes replacement, and publishes a new slot generation only through the runtime
+save transaction.
+
 User projects are not migrated during product update activation. User-state
 migration runs only after the new product version starts and validates the
 state schema.
@@ -338,8 +346,9 @@ Required tests cover:
 
 - [Release Architecture](./release.md)
 - [Release Security](./release-security.md)
+- [ADR-112](../../adr/112-save-archive-container-and-compatibility-policy.md): save
+  compatibility, migration and slot-publication identity.
 - [Horo Package System](../packages/package-system.md): package updates and dependency resolution
 - [Application Security](../security/application-security.md)
 - [Platform Abstraction](../foundation/platform-abstraction.md)
 - [Configuration System](../foundation/configuration-system.md)
-

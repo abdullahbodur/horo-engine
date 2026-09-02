@@ -246,6 +246,13 @@ horo-engine/
 │       │   │   ├── NetworkSession.h
 │       │   │   ├── ReplicationManager.h
 │       │   │   └── ReplicationTraits.h
+│       │   ├── Terrain/
+│       │   │   ├── Api/
+│       │   │   │   ├── TerrainTypes.h
+│       │   │   │   ├── TerrainDescriptors.h
+│       │   │   │   └── TerrainSnapshots.h
+│       │   │   └── Runtime/
+│       │   │       └── TerrainRuntime.h
 │       │   ├── GameUI.h
 │       │   ├── DebugConsole.h
 │       │   ├── PlatformServices.h
@@ -403,6 +410,13 @@ horo-engine/
 │   │   │   ├── constraints/
 │   │   │   ├── integration/
 │   │   │   └── queries/
+│   │   ├── terrain/
+│   │   │   ├── api/
+│   │   │   ├── runtime/
+│   │   │   ├── streaming/
+│   │   │   ├── render_bridge/
+│   │   │   ├── physics_bridge/
+│   │   │   └── navigation_bridge/
 │   │   ├── audio/
 │   │   │   ├── frontend/
 │   │   │   ├── mixer/
@@ -661,7 +675,7 @@ horo-engine/
 │   │   │   │   ├── SendPayloadLifetimeTests.cpp
 │   │   │   │   ├── ReplicationManagerTests.cpp
 │   │   │   │   ├── NetworkTransportNullTests.cpp
-│   │   │   │   ├── NetworkTransportENetTests.cpp
+│   │   │   │   ├── NetworkTransportGNSTests.cpp
 │   │   │   │   └── NetworkLifecycleAndShutdownTests.cpp
 │   │   │   ├── game_ui/
 │   │   │   ├── debug/

@@ -9,12 +9,24 @@ integration, and observability for Horo Engine.
 Networking is an optional engine capability. Hosts, tools, and games that do not need it
 do not construct, link, or activate concrete transport backends.
 
+Future Character replication/rollback must consume
+[ADR-092](../../adr/092-character-controller-determinism-and-state-composition.md)'s
+canonical typed state/codec rather than defining another authoritative Character
+field set. Network authority, interest, baselines, prediction, packet framing,
+compression, acknowledgement and security remain Network-owned. Exact canonical
+deltas may wrap the state; lossy presentation snapshots are distinct and cannot be
+used for canonical restore/hash. Connection/session/packet state never enters the
+Character checkpoint.
+
 ## Core Decisions
 
-- **Strict Layered Architecture**: Networking is separated into target-level tiers: public contracts and types (`HoroEngine::NetworkApi`), session coordination and replication runtime (`HoroEngine::NetworkRuntime`), and private concrete transport backends (`HoroEngine::NetworkTransportNull`, `HoroEngine::NetworkTransportENet`).
+- **Strict Layered Architecture**: Networking is separated into target-level tiers: public contracts and types (`HoroEngine::NetworkApi`), session coordination and replication runtime (`HoroEngine::NetworkRuntime`), and private concrete transport backends (`HoroEngine::NetworkTransportNull`, `HoroEngine::NetworkTransportGNS`).
+- **Production Baseline**: ADR-097 selects open-source GameNetworkingSockets (GNS) for production direct-IP real-time transport. Null remains the deterministic/offline backend; ICE/P2P, relay and provider integrations require explicit optional composition.
 - **Transport vs Session Split**: `INetworkTransport` is a packet-transport abstraction. Protocol negotiation, authentication, replication, and `NetworkSession` live in `NetworkRuntime`. Transport backends do not implement application authentication.
+- **Admission Before Gameplay**: Transport `Connected` creates a pre-active session only. The runtime's bounded admission controller is the sole authority that may negotiate, authenticate, activate and publish a session to gameplay.
+- **Host-Owned Trust**: The composition root supplies an immutable loopback-development, LAN or remote trust-policy snapshot. Project data, peers and transports cannot choose trust roots, weaken authentication or widen bind scope.
 - **Handle-Based Public Transport API**: Public transport operations use `INetworkTransport` plus generation-checked `ConnectionHandle` / `ListenerHandle` values. `ITransportConnection` and `ITransportListener` are not public types.
-- **Complete Native Encapsulation**: Public headers expose zero OS socket descriptors (`SOCKET`, `int fd`), OS socket headers, TLS/OpenSSL contexts (`SSL*`), event loops, or third-party transport structures (`ENetHost`, `SteamNetworkingSockets`).
+- **Complete Native Encapsulation**: Public headers expose zero OS socket descriptors (`SOCKET`, `int fd`), OS socket headers, TLS/OpenSSL contexts (`SSL*`), event loops, or GNS/provider transport structures.
 - **Optional Link and Composition**: Single-player games, asset tools, and offline CLI utilities compile and run without linking transport backends. Products can compose `NetworkTransportNull` or omit the network runtime entirely.
 - **Host-Owned Injection**: The composition root instantiates a concrete transport and transfers unique ownership into `NetworkRuntime`. `NetworkRuntime` never links a concrete backend directly.
 - **Thread Isolation & Zero I/O State Mutation**: Network I/O executes on dedicated background worker threads owned by the concrete transport that needs them. I/O threads never directly mutate Scene, ECS, Entity, Component, Editor, or Gameplay state.
@@ -24,6 +36,10 @@ do not construct, link, or activate concrete transport backends.
 - **Bounded Queues and Backpressure**: Inbound and outbound message queues enforce fixed capacity bounds and deterministic drop/rejection policies for overloaded connections.
 - **Explicit Schemas & Negotiation**: Messages use typed schemas and handshake negotiation. Raw C++ memory layout, vtables, pointers, and unstructured object graphs are never serialized.
 - **Deterministic Cancellation and Shutdown**: Every connection reaches a definitive terminal state. Disconnections, timeouts, cancellations, and engine shutdown follow bounded, leak-free teardown protocols.
+- **Opt-In Prediction**: NonPredicted is the baseline and constructs no history/replay machinery. LocalPrediction and RollbackResimulation require validated ADR-100 descriptors, bounded histories and owner-provided fixed-tick hooks.
+- **Network-Owned Scheduling**: One NetworkRuntime scheduler applies immutable renderer-independent project profiles, per-connection bandwidth/work/queue ledgers, bounded interest and weighted-deficit fairness.
+- **Typed Runtime Mode Plan**: ADR-102 separates package-supported modes from the one standalone, client, listen-server or dedicated-server plan selected before world publication. Gameplay receives world/session-generation-scoped roles and capabilities; process globals, locality and headless state never grant authority.
+- **Shared Typed Configuration**: ADR-103 applies ADR-009 once across editor, CLI, MCP, CI and packaged hosts. Project defaults, preview preferences, release role, host requests and credential bindings retain distinct owners; product capability/security floors constrain runtime selection.
 
 ## Target Topology and Module Ownership
 
@@ -43,7 +59,7 @@ The network subsystem is organized into four distinct CMake targets with strict 
 +---------------------+----+   +-----+-------------------------+
 | HoroEngine::NetworkRuntime|   | Concrete Transports (Private) |
 | (depends also on Runtime) |   | - NetworkTransportNull        |
-+---------------------------+   | - NetworkTransportENet        |
++---------------------------+   | - NetworkTransportGNS         |
                                 +-------------------------------+
 ```
 
@@ -58,7 +74,7 @@ The network subsystem is organized into four distinct CMake targets with strict 
   - Result and error types: `Result<T, NetworkErrorCode>`, `NetworkErrorCode`, `DisconnectReason`.
   - Message abstractions: `MessageView`, `ConstMessageSpan`, `IMessageSerializer`.
   - Transport interface and events: `INetworkTransport`, `ITransportEventConsumer`, `TransportEvent`, `TransportConnectionState`, `TransportCapabilities`.
-  - Replication traits and property condition flags: `ReplicationTraits<T>`, `ReplicationCondition`.
+  - Replication schema contracts: `ReplicationSchemaId`, stable `FieldId`, `ReplicationSchemaVersion`, field descriptors, canonical codec bindings and `ReplicationCondition`.
 - **Not Public**: `ITransportConnection`, `ITransportListener`, native peers, OS sockets, and backend queue types.
 
 ### 2. `HoroEngine::NetworkRuntime`
@@ -70,8 +86,9 @@ The network subsystem is organized into four distinct CMake targets with strict 
 - **Key Components**:
   - `NetworkRuntimeCoordinator`: Owns the injected transport and active sessions, and ticks during `NetworkPoll` / `NetworkFlush`.
   - `NetworkSession`: Application-facing session that starts after the transport reports `Connected`.
-  - `SessionStateMachine`: Manages session transitions (`Created` -> `Negotiating` -> `Authenticating` -> `Active` -> `Closing` -> `Closed`).
-  - `ReplicationManager`: Manages dirty property tracking, delta compression, interest management sets, and authoritative snapshot generation.
+  - `SessionAdmissionController`: Owns bounded compatibility, peer trust, credential verification and activation before gameplay dispatch.
+  - `SessionStateMachine`: Manages session transitions (`Created` -> `Negotiating` -> `Authenticating` -> `Activating` -> `Active` -> `Closing` -> `Closed`).
+  - `ReplicationManager`: Pins the validated schema generation and manages explicit dirty hints, immutable captured snapshots, baselines, interest, wire routing and validated apply commands without owning gameplay state.
   - `MessageDispatcher`: Routes incoming RPCs and replication payloads to registered game handlers on the simulation thread.
 
 ### 3. `HoroEngine::NetworkTransportNull`
@@ -81,12 +98,13 @@ The network subsystem is organized into four distinct CMake targets with strict 
 - **Must Not Depend On**: `HoroEngine::Platform`, OS sockets, or a network I/O thread.
 - **Purpose**: Unit testing, CI verification, single-player offline simulation, and synthetic latency/loss testing harnesses. `PollEvents()` and `Send()` run on the caller thread against in-memory queues.
 
-### 4. `HoroEngine::NetworkTransportENet`
+### 4. `HoroEngine::NetworkTransportGNS`
 
-- **Role**: High-performance reliable and unreliable UDP transport implementation.
+- **Role**: Production direct-IP reliable and unreliable message transport implemented with open-source GameNetworkingSockets.
 - **Direct Dependencies**: `HoroEngine::NetworkApi`, `HoroEngine::Foundation`, `HoroEngine::Platform`.
-- **Encapsulation**: Links third-party ENet and platform socket libraries strictly as `PRIVATE`. No third-party headers or socket types leak into public includes.
-- **Owns**: I/O thread, native ENet/socket state, inbound event queue, and outbound send queue.
+- **Encapsulation**: Links GNS, its selected crypto provider, protobuf and platform socket libraries strictly as `PRIVATE`. No third-party headers, values or socket types leak into public includes.
+- **Owns**: I/O thread, native GNS/socket state and messages, inbound event queue, and outbound send queue.
+- **Baseline Features**: Direct IPv4/IPv6 only. ICE/P2P and Steam/provider-specific integration are disabled unless a product explicitly composes and qualifies them.
 
 ## Public Header Encapsulation
 
@@ -96,14 +114,14 @@ To maintain portability, compile speed, and memory safety, public headers under 
 2. **No Native Sockets / Handles**: Sockets are encapsulated as opaque integer handles or private members within backend `.cpp` files. Public APIs operate exclusively on `ConnectionHandle` and `ListenerHandle`.
 3. **No TLS / Crypto Contexts**: OpenSSL, mbedTLS, or native TLS context pointers (`SSL*`, `SSL_CTX*`) never appear in public interfaces.
 4. **No Native Event Loops**: Event loop primitives (libuv `uv_loop_t`, epoll file descriptors, kqueue, IOCP handles) remain private to backend implementations.
-5. **No Third-Party Types**: `ENetHost`, `ENetPeer`, `ENetPacket`, or Steam networking structs are strictly confined to concrete backend sources.
+5. **No Third-Party Types**: GNS interfaces, handles, messages, connection-info structures, configuration values, callbacks and Steam networking structures are strictly confined to concrete backend sources.
 
 ## Host Composition and Transport Ownership
 
-The host composition root selects and instantiates the backend. `NetworkRuntime` never links `NetworkTransportNull` or `NetworkTransportENet`.
+The host composition root selects and instantiates the backend. `NetworkRuntime` never links `NetworkTransportNull` or `NetworkTransportGNS`.
 
 ```cpp
-auto transport = CreateENetTransport(config); // or CreateNullTransport(config)
+auto transport = CreateGnsTransport(config); // or CreateNullTransport(config)
 NetworkRuntime runtime({
     .transport = std::move(transport),
 });
@@ -217,6 +235,7 @@ NetworkSession
   Created                 // allocated when transport reaches Connected
     -> Negotiating        // protocol version, channels, capabilities
     -> Authenticating     // runtime/session token validation
+    -> Activating         // transcript-bound mutual activation acknowledgement
     -> Active
     -> Closing
     -> Closed
@@ -226,21 +245,22 @@ NetworkSession
 
 - **Transport `Created`**: Handle allocated; request validated. `Connect()` has already returned.
 - **Transport `Resolving`**: Asynchronous DNS for a hostname endpoint.
-- **Transport `Connecting`**: Native connect and transport-level handshake (for example ENet peer connect). No application token is exchanged here.
+- **Transport `Connecting`**: Native connect and transport-level handshake. No application token is exchanged here.
 - **Transport `Connected`**: Packets can flow. `NetworkRuntime` now creates a `NetworkSession`.
 - **Session `Negotiating`**: Schema/protocol version, compression, and MTU agreement.
-- **Session `Authenticating`**: `NetworkRuntime` validates application credentials. Tokens are runtime/session data, not `ConnectRequest` fields on the transport.
+- **Session `Authenticating`**: `NetworkRuntime` validates host/peer trust and application credentials against the immutable listener policy. Tokens are runtime/session data, not `ConnectRequest` fields on the transport.
+- **Session `Activating`**: Both peers validate transcript-bound activation acknowledgements; no gameplay dispatch is permitted yet.
 - **Session `Active`**: Gameplay messages, RPCs, and replication are admitted.
 - **Closing / Closed / Failed**: Each layer tears down independently. Session close requests transport `Close()`. Transport `Failed` fails the associated session.
 
-Future transports (SteamNetworkingSockets, WebRTC, and similar) replace only the transport machine. They must not absorb session authentication.
+Future provider transports replace only the transport machine. They must not absorb session authentication.
 
 ## Queue Ownership
 
 Model A is normative:
 
 ```text
-Transport I/O thread (ENet) or caller thread (Null)
+Transport I/O thread (GNS) or caller thread (Null)
     -> transport-owned inbound event queue
     -> NetworkRuntime calls transport.PollEvents(consumer)
 
@@ -265,7 +285,7 @@ The transport owns:
 To prevent race conditions and frame stalls, network operations are strictly partitioned:
 
 ```text
-[ Background I/O Worker Thread ]          // ENet only; Null has none
+[ Background I/O Worker Thread ]          // GNS only; Null has none
   OS Socket Poll -> Recv Packets -> Framing
          |
          v
@@ -279,7 +299,7 @@ To prevent race conditions and frame stalls, network operations are strictly par
   Frame Phase: NetworkPoll
     - transport.PollEvents(consumer)
     - advance TransportConnection states
-    - create/advance NetworkSession (negotiate, authenticate)
+    - create/advance NetworkSession (negotiate, authenticate, activate)
     - dispatch Active-session messages to ReplicationManager / gameplay
   Frame Phase: Simulation & Gameplay Update
   Frame Phase: NetworkFlush
@@ -312,7 +332,7 @@ To prevent race conditions and frame stalls, network operations are strictly par
 
 Allowed adjacent orders are `NetworkPoll -> Simulation -> NetworkFlush -> RenderExtraction -> Render`. `NetworkFlush` after `RenderExtraction` is forbidden as the default because it adds render-extract latency to the network path without a transport requirement.
 
-## Message Schema and Protocol Negotiation
+## Message Schema, Protocol Negotiation and Session Trust
 
 Messages consist of:
 
@@ -321,13 +341,71 @@ Messages consist of:
 - 32-bit Sequence / Acknowledgement Numbers.
 - Bounded payload bytes with validated length headers.
 
-`NetworkRuntime` performs handshake negotiation after the transport reports `Connected`:
+Replication payloads further carry ADR-099 authority epoch, network object ID/
+generation, authoritative tick, schema ID/version and canonical ascending stable
+`FieldId` records. Property paths, native offsets and component memory layouts are
+never protocol identity.
 
-- Minimum and maximum supported protocol versions.
-- Supported compression algorithms and MTU payload limits.
-- Authentication credentials and capability flags.
+`NetworkRuntime` performs handshake negotiation after the transport reports
+`Connected`. Until the session is `Active`, it accepts only bounded admission
+messages on the reserved control channel. Early gameplay, RPC, replication, voice,
+console and extension messages are rejected and never buffered for later dispatch.
 
-Mismatched protocol versions or invalid authentication tokens fail the **session** with `NetworkErrorCode::IncompatibleProtocol` or `NetworkErrorCode::AuthenticationFailed`. The transport connection is then closed. Transport backends must not interpret authentication tokens.
+The canonical hello exchange includes:
+
+- Product/protocol family identity and minimum/maximum wire versions.
+- Gameplay schema-set fingerprint and compatibility epoch.
+- Required/optional capability IDs, compression and MTU limits.
+- Trust-policy ID/revision, transport protection evidence and fresh nonces.
+
+The server selects the highest mutually supported version above both configured
+compatibility/security floors. Required capabilities and schema fingerprints use
+an explicit compatibility table; no string comparison, native-layout inference or
+silent downgrade is permitted. Both peers bind verification and activation to a
+canonical transcript digest.
+
+Mismatched protocol versions, trust failures or invalid credentials fail the
+**session** with a typed safe error and then close the transport. Transport
+backends must not interpret application credentials.
+
+GNS connection encryption and packet integrity are private transport capabilities;
+they do not authenticate a Horo user, authorize a session or replace application
+protocol negotiation. `NetworkRuntime` owns credential/token exchange, peer trust,
+session admission and replication authority.
+
+NAT traversal is an optional capability boundary. A concrete adapter may own an
+ICE/STUN/TURN or provider-native mechanism, while `NetworkRuntime` and the host own
+signaling policy, credential acquisition and provider selection. The baseline GNS
+composition does not enable traversal, Steam signaling/authentication, Steam
+Datagram Relay, WebRTC or console-provider SDKs.
+
+### Exposure and Admission Policy
+
+The host supplies an immutable `NetworkTrustPolicySnapshot` before listener/connect
+creation. Effective bind scope must agree with its exposure:
+
+| Exposure | Required channel/peer policy | Application admission |
+|---|---|---|
+| Loopback development | Proven loopback bind/peer; native encryption when supported; Null may remain in-memory | Explicit local principal or configured credential |
+| Local network | Encryption/integrity plus product trust anchor, exact pin or explicit out-of-band pairing | Credential or explicitly configured bounded LAN guest principal |
+| Remote | Encryption/integrity plus authenticated server identity | Required short-lived transcript/nonces/server-bound admission proof |
+
+IP/private-subnet identity, successful key exchange and encrypted-but-
+unauthenticated transport are not peer authentication. A remote connection cannot
+become active without both server trust and application admission. Provider/native
+identity is verifier evidence, not gameplay authority.
+
+Successful verification creates an immutable Horo `SessionPrincipal` containing a
+fresh random session ID, principal ID, trust level, bounded roles/capabilities,
+credential provenance and expiry. Client claims never grant authority directly.
+Expiry or revocation closes the M0 session; transparent reauthentication is not
+part of this baseline.
+
+Admission has finite byte/message/field, pre-active connection, verifier-work,
+attempt, per-source rate, negotiation and activation limits. Cheap canonical
+parsing and compatibility checks precede expensive verification. Timeout,
+cancellation or shutdown invalidates the admission generation, so late transport
+or verifier completion cannot activate a session.
 
 ## Delivery Semantics and Backpressure
 
@@ -355,24 +433,92 @@ All transport queues have bounded capacities:
 
 ## Deterministic Cancellation and Shutdown
 
-- **Cancellation**: Connect and resolve requests accept `CancellationToken`. Triggering cancellation immediately halts DNS lookups and connection attempts. The transport connection moves to `Failed` with `NetworkErrorCode::OperationCancelled`, reported through `PollEvents()`.
+- **Cancellation**: Connect and resolve requests accept `CancellationToken`. Triggering cancellation halts DNS lookups and connection attempts, closes any native attempt and reports exactly one terminal `NetworkErrorCode::OperationCancelled` event through `PollEvents()`. Generation checks discard late native callbacks.
 - **Graceful Teardown**: Session close asks the transport to `Close()`. The transport transmits a disconnect frame and starts a bounded drain timer. Upon expiry or peer ACK, native resources are reclaimed.
 - **Process Shutdown Sequence**:
   1. The host calls `NetworkRuntime::Shutdown()`.
-  2. Runtime fails/closes all sessions and stops admitting gameplay messages.
-  3. Runtime calls `INetworkTransport::Shutdown()`: listeners stop accepting, connections send disconnect notices, I/O threads stop and join with a bounded timeout.
-  4. Runtime destroys the unique transport.
-  5. Session pools and dispatcher tables are freed.
+  2. Runtime stops admission, invalidates verification generations, removes every session from gameplay dispatch and cancels verifier work.
+  3. Runtime calls `INetworkTransport::Shutdown()`: listeners stop accepting, pending connects are cancelled, connections send disconnect notices and perform only the bounded close drain.
+  4. The backend stops and joins its I/O thread, drains or explicitly discards native and normalized messages under the shutdown policy, then releases native library state.
+  5. Runtime destroys the unique transport. No callback may target it after destruction.
+  6. Session pools and dispatcher tables are freed.
+
+## Runtime Network Modes and Authority Exposure
+
+[ADR-102](../../adr/102-runtime-network-modes-and-authority-exposure.md)
+separates the immutable modes supported by a product artifact from the one mode
+selected for a host generation. Runtime flags and project configuration can select
+only a declared mode; they cannot add a missing target/backend or synthesize
+server authority.
+
+| Runtime mode | World composition | Network service ownership | Gameplay authority exposure |
+|---|---|---|---|
+| `Standalone` | One standalone world | Omitted by default; an explicit Null facade remains inert | Normal local Scene/Gameplay ownership without a network session, grant or authority epoch |
+| `Client` | One client world | Outbound attempts and Active sessions owned by `NetworkRuntime`; no listener | Autonomous/simulated capabilities only through the current admitted session and object grants |
+| `ListenServer` | Separate authority-server and local-client worlds | Server listener/admission plus an explicitly admitted loopback client session | Server authority appears only in the server world; locality never grants the client world authority |
+| `DedicatedServer` | One authority-server world | Server listener, admission and sessions; no outbound gameplay client | Server-world authority with no local player, renderer, audio, input or window requirement |
+
+The host validates the whole world/listener/outbound/local-player matrix before
+publishing a world. Gameplay receives an immutable `GameplayNetworkRoleView`
+scoped by plan, host, scene and optional session/authority generations. Privileged
+operations revalidate those generations at the owner safe point. A process-global
+`IsServer`, listener presence, local player, loopback address, executable name,
+headless state or service-locator result is never authority.
+
+Mode is fixed for one host generation. Travel replaces world/authority generations
+without changing mode; reconnect creates a new session generation. Disconnect
+unpublishes the client session view and cannot promote a client to standalone.
+Shutdown unpublishes views and invalidates grants before worlds, sessions,
+listeners or transports are destroyed.
+
+Immersive Editor AI under
+[ADR-172](../../adr/172-immersive-agent-ownership-authoring-mode-and-risk.md)
+does not alter this authority model. Local XR presence, an agent/MCP session,
+voice or physical interaction cannot mint a peer, session, object or server-world
+grant. Remote participants cannot impersonate local proposal approval, and
+network content remains untrusted context rather than editor-tool authority.
+
+## Project Configuration and Product Capability
+
+[ADR-103](../../adr/103-network-project-configuration-and-build-profile-ownership.md)
+specializes the Foundation configuration resolver without creating a Network-local
+precedence implementation. The Network module contributes inert `network.*`
+descriptors and projects the resolved snapshot into one validated
+`EffectiveNetworkConfiguration`. Editor, CLI, MCP, CI and packaged hosts call the
+same application use case and receive the same typed diagnostics/provenance.
+
+Portable project policy owns protocol/profile/trust/provider intent; local user
+configuration owns preview-only preferences; the product release profile owns
+supported ADR-102 modes, exact targets/providers, security floors and qualification
+evidence; a host request selects only within that envelope. Renderer backend,
+device/quality tier, developer CMake profile and headless state cannot select a
+network mode, transport or ADR-101 scheduling profile.
+
+Packaging emits a safe versioned `NetworkProductCapabilityManifest`. It describes
+supported modes/providers, public compatibility/security evidence and permitted
+override bounds, but grants no authority. Project files and manifests contain no
+raw credential/private-key values or private credential bindings. They declare
+stable credential requirements; private host/CI input binds an opaque provider
+reference, and the consuming operation resolves a short-lived value/operation
+handle. Missing mode/provider/credential/trust capability fails explicitly without
+fallback.
+
+Every preview, release job and runtime activation pins the effective configuration
+revision. Migration is versioned and cannot infer network values from renderer
+tiers. Runtime mode/provider/exposure changes require ADR-102 host recomposition;
+existing sessions keep their negotiated generations until bounded replacement or
+shutdown.
 
 ## Optional Composition and Product Configurations
 
-Horo Engine products compose networking according to their needs:
+Horo Engine products declare only the modes and network targets they can realize:
 
 | Configuration | Composed Targets | Behavior |
 |---|---|---|
-| **Editor / IDE** (`HoroEditor`) | `NetworkApi`, `NetworkRuntime`, `NetworkTransportENet` | Full multiplayer preview, network debugger panel, local test servers. |
-| **Dedicated Server** (`horo-engine server`) | `NetworkApi`, `NetworkRuntime`, `NetworkTransportENet` | Headless execution, high-tick simulation, no rendering or audio dependencies. |
-| **Offline Game Client** | `NetworkApi`, `NetworkRuntime`, `NetworkTransportNull` | Uses replication/session API locally; zero socket operations, Platform sockets, or I/O threads. |
+| **Editor / IDE** (`HoroEditor`) | `NetworkApi`, `NetworkRuntime`, `NetworkTransportGNS`, optional Null test backend | Validates an explicit standalone/client/listen/dedicated preview plan; no editor-only authority role. |
+| **Network-capable game artifact** | `NetworkApi`, `NetworkRuntime`, selected qualified transport(s) | May support client/listen/dedicated modes according to its cooked product capability declaration. |
+| **Standalone artifact** | Network targets omitted by default; optional `NetworkApi`, `NetworkRuntime`, `NetworkTransportNull` test facade | Standalone role only; the optional facade creates no listener, session, replication or authority epoch. |
+| **Dedicated-server artifact** | `NetworkApi`, `NetworkRuntime`, `NetworkTransportGNS` | Headless dedicated plan without renderer, audio, input, window or local-player dependencies. |
 | **Tooling / Packager** (`horopak`) | *None* | Links zero network targets; compiles cleanly with minimal footprint. |
 
 ## Observability and Diagnostics
@@ -388,9 +534,12 @@ Networking integrates with Horo's diagnostic and metric infrastructure:
 The networking subsystem requires targeted automated verification:
 
 1. **Unit Tests (`tests/unit/runtime/networking/`)**:
+   - `NetworkConfigurationTests`: legal source/precedence matrix, security-floor constraints, cross-surface parity, renderer/build-profile isolation and unavailable capability errors.
+   - `NetworkArtifactPlanTests`: mode/provider target inventory, canonical manifest, migration and proof that credentials/private bindings never enter public outputs.
    - `NetworkAddressTests`: IPv4, IPv6, hostname, loopback, port parsing, serialization.
    - `TransportConnectionStateTests`: `Connect()` returns immediately; `Created` / `Resolving` / `Connecting` / `Connected`; invalid transitions; timeout.
-   - `SessionStateMachineTests`: `Negotiating` / `Authenticating` / `Active`; auth failure does not require transport-level auth.
+   - `SessionStateMachineTests`: `Negotiating` / `Authenticating` / `Activating` / `Active`; only Active reaches gameplay dispatch.
+   - `SessionAdmissionTests`: protocol/schema compatibility, transcript binding, exposure/bind policy, principal creation, expiry and revocation.
    - `NetworkHandleTests`: stale handle -> `InvalidHandle`; send-after-close -> `ConnectionClosed`; duplicate `Close` is idempotent.
    - `SendPayloadLifetimeTests`: caller buffer may be overwritten after `Send()` returns.
    - `ReplicationManagerTests`: Dirty property extraction, delta compression, interest management queries.
@@ -400,17 +549,40 @@ The networking subsystem requires targeted automated verification:
    - `PollEvents()` drains the transport-owned in-memory queue on the caller thread.
    - Graceful disconnect and timeout handling.
 3. **Integration & Lifecycle Tests**:
+   - Complete standalone/client/listen/dedicated plan matrix, including unsupported package modes and incompatible world/listener/outbound/local-player capabilities.
+   - World-scoped role exposure rejects authority inferred from flags, headless state, listeners, local players, loopback or same-process pointers.
+   - Listen-server worlds remain isolated through admitted loopback, travel and local-client disconnect; client disconnect never promotes to standalone.
+   - Travel/reconnect replace scene, authority and session generations; stale grants, role views and late work cannot mutate or republish state.
    - Full client-server connect, session authenticate, transfer, and disconnect sequences.
+   - Connected peers sending early gameplay never reach gameplay/replication callbacks.
+   - Loopback, LAN and remote valid flows; wrong pins/roots, unauthenticated encryption, invalid/expired/revoked credentials and downgrade/replay attempts.
+   - Bounded malformed/truncated/oversized admission input, rate/flood limits and verifier exhaustion.
    - Cancellation during DNS and connect; `Connect()` already returned a handle.
+   - Negotiation, verification and activation timeout/cancellation races discard late completions.
    - Unique-ptr injection: runtime shutdown destroys the transport exactly once.
    - Process shutdown with active connections and pending queued messages without hangs or memory leaks.
+4. **GNS Adapter Contract Tests (`NetworkTransportGNSTests`)**:
+   - Successful direct-IP IPv4/IPv6 listen, connect, reliable/unreliable transfer, close and reconnect.
+   - Zero/max message, connection, listener, channel/lane and queue boundaries; unsupported capability combinations fail explicitly.
+   - Malformed, truncated, oversized, duplicate, reordered and flood input is rejected without unbounded allocation or runtime mutation.
+   - Cancellation racing native success/failure publishes one terminal event and cannot revive a stale handle.
+   - Shutdown before initialization, after partial failure and with active native callbacks/messages is bounded, idempotent and callback-free after destruction.
+   - Dependency builds and smoke tests cover every claimed platform/toolchain and crypto-provider configuration; sanitizer/fuzz evidence is retained where supported.
 
 ## Related Documents
 
 - [ADR-020: Network Target Ownership and Dependency Boundary](../../adr/020-network-target-ownership-and-dependency-boundary.md)
+- [ADR-097: Default Real-Time Transport Backend](../../adr/097-default-real-time-transport-backend.md)
+- [ADR-098: Protocol, Session and Trust Policy](../../adr/098-protocol-session-and-trust-policy.md)
+- [ADR-099: Replication Ownership, Authority and Compatibility](../../adr/099-replication-ownership-authority-and-compatibility.md)
+- [ADR-100: Prediction Capability Tiers and Determinism Policy](../../adr/100-prediction-capability-tiers-and-determinism-policy.md)
+- [ADR-101: Interest, Priority and Network Budget Model](../../adr/101-interest-priority-and-network-budget-model.md)
+- [ADR-102: Runtime Network Modes and Authority Exposure](../../adr/102-runtime-network-modes-and-authority-exposure.md)
+- [ADR-103: Network Project Configuration and Build-Profile Ownership](../../adr/103-network-project-configuration-and-build-profile-ownership.md)
 - [System Design](../foundation/system-design.md)
 - [Desired Project Trees](../desired-project-tree.md)
 - [Multiplayer Replication Architecture](./multiplayer-replication-architecture.md)
 - [Runtime Lifecycle](./runtime-lifecycle.md)
 - [Concurrency And Job System](../foundation/concurrency-and-jobs.md)
 - [Network Debugger UI Reference](./network-debugger.html)
+- [Application Security Architecture](../security/application-security.md)

@@ -172,7 +172,7 @@ GPU-driven culling consumes an immutable published GPU Scene generation from
 checked view descriptor, Hi-Z/history inputs when admitted and finite output
 capacities:
 
-```
+```text
 1. Compute shader: frustum + occlusion + distance culling
 2. Compact visible instance list
 3. Write indirect draw commands to GPU buffer
@@ -191,6 +191,28 @@ validated batches to private native indirect execution. Culling parameters
 readback is required for normal drawing, and optional diagnostics are asynchronous,
 bounded and generation tagged. GPU visibility is presentation data, not gameplay
 or streaming truth.
+
+## Terrain And Foliage Boundary
+
+[ADR-139](../../adr/139-terrain-render-extraction-material-lod-and-tier-boundary.md)
+separates Terrain representation authority from renderer selection. Terrain Cook/Runtime
+owns the finite legal tile/foliage LOD set, geometric-error inputs, seam/skirt/morph and
+neighbor compatibility, material/hole preservation, resident availability and exact
+content generation. The Terrain extractor publishes those facts in a bounded immutable,
+view-independent candidate snapshot.
+
+RenderFrontend owns selection per view because projection, output extent, raster recipe,
+history/hysteresis and render budgets are presentation inputs. It may select only a
+resident compatible representation and must satisfy adjacent-tile seam constraints. No
+compatible required selection yields explicit preparing/unavailable/failure state rather
+than a crack, flat substitute, silent omission or independent neighbor clamp.
+
+Core 1.0 performs deterministic bounded CPU frustum/distance/LOD/seam planning and emits
+neutral direct or instanced batches. The GPU-driven pipeline above is an optional post-1.0
+Terrain/Foliage recipe requiring separately cooked shaders, complete effective compute/
+storage/indirect capability, finite work buffers and an admitted fallback. GPU-selected
+visibility/LOD remains per-view presentation data and cannot synchronously mutate World
+Streaming residency or become gameplay truth.
 
 ## Debug And Visualization
 
@@ -221,6 +243,7 @@ switches backend, silently drops candidates or changes gameplay visibility.
 
 - [Rendering Architecture](./rendering-architecture.md): draw call submission and indirect draws
 - [Terrain And Foliage Architecture](./terrain-and-foliage-architecture.md): foliage LOD and impostors
+- [ADR-139](../../adr/139-terrain-render-extraction-material-lod-and-tier-boundary.md): Terrain/Foliage representation, per-view selection and CPU/GPU recipe ownership
 - [World Streaming Architecture](./world-streaming-architecture.md): visibility cell streaming
 - [Advanced Rendering Architecture](./advanced-rendering-architecture.md): ray-traced occlusion
 - [Scene Runtime](./scene-runtime.md): renderable component and bounding data

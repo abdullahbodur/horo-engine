@@ -277,6 +277,67 @@ certification APIs directly. See
 [Platform Abstraction](../foundation/platform-abstraction.md) for path,
 directory, atomic file, and platform-service contracts.
 
+### Cinematic Control Outcomes
+
+[ADR-118](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md)
+requires gameplay modules to submit ordinary typed animation-parameter, movement,
+heading, stance and action commands even while a cinematic runs. The receiving owner
+resolves each channel against the tick's immutable authority claims and returns
+`AcceptedGameplay`, `AcceptedForOwnerBlend`, `SuppressedByCinematic`,
+`StaleAuthority` or `AuthorityDenied` as appropriate.
+
+Modules do not poll a global cinematic flag, write poses/transforms directly or queue
+suppressed edge actions until a sequence stops. Unclaimed channels and unrelated
+simulation continue when fixed ticks run. Whole-game pause attempts no Gameplay,
+Animation, Character or Physics tick; collision-aware cinematic movement instead
+uses scoped control transfer while simulation remains active.
+
+### Cinematic Playback Capability
+
+[ADR-122](../../adr/122-cinematic-trigger-sources-and-capability-policy.md)
+forbids gameplay modules and scripts from discovering `CinematicRuntimeService` or
+constructing players. A module that declares and receives
+`cinematic.playback.start` gets a narrow `ICinematicPlaybackCapability` in its runtime
+context. Requests are scoped to the caller principal, runtime session, world role,
+allowed sequence/effect set and owner authority; knowing an asset ID is not a grant.
+
+The same typed application admission serves native/script gameplay, cooked scene
+autoplay and committed gameplay-event adapters in development and packaged profiles.
+A client capability cannot acquire server-owned Character/gameplay/Physics/pause
+authority. Module/script unload and grant revocation close admission and generation-
+fence late preparation/start results. Denial returns a typed result and creates no
+player, lease, event, Audio/VFX request or partial effect.
+
+### VFX Gameplay Payload Capability
+
+[ADR-123](../../adr/123-vfx-cpu-stage-order-determinism-and-gameplay-coupling.md)
+keeps CPU particle storage and stage execution inside `VfxWorld`. Gameplay modules and
+scripts can submit only declared schema/range-checked `GameplayInput` parameters before
+the VFX tick cutoff and consume bounded `GameplayOutput` occurrences or effect-level
+aggregate snapshots after VFX commit at their owner boundary. They never receive a
+mutable SoA span, particle slot/index, stage callback or arbitrary force/collision
+kernel hook.
+
+Private/render channel access, wrong-stage writes, stale scene/emitter/schema identity,
+nonfinite values and output-capacity failure return typed results with zero mutation.
+GPU readback and Null/visual output cannot drive authoritative gameplay. A behavior
+needing particle-derived gameplay declares a CPU-mandatory compiled unit and admits
+its worst-case work/output capacity.
+
+[ADR-128](../../adr/128-vfx-spawn-event-mapping-pooling-and-budget-enforcement.md)
+places event-to-effect choice in an application-owned cooked
+`GameplayVfxBindingTable`. Ordinary modules/scripts receive a capability scoped to
+declared semantic event IDs or typed effect tags; they do not discover internal
+emitters, inspect the binding table or gain spawn authority merely by knowing an asset
+or tag ID. The application adapter resolves one immutable binding generation and
+submits bounded requests carrying stable occurrence/layer identity.
+
+The binding fixes payload schema, ownership/request class, finite fan-out, compatible
+quality variants and overload policy. Load rejects duplicate semantic ownership,
+unbounded mappings or required behavior paired with cosmetic delay/eviction. Queue,
+pool and budget denials return typed correlated results; gameplay cannot block, grow a
+pool or bypass the reserved required capacity.
+
 ## Services
 
 A game module may create project- or runtime-scoped services through explicit
@@ -297,6 +358,26 @@ services outlive scene-scoped systems and behaviors that depend on them;
 scene-scoped services are created before dependent scene instances and destroyed
 after dependent behaviors, systems, and jobs are drained.
 
+## Canonical Runtime Persistence
+
+Gameplay modules contribute runtime-save state only through the subsystem-owned
+`CanonicalStateParticipantDescriptor` and `ICanonicalStateAdapter` contract in
+[ADR-114](../../adr/114-canonical-runtime-world-persistence-boundary.md). The
+descriptor is inert metadata declaring stable participant/schema identity, scope,
+required policy, dependencies, bounds and owned field/type IDs. Host composition
+binds the adapter and rejects duplicate semantic ownership.
+
+A component or service does not gain persistence authority from reflection, a
+serialized authoring field or trivially-copyable layout. Its owning gameplay adapter
+captures stable semantic values/references at the aggregate save safe point and
+prepares detached restore state for one no-fail publication. Pointers, behavior/service
+instances, callbacks, jobs, queues, native handles and module-local indices are never
+durable payloads. Unknown or incompatible required adapters fail before live mutation.
+
+One semantic field belongs to one participant. A gameplay service and ECS component
+cannot both save authoritative copies. Account/profile values remain outside runtime
+slots, and client modules cannot persist replicated server state as local authority.
+
 ## Native Hot Reload
 
 Data, scene, shader, and asset hot reload follow their owning subsystem
@@ -306,7 +387,7 @@ Native gameplay code reload, when enabled in development:
 
 - occurs only at a runtime safe point
 - stops affected systems and joins module-owned jobs
-- serializes only explicitly preservable state
+- transfers only explicitly preservable state through a hot-reload adapter
 - invalidates all module-owned callbacks and function pointers
 - reloads through a versioned module boundary
 - recreates systems and restores compatible state
@@ -334,6 +415,9 @@ If any unload precondition cannot be proven, the editor requests a play-session
 or process restart instead of unloading unsafe C++ code.
 
 Shipping builds do not load unsigned replacement gameplay code.
+
+Hot-reload preservation is an implementation/session migration and does not
+implicitly register a durable canonical participant, schema or compatibility promise.
 
 ## Errors And Diagnostics
 
@@ -388,3 +472,8 @@ game.<project>.save
 - [Horo Package System](../packages/package-system.md): imported game library modules
 - [Build System](../delivery/build-system.md)
 - [Ownership And Resource Lifetime](../foundation/ownership-and-resource-lifetime.md)
+- [ADR-114](../../adr/114-canonical-runtime-world-persistence-boundary.md): canonical
+  runtime-state adapters and single semantic ownership.
+- [ADR-118](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md):
+  cinematic control claims, typed gameplay suppression and owner-preserving pose/
+  movement integration.

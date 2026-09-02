@@ -17,6 +17,49 @@ below describe the target architecture. A runtime, headset, or platform is not
 supported merely because it appears in a design example or because an OpenXR
 loader can discover it. Support requires reproducible qualification evidence.
 
+[ADR-157](../../adr/157-xr-ownership-runtime-composition-and-capability-tier.md)
+is the normative foundation for XR module ownership, host composition, typed
+capability admission, 1.0 profiles, unsupported paths and lifecycle. The sections
+below specialize that authority; downstream decisions may add exact schemas and state
+machines without moving ownership into Platform, Renderer, Input, Platform Services or
+post-processing.
+
+[ADR-158](../../adr/158-openxr-loader-backend-packaging-and-host-composition.md)
+specializes the first-party OpenXR target/package boundary, verified loader input,
+application composition and platform-specific loader policy. Loader discovery does not
+constitute product support, and the backend is not an ambient ExtensionHost plugin.
+
+[ADR-159](../../adr/159-xr-action-tracking-and-input-projection-ownership.md)
+specializes native action, tracking snapshot, Input projection, fixed-tick, gesture,
+haptic and privacy ownership. Input never polls OpenXR, and presentation-late tracking
+never rewrites committed simulation input.
+
+[ADR-160](../../adr/160-xr-rendering-openxr-compositor-and-renderer-ownership.md)
+specializes runtime-driven N-view admission, swapchain/external-resource leases, frame
+and layer submission, auxiliary targets and XR render-quality plans. XROpenXR owns native
+frame/compositor calls; Renderer owns Horo graph/GPU work and completion evidence.
+
+[ADR-161](../../adr/161-xr-interaction-runtime-ui-locomotion-and-accessibility-ownership.md)
+specializes the XR evidence-to-intent boundary across Input, Runtime UI, gameplay,
+Character, Camera and Accessibility. XR never owns UI focus or authoritative movement,
+and baseline comfort semantics are independent of renderer/device tier.
+
+[ADR-162](../../adr/162-mixed-reality-ownership-privacy-and-capability-tier.md)
+keeps passthrough, anchors, scene understanding, hit tests and light estimation as
+independent post-1.0 families with purpose-bound privacy. Native providers, Horo
+snapshots, derived domain realizations and durable storage remain separate owners.
+
+[ADR-163](../../adr/163-xr-tooling-diagnostics-privacy-and-qualification-ownership.md)
+separates portable project intent, effective runtime snapshots, editor tooling,
+Observability/captures and release evidence. Metrics use finite dimensions, and runtime
+compatibility never substitutes for physical-device qualification.
+
+[ADR-172](../../adr/172-immersive-agent-ownership-authoring-mode-and-risk.md)
+specializes the optional developer-only immersive Editor AI consumer. XR supplies
+validity- and generation-checked poses, rays, gaze and actions as bounded evidence;
+it does not interpret agent intent, approve proposals, own editor transactions or
+expose the capability in packaged games.
+
 ## Ownership
 
 ```text
@@ -61,6 +104,45 @@ Required boundaries:
 - Editor panels are query and command clients. They do not own the active XR
   session or directly call native runtime APIs.
 
+The logical target split is `HoroEngine::XRApi`, `HoroEngine::XRRuntime` and
+`HoroEngine::XROpenXR`. `XRApi` contains only backend-neutral public values and narrow
+interfaces. `XRRuntime` owns Horo-visible runtime/session/frame/space/view/capability
+generations and immutable snapshots. `XROpenXR` privately owns native loader, instance,
+system, session, action, space, swapchain, layer and extension state. The application
+host selects and connects the exact XR, Platform, Renderer and Input tuple before
+native/session resources exist.
+
+## OpenXR Packaging And Host Composition
+
+`XROpenXR` is an optional first-party product component. Package/install services
+verify one exact backend and loader artifact record for the product target; the
+application composition root then supplies that record with the selected Platform,
+Renderer, Input, product-profile and diagnostics generations. `XRRuntime` never scans
+for the backend, and `ExtensionHost` does not activate it as a general plugin.
+
+Loader source is an explicit product policy: a target uses either a bundled verified
+loader or a platform-provided loader controlled by that deployment contract. The
+backend never searches the current directory, project paths, `PATH`, arbitrary
+environment-provided paths or vendor-runtime libraries as fallback. Development runtime
+overrides and API layers require a typed non-shipping policy and mark evidence as
+non-release-qualified.
+
+The layers report distinct typed states:
+
+```text
+component installation
+  -> backend composition
+  -> loader availability
+  -> runtime availability
+  -> system support
+  -> session activation
+  -> capability availability
+```
+
+Success at one layer does not imply success at the next. Diagnostics preserve the
+attempt/revision and redacted failing layer; qualification remains keyed to the complete
+product tuple.
+
 ## Capability And Identity Model
 
 Capabilities are discovered from the selected runtime, platform host, renderer,
@@ -94,6 +176,26 @@ sufficient for permission-sensitive or replaceable capabilities.
 Runtime discovery, project policy, feature admission, activation, and current
 availability are distinct states. Horo never silently selects another runtime,
 renderer, view configuration, interaction profile, or privacy-sensitive feature.
+
+### Version 1 Product Profiles
+
+`XRProjection1_0` requires primary opaque stereo projection, runtime-driven views,
+validity-aware head pose, local/view spaces, predicted-frame sequencing, Renderer
+external color targets, canonical action projection and complete focus/session/loss/
+shutdown behavior. `XRTrackedInteraction1_0` adds two tracked controller roles with aim/
+grip poses, product-declared select/menu/trigger/squeeze/thumbstick actions, cancellable
+haptics and Runtime UI/comfort adapters.
+
+These are named requirement sets, not ordered quality/headset tiers. A product requiring
+tracked interaction fails preflight when the profile is incomplete; it never silently
+falls back to projection-only. Depth submission, fixed non-gaze foveation, refresh-rate
+selection, visibility masks, controller presentation and qualified Android standalone
+hosting are optional 1.0 capabilities with explicit plan identities.
+
+Passthrough, anchors, scene understanding, eye/hand/body/face tracking, gaze foveation,
+quad/multi-view, space warp and vendor-specific SDK features are post-1.0 unless a later
+roadmap revision explicitly promotes and qualifies them. Version-1 profiles neither
+depend on nor emulate them.
 
 ## OpenXR Backend Lifecycle
 
@@ -133,6 +235,13 @@ poll runtime events
 Cancellation and shutdown finish or abandon the current frame only through
 runtime-valid transitions. The host stops producers before destroying session,
 instance, renderer, and platform dependencies.
+
+Before this native lifecycle begins, application composition validates an inert backend
+plan, Platform and Renderer prerequisites and the verified loader input. Ready publishes
+only after loader, runtime/system, capability, native resource and adapter preparation
+all succeed. Failure rolls candidate resources back in reverse order. Shutdown retires
+Input/UI projections and Renderer external images before native session/instance and
+loader dispatch, and Platform library/activity leases outlive all native users.
 
 ## Extension Negotiation And Graceful Degradation
 
@@ -227,6 +336,30 @@ release, and composition submission maintain explicit ownership and
 synchronization. Session or surface loss retires resources only after queued GPU
 references are safe.
 
+The first production `XRProjection1_0` renderer admits exactly one primary opaque
+stereo configuration with two runtime views. The public plan remains bounded N-view.
+One-view inputs require an explicit simulator/test profile, while any greater-than-two
+configuration remains discovered-but-unsupported until fully implemented and qualified;
+it fails before image acquisition and is never truncated.
+
+An XR swapchain image and its imported `RenderResourceId` are correlated but distinct
+identities. XROpenXR retains allocation/acquire/release/destruction ownership; Renderer
+borrows an external lease with typed format, extent, render rectangle, subresource,
+usage, color/depth/motion/density role, synchronization and generations. Release waits
+for Renderer completion evidence, not merely CPU command recording, without a normal-
+frame device-idle wait.
+
+XRRuntime validates one immutable frame/layer intent. XROpenXR performs wait/begin,
+view location, acquire/wait, native layer encoding and end-frame. Renderer performs
+N-view extraction, graph execution and GPU retirement. Required layer/view failure is
+typed; a partial view set is never successful presentation.
+
+Dynamic resolution and fixed/gaze foveation use one immutable XR/Renderer plan that
+separates allocation extent, active render rectangle, scale, VRS/density mechanism,
+privacy state and fallback. Runtime space-warp depth/motion inputs remain post-1.0 until
+their exact semantics are admitted. Runtime asynchronous reprojection and guardian/
+chaperone composition never become Horo passes.
+
 ## Tracking, Actions, And Haptics
 
 OpenXR action sets and suggested bindings are backend data. Engine systems
@@ -263,27 +396,53 @@ revocation, and session replacement neutralize affected actions immediately.
 Haptic requests have explicit owner, duration, cancellation, device generation,
 and capability fallback.
 
+Application/project policy declares canonical actions and XR profile requirements;
+Input owns semantic action IDs, contexts, player assignment, user overrides and
+consumption. XROpenXR compiles the admitted plan into native action sets/actions/spaces,
+synchronizes and locates them, and keeps native paths private. XRRuntime publishes one
+bounded generation-scoped snapshot, and the host-composed XR/Input adapter joins it to
+the normal Input snapshot transaction before the cutoff.
+
+Rendering-time view/head poses are a distinct predicted-frame snapshot. They may reduce
+visual latency but cannot overwrite the Input snapshot, a tick-assigned gameplay frame,
+recording or network command. Fixed simulation receives only immutable Horo values tied
+to an exact tick, player/input-user assignment and source sample; it never queries live
+XR state.
+
+Gesture recognition is an explicit host-composed derived provider. It consumes admitted
+immutable joints/poses/gaze, publishes bounded candidates before Input commit and owns
+no focus, routing, gameplay meaning or scene mutation. Haptic admission/cancellation is
+owned by the Input/application coordinator; XROpenXR owns native apply/stop and reports
+submission separately from physical completion.
+
 ## Interaction, Runtime UI, And Comfort
 
-XR interaction adapts ray, direct-touch, proximity, grab, and spatial hit
-evidence into existing runtime UI and gameplay contracts. It does not duplicate
-physics queries, UI focus/capture, or scene authority.
+XR interaction sources publish bounded generation-scoped ray/direct/proximity evidence.
+Host adapters may combine it with read-only Physics/Scene queries, but a hit remains a
+candidate. Runtime UI alone resolves its last-presented hit tree, hover, focus, capture
+and semantic action; gameplay alone validates use/grab intent; Character alone commits
+collision-root movement. Source or target loss neutralizes capture/intents rather than
+reusing the last ray/hit.
 
-World-space canvases remain runtime UI documents projected into world space.
-They use the same semantic focus, navigation, accessibility, localization, and
-input-action model as non-XR UI. Stereo presentation and occlusion belong to the
-renderer/UI projection adapter.
+World-space canvases remain ordinary Runtime UI owner scopes with the same layout,
+localization, semantic accessibility and action-command model. Renderer owns per-view
+projection/depth/occlusion/pixels. A native composition layer does not become a second UI
+tree or bypass UI focus.
 
-Locomotion produces intent for the character-movement owner. Teleport, smooth
-move, snap turn, arm-swing, and room-scale behavior are policy/configuration, not
-hard-coded controller logic. Comfort settings include turning, vignette,
-movement, height, seated/standing, handedness, boundary awareness, and reduced
-motion where supported.
+Locomotion produces tick-assigned gameplay intent. Continuous/snap movement and teleport
+reach Character through typed commands; moving the camera or recentering tracking space
+is not a collision-safe teleport. Camera/view composition combines committed Character
+root, calibration and tracked head pose without acquiring movement authority.
 
-Refresh rate, view extent, and frame budget come from runtime/device capability
-snapshots. Architecture does not prescribe a universal 90 Hz minimum. Each
-qualified tuple records its supported modes and measured comfort/performance
-evidence.
+When artificial locomotion/rotation exists, disable controls where gameplay permits,
+snap-turn configuration, speed/handedness, seated/standing/recenter behavior, motion-
+reduction controls and declared teleport/continuous availability remain visible across
+renderer/device tiers. Missing authored alternatives are explicit limitations, never
+silent fallbacks.
+
+Refresh rate, view extent and frame budget come from runtime/device capability
+snapshots; architecture does not prescribe a universal 90 Hz minimum. Each qualified
+tuple records its supported modes and measured comfort/performance evidence.
 
 ## Mixed Reality And Privacy
 
@@ -294,12 +453,29 @@ failure states.
 - Raw camera frames do not enter ordinary engine logs, captures, or public APIs.
 - Eye gaze, continuous poses, environment geometry, voice, and spatial anchors
   are privacy-sensitive diagnostic inputs.
+- Articulated hand joints and eye gaze require product policy, runtime capability,
+  applicable OS permission and purpose-bound consent. Discovery or permission alone is
+  insufficient.
+- Raw joints/gaze and continuous pose history are excluded from ordinary logs, crash
+  dumps, metrics, replay, analytics, AI context and support bundles.
 - Permission revocation removes derived capability state and invalidates
   outstanding work.
 - Persistent anchors identify localization state and failure; they do not imply
   that every runtime supports cross-session restore.
 - Renderer consumes admitted passthrough/composition descriptors without owning
   camera permission or environment understanding.
+
+There is no aggregate MR-enabled tier. Passthrough, spatial anchors, scene understanding,
+environment hit tests and light estimation have independent capability/access/lifecycle
+states and fallbacks. `XRProjection1_0` and `XRTrackedInteraction1_0` require none of
+them.
+
+Baseline passthrough is a runtime compositor-layer intent and exposes no raw camera
+frames. Live anchors use Horo generation-safe localization identity; durable restore is
+a separate capability with opaque protected provider references. Plane/mesh snapshots
+are bounded observed evidence and never mutate authored Scene, Physics or Navigation
+without an explicit destination-owned adapter and transaction. Hit tests cannot invoke
+UI/gameplay/editor actions, and light estimates cannot rewrite authored lights/exposure.
 
 ## Android And Standalone XR
 
@@ -341,6 +517,17 @@ Setup and diagnostics consume the same typed runtime snapshots as production
 code. They show loader/runtime discovery, system/session state, view
 configuration, interaction profile, optional extensions, permissions,
 swapchains, frame timing, tracking confidence, and redacted failure details.
+
+Setup view models show requested, effective, availability/reason and evidence level as
+separate fields. Editors validate drafts and invoke application commands; they never call
+native XR or persist local discovery/evidence into project settings. Metrics admit only
+finite dimensions such as registered backend/profile/phase/outcome classes—never device
+names, serials, native strings/paths, live IDs, poses, gaze or environment geometry.
+
+Detailed capture is an explicit bounded operation with channels, duration/frame/byte
+limits, privacy purpose, retention/export and a manifest recording completeness,
+truncation and drops. Sensitive channels are unavailable unless separately admitted;
+development build type is not consent.
 
 Support evidence is keyed by the full tuple:
 
@@ -403,6 +590,13 @@ device release gate.
 
 ## Related Documents
 
+- [XR Ownership, Runtime Composition and Capability Tier](../../adr/157-xr-ownership-runtime-composition-and-capability-tier.md)
+- [OpenXR Loader, Backend Packaging and Host Composition](../../adr/158-openxr-loader-backend-packaging-and-host-composition.md)
+- [XR Action, Tracking and Input-Projection Ownership](../../adr/159-xr-action-tracking-and-input-projection-ownership.md)
+- [XR Rendering, OpenXR Compositor and Renderer Ownership](../../adr/160-xr-rendering-openxr-compositor-and-renderer-ownership.md)
+- [XR Interaction, Runtime UI, Locomotion and Accessibility Ownership](../../adr/161-xr-interaction-runtime-ui-locomotion-and-accessibility-ownership.md)
+- [Mixed-Reality Ownership, Privacy and Capability Tier](../../adr/162-mixed-reality-ownership-privacy-and-capability-tier.md)
+- [XR Tooling, Diagnostics, Privacy and Qualification Ownership](../../adr/163-xr-tooling-diagnostics-privacy-and-qualification-ownership.md)
 - [XR Setup UI Reference](./xr-setup.html)
 - [Rendering Architecture](./rendering-architecture.md)
 - [Render Backend Parity Contract](./render-backend-parity-contract.md)

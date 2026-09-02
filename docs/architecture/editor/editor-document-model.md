@@ -140,6 +140,57 @@ Examples:
 Only a committed transaction increments the authoritative document revision and
 publishes one coherent change notification.
 
+### Prefab Override Transactions
+
+[ADR-093](../../adr/093-prefab-override-property-identity-and-delta-operations.md)
+requires prefab override assign/add/remove/move, revert, source rebase, conflict/
+orphan resolution and apply-to-prefab to enter through typed Editor commands or a
+multi-document application use case. Inspector widgets, file watchers and
+serializers never mutate override maps or `.prefab` files directly.
+
+Commands pin the document session/revision, source prefab revision and component
+schema registry revision, build a complete canonical override/rebase candidate and
+then commit override records, conflicts/orphans, dirty state and one history entry
+atomically. Failure/cancellation preserves the old set. Undo/redo owns exact semantic
+deltas including losslessly preserved opaque records.
+
+Apply-to-prefab prepares source edits, affected instance rebase candidates,
+permissions/source-control and durable publication before removing instance records.
+An external publication with uncertain/partial outcome receives an explicit
+reconciliation record; the editor cannot claim in-memory rollback undid an already
+published source file.
+
+[ADR-094](../../adr/094-prefab-nested-composition-and-variant-inheritance.md)
+extends the same transaction boundary to nested-placement and single-parent variant
+resolution. The application pins one Asset Registry snapshot, validates the
+combined `NestedPlacement`/`VariantParent` graph, resolves affected assets in
+deterministic dependency order and prepares every ADR-093 rebase before commit.
+The visible document and viewport receive one complete candidate; a cycle, missing
+revision, conflict, cancellation or stale async completion leaves the prior graph,
+projection, dirty state and history unchanged.
+
+The editor exposes concrete, variant, nested-placement and scene-instance layers
+separately through bounded provenance. A variant has exactly one immediate parent.
+Inspector and graph controls cannot add a second parent, run construction scripts,
+edit the flattened projection or mutate dependants from a file-watcher callback.
+They submit typed commands against stable `AssetId`, source revision and persisted
+placement `LocalObjectId` scope.
+
+[ADR-096](../../adr/096-prefab-external-reference-and-binding-slot-contract.md)
+makes create-from-selection a reference-boundary audit inside the same transaction.
+Known internal references are remapped to new stable prefab-local IDs, assets retain
+typed `AssetId` identity, and every target outside the selection is reported with
+its owning object/component/property and target classification. The user explicitly
+includes the target, exposes a required/optional typed slot, or cancels. Unknown
+opaque reference semantics block publication.
+
+The command prepares the prefab source, replacement instance, local-ID remap, slot
+declarations, instance binding set, history and selection reconciliation together.
+It never silently nulls, copies, reparents or captures an external scene object.
+Failure, cancellation or stale document/source revision leaves every document,
+file, dirty state, history and selection unchanged. External Bindings, Overrides
+and Initialization remain separate Inspector models and command schemas.
+
 Intermediate transaction state is not observable by tabs or panels until the
 transaction commits, unless the transaction is explicitly marked as a preview
 transaction.
@@ -303,6 +354,156 @@ When the canonical file changes externally:
 
 By default, external reload starts a new history branch, clears redo history, and prevents undo across the reload boundary. It is never injected as a hidden command. Rebase is allowed only through an explicit policy that rebuilds valid semantic history entries.
 
+## Navigation Definition And Scene Intent
+
+[ADR-110](../../adr/110-navigation-editor-surface-and-command-ownership.md)
+applies this document contract to a persistent `NavigationDefinitionDocument`
+rooted at the definition `AssetId`. It owns only profiles, areas, build/tile and
+scope policy with its own session/revision/history/dirty/save/recovery state.
+`SceneDocument` separately owns definition references, sources, modifiers, links
+and dynamic-obstacle intent through typed Scene commands.
+
+Starting a navigation bake is an application use case, not a document command.
+ADR-106 publication neither advances history nor clears dirty state, and undo does
+not delete cooked artifacts. A deliberate cross-document edit requires a staged
+multi-document transaction; UI surfaces cannot write either document directly.
+
+## Gameplay AI Asset Documents
+
+[ADR-111](../../adr/111-gameplay-ai-document-panel-and-runtime-debug-ownership.md)
+defines separate document routes for blackboard schemas, behavior-tree/state-
+machine/utility graphs and EQS templates. Each keeps its own asset-rooted session,
+revision, semantic history, dirty/save/recovery/conflict state and subsystem
+validator. Shared graph widgets emit commands but own no semantic storage.
+
+Cross-schema/reference edits use the staged multi-document transaction contract.
+Compilation is revision-correlated derived work and does not clear dirty state.
+Live PIE blackboards, nodes, tasks and query results never enter document history;
+importing reviewed runtime data requires a separate typed editor command.
+
+## Cinematic Sequence Asset Documents
+
+[ADR-121](../../adr/121-cinematic-editor-document-and-authoring-context.md)
+defines each sequence asset as a first-class persistent `SequenceDocument` rooted at
+its stable `AssetId`. `EditorWorkspaceController` and the document tab host own its
+session, route, typed command/history, dirty, save/autosave/recovery/conflict and
+derived compile/preview revisions through this document contract. The Create Sequence
+modal is only a transient asset-creation workflow; it opens the persistent tab after
+atomic publication and owns no hidden document or undo stack.
+
+An optional generation-checked `SequenceAuthoringContext` attaches the sequence
+session to an immutable SceneDocument binding-resolution snapshot. It enables scene
+picking, property enumeration, recording and preview but owns no authored content.
+The sequence remains editable without a scene. Rename/reorder preserve stable object
+bindings; wrong scene, deletion, component/schema change, reload or scene replacement
+publish derived typed stale states without clearing or name-retargeting the authored
+identity. Repair is an explicit undoable Sequence command.
+
+Sequence edits and scene edits remain in their owning documents. An intentional
+two-document action uses the staged multi-document application transaction; UI cannot
+run two direct mutations or maintain a third history. Scrub/play state, live handles,
+authority leases and viewport state belong to a disposable preview/session projection
+and never enter document storage. Save, autosave, recovery, external conflict, Save
+As/Copy As, close guards and stale worker-result rejection use the shared policies
+above unchanged.
+
+## VFX Effect Asset Documents
+
+[ADR-129](../../adr/129-vfx-editor-document-live-preview-and-module-authoring.md)
+defines each effect asset as a persistent `VfxEffectDocument` rooted at stable asset
+and source revision. Document services own session/revision, typed commands/history,
+dirty/save/autosave/recovery/conflict and derived compile/preview state; the panel host
+owns the tab route and presentation lifecycle. Existing particle-system assets migrate
+through the effect source schema rather than remaining a second document class.
+
+Stack and graph are independent source kinds with distinct command/layout models but
+one catalog, semantic compiler and ADR-126 `CompiledVfxEffectDescriptor` target. A
+deferred/unavailable graph UI preserves source or exposes read-only inspection; it
+does not flatten or save the graph as a stack. Compiler and preview success never
+advance saved revision or clear dirty state.
+
+Effect-spawned/reusable decals are authored within the effect document. Scene-placed
+decal components remain SceneDocument state. Projection manipulation uses transient
+preview overlays and one typed command to the owning document; intentional cross-
+document edits use the staged multi-document transaction and never a third history.
+
+Live preview compiles one immutable document snapshot with the ordinary VFX cooker and
+activates the resulting descriptor through normal `VfxWorld`, CPU/GPU/Null, extraction
+and Renderer services in an isolated preview host. Preview controls, particles, leases,
+diagnostics and fixture inputs are disposable generation-fenced state. They do not
+mutate documents or publish into live gameplay/Audio/event authorities. Close/project
+teardown cancels derived work and retires resources through normal runtime boundaries.
+
+## Terrain And Foliage Authoring Documents
+
+[ADR-142](../../adr/142-terrain-foliage-document-tool-undo-and-preview-ownership.md)
+specializes this contract for asset-rooted terrain datasets. Their dataset-local
+foliage placement source is part of the same document, while reusable foliage-type
+definitions remain separate referenced asset documents. Document services own
+canonical height/weight/hole/spline/placement state,
+revision, typed commands, bounded history, dirty/save/recovery/conflict and derived
+preview revisions. Toolbars, viewport tools, palettes and overlays own presentation and
+input only; runtime and cooked tiles are never editable document storage.
+
+Each `TerrainEditOperation` preflights an exact canonical closure of affected tile/patch
+rectangles, including seams, aprons and placement dependencies. One atomic history
+record stores lossless bounded `before` and `after` values. Whole-heightfield/dataset
+copies per edit, partial tile commits and undo by rerunning a brush, noise or scatter
+algorithm are prohibited. A continuous gesture may show a disposable revision-fenced
+overlay but commits at most one history transaction.
+
+Heavy work uses immutable snapshots and document-owned cancellable task groups; only
+the document owner may revalidate and commit a matching completion. Source save, editor
+autosave/recovery, transient preview cook, published Asset cook and Runtime Save/
+Persistent World foliage deltas remain independent. High-fidelity preview activates
+ordinary Terrain runtime contracts in an isolated generation-fenced session and never
+mutates the document or a live gameplay world.
+
+## Fracture Asset Documents
+
+[ADR-148](../../adr/148-fracture-document-generator-undo-and-preview-ownership.md)
+specializes this contract for fracture assets. One persistent `FractureAssetDocument`
+owns the unsaved working recipe/source/graph intent, revision, typed operations, bounded
+semantic history, dirty/saved identity, recovery/conflict and derived generator/cook/
+preview status. Assets remains the durable source and cooked-generation publication
+authority. Panels, tree/graph views, inspectors and viewport tools own no source or
+history.
+
+Import and procedural generation capture one immutable exact-revision input snapshot
+and produce a reserved detached candidate in a document-owned task group. Completion
+returns to the owner and changes no document state. An explicit accept operation applies
+the candidate's authored semantic patch atomically and records exact before/after values
+or immutable source-section checkpoints. Undo/redo never reruns a generator or retains
+production cooked meshes, Physics shapes/bodies or GPU resources.
+
+High-fidelity preview cooks a captured source/candidate in a transient non-published
+namespace and activates normal DFR/RuntimeScene/Physics/Render contracts in an isolated
+`FracturePreviewSession`. Its world, bodies, events and resources cannot enter production
+PhysicsWorld, DestructionWorld, streaming, persistence, replication or Assets current-
+generation state. Save, production cook and preview each advance only their own typed
+revision/status.
+
+## PCG Graph Documents
+
+[ADR-155](../../adr/155-pcg-graph-document-preview-bake-and-undo-ownership.md)
+specializes this contract for PCG graph assets. One persistent `PCGGraphDocument` owns
+the unsaved working source, monotonic revision, typed commands, bounded semantic
+history, dirty/saved identity, validation and save/recovery/conflict state. Workspace,
+graph canvas, palette, inspector, diagnostics and preview panels own presentation state
+only and cannot mutate graph or Scene storage.
+
+Validation, cook, preview and bake capture exact immutable document/catalog/dependency
+revisions and return detached candidates to the document/workflow owner. Stale
+completions cannot update current diagnostics or output. Undo/redo applies exact source
+or target semantic patches and never reruns the graph.
+
+Preview uses the ordinary transient PCG cook and runtime evaluator inside an isolated
+`PCGPreviewSession`; it cannot publish source, production Scene, streaming, save or
+network state. Bake is a separate explicit aggregate target-owner transaction whose
+receipt records the exact graph revision. Graph saved/dirty and bake current/stale are
+independent state dimensions, and provenance-aware bake undo cannot remove hand-authored
+or adopted content.
+
 ## Runtime Conversion
 
 The document converts to `RuntimeSceneDefinition` through an editor service.
@@ -313,6 +514,14 @@ Conversion:
 - resolves logical asset references
 - emits structured diagnostics
 - never gives runtime systems mutable document access
+
+[ADR-087](../../adr/087-scene-to-physics-ownership-and-conversion.md) limits this
+editor service to mapping explicit authored rigid-body, collider, trigger and
+constraint components into typed Horo payloads with stable object/component/slot
+IDs and source evidence. It does not infer bodies from hierarchy/render meshes,
+choose native shapes/filters or allocate Physics objects. The Physics-owned plan
+builder performs semantic conversion for editor, packaged and headless paths, and
+the aggregate scene candidate owns activation/rollback.
 
 Play and preview sessions record the document revision from which they were
 built.
@@ -377,6 +586,40 @@ Required tests cover:
   change
 - recovery file with stale/unsupported document format version
 - bounded AffectedObjectSummary does not break subscriber correctness
+- prefab override apply/revert/rebase/conflict resolution has command symmetry,
+  one-entry history and no direct Inspector/file-watcher mutation
+- apply-to-prefab failure or uncertain external publication preserves instance
+  intent and reports reconciliation state
+- sequence asset create/open/close uses a persistent document tab and shared command,
+  dirty, save, autosave, recovery and external-conflict ownership without a parallel
+  sequencer stack or serializer state
+- sequence authoring context covers no/wrong/replaced scene, stable rename/reorder,
+  missing object/component, schema mismatch, explicit repair and stale preview/
+  binding/compile results without mutating authored identity
+- VFX effect create/open/close uses one persistent document tab and shared command,
+  dirty, save, autosave, recovery and external-conflict ownership without a particle-
+  or decal-specific undo/serializer path
+- stack/graph source kinds preserve independent commands/layout while compiling through
+  one semantic target; unavailable graph UI never converts or mutates its source
+- VFX preview compiles an immutable document revision and executes normal runtime
+  services; stale derived work, tab/project teardown and decal-gizmo cancel/commit
+  cannot mutate either VfxEffectDocument or SceneDocument unexpectedly
+- terrain/foliage tools produce canonical bounded affected tile/patch closures and one
+  exact before/after history entry per gesture without whole-heightfield copies
+- terrain/foliage apply, undo and redo are symmetric without reading current tool state
+  or rerunning brush/noise/scatter algorithms
+- stale/cancelled terrain edit and preview completions cannot mutate document, dirty,
+  history, cook or live runtime state across edit, reload, close or project shutdown
+- terrain source save, autosave/recovery, preview cook, published cook and Runtime Save
+  foliage persistence advance independently
+- fracture editor surfaces share one typed document operation path and cannot directly
+  mutate source, dirty state, history or artifact publication
+- fracture generation candidates are detached, bounded and revision-fenced; completion
+  alone cannot commit, dirty, save or publish them
+- fracture undo/redo restores exact authored patches/checkpoints without rerunning the
+  generator or storing production derived/native products
+- fracture preview uses an isolated normal runtime composition and cannot mutate
+  production Physics, Destruction, streaming, persistence or replication state
 
 ## Related Documents
 
@@ -389,3 +632,6 @@ Required tests cover:
 - [Asset Pipeline](../runtime/asset-pipeline.md)
 - [Prefab Architecture](../runtime/prefab-architecture.md)
 - [Save Game And Persistence](../runtime/save-game-and-persistence.md)
+- [Cinematic Sequencer](../runtime/cinematic-sequencer-architecture.md)
+- [VFX And Particles](../runtime/vfx-and-particles-architecture.md)
+- [Terrain And Foliage](../runtime/terrain-and-foliage-architecture.md)

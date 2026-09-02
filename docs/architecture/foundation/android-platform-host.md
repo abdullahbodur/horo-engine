@@ -11,24 +11,47 @@ by ordinary Android applications and standalone Android-class XR targets.
 Android support is a platform capability. XR, game runtime, editor tooling, and
 renderer systems do not call Android APIs directly.
 
+## Decision Authority And Initial Baseline
+
+[ADR-171](../../adr/171-android-host-target-and-ownership.md) owns the Android
+entry, target and native-resource ownership decision. The initial interactive
+host uses pinned AndroidX GameActivity integration, API 29 as its minimum,
+`arm64-v8a` as its production ABI, and Android Vulkan 1.1 plus the Android
+Baseline profile. `x86_64` is a development/emulator ABI until separately
+distribution-qualified. OpenGL ES, `armeabi-v7a`, and `x86` are outside the
+initial product scope.
+
+Every product profile still freezes its actual compile/target API level and
+distribution constraints. Store-policy changes may advance those values; they
+do not silently alter the engine floor, ownership boundaries, or another
+distribution profile.
+
 ## Composition
 
 ```text
-Android application target
-  +-- Horo application composition
-  +-- Android platform adapter
+Android product application (GameActivity)
+  +-- private AndroidHost composition root
+  +-- Horo application/runtime composition
+  +-- private Android platform adapter
   |     activity/process lifecycle
   |     native window generation
   |     input, sensors, permissions
   |     storage and user directories
   |     device/resource snapshots
-  +-- selected renderer backend adapter
+  +-- Android Vulkan renderer or explicit RenderNull test adapter
   +-- optional OpenXR backend
 ```
 
-The process composition root selects the application profile, renderer, and
+The private AndroidHost process composition root selects the application profile, renderer, and
 optional XR backend. The Android host does not discover and activate arbitrary
 renderers after a native surface has already been bound to another backend.
+
+For an XR-enabled product, packaging records one verified OpenXR backend and loader
+artifact per shipped ABI. The application passes Android application/activity
+initialization inputs through a private host capability to XROpenXR. Android Platform
+does not call OpenXR, interpret runtime manifests, select a runtime or own loader
+dispatch. A missing ABI artifact, incompatible loader, unavailable runtime and
+unsupported XR system are different typed preflight outcomes.
 
 ## Target Contract
 
@@ -133,6 +156,11 @@ Package assembly is deterministic for identical inputs and records provenance,
 ABI contents, native libraries, runtime assets, permissions, and manifest
 features. Machine-specific SDK paths and credentials never enter committed
 metadata.
+
+OpenXR-enabled packages additionally record the Horo backend contract, loader artifact
+identity/digest/provenance and loader source policy. They do not package a vendor runtime
+or development API layer as an implicit dependency. Non-XR Android profiles contain no
+OpenXR loader/backend artifact or runtime probe.
 
 Developer deployment selects a device explicitly. Install, launch, log capture,
 termination, timeout, and disconnect use argv-based process APIs and bounded

@@ -126,6 +126,10 @@ attachment are orthogonal typed state; they are not lifecycle aliases. Hiding an
 instance does not destroy it, pausing gameplay does not deactivate it, and a
 temporarily unavailable viewport does not transfer it to another owner.
 
+[ADR-080](080-runtime-ui-presentation-scope-layer-and-route.md) projects these
+owner scopes into typed presentation bands and transactional route stacks without
+changing ownership or lifetime authority.
+
 Scope create/destroy, document replacement and cross-tree structural transactions
 commit during `ApplyQueuedOwnerThreadCommands`, or at the next
 `CommitDeferredLifecycleChanges` when requested after that frame's command cutoff.

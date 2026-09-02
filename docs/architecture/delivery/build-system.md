@@ -108,6 +108,16 @@ Local development defaults to the `editor` profile because most contributors wor
 on the editor and runtime together. Headless CI jobs default to the `cli`
 profile to minimize build time for tooling-only changes.
 
+Developer build profiles are not product roles. In particular, `runtime-only`,
+`cli`, a Release configuration, headless execution or renderer omission does not
+mean client, listen-server or dedicated-server. Under
+[ADR-103](../../adr/103-network-project-configuration-and-build-profile-ownership.md),
+the product release profile produces a typed `NetworkArtifactPlan` naming exact
+ADR-102 modes, targets, private providers, platform variants and qualification
+evidence. Configure/build/package consume that pinned plan and fail if required
+content is unavailable; they never infer network capability from a renderer/device
+tier or silently include a server/provider target.
+
 ### Adding A New Preset
 
 New presets must be reviewed if they change compiler flags, generator, or
@@ -178,7 +188,7 @@ network/
     HoroEngine::NetworkApi
     HoroEngine::NetworkRuntime
     HoroEngine::NetworkTransportNull
-    HoroEngine::NetworkTransportENet
+    HoroEngine::NetworkTransportGNS
 
 asset/
     HoroEngine::Assets
@@ -398,6 +408,15 @@ FetchContent_Declare(
 
 When updating a dependency, the SHA change is reviewed like a source code
 change. The old SHA and the new SHA must both be visible in the diff.
+
+[ADR-104](../../adr/104-default-navigation-provider-and-recast-detour-adoption.md)
+selects Recast Navigation commit
+`9f4ce64458dfae86e1239c525ddc219c4e9e06f1` for the first grounded NavMesh
+provider. Its implementation change must declare that exact revision here,
+register it in the dependency fingerprint/manifest and lock the reviewed native
+options. Runtime-only products link Detour plus only requested optional modules;
+bake/cook compositions add Recast privately. Tags, system packages and a floating
+`main` checkout are not compatible substitutions.
 
 ### Configure Performance
 

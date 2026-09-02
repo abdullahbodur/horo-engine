@@ -9,6 +9,12 @@ release.
 The pipeline is host-agnostic. The same importers, cookers, and packagers are
 used by the GUI, CLI, and MCP.
 
+Virtual-texture sources follow this same authority under
+[ADR-164](../../adr/164-virtual-texturing-ownership-product-scope-and-capability-tier.md):
+the pipeline publishes immutable target/capability-keyed artifacts and bounded byte
+leases. The VTX runtime neither constructs cache/package paths nor discovers loose
+files, and the asset pipeline does not own runtime page demand or GPU residency.
+
 ## Asset Lifecycle
 
 ```text
@@ -159,6 +165,21 @@ the previous active scene. No fallback asset or partial scene activation is
 invented. `RuntimeSceneView` exposes allocation-free lookup of the opaque cooked
 bytes; decoding and typed resource installation belong to later asset/material/
 renderer slices.
+
+## Localized Catalog And Variant Assets
+
+[ADR-081](../../adr/081-runtime-ui-and-localization-ownership-boundary.md) keeps
+Assets responsible for stable identity, dependency graphs, cook/package
+publication and immutable byte transport. Localization owns catalog parsing,
+semantic validation, message-format/CLDR compatibility fingerprints and locale
+fallback; Assets never selects or formats a translated message.
+
+Localized visual/audio variants are finite authored mappings from normalized
+locale profiles to stable `AssetId` values. The owning feature declares Required,
+UseNeutral or Omit behavior, Localization supplies the fallback chain, and Assets
+resolves only declared variants. Cook closure includes required catalogs, source/
+product fallbacks, locale-specific font policy and localized asset variants; no
+runtime path scan, source import, download or undeclared substitute is allowed.
 
 ### Collision Rules
 
@@ -632,6 +653,112 @@ ownership, and C++ object ownership do not cross that ABI. The adapter must
 validate all output before it can enter the cache or a candidate cooked
 generation, so external and built-in contributions cannot bypass host invariants.
 
+### Terrain Domain Import And Cook Boundary
+
+[ADR-138](../../adr/138-terrain-source-cooked-tile-cache-and-streaming-ownership.md)
+applies the generic-Assets/domain-semantics split to Terrain and Foliage. Assets owns
+tracked source bytes and `AssetId`, immutable input borrows, cooker registration and
+scheduling, dependency-aware keys, cache storage, staging, verified generation
+manifests, atomic `current.json` publication and provider byte leases. It does not
+interpret height, layer, hole, seam, foliage placement, coordinate or LOD semantics.
+
+Terrain Import/Model owns external format decoding and canonical authored Terrain
+source validation. Terrain Cook owns deterministic tiling, seam/mip/LOD derivation,
+layer/hole/spline semantics, foliage clustering and Terrain manifest/tile schemas. Both
+are bounded catalog contributions; they create no second asset identity, dependency
+graph, scheduler, cache directory or publication authority.
+
+The dependency-aware key closes over the exact canonical Terrain source revision and
+digest, every accepted dependency artifact, tiling/seam/LOD/compression policy,
+effective tier/limit profile, Terrain source/cooked/manifest/algorithm versions and the
+generic target/toolchain envelope. The resulting immutable dataset manifest binds a
+canonically ordered set of independently verifiable tile/cluster artifacts with exact
+bounds, digests, seam/dependency signatures and peak costs. Native Render, Physics and
+Navigation artifacts are excluded and remain separately keyed by their owners.
+
+Runtime pins one verified published generation through the Assets provider. It never
+scans an output directory, follows `current.json` independently for each tile, imports
+source or cooks a missing variant. Package validation applies the same manifest, digest,
+limit and dependency checks used by fresh cook and cache reuse.
+
+### Virtual Texturing Domain Import And Cook Boundary
+
+[ADR-165](../../adr/165-virtual-texture-source-cooked-artifact-page-store-and-cache-ownership.md)
+applies the generic-Assets/domain-semantics split to virtual textures. Assets owns
+tracked source identity/bytes, immutable input borrows, generic dependency scheduling,
+content-addressed cache storage, staging, atomic generation publication, package
+membership and runtime artifact/range leases. It does not interpret virtual page,
+mip-tail, border, channel, color, addressing, encoding or pack-grouping semantics.
+
+VTX Import/Model owns canonical authored source/settings validation. VTX Cook owns
+deterministic page derivation and a versioned root manifest plus bounded immutable page
+packs. A logical page is independently requested and verified but is not an independent
+authored `AssetId`, sidecar, mutable file or current-generation pointer. The manifest is
+the only page/pack membership and canonical-order authority.
+
+Runtime pins one exact generation and uses an Assets-owned bounded page-store/range-read
+port. It cannot pass paths, request an ambient "current", enumerate storage or mix pack
+bytes from different generations. Generic envelopes/requested keys, root/pack/page
+digests, checked ranges and VTX semantics are all validated before publication.
+
+Cook cache entries, published generations, provider byte caches, VTX decoded-page
+caches and Renderer physical caches retain separate ownership and eviction effects.
+Removing one never silently unloads, unmaps or republishes another.
+
+### VFX Domain Import And Cook Boundary
+
+[ADR-126](../../adr/126-vfx-graph-compilation-and-runtime-representation-convergence.md)
+applies the same generic-Assets/domain-semantics split to stack and graph VFX assets.
+Assets owns stable `AssetId`, immutable source/metadata snapshots, generic cooker
+catalog/scheduling, `CacheKeyV1`, target selection, output bounds, staging, atomic
+generation publication, rollback and immutable runtime byte delivery. It does not
+interpret particle modules/nodes, select simulation domains, compile VFX kernels or
+define runtime parameter/render behavior.
+
+VFX Model/Cook owns both authoring schemas and one deterministic lowering pipeline to
+the backend-neutral `CompiledVfxEffectDescriptor` plus target CPU/GPU kernel packages.
+`ParticleSystemDescriptor` is the nested compiled emitter-unit foundation, not a
+parallel stack/graph runtime. VFX validation owns semantic IDs/order, stages, payloads,
+domain edges, readback/fallback, render/sort compatibility, resource dependencies,
+provider/kernel versions and peak costs. A compiler IR is invocation-local and never
+becomes a published executable representation.
+
+The VFX cache extension includes source/semantic/compiler/provider/kernel/plan schema
+versions, the effective target capability fingerprint and every accepted dependency
+digest. Stack/graph sources with equivalent semantics and identical locked inputs emit
+identical descriptor/kernel fingerprints. Editor layout, comments, timestamps, paths
+and worker completion are not semantic inputs.
+
+Runtime receives the published immutable envelope through the Assets provider, then
+VFX validates payload/kernel/target/provider versions and digests before admission.
+It never parses authoring nodes, invokes cookers/plugins, runs arbitrary particle
+scripts or compiles missing variants. Too-old artifacts recook in authoring hosts;
+newer/incompatible packaged artifacts fail typed loading. Hot reload publishes a new
+generation atomically while active instances retain old artifact/provider/resource
+leases until safe finish/restart and final retirement.
+
+### PCG Domain Graph And Cook Boundary
+
+[ADR-150](../../adr/150-pcg-graph-source-cooked-plan-cache-and-runtime-ownership.md)
+applies the generic-Assets/domain-semantics split to procedural generation graphs.
+Assets owns stable `AssetId`, accepted source/dependency snapshots, generic cook
+orchestration, cache storage, staged-generation manifests, atomic publication and
+immutable provider leases. It does not interpret nodes, lower graphs, evaluate plans
+or commit generated scene state.
+
+PCG Model owns graph/node/pin/edge semantics and PCG Cook deterministically lowers one
+closed input snapshot to the backend-neutral immutable `CookedPCGPlan`. The PCG cache
+extension includes normalized source semantics, every locked dependency, node-library
+catalog and referenced node-schema generations, seed/numeric policy, effective target
+capabilities/limits and all byte-affecting schema/compiler versions. Editor layout,
+selection, timestamps, paths and worker order are excluded.
+
+Fresh output and cache reuse pass the same generic envelope and PCG semantic validation
+before aggregate generation publication. Runtime consumes only an exact published
+plan through an Assets provider lease; it never interprets source or compiles a missing
+variant. Evaluation intermediates are operation-local, and generated outputs publish
+only through their target owners after a separate aggregate transaction.
+
 ### Audio Domain Import And Cook Boundary
 
 [ADR-064](../../adr/064-audio-asset-and-cook-boundary.md) is the single
@@ -716,6 +843,153 @@ limits and integrity/version data. Editor inspector layout, selected token, prev
 overrides, `ImGuiStyle`, HoroEditor `Theme`, paths, callbacks and renderer/native
 handles are excluded from semantic inputs and output. Runtime consumes only the
 published cooked graph and cannot scan style source files or guess missing tokens.
+
+### Runtime UI Template Domain Import And Cook Boundary
+
+[ADR-083](../../adr/083-ui-template-identity-schema-and-expansion.md) gives Assets
+stable template asset identity, source/sidecar access, generic dependency/cook/
+cache/package scheduling, atomic artifact publication and immutable byte delivery.
+The Runtime UI Template domain owns local/parameter/slot/instance schemas, typed
+validation, nested-DAG expansion, semantic/interface fingerprints and compatibility.
+
+UI document cook resolves each exact accepted template revision from the locked
+asset/package graph and deterministically flattens linked instances into ordinary
+elements. Dependencies include nested templates and every referenced style, font,
+localization, binding schema and slot resource. Cache identity includes canonical
+arguments/slots, expansion algorithm/property/element schemas and all dependency
+digests.
+
+AST never interprets template parameters, reconciles updates or detaches instances;
+the Template domain never creates another asset ID, scheduler, cache, package lock
+or publication authority. Cooked output excludes source paths, editor state,
+runtime handles and source-template update behavior.
+
+### Physics Shape Domain Import And Cook Boundary
+
+[ADR-085](../../adr/085-physics-shape-authoring-cook-and-runtime-boundary.md)
+gives Assets stable collider asset identity, source/sidecar access, generic
+dependency/cook/cache/package scheduling, atomic artifact publication and immutable
+byte delivery. The Physics Shape domain owns typed primitive, convex hull,
+triangle-mesh, height-field and compound schemas; geometry normalization; motion
+compatibility; material/subshape mapping; and solver-private payload construction.
+
+The cooker deterministically validates and canonicalizes geometry, bakes accepted
+local scale, resolves exact dependency revisions and publishes a bounded Horo
+envelope keyed by semantic digests, Physics schemas, tolerance/cooker profiles,
+target platform and the exact private solver build. Paths, editor state, runtime
+handles and raw authoring meshes are excluded from the artifact.
+
+Runtime Physics accepts only validated published artifacts and immutable shape
+leases. It cannot invoke import/cook work or substitute a fallback shape. The Shape
+domain does not create a parallel asset ID, scheduler, cache, package lock or
+publication authority.
+
+### Destruction Domain Source And Cook Boundary
+
+[ADR-145](../../adr/145-destruction-source-chunk-geometry-collision-and-cook-ownership.md)
+gives Assets tracked mesh/recipe identity, immutable input delivery, dependency-aware
+scheduling, physical content-addressed cache/package storage, operation staging and
+atomic publication. Destruction Cook owns fracture semantics: normalized input
+validation, deterministic chunk generation/import mapping, canonical exterior/interior
+geometry, material slots, hierarchy/support/connectivity and solver-neutral convex input.
+
+One canonical DFR artifact is the portable chunk-membership/topology authority. It has a
+complete source/recipe/algorithm/seed/policy/schema/toolchain fingerprint and contains
+no native Physics shape, renderer resource, path, editor state or runtime handle.
+Physics consumes its exact chunk collision inputs to publish separately keyed solver-
+private shape artifacts under ADR-085. Mesh/Render consumes its exact geometry to publish
+separately keyed render products. Solver/backend changes invalidate only their derived
+products unless DFR semantics changed.
+
+Destruction Cook creates no private cache, current-generation pointer or package root.
+Workers produce immutable candidates in the Asset operation namespace; only Assets may
+verify and atomically publish. Runtime loads exact validated DFR plus required dependent
+artifacts and cannot import, repair, fracture or cook a missing product.
+
+[ADR-148](../../adr/148-fracture-document-generator-undo-and-preview-ownership.md)
+keeps editor generation and publication distinct. `FractureAssetDocument` owns only an
+unsaved working source candidate plus semantic history. Generator workers return bounded
+detached candidates to that document; completion cannot write source, cache entries or a
+current generation. Source save asks Assets to durably publish one exact accepted
+document revision. Production cook then consumes that Assets revision through the
+ordinary ADR-145 operation. Preview cook uses a transient non-published namespace and
+cannot satisfy production readiness, enter a package or clear document dirty state.
+
+### Navigation Domain Capture And Cook Boundary
+
+[ADR-105](../../adr/105-navigation-asset-and-scene-ownership-boundary.md)
+gives Assets the tracked `NavigationDefinition` identity/sidecar, immutable input
+storage, dependency-aware scheduling/cache keys, staging, atomic generation
+publication, packaging and runtime byte delivery. The Navigation domain owns typed
+grounded profiles, area/link/source semantics, Scene contribution capture,
+canonicalization, NavMesh build rules, neutral payload validation and provider-
+private conversion.
+
+The application bake operation captures one bounded immutable
+`NavigationBakeInputSnapshot` from exact migrated project/Scene revisions, the
+definition AssetId/source digest, stable contributor IDs and accepted canonical
+geometry-source digests. A host adapter may project an ADR-085 normalized Physics
+source model without exposing a runtime world or solver-native shape. The snapshot
+is ephemeral derived state: it is neither registered as an asset nor edited,
+migrated, packaged or loaded by runtime. Cookers receive it through host-owned
+bounded views and cannot retain live Scene, registry, ECS or asset-record pointers.
+
+Cook output is an immutable `GroundedNavMeshArtifact`/neutral `NavMeshData` keyed by
+the full source/dependency/settings/schema/coordinate/cooker/provider fingerprint.
+Generated scope/profile/tile partitions retain definition, grounded-profile and
+stable contributor provenance but receive no authoring AssetIds or sidecars.
+Provider-native sections are optional fingerprinted derived data. Only Assets may
+publish the complete candidate generation; Navigation creates no parallel cache,
+output tree, current-generation pointer or package authority.
+
+Runtime accepts only validated published artifacts and immutable leases. Missing,
+stale, corrupt or unsupported required data fails Scene/cell preparation. Runtime
+cannot parse source, invoke bake, migrate data, choose an inactive generation or
+substitute straight-line navigation. Dynamic carved topology remains transient
+runtime state and cannot be published as a new cooked base.
+
+[ADR-106](../../adr/106-navigation-bake-ownership-transaction-and-cache.md)
+binds this contribution to the application `NavigationBakeService` and generic
+AssetCook transaction. AssetCook remains sole owner of immutable cache storage,
+unique same-filesystem staging, manifest construction, the cross-process
+publication lock, generation directories and final `current.json` replacement.
+The service owns request coalescing, immutable navigation capture, tile/profile
+task groups, latest-wins generation checks and operation progress. The provider
+builder owns only bounded computation over borrowed immutable input.
+
+The navigation cache key is an explicitly versioned dependency-aware extension,
+not the dependency-free AST-001C `CacheKeyV1`. Fresh and cached tiles pass equal
+envelope/key/digest/bounds/semantic checks before complete generation assembly.
+Cache presence cannot select a generation. Cancellation, failure, supersession,
+lock timeout or stale source preserves the last valid pointer; interrupted staging
+and inactive generations are cleaned/quarantined but never inferred as current.
+
+### Prefab Domain Resolution And Cook Boundary
+
+[ADR-095](../../adr/095-prefab-cook-boundary-and-artifact-model.md) gives Assets
+stable prefab identity, immutable snapshot capture, bounded cook scheduling,
+dependency-aware cache keys, staging, manifest verification, atomic generation
+publication, rollback, packaging and runtime byte delivery. Assets does not parse
+prefab hierarchy semantics, apply overrides or create a second expansion path.
+
+The Prefab domain owns source validation and one versioned ADR-094 resolver that
+produces an immutable `EffectivePrefabCandidateV1`. Scene Cook consumes it to embed
+static placements as ordinary `RuntimeSceneDefinition` content. Prefab Cook consumes
+it to emit flat `CookedPrefab` artifacts for declared dynamic-spawn roots. The
+effective candidate is not an asset, cache publication or runtime input.
+
+Keys include exact source/transitive identity, revision and digest; project,
+package, schema and resolver revisions; semantic edge/placement and override
+digests; cooker/output/envelope versions; target/profile; and the role-specific
+scene placement/conversion or dynamic-spawn policy. Fresh and cached outputs pass
+the same envelope, requested-key, payload, bounds and compatibility validation.
+
+Standard packaging excludes raw prefab source, sidecars and effective candidates.
+Static-only prefab content ships inside cooked scenes; `CookedPrefab` ships only in
+the declared dynamic-spawn closure. Candidate cancellation, corruption, staleness
+or publication failure preserves the prior active generation. Reloaded templates
+affect future spawns only; static scene replacement remains a Scene Runtime
+transaction.
 
 ### Determinism And Failure Invariants
 
@@ -836,10 +1110,11 @@ a bounded payload, and a cryptographic digest. The compatibility policy will be:
 - an artifact newer than the runtime is rejected with a request for a compatible
   engine version
 
-Prefab cooking is also future work. It will resolve prefab references in scenes
-and inline expanded objects into the cooked scene artifact; release packages
-will not ship raw `.prefab` files as runtime data. See
-[Prefab Architecture](./prefab-architecture.md).
+Prefab cooking is also future work. One Prefab-domain resolver will supply both
+scene cook, which inlines static placements, and runtime-template cook, which emits
+`CookedPrefab` only for declared dynamic-spawn roots. Standard release packages do
+not ship raw `.prefab` files as runtime data. See [Prefab Architecture](./prefab-architecture.md)
+and [ADR-095](../../adr/095-prefab-cook-boundary-and-artifact-model.md).
 
 The future development output contract uses
 `build/<preset>/cooked_assets/<target>/` as each target's `<cooked-root>/<target>`
@@ -1218,6 +1493,13 @@ public:
 Hot reload is editor-only. Release builds do not support asset modification at
 runtime; they rely on chunk loading and unloading.
 
+Terrain dataset reload is a generation replacement, not an in-place reaction to
+`AssetReloadedEvent`. TerrainRuntime pins its current verified generation, prepares the
+new manifest and its seam/dependency closure under World Streaming reservations, and
+publishes only after all required consumers are ready. A failed/cancelled candidate
+leaves the old generation Active; old artifact and native-resource leases retire after
+their last reader rather than when `current.json` changes.
+
 ## Asset Cache
 
 AST-001C's cache is a derived, immutable content-addressed store. The canonical
@@ -1327,6 +1609,13 @@ slice once implemented. Until a later slice admits another target, the operation
 must return a typed unavailable-target error for every other target; none may be
 substituted.
 
+Navigation bake is the domain-specific application operation defined by
+[ADR-106](../../adr/106-navigation-bake-ownership-transaction-and-cache.md).
+Editor, `horo-engine navigation bake`, MCP and release cook submit the same typed
+request and share its immutable capture, latest-wins, cache, cross-process lock,
+staging, publication and recovery rules. The command/tool names are adapter
+surfaces, not additional cook authorities.
+
 The following block is a non-executable sketch of future command shapes. No CLI
 or MCP cook adapter described here exists in AST-001C.
 
@@ -1349,6 +1638,9 @@ horo-engine asset cook --target desktop-vulkan --target desktop-metal --target d
 
 # Cook a specific asset for a specific target
 horo-engine asset cook --asset a1b2c3d4-e5f6-4890-abcd-ef1234567890 --target headless-null
+
+# Bake one navigation definition/scope through the shared application operation
+horo-engine navigation bake --definition a1b2c3d4-e5f6-4890-abcd-ef1234567890 --scope main
 
 # The sole target this slice will admit once implemented
 horo-engine asset cook --target headless-null
@@ -1383,6 +1675,10 @@ adapters only; they do not own pipeline policy.
   runtime loading, and audio memory budgets.
 - [Prefab Architecture](./prefab-architecture.md): prefab asset format, expansion,
   and cook-time inlining.
+- [Terrain And Foliage Architecture](./terrain-and-foliage-architecture.md): canonical
+  Terrain source, deterministic dataset/tile cooking and runtime residency.
+- [ADR-138](../../adr/138-terrain-source-cooked-tile-cache-and-streaming-ownership.md):
+  Terrain import/cook contribution, cache, publication and generation-pinning boundary.
 - [Release Architecture](../release/release.md): packaging and verification.
 - [Horo Package System](../packages/package-system.md): bulk asset import from packages.
 - [Asset Import Modal](./asset-import-modal.html): HTML reference design for the

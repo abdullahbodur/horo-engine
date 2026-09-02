@@ -424,6 +424,13 @@ The XR backend publishes bounded pose/action snapshots and projects admitted
 OpenXR actions into the same canonical Horo action router. Input does not poll
 OpenXR or retain native action/path handles.
 
+[ADR-159](../../adr/159-xr-action-tracking-and-input-projection-ownership.md)
+defines the normative handoff. Application/project policy declares canonical actions
+and product requirements; Input owns semantic schemas, contexts, player assignment,
+overrides, routing and transition consumption; XROpenXR owns native action sets/actions/
+spaces/paths, synchronization and location; XRRuntime owns the generation-scoped Horo
+snapshot. A host-composed adapter is the only XR-to-Input publisher.
+
 XR device identities include the XR session generation. Grip/aim poses,
 buttons, axes, hand joints, and haptic targets become invalid when tracking,
 focus, interaction profile, device, or session generation changes. The next
@@ -444,10 +451,38 @@ gameplay action IDs. Presentation uses the existing glyph/label provider model.
 Frame-hot hand joints use fixed-capacity or owner-backed spans rather than one
 heap allocation per hand per frame.
 
+XR sampling has one bounded owner-thread opportunity after native runtime-event handling
+and before the normal `BuildInputSnapshot` commit. Late callback/worker results enter the
+next frame. The adapter cannot create actions, choose a player, bypass context priority
+or consume a transition. On focus, tracking, profile, device, permission or session loss,
+it supplies explicit unavailable state and Input commits neutralization rather than
+reusing the last snapshot.
+
+Gameplay fixed ticks receive an immutable tick-assigned Horo projection with exact
+source sample/generation. They never query XRRuntime for a latest pose. Rendering-time
+late poses cannot rewrite that projection. Catch-up ticks follow declared edge/hold
+policy, and any pose interpolation/extrapolation must be an explicit simulation policy.
+
+Gestures are produced by finite host-composed recognizers from immutable admitted data,
+then routed as canonical action candidates by Input. A recognizer owns neither focus nor
+gameplay meaning. Hand joints and eye gaze additionally require purpose-bound privacy
+admission; derived access does not grant logging, replay, telemetry or AI retention.
+
 XR haptics follow the same ownership principles as gamepad haptics but include
 session/device generation, action/subpath target, duration, frequency where
 supported, cancellation, and explicit unsupported fallback. Ordinary input or
 focus loss cancels effects owned by the lost scope.
+
+The Input/application haptic coordinator owns request scope, validation and cancellation;
+XROpenXR owns native apply/stop. Accepted, submitted and physically completed are
+distinct states. Device/profile/session changes, timeout and shutdown cancel old work;
+no timer or callback outlives its owner generation.
+
+[ADR-161](../../adr/161-xr-interaction-runtime-ui-locomotion-and-accessibility-ownership.md)
+keeps an XR ray, direct point, proximity volume, Physics hit or gesture as evidence until
+normal Input routing admits the associated semantic action. Runtime UI owns UI focus and
+capture; gameplay owns use/grab/locomotion meaning; Character owns movement. The XR
+adapter cannot choose a player, bypass the consumption ledger or mutate either target.
 
 ## Data Bus Relationship
 
