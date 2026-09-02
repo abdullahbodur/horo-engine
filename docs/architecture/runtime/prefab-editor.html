@@ -1335,7 +1335,7 @@ aside.horo-drawer.drawer-closed > * { opacity:0; pointer-events:none; }
     </div>
     <div class="search"><input placeholder="Search prefabs…" /></div>
     <div class="panel-body">
-      <div class="group-note">Prefabs are authored assets. Scene documents store stable logical references; cooked scenes inline expanded objects for runtime construction.</div>
+      <div class="group-note">Prefabs are authored assets. Nested placements use stable local slots; variants have one immediate parent. Cooked scenes inline the validated effective graph.</div>
       <div class="prefab-row active"><span>◆</span><span>Door_Interactable</span><span class="meta">v7</span></div>
       <div class="prefab-row"><span>◆</span><span>Chest_Lootable</span><span class="meta">v3</span></div>
       <div class="prefab-row"><span>◆</span><span>PressurePlate</span><span class="meta">v5</span></div>
@@ -1419,11 +1419,13 @@ aside.horo-drawer.drawer-closed > * { opacity:0; pointer-events:none; }
           <div class="kv"><span>Path</span><span>assets/prefabs/interactables/Door_Interactable.prefab</span></div>
           <div class="kv"><span>Schema</span><span>prefab.v1</span></div>
           <div class="kv"><span>Objects</span><span>6 source / 6 expanded</span></div>
-          <div class="kv"><span>Dependencies</span><span>5 direct / 9 transitive</span></div>
+          <div class="kv"><span>Composition</span><span>2 nested / variant depth 1</span></div>
+          <div class="kv"><span>Dependencies</span><span>5 resource / 9 transitive</span></div>
           <div class="kv"><span>Dirty State</span><span>2 preview overrides</span></div>
           <div style="height:10px"></div>
           <div class="override-list">
             <div class="override-card active"><span class="dot blue"></span><div><div class="override-title">Source asset reference is stable</div><div class="override-sub">Path can move without breaking prefab instances.</div></div><span class="pill ok">OK</span></div>
+            <div class="override-card"><span class="dot ok"></span><div><div class="override-title">Precedence is deterministic</div><div class="override-sub">Source, variants, nested placement, then scene instance; every layer retains provenance.</div></div><span class="pill ok">OK</span></div>
             <div class="override-card"><span class="dot ok"></span><div><div class="override-title">Runtime handles are not serialized</div><div class="override-sub">Scene stores stable object and asset IDs only.</div></div><span class="pill ok">OK</span></div>
           </div>
         </div>
@@ -1476,8 +1478,8 @@ aside.horo-drawer.drawer-closed > * { opacity:0; pointer-events:none; }
           <path d="M544 110 C640 235 640 260 720 260" stroke="#e6a23c" stroke-width="2" fill="none" opacity=".55"/>
           <path d="M544 110 C640 320 640 360 720 360" stroke="#04a5fc" stroke-width="2" fill="none" opacity=".5"/>
         </svg>
-        <div class="dep-node active" style="left:26px;top:78px"><div class="graph-title">Door_Interactable.prefab</div><div class="graph-sub">authoring asset</div></div>
-        <div class="dep-node" style="left:calc(50% - 82px);top:78px"><div class="graph-title">Scene Instance</div><div class="graph-sub">LibraryDoor_A reference</div></div>
+        <div class="dep-node active" style="left:26px;top:78px"><div class="graph-title">Door_Base.prefab</div><div class="graph-sub">concrete source</div></div>
+        <div class="dep-node" style="left:calc(50% - 82px);top:78px"><div class="graph-title">Door_Interactable</div><div class="graph-sub">single VariantParent edge</div></div>
         <div class="dep-node" style="right:26px;top:48px"><div class="graph-title">mesh_door_wood_01</div><div class="graph-sub">mesh asset</div></div>
         <div class="dep-node" style="right:26px;top:132px"><div class="graph-title">mat_oak_varnished</div><div class="graph-sub">material asset</div></div>
         <div class="dep-node" style="right:26px;top:244px"><div class="graph-title">snd_door_open_01</div><div class="graph-sub">audio source</div></div>
@@ -1488,6 +1490,8 @@ aside.horo-drawer.drawer-closed > * { opacity:0; pointer-events:none; }
         <div class="card-head"><span>Asset Pipeline</span><span class="pill ok">ready</span></div>
         <div class="card-body">
           <div class="kv"><span>Import State</span><span>editor asset valid</span></div>
+          <div class="kv"><span>Graph Policy</span><span>acyclic · single parent</span></div>
+          <div class="kv"><span>Placement Scope</span><span>stable LocalObjectId chain</span></div>
           <div class="kv"><span>Sidecar</span><span>Door_Interactable.prefab.horo</span></div>
           <div class="kv"><span>Cook Targets</span><span>vulkan / opengl / null</span></div>
           <div class="kv"><span>Cache Key</span><span>asset + source + cooker + target</span></div>
