@@ -62,7 +62,7 @@ namespace Horo::Render::Detail {
         entry.dependencies.assign(dependencies.begin(), dependencies.end());
         entry.retirementQueued = false;
         for (const RenderResourceIdentity dependency : dependencies) {
-            ++FindExact(dependency)->dependentPins;
+            ++entries_[dependency.slot].dependentPins;
         }
         operations_.push_back(OperationRecord{.id = entry.operation});
         ++pendingRequests_;
@@ -175,20 +175,22 @@ namespace Horo::Render::Detail {
     }
 
     Result<void> RenderResourceRegistry::Release(const RenderResourceClass resourceClass, const RenderResourceIdentity identity) {
+        using enum RenderResourceState;
+
         auto validated = Validate(resourceClass, identity);
         if (validated.HasError()) {
             return Result<void>::Failure(validated.ErrorValue());
         }
         Entry &entry = entries_[validated.Value()];
-        if (entry.state == RenderResourceState::Retiring) {
+        if (entry.state == Retiring) {
             return Result<void>::Failure(
                 RegistryError(FrontendErrors::ResourceAlreadyRetiring, "The resource generation is already retiring."));
         }
-        if (entry.state != RenderResourceState::Ready) {
+        if (entry.state != Ready) {
             return Result<void>::Failure(
                 RegistryError(FrontendErrors::ResourceNotReady, "Only a ready resource generation can be released."));
         }
-        entry.state = RenderResourceState::Retiring;
+        entry.state = Retiring;
         QueueRetirementIfEligible(identity.slot);
         return Result<void>::Success();
     }
@@ -319,8 +321,8 @@ namespace Horo::Render::Detail {
 
     Result<std::size_t> RenderResourceRegistry::Validate(const RenderResourceClass resourceClass,
                                                          const RenderResourceIdentity identity) const {
-        const std::array<std::uint64_t, 3> identityFields{identity.owner.value, identity.slot, identity.generation};
-        if (std::ranges::find(identityFields, 0) != identityFields.end()) {
+        if (const std::array<std::uint64_t, 3> identityFields{identity.owner.value, identity.slot, identity.generation};
+            std::ranges::find(identityFields, 0) != identityFields.end()) {
             return Result<std::size_t>::Failure(
                 RegistryError(FrontendErrors::ResourceHandleMalformed, "The renderer resource handle contains a zero identity field."));
         }
@@ -342,10 +344,6 @@ namespace Horo::Render::Detail {
                 RegistryError(FrontendErrors::ResourceWrongType, "The renderer resource handle type does not match the registry entry."));
         }
         return Result<std::size_t>::Success(identity.slot);
-    }
-
-    RenderResourceRegistry::Entry *RenderResourceRegistry::FindExact(const RenderResourceIdentity identity) noexcept {
-        return const_cast<Entry *>(std::as_const(*this).FindExact(identity));
     }
 
     const RenderResourceRegistry::Entry *RenderResourceRegistry::FindExact(const RenderResourceIdentity identity) const noexcept {
@@ -372,8 +370,8 @@ namespace Horo::Render::Detail {
     void RenderResourceRegistry::QueueRetirementIfEligible(const std::size_t slot) {
         Entry &entry = entries_[slot];
         const bool retiring = entry.state == RenderResourceState::Retiring || entry.state == RenderResourceState::Failed;
-        const std::array eligibility{retiring, entry.dependentPins == 0, entry.submissionPins == 0, !entry.retirementQueued};
-        if (!std::ranges::all_of(eligibility, std::identity{})) {
+        if (const std::array eligibility{retiring, entry.dependentPins == 0, entry.submissionPins == 0, !entry.retirementQueued};
+            !std::ranges::all_of(eligibility, std::identity{})) {
             return;
         }
         assert(retirementQueueCount_ < retirementQueue_.size());
@@ -386,9 +384,10 @@ namespace Horo::Render::Detail {
     void RenderResourceRegistry::Retire(const std::size_t slot) noexcept {
         Entry &entry = entries_[slot];
         for (const RenderResourceIdentity dependency : entry.dependencies) {
-            if (Entry *dependencyEntry = FindExact(dependency); dependencyEntry != nullptr) {
-                assert(dependencyEntry->dependentPins > 0);
-                --dependencyEntry->dependentPins;
+            if (FindExact(dependency) != nullptr) {
+                Entry &dependencyEntry = entries_[dependency.slot];
+                assert(dependencyEntry.dependentPins > 0);
+                --dependencyEntry.dependentPins;
                 QueueRetirementIfEligible(dependency.slot);
             }
         }
