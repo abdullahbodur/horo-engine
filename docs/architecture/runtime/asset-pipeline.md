@@ -695,6 +695,28 @@ substitute. Font cook output contains family/face manifests, retained shaping/
 raster tables, coverage/metrics and integrity metadata, never GPU atlases, native
 font handles, absolute source paths or editor preview state.
 
+### Runtime UI Style Domain Import And Cook Boundary
+
+[ADR-076](../../adr/076-runtime-ui-style-asset-token-and-inheritance.md) gives AST
+stable runtime-style asset identity, source/sidecar access, generic cooker/cache/
+dependency scheduling, staging, atomic publication, rollback and runtime bytes.
+The Runtime UI Style domain owns token/property/class/state schemas, typed
+normalization, inheritance/reference graph validation, deterministic flattening,
+semantic fingerprints and cooked payload compatibility.
+
+Style cook dependencies include base style assets, referenced font families,
+imagery/material assets and registered property/provider schema revisions. AST does
+not interpret a token, resolve a visual state, import an editor theme or create a
+computed style. The Style domain does not create a parallel scheduler, cache,
+output tree, publication record or asset identity.
+
+Cook output is a bounded `CookedRuntimeStyle` with stable IDs, flattened token/
+class provenance, typed property/state tables, dependency digests, effect masks,
+limits and integrity/version data. Editor inspector layout, selected token, preview
+overrides, `ImGuiStyle`, HoroEditor `Theme`, paths, callbacks and renderer/native
+handles are excluded from semantic inputs and output. Runtime consumes only the
+published cooked graph and cannot scan style source files or guess missing tokens.
+
 ### Determinism And Failure Invariants
 
 A cooker receives an invocation-bounded immutable borrowed source view, immutable

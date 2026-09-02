@@ -1089,6 +1089,13 @@ retirement, but atlas miss/eviction/backend replacement cannot choose another fa
 change metrics or line breaking, or expose parser/rasterizer/native font handles in
 the UI snapshot.
 
+[ADR-076](../../adr/076-runtime-ui-style-asset-token-and-inheritance.md) keeps token,
+class, inheritance, visual-state and accessibility resolution in Runtime UI.
+Extraction provides immutable Horo typed computed paint data and stable resource
+identities. Renderer may convert linear colors, resolve resources and batch equal
+paint state, but cannot read editor/ImGui styles, select state overrides, inherit a
+property, replace a token or mutate a computed-style generation.
+
 World-space canvases project as ordinary view-dependent render instances under
 declared depth/visibility policy. Screen-space canvases are frontend-owned passes
 composed after world/display transform unless an explicit render plan declares an
