@@ -1064,6 +1064,15 @@ match. An aggregate plan records both axes, exact variants/limits/revisions and 
 declared fallback. The renderer cannot use its profile to raise Terrain limits, discard
 required layers/holes/instances or invent a missing shader representation.
 
+[ADR-141](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md)
+places renderer preparation inside the aggregate Terrain/Scene/cell transaction.
+RenderFrontend returns typed request/incarnation/Terrain/resource revision receipts;
+Ready resources remain private, Prepared publication is prevalidated for RenderSafePoint,
+and Published resources remain activation-ticket-scoped until the aggregate root commits.
+Failure/cancellation retires the candidate while old frames/resources remain valid. Render
+alone acknowledges Retired after uploads, frames, GPU work and dependencies drain; visual
+readiness cannot be inferred from decoded Terrain or native resource existence.
+
 The scene runtime produces frame-owned render data:
 
 ```cpp
@@ -1546,3 +1555,4 @@ Required tests cover:
 - [XR Architecture](./vr-ar-architecture.md)
 - [ADR-137: Terrain and Foliage Ownership, Data, Tier and Lifecycle](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
 - [ADR-139: Terrain Render Extraction, Material, LOD and Tier Boundary](../../adr/139-terrain-render-extraction-material-lod-and-tier-boundary.md)
+- [ADR-141: Terrain/Foliage Cross-System Ownership and Readiness](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md)

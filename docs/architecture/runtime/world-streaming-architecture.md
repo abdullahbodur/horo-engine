@@ -321,6 +321,17 @@ Active/pinned cells and candidate/native leases remain charged. Changed tiles re
 with their manifest-declared seam/dependency closure, and this authority commits only
 after the aggregate required readiness barrier succeeds.
 
+[ADR-141](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md)
+defines how that barrier composes distinct owner safe points. Terrain supplies bounded
+immutable consumer snapshots; Render, Physics and Navigation return typed request/
+incarnation/revision/fence receipts. Ready is private staging, Prepared means a no-fail
+owner-safe-point publication is ready, and Published remains activation-ticket-scoped.
+Only after every required/degradable receipt matches does RuntimeScene publish the
+aggregate root and this authority mark the cell Active. Optional absence is explicit;
+stale/missing evidence is not success. Rollback retains the old root and retires every
+started candidate, while eviction releases the shared reservation only after all owners
+acknowledge Retired.
+
 ## Streaming Volumes, Priority And Retry Policy
 
 Camera, Gameplay, NetworkRelevance and Preload volumes create bounded residency
@@ -950,6 +961,7 @@ See [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin
 - [ADR-137](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md): Terrain/Foliage data, tier, lifecycle, readiness and reservation ownership.
 - [ADR-138](../../adr/138-terrain-source-cooked-tile-cache-and-streaming-ownership.md): Terrain dataset/tile manifests, cache authorities, typed residency requests and seam-safe generation replacement.
 - [ADR-140](../../adr/140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md): Foliage state classification, durable delta handoff and no-loss cell eviction.
+- [ADR-141](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md): Terrain consumer snapshots, typed receipts, aggregate activation and reverse-DAG retirement.
 - [Physics Architecture](./physics-architecture.md): Static mesh collider registration and scene binding.
 - [Networking Architecture](./networking-architecture.md): Server-authoritative cell relevance and replication.
 - [Concurrency And Job System](../foundation/concurrency-and-jobs.md): Job workers, cancellation tokens, and thread roles.

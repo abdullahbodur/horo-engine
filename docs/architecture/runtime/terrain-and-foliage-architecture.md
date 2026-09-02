@@ -20,6 +20,9 @@ core-1.0 versus post-1.0 GPU-driven boundary.
 [ADR-140](../../adr/140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md)
 defines deterministic placement, baked/ephemeral/durable state classification, mutation,
 capacity, persistence handoff and eviction ownership.
+[ADR-141](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md)
+defines immutable consumer snapshots, typed readiness receipts, owner-safe-point
+publication, aggregate activation, rollback and reverse-DAG retirement.
 
 ## Ownership And Data Boundaries
 
@@ -438,6 +441,21 @@ Scene binding/effective plan, reserves all peak work and builds a detached candi
 Workers return generation-tagged evidence only; the Terrain owner lane publishes the
 candidate at the RuntimeScene safe point after every required participant is Prepared.
 
+Terrain projects one revision-consistent leased source root into bounded consumer-specific
+snapshots. Render receives ADR-139 candidates; Physics receives neutral collision shape/
+material/subshape/hole inputs; Navigation receives neutral grounded-surface/hole/obstacle/
+link inputs. Every snapshot carries Terrain/content/residency/mutation/capability, world/
+cell/fence/request and origin evidence. It contains no mutable Terrain pointer or consumer-
+native handle. TRF-005.2 freezes the exact collision/navigation projection schemas.
+
+Each consumer prepares private state under its own worker/native affinity and returns an
+immutable typed receipt through `Pending`, `Ready`/`ReadyFallback`, `Prepared`,
+`Published`, `Retiring` and `Retired` (or explicit `Unavailable`/`Failed`). `Prepared`
+means all fallible work is complete and a no-fail owner-safe-point publication is ready;
+it does not make state live. Render, Physics, Navigation and Terrain publish private roots
+addressed only by one `ActivationTicket`. RuntimeScene/World Streaming exposes them only
+after every required receipt matches and one aggregate root commits.
+
 Readiness is an immutable generation-scoped snapshot with separate logical, streaming,
 visual, collision, navigation and mutation dimensions. Each dimension is
 `NotRequested`, `Preparing`, `Ready`, `Unavailable`, `Failed`, `Suspended` or
@@ -450,6 +468,13 @@ explicit unload/replacement. Replacement retains the old dataset, snapshots, til
 GPU work, collision/navigation installs and module/provider dependencies until every
 lease/fence retires; stale worker or participant evidence cannot publish by matching a
 slot, coordinate or asset.
+
+Required, Optional and Degradable criticality is frozen in the validated plan. Optional
+absence is explicit; Degradable requires an exact predeclared substitute; a missing or
+stale receipt is never success. After aggregate activation, required consumer/device loss
+becomes a new Suspended/Failed/recovery or eviction transition rather than retroactive
+rollback. Gameplay queries the committed aggregate capability and never probes a Physics
+body, NavMesh, render result or decoded tile to infer another dimension's readiness.
 
 Authored mutation goes through document/application commands and recook. Optional
 runtime deformation/dynamic foliage uses a typed command with terrain generation,
@@ -581,6 +606,10 @@ Required coverage includes:
   identity separation and base-relative save delta golden fixtures;
 - active-to-dormant dirty foliage handoff, SaveCaptureEpoch one-copy capture, base-remap
   incompatibility and eviction pressure with no persistent state loss;
+- consumer-specific immutable snapshot and typed receipt state machines, stale/duplicate/
+  out-of-order evidence, criticality/fallback matrices and aggregate activation roots;
+- adversarial Render/Physics/Navigation/Terrain safe-point ordering with no partial live
+  state, complete pre-commit rollback and post-commit runtime failure transitions;
 - world-streaming reservation/growth/pressure accounting for staging, old/new and
   retiring generations without double charge or oversubscription;
 - source/cook/provider-byte/decoded/GPU/Physics/Navigation cache ownership, pinning and
@@ -624,3 +653,6 @@ Required coverage includes:
 - [ADR-140](../../adr/140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md):
   deterministic placement, immutable baked base, ephemeral overlays, durable canonical
   deltas, capacity policy and no-loss cell eviction
+- [ADR-141](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md):
+  consumer snapshots and receipts, owner-safe-point staging, aggregate readiness,
+  rollback, runtime failure and reverse-dependency retirement
