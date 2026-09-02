@@ -7,6 +7,13 @@ Horo Engine. It covers the post-process volume system, individual effects
 (bloom, depth of field, motion blur, ambient occlusion, tonemapping, color
 grading), effect ordering, feature tiers, and GPU performance budgets.
 
+XR session/view/composition ownership is deliberately outside this subsystem under
+[ADR-157](../../adr/157-xr-ownership-runtime-composition-and-capability-tier.md).
+Foveation is an admitted XR/Renderer plan and runtime asynchronous reprojection/timewarp
+belongs to the native XR compositor; neither is a generic post-process effect. This
+stack may consume an already admitted XR view like any other Render view, but it cannot
+discover/select an XR runtime, choose a view configuration or submit composition layers.
+
 ## Scene Color And Output Contract
 
 [ADR-037: Scene Color and HDR Architecture](../../adr/037-scene-color-and-hdr-architecture.md)
@@ -87,7 +94,7 @@ struct PostProcessSettings {
 
 Post-processing is implemented as typed render graph passes:
 
-```
+```text
 Raster semantic inputs ──→ Scene-referred effects ──→ Exposure + creative look
     ──→ ACES target output transform ──→ Display-referred UI
     ──→ Accessibility ──→ Gamut containment + dither + transfer encoding

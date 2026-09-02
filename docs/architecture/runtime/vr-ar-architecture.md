@@ -17,6 +17,13 @@ below describe the target architecture. A runtime, headset, or platform is not
 supported merely because it appears in a design example or because an OpenXR
 loader can discover it. Support requires reproducible qualification evidence.
 
+[ADR-157](../../adr/157-xr-ownership-runtime-composition-and-capability-tier.md)
+is the normative foundation for XR module ownership, host composition, typed
+capability admission, 1.0 profiles, unsupported paths and lifecycle. The sections
+below specialize that authority; downstream decisions may add exact schemas and state
+machines without moving ownership into Platform, Renderer, Input, Platform Services or
+post-processing.
+
 ## Ownership
 
 ```text
@@ -61,6 +68,14 @@ Required boundaries:
 - Editor panels are query and command clients. They do not own the active XR
   session or directly call native runtime APIs.
 
+The logical target split is `HoroEngine::XRApi`, `HoroEngine::XRRuntime` and
+`HoroEngine::XROpenXR`. `XRApi` contains only backend-neutral public values and narrow
+interfaces. `XRRuntime` owns Horo-visible runtime/session/frame/space/view/capability
+generations and immutable snapshots. `XROpenXR` privately owns native loader, instance,
+system, session, action, space, swapchain, layer and extension state. The application
+host selects and connects the exact XR, Platform, Renderer and Input tuple before
+native/session resources exist.
+
 ## Capability And Identity Model
 
 Capabilities are discovered from the selected runtime, platform host, renderer,
@@ -94,6 +109,26 @@ sufficient for permission-sensitive or replaceable capabilities.
 Runtime discovery, project policy, feature admission, activation, and current
 availability are distinct states. Horo never silently selects another runtime,
 renderer, view configuration, interaction profile, or privacy-sensitive feature.
+
+### Version 1 Product Profiles
+
+`XRProjection1_0` requires primary opaque stereo projection, runtime-driven views,
+validity-aware head pose, local/view spaces, predicted-frame sequencing, Renderer
+external color targets, canonical action projection and complete focus/session/loss/
+shutdown behavior. `XRTrackedInteraction1_0` adds two tracked controller roles with aim/
+grip poses, product-declared select/menu/trigger/squeeze/thumbstick actions, cancellable
+haptics and Runtime UI/comfort adapters.
+
+These are named requirement sets, not ordered quality/headset tiers. A product requiring
+tracked interaction fails preflight when the profile is incomplete; it never silently
+falls back to projection-only. Depth submission, fixed non-gaze foveation, refresh-rate
+selection, visibility masks, controller presentation and qualified Android standalone
+hosting are optional 1.0 capabilities with explicit plan identities.
+
+Passthrough, anchors, scene understanding, eye/hand/body/face tracking, gaze foveation,
+quad/multi-view, space warp and vendor-specific SDK features are post-1.0 unless a later
+roadmap revision explicitly promotes and qualifies them. Version-1 profiles neither
+depend on nor emulate them.
 
 ## OpenXR Backend Lifecycle
 
@@ -403,6 +438,7 @@ device release gate.
 
 ## Related Documents
 
+- [XR Ownership, Runtime Composition and Capability Tier](../../adr/157-xr-ownership-runtime-composition-and-capability-tier.md)
 - [XR Setup UI Reference](./xr-setup.html)
 - [Rendering Architecture](./rendering-architecture.md)
 - [Render Backend Parity Contract](./render-backend-parity-contract.md)
