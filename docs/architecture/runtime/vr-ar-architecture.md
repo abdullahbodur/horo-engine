@@ -34,6 +34,11 @@ specializes native action, tracking snapshot, Input projection, fixed-tick, gest
 haptic and privacy ownership. Input never polls OpenXR, and presentation-late tracking
 never rewrites committed simulation input.
 
+[ADR-160](../../adr/160-xr-rendering-openxr-compositor-and-renderer-ownership.md)
+specializes runtime-driven N-view admission, swapchain/external-resource leases, frame
+and layer submission, auxiliary targets and XR render-quality plans. XROpenXR owns native
+frame/compositor calls; Renderer owns Horo graph/GPU work and completion evidence.
+
 ## Ownership
 
 ```text
@@ -310,6 +315,30 @@ release, and composition submission maintain explicit ownership and
 synchronization. Session or surface loss retires resources only after queued GPU
 references are safe.
 
+The first production `XRProjection1_0` renderer admits exactly one primary opaque
+stereo configuration with two runtime views. The public plan remains bounded N-view.
+One-view inputs require an explicit simulator/test profile, while any greater-than-two
+configuration remains discovered-but-unsupported until fully implemented and qualified;
+it fails before image acquisition and is never truncated.
+
+An XR swapchain image and its imported `RenderResourceId` are correlated but distinct
+identities. XROpenXR retains allocation/acquire/release/destruction ownership; Renderer
+borrows an external lease with typed format, extent, render rectangle, subresource,
+usage, color/depth/motion/density role, synchronization and generations. Release waits
+for Renderer completion evidence, not merely CPU command recording, without a normal-
+frame device-idle wait.
+
+XRRuntime validates one immutable frame/layer intent. XROpenXR performs wait/begin,
+view location, acquire/wait, native layer encoding and end-frame. Renderer performs
+N-view extraction, graph execution and GPU retirement. Required layer/view failure is
+typed; a partial view set is never successful presentation.
+
+Dynamic resolution and fixed/gaze foveation use one immutable XR/Renderer plan that
+separates allocation extent, active render rectangle, scale, VRS/density mechanism,
+privacy state and fallback. Runtime space-warp depth/motion inputs remain post-1.0 until
+their exact semantics are admitted. Runtime asynchronous reprojection and guardian/
+chaperone composition never become Horo passes.
+
 ## Tracking, Actions, And Haptics
 
 OpenXR action sets and suggested bindings are backend data. Engine systems
@@ -513,6 +542,7 @@ device release gate.
 - [XR Ownership, Runtime Composition and Capability Tier](../../adr/157-xr-ownership-runtime-composition-and-capability-tier.md)
 - [OpenXR Loader, Backend Packaging and Host Composition](../../adr/158-openxr-loader-backend-packaging-and-host-composition.md)
 - [XR Action, Tracking and Input-Projection Ownership](../../adr/159-xr-action-tracking-and-input-projection-ownership.md)
+- [XR Rendering, OpenXR Compositor and Renderer Ownership](../../adr/160-xr-rendering-openxr-compositor-and-renderer-ownership.md)
 - [XR Setup UI Reference](./xr-setup.html)
 - [Rendering Architecture](./rendering-architecture.md)
 - [Render Backend Parity Contract](./render-backend-parity-contract.md)

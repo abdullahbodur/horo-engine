@@ -13,6 +13,10 @@ Foveation is an admitted XR/Renderer plan and runtime asynchronous reprojection/
 belongs to the native XR compositor; neither is a generic post-process effect. This
 stack may consume an already admitted XR view like any other Render view, but it cannot
 discover/select an XR runtime, choose a view configuration or submit composition layers.
+The external-target, dynamic-resolution, foveation, auxiliary-input and layer boundary is
+fixed by [ADR-160](../../adr/160-xr-rendering-openxr-compositor-and-renderer-ownership.md).
+Post-processing cannot acquire/release runtime images, enable VRS/density/space warp,
+fabricate missing depth/motion inputs or model guardian/chaperone as an effect.
 
 ## Scene Color And Output Contract
 

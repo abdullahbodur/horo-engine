@@ -591,6 +591,15 @@ from the frontend frame plan. Only ImGui texture resolution remains app-private;
 the public renderer API intentionally exposes no native or GUI texture type.
 
 Migration must not preserve either backend as a privileged composition path.
+
+XR follows the same parity rule under
+[ADR-160](../../adr/160-xr-rendering-openxr-compositor-and-renderer-ownership.md).
+Every renderer advertised for an XR product tuple supplies a private OpenXR external-
+resource bridge and proves equivalent typed format/usage negotiation, image-lease
+synchronization, N-view semantics, completion evidence and deferred retirement. Native
+handles remain private, and XROpenXR retains acquire/release/end-frame ownership. A
+backend may use multipass or native multiview internally, but cannot omit/reorder views
+or claim an unqualified greater-than-two configuration.
 The common module metadata, window requirements, editor lifecycle, generic mesh
 snapshot, target handles, submission contract, and parity test harness are shared.
 
