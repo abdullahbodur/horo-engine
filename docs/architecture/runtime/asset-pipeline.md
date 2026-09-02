@@ -647,6 +647,34 @@ ownership, and C++ object ownership do not cross that ABI. The adapter must
 validate all output before it can enter the cache or a candidate cooked
 generation, so external and built-in contributions cannot bypass host invariants.
 
+### Terrain Domain Import And Cook Boundary
+
+[ADR-138](../../adr/138-terrain-source-cooked-tile-cache-and-streaming-ownership.md)
+applies the generic-Assets/domain-semantics split to Terrain and Foliage. Assets owns
+tracked source bytes and `AssetId`, immutable input borrows, cooker registration and
+scheduling, dependency-aware keys, cache storage, staging, verified generation
+manifests, atomic `current.json` publication and provider byte leases. It does not
+interpret height, layer, hole, seam, foliage placement, coordinate or LOD semantics.
+
+Terrain Import/Model owns external format decoding and canonical authored Terrain
+source validation. Terrain Cook owns deterministic tiling, seam/mip/LOD derivation,
+layer/hole/spline semantics, foliage clustering and Terrain manifest/tile schemas. Both
+are bounded catalog contributions; they create no second asset identity, dependency
+graph, scheduler, cache directory or publication authority.
+
+The dependency-aware key closes over the exact canonical Terrain source revision and
+digest, every accepted dependency artifact, tiling/seam/LOD/compression policy,
+effective tier/limit profile, Terrain source/cooked/manifest/algorithm versions and the
+generic target/toolchain envelope. The resulting immutable dataset manifest binds a
+canonically ordered set of independently verifiable tile/cluster artifacts with exact
+bounds, digests, seam/dependency signatures and peak costs. Native Render, Physics and
+Navigation artifacts are excluded and remain separately keyed by their owners.
+
+Runtime pins one verified published generation through the Assets provider. It never
+scans an output directory, follows `current.json` independently for each tile, imports
+source or cooks a missing variant. Package validation applies the same manifest, digest,
+limit and dependency checks used by fresh cook and cache reuse.
+
 ### VFX Domain Import And Cook Boundary
 
 [ADR-126](../../adr/126-vfx-graph-compilation-and-runtime-representation-convergence.md)
@@ -1378,6 +1406,13 @@ public:
 Hot reload is editor-only. Release builds do not support asset modification at
 runtime; they rely on chunk loading and unloading.
 
+Terrain dataset reload is a generation replacement, not an in-place reaction to
+`AssetReloadedEvent`. TerrainRuntime pins its current verified generation, prepares the
+new manifest and its seam/dependency closure under World Streaming reservations, and
+publishes only after all required consumers are ready. A failed/cancelled candidate
+leaves the old generation Active; old artifact and native-resource leases retire after
+their last reader rather than when `current.json` changes.
+
 ## Asset Cache
 
 AST-001C's cache is a derived, immutable content-addressed store. The canonical
@@ -1553,6 +1588,10 @@ adapters only; they do not own pipeline policy.
   runtime loading, and audio memory budgets.
 - [Prefab Architecture](./prefab-architecture.md): prefab asset format, expansion,
   and cook-time inlining.
+- [Terrain And Foliage Architecture](./terrain-and-foliage-architecture.md): canonical
+  Terrain source, deterministic dataset/tile cooking and runtime residency.
+- [ADR-138](../../adr/138-terrain-source-cooked-tile-cache-and-streaming-ownership.md):
+  Terrain import/cook contribution, cache, publication and generation-pinning boundary.
 - [Release Architecture](../release/release.md): packaging and verification.
 - [Horo Package System](../packages/package-system.md): bulk asset import from packages.
 - [Asset Import Modal](./asset-import-modal.html): HTML reference design for the
