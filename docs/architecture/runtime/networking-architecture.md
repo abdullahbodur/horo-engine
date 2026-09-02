@@ -37,6 +37,7 @@ Character checkpoint.
 - **Explicit Schemas & Negotiation**: Messages use typed schemas and handshake negotiation. Raw C++ memory layout, vtables, pointers, and unstructured object graphs are never serialized.
 - **Deterministic Cancellation and Shutdown**: Every connection reaches a definitive terminal state. Disconnections, timeouts, cancellations, and engine shutdown follow bounded, leak-free teardown protocols.
 - **Opt-In Prediction**: NonPredicted is the baseline and constructs no history/replay machinery. LocalPrediction and RollbackResimulation require validated ADR-100 descriptors, bounded histories and owner-provided fixed-tick hooks.
+- **Network-Owned Scheduling**: One NetworkRuntime scheduler applies immutable renderer-independent project profiles, per-connection bandwidth/work/queue ledgers, bounded interest and weighted-deficit fairness.
 
 ## Target Topology and Module Ownership
 
@@ -500,6 +501,7 @@ The networking subsystem requires targeted automated verification:
 - [ADR-098: Protocol, Session and Trust Policy](../../adr/098-protocol-session-and-trust-policy.md)
 - [ADR-099: Replication Ownership, Authority and Compatibility](../../adr/099-replication-ownership-authority-and-compatibility.md)
 - [ADR-100: Prediction Capability Tiers and Determinism Policy](../../adr/100-prediction-capability-tiers-and-determinism-policy.md)
+- [ADR-101: Interest, Priority and Network Budget Model](../../adr/101-interest-priority-and-network-budget-model.md)
 - [System Design](../foundation/system-design.md)
 - [Desired Project Trees](../desired-project-tree.md)
 - [Multiplayer Replication Architecture](./multiplayer-replication-architecture.md)

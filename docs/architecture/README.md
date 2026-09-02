@@ -263,6 +263,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Prediction Capability Tiers and Determinism Policy](../adr/100-prediction-capability-tiers-and-determinism-policy.md):
   non-predicted baseline, local candidates, qualified rollback provider closure,
   bounded histories/replay, correction and side-effect reconciliation.
+- [Interest, Priority and Network Budget Model](../adr/101-interest-priority-and-network-budget-model.md):
+  renderer-independent network profiles, immutable relevancy facts,
+  per-connection ledgers, weighted fairness and bounded overload behavior.
 - [Asset Pipeline](./runtime/asset-pipeline.md): import, cook, package, runtime
   loading, cache, and hot reload.
 - [Prefab Architecture](./runtime/prefab-architecture.md): dual-role authoring

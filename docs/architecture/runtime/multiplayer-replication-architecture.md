@@ -276,25 +276,40 @@ external effects are server-authoritative only.
 
 ## Interest Management
 
-Not all objects are relevant to all clients:
+`ReplicationScheduler` is the sole interest/priority/budget authority for an
+authority world. Gameplay, Scene and registered providers contribute bounded
+read-only facts; they cannot enqueue packets, mutate deficits/tokens, force-send or
+change authoritative state.
 
 ```cpp
-struct InterestSettings {
-    float relevanceRadius;
-    std::uint32_t maxRelevantObjects;
-    ReplicationGroupMask groupMask;
+struct ConnectionSchedulingInput {
+    NetworkSessionGeneration session;
+    NetworkProjectProfileId profile;
+    BoundedVector<ViewerFact> viewers;
+    BoundedVector<SubscriptionFact> subscriptions;
+    TransportBackpressure backpressure;
 };
 
-struct ReplicationGroup {
-    ReplicationGroupId id;
-    BoundingBox volume;
-    float priority;
+struct ObjectSchedulingInput {
+    NetworkObjectId object;
+    NetworkObjectGeneration generation;
+    WorldBounds bounds;
+    ReplicationGroupMask groups;
+    ReplicationPriorityClass priorityClass;
+    SimulationTick dirtySince;
+    SimulationTick lastSent;
 };
 ```
 
-Interest is a read-only routing input. It cannot grant authority, mutate Scene or
-change schema compatibility. The authority server maintains a per-session relevant
-set at the network tick under explicit work and bandwidth budgets.
+Spatial cell/distance, explicit subscriptions/groups and authority-required
+lifecycle are baseline interest sources. Results are unioned/filter by stable
+object ID under candidate/relevant limits. Enter/exit thresholds and dwell ticks
+provide hysteresis. Boundary-change work is capped per connection/tick; excess is
+deferred in stable object-ID order and revalidated next tick.
+
+Interest is a read-only routing input. It cannot grant authority, mutate Scene,
+mark values dirty or change schema compatibility. Despawn and permission revocation
+use the reserved lifecycle class rather than ordinary relevance deferral.
 
 ## Dedicated Server
 
@@ -334,27 +349,37 @@ authority; ADR-098 active-session admission remains mandatory.
 
 ## Bandwidth Management
 
-Replication scheduling observes explicit per-session/tick limits:
+The immutable `NetworkProjectProfileV1` is renderer-independent and gives every
+limit a unit/value before world activation:
 
-- per-client byte/message/work budgets;
-- priority scheduling of already-relevant objects;
-- baseline/delta encoding with bounded retained history;
-- replaceable unreliable snapshot policy;
-- explicit reliable-queue overflow failure.
+- network tick rate (`Hz`), active connections and network objects (`count`);
+- candidates, relevant objects and interest transitions
+  (`count/connection/network-tick`);
+- captured objects (`count/network-tick`) and serialized fields/messages
+  (`count/connection/network-tick`);
+- interest, capture and scheduling work (`microseconds/network-tick`);
+- target rate (`bytes/second/connection`), burst and reliable/unreliable queue
+  capacity (`bytes/connection`);
+- enter/exit dwell, starvation and saturation grace (`network ticks`).
 
-Interest, priority and budgets affect routing/scheduling only. They do not change
-field identity, authority or compatibility.
+Profiles are selected by product/match mode and qualification evidence—not `es3`,
+DirectX/Vulkan, `high_end`, render LOD, GPU memory, resolution or frame rate. A
+profile replacement creates a new scheduling generation at a network-tick safe
+point.
 
-## Feature Tiers
+Each connection uses a rate-derived byte token bucket, per-tick message/field/work
+ledgers and capped per-priority weighted deficits. Required lifecycle/initial state,
+gameplay-critical reliable, gameplay state and cosmetic/replaceable classes have
+explicit reservations/weights. Selection uses class, deficit/age and stable object
+ID; rotating connection start plus accumulated deficit prevents a fixed low-ID
+connection from always winning world budgets.
 
-| Feature              | `es3`      | `dx11` / `dx12_vulkan` | `high_end` |
-| -------------------- | ----------- | ----------------------- | ---------- |
-| Max players (server) | 4           | 32                      | 128        |
-| Replicated objects   | 512         | 4K                      | 16K        |
-| Client prediction    | Optional    | Optional                | Optional   |
-| Interest management  | Distance    | Spatial+Group           | Spatial+Group |
-| Dedicated server     | Yes         | Yes                     | Yes        |
-| Bandwidth budget     | 64 KB/s     | 256 KB/s                | 512 KB/s   |
+Overload is bounded: stop admission at capacity, preserve control/lifecycle,
+coalesce newest replaceable unreliable state, defer lower classes with fairness,
+reject reliable queue overflow, then degrade optional frequency/classes and close a
+connection that cannot make required progress after its grace window. A slow peer
+cannot spend another connection's ledger. Limits never expand and scheduling never
+mutates authoritative state.
 
 ## Testing and Qualification
 
@@ -382,6 +407,14 @@ Required automated coverage includes:
   history/replay overflow, full resync/degrade and lifecycle generation changes.
 - Speculative occurrence deduplication and prohibition of irreversible client-side
   effects during replay.
+- renderer-independent profile unit/bound/overflow validation and proof that
+  renderer backend/tier/frame rate cannot alter scheduling;
+- exact-boundary interest movement, hysteresis/dwell, transition saturation,
+  permission/group changes and stable deferred order;
+- token/deficit accounting, weighted fairness, rotating connections, starvation
+  bounds, queue isolation, unreliable coalescing and reliable overflow;
+- sustained saturation degrade/disconnect plus spawn/despawn/profile/scene/session
+  generation and shutdown with queued/provider work.
 
 Descriptor, compatibility, record framing and codec parsers receive bounded fuzz/
 property coverage. Diagnostics identify stable IDs/versions and safe reasons but
@@ -393,6 +426,7 @@ exclude field payloads by default.
 - [ADR-098: Protocol, Session and Trust Policy](../../adr/098-protocol-session-and-trust-policy.md)
 - [ADR-099: Replication Ownership, Authority and Compatibility](../../adr/099-replication-ownership-authority-and-compatibility.md)
 - [ADR-100: Prediction Capability Tiers and Determinism Policy](../../adr/100-prediction-capability-tiers-and-determinism-policy.md)
+- [ADR-101: Interest, Priority and Network Budget Model](../../adr/101-interest-priority-and-network-budget-model.md)
 - [Networking Architecture](./networking-architecture.md)
 - [Scene Runtime](./scene-runtime.md)
 - [Gameplay Behavior Authoring](../extensions/gameplay-behavior-authoring.md)
