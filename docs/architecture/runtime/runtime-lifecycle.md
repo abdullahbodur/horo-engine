@@ -187,6 +187,15 @@ descending priority and stable identity. Commands or worker completions after th
 cutoff cannot alter the active batch. Failed attempted ticks discard staged cinematic
 cursors/values/occurrences; tick commit advances them and releases occurrences.
 
+[ADR-119](../../adr/119-camera-authority-during-cinematics.md) adds no runtime phase.
+After `VariableUpdate` and before `RenderExtraction`, each live camera-view context
+drains eligible gameplay/cinematic/editor proposals and commits one immutable camera
+selection. Every pass for that rendered frame consumes that selection; a cut, stop,
+cancel or late completion after the cutoff is eligible only for the next commit.
+Multiple fixed ticks may cross multiple cut keys, but only the final eligible
+selection at this boundary is promised a rendered frame. Context teardown retires
+the snapshot only after frame consumers complete.
+
 [ADR-078](../../adr/078-runtime-ui-input-context-and-player-routing.md) also adds no
 phase. `BuildInputSnapshot` publishes device/action/assignment evidence; Runtime UI
 VariableUpdate applies one ordered context stack against the last presented

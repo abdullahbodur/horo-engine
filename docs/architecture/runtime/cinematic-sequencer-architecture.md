@@ -15,6 +15,9 @@ replay/headless evidence, numeric determinism and random-access seek.
 [ADR-118](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md)
 defines Animation, Character and Gameplay authority while those players target
 skeletal pose or actor control.
+[ADR-119](../../adr/119-camera-authority-during-cinematics.md) defines per-view
+runtime, PIE and editor camera authority, cinematic cut handoff, frame-commit
+validity and tiered transition/render contracts.
 [ADR-068](../../adr/068-music-transport-and-cross-system-ownership.md) owns the
 AudioTrack handoff: Sequencer retains sequence clock, directed event traversal,
 seek/scrub and preroll intent while Audio alone maps accepted requests to sample
@@ -50,6 +53,9 @@ time and schedules the callback.
 - **Owner-issued cinematic authority**: Animation composes per-joint pose claims,
   Character resolves exclusive cinematic movement, and Gameplay returns typed
   suppression/acceptance. Whole-game pause never moves an authoritative Character.
+- **Per-view camera authority**: Runtime and PIE Camera services resolve gameplay
+  plus cinematic proposals independently; the editor viewport controller retains
+  authoring-camera authority. One immutable selection covers one rendered frame.
 
 ## System Boundaries and Target Topology
 
@@ -233,12 +239,28 @@ struct CameraCutKeyframe {
 
 Camera cuts carry camera identity and blend metadata, not world-space positions.
 A host-injected typed camera adapter requests an owner-issued, generation-safe
-cinematic override token. The Camera subsystem resolves the final active camera
-from gameplay proposals and admitted cinematic requests; the sequencer never writes
-a global active-camera pointer. Conflicts use explicit priority then stable player
-identity, independent of update order. Stop, cancellation, binding loss, scene
-replacement and failed activation release only this player's token. Restoring an
-older gameplay camera pointer is forbidden: the owner resolves the current proposal.
+override lease for one `CameraViewContextId`. Runtime and PIE sessions own isolated
+Camera services; the editor viewport controller retains its authoring camera and
+admits preview only through an editor-scoped proposal. The sequencer never writes a
+global active-camera pointer or takes editor viewport authority.
+
+The track has no effective override before its first cut. Its compiled end policy is
+either the default `HoldLastUntilPlayerEnd` or explicit `ReleaseAtTrackEnd`. Stop,
+cancellation, completion, binding loss, scene replacement and context destruction
+close proposal admission and release only that player's lease at the owner safe
+point. The owner then resolves the current gameplay, cinematic or editor proposal;
+restoring an older pointer is forbidden. Conflicts use descending priority then
+stable player identity, independent of evaluation order.
+
+The Camera owner commits one immutable selection after `VariableUpdate` and before
+`RenderExtraction`; late changes apply to the next rendered frame. The baseline is a
+one-view `HardCut`. `SingleViewBlend` is a Camera-owned backend-neutral pose/
+projection interpolation, while `DualViewCrossFade` requires an explicitly admitted
+two-view frontend capability and budget. Fallback to a hard cut must be authored;
+transition modes are never silently substituted. Rendering consumes the resulting
+camera snapshot, selection epoch and generic discontinuity evidence without choosing
+camera authority or exposing backend APIs to Cinematic Runtime. ADR-119 owns the
+complete contract.
 
 ### 4. Event Track
 
@@ -801,6 +823,12 @@ These are required implementation acceptance tests, not tests added by this ADR:
   GameplayControlled/CinematicControlled arbitration and typed suppression.
 - Whole-game pause produces no authoritative pose/root-motion/Character movement or
   gameplay backlog; running-simulation control transfer keeps ordinary owners ticking.
+- Runtime, PIE and editor view contexts retain isolated camera owners; exercise first/
+  last cut handoff, both track-end policies, current-proposal restoration and every
+  stop/cancel/binding-loss/scene-replacement path without stale camera state.
+- Camera selection commits once before render extraction; test multiple cuts between
+  rendered frames, before/after-cutoff arrival, hard cut, single-view blend and
+  admitted/denied two-view cross-fade with explicit fallback and Null adapters.
 - Validate all clock/pause/dilation combinations, nested pause-token release, menu
   plus cinematic pause, host resume, provider capability/loss and discontinuities.
 - Value samples are history-independent; event tests cover forward/reverse endpoints,
@@ -821,6 +849,7 @@ These are required implementation acceptance tests, not tests added by this ADR:
 - [ADR-014: Sequencer Ownership, Clock Authority and Binding Boundary Decision](../../adr/014-sequencer-ownership-clock-authority-and-binding-boundary.md)
 - [ADR-117: Playback Ownership, Frame Order and Determinism](../../adr/117-playback-ownership-frame-order-and-determinism.md)
 - [ADR-118: Animation, Character and Gameplay Authority During Cinematics](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md)
+- [ADR-119: Camera Authority During Cinematics](../../adr/119-camera-authority-during-cinematics.md)
 - [Cinematic Sequencer UI Reference](./cinematic-sequencer.html)
 - [Scene Runtime Architecture](./scene-runtime.md)
 - [Animation Architecture](./animation-architecture.md)

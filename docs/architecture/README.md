@@ -360,6 +360,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Animation, Character and Gameplay Authority During Cinematics](../adr/118-animation-character-and-gameplay-authority-during-cinematics.md):
   per-joint pose override/blend, Character collision-root authority, gameplay control
   leases, typed suppression and whole-game pause semantics.
+- [Camera Authority During Cinematics](../adr/119-camera-authority-during-cinematics.md):
+  per-view runtime/PIE/editor authority, cut entry and exit handoff, immutable
+  frame selection, tiered transitions and backend-neutral render snapshots.
 - [Post-Processing And Effects Architecture](./runtime/post-processing-and-effects-architecture.md):
   screen-space effects, HDR post chain, tonemapping, color grading, and
   accessibility pass ordering.

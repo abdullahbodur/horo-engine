@@ -130,6 +130,7 @@ to the replacement.
 | [116](116-save-data-threat-model-and-trust-policy.md) | Save Data Threat Model and Trust Policy | Proposed | 2026-09-02 |
 | [117](117-playback-ownership-frame-order-and-determinism.md) | Playback Ownership, Frame Order and Determinism | Proposed | 2026-09-02 |
 | [118](118-animation-character-and-gameplay-authority-during-cinematics.md) | Animation, Character and Gameplay Authority During Cinematics | Proposed | 2026-09-02 |
+| [119](119-camera-authority-during-cinematics.md) | Camera Authority During Cinematics | Proposed | 2026-09-02 |
 
 ## Conventions
 

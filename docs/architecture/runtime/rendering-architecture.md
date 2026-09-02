@@ -1011,6 +1011,31 @@ remain pending and must not be represented as implemented UI behavior.
 
 ## Render Snapshot
 
+### Cinematic camera selection boundary
+
+[ADR-119](../../adr/119-camera-authority-during-cinematics.md) keeps active-camera
+selection outside the renderer. Runtime and PIE Camera services each resolve their
+view-context proposals, while the editor viewport controller owns its authoring
+camera. After `VariableUpdate` and before extraction, each owner publishes one
+generation-checked immutable `CameraSelectionSnapshot`. All passes and outputs for
+that rendered frame use the same selection; render execution cannot query sequence
+state or replace the camera mid-frame.
+
+Extraction projects the selection into frame-owned backend-neutral camera/view data.
+The projection includes stable view/scene generations, camera identity, selection
+epoch, transform and projection/lens values, transition state and generic
+discontinuity evidence. It never retains a scene-component pointer or includes a
+native graphics handle. Hard cuts publish one destination view. Camera-owned
+single-view blends publish one interpolated view. An advanced two-view cross-fade is
+accepted only through a declared frontend capability, qualified budget and explicit
+fallback policy; no backend may silently change the selected transition mode.
+
+Camera cuts and incompatible transitions change the generic selection epoch/
+discontinuity evidence. Reconstruction, exposure, motion and other temporal
+consumers apply their own history policy from that evidence. Cinematic Runtime never
+calls backend/provider-specific reset hooks, and rendering never decides whether a
+gameplay, cinematic or editor proposal wins.
+
 The scene runtime produces frame-owned render data:
 
 ```cpp
