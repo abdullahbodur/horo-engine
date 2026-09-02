@@ -424,6 +424,8 @@ The startup snapshot must not contain:
 - passwords, tokens, credentials, authorization headers, or private keys
 - a full environment-variable dump
 - username, email address, machine hostname, or hardware serial number
+- raw provider/platform account identifiers, generation-scoped subject/social handle
+  bytes, gamertags, friends graphs, avatar locators, or presence free text
 - full home-directory paths when a normalized or project-relative path suffices
 - project assets, source contents, or arbitrary command arguments
 

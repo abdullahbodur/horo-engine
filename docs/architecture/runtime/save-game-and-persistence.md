@@ -795,6 +795,15 @@ the per-user profile catalog, active `GameProfileId`, account association and pr
 display metadata. Runtime Save owns slot operations, not user sign-in, profile
 creation/linking or profile-store state.
 
+[ADR-135](../../adr/135-platform-identity-session-generation-privacy-and-consent.md)
+requires that live handle to be a non-guessable, non-persistent capability scoped to
+one provider/session generation, distinct from the private durable provider binding.
+Every cloud/profile user-scoped commit revalidates the captured session and applicable
+access-policy revision. Account switch/sign-out invalidates old admission before native
+teardown; stale callbacks and journal work cannot publish/replay into the next user.
+Raw provider identity and personal presentation never enter save catalogs, archives,
+paths or broad diagnostics.
+
 When multi-device/cloud persistence is advertised, the backend must provide a stable
 opaque authenticated-user scope so the same platform account maps consistently on
 each device. If it cannot, cloud persistence is unavailable and local fallback uses

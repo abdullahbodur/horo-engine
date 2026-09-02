@@ -159,6 +159,24 @@ Horo IDs and normalized values/outcomes, not credentials, raw provider account I
 native tokens or personal display data. Idempotency deduplicates an already-authorized
 intent; it never authenticates one.
 
+## Platform Identity And Consent
+
+[ADR-135](../../adr/135-platform-identity-session-generation-privacy-and-consent.md)
+keeps provider account locators private and exposes only non-guessable, generation-
+scoped live subject capabilities. Local storage/profile and gameplay identities remain
+separate explicit mappings; display name, email, gamertag or provider login cannot
+authorize/link them. Every user-scoped commit revalidates session generation and the
+applicable access-policy revision so stale callbacks, caches and durable work cannot
+cross sign-out/account switch.
+
+Consent/restriction is the intersection of operation purpose/data classes, provider/
+OS permission, product consent, region/legal and child/parental policy. Only a typed
+Granted capability admits work. UI presents/submits a decision but cannot grant itself,
+and development/debug paths cannot bypass or convert denial into empty success.
+Personal/social presentation is bounded, untrusted and ephemeral by default. General
+logs, metrics, crash bundles, saves/journals and ordinary tools exclude raw account/
+handle values, friends graphs, display data, presence free text and credentials.
+
 ## Process Execution
 
 Process policy validates:
