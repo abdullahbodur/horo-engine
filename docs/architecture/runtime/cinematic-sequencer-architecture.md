@@ -24,6 +24,9 @@ failure outcomes and the AudioFrontend handoff governed by AUD-family decisions.
 [ADR-121](../../adr/121-cinematic-editor-document-and-authoring-context.md)
 defines persistent sequence documents/tabs, command and persistence ownership,
 detachable scene authoring context, stale-reference inspection and preview isolation.
+[ADR-122](../../adr/122-cinematic-trigger-sources-and-capability-policy.md)
+defines the common typed start request and capability/trust/authority/product-profile
+policy for gameplay, scene autoplay, event, editor, MCP and remote trigger sources.
 [ADR-068](../../adr/068-music-transport-and-cross-system-ownership.md) owns the
 AudioTrack handoff: Sequencer retains sequence clock, directed event traversal,
 seek/scrub and preroll intent while Audio alone maps accepted requests to sample
@@ -68,6 +71,9 @@ time and schedules the callback.
 - **Document-owned authoring**: Sequence assets use persistent document tabs and the
   shared typed command/history/save/conflict model. Scene context and preview are
   detachable projections and never become a second source of authored truth.
+- **Capability-gated triggers**: Every source submits the same typed application start
+  request. Authored Shipping triggers remain product behavior; debug/MCP/remote start
+  adapters are omitted from Retail Shipping and cannot be enabled by runtime flags.
 
 ## System Boundaries and Target Topology
 
@@ -129,6 +135,34 @@ Root activation IDs come from stable scene object/playback-slot identity, a reco
 gameplay command/event occurrence or a recorded application operation identity.
 Allocation order, pointers, thread arrival, worker completion, unordered-map order and
 process-random hash seeds are never player identity or tie-breakers.
+
+## Trigger Sources And Admission
+
+Gameplay scripts/native behaviors, scene-load autoplay descriptors, committed
+gameplay events, editor UI/preview, MCP/agent tools, local debug/CLI and authenticated
+remote/server adapters all submit one bounded `SequenceStartRequest` through an
+injected `ICinematicPlaybackCapability`. No caller constructs a player or discovers a
+global service. Admission validates source/principal, build profile, project/package
+trust, capability grant, session/scene/world authority, cooked asset revision, full
+effect capability plan and shared budgets before acquiring any player/domain state.
+
+Gameplay and cooked scene/event triggers are ordinary product behavior and may ship
+when their modules/assets and effect plans are admitted. Scene autoplay begins only
+after successful aggregate scene activation. Event-triggered starts occur after the
+source occurrence commits and use occurrence-derived stable activation identity;
+cycles/nesting share ADR-117 capacity. Client requests cannot gain server authority.
+
+Editor preview is isolated; PIE uses PIE world authority. MCP/agent/debug/remote
+adapters reuse their existing tool schema, project trust, permission, product-profile,
+server-authority, revision-bound approval and audit infrastructure. Authentication or
+localhost is not authorization. Retail Shipping omits these tooling start descriptors;
+a runtime flag cannot restore them. Dedicated Server admits only explicitly registered,
+authenticated `Restricted`, server-authoritative and headless-compatible operations.
+
+Denial creates no player, cursor, lease/token or downstream Audio/VFX/event request.
+Stable results distinguish unsupported source/adapter, product-profile/trust/
+capability/approval/world denial, unavailable asset, effect denial, conflict, capacity
+and headless incompatibility. ADR-122 owns the complete source matrix and lifecycle.
 
 ## Sequencer Data Model
 
@@ -906,6 +940,9 @@ These are required implementation acceptance tests, not tests added by this ADR:
 - Sequence editor tests cover atomic create/focus/close, shared command/history/dirty/
   save/recovery/conflict behavior, no/wrong/replaced scene contexts, derived stale
   binding states, explicit repair, cross-document atomicity and disposable preview.
+- Trigger tests cover every gameplay/scene/event/editor/MCP/debug/remote source across
+  product profiles, trust/capability/approval/world authority, Shipping descriptor
+  absence, server headless policy, revocation and zero-side-effect typed denial.
 
 ## Related Documents
 
@@ -915,6 +952,7 @@ These are required implementation acceptance tests, not tests added by this ADR:
 - [ADR-119: Camera Authority During Cinematics](../../adr/119-camera-authority-during-cinematics.md)
 - [ADR-120: Cinematic Event Dispatch and Audio Coupling Boundary](../../adr/120-cinematic-event-dispatch-and-audio-coupling-boundary.md)
 - [ADR-121: Cinematic Editor Document and Authoring Context](../../adr/121-cinematic-editor-document-and-authoring-context.md)
+- [ADR-122: Cinematic Trigger Sources and Capability Policy](../../adr/122-cinematic-trigger-sources-and-capability-policy.md)
 - [Cinematic Sequencer UI Reference](./cinematic-sequencer.html)
 - [Scene Runtime Architecture](./scene-runtime.md)
 - [Animation Architecture](./animation-architecture.md)

@@ -415,6 +415,21 @@ enabled by a remote caller or archive field.
 
 ## Security
 
+[ADR-122](../../adr/122-cinematic-trigger-sources-and-capability-policy.md)
+specializes cinematic start/control tools. A registered tool remains an MCP adapter
+over the common application `ICinematicPlaybackCapability`; it never receives the
+runtime service. Mutating start requires authenticated/scoped caller identity where
+applicable, trusted project, exact capability, target-world authority and the existing
+operation approval. Authentication, localhost access or project trust alone is not
+authorization, and approval is bound to the visible request/revision rather than
+stored in sequence/project content.
+
+Cinematic MCP start tools are Editor/local-development tooling by default and are
+absent from Retail Shipping builds. Remote policy below still applies; a non-loopback
+transport cannot widen the tool set. Denial uses the application typed result, creates
+no player/effects and is redacted/audited without disclosing unavailable sequence or
+world details.
+
 - MCP transport does not accept anonymous remote connections in production.
 - The SSE transport requires authentication when exposed beyond localhost.
 - Tool arguments are validated against JSON Schema before execution.
