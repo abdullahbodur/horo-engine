@@ -214,7 +214,9 @@ dependency direction in [System Design](./foundation/system-design.md).
   descriptors, trust/activation hand-off, layouts, and legacy migration.
 - [Extension Capability Roadmap](./extensions/extension-capability-roadmap.md):
   ecosystem capability stages and their separation from product milestones,
-  workstreams, planning horizons, and technical dependencies.
+  workstreams, planning horizons, and technical dependencies. Script-consumable
+  service authority, binding adapters and context lifetimes are defined by
+  [ADR-059](../adr/059-script-consumable-module-boundary.md).
 - [Gameplay Module](./extensions/gameplay-module.md): overview for
   project-owned gameplay modules, behavior authoring, runtime integration, and
   verification.

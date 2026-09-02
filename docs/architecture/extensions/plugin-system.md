@@ -409,6 +409,28 @@ This keeps GUI, CLI, MCP, and headless hosts aligned. The same backend capabilit
 can be invoked from multiple frontends without duplicating business logic or
 requiring ImGui to exist in the process.
 
+### Script-consumable module boundary
+
+Script APIs follow
+[ADR-059](../../adr/059-script-consumable-module-boundary.md). A validated script
+API descriptor is an independently versioned language-neutral projection over
+one compatible service export. The backend service remains authoritative; the
+script runtime adapter owns only VM-specific bindings and value/error projection.
+
+The host resolves declared imports from the verified package graph, trust and
+permission state, context profile and immutable provider generation. Resolution
+never uses package load order, filesystem discovery, native symbol names or
+runtime globals. Calls pass through the host invocation gateway using bounded
+values and host-owned async operations. Provider disablement, reload and shutdown
+revoke bindings before callbacks, jobs, service objects or native code are
+released.
+
+The initial adapter is an in-process sandbox. Script code receives no provider
+function table, native pointer, C++ service object, platform handle or extension
+GUI object. A future isolated provider or runtime must preserve the same service,
+script API, value, error and lifecycle semantics rather than defining a parallel
+transport-specific contract.
+
 ## Discovery And Resolution
 
 Packages are discovered from:
@@ -997,6 +1019,11 @@ module API:
 
 If any invariant cannot be proven, restart remains the only supported unload
 path.
+
+One provider may retain at most its active generation and one draining
+predecessor. Further update candidates are coalesced without activation; a drain
+deadline or retained-code budget breach requires restart instead of accumulating
+loaded libraries.
 
 ## Failure Isolation
 
