@@ -459,6 +459,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [PCG Graph Source, Cooked Plan, Cache and Runtime Ownership](../adr/150-pcg-graph-source-cooked-plan-cache-and-runtime-ownership.md):
   one authored truth, deterministic lowering, disposable cache/intermediates, immutable
   runtime-plan leases and target-owner output commit.
+- [PCG Ownership, Authority, Tier and Lifecycle](../adr/151-pcg-ownership-authority-tier-and-lifecycle.md):
+  pure evaluator ownership, external commit authority, deterministic capability classes,
+  offline/preview/runtime/hybrid modes and headless/null lifecycle.
 - [Multiplayer Replication Architecture](./runtime/multiplayer-replication-architecture.md):
   replication roles, property deltas, RPCs, prediction, interest management,
   dedicated servers, and security.
