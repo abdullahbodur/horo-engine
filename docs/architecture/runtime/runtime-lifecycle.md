@@ -153,6 +153,13 @@ simulation, unscaled, screen-transition, preview, deterministic-test and manual
 domains and evaluates every active UI timeline exactly once before style/layout
 publication. Render extraction/execution never advances them.
 
+[ADR-078](../../adr/078-runtime-ui-input-context-and-player-routing.md) also adds no
+phase. `BuildInputSnapshot` publishes device/action/assignment evidence; Runtime UI
+VariableUpdate applies one ordered context stack against the last presented
+interaction snapshot, publishes a consumption ledger and sends only filtered
+gameplay/UI owner commands onward. Context/modal/focus/capture teardown commits at
+the same ADR-073 lifecycle cutoffs.
+
 ## Time Model
 
 The host tracks:

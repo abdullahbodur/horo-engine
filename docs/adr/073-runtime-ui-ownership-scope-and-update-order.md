@@ -181,6 +181,9 @@ suspended wall time.
 
 ### 7. Input and focus are per player/viewport interaction context
 
+[ADR-078](078-runtime-ui-input-context-and-player-routing.md) is the normative
+specialization for audience identity, UI/gameplay/editor priority, modal scope,
+consumption, assignment, pointer/text routing, focus/capture and device modality.
 Each interactive attachment owns a generation-checked `RuntimeUiInputContextId`
 that names game runtime, optional player, viewport, active route/layer and
 interaction snapshot revision. It consumes normalized Input Architecture actions,
