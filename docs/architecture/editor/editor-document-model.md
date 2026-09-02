@@ -407,6 +407,33 @@ and never enter document storage. Save, autosave, recovery, external conflict, S
 As/Copy As, close guards and stale worker-result rejection use the shared policies
 above unchanged.
 
+## VFX Effect Asset Documents
+
+[ADR-129](../../adr/129-vfx-editor-document-live-preview-and-module-authoring.md)
+defines each effect asset as a persistent `VfxEffectDocument` rooted at stable asset
+and source revision. Document services own session/revision, typed commands/history,
+dirty/save/autosave/recovery/conflict and derived compile/preview state; the panel host
+owns the tab route and presentation lifecycle. Existing particle-system assets migrate
+through the effect source schema rather than remaining a second document class.
+
+Stack and graph are independent source kinds with distinct command/layout models but
+one catalog, semantic compiler and ADR-126 `CompiledVfxEffectDescriptor` target. A
+deferred/unavailable graph UI preserves source or exposes read-only inspection; it
+does not flatten or save the graph as a stack. Compiler and preview success never
+advance saved revision or clear dirty state.
+
+Effect-spawned/reusable decals are authored within the effect document. Scene-placed
+decal components remain SceneDocument state. Projection manipulation uses transient
+preview overlays and one typed command to the owning document; intentional cross-
+document edits use the staged multi-document transaction and never a third history.
+
+Live preview compiles one immutable document snapshot with the ordinary VFX cooker and
+activates the resulting descriptor through normal `VfxWorld`, CPU/GPU/Null, extraction
+and Renderer services in an isolated preview host. Preview controls, particles, leases,
+diagnostics and fixture inputs are disposable generation-fenced state. They do not
+mutate documents or publish into live gameplay/Audio/event authorities. Close/project
+teardown cancels derived work and retires resources through normal runtime boundaries.
+
 ## Runtime Conversion
 
 The document converts to `RuntimeSceneDefinition` through an editor service.
@@ -499,6 +526,14 @@ Required tests cover:
 - sequence authoring context covers no/wrong/replaced scene, stable rename/reorder,
   missing object/component, schema mismatch, explicit repair and stale preview/
   binding/compile results without mutating authored identity
+- VFX effect create/open/close uses one persistent document tab and shared command,
+  dirty, save, autosave, recovery and external-conflict ownership without a particle-
+  or decal-specific undo/serializer path
+- stack/graph source kinds preserve independent commands/layout while compiling through
+  one semantic target; unavailable graph UI never converts or mutates its source
+- VFX preview compiles an immutable document revision and executes normal runtime
+  services; stale derived work, tab/project teardown and decal-gizmo cancel/commit
+  cannot mutate either VfxEffectDocument or SceneDocument unexpectedly
 
 ## Related Documents
 
@@ -512,3 +547,4 @@ Required tests cover:
 - [Prefab Architecture](../runtime/prefab-architecture.md)
 - [Save Game And Persistence](../runtime/save-game-and-persistence.md)
 - [Cinematic Sequencer](../runtime/cinematic-sequencer-architecture.md)
+- [VFX And Particles](../runtime/vfx-and-particles-architecture.md)
