@@ -717,6 +717,21 @@ does not bypass real-time thread rules.
 
 ## Device Lifecycle
 
+[ADR-067](../../adr/067-platform-audio-backend-strategy.md) is the single
+normative owner of output-backend roles, the supported 1.0 platform matrix,
+compile-time composition, startup selection, common parity, and qualification.
+WASAPI on Windows 11 x86_64, Core Audio on macOS 14+ arm64/x86_64, and PipeWire on
+Linux x86_64 (Ubuntu 24.04 LTS reference) are equal-peer native production
+backends. SDL3Audio is an explicit portability/reference peer and NullAudio is the
+headless/test peer. SDL3Audio is not the base or silent fallback for a native
+backend merely because the host also uses SDL3 for windowing.
+
+The application composition root links and registers only admitted backend
+targets, then resolves one stable backend ID before device construction. Backend
+identity remains fixed for the AudioRuntime lifetime; selecting another peer
+requires host-owned runtime replacement. A startup fallback list must be explicit
+and fully preflighted, and interactive products never fall back to NullAudio.
+
 ADR-062 owns the parent runtime state machine and callback-epoch handshake. The
 states below are subordinate backend/device facts committed only by the audio
 control runtime; the callback and backend cannot select product fallback or write
@@ -985,6 +1000,11 @@ Required tests cover:
 - real-time queue saturation
 - streaming underrun recovery
 - device loss and reopen
+- WASAPI/Core Audio/PipeWire/SDL3Audio/NullAudio common backend-contract parity
+  plus native per-platform hardware qualification
+- native-default and explicit startup backend resolution with no registration-
+  order selection or implicit SDL3Audio/NullAudio fallback
+- requested, effective, API-reported, and measured format/buffer/latency separation
 - scene unload with active voices
 - scene-context unload barriers under saturation, late producer completion, and replacement
 - null backend deterministic clock

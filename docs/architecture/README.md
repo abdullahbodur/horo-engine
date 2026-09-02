@@ -164,6 +164,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Spatial Provider and Required Capability](../adr/066-spatial-provider-and-required-capability.md):
   typed spatial profiles, deterministic provider preflight, explicit optional
   fallback, required-capability failure, and recovery observability.
+- [Platform Audio Backend Strategy](../adr/067-platform-audio-backend-strategy.md):
+  equal-peer WASAPI, Core Audio, PipeWire, SDL3, and Null roles; the supported
+  1.0 matrix; compile-time composition; selection; parity; and qualification.
 - [Input Architecture](./runtime/input-architecture.md): input snapshots, action
   maps, focus, capture, modal routing, and simulation input frames.
 - [Game UI And HUD](./runtime/game-ui-and-hud.md): runtime game menus, HUDs,

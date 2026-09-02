@@ -78,6 +78,7 @@ to the replacement.
 | [064](064-audio-asset-and-cook-boundary.md) | Audio Asset and Cook Boundary | Proposed | 2026-09-02 |
 | [065](065-mixer-topology-and-constrained-dag.md) | Mixer Topology and Constrained DAG | Proposed | 2026-09-02 |
 | [066](066-spatial-provider-and-required-capability.md) | Spatial Provider and Required Capability | Proposed | 2026-09-02 |
+| [067](067-platform-audio-backend-strategy.md) | Platform Audio Backend Strategy | Proposed | 2026-09-02 |
 
 ## Conventions
 
