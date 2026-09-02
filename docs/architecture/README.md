@@ -187,6 +187,9 @@ dependency direction in [System Design](./foundation/system-design.md).
   maps, focus, capture, modal routing, and simulation input frames.
 - [Game UI And HUD](./runtime/game-ui-and-hud.md): runtime game menus, HUDs,
   canvases, UI primitives, focus/navigation, and UI rendering.
+- [Runtime UI Ownership, Scope and Update Order](../adr/073-runtime-ui-ownership-scope-and-update-order.md):
+  game/player/scene/viewport scopes, lifecycle, frame phases, pause, input,
+  extraction, unload, compatibility, and shutdown.
 - [Networking Architecture](./runtime/networking-architecture.md): optional
   handle-based transports, session/authentication runtime, bounded I/O, and
   remote security.

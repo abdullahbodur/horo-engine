@@ -37,6 +37,7 @@ RawInputSnapshot
 Input Router + Action Maps
        |
        +-- GUI text/navigation input
+       +-- Runtime UI player/viewport contexts
        +-- Editor commands and viewport controls
        +-- Gameplay InputFrame
 ```
@@ -135,6 +136,22 @@ available only where policy allows it.
 
 Contexts are pushed and removed through RAII tokens. A destroyed tab, modal,
 tool, or play session cannot leave an active context behind.
+
+[ADR-073](../../adr/073-runtime-ui-ownership-scope-and-update-order.md) adds
+generation-checked `RuntimeUiInputContextId` values per interactive player/
+viewport attachment. In a packaged game, the top eligible runtime UI modal/route
+precedes its associated gameplay context. In editor play, native dialogs, editor
+modals and the focused editor widget/tool precede Runtime UI; the game UI context
+is eligible only when its embedded game viewport owns focus. Runtime UI cannot
+consume editor shortcuts from an unfocused viewport.
+
+Runtime UI pointer/focus routing uses the last successfully presented
+`UiInteractionSnapshot`, not an unpublished layout. Failed/skipped presentation,
+scope or viewport destruction, route replacement, focus/device loss, suspension
+and shutdown neutralize the context and release capture. Split-screen players keep
+independent focus/capture unless an explicit game-instance modal policy blocks
+them. UI actions are typed application/gameplay commands for owner safe points,
+not direct ECS mutations from input handlers.
 
 ## Focus And Capture
 

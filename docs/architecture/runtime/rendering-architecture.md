@@ -1064,6 +1064,30 @@ batches stay off GPU Scene slots.
 Multiple views, including game, scene viewport, thumbnails, and previews, use
 separate `RenderView` descriptors over compatible snapshots.
 
+## Runtime UI Projection
+
+[ADR-073](../../adr/073-runtime-ui-ownership-scope-and-update-order.md) keeps
+Runtime UI semantic state in `RuntimeUiService` and gives Renderer only immutable
+per-view `UiRenderSnapshot` values. A snapshot names Horo logical UI/viewport/view/
+layout/resource generations and contains bounded draw, text, clip and projection
+data. It never contains mutable UI trees, ECS/component pointers, editor widgets,
+ImGui IDs, native surfaces, swapchains, command buffers or backend handles.
+
+World-space canvases project as ordinary view-dependent render instances under
+declared depth/visibility policy. Screen-space canvases are frontend-owned passes
+composed after world/display transform unless an explicit render plan declares an
+earlier point. Runtime UI is part of `RenderExecution`; `RenderGui` remains the
+separate host/editor/development GUI phase. A backend cannot reorder UI by native
+convenience or make editor GUI composition the packaged-game path.
+
+Viewport resize, DPI/safe-area/output change, backend replacement and resource
+reload prepare complete new attachment/layout/render generations. In-flight frames
+pin the old snapshot/resources until deferred retirement. Render completion returns
+a typed presented/skipped/failed result correlated to the UI interaction revision;
+RuntimeUiService, not Renderer, decides when that revision becomes eligible for
+next-frame input. Failed/skipped presentation cannot silently adopt unpublished
+hit-test geometry.
+
 The [VFX contract](./vfx-and-particles-architecture.md) extends the snapshot with
 bounded immutable GPU simulation work, CPU/GPU particle sources, decals and volume
 batches. VfxRenderExtractor never submits graph passes or writes mapped GPU buffers.
