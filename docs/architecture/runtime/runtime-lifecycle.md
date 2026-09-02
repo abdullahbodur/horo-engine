@@ -303,6 +303,13 @@ One fixed tick executes:
 7. atomically publish committed subsystem state, events, and previous/current
    state for interpolation
 
+[ADR-084](../../adr/084-canonical-physics-solver-units-and-tolerances.md) fixes the
+initial Physics step to pinned Jolt CanonicalV1 under one owner thread and serial
+private job adapter. Physics consumes only the host fixed delta (default qualified
+at 60 Hz), completes all native work before publishing transforms/events and never
+measures render/wall time. Parallel solver jobs require a separately qualified
+private profile and must join before step publication.
+
 System ordering is declared by the scene runtime and validated before execution.
 The data bus is not used to establish per-tick system order.
 

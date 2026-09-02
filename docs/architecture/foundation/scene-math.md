@@ -10,6 +10,11 @@ forward. Angles are radians. Matrices are column-major, multiply column vectors,
 and compose authored transforms as `T * R * S`. A child world transform is
 `parentToWorld * childLocalToParent`.
 
+[ADR-084](../../adr/084-canonical-physics-solver-units-and-tolerances.md) applies
+this convention directly to Physics with SI meters/kilograms/seconds/radians. The
+private canonical Jolt adapter performs no hidden handedness/up-axis/unit scaling;
+foreign axes and units normalize at import.
+
 `Horo::Math` in `include/Horo/Math/SceneMath.h` is the single public authority for
 these conventions. Consumers must not maintain private vector, projection,
 inverse, ray, or intersection implementations.
