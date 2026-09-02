@@ -7,20 +7,42 @@ It covers pre-fractured geometry, runtime fracture, debris generation,
 destruction events, physics integration, audio and VFX coupling, and network
 replication of destruction state.
 
+[ADR-144](../../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md)
+is the foundation contract. Destruction is a scene-scoped runtime domain with one
+semantic state authority, pre-cooked core-1.0 geometry, provider-neutral tiers and
+aggregate Scene/Physics/Render publication. Runtime mesh cutting is post-1.0 only.
+
+## Ownership
+
+`DestructionApi` owns backend-neutral identities, revisions, descriptors, commands,
+results and immutable snapshots. `DestructionRuntime` owns live scene-scoped health,
+semantic phase, broken/support membership, command admission, transition planning and
+canonical events. RuntimeScene owns entity/binding lifetime and aggregate activation;
+Physics and Render own bodies/shapes and render/GPU state; Assets/Destruction Cook own
+source, deterministic artifacts and publication; gameplay owns damage permission.
+
+Physics contacts, replicated records, scripts, UI, Audio, VFX and Decals never mutate
+destruction state directly. They provide typed evidence/commands or consume post-commit
+snapshots/events. Native handles and mutable buffers do not cross the public boundary.
+
 ## Destruction Model
 
-Destruction is modeled through destructible components:
+Scene components carry stable binding and authored policy, not live mutable state:
 
 ```cpp
-struct DestructibleComponent {
-    AssetId                fractureAsset;
-    DestructibleState      state;            // Intact, Damaged, Destroyed
-    float                  health;
-    float                  damageThreshold;  // damage before state transition
-    DestructibleBehavior   behavior;
-    bool                   networkReplicated;
+struct DestructibleSceneBinding {
+    DestructibleId destructible;
+    AssetId fractureAsset;
+    DestructionPolicyId policy;
+    DestructionFeatureRequirements requiredFeatures;
 };
 ```
+
+`DestructionWorld` owns `Intact`, `Damaged` or `Fractured` semantic phase plus exact
+health, broken chunk set and support state under one monotonic state revision.
+`Fractured` means at least one cooked transition committed; exact membership cannot be
+inferred from the phase. The independent runtime lifecycle is `Absent`, `Preparing`,
+`Prepared`, `Active`, `Replacing`, `Suspended`, `Retiring` or `Failed`.
 
 ## Pre-Fractured Geometry
 
@@ -50,7 +72,7 @@ struct FractureChunk {
 };
 ```
 
-## Runtime Fracture
+## Runtime Pre-Cooked Fracture
 
 Runtime fracture can be triggered by:
 
@@ -69,14 +91,24 @@ struct FractureEvent {
 };
 ```
 
-On fracture:
+Every trigger becomes an authority-, generation- and revision-checked typed command.
+Physics contacts are immutable evidence consumed after the Physics step; callbacks do
+not fracture objects directly. On a successful pre-cooked transition:
 
-1. The intact mesh is hidden
-2. Chunks within the damage radius are activated
-3. Physics forces are applied to chunks (explosion, impact direction)
-4. Debris particles are spawned
-5. Audio impact/destruction sound is triggered
-6. Destruction event is broadcast on the data bus
+1. Destruction validates the exact cooked chunk/support closure and complete peak cost.
+2. Physics and Render prepare required chunk representations privately.
+3. RuntimeScene commits semantic state, intact/chunk visibility, entities and required
+   bodies through one activation-ticket-scoped aggregate root.
+4. Canonical gameplay/network/save events publish only after commit.
+5. Optional VFX, Audio and Decal presentation requests consume the committed event.
+
+Failure or cancellation before commit preserves the intact/previous generation. Old
+representations remain leased and charged until every consumer acknowledges retirement.
+
+Core 1.0 never cuts, booleans, voxelizes, remeshes or triangulates source geometry; it
+never creates interior surfaces, convex decomposition or mass properties at runtime.
+Those products must exist in the validated fracture artifact. Missing/incompatible
+content returns a typed failure instead of runtime generation or visual-only fallback.
 
 ## Debris System
 
@@ -124,20 +156,23 @@ Fracture chunks use the physics system:
 - Chunk collision shapes use convex decomposition (pre-computed in the
   fracture asset)
 - Initial velocities are derived from the fracture event
-- Chunks that come to rest (sleep) are frozen to reduce simulation cost
-- After a configurable duration, sleeping chunks may be removed (debris
-  cleanup)
+- Physics sleep remains solver state and does not grant cleanup authority
+- Gameplay-authoritative and durable chunks retire only through explicit policy and,
+  where required, a successful Runtime Save/Persistent World handoff
+- Cosmetic debris is VFX-owned, finite-lived and excluded from canonical chunk state
 
 ## Network Replication
 
-Destruction state is replicated in multiplayer:
+Destruction state is replicated through the normal authority and replication boundary:
 
-- Server authoritatively determines fracture events
-- Destruction state changes are replicated as reliable RPCs
-- Only the final state (Intact/Damaged/Destroyed) is replicated, not
-  individual chunk transforms
-- Debris is client-side cosmetic only (not replicated)
-- Late-joining clients receive the current destruction state
+- The authority server commits canonical destruction commands/state
+- NetworkRuntime captures versioned bounded snapshots/deltas and delivers typed apply
+  commands; I/O threads do not mutate Destruction
+- Late join receives health, phase, broken/support/dormant sets and ordered later deltas
+- Gameplay-authoritative chunk motion uses existing Physics/network state replication;
+  Destruction does not create a second transform stream
+- Cosmetic chunks/debris may simulate client-side but cannot affect gameplay, saves or
+  canonical hashes
 
 ## Editor Authoring
 
@@ -151,14 +186,47 @@ Fracture authoring tools:
 
 ## Feature Tiers
 
-| Feature              | `es3`      | `dx11` / `dx12_vulkan` | `high_end` |
-| -------------------- | ----------- | ------------- | ------------ |
-| Pre-fractured meshes | No          | Yes           | Yes          |
-| Runtime fracture     | No          | Simple        | Full         |
-| Hierarchical fracture| No          | No            | Yes          |
-| Debris particles     | No          | 256           | 2K           |
-| Chunk count per asset| —           | 64            | 512          |
-| Chunk physics        | —           | Convex        | Convex + mesh|
+Tiers are provider-neutral product preference profiles. They do not name a graphics API,
+platform, solver or device and do not grant capability:
+
+| Feature family | `Baseline` | `Standard` | `High` |
+|---|---|---|---|
+| Pre-cooked fracture | Bounded one-level | Larger staged graph | Larger qualified hierarchy |
+| Support/collapse | Minimal cooked policy | Richer cooked policy | Hierarchical cooked policy |
+| Physics | Pre-cooked dynamic convex chunks | Same ownership, larger limits | Same ownership, qualified larger limits |
+| Presentation effects | Optional bounded cosmetic requests | Increased declared limits | Highest qualified declared limits |
+| Runtime geometry generation | Unavailable in core 1.0 | Unavailable in core 1.0 | Unavailable in core 1.0 |
+
+DFR-001.3 freezes exact chunk/depth/body/event/byte/work limits. Resolution intersects
+product request, cooked variants, runtime, World Streaming, Physics, Render and host
+capabilities. Required unsupported content fails; fallback is only an explicitly ordered
+product choice with a typed reason. Runtime geometry is a separate post-1.0 capability,
+not an automatic `High` feature.
+
+## Lifecycle, Persistence And Shutdown
+
+Destruction builds transitions as detached candidates with exact affected chunks,
+consumer requirements and peak reservations. Workers validate immutable artifacts only;
+the owner lane commits state. Stale revision/generation, authority loss, budget denial,
+consumer failure or cancellation changes nothing before aggregate publication.
+
+Runtime Save captures stable destructible/chunk identities, content/state revisions,
+health, broken/support/dormant sets and required progress. Native bodies, shapes, GPU
+resources, particles, voices, contacts and caches are derived/excluded. World Streaming
+cannot evict the last durable state before the persistence owner accepts its handoff.
+
+Shutdown closes admission, cancels task groups, invalidates candidates, requests exact-
+generation consumer retirement and retains artifacts/reservations/modules until every
+reader, job and native owner acknowledges release. A deadline reports incomplete
+shutdown and never force-frees possibly referenced state.
+
+## Verification
+
+Required coverage includes authority/revision checks, every semantic/lifecycle
+transition, deterministic contact ordering, cooked chunk closure, proof that core paths
+perform no runtime geometry/collision cook, aggregate consumer rollback/replacement,
+capacity and durable cleanup, save/restore, late join, authoritative/cosmetic motion,
+headless/Null/all interactive backends, cancellation and repeated shutdown.
 
 ## Related Documents
 
@@ -170,3 +238,9 @@ Fracture authoring tools:
 - [Decal System Architecture](./decal-system-architecture.md): impact decals
 - [Networking Architecture](./networking-architecture.md): destruction state replication
 - [Scene Runtime](./scene-runtime.md): destructible component model
+- [Asset Pipeline](./asset-pipeline.md): source, cook, cache and artifact publication
+- [Save Game And Persistence](./save-game-and-persistence.md): canonical destruction
+  state capture and durable dormancy
+- [ADR-144](../../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md):
+  module/state authorities, command ordering, cooked activation, tiers, persistence,
+  replication and post-1.0 runtime geometry boundary

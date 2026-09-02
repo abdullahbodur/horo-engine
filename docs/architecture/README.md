@@ -435,6 +435,9 @@ dependency direction in [System Design](./foundation/system-design.md).
   resources.
 - [Destruction And Fracture Architecture](./runtime/destruction-and-fracture-architecture.md):
   fracture assets, chunk physics, debris, authority, and network reconstruction.
+- [Destruction Ownership, Authority, State and Runtime Geometry Boundary](../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md):
+  canonical semantic state and commands, cooked chunk activation, aggregate publication,
+  provider-neutral tiers and the post-1.0 runtime mesh-cutting boundary.
 - [Procedural Generation Architecture](./runtime/procedural-generation-architecture.md):
   PCG graphs, point clouds, validation, transactions, server authority, and
   streaming-cell ownership.
