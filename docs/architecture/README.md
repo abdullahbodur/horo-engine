@@ -387,6 +387,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [VFX Decal Projection, Lifetime and Rendering Path Policy](../adr/127-vfx-decal-projection-lifetime-and-rendering-path-policy.md):
   typed box placement, tagged lifetime/removal authority, finite count admission
   and deferred-default with compatible forward-tier fallback.
+- [VFX Spawn Event Mapping, Pooling and Budget Enforcement](../adr/128-vfx-spawn-event-mapping-pooling-and-budget-enforcement.md):
+  application-owned semantic bindings, allocation-free playback pools, one finite
+  CPU/GPU budget ledger and deterministic cosmetic overload/sleep policy.
 - [Post-Processing And Effects Architecture](./runtime/post-processing-and-effects-architecture.md):
   screen-space effects, HDR post chain, tonemapping, color grading, and
   accessibility pass ordering.

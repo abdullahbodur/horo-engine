@@ -139,6 +139,7 @@ to the replacement.
 | [125](125-vfx-transparency-sorting-and-pass-placement.md) | VFX Transparency, Sorting and Pass Placement | Proposed | 2026-09-02 |
 | [126](126-vfx-graph-compilation-and-runtime-representation-convergence.md) | VFX Graph Compilation and Runtime Representation Convergence | Proposed | 2026-09-02 |
 | [127](127-vfx-decal-projection-lifetime-and-rendering-path-policy.md) | VFX Decal Projection, Lifetime and Rendering Path Policy | Proposed | 2026-09-02 |
+| [128](128-vfx-spawn-event-mapping-pooling-and-budget-enforcement.md) | VFX Spawn Event Mapping, Pooling and Budget Enforcement | Proposed | 2026-09-02 |
 
 ## Conventions
 

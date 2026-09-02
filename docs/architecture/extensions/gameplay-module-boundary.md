@@ -324,6 +324,20 @@ GPU readback and Null/visual output cannot drive authoritative gameplay. A behav
 needing particle-derived gameplay declares a CPU-mandatory compiled unit and admits
 its worst-case work/output capacity.
 
+[ADR-128](../../adr/128-vfx-spawn-event-mapping-pooling-and-budget-enforcement.md)
+places event-to-effect choice in an application-owned cooked
+`GameplayVfxBindingTable`. Ordinary modules/scripts receive a capability scoped to
+declared semantic event IDs or typed effect tags; they do not discover internal
+emitters, inspect the binding table or gain spawn authority merely by knowing an asset
+or tag ID. The application adapter resolves one immutable binding generation and
+submits bounded requests carrying stable occurrence/layer identity.
+
+The binding fixes payload schema, ownership/request class, finite fan-out, compatible
+quality variants and overload policy. Load rejects duplicate semantic ownership,
+unbounded mappings or required behavior paired with cosmetic delay/eviction. Queue,
+pool and budget denials return typed correlated results; gameplay cannot block, grow a
+pool or bypass the reserved required capacity.
+
 ## Services
 
 A game module may create project- or runtime-scoped services through explicit

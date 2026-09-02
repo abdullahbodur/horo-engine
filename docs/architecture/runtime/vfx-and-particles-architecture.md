@@ -33,6 +33,11 @@ specializes decals without changing ADR-011 ownership: typed box placement, exha
 permanent/timed/event lifetime, finite admission and deferred-preferred/forward-
 compatible rendering resolution.
 
+[ADR-128](../../adr/128-vfx-spawn-event-mapping-pooling-and-budget-enforcement.md)
+places semantic event-to-effect bindings at the application boundary, requires
+allocation-free playback from prepared pools, unifies count/work/time/memory budgets
+and makes cosmetic overload plus sleep/wake explicit and deterministic.
+
 DCC workflows, full fluid solvers, atmospheric scattering and screen-space
 post-processing remain outside this subsystem; see
 [Advanced Rendering Architecture](./advanced-rendering-architecture.md).
@@ -360,6 +365,17 @@ entries retain FIFO order for later ticks. Results, cancellation and retirement 
 reserved capacity so overload cannot prevent cleanup. Configuration validates queue,
 result and gameplay-reserve limits together. Null follows the same capacity policy;
 a separate reduced visual resource budget cannot consume the gameplay reserve.
+
+ADR-128 permits `DelayBounded`, `EvictOldestCosmetic`,
+`EvictFarthestCosmetic` or `UseAuthoredReduction` only when an immutable binding
+explicitly selects it. `RejectNewest` remains the default. Delay has fixed count/age
+bounds and FIFO ties. Replacement considers only explicitly replaceable cosmetic work
+inside the same partition; required/gameplay work, permanent or event-driven decals,
+pending outputs and protected owner/cell effects are ineligible. Oldest uses admitted
+tick/sequence/instance identity. Farthest uses a declared reference frozen for that
+admission boundary and stable ties, never renderer traversal order. If retirement does
+not yield immediately reusable logical capacity, the incoming request is rejected or
+uses its one bounded declared fallback.
 
 ## Scene And Cell Teardown
 
@@ -767,8 +783,23 @@ struct DecalDescriptor {
 
 ## Event-Driven Spawning & Audio Coupling
 
-Gameplay requests effects through fallible bounded admission to VfxEventQueue;
-this schematic payload is copied into queue-owned storage:
+Gameplay/application composition owns an immutable cooked
+`GameplayVfxBindingTable`. It maps typed semantic event IDs or registry-backed effect
+tags to effect assets, payload schemas, owner/request class, quality variants and one
+overload policy. `VfxWorld` validates and executes resolved requests; it never
+hardcodes gameplay meanings or queries gameplay state to infer a Footstep, Explosion,
+Hit or Weather effect. Ordinary gameplay receives a capability scoped to permitted
+events/tags; direct asset requests require an explicit low-level application/tooling
+grant.
+
+The semantic event retains scene/tick/producer/sequence and occurrence identity. The
+owning application adapter resolves one captured binding generation, applies cooked
+finite fan-out order and submits each deduplicated layer through fallible bounded
+admission. Binding hot reload publishes atomically at an owner safe point; accepted
+requests retain their original binding generation. Missing/duplicate/unauthorized
+bindings and payload mismatch are typed zero-mutation failures.
+
+The resolved schematic payload is copied into queue-owned storage:
 
 ```cpp
 struct VfxSpawnRequest {
@@ -838,12 +869,28 @@ budget. Fallback requires a complete new plan, and replacement overlap remains c
 until retirement. GPU/readback pressure cannot consume reserved gameplay CPU work or
 output capacity.
 
-The single overflow policy above rejects incoming requests/new cosmetic births.
-There is no separate implicit oldest/farthest eviction policy. Authored quality
-reductions are selected during admission/restart and reported with the resolved
-cap, capability/policy revision, emitter identity and reason. Diagnostics expose
-queue/pool use, rejected requests, deferred steps, gameplay failures, sort omissions,
-retired bytes and timeout causes through the observability system.
+The default overflow policy above rejects incoming requests/new cosmetic births.
+There is no implicit oldest/farthest eviction policy. ADR-128's opt-in cosmetic delay,
+replacement and authored-reduction modes use the same ledger and stable owner ordering;
+they never evict or degrade required work. Authored quality reductions are selected
+during admission/restart and reported with the resolved cap, capability/policy
+revision, emitter identity and reason. Diagnostics expose queue/pool use, rejected and
+delayed requests, selected victims, sleep/wake outcomes, gameplay failures, sort
+omissions, retired bytes and timeout causes through the observability system.
+
+### Sleep And Wake Admission
+
+`VfxWorld` alone transitions `Active`, `Sleeping`, `WakePending` and `Retiring`.
+Only compiled cosmetic sleepable systems with no required gameplay output, pending
+sub-emitter/Audio event, readback consumer, owner callback or retirement dependency
+are eligible. Visibility alone cannot sleep gameplay-coupled work. The authored policy
+freezes age, advances bounded analytic age or restarts on wake.
+
+Sleeping schedules no simulation, extraction, sort or draw work, but its occupied
+slots and physical resources remain charged. Wake re-admits work against prepared
+storage and never allocates or replays every missed tick. On denial the system remains
+sleeping or follows its one declared cosmetic fallback with a typed diagnostic. A stale
+scene/cell/owner generation retires rather than waking.
 
 ## Typed Failure Contract
 
@@ -925,6 +972,18 @@ architecture-only change:
 - Resolve every decal path preference across Forward, Clustered Forward+ and Deferred,
   including missing variants/capabilities/budgets and explicit suppression. Verify no
   depth write, double rendering or renderer-driven lifetime change.
+- Resolve semantic events/tags through versioned binding fixtures. Reject duplicate
+  ownership, invalid schema/capability, unbounded fan-out and stale generations; prove
+  stable occurrence/layer deduplication and no hardcoded gameplay-to-asset mapping.
+- Instrument enqueue, drain, spawn, simulation, extraction, sleep and wake under mixed
+  load and require zero heap allocations. Exercise prepared resize with admitted
+  old/new overlap and retain slot/memory charges through final reader/GPU retirement.
+- Saturate every count/work/draw/time/memory dimension and each ADR-128 overload mode.
+  Verify RejectNewest default, bounded FIFO delay/expiry, stable oldest/farthest ties,
+  protected required/permanent/event-driven work and no cascading or hidden eviction.
+- Exercise Active/Sleeping/WakePending/Retiring across visibility, multi-view, owner
+  and cell generation changes. Verify sleeping retains memory charges, wake performs
+  no allocation or unbounded catch-up and denied wake remains bounded and observable.
 - Delay workers, GPU fences and snapshot readers across cell eviction and scene
   replacement. No early free/slot reuse, stale publication or lost accounting;
   Retired remains pending and teardown timeout retains dependencies safely.
@@ -945,6 +1004,8 @@ architecture-only change:
   Normative authoring convergence, compiled artifact and compatibility contract.
 - [ADR-127: VFX Decal Projection, Lifetime and Rendering Path Policy](../../adr/127-vfx-decal-projection-lifetime-and-rendering-path-policy.md):
   Normative decal placement, lifetime, admission and rendering-path contract.
+- [ADR-128: VFX Spawn Event Mapping, Pooling and Budget Enforcement](../../adr/128-vfx-spawn-event-mapping-pooling-and-budget-enforcement.md):
+  Normative semantic binding, allocation-free playback, budget, overload and sleep/wake contract.
 - [Particle Editor UI Reference](./particle-editor.html): Emitter stack, curve editing,
   and live preview panel.
 - [Material And Shader Model](./material-and-shader-model.md): Particle and decal materials.
