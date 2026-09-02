@@ -450,6 +450,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Fracture Document, Generator, Undo and Preview Ownership](../adr/148-fracture-document-generator-undo-and-preview-ownership.md):
   persistent authoring document, detached generator transactions, exact bounded history,
   Assets source/cook publication and production-isolated preview.
+- [Destruction Persistence, Replication, Streaming and Authority](../adr/149-destruction-persistence-replication-streaming-and-authority.md):
+  canonical reconstruction state, server authority, paired Physics motion, snapshot-first
+  late join, durable cell handoff and stable-identity compatibility.
 - [Procedural Generation Architecture](./runtime/procedural-generation-architecture.md):
   PCG graphs, point clouds, validation, transactions, server authority, and
   streaming-cell ownership.

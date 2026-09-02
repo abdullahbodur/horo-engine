@@ -447,6 +447,16 @@ handoff blocks eviction and remains charged; it cannot drop foliage or force a u
 save. This authority still chooses cells, while Terrain validates/applies foliage
 semantics and Runtime Save owns durable capture/restore.
 
+[ADR-149](../../adr/149-destruction-persistence-replication-streaming-and-authority.md)
+applies the edge to destruction. A destructible retains its cooked stable owning cell
+even when active Physics chunks move across cell boundaries. Before last-copy eviction,
+DFR freezes exact content/revision/seed/chunk/support state and Persistent World returns
+a generation-scoped durable handoff receipt. Unsupported active motion, stale revision,
+capacity denial or handoff failure blocks retirement. Later admission applies compatible
+dormant state before aggregate Scene/DFR/Physics/Render publication. World Streaming
+still owns residency; neither DFR nor a server semantic revision can skip local provider
+readiness and budgets.
+
 ## Multiplayer Authority And Editor Isolation
 
 Server authority decides gameplay cell relevance and replicated entity lifecycle.
@@ -962,6 +972,7 @@ See [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin
 - [ADR-138](../../adr/138-terrain-source-cooked-tile-cache-and-streaming-ownership.md): Terrain dataset/tile manifests, cache authorities, typed residency requests and seam-safe generation replacement.
 - [ADR-140](../../adr/140-foliage-placement-baked-dynamic-state-and-eviction-ownership.md): Foliage state classification, durable delta handoff and no-loss cell eviction.
 - [ADR-141](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md): Terrain consumer snapshots, typed receipts, aggregate activation and reverse-DAG retirement.
+- [ADR-149](../../adr/149-destruction-persistence-replication-streaming-and-authority.md): Destruction canonical state, server authority, durable cell handoff and late-join/streaming compatibility.
 - [Physics Architecture](./physics-architecture.md): Static mesh collider registration and scene binding.
 - [Networking Architecture](./networking-architecture.md): Server-authoritative cell relevance and replication.
 - [Concurrency And Job System](../foundation/concurrency-and-jobs.md): Job workers, cancellation tokens, and thread roles.

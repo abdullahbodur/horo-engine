@@ -16,6 +16,10 @@ adapters for HORO-1438 #1438 [SAV-004.1].
 applies that single-authority model to baked, ephemeral and durable foliage mutations:
 Runtime Save/Persistent World owns canonical capture and dormant deltas, while Terrain
 defines and applies the semantic projection without a second persistence store.
+[ADR-149](../../adr/149-destruction-persistence-replication-streaming-and-authority.md)
+applies it to destruction: DFR owns semantic revision/seed/chunk/support sets, Physics
+owns paired active-chunk motion, and Persistent World owns dormant storage without
+becoming a semantic or residency authority.
 ADR-115 freezes local/cloud authority, provider revisions and conflict preservation
 for HORO-1466 #1466 [SAV-006.1].
 ADR-116 freezes save-source trust, bounded admission, tool capabilities, credentials
@@ -647,6 +651,20 @@ render buffers, Physics bodies and Navigation tiles are excluded. Terrain owns s
 validation/encoding and active application; it does not own another archive, spill store
 or dormant ledger. A dirty foliage handoff failure blocks eviction rather than dropping
 the delta or forcing an implicit slot save.
+
+Destruction follows the same no-loss protocol under ADR-149. Its canonical snapshot
+binds exact fracture artifact content/chunk-table identity, semantic revision,
+deterministic seed, health/phase and broken/active/supported/dormant sets plus required
+support data. Runtime Save captures that DFR-owned value once. Gameplay-authoritative
+active-chunk motion is a paired Physics-owned Horo checkpoint at the same world/tick;
+native solver bodies/shapes/manifolds are excluded.
+
+Before the last resident copy retires, Persistent World accepts the exact DFR revision
+and required motion-to-dormancy policy result. A stale, over-budget or failed handoff
+blocks eviction. Later cell activation resolves compatible artifacts and applies the
+dormant state through the normal aggregate Scene/DFR/Physics/Render barrier. A content
+change requires registered stable-chunk migration; index/name matching, partial masks
+and intact fallback are forbidden.
 
 Active-cell changes, inactive ledger entries and tombstones join the same coherent
 SaveCaptureEpoch. An entity/field has one authoritative record at that cut, not two

@@ -22,6 +22,13 @@ dedicated-server composition and transport integration.
 - Standalone, authority-server, autonomous-client and simulated-client roles are
   explicit world/session capabilities. Process locality, possession and input
   devices never grant authority.
+- [ADR-149](../../adr/149-destruction-persistence-replication-streaming-and-authority.md)
+  specializes this split for destruction. The server captures exact content/revision/
+  seed/chunk/support state through the DFR adapter, while Physics separately contributes
+  paired active-chunk motion. Clients validate and stage snapshots/deltas for the DFR
+  owner safe point; network threads, local contacts and predicted cosmetics never commit
+  canonical fracture state. Late join publishes one compatible snapshot root before
+  contiguous deltas and never replays historical presentation events.
 - Only ADR-098 `Active` sessions reach replication/RPC dispatch.
 - Automatic ECS-memory and generic event-bus replication are prohibited.
 - ADR-102 host plans map standalone/client/listen/dedicated modes to finite world
