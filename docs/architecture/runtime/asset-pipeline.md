@@ -805,6 +805,22 @@ cannot parse source, invoke bake, migrate data, choose an inactive generation or
 substitute straight-line navigation. Dynamic carved topology remains transient
 runtime state and cannot be published as a new cooked base.
 
+[ADR-106](../../adr/106-navigation-bake-ownership-transaction-and-cache.md)
+binds this contribution to the application `NavigationBakeService` and generic
+AssetCook transaction. AssetCook remains sole owner of immutable cache storage,
+unique same-filesystem staging, manifest construction, the cross-process
+publication lock, generation directories and final `current.json` replacement.
+The service owns request coalescing, immutable navigation capture, tile/profile
+task groups, latest-wins generation checks and operation progress. The provider
+builder owns only bounded computation over borrowed immutable input.
+
+The navigation cache key is an explicitly versioned dependency-aware extension,
+not the dependency-free AST-001C `CacheKeyV1`. Fresh and cached tiles pass equal
+envelope/key/digest/bounds/semantic checks before complete generation assembly.
+Cache presence cannot select a generation. Cancellation, failure, supersession,
+lock timeout or stale source preserves the last valid pointer; interrupted staging
+and inactive generations are cleaned/quarantined but never inferred as current.
+
 ### Prefab Domain Resolution And Cook Boundary
 
 [ADR-095](../../adr/095-prefab-cook-boundary-and-artifact-model.md) gives Assets
@@ -1443,6 +1459,13 @@ slice once implemented. Until a later slice admits another target, the operation
 must return a typed unavailable-target error for every other target; none may be
 substituted.
 
+Navigation bake is the domain-specific application operation defined by
+[ADR-106](../../adr/106-navigation-bake-ownership-transaction-and-cache.md).
+Editor, `horo-engine navigation bake`, MCP and release cook submit the same typed
+request and share its immutable capture, latest-wins, cache, cross-process lock,
+staging, publication and recovery rules. The command/tool names are adapter
+surfaces, not additional cook authorities.
+
 The following block is a non-executable sketch of future command shapes. No CLI
 or MCP cook adapter described here exists in AST-001C.
 
@@ -1465,6 +1488,9 @@ horo-engine asset cook --target desktop-vulkan --target desktop-metal --target d
 
 # Cook a specific asset for a specific target
 horo-engine asset cook --asset a1b2c3d4-e5f6-4890-abcd-ef1234567890 --target headless-null
+
+# Bake one navigation definition/scope through the shared application operation
+horo-engine navigation bake --definition a1b2c3d4-e5f6-4890-abcd-ef1234567890 --scope main
 
 # The sole target this slice will admit once implemented
 horo-engine asset cook --target headless-null

@@ -382,6 +382,39 @@ inactive prior generation. Dynamic carving derives a new runtime topology genera
 without mutating the published artifact; a persistent change edits authored intent
 and requires recook.
 
+### Navigation Bake Operation And Publication
+
+[ADR-106](../../adr/106-navigation-bake-ownership-transaction-and-cache.md)
+makes one application-owned `NavigationBakeService` the admission and lifetime
+authority for Editor, CLI, MCP, play and release-cook requests. Presentation
+adapters submit typed project/definition/scope/profile/target requests, observe the
+shared `OperationStore` and request cooperative cancellation. A panel, transport
+session or private builder never owns the accepted operation.
+
+Each attempt pins the complete ADR-105 immutable input and computes a canonical
+fingerprint before cache/build work. Requests coalesce by project, definition,
+scope, grounded profile set and target/profile: identical fingerprints join; a
+different request supersedes the active or one bounded pending successor. Only the
+latest request generation may cross the final adoption barrier. Tile/profile jobs
+use Foundation `JobSystem` and bounded host-owned memory/output writers; the
+provider creates no scheduler, cache or publication path.
+
+Navigation uses a versioned dependency-aware cache key covering definition/Scene/
+contributor/geometry digests, project and schema revisions, grounded semantic
+tables, coordinate/tile/build policy, catalog/cooker/provider fingerprints,
+target/profile and payload/envelope formats. Cache hits receive the same validation
+as fresh output and do not become active merely by existing.
+
+Unique same-filesystem staging plus a process resource lease and Platform
+`ExclusiveFileLock` serialize every writer to one canonical publication key across
+Editor/CLI/CI processes. The operation assembles and verifies a complete immutable
+generation, then atomically replaces `current.json` last. Failure, cancellation,
+timeout, supersession or crash before that point preserves the prior generation.
+Recovery validates the current pointer or an explicit successful receipt; it never
+selects the newest directory. Accepted operations end exactly `Succeeded`,
+`Failed`, `Cancelled`, `Superseded` or `TimedOut`, with the latter two projected to
+the shared operation model using typed causes.
+
 ### NavMesh Data
 
 The runtime NavMesh is a compact data structure:

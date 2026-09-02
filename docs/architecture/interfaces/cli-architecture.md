@@ -269,6 +269,16 @@ own use-case logic, transactions, and state invariants. They must never place
 business logic, scene mutation paths, asset import logic, or build algorithms
 inside CLI handlers.
 
+[ADR-106](../../adr/106-navigation-bake-ownership-transaction-and-cache.md)
+applies this equivalence contract to `horo-engine navigation bake`. The CLI
+descriptor parses a project-contained definition/scope, grounded profile set,
+target/profile and output mode, then invokes the application-owned
+`NavigationBakeService`. It may join/observe an existing identical operation or
+wait through the CLI host's bounded operation pump; it never calls a provider
+builder, chooses a workspace path, writes a cache/generation, owns a lock or
+implements supersession/recovery. Text, JSON and JSONL are presentations of the
+same operation terminal result used by GUI, MCP and release cook.
+
 ## Separation of Concerns: CLI, Debug Console, and MCP
 
 CLI commands, Runtime Debug Console commands (`DBG-001`), and MCP tools (`MCP-001`)
@@ -435,7 +445,6 @@ records only when requested.
 
 Progress is bounded and never delays the operation because a consumer is slow.
 
-
 ## Cancellation And Signals
 
 ### Signal Ownership Chain
@@ -468,7 +477,6 @@ Cancellation:
 - returns the cancellation exit category
 
 The CLI does not leave background jobs running after process exit.
-
 
 ## Input Sources
 
