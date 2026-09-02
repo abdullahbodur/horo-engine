@@ -31,6 +31,27 @@ colorblind viewport simulation, screen reader logging, control scheme validation
    quality. Native integration reports actual platform capability. Accessibility
    work cannot introduce unbounded waits into core loops or reverse dependencies.
 
+## Runtime UI Semantic And Capability Boundary
+
+[ADR-082](../../adr/082-runtime-ui-accessibility-capability-and-ownership.md)
+assigns typed role/state/action/relationship metadata, semantic focus and immutable
+per-audience semantic snapshots to Runtime UI. Snapshots publish from the same
+element, localization, style, layout, route, interaction and presentation evidence
+as visible UI; Renderer never reconstructs semantics from draw commands.
+
+Configuration remains preference authority, ADR-081 Localization resolves owned
+accessible text, Input/Runtime UI routing owns actions and focus, and Platform owns
+native capability, mapping, thread-affine dispatch and native lifetime. Platform
+receives only bounded Horo snapshots/commands and cannot inspect mutable widgets or
+invoke gameplay.
+
+Semantic model, navigation, visual preferences, captions, headless export and native
+screen-reader integration are reported independently. Native status is Supported,
+Unavailable, Unsupported or host-level NotComposed and is separate from user
+preference. Null and recording adapters do not constitute native qualification;
+each Supported manifest entry requires platform and real assistive-technology
+evidence.
+
 ```mermaid
 graph TD
     Config[Immutable configuration snapshot] --> Visual[Backend-neutral visual settings]

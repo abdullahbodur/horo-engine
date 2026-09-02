@@ -338,6 +338,25 @@ passthrough list may bypass them. Assignment change neutralizes old held/capture
 input before a new player/context activates. Focus, restoration, capture and active
 device modality remain per context/audience rather than process global.
 
+## Runtime Accessibility Semantics
+
+[ADR-082](../../adr/082-runtime-ui-accessibility-capability-and-ownership.md) makes
+Runtime UI authoritative for typed roles, accessible state/actions/relationships,
+semantic focus and immutable semantic snapshots. Each snapshot records the exact
+localization/style/layout/route/interaction generation, and nodes become native-
+visible only after matching presentation succeeds.
+
+Native accessibility requests return as revision-checked input commands through
+the owning player/audience context; Platform cannot mutate widgets or gameplay.
+Configuration owns preferences, ADR-081 owns localized accessible text, and
+Renderer owns pixels only. Hidden/modal/covered/offscreen exposure is explicit and
+cannot leave lower routes natively actionable.
+
+Support is reported per capability. Keyboard/gamepad navigation and semantic/model-
+only output do not imply native screen-reader support. Null reports Unsupported;
+Recording is test-only; each native Supported claim requires platform-specific
+interoperability evidence.
+
 ## Runtime Localization Boundary
 
 [ADR-081](../../adr/081-runtime-ui-and-localization-ownership-boundary.md) keeps
