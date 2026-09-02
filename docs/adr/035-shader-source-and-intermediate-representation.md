@@ -1,11 +1,12 @@
 # ADR-035: Shader Source and Intermediate Representation
 
-- **Status**: Proposed
+- **Status**: Accepted
 - **Date**: 2026-08-31
 - **Supersedes**: None
 - **Scope**: Shader source language, compiler routes and reflection authority
 - **Issue**: [RND-011.1](https://github.com/abdullahbodur/horo-engine/issues/368)
 - **Jira**: [HORO-368](https://horo-engine.atlassian.net/browse/HORO-368)
+- **Parent**: [RND-011](https://github.com/abdullahbodur/horo-engine/issues/283)
 - **Normative document**: [Rendering Architecture](../architecture/runtime/rendering-architecture.md)
 
 ## Context
@@ -24,6 +25,37 @@ It does not implement a compiler, change material shading algorithms, or activat
 a desktop cook target in the existing headless-only Phase A contract.
 
 ## Decision
+
+### Authority and adjacent ownership
+
+This ADR is the single normative owner of the production shader source language,
+compiler and intermediate-representation routes, target-descriptor requirements,
+normalized reflection boundary, artifact identity inputs, source diagnostic
+provenance, and packaged-versus-development compilation policy. Summaries in
+[Asset Pipeline](../architecture/runtime/asset-pipeline.md),
+[Rendering Architecture](../architecture/runtime/rendering-architecture.md), and
+[Material And Shader Model](../architecture/runtime/material-and-shader-model.md)
+consume this decision and cannot introduce another source language, universal
+intermediate, reflection authority, or implicit runtime compiler path.
+
+Adjacent owners remain separate:
+
+- Asset Pipeline owns admitted source/include resolution, bounded cook
+  orchestration, cache lookup, staging, and atomic artifact publication.
+- Renderer resource and capability contracts own live shader-module/pipeline
+  generations and target admission under [ADR-027](027-renderer-resource-identity-and-descriptors.md)
+  and [ADR-028](028-renderer-capability-limits-and-product-profiles.md).
+- ADR-029 through ADR-032 own native backend baselines; they constrain this
+  decision's target descriptors but do not select a different engine-wide
+  language or reflection model.
+- Material and shader-graph work owns semantic material/graph schemas and emits
+  this source contract plus mappings; it does not create another compiler or IR
+  authority.
+
+RND-011.2 through RND-011.13 consume this decision within their assigned
+implementation, adjacent-decision, or qualification scopes. Their issue numbers
+and roadmap milestones do not imply delivery order; native blocked-by relationships
+remain the scheduling authority.
 
 ### 1. One source contract, target-specific derived artifacts
 

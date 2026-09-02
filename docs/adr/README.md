@@ -46,7 +46,7 @@ to the replacement.
 | [032](032-d3d12-baseline-and-agility-sdk-policy.md) | D3D12 Baseline and Agility SDK Policy | Proposed | 2026-08-31 |
 | [033](033-presentation-and-display-ownership.md) | Presentation and Display Ownership | Proposed | 2026-08-31 |
 | [034](034-gpu-memory-and-residency-ownership.md) | GPU Memory and Residency Ownership | Proposed | 2026-08-31 |
-| [035](035-shader-source-and-intermediate-representation.md) | Shader Source and Intermediate Representation | Proposed | 2026-08-31 |
+| [035](035-shader-source-and-intermediate-representation.md) | Shader Source and Intermediate Representation | Accepted | 2026-08-31 |
 | [036](036-raster-render-path-and-quality-architecture.md) | Raster Render Path and Quality Architecture | Proposed | 2026-09-01 |
 | [037](037-scene-color-and-hdr-architecture.md) | Scene Color and HDR Architecture | Proposed | 2026-09-01 |
 | [038](038-gpu-scene-and-instance-data-model.md) | GPU Scene and Instance Data Model | Proposed | 2026-09-01 |

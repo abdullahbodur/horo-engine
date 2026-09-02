@@ -1224,6 +1224,8 @@ generation check.
 
 The source language, compiler routes, normalized reflection and diagnostics policy
 is [ADR-035](../../adr/035-shader-source-and-intermediate-representation.md).
+ADR-035 is the sole normative owner of that policy; the renderer consumes its
+validated target artifacts and must not select an alternate source or IR route.
 Portable HLSL source feeds validated SPIR-V for Vulkan/GLSL/MSL routes and direct
 DXIL for D3D12. Target-specific binding/packing maps preserve logical material
 interfaces; native compiler defaults and raw reflection structs are not public
