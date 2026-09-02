@@ -33,6 +33,13 @@ Virtual Texturing participates through the feature-provider boundary defined by
 Its page readiness may contribute to a cell barrier, but it cannot run a competing
 world scheduler or turn page pressure into an implicit cell transition.
 
+[ADR-166](../../adr/166-vtx-feature-local-residency-and-eviction-within-global-reservations.md)
+specializes this boundary: the authority grants a generation-scoped multidimensional
+reservation and aggregate priority/criticality; VTX orders and evicts pages only inside
+that slice. Shared pages use explicit consumer leases and one charge identity. A VTX
+pressure shortfall returns here for global deferral/fallback/cell policy, and reserved
+capacity is released only after provider, worker and GPU retirement acknowledgements.
+
 ```mermaid
 flowchart TD
     Host[Host composition and phase mapping] --> Manager[WorldStreamingManager orchestration]

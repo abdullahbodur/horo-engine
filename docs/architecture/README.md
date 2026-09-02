@@ -439,6 +439,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Virtual Texture Source, Cooked Artifact, Page Store and Cache Ownership](../adr/165-virtual-texture-source-cooked-artifact-page-store-and-cache-ownership.md):
   canonical source/cook authority, immutable root-plus-pack generations, bounded
   exact-generation reads, layered integrity and distinct cache lifetimes.
+- [VTX Feature-Local Residency and Eviction Within Global Reservations](../adr/166-vtx-feature-local-residency-and-eviction-within-global-reservations.md):
+  global versus feature-local scheduling, multidimensional reservation slices, typed
+  pins, shared-page charging, two-phase eviction and pressure accounting.
 - [Destruction And Fracture Architecture](./runtime/destruction-and-fracture-architecture.md):
   fracture assets, chunk physics, debris, authority, and network reconstruction.
 - [Destruction Ownership, Authority, State and Runtime Geometry Boundary](../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md):

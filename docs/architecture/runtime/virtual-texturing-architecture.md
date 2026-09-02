@@ -91,6 +91,18 @@ host-composed adapter. Neither VTX page eviction nor Renderer pressure independe
 evicts a world cell. Activation-critical page failure participates in the cell barrier;
 optional content may use only a fallback variant admitted before activation.
 
+[ADR-166: VTX Feature-Local Residency and Eviction Within Global Reservations](../../adr/166-vtx-feature-local-residency-and-eviction-within-global-reservations.md)
+defines the execution boundary. World Streaming/host policy owns global CPU, I/O,
+decoded/staging memory, GPU, queue and frame-work admission. VTX may merge demand,
+prioritize, pin and evict pages only inside a generation-scoped multidimensional
+reservation. Renderer separately owns physical GPU claims and retirement.
+
+Pins are typed owner leases, not booleans. Repeated compatible demand coalesces, shared
+pages retain one charge identity plus consumer leases, and only unpinned disposable
+pages are eviction candidates. Eviction first revokes logical availability, then waits
+for Assets, worker, snapshot and Renderer acknowledgements. `Evicting` state remains
+charged; cancellation or page-table removal alone never refunds capacity.
+
 ## Capability And Product Scope
 
 VTX uses feature-local tiers:
