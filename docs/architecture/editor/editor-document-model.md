@@ -176,6 +176,21 @@ edit the flattened projection or mutate dependants from a file-watcher callback.
 They submit typed commands against stable `AssetId`, source revision and persisted
 placement `LocalObjectId` scope.
 
+[ADR-096](../../adr/096-prefab-external-reference-and-binding-slot-contract.md)
+makes create-from-selection a reference-boundary audit inside the same transaction.
+Known internal references are remapped to new stable prefab-local IDs, assets retain
+typed `AssetId` identity, and every target outside the selection is reported with
+its owning object/component/property and target classification. The user explicitly
+includes the target, exposes a required/optional typed slot, or cancels. Unknown
+opaque reference semantics block publication.
+
+The command prepares the prefab source, replacement instance, local-ID remap, slot
+declarations, instance binding set, history and selection reconciliation together.
+It never silently nulls, copies, reparents or captures an external scene object.
+Failure, cancellation or stale document/source revision leaves every document,
+file, dirty state, history and selection unchanged. External Bindings, Overrides
+and Initialization remain separate Inspector models and command schemas.
+
 Intermediate transaction state is not observable by tabs or panels until the
 transaction commits, unless the transaction is explicitly marked as a preview
 transaction.
