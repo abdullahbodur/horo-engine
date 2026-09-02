@@ -28,6 +28,10 @@ The equal first-class obligations of interactive backend modules are defined by
 - The active renderer backend is selected by configuration or command-line
   override at host startup. Runtime scene, editor, asset, gameplay, and MCP code
   do not branch on concrete backend types.
+- Virtual Texturing owns logical page demand, selection and residency intent under
+  [ADR-164](../../adr/164-virtual-texturing-ownership-product-scope-and-capability-tier.md).
+  Renderer owns admitted physical atlas/sparse resources, uploads, mappings, graph
+  passes and GPU-safe retirement; it does not become logical page authority.
 
 ## Layer Model
 

@@ -9,6 +9,12 @@ release.
 The pipeline is host-agnostic. The same importers, cookers, and packagers are
 used by the GUI, CLI, and MCP.
 
+Virtual-texture sources follow this same authority under
+[ADR-164](../../adr/164-virtual-texturing-ownership-product-scope-and-capability-tier.md):
+the pipeline publishes immutable target/capability-keyed artifacts and bounded byte
+leases. The VTX runtime neither constructs cache/package paths nor discovers loose
+files, and the asset pipeline does not own runtime page demand or GPU residency.
+
 ## Asset Lifecycle
 
 ```text

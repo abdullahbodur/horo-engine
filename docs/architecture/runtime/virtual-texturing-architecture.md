@@ -1,180 +1,116 @@
 # Virtual Texturing Architecture
 
-## Purpose
+## Purpose And Decision Authority
 
-This document defines the virtual-texturing subsystem for Horo Engine. It
-covers sparse virtual texture pages, page table indirection, page residency
-management, feedback-based streaming, page cache compression, and integration
-with the material system and asset pipeline.
+Virtual texturing is an optional Post-1.0 runtime vertical slice that decouples
+logical texture address space from resident GPU backing. It coordinates cooked page
+artifacts, bounded demand, logical residency intent, renderer realization and material
+sampling without taking ownership from Assets, Materials, World Streaming, Renderer
+or source-domain producers.
 
-## Memory Ownership Boundary
+[ADR-164: Virtual Texturing Ownership, Product Scope and Capability Tier](../../adr/164-virtual-texturing-ownership-product-scope-and-capability-tier.md)
+is the normative ownership, composition, product-scope, capability and lifecycle
+decision. Exact identities, numeric bounds, artifact formats, queues, feedback policy
+and renderer contracts are assigned to the dependent VTX tickets. Illustrations in
+this document do not create a second contract.
 
-[ADR-034: GPU Memory and Residency Ownership](../../adr/034-gpu-memory-and-residency-ownership.md)
-owns GPU allocation, reservations and pressure policy. Virtual Texturing selects
-pages and disposable cache entries within its admitted allowance; the renderer
-owns native atlas/sparse backing and safe mapping execution. Page-table updates
-and slot reuse wait for previous GPU readers. Evicting a page from an allocated
-atlas frees a slot, not physical heap capacity from the budget.
+## Ownership Summary
 
-For streamed worlds, this allowance consumes World Streaming's aggregate
-reservation through the host-composed adapter. Missing pages may use an explicitly
-admitted feature fallback, but cannot silently invalidate activation-critical cell
-content. Neither page selection nor renderer pressure independently evicts cells.
-Sparse resources require effective backend support; an atlas fallback has a
-separate cost plan that must fit. Page counts below are recipe sizing inputs,
-not extra memory allowances or proof of backend capability. Include atlas backing,
-page tables, feedback, upload and readback copies in peak-cost admission.
+| Domain | Owns | Does not own |
+|---|---|---|
+| VTX API/runtime | Logical identities/generations, bounded demand merge, page choice, feature-local eviction and residency snapshots | Files, material definitions, world cells, native GPU resources or a global scheduler |
+| Assets/Pipeline | Source identity, deterministic cook, immutable artifact publication and bounded byte leases | Runtime demand, logical residency or GPU mapping |
+| Materials | Authored semantic slots, sampling intent and required/fallback variants | Page priority, physical slots or feedback state |
+| World Streaming | Cell relevance, aggregate admission and activation/retirement barriers | Per-page policy or a second VTX state machine |
+| Renderer | GPU reservations, physical atlas/sparse backing, uploads, mappings, graph passes and safe retirement | Logical page identity, demand policy or artifact discovery |
+| Producers | Source-domain meaning and immutable payload contribution | Global admission, package paths or GPU allocation |
+| Host/application | Composition, product policy and effective-tier admission | Feature/runtime state after ownership transfer |
 
-## Virtual Texture Model
+The host composes VTX through typed ports. VTX uses Assets for page bytes, the injected
+ADR-010 job contract for bounded preparation, ADR-034 reservations for GPU work and
+Renderer requests for realization. It never opens a project/build/cache path, queries a
+service locator, creates its own global worker pool or exposes a backend-native handle.
 
-Virtual texturing decouples logical texture resolution from physical GPU
-memory:
+## Data And Runtime Flow
 
-- A virtual texture appears as a single large texture to shaders (up to
-  128K×128K)
-- Physical GPU memory holds only the currently visible pages
-- An indirection table maps virtual page coordinates to physical page locations
-- Missing pages are streamed from disk asynchronously
-
-```cpp
-struct VirtualTexture {
-    VirtualTextureId   id;
-    uint32_t           virtualWidth;        // up to 131072
-    uint32_t           virtualHeight;
-    uint32_t           pageSize;            // typically 128×128 texels
-    PixelFormat        format;
-    uint32_t           mipLevels;
-    uint32_t           physicalPageCount;   // GPU memory budget in pages
-    VirtualTexturePageTable pageTable;
-};
-```
-
-## Page Table
-
-The page table is a GPU-resident texture that maps virtual to physical:
-
-```cpp
-struct VirtualTexturePageTable {
-    // GPU resource
-    TextureHandle      indirectionTexture;   // backend-neutral page-table texture
-    uint32_t           tableWidth;           // virtualWidth / pageSize / tileSize
-    uint32_t           tableHeight;
-
-    // CPU mirror for residency tracking
-    std::vector<PageTableEntry> cpuMirror;
-};
-
-struct PageTableEntry {
-    uint32_t   physicalPageIndex;   // or INVALID_PAGE if not resident
-    uint32_t   lastAccessFrame;
-    bool       isResident;
-    bool       isRequested;         // loading in progress
-};
-```
-
-The indirection texture is sampled in the material shader before the actual
-texture sample. The GPU computes the virtual page coordinate and looks up the
-physical page UV offset.
-
-## Feedback System
-
-Page residency is driven by GPU feedback:
-
-- A feedback pass writes which virtual pages were accessed during rendering
-- Feedback is read back to the CPU (typically 1-2 frames behind)
-- Pages with high access frequency are prioritized for loading
-- Unused pages are evicted under memory pressure
-
-```cpp
-struct VirtualTextureFeedback {
-    BufferHandle       feedbackBuffer;
-    uint32_t           feedbackWidth;       // viewport-aligned feedback resolution
-    uint32_t           feedbackHeight;
-    std::vector<VirtualPageCoord> requestedPages;  // CPU-side aggregated requests
-};
-```
-
-Feedback uses a compute shader that writes page IDs to an append buffer.
-The buffer is read back using async GPU-CPU transfer.
-
-## Page Streaming
-
-Page loading is asynchronous and priority-driven:
-
-```cpp
-struct VirtualPageStreamRequest {
-    VirtualTextureId   textureId;
-    VirtualPageCoord   pageCoord;        // virtual page (x, y, mip)
-    float              priority;         // derived from feedback frequency
-    CancellationToken  cancelToken;
-};
-```
-
-Streaming uses the asset pipeline's async I/O:
-
-1. Request is queued with priority
-2. Page data is read from the virtual texture page cache on disk
-3. Page is decompressed (BCn on GPU, or CPU decompress for lower tiers)
-4. Page is uploaded to the physical texture atlas
-5. Page table entry is updated on GPU
-6. CPU mirror is marked resident
-
-## Page Cache
-
-Virtual texture pages are cached on disk:
+Authored content is deterministically cooked into immutable target/capability-keyed
+artifacts. Runtime data moves through generation-checked typed requests:
 
 ```text
-<project>/build/<preset>/asset_cache/<target>/virtual_textures/
-├── <textureId>/
-│   ├── page_0_0_0.bin     # mip 0, page (0,0)
-│   ├── page_0_1_0.bin     # mip 0, page (1,0)
-│   ├── ...
-│   └── page_3_5_2.bin     # mip 2, page (5,3)
-└── index.json
+material/producer/world demand snapshots
+  -> VTX bounded demand merge and logical page plan
+  -> Assets page-byte lease
+  -> Renderer admitted upload and mapping
+  -> VTX generation-checked residency commit
+  -> immutable residency/binding projection
 ```
 
-The page cache is content-addressed by texture source hash, virtual
-coordinates, and import settings.
+Demand is evidence, not authority. Renderer completion becomes visible only when it
+matches the active VTX generation and all required leases/readiness records. Workers
+may prepare immutable data, but VTX owner safe points commit logical state and Renderer
+safe points mutate GPU state.
 
-## Material Integration
+Replacement admits old/new peak overlap and publishes atomically. Cancellation
+invalidates the operation/generation before late completions arrive. Stale work releases
+its asset leases and reservations without publication. Physical slots and resources are
+reused only after the relevant GPU work and dependent leases retire.
 
-Materials declare virtual texture usage:
+## Memory And World-Streaming Boundary
 
-```cpp
-struct MaterialVirtualTextureSlot {
-    std::string    slotName;         // e.g., "BaseColor", "Normal"
-    AssetId        virtualTextureId;
-    VirtualTextureSampler sampler;   // trilinear, anisotropic level
-};
-```
+[ADR-034: GPU Memory and Residency Ownership](../../adr/034-gpu-memory-and-residency-ownership.md)
+owns GPU allocation, reservations and pressure policy. VTX selects disposable pages
+within an admitted allowance; Renderer owns native atlas/sparse backing and safe mapping
+execution. Evicting a logical page from an allocated atlas frees a slot, not physical
+heap capacity.
 
-The material shader receives the virtual texture indirection table binding and
-performs the two-level sample:
+For streamed worlds, VTX consumes World Streaming's aggregate reservation through a
+host-composed adapter. Neither VTX page eviction nor Renderer pressure independently
+evicts a world cell. Activation-critical page failure participates in the cell barrier;
+optional content may use only a fallback variant admitted before activation.
 
-```hlsl
-float4 SampleVirtualTexture(VirtualTexture vt, float2 uv, float mip) {
-    float2 pageUV = vt.PageTable.Sample(uv, mip);   // indirection lookup
-    return vt.PhysicalAtlas.Sample(pageUV, mip);     // physical sample
-}
-```
+## Capability And Product Scope
 
-## Performance And Feature Tiers
+VTX uses feature-local tiers:
 
-| Feature              | `es3`      | `dx11`      | `dx12_vulkan` | `high_end`   |
-| -------------------- | ----------- | ----------- | -------------- | ------------ |
-| Virtual texturing    | No          | Yes         | Yes            | Yes          |
-| Max virtual size     | —           | 32K×32K     | 64K×64K        | 128K×128K    |
-| Page size            | —           | 128×128     | 128×128        | 128×128      |
-| GPU feedback         | —           | CPU readback| Append buffer  | Append buffer|
-| Async page upload    | —           | Staged      | Direct         | Direct       |
-| Physical page budget | —           | 4K pages    | 8K pages       | 16K pages    |
+| Tier | Meaning |
+|---|---|
+| `Unavailable` | VTX assets are rejected; supported ordinary texture/material variants remain available |
+| `Atlas` | An explicitly budgeted physical atlas and logical page-table path is implemented and admitted |
+| `Sparse` | Qualified native sparse/tiled backing satisfies the same VTX semantics |
+
+Content policy (`Required`, `OptionalWithFallback`, `Disabled`) is separate from the
+tier. Effective support is the intersection of compiled implementation, selected
+backend/device operations, formats and limits, budgets, shader/material variants,
+cooked artifacts and product policy. Backend names, profile ranks and extension bits do
+not prove support. Sparse-to-atlas fallback requires independent atlas admission.
+
+Horo 1.0 does not require VTX. VTX runtime delivery remains Post-1.0 and depends on the
+RND-010.9 sparse/atlas residency foundation. Headless and dedicated-server hosts do not
+initialize GPU residency; validation/cook tools may compose narrow non-rendering
+contracts explicitly.
+
+## Unsupported Shortcuts
+
+- direct runtime filesystem/cache-path access or loose-file discovery;
+- process-global VTX schedulers, renderer selection or memory ledgers;
+- backend/API names and native handles in public/persisted contracts;
+- runtime cooking or shader generation after a page miss;
+- silent capability, quality or content fallback;
+- unbounded work/queues, normal-frame blocking waits or frame-index-only reuse; and
+- debug UI state acting as runtime authority.
+
+Failures are typed and observable, including unsupported composition, missing artifacts
+or variants, invalid descriptors, capacity, stale generation, cancellation, I/O,
+decode, renderer admission, upload/mapping, device loss and stalled retirement.
 
 ## Related Documents
 
+- [ADR-164: Virtual Texturing Ownership, Product Scope and Capability Tier](../../adr/164-virtual-texturing-ownership-product-scope-and-capability-tier.md)
+- [ADR-034: GPU Memory and Residency Ownership](../../adr/034-gpu-memory-and-residency-ownership.md)
 - [Virtual Texturing Debug UI Reference](./virtual-texturing-debug.html)
-
-- [Rendering Architecture](./rendering-architecture.md): virtual texture bindings and passes
-- [Material And Shader Model](./material-and-shader-model.md): virtual texture material slots
-- [Asset Pipeline](./asset-pipeline.md): page cache and streaming I/O
-- [Terrain And Foliage Architecture](./terrain-and-foliage-architecture.md): terrain virtual texturing
-- [LOD And Culling Architecture](./lod-and-culling-architecture.md): mip-based LOD integration
+- [Rendering Architecture](./rendering-architecture.md): virtual texture realization and passes
+- [Material And Shader Model](./material-and-shader-model.md): semantic virtual-texture slots and variants
+- [Asset Pipeline](./asset-pipeline.md): cooked artifacts and bounded byte access
+- [World Streaming Architecture](./world-streaming-architecture.md): aggregate admission and cell barriers
+- [Terrain And Foliage Architecture](./terrain-and-foliage-architecture.md): typed producer integration
+- [LOD And Culling Architecture](./lod-and-culling-architecture.md): bounded demand inputs

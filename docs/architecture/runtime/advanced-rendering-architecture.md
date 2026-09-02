@@ -482,6 +482,11 @@ Virtual texturing allows scenes to use more texture data than GPU memory.
 
 Virtual texturing is optional and admitted through its effective feature/format
 requirements and product residency budgets, not through a profile rank.
+Logical page policy and physical realization remain separate under
+[ADR-164](../../adr/164-virtual-texturing-ownership-product-scope-and-capability-tier.md).
+The feature is Post-1.0; an API/backend name or sparse-resource bit does not advertise
+support without complete artifact, material, budget, synchronization and qualification
+evidence.
 
 ## Occlusion Culling
 

@@ -431,8 +431,11 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Decal System Architecture](./runtime/decal-system-architecture.md): deferred
   decals, forward fallbacks, material domain, pooling, ownership, and lifetime.
 - [Virtual Texturing Architecture](./runtime/virtual-texturing-architecture.md):
-  page tables, feedback, streaming, asset-provider cache, and backend-neutral
-  resources.
+  logical page demand/residency, typed asset and renderer integration, capability
+  tiers, lifecycle and Post-1.0 scope.
+- [Virtual Texturing Ownership, Product Scope and Capability Tier](../adr/164-virtual-texturing-ownership-product-scope-and-capability-tier.md):
+  VTX/Assets/Materials/World Streaming/Renderer/producer ownership, typed composition,
+  Atlas/Sparse admission and unsupported-path policy.
 - [Destruction And Fracture Architecture](./runtime/destruction-and-fracture-architecture.md):
   fracture assets, chunk physics, debris, authority, and network reconstruction.
 - [Destruction Ownership, Authority, State and Runtime Geometry Boundary](../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md):

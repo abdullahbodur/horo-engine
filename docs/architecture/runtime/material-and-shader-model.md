@@ -56,6 +56,11 @@ Not covered:
   ownership and compatibility keys.
 - No gameplay code queries raw shader handles. Gameplay sees only material names,
   parameter overrides, and feature flags.
+- Virtual-texture integration follows
+  [ADR-164](../../adr/164-virtual-texturing-ownership-product-scope-and-capability-tier.md):
+  Materials owns semantic sampling intent and required/fallback variants, while VTX
+  owns logical page state and Renderer owns physical resources and bindings. Variant
+  selection is admitted before activation and never generated on a runtime page miss.
 
 ## Shader Graph Editor Surface
 
