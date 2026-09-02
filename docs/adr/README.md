@@ -129,6 +129,7 @@ to the replacement.
 | [115](115-cloud-save-authority-revision-and-conflict-policy.md) | Cloud Save Authority, Revision and Conflict Policy | Proposed | 2026-09-02 |
 | [116](116-save-data-threat-model-and-trust-policy.md) | Save Data Threat Model and Trust Policy | Proposed | 2026-09-02 |
 | [117](117-playback-ownership-frame-order-and-determinism.md) | Playback Ownership, Frame Order and Determinism | Proposed | 2026-09-02 |
+| [118](118-animation-character-and-gameplay-authority-during-cinematics.md) | Animation, Character and Gameplay Authority During Cinematics | Proposed | 2026-09-02 |
 
 ## Conventions
 

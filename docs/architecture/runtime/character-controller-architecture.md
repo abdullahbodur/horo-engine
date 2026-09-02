@@ -60,6 +60,9 @@ Not covered:
   defines explicit `Disabled`, `ObstacleOnly`, `OneWayPush` and
   `BidirectionalProxy` dynamic interaction modes. Character remains root authority
   in every mode; unsupported capability never silently changes the effective mode.
+- [ADR-118](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md)
+  keeps Character as collision-root authority during cinematics. Each claimed channel
+  is GameplayControlled or CinematicControlled; whole-game pause performs no move.
 
 ## Implementation And Ownership
 
@@ -178,6 +181,35 @@ Gameplay desired heading for that tick and applies root twist to the carried
 heading. Root translation uses the pre-root heading. Platform tilt and root/visual
 pitch or roll never rotate the capsule; changing the up basis is a typed safe-point
 command with clearance validation.
+
+## Cinematic Control Arbitration
+
+Before a sequence starts, the application requests generation-scoped Character
+claims for translation, heading, stance/jump or a separately admitted teleport
+capability. Required conflicts fail aggregate player activation; optional tracks
+disable visibly. The resulting per-tick authority snapshot selects exactly one source
+for each claimed channel:
+
+- `GameplayControlled` consumes the ordinary Gameplay/AI command and configured
+  Animation root-motion policy; or
+- `CinematicControlled` consumes the ADR-117-selected cinematic command and returns
+  `SuppressedByCinematic` for ordinary commands targeting the same channel.
+
+Suppressed movement, heading, jump, stance and actions are not queued for replay after
+the claim releases. Unclaimed channels remain accepted. The baseline does not sum
+gameplay and cinematic displacement; a future cooperative mode must be an explicit
+Character-owned reducer with its own collision/timing contract.
+
+A cinematic command carries exact scene/controller/player/tick/generation/order
+identity and no caller-selected delta or native body handle. Character performs the
+same platform carry, root-motion composition, bounded Horo sweeps, collision/dynamic
+interaction and Physics command staging used by gameplay. Cinematic Runtime never
+writes Scene Transform or bypasses the controller with a visual-root value.
+
+Host gameplay pause produces no Character tick or movement. Collision-aware cutscene
+movement therefore keeps simulation running and suppresses selected Gameplay/AI
+control through owner leases. Presentation pose motion while paused cannot update the
+capsule, accumulate root motion or become a resume-time catch-up displacement.
 
 ## Movement Resolution
 
@@ -541,6 +573,10 @@ Runtime variables:
 - Platform carry point rotation, dynamic point-velocity prediction, optional heading
   twist and no post-Physics second move.
 - Capsule up, Gameplay desired heading, root twist and visual pitch/roll ownership.
+- GameplayControlled/CinematicControlled claims, claimed/unclaimed command outcomes,
+  multi-player priority conflicts and no suppressed-command backlog.
+- Whole-game pause versus running-simulation cinematic control transfer, including no
+  presentation/root-motion catch-up and ordinary collision-aware movement.
 - Four-mode dynamic visibility/push/reaction truth table, including filtered,
   unsupported-capability and explicit-fallback cases.
 - One-way command canonicalization, proxy pair exclusivity, no double impulse,
@@ -559,6 +595,7 @@ Runtime variables:
   materials, rigid bodies, and fixed-step world.
 - [Animation Architecture](./animation-architecture.md): root motion and
   animation-driven movement.
+- [ADR-118: Animation, Character and Gameplay Authority During Cinematics](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md)
 - [Audio Architecture](./audio-architecture.md): audio event routing and
   variation containers.
 - [VFX And Particles Architecture](./vfx-and-particles-architecture.md): impact

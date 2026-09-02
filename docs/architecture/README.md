@@ -357,6 +357,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Playback Ownership, Frame Order and Determinism](../adr/117-playback-ownership-frame-order-and-determinism.md):
   runtime-service player lifetime, stable activation identity, immutable evaluation
   batches, replay/headless evidence and random-access seek.
+- [Animation, Character and Gameplay Authority During Cinematics](../adr/118-animation-character-and-gameplay-authority-during-cinematics.md):
+  per-joint pose override/blend, Character collision-root authority, gameplay control
+  leases, typed suppression and whole-game pause semantics.
 - [Post-Processing And Effects Architecture](./runtime/post-processing-and-effects-architecture.md):
   screen-space effects, HDR post chain, tonemapping, color grading, and
   accessibility pass ordering.

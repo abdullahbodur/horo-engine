@@ -331,8 +331,8 @@ Variable-rate update is not used for deterministic physics integration.
 One fixed tick executes:
 
 1. consume the input command state assigned to the tick
-2. stage Gameplay/AI/Nav movement/facing, animation parameters and kinematic-platform
-   targets
+2. stage Gameplay/AI/Nav and owner-admitted Cinematic movement/facing, animation
+   parameters and kinematic-platform targets under the effective authority snapshot
 3. evaluate authoritative Animation pose/root motion and freeze Physics-owned
    Character query/support/platform-motion evidence
 4. run Horo Character platform carry and bounded query movement, staging its root
@@ -443,6 +443,14 @@ returns to paused state. It uses the ordinary unchanged fixed quantum and comple
 subsystem order; it does not consume accumulated wall time. Authoritative animation
 therefore holds during pause and advances once during a successful step. Isolated
 editor preview may advance only under its separate preview controls.
+
+Under [ADR-118](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md),
+whole-game pause also means no authoritative cinematic pose advance, root-motion
+request, Character movement, Physics step or gameplay-action backlog. Permitted
+unscaled/external cinematic work is presentation/service-only. A cutscene that must
+move collision-aware actors leaves fixed simulation running and acquires scoped
+Gameplay/Animation/Character control claims; it does not use pause as selective input
+suppression. Resume cannot apply elapsed presentation motion as a catch-up tick.
 
 Runtime UI continues its ordinary VariableUpdate/input/layout/render path while
 gameplay is paused. Menus/navigation/accessibility feedback use declared unscaled
@@ -595,6 +603,7 @@ Required tests cover:
 - [Audio Architecture](./audio-architecture.md)
 - [Networking Architecture](./networking-architecture.md)
 - [ADR-117: Playback Ownership, Frame Order and Determinism](../../adr/117-playback-ownership-frame-order-and-determinism.md)
+- [ADR-118: Animation, Character and Gameplay Authority During Cinematics](../../adr/118-animation-character-and-gameplay-authority-during-cinematics.md)
 - [ADR-102: Runtime Network Modes and Authority Exposure](../../adr/102-runtime-network-modes-and-authority-exposure.md)
 - [Asset Pipeline](./asset-pipeline.md)
 - [Runtime Debug Console And Development Overlays](./debug-console-and-overlays.md)
