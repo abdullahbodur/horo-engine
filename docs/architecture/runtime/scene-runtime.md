@@ -380,6 +380,8 @@ after:
 
 - definition validation succeeds
 - required assets and capabilities are available
+- any requested Physics determinism tier/fingerprint/evidence is qualified under
+  [ADR-088](../../adr/088-physics-determinism-capability-and-support-tiers.md)
 - systems initialize successfully
 - physics and render bindings are ready
 - startup hooks succeed

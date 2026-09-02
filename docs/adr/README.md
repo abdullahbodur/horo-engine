@@ -99,6 +99,7 @@ to the replacement.
 | [085](085-physics-shape-authoring-cook-and-runtime-boundary.md) | Physics Shape Authoring, Cook and Runtime Boundary | Proposed | 2026-09-02 |
 | [086](086-collision-layer-profile-and-query-channel-policy.md) | Collision Layer, Profile and Query Channel Policy | Proposed | 2026-09-02 |
 | [087](087-scene-to-physics-ownership-and-conversion.md) | Scene-to-Physics Ownership and Conversion | Proposed | 2026-09-02 |
+| [088](088-physics-determinism-capability-and-support-tiers.md) | Physics Determinism Capability and Support Tiers | Proposed | 2026-09-02 |
 
 ## Conventions
 

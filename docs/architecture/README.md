@@ -159,6 +159,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Scene-to-Physics Ownership and Conversion](../adr/087-scene-to-physics-ownership-and-conversion.md):
   explicit authored body/collider/constraint producers, Physics-owned scene plans,
   detached world candidates and atomic aggregate activation/rollback.
+- [Physics Determinism Capability and Support Tiers](../adr/088-physics-determinism-capability-and-support-tiers.md):
+  fail-closed tier negotiation, exact execution fingerprints, same-build/platform
+  support target, future cross-platform groups, exclusions and evidence gates.
 - [Audio Architecture](./runtime/audio-architecture.md): ADR-backed ownership,
   clocks, formats, assets, mixer, spatial, devices, tooling and explicit 1.0 versus
   Post-1.0 product boundaries.
