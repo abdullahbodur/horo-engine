@@ -173,6 +173,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Audio Extension Capability and ABI](../adr/069-audio-extension-capability-and-abi.md):
   generic EXT/PKG handoff, typed Audio capability families, the stricter Audio RT
   ABI, transactional registration, trust, owner leases, and unload barriers.
+- [Capture and Voice I/O Ownership](../adr/070-capture-and-voice-io-ownership.md):
+  permission-aware input sessions, bounded timestamped PCM, monitoring, recording,
+  NET packet-policy exclusion, speech/editor boundaries, and privacy.
 - [Input Architecture](./runtime/input-architecture.md): input snapshots, action
   maps, focus, capture, modal routing, and simulation input frames.
 - [Game UI And HUD](./runtime/game-ui-and-hud.md): runtime game menus, HUDs,

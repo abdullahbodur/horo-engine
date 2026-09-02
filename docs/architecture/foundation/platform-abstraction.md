@@ -256,6 +256,12 @@ next-launch code owns rich association and preserves best-effort/partial coverag
 
 ## Threading
 
+[ADR-070](../../adr/070-capture-and-voice-io-ownership.md) assigns Platform the
+native microphone/input-device and OS permission adapter only. Platform reports
+typed permission/device facts on required owner threads and keeps native handles
+private; it does not own Audio capture sessions, consent/retention policy,
+recording assets, network voice, speech, or editor workflows.
+
 Capabilities declare affinity:
 
 | Capability | Required affinity |
