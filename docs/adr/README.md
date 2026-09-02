@@ -128,6 +128,7 @@ to the replacement.
 | [114](114-canonical-runtime-world-persistence-boundary.md) | Canonical Runtime World Persistence Boundary | Proposed | 2026-09-02 |
 | [115](115-cloud-save-authority-revision-and-conflict-policy.md) | Cloud Save Authority, Revision and Conflict Policy | Proposed | 2026-09-02 |
 | [116](116-save-data-threat-model-and-trust-policy.md) | Save Data Threat Model and Trust Policy | Proposed | 2026-09-02 |
+| [117](117-playback-ownership-frame-order-and-determinism.md) | Playback Ownership, Frame Order and Determinism | Proposed | 2026-09-02 |
 
 ## Conventions
 

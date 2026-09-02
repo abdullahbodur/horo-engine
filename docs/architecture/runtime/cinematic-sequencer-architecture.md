@@ -9,6 +9,9 @@ The goal is to provide a bounded, data-oriented cinematic runtime capable of dri
 ## Normative Decision Reference
 
 This subsystem is governed by [ADR-014: Sequencer Ownership, Clock Authority and Binding Boundary Decision](../../adr/014-sequencer-ownership-clock-authority-and-binding-boundary.md).
+[ADR-117](../../adr/117-playback-ownership-frame-order-and-determinism.md)
+refines live-player ownership, activation identity, multi-player batch order,
+replay/headless evidence, numeric determinism and random-access seek.
 [ADR-068](../../adr/068-music-transport-and-cross-system-ownership.md) owns the
 AudioTrack handoff: Sequencer retains sequence clock, directed event traversal,
 seek/scrub and preroll intent while Audio alone maps accepted requests to sample
@@ -34,6 +37,13 @@ time and schedules the callback.
 - **Coordinate and capacity contracts**: Local transform tracks use durable parent
   or sequence anchors. Typed CPU/memory budgets bound players, nested tracks,
   events, binding retries and per-boundary work independently of graphics APIs.
+- **Runtime-service player ownership**: Scene components are inert authored start
+  descriptors. One session-owned service retains live players, tokens, leases,
+  nested instances, event cursors and late-completion fences.
+- **Stable batch order and qualified determinism**: Boundary snapshots order players
+  by domain, descending priority and stable identity. Exact cross-platform float bits
+  are not promised; identities/time/event order are exact and samples use declared
+  tolerances across build/platform fingerprints.
 
 ## System Boundaries and Target Topology
 
@@ -63,6 +73,38 @@ time and schedules the callback.
 | `HoroEngine::EditorServices` | Presentation / Tooling | Timeline workspace controllers, property recording, curve editing services, track solo/mute adapters, and Problems panel integration. | `CinematicRuntime`, `CinematicModel`, `SceneModel`, `EditorModel` |
 
 `HoroEngine::CinematicRuntime` contains zero dependencies on `HoroEngine::EditorServices`, `HoroEngine::Gui`, or ImGui.
+
+## Player Ownership And Lifetime
+
+`CinematicRuntimeService` is owned by one application/runtime session and owns every
+live `SequencePlayer`. Its registry retains clocks, event cursors, binding caches,
+nested-player trees, capacity reservations, asset/provider leases, domain tokens and
+queued-effect lifetime. It closes before Scene/Runtime dependencies and no player
+survives the session.
+
+An optional scene `SequencePlaybackComponent` contains only authored configuration:
+sequence asset identity, stable activation identity, settings, priority, autoplay and
+`SceneBound`/`ApplicationBound` scope. Runtime conversion submits a typed request and
+receives a generation-checked handle; the component does not embed a player or retain
+callbacks into its own memory. Application/gameplay starts use the same service API.
+
+SceneBound players stop before their `SceneRuntimeId` is replaced. ApplicationBound
+players survive travel only when the descriptor has no required old-scene binding and
+every retained adapter admits travel. Preview, PIE and packaged runtime use separate
+session registries. Component removal, UI close or dropping a handle requests stop;
+only the service retires tokens, leases and queued effects at an owning boundary.
+
+Preparation validates assets/nesting, compiles the plan, reserves aggregate capacity,
+resolves required adapters and acquires tokens before the player enters a batch. Stop
+closes admission, removes it from a later batch, releases only its tokens, cancels
+owned work where possible and ignores late completions by session/player generation.
+Nested players are registry-owned children identified by root activation plus stable
+track/key/instance path; they cannot acquire an independent session or budget pool.
+
+Root activation IDs come from stable scene object/playback-slot identity, a recorded
+gameplay command/event occurrence or a recorded application operation identity.
+Allocation order, pointers, thread arrival, worker completion, unordered-map order and
+process-random hash seeds are never player identity or tie-breakers.
 
 ## Sequencer Data Model
 
@@ -369,6 +411,15 @@ establishes stricter guarantees. Same committed ticks, assets, settings and orde
 inputs reproduce semantic samples and event order regardless of render cadence.
 Wall/external histories must be recorded explicitly to reproduce their inputs.
 
+Within one qualified determinism fingerprint (engine/schema, cooked asset digest,
+evaluation policy, compiler/CPU/FP mode and adapter versions), replay requires exact
+player/time/order/event identity and repeatable float outputs. Across supported
+platform/build fingerprints, exact IDs, interval membership and order still hold, but
+float/vector/quaternion outputs compare with declared absolute/relative/ULP tolerances.
+Bit-identical cross-platform sampling is not a baseline claim because interpolation
+and receiving systems use floating-point operations without a closed deterministic-
+math profile.
+
 Event dispatch is stateful directed-interval processing:
 
 - Forward advance crosses `(previous, current]`; reverse crosses `[current, previous)`
@@ -385,6 +436,12 @@ Event dispatch is stateful directed-interval processing:
 - Preflight the complete bounded interval before applying values or advancing the
   cursor. If the event/loop work budget cannot admit it, return `EvaluationBudgetExceeded`
   and hold the player without partial effects. Never silently drop authoritative events.
+
+Seek maps target/loop/nested time directly and samples by indexed lookup. It never
+steps from the current cursor or replays from zero. The complete seek result is staged
+and published at one owner boundary; failure preserves the prior cursor/values. Audio,
+VFX and other stateful destinations receive typed seek/resynchronize intent or
+Unsupported rather than historical side-effect playback.
 
 ## Frame Evaluation Phase
 
@@ -621,7 +678,19 @@ Binary key lookup bounds sample work by active tracks and keys per track. Cubic
 segments require monotonic time tangents and a fixed iteration limit, not an
 unbounded numeric solver. Event/loop preflight enforces runtime interval limits.
 
-Aggregate evaluation visits admitted players in priority then stable-ID order.
+Before each fixed or service/presentation boundary, the service drains commands up to
+the cutoff and snapshots one immutable eligible batch. Late commands join the next
+corresponding boundary. Root order is evaluation seam/domain, priority descending,
+then `SequencePlayerId` ascending stable byte order. Nested players follow their root
+by track ID, key ID, instance ordinal and recursion path. Parallel jobs merge only
+through preassigned order slots; completion order cannot change output.
+
+Exclusive target owners select the highest-priority contribution and use the lowest
+stable player ID as the declared equal-priority tie-break. Registered reducers/blends
+consume contributions in canonical order. Global occurrences order by destination
+seam, directed crossing time, player order, track ID and keyframe ID. Iteration order
+is never a conflict resolver.
+
 Gameplay-authoritative sampling is never skipped according to elapsed wall time;
 if deterministic work cannot be admitted, reject/hold with a typed outcome. Optional
 presentation-only work may use an explicit lower sampling rate, without changing
@@ -673,6 +742,16 @@ These are required implementation acceptance tests, not tests added by this ADR:
 
 - Compare identical committed tick/input histories under 30/60/144 Hz presentation;
   authoritative values/event order match under documented numeric tolerances.
+- Component/application players share one service registry; test component removal,
+  dropped handles, scene travel, preview/PIE isolation, nested stop and late completion
+  fencing without leaked or prematurely destroyed state.
+- Randomize allocation, container, command-arrival-before-cutoff and worker completion
+  order; immutable batches, priority/stable-ID winners and event order stay identical.
+- Same-fingerprint replays require exact time/identity/order/events and repeatable
+  floats; cross-platform fingerprints use declared numeric tolerances and report the
+  mismatch rather than claiming bit identity.
+- Headless replay uses the production service with manual recorded clocks/Null
+  adapters and reports missing activation, wall/provider or async evidence explicitly.
 - Validate all clock/pause/dilation combinations, nested pause-token release, menu
   plus cinematic pause, host resume, provider capability/loss and discontinuities.
 - Value samples are history-independent; event tests cover forward/reverse endpoints,
@@ -691,6 +770,7 @@ These are required implementation acceptance tests, not tests added by this ADR:
 ## Related Documents
 
 - [ADR-014: Sequencer Ownership, Clock Authority and Binding Boundary Decision](../../adr/014-sequencer-ownership-clock-authority-and-binding-boundary.md)
+- [ADR-117: Playback Ownership, Frame Order and Determinism](../../adr/117-playback-ownership-frame-order-and-determinism.md)
 - [Cinematic Sequencer UI Reference](./cinematic-sequencer.html)
 - [Scene Runtime Architecture](./scene-runtime.md)
 - [Animation Architecture](./animation-architecture.md)

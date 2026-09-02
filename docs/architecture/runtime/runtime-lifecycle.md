@@ -179,6 +179,14 @@ simulation, unscaled, screen-transition, preview, deterministic-test and manual
 domains and evaluates every active UI timeline exactly once before style/layout
 publication. Render extraction/execution never advances them.
 
+[ADR-117](../../adr/117-playback-ownership-frame-order-and-determinism.md) refines
+Cinematic Runtime without adding a phase. Before each fixed or permitted service/
+presentation boundary, the session-owned service drains commands through that
+boundary's cutoff and publishes one immutable player batch ordered by domain,
+descending priority and stable identity. Commands or worker completions after the
+cutoff cannot alter the active batch. Failed attempted ticks discard staged cinematic
+cursors/values/occurrences; tick commit advances them and releases occurrences.
+
 [ADR-078](../../adr/078-runtime-ui-input-context-and-player-routing.md) also adds no
 phase. `BuildInputSnapshot` publishes device/action/assignment evidence; Runtime UI
 VariableUpdate applies one ordered context stack against the last presented
@@ -550,6 +558,8 @@ Required tests cover:
 - startup success and partial-initialization failure unwind
 - fixed-step accumulator and catch-up bounds
 - fixed-state determinism under 30, 60, and 144 Hz variable frame cadences
+- cinematic immutable-batch cutoff/order, failed-tick discard and same-history replay
+  across zero/one/multiple fixed ticks per presentation frame
 - interpolation alpha at equivalent accumulator positions
 - presentation gating after extraction, execution, and GUI failures
 - dropped-time and clamp counter observability
@@ -578,6 +588,7 @@ Required tests cover:
 - [Physics Architecture](./physics-architecture.md)
 - [Audio Architecture](./audio-architecture.md)
 - [Networking Architecture](./networking-architecture.md)
+- [ADR-117: Playback Ownership, Frame Order and Determinism](../../adr/117-playback-ownership-frame-order-and-determinism.md)
 - [ADR-102: Runtime Network Modes and Authority Exposure](../../adr/102-runtime-network-modes-and-authority-exposure.md)
 - [Asset Pipeline](./asset-pipeline.md)
 - [Runtime Debug Console And Development Overlays](./debug-console-and-overlays.md)
