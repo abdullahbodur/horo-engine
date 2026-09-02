@@ -191,6 +191,10 @@ normalized locale/script evidence and policy revision, not a font filename or
 native face. Changing locale can select a different versioned fallback profile and
 therefore creates a new font/layout candidate generation.
 
+[ADR-081](081-runtime-ui-and-localization-ownership-boundary.md) owns the adjacent
+catalog/locale/formatting snapshot boundary and keeps translation, font and
+localized visual/audio asset fallback as separate revisioned decisions.
+
 ### 6. Missing-font behavior is explicit and observable
 
 Every shipping/self-contained profile includes a terminal cooked family with a

@@ -92,6 +92,7 @@ to the replacement.
 | [078](078-runtime-ui-input-context-and-player-routing.md) | Runtime UI Input Context and Player Routing | Proposed | 2026-09-02 |
 | [079](079-runtime-ui-binding-provider-schema-identity-and-lifetime.md) | Runtime UI Binding Provider Schema, Identity and Lifetime | Proposed | 2026-09-02 |
 | [080](080-runtime-ui-presentation-scope-layer-and-route.md) | Runtime UI Presentation Scope, Layer and Route | Proposed | 2026-09-02 |
+| [081](081-runtime-ui-and-localization-ownership-boundary.md) | Runtime UI and Localization Ownership Boundary | Proposed | 2026-09-02 |
 
 ## Conventions
 
