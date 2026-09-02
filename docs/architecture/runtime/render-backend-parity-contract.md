@@ -333,6 +333,19 @@ owner-thread teardown. Null proves shared resolution, mapping, saturation and
 lifecycle fixtures but cannot certify a native facility, driver message mapping,
 callback thread or validation overhead.
 
+[ADR-046 compatibility parity](../../adr/046-gpu-driver-compatibility-and-workaround-registry.md)
+requires every backend to report canonical typed environment identity and apply
+the same restrictive-only policy semantics through the frontend. Native driver
+version namespaces and private workaround implementations may differ, but generic
+code never compares driver strings or branches on vendor/device names.
+
+All matching restrictions compose conservatively and retain stable provenance.
+A backend cannot use a rule to grant support, increase limits, weaken alignment,
+switch adapter/backend or hide failure. Private routes must preserve public
+semantics and be registered/qualified before policy references them. Null validates
+matching, conflict, bounds and generation behavior synthetically; affected and
+unaffected native hardware lanes qualify each actual rule and route.
+
 In particular:
 
 - OpenGL global state is private to the OpenGL integration.
