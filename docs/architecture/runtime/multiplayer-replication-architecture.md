@@ -16,6 +16,8 @@ Horo Engine uses an authoritative server model:
 - The server runs the full simulation; clients run a predicted simulation
 - Listen servers (one client is also the server) are supported
 - Dedicated servers (headless, no rendering) are the production target
+- Replication and RPC dispatch accept only sessions published `Active` by the
+  ADR-098 admission gate; transport connectivity is not gameplay authority
 
 ```cpp
 enum class NetworkRole {
@@ -201,6 +203,8 @@ Replication does not depend on a native transport or provider identity. Session
 authentication, protocol negotiation, authority and bandwidth policy remain in
 `NetworkRuntime`; GNS packet encryption does not replace them. All transports must
 honor the same bounded queues, cancellation, malformed-input and shutdown contract.
+Before ADR-098 activation, replication messages are rejected and never buffered;
+provider identity or a claimed client role cannot grant replication authority.
 
 ## Bandwidth Management
 
@@ -227,6 +231,7 @@ Replication bandwidth is managed:
 
 - [Networking Architecture](./networking-architecture.md): transport layer and connection model
 - [ADR-097: Default Real-Time Transport Backend](../../adr/097-default-real-time-transport-backend.md): production baseline and optional provider policy
+- [ADR-098: Protocol, Session and Trust Policy](../../adr/098-protocol-session-and-trust-policy.md): pre-gameplay admission, peer trust and active-session gate
 - [Scene Runtime](./scene-runtime.md): object lifecycle and network identity
 - [Physics Architecture](./physics-architecture.md): server-side physics and prediction
 - [Save Game And Persistence](./save-game-and-persistence.md): server-side save state

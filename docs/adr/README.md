@@ -109,6 +109,7 @@ to the replacement.
 | [095](095-prefab-cook-boundary-and-artifact-model.md) | Prefab Cook Boundary and Artifact Model | Proposed | 2026-09-02 |
 | [096](096-prefab-external-reference-and-binding-slot-contract.md) | Prefab External Reference and Binding Slot Contract | Proposed | 2026-09-02 |
 | [097](097-default-real-time-transport-backend.md) | Default Real-Time Transport Backend | Proposed | 2026-09-02 |
+| [098](098-protocol-session-and-trust-policy.md) | Protocol, Session and Trust Policy | Proposed | 2026-09-02 |
 
 ## Conventions
 

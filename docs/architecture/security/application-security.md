@@ -25,6 +25,9 @@ editor and CLI hosts.
   access for remote exposure.
 - Runtime console and remote-console access are profile-gated, permission-scoped,
   and denied remotely by default.
+- Real-time transport connectivity is never application trust. `NetworkRuntime`
+  owns bounded protocol/session admission under an immutable host-selected
+  loopback, LAN or remote trust policy before gameplay dispatch.
 - Secrets remain in credential providers and short-lived secure memory.
 - Package source credentials and credential handles never enter package/project
   manifests, lockfiles, cache provenance exported to projects, logs, diagnostics
@@ -166,6 +169,40 @@ capability.
 Redirects, proxy behavior, certificate validation, and download integrity are
 explicit for update and package operations.
 
+## Real-Time Session Trust
+
+[ADR-098](../../adr/098-protocol-session-and-trust-policy.md) defines the
+real-time admission boundary. A transport `Connected` event, encrypted packet
+channel, IP address, private subnet or provider identity claim does not authorize a
+gameplay session. Before `Active`, only bounded control-channel admission messages
+may reach `SessionAdmissionController`; all gameplay/RPC/replication input is
+rejected and never queued for later dispatch.
+
+The host resolves an immutable trust-policy snapshot before listener/connect
+creation. Projects, peers and transports cannot install trust anchors, weaken
+verification or widen bind scope. Exposure requirements are:
+
+- loopback development proves both bind and peer are loopback and grants only an
+  explicit local principal or configured credential; the profile cannot bind LAN
+  or public interfaces;
+- LAN requires encryption/integrity, authenticated server identity through a
+  product trust anchor, exact pin or explicit pairing, and either a credential or
+  an explicitly bounded guest policy;
+- remote requires encryption/integrity, authenticated server identity and a
+  short-lived replay-resistant application admission proof bound to the server,
+  protocol transcript, nonces and expiry.
+
+Provider/native identity and client claims are inputs to an injected credential
+verifier, not gameplay roles. Successful verification produces a bounded immutable
+Horo principal; credential expiry or revocation closes the M0 session. Credentials,
+proofs, trust secrets and transcript secret material never enter logs, metrics,
+errors, project data or diagnostic bundles.
+
+Admission enforces finite pre-active connections, bytes, messages, fields, attempts,
+verification work, per-source rate and timeouts before expensive verification.
+Malformed, incompatible, replayed, downgraded, expired or hostile input fails
+terminally and never falls back to a weaker/guest profile.
+
 ## Diagnostic And Privacy Policy
 
 [ADR-070](../../adr/070-capture-and-voice-io-ownership.md) treats microphone,
@@ -213,6 +250,9 @@ Required tests cover:
 - plugin permission and trust checks
 - MCP authentication, authorization, and rate limiting
 - credential redaction across every signal
+- loopback/LAN/remote bind and trust-policy enforcement
+- protocol downgrade, schema/capability mismatch, wrong peer pin/root and replayed admission proof
+- pre-active gameplay denial, bounded malformed admission input, timeout, revocation and shutdown races
 - parser resource limits and malformed input
 - update signature rejection
 
@@ -225,3 +265,5 @@ Required tests cover:
 - [Runtime Debug Console And Development Overlays](../runtime/debug-console-and-overlays.md)
 - [Horo Package System](../packages/package-system.md): package trust levels and code contribution policy
 - [Error And Diagnostics](../foundation/error-and-diagnostics.md)
+- [Networking Architecture](../runtime/networking-architecture.md)
+- [ADR-098: Protocol, Session and Trust Policy](../../adr/098-protocol-session-and-trust-policy.md)
