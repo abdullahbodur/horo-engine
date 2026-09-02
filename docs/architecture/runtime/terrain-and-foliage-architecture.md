@@ -26,6 +26,9 @@ publication, aggregate activation, rollback and reverse-DAG retirement.
 [ADR-142](../../adr/142-terrain-foliage-document-tool-undo-and-preview-ownership.md)
 defines persistent authoring documents, typed tool routing, bounded tile-patch history,
 isolated preview and distinct source-save/cook/runtime-persistence boundaries.
+[ADR-143](../../adr/143-terrain-foliage-scale-budgets-observability-and-feature-boundary.md)
+defines versioned core/high-end 1.0 scale and performance workloads, required
+measurements and the explicit post-1.0 GPU-driven qualification boundary.
 
 ## Ownership And Data Boundaries
 
@@ -605,6 +608,39 @@ and the compatible cooked variant exists. Runtime never silently clamps layers, 
 instances, removes collision, changes renderer/provider or switches CPU/GPU algorithms
 to make a tier appear successful.
 
+### Qualification Profiles And Budgets
+
+Feature tiers are not benchmark profiles. ADR-143 defines two version-1 qualification
+workloads that fix content, host/recipe, environment cohort and measurements:
+
+| Required envelope | `TerrainCore1_0` | `TerrainHighEnd1_0` |
+|---|---:|---:|
+| Tile interior/stored samples | 128 x 128 quads / 129 x 129 samples | same |
+| Simultaneously Active terrain tiles | 256 | 1,024 |
+| Active foliage clusters / instances | 1,024 / 262,144 | 8,192 / 2,097,152 |
+| Terrain/Foliage steady resident bytes | 256 MiB / 256 MiB | 1,024 MiB / 1,024 MiB |
+| Staging / retiring allowance | 128 MiB / 128 MiB | 512 MiB / 512 MiB |
+| Newly committed resident payload per frame/tick epoch | 4 MiB | 16 MiB |
+
+Both qualify ADR-139's bounded CPU-selected visibility/LOD/seam and direct/instanced
+render recipe. GPU Scene, compute selection and indirect command generation are outside
+these workload identities. Post-1.0 GPU-driven support requires a new explicit recipe,
+capacities, overflow/synchronization/fallback rules and backend cohorts; it cannot
+silently satisfy or alter a version-1 result.
+
+Cold cook floors are 16/64 published terrain tiles per second and 250,000/1,000,000
+deterministically evaluated foliage placements per second for core/high-end protected
+runner cohorts. Standard editor gestures require p95 overlay/commit latency no greater
+than 16.67/100 ms for core and 8.33/50 ms for high-end. Headless fixed-tick Terrain
+owner work is capped at p95 0.50/1.50 ms; visual CPU work, GPU bytes and draw/dispatch/
+submit counts are exactly zero. Required metric absence invalidates qualification rather
+than becoming zero.
+
+These numbers are workload gates, not automatic runtime allowances or TRF-001.3
+descriptor maxima. World Streaming retains aggregate admission, every byte is charged
+once through its existing ledger, and the high-end envelope requires an explicitly
+larger product/runner global budget.
+
 ## Verification
 
 Required coverage includes:
@@ -652,7 +688,13 @@ Required coverage includes:
 - authoring failure/cancel/stale completion preserving source revision, dirty state,
   history and notifications at every staged boundary; and
 - source save, autosave/recovery, transient preview cook, published cook and Runtime Save
-  state separation, including isolated preview teardown and stale-result rejection.
+  state separation, including isolated preview teardown and stale-result rejection;
+- exact core/high-end active-count, resident/staging/retirement and per-epoch streaming
+  boundaries, including one-over-limit denial with checked accounting;
+- protected-cohort cold cook, editor p95 and headless overhead gates with required metric
+  availability, fixed fixtures and no invalid sample removal; and
+- CPU-selected 1.0 recipe enforcement plus rejection of undeclared GPU-driven/fallback
+  work under the same workload identity.
 
 ## Related Documents
 
@@ -694,3 +736,6 @@ Required coverage includes:
 - [ADR-142](../../adr/142-terrain-foliage-document-tool-undo-and-preview-ownership.md):
   persistent authoring documents, typed tool routing, bounded tile-patch undo/redo,
   isolated preview and source-save/cook/runtime-persistence separation
+- [ADR-143](../../adr/143-terrain-foliage-scale-budgets-observability-and-feature-boundary.md):
+  core/high-end scale, memory, streaming, cook, editor and headless gates, required
+  observability and core-1.0 versus post-1.0 recipe qualification

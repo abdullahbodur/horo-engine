@@ -317,6 +317,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Terrain/Foliage Document, Tool, Undo and Preview Ownership](../adr/142-terrain-foliage-document-tool-undo-and-preview-ownership.md):
   persistent authoring documents, typed tool routing, bounded tile-patch history,
   isolated preview and distinct source-save/cook/runtime-persistence boundaries.
+- [Terrain/Foliage Scale Budgets, Observability and Feature Boundary](../adr/143-terrain-foliage-scale-budgets-observability-and-feature-boundary.md):
+  versioned core/high-end active scale, memory, streaming, cook, editor/headless gates,
+  required measurements and core-1.0 versus post-1.0 recipe qualification.
 - [World Streaming Architecture](./runtime/world-streaming-architecture.md):
   streaming cells, volumes, priority, budgets, server authority, and editor
   world-composition tools.
