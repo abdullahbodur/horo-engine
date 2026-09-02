@@ -147,6 +147,9 @@ dependency direction in [System Design](./foundation/system-design.md).
   materials, and surface events.
 - [Physics Architecture](./runtime/physics-architecture.md): fixed-step world
   ownership, transform authority, collision events, queries, and determinism.
+- [Canonical Physics Solver, Units and Tolerances](../adr/084-canonical-physics-solver-units-and-tolerances.md):
+  pinned Jolt baseline, private native boundary, SI/right-handed Y-up conventions,
+  fp32 local clusters, tolerance/scale profile, platforms, licensing, and upgrades.
 - [Audio Architecture](./runtime/audio-architecture.md): ADR-backed ownership,
   clocks, formats, assets, mixer, spatial, devices, tooling and explicit 1.0 versus
   Post-1.0 product boundaries.

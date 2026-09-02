@@ -20,6 +20,46 @@ debugging for Horo Engine.
 - Physics queries use explicit snapshots or world affinity.
 - Backend-independent engine contracts do not expose solver implementation
   details.
+- [ADR-084](../../adr/084-canonical-physics-solver-units-and-tolerances.md)
+  selects pinned Jolt v5.6.0 as the one private initial solver; it does not create
+  a runtime multi-solver ABI.
+
+## Canonical Solver, Units And Tolerance Profile
+
+CanonicalV1 pins Jolt `v5.6.0` at commit
+`e77f175595e64cb44218cc9d9d56fc365ad0e36a`, float precision and a serial Horo-
+owned job profile. Jolt types, handles, listeners, locks, allocators, job objects
+and binary state stay private to `HoroEngine::Physics`; public/scene/gameplay
+contracts expose only Horo values and generation-checked handles.
+
+Physics uses SI units: meters, seconds, kilograms, radians, newtons and derived SI
+units. It shares Scene Math's right-handed, `+Y`-up, `-Z`-forward, column-vector
+convention without a hidden axis/unit conversion. Default gravity is
+`(0, -9.81, 0) m/s²`. Foreign content normalizes at import; Physics never guesses
+centimeters or per-body scale.
+
+The ADR-026 local float cluster has a hard half-extent of `8192 m` and a qualified
+high-fidelity dynamic-contact radius of `4096 m`. Canonical ordinary dynamic
+objects are `0.1..10 m`, static objects `0.1..2000 m`, and speeds `0..500 m/s`.
+Out-of-profile data is diagnosed/rejected, not silently clamped.
+
+`PhysicsToleranceProfileId::CanonicalV1` pins collision tolerance `1e-4 m`,
+manifold tolerance `1e-3 m`, speculative distance and penetration slop `0.02 m`,
+maximum correction `0.2 m`, warm-contact distance `0.01 m`, sleep velocity
+`0.03 m/s`, sleep time `0.5 s`, and solver iterations `10/2`. Exact identities,
+events, layers and serialization never use these as a generic epsilon.
+
+Initial Horo qualification covers macOS 14+ arm64/x86_64, Windows 11 x86_64 and
+Ubuntu 24.04 x86_64, including headless compositions. Android, iOS, WebAssembly,
+other architectures and consoles remain unqualified/unsupported for shipped Horo
+Physics until their explicit matrix exists. Upstream build support alone is not a
+Horo support claim.
+
+Jolt is distributed under MIT with pinned license/notice/SBOM inputs. Solver
+upgrades are dedicated compatibility changes reviewing release/API/default drift,
+compile definitions, derived-cache invalidation, platform qualification,
+performance and rollback. Horo never persists Jolt binary state as project/save
+authority.
 
 ## Ownership
 

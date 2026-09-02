@@ -60,8 +60,14 @@ Key design constraints:
    - The active `PhysicsWorld` resides entirely in local rebased cluster coordinates within $[-R_{\text{physics}}, +R_{\text{physics}}]$ (default $8192\,\text{m}$). $R_{\text{physics}}$ is independent of $R_{\text{threshold}}$ (default $1000\,\text{m}$); see the normative document.
    - On `OriginRebaseEvent`, the physics adapter shifts body spatial structures by $-\Delta_{\text{origin}}$ without modifying linear or angular velocities, contact manifold caches, or sleeping states.
    - Audio listeners/emitters, VFX particle buffers, navigation agent waypoints, and camera rigs apply $-\Delta_{\text{origin}}$ cleanly without timing or derivative artifacts.
+
 5. **Fallible Boundaries and Typed Errors**:
    - All spatial transformations, conversions, and rebase transactions return `Horo::Result<T, Error>` under the `horo.runtime.precision` and `horo.runtime.world_streaming` error domains per [ADR-008](008-error-model-exception-boundary-and-registry.md).
+
+[ADR-084](084-canonical-physics-solver-units-and-tolerances.md) specializes this
+local Physics cluster as pinned float-precision Jolt CanonicalV1, with a `4096 m`
+qualified high-fidelity dynamic-contact radius inside the existing `8192 m` hard
+half-extent and explicit SI/tolerance/scale policy.
 
 ---
 
