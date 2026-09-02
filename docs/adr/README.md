@@ -75,6 +75,7 @@ to the replacement.
 | [061](061-animation-ownership-update-order-and-clock.md) | Animation Ownership, Update Order and Clock | Proposed | 2026-09-02 |
 | [062](062-audio-runtime-ownership-and-update-order.md) | Audio Runtime Ownership and Update Order | Proposed | 2026-09-02 |
 | [063](063-audio-sample-format-and-channel-layout.md) | Audio Sample Format and Channel Layout | Proposed | 2026-09-02 |
+| [064](064-audio-asset-and-cook-boundary.md) | Audio Asset and Cook Boundary | Proposed | 2026-09-02 |
 
 ## Conventions
 

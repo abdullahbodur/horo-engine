@@ -632,11 +632,40 @@ ownership, and C++ object ownership do not cross that ABI. The adapter must
 validate all output before it can enter the cache or a candidate cooked
 generation, so external and built-in contributions cannot bypass host invariants.
 
+### Audio Domain Import And Cook Boundary
+
+[ADR-064](../../adr/064-audio-asset-and-cook-boundary.md) is the single
+normative owner of the Audio/AST import, cook, cache, publication, and runtime
+media boundary. AST owns stable asset identity, source and sidecar access,
+generic orchestration, resource limits, dependency-aware cache keys, staging,
+atomic publication, rollback, and runtime artifact delivery. It treats Audio
+domain values as validated typed contribution data and does not parse codecs,
+choose channel layouts, interpret loop or gapless metadata, or select runtime
+decode policy.
+
+AudioModel and AudioCook own the audio source extractors, container and codec
+registry, authoring and cooked schemas, typed cook profiles, resampling and
+layout conversion, analysis, the deterministic audio fingerprint, logical
+outputs, and runtime compatibility requirements. The host composition root
+registers those contributions through the generic catalog. The Assets targets
+never depend on Audio targets, and Audio does not create a parallel scheduler,
+cache, output tree, publication record, or asset identity.
+
+AST validates the contribution envelope and declared outputs, then publishes a
+complete generation atomically. AudioRuntime consumes immutable published bytes
+through the Assets provider API and validates the Audio-owned cooked header
+before preparing resident or streamed state. Source decoding, file access, and
+asset-provider calls never occur on the audio callback.
+
 ### Determinism And Failure Invariants
 
-A cooker receives an invocation-bounded immutable borrowed source view, immutable
-host-canonical cooker-input metadata, a typed target, and cancellation. Before
-invocation, the host serializes exactly the fields that the current metadata
+A cooker receives an invocation-bounded immutable source input, immutable
+host-canonical cooker-input metadata, a typed target, and cancellation. A
+contribution may receive a contiguous borrowed view only when the admitted source
+fits that contract; oversized or seek-oriented formats receive a bounded seekable
+reader backed by host-owned storage. The reader uses caller-provided buffers,
+enforces byte/read/seek limits, and cannot be retained beyond the invocation.
+Before invocation, the host serializes exactly the fields that the current metadata
 schema declares cooker-visible into `canonicalCookerMetadataBytes`: fields use
 schema-defined order, scalar encodings are fixed, strings are UTF-8, and repeated
 or map values are sorted by their canonical encoded key. The serialization is
@@ -647,8 +676,8 @@ diagnostics, and editor/UI state are not cooker input. Its cryptographic digest
 and the metadata `schemaVersion` are immutable canonical inputs; arbitrary mutable
 metadata is not.
 
-The host retains ownership of the bounded source and metadata storage for the
-entire invocation. Given the same complete `CacheKeyV1` inputs defined in
+The host retains ownership of the bounded source/reader and metadata storage for
+the entire invocation. Given the same complete `CacheKeyV1` inputs defined in
 [Incremental Cook And Cache Reuse](#incremental-cook-and-cache-reuse), the cooker
 must deterministically emit byte-identical payload, dependency, and diagnostic
 outputs through the host-owned writers. The host operation validates those

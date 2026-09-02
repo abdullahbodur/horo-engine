@@ -155,6 +155,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Audio Sample Format and Channel Layout](../adr/063-audio-sample-format-and-channel-layout.md):
   planar binary32 processing, explicit speaker/Ambisonic order, alignment,
   silence, denormals, layout conversion, and clipping boundaries.
+- [Audio Asset and Cook Boundary](../adr/064-audio-asset-and-cook-boundary.md):
+  generic AST orchestration and publication, Audio-owned media semantics,
+  deterministic cook identity, and runtime payload validation.
 - [Input Architecture](./runtime/input-architecture.md): input snapshots, action
   maps, focus, capture, modal routing, and simulation input frames.
 - [Game UI And HUD](./runtime/game-ui-and-hud.md): runtime game menus, HUDs,
