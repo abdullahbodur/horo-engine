@@ -86,6 +86,12 @@ GUI       CLI       MCP       CI
 `ReleaseService` owns use-case validation, job lifecycle, cancellation,
 progress, and structured results.
 
+[ADR-060](../../adr/060-release-domain-model-and-state-machine.md) defines the
+authoritative typed identities, single-target job state, stage attempts,
+candidate state, revisioned snapshots, terminal results and ownership rules.
+Adapters and the operation store project that model; they do not own or
+reinterpret it.
+
 `ReleasePipeline` owns deterministic execution of release stages. It does not
 depend on ImGui, terminal formatting, MCP transport, or CI-provider APIs.
 
@@ -124,13 +130,25 @@ Secrets are referenced through credential handles. Passwords, private keys, and
 tokens are not stored directly in release request objects or persistent job
 history.
 
-## Pipeline Stages
+## Job And Pipeline State
 
-Every release follows an explicit state machine:
+Each target is an independent job under ADR-060. Job ownership and stage attempts
+are separate state machines. A job follows:
 
 ```text
-Pending
-  -> Validating
+Queued -> Running -> Succeeded
+   |         |  \
+   |         |   -> Failed
+   |         -> Cancelling -> Cancelled
+   |                         -> Failed
+   -> Cancelled
+   -> Failed
+```
+
+The pipeline position for each target follows the planned stage order:
+
+```text
+Validating
   -> Configuring
   -> Building
   -> Cooking
@@ -140,10 +158,15 @@ Pending
   -> FinalizingMetadata
   -> FinalVerifying
   -> Publishing
-  -> Succeeded
 ```
 
-Any active stage may transition to `Failed` or `Cancelled`.
+Each stage is a distinct attempt with `NotStarted`, `Running`, `Succeeded`,
+`Failed`, `Cancelled`, or preplanned `NotApplicable` state. An attempt never
+rewrites a previous attempt, and the job terminal result commits exactly once.
+`Cancelling` remains non-terminal until cleanup acknowledges cancellation or
+reports failure. A queued job not yet admitted to a worker owns no pipeline
+resources and may atomically commit `Cancelled`; an admission/cancel race is
+serialized by the release service.
 
 Stage contracts:
 
@@ -171,6 +194,11 @@ Stage contracts:
 Stages publish typed progress events and structured diagnostics. A failed stage
 does not silently continue into later stages.
 
+Events are bounded invalidations carrying job revision and typed identities.
+Observers query immutable service snapshots for authoritative state. Closing a
+modal, terminal view, MCP connection or CI log subscriber releases only that
+observer and never changes job lifetime.
+
 ## Build & Release Modal Design
 
 `BuildReleaseModal` is hosted by `EditorModalHost` and presents the release job
@@ -196,9 +224,11 @@ Local GUI and CLI invocations may execute one or more jobs, but each job remains
 independent and validates its own toolchain. Cross-compilation is allowed only
 when an explicit compatible toolchain profile is configured.
 
-CI creates a matrix of independent release jobs and aggregates their verified
-outputs. A failed target cannot be represented as a successful multi-platform
-release.
+CI creates a service-owned `ReleaseGroupId` with immutable required/optional
+membership for a matrix of independent release jobs and aggregates their verified
+outputs by that identity. Adapters never infer a matrix from labels, timestamps,
+paths or request order. A failed required target cannot be represented as a
+successful multi-platform release.
 
 ## Output Layout
 
