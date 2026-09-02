@@ -25,7 +25,13 @@ budget changes; the manager never maintains a competing residency cache.
 | Scene Runtime | Detached ECS candidates and transactional structural commit | Cell relevance, topology or load priority |
 | Asset Pipeline | Registry/catalog, cooked bytes, validation and bounded I/O | Camera/relevance policy or entity activation |
 | Feature providers | Domain-specific candidate resources, native affinity, readiness/retirement acknowledgement | Independent world-cell loads, residency decisions or budget expansion |
+| Virtual Texturing | Feature-local page demand, selection and eviction within an admitted reservation | Cell relevance, aggregate budgets, activation barriers or independent cell eviction |
 | Editor | Authoring document, independent paging/pins, offline bake and isolated preview | Destructive coupling to runtime cell eviction |
+
+Virtual Texturing participates through the feature-provider boundary defined by
+[ADR-164](../../adr/164-virtual-texturing-ownership-product-scope-and-capability-tier.md).
+Its page readiness may contribute to a cell barrier, but it cannot run a competing
+world scheduler or turn page pressure into an implicit cell transition.
 
 ```mermaid
 flowchart TD

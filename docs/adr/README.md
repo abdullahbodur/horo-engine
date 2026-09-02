@@ -169,6 +169,13 @@ to the replacement.
 | [155](155-pcg-graph-document-preview-bake-and-undo-ownership.md) | PCG Graph Document, Preview, Bake and Undo Ownership | Proposed | 2026-09-02 |
 | [156](156-pcg-scale-budgets-trust-and-release-scope.md) | PCG Scale Budgets, Trust and Release Scope | Proposed | 2026-09-02 |
 | [157](157-xr-ownership-runtime-composition-and-capability-tier.md) | XR Ownership, Runtime Composition and Capability Tier | Proposed | 2026-09-02 |
+| [158](158-openxr-loader-backend-packaging-and-host-composition.md) | OpenXR Loader, Backend Packaging and Host Composition | Proposed | 2026-09-02 |
+| [159](159-xr-action-tracking-and-input-projection-ownership.md) | XR Action, Tracking and Input-Projection Ownership | Proposed | 2026-09-02 |
+| [160](160-xr-rendering-openxr-compositor-and-renderer-ownership.md) | XR Rendering, OpenXR Compositor and Renderer Ownership | Proposed | 2026-09-02 |
+| [161](161-xr-interaction-runtime-ui-locomotion-and-accessibility-ownership.md) | XR Interaction, Runtime UI, Locomotion and Accessibility Ownership | Proposed | 2026-09-02 |
+| [162](162-mixed-reality-ownership-privacy-and-capability-tier.md) | Mixed-Reality Ownership, Privacy and Capability Tier | Proposed | 2026-09-02 |
+| [163](163-xr-tooling-diagnostics-privacy-and-qualification-ownership.md) | XR Tooling, Diagnostics, Privacy and Qualification Ownership | Proposed | 2026-09-02 |
+| [164](164-virtual-texturing-ownership-product-scope-and-capability-tier.md) | Virtual Texturing Ownership, Product Scope and Capability Tier | Proposed | 2026-09-02 |
 
 ## Conventions
 
