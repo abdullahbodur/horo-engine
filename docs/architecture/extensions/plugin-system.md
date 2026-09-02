@@ -1020,6 +1020,11 @@ module API:
 If any invariant cannot be proven, restart remains the only supported unload
 path.
 
+One provider may retain at most its active generation and one draining
+predecessor. Further update candidates are coalesced without activation; a drain
+deadline or retained-code budget breach requires restart instead of accumulating
+loaded libraries.
+
 ## Failure Isolation
 
 Extension callbacks are guarded at host boundaries. A module error disables the
