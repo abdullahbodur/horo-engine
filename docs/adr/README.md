@@ -104,6 +104,7 @@ to the replacement.
 | [090](090-character-dynamic-body-visibility-push-and-proxy-policy.md) | Character Dynamic-Body Visibility, Push and Proxy Policy | Proposed | 2026-09-02 |
 | [091](091-footstep-and-locomotion-event-ownership.md) | Footstep and Locomotion Event Ownership | Proposed | 2026-09-02 |
 | [092](092-character-controller-determinism-and-state-composition.md) | Character Controller Determinism and State Composition | Proposed | 2026-09-02 |
+| [093](093-prefab-override-property-identity-and-delta-operations.md) | Prefab Override Property Identity and Delta Operations | Proposed | 2026-09-02 |
 
 ## Conventions
 

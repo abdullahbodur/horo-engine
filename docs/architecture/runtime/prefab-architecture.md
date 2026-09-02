@@ -129,6 +129,11 @@ own those delivery decisions:
 
 ### Tier 2: Live Variant Inheritance & Dynamic Override Tracking (Deferred)
 
+[ADR-093](../../adr/093-prefab-override-property-identity-and-delta-operations.md)
+fixes the property/component identity and delta foundation used by this tier. It
+does not move the tier into the implemented baseline; hierarchy object operations,
+variant DAG delivery and UI remain their owning PFB-003 work.
+
 - **Prefab Variants**: A variant `.prefab` references a parent base prefab `AssetId` and stores
   only delta overrides (modified property fields, added/removed components, extra child objects).
 - **Variant Inheritance DAG**: Multi-level variant chains (`Base -> VariantA -> VariantB`) validated
@@ -137,6 +142,46 @@ own those delivery decisions:
   scenes referencing the prefab, and active viewport sessions update in real time.
 - **Granular Override Management**: Deep per-property diffing, revert-to-prefab, and apply-to-prefab
   workflows in the Inspector panel.
+
+### Stable Override Identity And Delta Algebra
+
+Overrides address the exact source `AssetId`/revision, nested `LocalObjectId` scope,
+target `LocalObjectId`, registered `ComponentTypeId`, persisted
+`ComponentInstanceId` and typed `PropertyId` path. Built-in and project/package
+components use the same schema registry. Display/localization/JSON/C++ names,
+offsets, reflection/component order and collection indexes are never durable
+identity.
+
+Collections declare `Atomic`, `StableElements` or `CanonicalMap`. An unkeyed
+sequence accepts only whole-property assignment. Granular element operations use a
+persisted `CollectionElementId` or canonical typed map key and stable move anchors.
+
+V1's closed operations are `AssignValue`, `InsertElement`, `RemoveElement`,
+`MoveElement`, `AssignElementValue`, `AddComponent` and `RemoveComponent`. Revert
+removes the corresponding record through an Editor command; it is not a serialized
+operation. Hierarchy add/remove/reparent remains a separate decision and is rejected
+by this algebra.
+
+Records carry exact source/schema revision and canonical expected-value/component
+digests. They sort canonically by object scope, local object, component type/
+instance, property path, target class and operation rank. Duplicate/conflicting
+same-layer operations fail rather than using serialized last-write-wins order.
+
+Schema canonical bytes own equality. The comparison default is the exact effective
+immediate source-layer value, not the current registry default or Inspector string.
+Equal assignments are removed as redundant; added components store a complete
+validated payload so later default changes cannot reinterpret them.
+
+Source updates produce a detached deterministic three-way rebase candidate.
+Simultaneous incompatible changes become explicit conflicts; missing/retyped/
+unresolvable targets become losslessly preserved orphans. IDs retarget only through
+registered ProjectVersion/schema migrations. Opening, saving or package unload
+never guesses or drops records.
+
+Apply, revert, conflict resolution, rebase and apply-to-prefab run through typed
+document/application transactions with undo/history, revision, dirty-state and
+atomic-save semantics. Inspector/file-watcher/serializer code does not mutate the
+document or `.prefab` file directly.
 
 ---
 
@@ -420,7 +465,8 @@ To support modular gameplay packages and project-specific C++ plugins:
 
    ```cpp
    struct RawComponentPayload {
-       std::string componentTypeId;
+       ComponentTypeId componentType;
+       ComponentInstanceId componentInstance;
        std::uint32_t schemaVersion{1};
        std::vector<std::uint8_t> serializedBytes;
    };
@@ -432,6 +478,12 @@ To support modular gameplay packages and project-specific C++ plugins:
 3. **Runtime Spawning Safety**: If an unregistered component type is encountered during runtime
    spawn, the transaction aborts before publishing entities or invoking behavior lifecycle hooks.
    Staging discards unpublished storage (no gameplay behavior instance was constructed) and returns `PrefabError::ComponentTypeUnregistered`.
+
+Unknown override records for that component preserve their stable component/property
+envelope and original bounded canonical bytes as ADR-093 orphans. Package unload,
+round-trip save or source rebase cannot translate them through display names or
+discard them. Cook/runtime expansion remains blocked until the schema is available
+and the records validate or an explicit transaction deletes them.
 
 ---
 
@@ -502,6 +554,14 @@ enum class PrefabError : std::uint32_t {
 | **Lifecycle** | Created-disabled behavior | `OnCreate` runs; `OnEnable`/`OnStart` wait for first enable |
 | **Lifecycle** | Post-commit behavior construction or hook fault | Structural spawn remains committed; fault reported; normal teardown |
 | **Cook** | Nested dependency, target, settings, or version changes | Full canonical cache key changes; no stale artifact reuse |
+| **Identity** | Built-in/project component and property renamed or reordered | Stable IDs retain target; labels/offsets/order are irrelevant |
+| **Identity** | Same component type appears twice on one object | Persisted `ComponentInstanceId` selects the exact occurrence |
+| **Identity** | Source inserts before an overridden collection element | Stable element ID remains targeted; unkeyed numeric path is rejected |
+| **Valid** | Assign/insert/remove/move/add-component/remove-component override | Canonical typed delta resolves in stable order |
+| **Malformed** | Duplicate/conflicting operation targets in one layer | Reject; no last-write-wins or partial candidate |
+| **Lifecycle** | Source and override change the same value incompatibly | Preserve explicit three-way conflict and original override bytes |
+| **Lifecycle** | Source deletes/retypes target or package schema unloads | Preserve orphan/opaque record; cook blocked until explicit resolution |
+| **Lifecycle** | Revert/rebase/apply-to-prefab fails or is cancelled | Document/source/override/history remain unchanged |
 
 ---
 
