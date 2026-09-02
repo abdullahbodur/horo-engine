@@ -314,6 +314,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Terrain/Foliage Cross-System Ownership and Readiness](../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md):
   immutable producer snapshots, typed Render/Physics/Navigation receipts, owner-safe-
   point staging, aggregate activation, rollback and reverse-dependency retirement.
+- [Terrain/Foliage Document, Tool, Undo and Preview Ownership](../adr/142-terrain-foliage-document-tool-undo-and-preview-ownership.md):
+  persistent authoring documents, typed tool routing, bounded tile-patch history,
+  isolated preview and distinct source-save/cook/runtime-persistence boundaries.
 - [World Streaming Architecture](./runtime/world-streaming-architecture.md):
   streaming cells, volumes, priority, budgets, server authority, and editor
   world-composition tools.

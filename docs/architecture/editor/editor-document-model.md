@@ -434,6 +434,31 @@ diagnostics and fixture inputs are disposable generation-fenced state. They do n
 mutate documents or publish into live gameplay/Audio/event authorities. Close/project
 teardown cancels derived work and retires resources through normal runtime boundaries.
 
+## Terrain And Foliage Authoring Documents
+
+[ADR-142](../../adr/142-terrain-foliage-document-tool-undo-and-preview-ownership.md)
+specializes this contract for asset-rooted terrain datasets. Their dataset-local
+foliage placement source is part of the same document, while reusable foliage-type
+definitions remain separate referenced asset documents. Document services own
+canonical height/weight/hole/spline/placement state,
+revision, typed commands, bounded history, dirty/save/recovery/conflict and derived
+preview revisions. Toolbars, viewport tools, palettes and overlays own presentation and
+input only; runtime and cooked tiles are never editable document storage.
+
+Each `TerrainEditOperation` preflights an exact canonical closure of affected tile/patch
+rectangles, including seams, aprons and placement dependencies. One atomic history
+record stores lossless bounded `before` and `after` values. Whole-heightfield/dataset
+copies per edit, partial tile commits and undo by rerunning a brush, noise or scatter
+algorithm are prohibited. A continuous gesture may show a disposable revision-fenced
+overlay but commits at most one history transaction.
+
+Heavy work uses immutable snapshots and document-owned cancellable task groups; only
+the document owner may revalidate and commit a matching completion. Source save, editor
+autosave/recovery, transient preview cook, published Asset cook and Runtime Save/
+Persistent World foliage deltas remain independent. High-fidelity preview activates
+ordinary Terrain runtime contracts in an isolated generation-fenced session and never
+mutates the document or a live gameplay world.
+
 ## Runtime Conversion
 
 The document converts to `RuntimeSceneDefinition` through an editor service.
@@ -534,6 +559,14 @@ Required tests cover:
 - VFX preview compiles an immutable document revision and executes normal runtime
   services; stale derived work, tab/project teardown and decal-gizmo cancel/commit
   cannot mutate either VfxEffectDocument or SceneDocument unexpectedly
+- terrain/foliage tools produce canonical bounded affected tile/patch closures and one
+  exact before/after history entry per gesture without whole-heightfield copies
+- terrain/foliage apply, undo and redo are symmetric without reading current tool state
+  or rerunning brush/noise/scatter algorithms
+- stale/cancelled terrain edit and preview completions cannot mutate document, dirty,
+  history, cook or live runtime state across edit, reload, close or project shutdown
+- terrain source save, autosave/recovery, preview cook, published cook and Runtime Save
+  foliage persistence advance independently
 
 ## Related Documents
 
@@ -548,3 +581,4 @@ Required tests cover:
 - [Save Game And Persistence](../runtime/save-game-and-persistence.md)
 - [Cinematic Sequencer](../runtime/cinematic-sequencer-architecture.md)
 - [VFX And Particles](../runtime/vfx-and-particles-architecture.md)
+- [Terrain And Foliage](../runtime/terrain-and-foliage-architecture.md)
