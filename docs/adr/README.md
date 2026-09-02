@@ -177,6 +177,7 @@ to the replacement.
 | [163](163-xr-tooling-diagnostics-privacy-and-qualification-ownership.md) | XR Tooling, Diagnostics, Privacy and Qualification Ownership | Proposed | 2026-09-02 |
 | [164](164-virtual-texturing-ownership-product-scope-and-capability-tier.md) | Virtual Texturing Ownership, Product Scope and Capability Tier | Proposed | 2026-09-02 |
 | [165](165-virtual-texture-source-cooked-artifact-page-store-and-cache-ownership.md) | Virtual Texture Source, Cooked Artifact, Page Store and Cache Ownership | Proposed | 2026-09-02 |
+| [166](166-vtx-feature-local-residency-and-eviction-within-global-reservations.md) | VTX Feature-Local Residency and Eviction Within Global Reservations | Proposed | 2026-09-02 |
 
 ## Conventions
 
