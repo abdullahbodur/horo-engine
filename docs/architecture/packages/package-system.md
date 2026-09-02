@@ -22,6 +22,12 @@ package model authoritative for extension-only and hybrid packages as well as
 asset, game-library and template packages. ExtensionHost consumes verified
 activation candidates; it is not a second resolver, installer or trust store.
 
+[ADR-057](../../adr/057-package-manifest-v1-typed-model.md) defines the only
+public package-manifest value model. TOML decoding, semantic validation, bundle
+verification and install/source policy are separate stages; only an immutable
+validated model bound to its exact file manifest, archive and signature evidence
+may enter resolution, lifecycle, activation or release planning.
+
 The package system is not a replacement for the asset importer or the extension
 system:
 
@@ -52,37 +58,42 @@ and require separate trust approval.
 
 ```cpp
 enum class HoroPackageKind {
-    AssetPackage,
-    GameLibrary,
-    ExtensionPackage,
-    HybridPackage,
-    TemplatePackage,
+    Data,
+    Tool,
+    Extension,
+    GameplayLibrary,
+    Hybrid,
+    Template,
 };
 ```
 
-`PackageContributionKind` describes package contents:
+Package contribution payloads are a closed typed variant rather than an enum plus
+an arbitrary property map:
 
 ```cpp
-enum class PackageContributionKind {
-    Assets,
-    Scripts,
-    Behaviors,
-    RuntimeServices,
-    EditorExtension,
-    Samples,
-    Templates,
-    Documentation,
-};
+using PackageContributionPayload = std::variant<
+    PackageDataContribution,
+    PackageToolContribution,
+    PackageExtensionContribution,
+    PackageGameplayContribution,
+    PackageScriptContribution,
+    PackageServiceContribution,
+    PackageSampleContribution,
+    PackageTemplateContribution,
+    PackageDocumentationContribution>;
 ```
 
-Contribution kinds are validated independently. A `HybridPackage` may declare
-runtime and editor contributions, but editor contributions are not activated
-unless the extension trust flow succeeds.
+Contribution payloads are validated independently. A `Hybrid` package may
+declare runtime and editor contributions, but editor contributions are not
+activated unless the extension trust flow succeeds.
 
-An `ExtensionPackage` contains one or more extension descriptors and may include
+An `Extension` package contains one or more extension descriptors and may include
 only their declared binaries, scripts, resources, schemas, licenses and
 documentation. A package that also contributes project assets, gameplay code or
-services is a `HybridPackage`; both shapes use the same package authority.
+services is `Hybrid`; both shapes use the same package authority. `Data` cannot
+contain executable/script/module artifacts, and `Tool` execution is always an
+explicit host-gated operation rather than an install/restore hook. Complete shape
+invariants and legacy-kind migration are defined by ADR-057.
 
 ## Package Operations
 
@@ -98,7 +109,22 @@ Install, trust, enable, and activation are separate lifecycle steps. See
 
 ## Manifest Format
 
+The signed/distributed `horo-package.toml` is the canonical serialized projection
+of `ValidatedPackageManifestV1`; it is not exposed as a TOML DOM or string map to
+consumers. Every ID, semantic version/range, kind, scope, platform/architecture,
+ABI, capability, module, artifact, contribution, content set, license and
+signature requirement decodes into its owning bounded type. Source selection,
+credentials, trust decisions, cache/install state and lock resolution are not
+package-manifest fields.
+
+The following is an authoring-format example, not canonical distribution bytes.
+Authoring tools may preserve its comments and contribution-root shorthand, then
+must expand it into the complete typed reference graph and emit deterministic,
+comment-free canonical TOML before signing or publication.
+
 ```toml
+schemaVersion = 1
+
 [package]
 id = "com.example.horo.gun-pack"
 version = "1.2.3"
@@ -115,9 +141,23 @@ scriptRuntime = "lua-1"
 assetArchiveFormat = "1"
 platforms = ["windows-x64", "linux-x64", "macos-arm64"]
 
-[dependencies]
-"com.horo.input" = { version = "^1.0.0", contributions = ["runtime"] }
-"com.horo.editor.widgets" = { version = "^2.0.0", contributions = ["editor"] }
+[[dependency]]
+id = "input-runtime"
+package = "com.horo.input"
+versions = "^1.0.0"
+requirement = "required"
+scopes = ["runtime"]
+requiredFeatures = []
+requiredContributions = []
+
+[[dependency]]
+id = "editor-widgets"
+package = "com.horo.editor.widgets"
+versions = "^2.0.0"
+requirement = "optional"
+scopes = ["editor"]
+requiredFeatures = []
+requiredContributions = []
 
 # Shorthand contribution roots. The verifier expands these into typed
 # contribution descriptors before install/activation.
@@ -181,10 +221,17 @@ every file in the archive must be declared. The verifier rejects undeclared
 executable files, duplicate normalized paths, unsafe links, path traversal, and
 files outside declared contribution roots.
 
+The file inventory has its own immutable typed model. `VerifiedPackageBundle`
+binds package-manifest, file-manifest and archive digests plus verified detached
+signature evidence. Every module/artifact/content/contribution reference resolves
+to exact `PackageFileId` values before publication; author-declared publisher keys
+never become trust roots by themselves.
+
 ## Contribution Descriptors
 
-Folder-based contribution declarations are shorthand only. Before install or
-activation, the verifier expands them into typed descriptors that declare:
+Folder-based contribution declarations are authoring shorthand only. Before
+canonical publication, authoring tools expand them into typed module, artifact,
+content-set, file and contribution descriptors that declare:
 
 - contribution kind
 - stable contribution ID
@@ -197,8 +244,9 @@ activation, the verifier expands them into typed descriptors that declare:
 - supported platform and architecture for native binaries
 - required capabilities
 
-Activation, release inclusion, conflict checks, and dependency resolution use the
-expanded descriptors, not raw folder names.
+Activation, release inclusion, conflict checks and dependency resolution use the
+closed typed payloads and reference graph, not raw folder names. Shorthand is not
+present in a validated distribution manifest.
 
 ### Extension Descriptor Boundary
 
@@ -568,6 +616,11 @@ or sensitive local paths.
 ## Required Tests
 
 - manifest schema validation
+- canonical round-trip for pure data, tool, extension, gameplay-library, hybrid,
+  and template packages
+- package kind/contribution/artifact shape mismatch rejection
+- decoded or partially validated manifests cannot enter resolver/lifecycle APIs
+- package/file/archive/signature digest binding and trusted-root verification
 - package archive layout validation
 - package source validation
 - direct URL without hash rejected
