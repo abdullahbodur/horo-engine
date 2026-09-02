@@ -308,6 +308,22 @@ authority. Module/script unload and grant revocation close admission and generat
 fence late preparation/start results. Denial returns a typed result and creates no
 player, lease, event, Audio/VFX request or partial effect.
 
+### VFX Gameplay Payload Capability
+
+[ADR-123](../../adr/123-vfx-cpu-stage-order-determinism-and-gameplay-coupling.md)
+keeps CPU particle storage and stage execution inside `VfxWorld`. Gameplay modules and
+scripts can submit only declared schema/range-checked `GameplayInput` parameters before
+the VFX tick cutoff and consume bounded `GameplayOutput` occurrences or effect-level
+aggregate snapshots after VFX commit at their owner boundary. They never receive a
+mutable SoA span, particle slot/index, stage callback or arbitrary force/collision
+kernel hook.
+
+Private/render channel access, wrong-stage writes, stale scene/emitter/schema identity,
+nonfinite values and output-capacity failure return typed results with zero mutation.
+GPU readback and Null/visual output cannot drive authoritative gameplay. A behavior
+needing particle-derived gameplay declares a CPU-mandatory compiled unit and admits
+its worst-case work/output capacity.
+
 ## Services
 
 A game module may create project- or runtime-scoped services through explicit

@@ -134,6 +134,7 @@ to the replacement.
 | [120](120-cinematic-event-dispatch-and-audio-coupling-boundary.md) | Cinematic Event Dispatch and Audio Coupling Boundary | Proposed | 2026-09-02 |
 | [121](121-cinematic-editor-document-and-authoring-context.md) | Cinematic Editor Document and Authoring Context | Proposed | 2026-09-02 |
 | [122](122-cinematic-trigger-sources-and-capability-policy.md) | Cinematic Trigger Sources and Capability Policy | Proposed | 2026-09-02 |
+| [123](123-vfx-cpu-stage-order-determinism-and-gameplay-coupling.md) | VFX CPU Stage Order, Determinism and Gameplay Coupling | Proposed | 2026-09-02 |
 
 ## Conventions
 

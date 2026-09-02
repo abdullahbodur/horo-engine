@@ -8,6 +8,11 @@ extraction and renderer scheduling. [ADR-011](../../adr/011-vfx-effect-ownership
 records the proposed decision. These are implementation contracts, not claims that
 all paths or qualification tests already exist.
 
+[ADR-123](../../adr/123-vfx-cpu-stage-order-determinism-and-gameplay-coupling.md)
+specializes the gameplay-coupled CPU path: seven ordered stages, atomic candidate
+commit, stable particle identity, versioned counter-based randomness, deterministic
+parallel merge and schema-limited gameplay input/output.
+
 DCC workflows, full fluid solvers, atmospheric scattering and screen-space
 post-processing remain outside this subsystem; see
 [Advanced Rendering Architecture](./advanced-rendering-architecture.md).
@@ -63,9 +68,11 @@ the same request once for each emitter or clock.
    its declared clock update. Drain at most maxEventsPerTick accepted requests in
    FIFO order; requests produced during the drain/update become eligible next tick.
    No backend invokes a spawn completion inline from submission.
-2. Advance CPU state and logical decal/effect timers. CPU work may use Foundation
-   JobSystem/JobId over exclusive staging slices. Completion records are applied
-   on the declared owner phase, never by worker callbacks mutating live ECS.
+2. Advance CPU candidate state in the ADR-123 order `Spawn -> Initialize -> Forces ->
+   Integrate -> Collide -> Kill`, with a barrier between semantic stages. CPU work may
+   use Foundation JobSystem/JobId over exclusive preassigned staging slices. Completion
+   records are applied on the declared owner phase, never by worker callbacks mutating
+   live ECS. The whole candidate commits atomically or is discarded.
 3. GPU emitters produce bounded GpuVfxSimulationWork with scene/effect/emitter
    generation, step ID, delta/seed, parameters and typed input/output resource IDs.
    They do not encode GPU dispatches during VfxWorld::Update.
@@ -76,6 +83,64 @@ the same request once for each emitter or clock.
    bounded CPU data, and builds the graph: VFX Compute -> per-view Sort/Cull ->
    consuming depth/shadow/opaque/decal/volume/translucent passes. Backend encoding
    and native synchronization stay on the renderer's permitted execution roles.
+
+### CPU Stage Order And Atomic Commit
+
+Every gameplay-coupled CPU emitter uses this exact logical pipeline for one admitted
+fixed tick:
+
+```text
+Spawn -> Initialize -> Forces -> Integrate -> Collide -> Kill -> Extract
+```
+
+`VfxWorld` owns queue cutoff, capacity admission, deterministic birth count, monotonic
+spawn ordinal and slot reservation in Spawn. `CpuParticleSimulator` initializes every
+required new-particle attribute once; force kernels produce staged acceleration/
+velocity contributions; Integrate advances candidate motion/age; Collide consumes an
+immutable generation-matched Physics/scene query snapshot; and Kill selects survivors,
+stable compaction and bounded death/collision/sub-emitter occurrences. Requests born
+during a stage enter next tick's queue. No stage invokes gameplay, Audio or another
+emitter reentrantly.
+
+Spawn through Kill mutate one exclusive candidate generation. VfxWorld publishes
+particle state, emitter cursor/spawn ordinal and occurrence batches together only when
+the source tick commits. Failure/cancellation/capacity exhaustion preserves the prior
+generation and publishes no partial state/effect. `VfxRenderExtractor` then reads the
+committed post-Kill generation into immutable frame-owned data; it never mutates the
+SoA or repairs a failed stage. Kernel fusion/vectorization is allowed only when it is
+observably equivalent to these barriers.
+
+Cooked kernels declare stage reads/writes, required snapshots, scratch and bounded
+outputs. Cook rejects backward/cyclic dependencies, uninitialized reads, conflicting
+writers, private/render payload access from gameplay, GPU authoritative output and
+unbounded occurrences. Runtime violations discard the candidate and return a typed
+stage/schema/access result; Shipping never continues a half-updated buffer.
+
+### Stable Identity, RNG And Parallel Reproduction
+
+`ParticleSimulationId` derives from effect/emitter/activation identity and a checked
+monotonic spawn ordinal, not from a SoA/freelist slot, pointer or worker. Slot reuse
+never reuses identity. Iteration, compaction and occurrence merge use stable particle
+identity (or a declared semantic key with particle identity as final tie-break).
+
+Randomness uses versioned counter-based `VfxRngV1` per-particle semantic streams.
+Cook assigns each stochastic property/node a stable `VfxRngChannelId`; samples derive
+from project/effect seed, effect/emitter/activation and particle identity, channel,
+sample ordinal and algorithm version. Emitter spawn decisions use a separate tuple
+keyed by activation, committed step, request/trigger and channel. There is no mutable
+shared emitter PRNG, platform entropy, wall time or standard-library distribution.
+
+RNG integer/range mapping and integer-to-`[0,1)` conversion have golden cross-platform
+vectors. IDs, RNG bits, stage/event order, births/deaths and integer/quantized fields
+are exact across supported CPU runs with identical cooked digest and ordered inputs.
+Floating simulation/collision attributes are bit-exact only for a separately qualified
+deterministic-math/Physics fingerprint; otherwise they use declared numeric tolerances.
+This exact/tolerant split is the reference for later CPU/GPU equivalence claims.
+
+Parallel jobs receive disjoint preassigned candidate/output ranges. Stable barriers,
+merge slots, reduction trees and particle/collider/feature tie-breaks make job count,
+SIMD width, allocation and completion order irrelevant. One failed partition fails the
+whole candidate; completed ranges never publish incrementally.
 
 [ADR-010](../../adr/010-job-waiting-and-operation-store-ownership.md) governs jobs,
 operation tracking and allowed teardown drains. No ordinary owner/render/transport
@@ -467,6 +532,10 @@ struct CpuParticleBufferSoA {
 };
 ```
 
+The SoA is never a gameplay capability. `customFlags` and additional compiled channels
+remain private unless their schema class explicitly projects a bounded immutable value
+through the gameplay seam below.
+
 ### GPU Compute Simulation Layout
 
 The renderer owns GPU device buffers and runs the cooked kernels in declared graph
@@ -566,6 +635,29 @@ struct VfxSpawnRequest {
 };
 ```
 
+### Gameplay Payload Boundary
+
+Cook classifies every custom channel as `SimulationInternal`, `RenderOnly`,
+`GameplayInput` or `GameplayOutput`. Gameplay writes only declared typed/ranged
+GameplayInput parameters through bounded VFX commands before the tick cutoff;
+VfxWorld copies them into an immutable generation/schema-keyed input snapshot. Late,
+stale, nonfinite, unauthorized or private-channel writes return typed failure and do
+not alter the active step.
+
+GameplayOutput is available only from committed real CPU simulation. Its schema fixes
+source stage, maximum occurrences, stable order, target owner boundary and required/
+cosmetic policy. It exposes semantic IDs and bounded authored hit/position/normal/
+payload values, never mutable spans, SoA indices, render fields, pointers or native
+Physics handles. The application adapter drains it at the gameplay owner's next safe
+point; delivery cannot reenter or rewrite the source step. Required output capacity is
+reserved before stepping, so overflow fails the candidate instead of dropping events.
+
+Gameplay may read only declared last-committed effect-level aggregate snapshots.
+Per-particle queries are not baseline API. GPU readback, RenderOnly fields, extraction
+and Null cannot produce authoritative GameplayOutput. Invalid stage/private/schema
+access returns `VfxGameplayAccessDenied`, `VfxPayloadSchemaMismatch`,
+`StaleVfxGeneration` or `VfxStageContractViolation` with zero mutation.
+
 ### Audio Routing
 
 VFX graphs trigger audio events on spawn, collision, or sub-emitter creation. Audio
@@ -622,6 +714,14 @@ architecture-only change:
 - Run gameplay CPU kernels with identical seed/tick inputs in graphical and headless
   hosts; verify Null's accepted FIFO, next-tick results, pause/cancel/lifetime timing.
   Fake delayed submission/fences rather than assuming Null matches device latency.
+- Record every ADR-123 stage boundary and verify exact stage order, no reentrant
+  spawn/output delivery, atomic rollback on a stage failure and read-only extraction.
+- Reproduce identical RNG words, particle identities, collision tie-breaks and stable
+  merge order across repeated runs, worker counts and supported CPU platforms. Treat
+  float-state equivalence as exact only under the same deterministic-math fingerprint.
+- Attempt undeclared gameplay fields, private SoA access, render-only reads, schema
+  mismatches and authoritative GPU/Null output; require typed rejection with no
+  partial state mutation or gameplay publication.
 - Fill instance/particle/event/result/frame pools. Verify incoming rejection, gameplay
   reserve, stable ordering, no old-entry overwrite, cleanup progress and zero hot-path
   heap growth, including bounded typed parameter copying and diagnostics.
@@ -642,6 +742,8 @@ architecture-only change:
 
 - [ADR-011: Effect Ownership, Simulation Domain Policy and Renderer Boundary](../../adr/011-vfx-effect-ownership-simulation-domain-and-renderer-boundary.md):
   Proposed ownership, simulation and renderer-boundary decision.
+- [ADR-123: VFX CPU Stage Order, Determinism and Gameplay Coupling](../../adr/123-vfx-cpu-stage-order-determinism-and-gameplay-coupling.md):
+  Normative CPU stage, RNG, payload and gameplay publication contract.
 - [Particle Editor UI Reference](./particle-editor.html): Emitter stack, curve editing,
   and live preview panel.
 - [Material And Shader Model](./material-and-shader-model.md): Particle and decal materials.
