@@ -157,6 +157,14 @@ off to the side and commits body shape swaps only at the Physics pre-step safe
 point. Retired leases remain alive until scene, query and in-flight Physics readers
 have drained.
 
+[ADR-086](../../adr/086-collision-layer-profile-and-query-channel-policy.md)
+also requires scene conversion to resolve each collider's stable project
+`CollisionProfileId` against the exact locked collision-schema fingerprint.
+Candidate preparation acquires one immutable filter-schema generation and compiles
+private runtime/native tables; scene data never stores display names, bit positions
+or solver object layers. Missing or stale profile/channel IDs block activation
+rather than using the project's authoring default.
+
 ## Runtime UI Scope Boundary
 
 [ADR-073](../../adr/073-runtime-ui-ownership-scope-and-update-order.md) makes

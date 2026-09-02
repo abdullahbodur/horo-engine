@@ -57,6 +57,7 @@ MyGame/
         packages.json          # portable package and extension requests
         packages.lock          # exact resolved package graph
         input.json             # portable project input defaults
+        collision.json         # portable Physics layer/profile/query schema
         editor_workspace.json  # last editor layout and UI state
         asset_index.json       # derived asset lookup registry
         local/                 # optional machine-local overrides, ignored
@@ -78,7 +79,8 @@ Durable portable metadata, machine-local state, and derived output remain
 separate:
 
 - `.horo/project.json`, `.horo/packages.json`, `.horo/packages.lock`,
-  `.horo/input.json`, and asset sidecars are portable source-controlled inputs
+  `.horo/input.json`, `.horo/collision.json`, and asset sidecars are portable
+  source-controlled inputs
 - `.horo/editor_workspace.json`, `.horo/local/`, and `.horo/asset_index.json`
   are local or derived state
 - `build/` contains generated build outputs and content-addressed asset caches
@@ -157,6 +159,27 @@ Settings persistence uses deterministic serialization, a sibling temporary
 file, and atomic replacement. Concurrent writers use project identity and file
 revision checks so one GUI, CLI, or MCP operation cannot silently overwrite a
 newer settings commit.
+
+## Project Collision Schema
+
+[ADR-086](../../adr/086-collision-layer-profile-and-query-channel-policy.md)
+assigns the Project domain one versioned `.horo/collision.json` authority. It stores
+opaque stable layer, profile and query-channel IDs, one complete symmetric
+simulation response matrix, complete reusable profiles and an explicit default
+profile used only when an authoring command creates a collider.
+
+Display names, editor colors and list order are presentation. Scene/collider data
+references stable profile IDs and authored queries reference stable channel IDs;
+neither stores array positions, names, native object layers or masks. Renames and
+reorders preserve identity. Semantic edits produce a new immutable fingerprinted
+generation, and deletion is blocked until durable references migrate.
+
+Collision-schema saves use the same revision-checked project mutation lease,
+deterministic serialization, sibling temporary file and atomic replacement as
+other portable settings. Project-open validates the complete ID graph, matrix and
+profile/channel tables before scene or Physics candidate publication. Runtime does
+not fill missing entries, migrate legacy numeric/name data or fall back to the
+authoring default.
 
 ## Toolchain Profiles
 
@@ -464,6 +487,8 @@ enum class ProjectValidationMode {
 All modes require:
 
 - `.horo/project.json` exists and parses correctly
+- `.horo/collision.json` exists and its typed ID graph, symmetric matrix and
+  complete profile/channel tables validate, or a migration planner can produce it
 - `horoVersion` and `persistentContract` form a known compatible decision, or a
   migration planner can produce a valid path
 - `projectId` is present
@@ -475,10 +500,11 @@ information queries, validation, and read-only CI checks. A missing index is
 reconstructed in memory without writing project state.
 
 `Edit` validates writability per requested mutation: saving settings requires a
-writable `project.json`, saving a scene requires that scene destination, and
-importing requires the source sidecar and derived-index destination. Failure to
-persist optional workspace state is a warning and does not make an otherwise
-editable project invalid.
+writable `project.json`, saving the collision schema requires writable
+`collision.json`, saving a scene requires that scene destination, and importing
+requires the source sidecar and derived-index destination. Failure to persist
+optional workspace state is a warning and does not make an otherwise editable
+project invalid.
 
 `Build` requires a compatible toolchain resolution and writable build/output
 directories. A read-only source checkout remains valid when build outputs and
@@ -624,8 +650,8 @@ never mutates GUI route state directly. Stateful open requests return typed
 - Workspace state is user-specific and should not be committed to version
   control.
 - `.horo/project.json`, `.horo/packages.json`, `.horo/packages.lock`,
-  `.horo/input.json`, and asset metadata sidecars are portable and may be
-  committed. `.horo/editor_workspace.json`,
+  `.horo/input.json`, `.horo/collision.json`, and asset metadata sidecars are
+  portable and may be committed. `.horo/editor_workspace.json`,
   `.horo/asset_index.json`, `.horo/local/`, and generated build/cache output
   should be ignored.
 
