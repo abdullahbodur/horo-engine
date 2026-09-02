@@ -87,6 +87,7 @@ to the replacement.
 | [073](073-runtime-ui-ownership-scope-and-update-order.md) | Runtime UI Ownership, Scope and Update Order | Proposed | 2026-09-02 |
 | [074](074-runtime-ui-layout-units-and-measure-arrange.md) | Runtime UI Layout Units and Measure-Arrange | Proposed | 2026-09-02 |
 | [075](075-runtime-ui-font-asset-family-and-fallback.md) | Runtime UI Font Asset, Family and Fallback | Proposed | 2026-09-02 |
+| [076](076-runtime-ui-style-asset-token-and-inheritance.md) | Runtime UI Style Asset, Token and Inheritance | Proposed | 2026-09-02 |
 
 ## Conventions
 
