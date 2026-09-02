@@ -303,13 +303,30 @@ format compatibility.
 
 The release manifest may include:
 
-- `saveFormatVersion`
-- `minimumReadableSaveFormatVersion`
+- a versioned `saveCompatibility` object
 - `networkProtocolVersion`
 - `modApiVersion`
 - `assetArchiveFormatVersion`
 - `requiredEngineRuntimeVersion`
 - `requiredPluginApiVersion`
+
+When a product supports runtime saves, `saveCompatibility` is required and contains:
+
+- `productSaveCompatibilityVersion`;
+- exact `writeArchiveFormatVersion` and `writeSaveSchemaVersion`;
+- inclusive direct-readable and migration-source ranges for archive/save schemas;
+- every required save participant ID with its direct-readable and migration-source
+  `ParticipantSchemaVersion` ranges;
+- `minimumSupportedProductSaveCompatibilityVersion`;
+- migration policy and the sealed migration-catalog identity; and
+- `forwardReadPolicy`, which is `Reject` for HoroSave v1.
+
+Preflight rejects a release when its current writer versions are not directly
+readable, a declared migration range lacks a complete bounded path, or required
+participant declarations differ from sealed product composition. Engine/build and
+product semantic versions are provenance, not save-codec selectors. The legacy flat
+`saveFormatVersion` and `minimumReadableSaveFormatVersion` fields are read-only
+migration input and are not emitted by new manifests.
 
 A game update must not silently make existing user saves unreadable. If a save
 migration is required, the game release profile declares whether migration is:
@@ -318,6 +335,15 @@ migration is required, the game release profile declares whether migration is:
 - automatic but one-way
 - explicit user-confirmed
 - unsupported
+
+Before product 1.0, each shipped preview declares exact supported ranges and retains
+fixtures for those claims. From product 1.0 onward, a stable release supports
+migration from at least the previous two stable minor lines and for at least 12
+months after each source line's last release, whichever is longer. Patch releases
+cannot narrow this window. Removing support requires deprecation in two preceding
+stable minor lines, release notes and a final bridge release. Security policy may
+block a vulnerable decoder earlier only through an explicit manifest exception and
+typed security diagnostic.
 
 Network protocol incompatibility must be represented explicitly so multiplayer
 clients, dedicated servers, and tools can reject incompatible connections with a
@@ -488,6 +514,9 @@ artifact integrity follow [Release Security](./release-security.md).
 - [Release Security](./release-security.md): signing and credential boundaries.
 - [Distribution And Update](./distribution-and-update.md): installation
   packages, update manifests, activation, and rollback.
+- [ADR-112](../../adr/112-save-archive-container-and-compatibility-policy.md):
+  runtime-save container, version axes, release compatibility fields and support
+  horizon.
 - [Horo Package System](../packages/package-system.md): package lockfile freeze and
   content package to release chunk mapping.
 - [Observability Architecture](../observability/observability.md): structured records, job

@@ -308,6 +308,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Save Game And Persistence](./runtime/save-game-and-persistence.md): runtime
   save state, slot format, migration, cloud save, integrity, and secure archive
   loading.
+- [Save Archive Container and Compatibility Policy](../adr/112-save-archive-container-and-compatibility-policy.md):
+  portable framing, canonical logical state, independent version axes, typed
+  state/content/publication identities, release declarations and support horizon.
 - [Navigation And AI Architecture](./runtime/navigation-and-ai-architecture.md):
   NavMesh, pathfinding, dynamic obstacle overlays, perception, crowd, blackboard,
   and editor bake tooling.
