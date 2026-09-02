@@ -80,10 +80,14 @@ namespace Horo::Render {
             }
 
             /** @copydoc IRenderBackend::DestroyBuffer */
-            void DestroyBuffer(std::uint64_t) noexcept override {}
+            void DestroyBuffer(std::uint64_t) noexcept override {
+                // Null resources are opaque monotonic identities with no native allocation to release.
+            }
 
             /** @copydoc IRenderBackend::DestroyMesh */
-            void DestroyMesh(std::uint64_t) noexcept override {}
+            void DestroyMesh(std::uint64_t) noexcept override {
+                // Null resources are opaque monotonic identities with no native allocation to release.
+            }
 
             /** @copydoc IRenderBackend::BeginFrame */
             Result<FrameToken> BeginFrame(const FrameDescriptor &descriptor) override {

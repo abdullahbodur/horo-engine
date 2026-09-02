@@ -15,7 +15,7 @@ namespace Horo::Render {
             return kind == UploadRequestKind::Buffer ? Detail::RenderResourceClass::Buffer : Detail::RenderResourceClass::Mesh;
         }
 
-        [[nodiscard]] Result<std::uint64_t> RealizeMeshRequest(IRenderBackend &backend, Detail::RenderResourceRegistry &registry,
+        [[nodiscard]] Result<std::uint64_t> RealizeMeshRequest(IRenderBackend &backend, const Detail::RenderResourceRegistry &registry,
                                                                const RenderMeshDescriptor &descriptor) {
             const auto vertex = registry.BackendInstance(Detail::RenderResourceClass::Buffer, Identity(descriptor.vertexBuffer));
             if (vertex.HasError()) {
@@ -79,8 +79,7 @@ namespace Horo::Render {
             static_cast<void>(registry.Fail(resourceClass, request.identity, created.ErrorValue()));
             return;
         }
-        const Result<void> published = registry.Publish(resourceClass, request.identity, created.Value());
-        if (published.HasError()) {
+        if (const Result<void> published = registry.Publish(resourceClass, request.identity, created.Value()); published.HasError()) {
             DestroyResourceInstance(backend, resourceClass, created.Value());
             static_cast<void>(registry.Fail(resourceClass, request.identity, published.ErrorValue()));
             return;

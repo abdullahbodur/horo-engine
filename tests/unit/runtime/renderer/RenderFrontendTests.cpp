@@ -58,12 +58,19 @@ namespace {
         std::uint64_t nextResourceInstance{1};
         bool failResourceCreation{false};
         bool throwDuringResourceCreation{false};
+        bool supportsBufferResources{true};
+        bool supportsMeshResources{true};
     };
 
     BackendLifecycleState lifecycleState;
 
     class TrackingBackend final : public IRenderBackend {
     public:
+        TrackingBackend()
+            : capabilities_{.backend = RenderBackendId{"tracking"},
+                            .supportsBufferResources = lifecycleState.supportsBufferResources,
+                            .supportsMeshResources = lifecycleState.supportsMeshResources} {}
+
         Result<void> Initialize(const RenderBackendConfig &) override {
             ++lifecycleState.initializeCount;
             initialized_ = true;
@@ -209,11 +216,7 @@ namespace {
         }
 
     private:
-        RenderBackendCapabilities capabilities_{
-            .backend = RenderBackendId{"tracking"},
-            .supportsBufferResources = true,
-            .supportsMeshResources = true,
-        };
+        RenderBackendCapabilities capabilities_;
         bool initialized_{false};
     };
 
@@ -384,6 +387,58 @@ namespace {
         Check(frontend->ResourceState(first.Value().handle).Value() == RenderResourceState::Ready);
         Check(frontend->ResourceState(second.Value().handle).Value() == RenderResourceState::Pending);
         Check(frontend->ProcessResourceRequests().Value() == 1);
+    }
+
+    TEST_CASE("Frontend Rejects Unsupported And In-Frame Resource Mutations", "[unit][runtime][renderer][resource]") {
+        lifecycleState = {};
+        lifecycleState.supportsBufferResources = false;
+        lifecycleState.supportsMeshResources = false;
+        std::unique_ptr<RenderFrontend> unsupported = CreateTrackingFrontend();
+        const std::array<std::byte, 4> bytes{};
+        const auto rejectedBuffer = unsupported->CreateBuffer({.byteSize = bytes.size(),
+                                                               .usage = RenderBufferUsage::Vertex,
+                                                               .access = RenderBufferAccess::DeviceLocal},
+                                                              bytes);
+        Check(rejectedBuffer.HasError());
+        Check(rejectedBuffer.ErrorValue().code.Value() == "render.frontend.resource.unsupported");
+        const auto rejectedMesh = unsupported->CreateMesh({.vertexBuffer = {.owner = {1}, .slot = 1, .generation = 1},
+                                                           .indexBuffer = {.owner = {1}, .slot = 2, .generation = 1},
+                                                           .vertexStride = 4,
+                                                           .vertexCount = 1,
+                                                           .indexFormat = RenderIndexFormat::UInt32,
+                                                           .indexCount = 3,
+                                                           .topology = RenderPrimitiveTopology::Triangles,
+                                                           .localBounds = {{0.0F, 0.0F, 0.0F}, {1.0F, 1.0F, 1.0F}}});
+        Check(rejectedMesh.HasError());
+        Check(rejectedMesh.ErrorValue().code.Value() == "render.frontend.resource.unsupported");
+
+        lifecycleState = {};
+        std::unique_ptr<RenderFrontend> frontend = CreateTrackingFrontend();
+        const PendingTriangleBuffers buffers = QueueTriangleBuffers(*frontend);
+        Check(frontend->ProcessResourceRequests().Value() == 2);
+        auto pendingMesh = frontend->CreateMesh(MeshDescriptor(buffers.vertex.handle, buffers.index.handle));
+        Check(pendingMesh.HasValue());
+        const auto pendingReplacement =
+            frontend->ReplaceMesh(pendingMesh.Value().handle, MeshDescriptor(buffers.vertex.handle, buffers.index.handle));
+        Check(pendingReplacement.HasError());
+        Check(pendingReplacement.ErrorValue().code.Value() == "render.frontend.resource.not_ready");
+        Check(frontend->CreateMesh({}).ErrorValue().code.Value() == "render.frontend.resource.invalid_mesh_descriptor");
+
+        auto begun = frontend->BeginFrame(FrameDescriptor{.frameNumber = 1, .outputExtent = {640, 360}});
+        Check(begun.HasValue());
+        RenderFrameScope frame = std::move(begun).Value();
+        Check(frontend
+                  ->CreateBuffer({.byteSize = bytes.size(), .usage = RenderBufferUsage::Vertex, .access = RenderBufferAccess::DeviceLocal},
+                                 bytes)
+                  .ErrorValue()
+                  .code.Value() == "render.frontend.resource.change_during_frame");
+        Check(frontend->CreateMesh(MeshDescriptor(buffers.vertex.handle, buffers.index.handle)).ErrorValue().code.Value() ==
+              "render.frontend.resource.change_during_frame");
+        Check(frontend->ProcessResourceRequests().ErrorValue().code.Value() == "render.frontend.resource.change_during_frame");
+        Check(frontend->ReleaseBuffer(buffers.vertex.handle).ErrorValue().code.Value() == "render.frontend.resource.change_during_frame");
+        Check(frontend->ReleaseMesh(pendingMesh.Value().handle).ErrorValue().code.Value() ==
+              "render.frontend.resource.change_during_frame");
+        frame.Cancel();
     }
 
     TEST_CASE("Frontend Stores Backend Resource Exceptions As Operation Results", "[unit][runtime][renderer][resource]") {

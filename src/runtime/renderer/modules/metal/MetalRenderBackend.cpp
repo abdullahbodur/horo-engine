@@ -84,10 +84,14 @@ namespace Horo::Render {
             }
 
             /** @copydoc IRenderBackend::DestroyBuffer */
-            void DestroyBuffer(std::uint64_t) noexcept override {}
+            void DestroyBuffer(std::uint64_t) noexcept override {
+                // Generic Metal buffers cannot exist until the focused RND-001.5 migration.
+            }
 
             /** @copydoc IRenderBackend::DestroyMesh */
-            void DestroyMesh(std::uint64_t) noexcept override {}
+            void DestroyMesh(std::uint64_t) noexcept override {
+                // Generic Metal meshes cannot exist until the focused RND-001.5 migration.
+            }
 
             /** @copydoc IRenderBackend::BeginFrame */
             Result<FrameToken> BeginFrame(const FrameDescriptor &descriptor) override {
