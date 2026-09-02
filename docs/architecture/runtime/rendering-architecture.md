@@ -1153,6 +1153,8 @@ manually order backend commands around hidden global state.
 
 The canonical identity, descriptor, validation, and lifetime policy is
 [ADR-027: Renderer Resource Identity and Descriptors](../../adr/027-renderer-resource-identity-and-descriptors.md).
+ADR-027 is the sole normative owner of that policy; this section is an
+orientation summary and must not be extended into a parallel resource model.
 Supported resident resource classes are buffers, textures and texture views,
 samplers, shader modules and pipelines, render targets, and meshes. Leaf,
 derived, and composite classes share that model. Material bindings are typed

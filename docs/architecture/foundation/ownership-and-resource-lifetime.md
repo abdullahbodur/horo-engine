@@ -89,8 +89,20 @@ using TextureHandle = Handle<TextureTag>;
 using MeshHandle = Handle<MeshTag>;
 ```
 
-Registries validate type, index, generation, and owner domain. Stale handles
-fail safely and never alias a newly allocated object at the same slot.
+The generic handle is meaningful only to its owning registry. That registry
+validates type, index, generation, and the authority boundary at the API entry
+point. Stale handles fail safely and never alias a newly allocated object at the
+same index.
+
+Resident renderer resources cross frontend-registry lifetime boundaries and use
+distinct named handle types whose identity additionally carries a 64-bit renderer
+owner ID. That renderer requirement does not enlarge or parameterize the generic
+`Handle<Tag>` used by other registries. The exact resource taxonomy,
+owner/slot/non-wrapping-generation semantics, registry states, and retirement
+rules are owned by
+[ADR-027](../../adr/027-renderer-resource-identity-and-descriptors.md). The
+generic example above therefore does not authorize a renderer-specific two-field
+handle or a second renderer identity policy.
 
 Serialized project and asset data stores stable logical IDs, not process-local
 handles. The authority that owns the runtime registry resolves those IDs at an
