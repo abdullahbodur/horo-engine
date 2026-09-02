@@ -153,6 +153,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Physics Shape Authoring, Cook and Runtime Boundary](../adr/085-physics-shape-authoring-cook-and-runtime-boundary.md):
   typed collider descriptors, deterministic target-keyed cook artifacts, immutable
   runtime shape leases, motion compatibility, limits, and replacement semantics.
+- [Collision Layer, Profile and Query Channel Policy](../adr/086-collision-layer-profile-and-query-channel-policy.md):
+  project-stable typed filter identities, symmetric simulation responses, complete
+  reusable profiles, query intent and private generation-scoped compiled tables.
 - [Audio Architecture](./runtime/audio-architecture.md): ADR-backed ownership,
   clocks, formats, assets, mixer, spatial, devices, tooling and explicit 1.0 versus
   Post-1.0 product boundaries.

@@ -244,6 +244,10 @@ recomputes or preserves mass properties only under the declared body policy,
 invalidates affected contacts/query acceleration and applies an explicit wake or
 preserve-sleep decision. It commits completely or retains the old shape.
 
+[ADR-086](086-collision-layer-profile-and-query-channel-policy.md) defines the
+stable profile/layer/channel identities and immutable filter-schema generation used
+by those filter dependencies; shape artifacts do not embed packed/native masks.
+
 Replacement cannot occur during step/query callback, mutate a shared shape in place
 or patch bodies one-by-one across frames as a single logical scene transaction.
 Changes that would start interpenetrating use typed policy/diagnostics; Physics does

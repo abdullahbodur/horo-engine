@@ -23,6 +23,9 @@ debugging for Horo Engine.
 - [ADR-084](../../adr/084-canonical-physics-solver-units-and-tolerances.md)
   selects pinned Jolt v5.6.0 as the one private initial solver; it does not create
   a runtime multi-solver ABI.
+- [ADR-086](../../adr/086-collision-layer-profile-and-query-channel-policy.md)
+  separates stable project collision layers, reusable profiles and query channels
+  from generation-scoped packed/native filter representations.
 
 ## Canonical Solver, Units And Tolerance Profile
 
@@ -185,7 +188,7 @@ Supported queries include ray, shape cast, overlap, and point tests.
 Queries declare:
 
 - target world and scene generation
-- filter layers and masks
+- one stable project query channel plus explicit typed selectors where applicable
 - whether triggers are included
 - maximum result count
 - ordering guarantee
@@ -196,11 +199,28 @@ staleness.
 
 ## Layers And Filtering
 
-Collision layers are stable project configuration. The physics world resolves
-them into efficient masks at scene activation.
+[ADR-086](../../adr/086-collision-layer-profile-and-query-channel-policy.md)
+defines separate opaque 128-bit `CollisionLayerId`, `CollisionProfileId` and
+`PhysicsQueryChannelId` values. They are project-stable identities; display names,
+list positions, serialized bitmasks and Jolt object-layer values are not identity.
 
-Unknown layers, asymmetric invalid matrices, and unsupported runtime changes
-produce diagnostics. Layer display names are not serialized as runtime identity.
+The committed project collision schema owns one complete symmetric layer-pair
+matrix. `Ignore` rejects simulation, `Overlap` detects without solver response and
+`Block` admits contact solving. Every complete reusable profile selects exactly one
+simulation layer and an explicit `Ignore`/`Overlap`/`Block` response for every
+query channel. Simulation and query responses are distinct enum types and cannot
+be substituted for one another.
+
+Scene preparation validates exact profile/channel references and acquires an
+immutable schema generation. The world deterministically compiles dense indices,
+bitsets, broadphase partitions and native adapters as private state. Immediate
+queries use the active generation; snapshot queries lease the captured generation.
+Unknown IDs, missing/asymmetric entries and unsupported runtime changes fail with
+typed diagnostics rather than using the project's authoring default.
+
+Semantic schema changes build complete candidate tables and publish atomically at
+the Physics pre-step safe point. Bodies retain typed IDs plus schema generation,
+and every debug/event/query projection translates private indices back to Horo IDs.
 
 ## Determinism
 

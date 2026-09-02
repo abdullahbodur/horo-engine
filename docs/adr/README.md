@@ -97,6 +97,7 @@ to the replacement.
 | [083](083-ui-template-identity-schema-and-expansion.md) | UI Template Identity, Schema and Expansion | Proposed | 2026-09-02 |
 | [084](084-canonical-physics-solver-units-and-tolerances.md) | Canonical Physics Solver, Units and Tolerances | Proposed | 2026-09-02 |
 | [085](085-physics-shape-authoring-cook-and-runtime-boundary.md) | Physics Shape Authoring, Cook and Runtime Boundary | Proposed | 2026-09-02 |
+| [086](086-collision-layer-profile-and-query-channel-policy.md) | Collision Layer, Profile and Query Channel Policy | Proposed | 2026-09-02 |
 
 ## Conventions
 

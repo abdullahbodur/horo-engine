@@ -327,6 +327,12 @@ analytic box, sphere, capsule and static-plane source kinds. These descriptors u
 the same validation, scale-bake, cook-envelope and immutable runtime-lease boundary
 as imported collider assets; the catalog does not bypass Physics shape policy.
 
+When an authoring command adds one of these colliders, it records the project's
+explicit default `CollisionProfileId` (or the command's explicit profile) under
+[ADR-086](../../adr/086-collision-layer-profile-and-query-channel-policy.md).
+Runtime conversion never resolves a missing profile by primitive kind, display
+name, array index or fallback mask.
+
 ## CLI And MCP Integration
 
 CLI and MCP creation commands do not hardcode object types. They accept a
