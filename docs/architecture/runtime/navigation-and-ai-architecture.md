@@ -148,6 +148,23 @@ and scene lifetime without making them providers' dependencies.
 
 ### Submission, Jobs, And Publication
 
+[ADR-107](../../adr/107-navigation-query-consistency-and-snapshot-ownership.md)
+requires one atomically published `NavigationWorldSnapshot` combining exact Scene/
+world incarnation, topology and tile generations, streaming fences, logical
+obstacle overlay, filter/profile configuration, origin epoch, coverage and private
+provider leases. `NavigationReadSnapshot` keeps referenced memory valid but does
+not keep it logically current or resident. A tile/root candidate publishes wholly
+at a safe point; readers observe the complete old or new root, never a partial
+replacement.
+
+Queries declare `ExactSnapshot`, `CurrentAtPublish` or bounded `CurrentOrRetry`
+consistency independently from `RequireComplete`/`AllowPartial` coverage. Immediate
+queries are owner-thread, allocation/I/O/wait-free kernels with hard work/output
+bounds. Full, hierarchical and multi-tile paths use the bounded coordinator and
+Foundation JobSystem. Workers receive one immutable read lease and exclusive
+scratch, enqueue owned completion records and never complete a handle or mutate
+gameplay inline.
+
 `NavigationCoordinator` admits owned typed requests with captured navigation-world/scene
 incarnation, caller authority, cancellation, configuration, topology/obstacle revision, target
 tick, and bounded output/node-expansion budgets. Admission returns `Result<NavRequestHandle>`;
@@ -183,6 +200,14 @@ stop, never an incomplete new result. Completion timing is not an authority over
 Scene teardown closes admission, cancels pending work, rejects late results, then retires
 resources after readers finish. Query cancellation before publication prevents result
 application; cancellation after publication does not retroactively undo an applied intent.
+
+Only the simulation/Navigation owner publishes asynchronous terminal results at
+`NavIntentCommit`, in stable request order. It revalidates handle, cancellation,
+world/Scene authority and every topology/tile/overlay/filter/origin dependency.
+Results distinguish `CompletePath`, opt-in `PartialPath`, proven `NoPath`,
+unavailable `NoNavigationData`, `StaleSnapshot`, invalid identity, cancellation,
+capacity, unsupported capability and provider failure. Missing/evicted coverage is
+never `NoPath`; retained paths revalidate before later movement use.
 
 ### Obstacle And Provider State Synchronization
 

@@ -371,6 +371,17 @@ streaming/runtime state never writes back to the Scene, definition or cooked bas
 A missing required block prevents cell activation; temporary nonresidency may only
 produce the existing bounded residency request plus typed partial/no-data outcome.
 
+[ADR-107](../../adr/107-navigation-query-consistency-and-snapshot-ownership.md)
+requires a navigation query snapshot to record the exact PartitionEpoch,
+StreamingGeneration and tile generations it observed. Cell activation/replacement
+publishes the complete navigation coverage root or none; Resident staging is not
+queryable. Eviction first removes coverage logically, making affected late results
+stale, then waits for query leases before physical reclamation and budget release.
+Missing coverage may create only a bounded authority request here. Complete queries
+return `NoNavigationData`, while explicitly partial queries carry missing coverage;
+neither Navigation nor a held lease performs direct loading or turns absence into
+`NoPath`.
+
 ## Runtime Save And Dormant Cell State
 
 [Runtime persistence](./save-game-and-persistence.md) captures a coherent revision of
