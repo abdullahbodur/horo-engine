@@ -471,6 +471,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [PCG Cross-System Authority, Readiness and Commit Boundary](../adr/154-pcg-cross-system-authority-readiness-and-commit-boundary.md):
   host-composed target adapters, exact readiness receipts, aggregate rollback and
   preserved TRF/WST/NAV/Scene/VFX/network/persistence authority.
+- [PCG Graph Document, Preview, Bake and Undo Ownership](../adr/155-pcg-graph-document-preview-bake-and-undo-ownership.md):
+  persistent typed-command graph documents, semantic history, isolated ordinary-path
+  preview and explicit provenance-aware bake/undo transactions.
 - [Multiplayer Replication Architecture](./runtime/multiplayer-replication-architecture.md):
   replication roles, property deltas, RPCs, prediction, interest management,
   dedicated servers, and security.

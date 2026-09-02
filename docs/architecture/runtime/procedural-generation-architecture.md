@@ -286,6 +286,13 @@ The PCG editor provides a node-graph editing surface:
 - Seed randomization for variation exploration
 - Bake-to-scene command
 
+[ADR-155](../../adr/155-pcg-graph-document-preview-bake-and-undo-ownership.md)
+defines the editor ownership boundary. A persistent graph document owns working source,
+revision, typed commands, semantic history and save/recovery/conflicts; panels own only
+presentation. Preview captures one immutable revision and uses the ordinary transient
+cook/runtime path in an isolated world. Bake is a separate target-owner aggregate
+transaction, and undo/redo restores exact semantic patches without reevaluation.
+
 ## Feature Tiers
 
 The names below are product-profile labels, not renderer APIs or authority levels. At
@@ -310,6 +317,7 @@ intermediate, output and target-preparation costs are reserved before admission.
 - [PCG Spatial Input Snapshot and Node-Library Ownership](../../adr/152-pcg-spatial-input-snapshot-and-node-library-ownership.md)
 - [PCG Pure Evaluation, Commit and Generated-Output Ownership](../../adr/153-pcg-pure-evaluation-commit-and-generated-output-ownership.md)
 - [PCG Cross-System Authority, Readiness and Commit Boundary](../../adr/154-pcg-cross-system-authority-readiness-and-commit-boundary.md)
+- [PCG Graph Document, Preview, Bake and Undo Ownership](../../adr/155-pcg-graph-document-preview-bake-and-undo-ownership.md)
 - [PCG Graph Editor UI Reference](./pcg-graph-editor.html)
 
 - [Scene Runtime](./scene-runtime.md): generated objects as entities

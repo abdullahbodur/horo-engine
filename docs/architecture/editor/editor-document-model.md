@@ -483,6 +483,27 @@ PhysicsWorld, DestructionWorld, streaming, persistence, replication or Assets cu
 generation state. Save, production cook and preview each advance only their own typed
 revision/status.
 
+## PCG Graph Documents
+
+[ADR-155](../../adr/155-pcg-graph-document-preview-bake-and-undo-ownership.md)
+specializes this contract for PCG graph assets. One persistent `PCGGraphDocument` owns
+the unsaved working source, monotonic revision, typed commands, bounded semantic
+history, dirty/saved identity, validation and save/recovery/conflict state. Workspace,
+graph canvas, palette, inspector, diagnostics and preview panels own presentation state
+only and cannot mutate graph or Scene storage.
+
+Validation, cook, preview and bake capture exact immutable document/catalog/dependency
+revisions and return detached candidates to the document/workflow owner. Stale
+completions cannot update current diagnostics or output. Undo/redo applies exact source
+or target semantic patches and never reruns the graph.
+
+Preview uses the ordinary transient PCG cook and runtime evaluator inside an isolated
+`PCGPreviewSession`; it cannot publish source, production Scene, streaming, save or
+network state. Bake is a separate explicit aggregate target-owner transaction whose
+receipt records the exact graph revision. Graph saved/dirty and bake current/stale are
+independent state dimensions, and provenance-aware bake undo cannot remove hand-authored
+or adopted content.
+
 ## Runtime Conversion
 
 The document converts to `RuntimeSceneDefinition` through an editor service.
