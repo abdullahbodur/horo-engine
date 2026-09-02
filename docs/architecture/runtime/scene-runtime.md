@@ -180,6 +180,31 @@ leases, Physics world and the private generation-scoped binding table publish as
 single no-fail bundle. Any earlier failure/cancellation destroys only candidate
 state, consumes no public identities and preserves the prior active scene/world.
 
+## Navigation Authoring And Runtime Boundary
+
+[ADR-105](../../adr/105-navigation-asset-and-scene-ownership-boundary.md)
+requires `SceneDocument` to store typed navigation intent only. Stable Scene
+object/component/contribution IDs identify explicit surface, geometry-source,
+modifier, grounded-link and dynamic-obstacle declarations that reference a tracked
+`NavigationDefinition` AssetId. Components never serialize generated triangles,
+polygons, adjacency, tiles, provider refs/blobs or runtime topology handles.
+
+The application bake operation captures one immutable, revision-consistent view of
+the Scene intent and exact accepted geometry artifacts. That
+`NavigationBakeInputSnapshot` is derived operation state, not a Scene revision or
+asset. Asset Pipeline publishes its validated `GroundedNavMeshArtifact`; generated
+data never modifies document dirty state, undo history or source serialization.
+
+Scene conversion resolves each required definition/profile/scope to an exact
+published artifact identity and expected digest. Navigation prepares a detached
+generation-scoped topology candidate through the activation-participant seam. The
+candidate publishes atomically with the Scene; missing, stale, corrupt or
+unsupported required navigation rejects activation and preserves the old Scene.
+An explicitly optional capability may activate with typed `NoNavigationData`, but
+neither required nor optional policy authorizes runtime bake, source I/O or a fake
+path. Dynamic obstacle/carving state is runtime-owned transient overlay state and
+cannot write back into the Scene or cooked base.
+
 ## Runtime UI Scope Boundary
 
 [ADR-073](../../adr/073-runtime-ui-ownership-scope-and-update-order.md) makes

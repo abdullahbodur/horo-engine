@@ -116,6 +116,7 @@ to the replacement.
 | [102](102-runtime-network-modes-and-authority-exposure.md) | Runtime Network Modes and Authority Exposure | Proposed | 2026-09-02 |
 | [103](103-network-project-configuration-and-build-profile-ownership.md) | Network Project Configuration and Build-Profile Ownership | Proposed | 2026-09-02 |
 | [104](104-default-navigation-provider-and-recast-detour-adoption.md) | Default Navigation Provider and Recast-Detour Adoption | Proposed | 2026-09-02 |
+| [105](105-navigation-asset-and-scene-ownership-boundary.md) | Navigation Asset and Scene Ownership Boundary | Proposed | 2026-09-02 |
 
 ## Conventions
 
