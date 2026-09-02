@@ -156,6 +156,13 @@ Runtime UI VariableUpdate/extraction. Bindings and world anchors are immutable
 generation-tagged snapshots; UI never retains component-pool pointers or performs
 world queries during layout/rendering.
 
+[ADR-079](../../adr/079-runtime-ui-binding-provider-schema-identity-and-lifetime.md)
+requires each scene binding provider instance to name the exact `SceneRuntimeId`
+generation. It activates with the scene/UI barrier, publishes immutable typed
+snapshots, and enters revocation before scene storage teardown. Unload closes new
+reads/writes, cancels pending commands and drains old UI/snapshot/callback leases;
+late provider work cannot publish into a replacement scene generation.
+
 Scene unload closes its UI scope and input admission, cancels/joins pending UI
 work, publishes removal for attached views, waits for UI/render/resource leases,
 then releases scene UI state. Game-instance and persistent player UI survive scene
