@@ -1152,6 +1152,13 @@ encoding, graph resource barriers and fence-based deferred retirement remain ren
 responsibilities. Retained snapshot and GPU leases may outlive logical scene teardown
 but cannot reference destroyed scene storage or publish into a new incarnation.
 
+[ADR-124](../../adr/124-vfx-gpu-simulation-readback-and-compute-fallback.md)
+adds only cooked, bounded VFX readback intent. The frontend validates its normalized
+schema and reservation, schedules an asynchronous post-compute copy and returns a
+generation-tagged delayed observation. The backend privately owns staging, mapping,
+cache maintenance and fences. No renderer path waits for same-frame VFX data, grants
+it gameplay authority, chooses an effect fallback or changes the selected backend.
+
 ## XR Views And External Presentation Targets
 
 XR supplies a bounded runtime-driven set of view descriptors and

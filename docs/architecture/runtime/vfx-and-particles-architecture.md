@@ -13,6 +13,11 @@ specializes the gameplay-coupled CPU path: seven ordered stages, atomic candidat
 commit, stable particle identity, versioned counter-based randomness, deterministic
 parallel merge and schema-limited gameplay input/output.
 
+[ADR-124](../../adr/124-vfx-gpu-simulation-readback-and-compute-fallback.md)
+specializes GPU units: they remain visual-only; cooked readback is bounded,
+asynchronous and observational; compute-less fallback is authored and admitted; and
+CPU, GPU, shared and readback costs remain one auditable plan.
+
 DCC workflows, full fluid solvers, atmospheric scattering and screen-space
 post-processing remain outside this subsystem; see
 [Advanced Rendering Architecture](./advanced-rendering-architecture.md).
@@ -173,6 +178,29 @@ It cannot require the current depth pass that itself depends on VFX Compute, or
 advance the same emitter separately for each eye/view. No GPU particle readback
 may drive authoritative gameplay in the ordinary frame loop.
 
+### Opt-In GPU Readback Observation
+
+GPU readback is absent unless the cooked emitter declares one bounded
+`GpuVfxReadbackDescriptor`. Its normalized schema, authoring/diagnostics/capture/
+cosmetic purpose, optional-versus-required-visual policy, cadence, maximum records,
+bytes and pending results are fixed before activation. Cook rejects native layouts,
+unbounded fields, invalid products and any gameplay-authoritative consumer. Stable
+particle identity or a versioned reduction order selects records; native buffer order
+and completion timing have no semantic authority.
+
+VfxRenderExtractor publishes only logical intent. RenderFrontend validates the
+effective readback capability and reservation, then schedules one post-compute graph
+copy for the source step. Renderer owns native staging, encoding, mapping/cache rules,
+fences and deferred destruction. A delayed result carries scene/effect/emitter/step,
+resource generation, schema version, numeric fingerprint and typed status. Ordinary
+paths never wait for same-frame completion or map device storage directly.
+
+Optional readback pressure omits the newest observation and reports a bounded gap;
+it does not stop the visual effect. Required visual/capture readback follows its
+authored suspend/stop/fallback policy. Neither grows a queue, retries blindly, changes
+domain mid-step or returns zero-filled data as success. Cancellation/stale generation
+closes publication while all native leases and charges remain until completion.
+
 ## Domain Selection And Asset Intent
 
 Resolution is **per compiled emitter simulation unit**, not per composite graph.
@@ -199,6 +227,13 @@ Changing policy requires re-admission/restart at a safe point, not live CPU/GPU 
 migration. Migrate the previous proposed SimulationDomain field in cooked descriptor
 versioning: Automatic -> Automatic, CPU -> RequireCPU, GPU -> PreferGPU, with a
 migration diagnostic. There are not two parallel domain selectors.
+
+An authored CPU/substitute fallback additionally carries a versioned visual envelope:
+compatible parameters/outputs, finite CPU peak work, maximum reduced particle count
+and explicitly substitutable noise/collision/sort/volume/field features. A cooked CPU
+kernel alone does not prove compatibility or affordability. Allowed differences are
+visual only; a paired CPU gameplay unit retains identical accepted requests, fixed
+ticks and outputs whether the GPU visual runs, falls back or is suppressed.
 
 Resolution order:
 
@@ -248,6 +283,15 @@ Legacy labels es3, dx11/opengl4 and dx12_vulkan/metal are not VFX capability enu
 They may identify external product presets, but must resolve through typed capability
 facts and quality policy. Identical inputs resolve deterministically; this does not
 promise bitwise-identical visual CPU/GPU algorithms across devices.
+
+Readback is a separate effective capability with normalized format/alignment,
+device-to-host copy, maximum byte/work and pending-result limits. Missing optional
+readback produces an explicit degraded resolution while the GPU visual may continue.
+Missing required visual readback uses an authored compatible fallback or typed
+`VfxReadbackUnavailable`. Missing compute uses the same matrix: `RequireGPU` does not
+fall back implicitly; `PreferGPU`/`Automatic` may select an admitted compatible CPU
+kernel, authored substitute or permitted suppression in that order. No outcome
+selects another graphics backend or makes Null an interactive-renderer fallback.
 
 ### Null Timing And Gameplay Parity
 
@@ -683,6 +727,14 @@ ADR-012's aggregate ledger, not an extra VFX allowance. Resource growth needs pr
 reservation; GPU completion, not logical release, returns credits. Bounded extraction
 work prevents starting excess work, not preempts native calls or guarantees frame time.
 
+GPU readback additionally charges copy work/bytes, staging capacity, pending result
+records, retained source generations and consumer records. `VfxWorld` produces one
+admission plan covering CPU, GPU, shared and readback costs; renderer resource/work
+reservations referenced by it are the same host-envelope charges, not a second VFX
+budget. Fallback requires a complete new plan, and replacement overlap remains charged
+until retirement. GPU/readback pressure cannot consume reserved gameplay CPU work or
+output capacity.
+
 The single overflow policy above rejects incoming requests/new cosmetic births.
 There is no separate implicit oldest/farthest eviction policy. Authored quality
 reductions are selected during admission/restart and reported with the resolved
@@ -732,6 +784,14 @@ architecture-only change:
   shadow/volume/decal combinations. Exercise a missing previous-depth snapshot.
 - Verify graph compute/read/write/sort/draw dependencies and native affinity on each
   supported backend/capability profile, including an explicit no-compute composition.
+- Verify no-readback emitters schedule no copies; exercise every cooked schema/cadence/
+  byte/pending limit, delayed gaps, stale completion, cancellation and device loss.
+  Reject runtime field expansion and every authoritative gameplay readback consumer.
+- Exercise compute/readback capability and budget failure for every ADR-124 fallback
+  matrix row. Require recorded resolver evidence, an authored visual envelope and no
+  backend switch, hidden node deletion or change to paired CPU gameplay outputs.
+- Saturate mixed CPU/GPU/shared/readback charges and replacement overlap. Preserve
+  gameplay reserves and return readback/GPU credits only after final fence retirement.
 - Delay workers, GPU fences and snapshot readers across cell eviction and scene
   replacement. No early free/slot reuse, stale publication or lost accounting;
   Retired remains pending and teardown timeout retains dependencies safely.
@@ -744,6 +804,8 @@ architecture-only change:
   Proposed ownership, simulation and renderer-boundary decision.
 - [ADR-123: VFX CPU Stage Order, Determinism and Gameplay Coupling](../../adr/123-vfx-cpu-stage-order-determinism-and-gameplay-coupling.md):
   Normative CPU stage, RNG, payload and gameplay publication contract.
+- [ADR-124: VFX GPU Simulation, Readback and Compute Fallback](../../adr/124-vfx-gpu-simulation-readback-and-compute-fallback.md):
+  Normative GPU authority, observation, fallback and shared-admission contract.
 - [Particle Editor UI Reference](./particle-editor.html): Emitter stack, curve editing,
   and live preview panel.
 - [Material And Shader Model](./material-and-shader-model.md): Particle and decal materials.
