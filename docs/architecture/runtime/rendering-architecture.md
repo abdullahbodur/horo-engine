@@ -1073,6 +1073,14 @@ layout/resource generations and contains bounded draw, text, clip and projection
 data. It never contains mutable UI trees, ECS/component pointers, editor widgets,
 ImGui IDs, native surfaces, swapchains, command buffers or backend handles.
 
+[ADR-074](../../adr/074-runtime-ui-layout-units-and-measure-arrange.md) makes the
+snapshot's boxes signed fixed-point logical DIP geometry produced by Runtime UI.
+Renderer may derive physical pixel-snapped edges under the admitted output policy,
+but snapping cannot feed back into measure/arrange, scroll extent or serialized
+state. A policy that needs presented snapped hit geometry returns it as a new
+generation-correlated interaction revision; the backend never patches the logical
+snapshot or becomes layout authority.
+
 World-space canvases project as ordinary view-dependent render instances under
 declared depth/visibility policy. Screen-space canvases are frontend-owned passes
 composed after world/display transform unless an explicit render plan declares an
