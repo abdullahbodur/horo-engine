@@ -152,12 +152,12 @@ array. This creates a complete snapshot only for matches the regex can see.
 
 Current scanner limitations are contract-relevant:
 
-- it is not compiler- or AST-aware and may observe text in comments or strings;
-- the annotated C++ type must be a simple identifier, not a qualified name;
-- preprocessor expansion and semantic C++ validity are left to compilation;
-- input size and file count are not explicitly bounded by the generator;
-- output replacement is not an explicit durable temp-file transaction;
-- only behavior registrations exist; field migrations and bundle diagnostics do
+- It is not compiler- or AST-aware and may observe text in comments or strings;
+- The annotated C++ type must be a simple identifier, not a qualified name;
+- Preprocessor expansion and semantic C++ validity are left to compilation;
+- Input size and file count are not explicitly bounded by the generator;
+- Output replacement is not an explicit durable temp-file transaction;
+- Only behavior registrations exist; field migrations and bundle diagnostics do
   not.
 
 The helper and build service exchange these machine-local artifacts:
@@ -237,13 +237,13 @@ failed state and destroys the runtime scene.
 This is behavior-runtime reconstruction, not the normative
 quiesce/snapshot/unload/load/restore transaction. In particular:
 
-- old and candidate module `Start` lifetimes overlap;
-- module startup is not constrained to the runtime safe point;
-- module-owned jobs, callbacks, services, and external resources cannot be
+- Old and candidate module `Start` lifetimes overlap;
+- Module startup is not constrained to the runtime safe point;
+- Module-owned jobs, callbacks, services, and external resources cannot be
   enumerated or drained by the empty context;
-- runtime-only instance state is lost; authored `BehaviorComponent` fields are
+- Runtime-only instance state is lost; authored `BehaviorComponent` fields are
   used to recreate instances;
-- no explicit restart fallback is selected when unload safety cannot be proven.
+- No explicit restart fallback is selected when unload safety cannot be proven.
 
 ## Persistence And Missing-Code Behavior
 
@@ -287,33 +287,33 @@ roots must also be absolute and traversal-free.
 
 Existing focused tests prove:
 
-- relative module paths are rejected;
-- fingerprint mismatch fails before activation;
-- a valid fixture loads, produces a frozen registry, creates behavior instances,
+- Relative module paths are rejected;
+- Fingerprint mismatch fails before activation;
+- A valid fixture loads, produces a frozen registry, creates behavior instances,
   and unloads from a shadow copy;
-- native and Lua registrations merge and duplicate/invalid discovery diagnostics
+- Native and Lua registrations merge and duplicate/invalid discovery diagnostics
   gate activation;
-- compatible Lua source replacement retains a usable program;
-- a successful project build publishes state and manifest, is recognized as
+- Compatible Lua source replacement retains a usable program;
+- A successful project build publishes state and manifest, is recognized as
   current, and remains the last success after a later broken build;
-- scene persistence round-trips typed behavior payloads and runtime scene
+- Scene persistence round-trips typed behavior payloads and runtime scene
   validation rejects invalid or duplicate instance data.
 
 The current focused suite does not directly prove:
 
-- every missing entry point and every descriptor/bundle size, version, identity,
+- Every missing entry point and every descriptor/bundle size, version, identity,
   count, and revision rejection;
-- exception containment, `Stop`/destroy exact-once ordering, or failure at each
+- Exception containment, `Stop`/destroy exact-once ordering, or failure at each
   partial-start stage;
-- generator behavior around comments, strings, preprocessing, qualified types,
+- Generator behavior around comments, strings, preprocessing, qualified types,
   oversized input, or deterministic output;
-- manifest/build-state artifact digest binding or artifact replacement races;
+- Manifest/build-state artifact digest binding or artifact replacement races;
 - Windows Unicode paths and dependency search, macOS signing/rpath, or explicit
   cross-platform fixture parity;
-- job/callback/service quiescence, runtime-state snapshot/restore, or native
+- Job/callback/service quiescence, runtime-state snapshot/restore, or native
   restart fallback;
-- packaged-player loading and shipping replacement restrictions;
-- schema migration and lossless opaque preservation of unsupported payloads.
+- Packaged-player loading and shipping replacement restrictions;
+- Schema migration and lossless opaque preservation of unsupported payloads.
 
 ## Follow-Up Ownership
 
