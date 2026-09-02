@@ -125,10 +125,12 @@ a core workflow but may be added through custom shaders.
 | `ClearCoat` | Optional; dual normal/roughness layer. |
 
 New shading models must register their required vertex attributes, permutation
-keys, and render passes. The renderer may skip unsupported shading models on
-lower feature tiers. For example, `Hair`, `Cloth`, `Subsurface`, and `ClearCoat`
-are typically disabled on `es3`; `dx11` and above may support them depending on
-the renderer backend.
+keys, and render passes. Required shading models fail admission when unavailable.
+Optional models may select only an authored, cooked and product-declared fallback;
+the renderer records that edge and never skips a model from an API name or profile
+label. `Hair`, `Cloth`, `Subsurface`, and `ClearCoat` therefore depend on exact
+effective capabilities, limits and target variants rather than legacy `es3`/`dx11`
+tiers.
 
 ### Material Input Types
 
@@ -335,20 +337,43 @@ layout or another backend's reflection cannot substitute for that map.
 
 ## Renderer Integration
 
+### Terrain Material Boundary
+
+[ADR-139](../../adr/139-terrain-render-extraction-material-lod-and-tier-boundary.md)
+applies this model to Terrain/Foliage. Terrain authoring/cook owns semantic layer order,
+weights, holes, material-function references, legal per-tile layer masks and required
+blend behavior. Material/Shader cook validates those inputs and emits explicit finite
+target permutations with normalized reflection. RenderFrontend selects and binds only a
+cooked permutation compatible with the exact Terrain payload, raster recipe and effective
+capabilities; the backend cannot change layer count, disable holes or substitute a shader.
+
+Terrain `Baseline`/`Standard`/`High`/`Ultra` and renderer product profiles are independent
+typed axes. Equal labels do not imply conversion or a hidden compile flag. Profile-only
+numeric changes remain parameters; shader-byte or interface changes appear as declared
+features, pass/layout identity or target-artifact identity. TRF-003.2 owns the exact
+Terrain material permutation key and layer/blending limits within this boundary.
+
+Opaque, Masked, TransparentSorted and TransparentAdditive classification is authored and
+cooked material meaning, not an extractor guess from foliage type. Missing required
+texture, reflection, permutation, layer capacity or pass compatibility fails preparation.
+An optional lower variant must be explicitly declared, cooked and recorded by the product
+plan.
+
 ### Material Table
 
 The scene runtime owns a `MaterialTable` that maps `MaterialId` to:
 
 - parent material asset
 - resolved parameter block
-- selected shader variant
-- pipeline state object reference
+- declared feature/classification and permutation requirements
 
-The table is populated during scene conversion. Changing the parent material or
+This semantic table contains no resident shader, pipeline state object or native binding.
+RenderFrontend owns a generation-scoped realization that maps `MaterialId` plus packed
+`MaterialBindingId` to the admitted cooked variant, renderer resources and pipeline.
+The semantic table is populated during scene conversion. Changing the parent material or
 feature flags at runtime requires an explicit material swap. Editing per-instance
-parameter overrides does not require a swap; the scene runtime updates the
-instance's entry in the material table under a new override hash while the parent
-material remains shared.
+parameter overrides does not require a swap; the scene runtime updates the instance's
+entry under a new override hash while the parent material remains shared.
 
 ### Render Extraction
 
@@ -371,7 +396,8 @@ Materials declare which render passes they participate in:
 - `MotionVectors`
 - `CustomN`
 
-The render graph queries the material table for the correct variant per pass.
+The render graph queries the RenderFrontend realization for the exact admitted variant
+per pass and retains its generation through execution.
 
 ### GBuffer Contract
 
@@ -432,6 +458,8 @@ Cook-time diagnostics:
 - Cook tests that verify variant emission for each standard feature flag.
 - Runtime tests for explicit optional-feature fallback, missing required variants,
   driver restrictions, stale capability revisions and profile-policy rejection.
+- Terrain tests for layer/hole/blend permutation admission, material classification and
+  Terrain-tier/render-profile independence without implicit backend/profile fallback.
 - Visual regression tests for standard material spheres under representative
   lighting.
 
@@ -449,3 +477,7 @@ Cook-time diagnostics:
   lighting, shadows, global illumination, post-processing.
 - [Built-In Scene Primitives](./built-in-scene-primitives.md): default material
   assignment and vertex layout.
+- [Terrain And Foliage Architecture](./terrain-and-foliage-architecture.md): Terrain
+  layer, candidate and render-plan ownership.
+- [ADR-139](../../adr/139-terrain-render-extraction-material-lod-and-tier-boundary.md):
+  Terrain material/permutation, profile and renderer-realization boundary.
