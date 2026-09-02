@@ -447,6 +447,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Destruction Event and Cosmetic Consumer Ownership](../adr/147-destruction-event-and-cosmetic-consumer-ownership.md):
   committed fact identity and retention, application-owned dispatch, safe-point fan-out,
   deduplication and gameplay/VFX/Decal/Audio ownership boundaries.
+- [Fracture Document, Generator, Undo and Preview Ownership](../adr/148-fracture-document-generator-undo-and-preview-ownership.md):
+  persistent authoring document, detached generator transactions, exact bounded history,
+  Assets source/cook publication and production-isolated preview.
 - [Procedural Generation Architecture](./runtime/procedural-generation-architecture.md):
   PCG graphs, point clouds, validation, transactions, server authority, and
   streaming-cell ownership.
