@@ -1096,6 +1096,12 @@ identities. Renderer may convert linear colors, resolve resources and batch equa
 paint state, but cannot read editor/ImGui styles, select state overrides, inherit a
 property, replace a token or mutate a computed-style generation.
 
+[ADR-080](../../adr/080-runtime-ui-presentation-scope-layer-and-route.md) gives
+Renderer one immutable `UiPresentationPlan` per view. Its semantic World, HUD,
+Screen, Overlay, Modal, Loading and Debug band order is fixed; a backend may batch
+compatible draws within the plan but cannot reorder bands. Runtime UI and the host
+own loading/debug availability, coverage and authority policy, never a backend.
+
 World-space canvases project as ordinary view-dependent render instances under
 declared depth/visibility policy. Screen-space canvases are frontend-owned passes
 composed after world/display transform unless an explicit render plan declares an

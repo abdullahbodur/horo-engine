@@ -208,6 +208,10 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Runtime UI Binding Provider Schema, Identity and Lifetime](../adr/079-runtime-ui-binding-provider-schema-identity-and-lifetime.md):
   typed provider/property schemas, scoped instances, immutable read snapshots,
   owner-validated writes, registration/revocation, module unload, and compatibility.
+- [Runtime UI Presentation Scope, Layer and Route](../adr/080-runtime-ui-presentation-scope-layer-and-route.md):
+  orthogonal owner/audience/route/band/visibility dimensions, fixed presentation
+  bands, transactional scoped stacks, loading/debug policy, input, transitions,
+  and immutable rendering plans.
 - [Networking Architecture](./runtime/networking-architecture.md): optional
   handle-based transports, session/authentication runtime, bounded I/O, and
   remote security.
