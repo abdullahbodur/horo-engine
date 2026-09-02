@@ -780,6 +780,14 @@ The following require an explicit engine or trusted package migration recipe:
 - transforming behavior/plugin-owned payload semantics
 - any change requiring domain knowledge not represented by descriptors
 
+[ADR-132](../../adr/132-platform-services-project-salt-stable-id-tombstone-and-provider-mapping.md)
+is one such boundary: replacing `platformServicesIdSalt` changes every Platform
+Services numeric identity. A project fork/regeneration therefore requires a dry-run
+old-to-new map for active and tombstoned entries, complete durable-reference and
+provider-mapping coverage, transactional publication and derived/offline invalidation.
+Editing the salt field, regenerating during cook or treating text aliases as numeric
+namespace compatibility is forbidden.
+
 Example:
 
 ```cpp

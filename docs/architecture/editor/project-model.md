@@ -79,7 +79,8 @@ Durable portable metadata, machine-local state, and derived output remain
 separate:
 
 - `.horo/project.json`, `.horo/packages.json`, `.horo/packages.lock`,
-  `.horo/input.json`, `.horo/collision.json`, and asset sidecars are portable
+  `.horo/input.json`, `.horo/collision.json`,
+  `.horo/platform_services.ids.json`, and asset sidecars are portable
   source-controlled inputs
 - `.horo/editor_workspace.json`, `.horo/local/`, and `.horo/asset_index.json`
   are local or derived state
@@ -97,6 +98,7 @@ into `.horo/packages.json`; it is not a second package request authority.
   "horoVersion": "0.1.0",
   "persistentContract": "sha256:997e790fc23515b362847c755006156aa35353ce7f2624518acf7ed1214ddb03",
   "projectId": "proj_2a4f...",
+  "platformServicesIdSalt": "psid1:0123456789abcdef0123456789abcdef",
   "name": "MyGame",
   "projectVersion": "0.1.0",
   "createdAt": "2026-01-15T09:30:00Z",
@@ -127,6 +129,15 @@ injected verifier validates an exact compatibility proof.
 `projectId` is generated once at project creation and never changes. It is used
 as a non-secret observability, crash-reporting, and workspace-correlation
 identifier.
+
+`platformServicesIdSalt` is the single non-secret 128-bit namespace seed for
+[ADR-132](../../adr/132-platform-services-project-salt-stable-id-tombstone-and-provider-mapping.md)
+achievement, leaderboard, stat and presence-status IDs. Project creation obtains it
+from the platform cryptographic random source and commits it with the project identity
+and empty `.horo/platform_services.ids.json` ledger. Ordinary VCS/filesystem clones
+preserve it. Only an explicit project-identity fork or reviewed namespace migration
+may replace it; that transaction must remap every durable reference and provider
+mapping rather than editing this field alone.
 
 User activity such as `lastOpenedAt` does not belong in portable
 `project.json`; it is stored in the user-level recent-projects model.
