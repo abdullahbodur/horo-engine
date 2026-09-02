@@ -36,6 +36,9 @@ that lifecycle decision.
 - Procedural graphs compile to separate immutable sound generators and reuse the
   ordinary AudioFrontend, voice, spatialization, mixer routing, and lifecycle
   contracts under [ADR-071](../../adr/071-procedural-audio-graph-ownership.md).
+- Middleware selects either event bridge or backend replacement before runtime
+  construction; one runtime has one final mixer/device owner under
+  [ADR-072](../../adr/072-audio-middleware-integration-model.md).
 
 ## Layer Model
 
@@ -284,12 +287,20 @@ middleware event bridge described below.
 In **event middleware** mode the native Horo mixer remains active. The bridge
 must reserve a proxy slot in `VoiceRegistry` for each middleware event so that
 core voice limits and virtualization policy apply to the combined native +
-middleware voice budget. `MiddlewareVoiceHandle` is owned by the middleware
-bridge; the proxy slot carries the same priority, bus, and virtualization
-metadata used by native voices. If the bridge cannot create a proxy slot, the
-event is rejected according to the same policy as a native voice. Backend
-replacement mode may bypass the proxy slot because the middleware owns the
-entire voice and mixer model.
+middleware voice budget. Any private vendor playing handle is owned by the
+bridge and never leaves it; Horo exposes only `AudioEventInstanceId`. The proxy
+slot carries the same priority, bus, and virtualization metadata used by native
+voices. If the bridge cannot create a proxy slot, the event is rejected according
+to the same policy as a native voice. Backend
+replacement mode may own physical voice allocation, but it still consumes the
+effective Horo budget and reports admission, steal, virtualization and completion
+through stable Horo observations.
+
+Event bridge does not open a second final output. Its prevalidated vendor stems
+enter ordinary Horo buses as bounded source blocks while Horo retains Master and
+device ownership. Backend replacement owns the final vendor mixer/device; native
+Horo sources coexist only when the adapter preflights explicit feature mapping or
+`HoroSubmixInput` support.
 
 ### AudioListenerComponent
 
@@ -950,6 +961,14 @@ code is trusted in-process native code, not sandboxed; restart is the default fo
 disable/update unless every graph, callback, job, tail, queue, state, and module
 lease is proven drained.
 
+[ADR-072](../../adr/072-audio-middleware-integration-model.md) is the single
+normative owner of event-bridge versus backend-replacement semantics, normalized
+frontend frames, stable event/parameter bindings, final device/mixer ownership,
+native coexistence, global budgets, transactional banks, profiling and release
+gates. Middleware contributes one closed `audio.middleware.event_bridge` or
+`audio.middleware.backend` capability through ADR-069; it does not introduce a
+generic third integration shape.
+
 Core provides:
 
 - AudioSource / AudioListener
@@ -982,19 +1001,20 @@ Middleware integration has two supported shapes:
 
 ```text
 Backend replacement:
-  Horo AudioFrontend -> middleware backend/device/mixer
+  Horo AudioFrontendFrame -> middleware adapter -> vendor mixer/device
+  optional Horo submix ------^ (only with admitted HoroSubmixInput)
 
 Event middleware:
-  Horo scene component -> Wwise/FMOD event trigger
-  Horo mixer remains available for core audio
+  Horo AudioFrontend -> event proxy -> vendor event engine -> bounded stems
+                                                        -> Horo mixer/device
 ```
 
-Backend replacement delegates device and mixer work to middleware while keeping
-Horo's scene, asset identity, lifecycle, and observability contracts. Event
-middleware maps scene events and components to middleware-authored events while
-the native Horo mixer may still own basic audio. Both models must respect Horo's
-real-time thread rules and must not bypass project trust or package lifecycle
-policy.
+The application selects one exact adapter/model before runtime construction and
+that identity is fixed until ordered teardown. Event bridge keeps Horo as the only
+Master/device owner; the vendor does not open an independent endpoint. Backend
+replacement makes the adapter the only final mixer/device owner. Event bridge and
+replacement, two final Masters, or two independent devices cannot coexist in one
+runtime.
 
 ### Middleware Backend Contract
 
@@ -1012,12 +1032,19 @@ public:
 
 class IAudioMiddlewareEventBridge {
 public:
-    virtual Result<MiddlewareVoiceHandle>
-    PostEvent(StableEventId event,
+    virtual Result<AudioMiddlewareEpochToken>
+    PrepareOutputEpoch(const AudioMiddlewareOutputConfig& config) = 0;
+
+    virtual Result<void>
+    ActivateOutputEpoch(AudioMiddlewareEpochToken preparedEpoch) = 0;
+
+    virtual Result<void>
+    PostEvent(AudioEventInstanceId instance,
+              StableEventId event,
               const AudioEmitterContext& emitter,
               const AudioCommandTiming& timing) = 0;
 
-    virtual Result<void> StopEvent(MiddlewareVoiceHandle voice,
+    virtual Result<void> StopEvent(AudioEventInstanceId instance,
                                    AudioFadeDescriptor fade) = 0;
 };
 
@@ -1031,10 +1058,15 @@ public:
 ```
 
 Backend replacement may bypass Horo's native `MixerGraph` and `VoiceRegistry`,
-but it must still consume normalized frontend frames and publish bounded stats.
+but it must still consume normalized frontend frames, apply the effective Horo
+budget/profile and publish bounded observations/stats. Native Horo source/bus/DSP/
+spatial semantics are available only when the adapter declares exact mapping or
+`HoroSubmixInput`; required absence fails activation.
 Event middleware uses `AudioSourceKind::MiddlewareEvent` and routes stable event
 IDs, emitter transforms, and parameters through the same command staging path as
-native clip playback.
+native clip playback. It reserves proxy and conservative event-cost tokens before
+posting, correlates private vendor playing handles to `AudioEventInstanceId`, and
+routes declared vendor stems into Horo buses.
 
 Parameter bridge IDs are stable authoring/runtime IDs. They are registered in
 the audio parameter registry during project cook or package build so that
@@ -1062,6 +1094,23 @@ struct AudioEventRegistry {
 
 Event string-to-ID lookup is forbidden on the audio thread. Missing event IDs
 are reported through metrics and diagnostics, not through runtime logs.
+
+The cooked middleware binding manifest is the private translation boundary. It
+maps stable Horo event/parameter IDs to exact adapter, SDK, bank and vendor identity
+bytes with typed schemas and conservative cost. Vendor strings, GUIDs, hashes,
+playing IDs and handles never enter ordinary gameplay APIs, scene components,
+frontend frames, save data or metric dimensions.
+
+Adapter, complete binding manifest and all required banks preflight and publish as
+one generation. Missing/mismatched content, target, capability, budget, trust or
+license evidence rolls back the candidate; a partial event set never activates.
+Old banks/code remain leased until events, voices, tails, callbacks, queues and
+profiler views retire.
+
+All adapters publish a normalized bounded stats snapshot for voices/events,
+command lag/queue pressure, render load, underruns, bank memory and faults, with
+unknown/unsupported distinct from zero. Vendor-specific profiler data stays in an
+explicit integration panel/capture and is labeled with provenance.
 
 The middleware backend participates in the device lifecycle. `Initialize` and
 `Shutdown` are invoked from the same state machine that manages native device
@@ -1284,7 +1333,7 @@ or feature plan must be updated in the same change.
 | 1. Asset import | Project panel → Assets/Audio/SFX → Import Asset → `explosion.wav` | Import dialog → AssetImporter validates WAV → AudioCooker builds platform formats → AudioClip asset + registry | Asset browser'da görünür; inspector'da duration, sample rate, loop settings okunur |
 | 2. Audio Source ekleme | Hierarchy → Player → Add Component → Audio → Audio Source → sound (clip veya variation container)/bus/mode/spatial/preview | AudioSourceComponent sahneye serileşir → SceneRuntime transform çıkarır → sound resolve edilir → CreateVoice → MPSC → SPSC → callback → SFX bus → mixer | Preview ayrı bir bypass değil, normal command queue ile çalışır |
 | 3. Mixer'da bus ayarı | Window → Audio → Mixer → SFX bus volume -6 dB, mute; solo (editor-only) | AudioFrontend redundant command birleştirir → SwapMixerGraph / SetVoiceParameters → buffer boundary'de uygulanır | SFX bus runtime'da mute; solo sahneye yazılmaz |
-| 4. Middleware event | Inspector → Audio Source Kind: Middleware Event → StableEventId from registry (authoring name `enemy_footstep`) | AudioFrontend → IAudioMiddlewareEventBridge → VoiceRegistry proxy slot → MiddlewareVoiceHandle | Native ve middleware voice aynı voice bütçesini ve policy'yi paylaşır |
+| 4. Middleware event | Inspector → Audio Source Kind: Middleware Event → StableEventId from registry (authoring name `enemy_footstep`) | AudioFrontend → VoiceRegistry proxy slot/cost reservation → IAudioMiddlewareEventBridge → AudioEventInstanceId | Native ve middleware voice aynı voice bütçesini ve policy'yi paylaşır |
 | 5. Snapshot tetikleme | Game code: `AudioMixer.ApplySnapshot("pause_menu")` | AudioFrontend snapshot command → Mixer ramps Music↓, UI↑, SFX↓ | Ducking click/pop olmadan uygulanır |
 | 6. Animation event | Animation editor → frame 42 → Event type: Play Audio Clip → `footstep_run` | Animation system command producer olur → CreateVoice + StartVoice with timestamp | Animation sistemini audio thread'den poll etmeden senkron ses |
 | 7. Timeline senkron ses | Timeline → explosion/dialogue/music cue'ları aynı zaman damgasına hizala | Timeline → ScheduledCommandBatch → SPSC → callback atomik uygular | Sesler sample-accurate sync başlar |
