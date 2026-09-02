@@ -70,7 +70,7 @@ The network subsystem is organized into four distinct CMake targets with strict 
   - Result and error types: `Result<T, NetworkErrorCode>`, `NetworkErrorCode`, `DisconnectReason`.
   - Message abstractions: `MessageView`, `ConstMessageSpan`, `IMessageSerializer`.
   - Transport interface and events: `INetworkTransport`, `ITransportEventConsumer`, `TransportEvent`, `TransportConnectionState`, `TransportCapabilities`.
-  - Replication traits and property condition flags: `ReplicationTraits<T>`, `ReplicationCondition`.
+  - Replication schema contracts: `ReplicationSchemaId`, stable `FieldId`, `ReplicationSchemaVersion`, field descriptors, canonical codec bindings and `ReplicationCondition`.
 - **Not Public**: `ITransportConnection`, `ITransportListener`, native peers, OS sockets, and backend queue types.
 
 ### 2. `HoroEngine::NetworkRuntime`
@@ -84,7 +84,7 @@ The network subsystem is organized into four distinct CMake targets with strict 
   - `NetworkSession`: Application-facing session that starts after the transport reports `Connected`.
   - `SessionAdmissionController`: Owns bounded compatibility, peer trust, credential verification and activation before gameplay dispatch.
   - `SessionStateMachine`: Manages session transitions (`Created` -> `Negotiating` -> `Authenticating` -> `Activating` -> `Active` -> `Closing` -> `Closed`).
-  - `ReplicationManager`: Manages dirty property tracking, delta compression, interest management sets, and authoritative snapshot generation.
+  - `ReplicationManager`: Pins the validated schema generation and manages explicit dirty hints, immutable captured snapshots, baselines, interest, wire routing and validated apply commands without owning gameplay state.
   - `MessageDispatcher`: Routes incoming RPCs and replication payloads to registered game handlers on the simulation thread.
 
 ### 3. `HoroEngine::NetworkTransportNull`
@@ -336,6 +336,11 @@ Messages consist of:
 - 16-bit Message Type ID.
 - 32-bit Sequence / Acknowledgement Numbers.
 - Bounded payload bytes with validated length headers.
+
+Replication payloads further carry ADR-099 authority epoch, network object ID/
+generation, authoritative tick, schema ID/version and canonical ascending stable
+`FieldId` records. Property paths, native offsets and component memory layouts are
+never protocol identity.
 
 `NetworkRuntime` performs handshake negotiation after the transport reports
 `Connected`. Until the session is `Active`, it accepts only bounded admission

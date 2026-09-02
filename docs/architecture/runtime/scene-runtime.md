@@ -464,6 +464,25 @@ owned as logical `SceneObjectId`: it resolves to the replacement scene when the
 object remains and is cleared when the authored object was deleted. Editor state
 does not retain an old runtime's `EntityRef`.
 
+## Replication Ownership Boundary
+
+[ADR-099](../../adr/099-replication-ownership-authority-and-compatibility.md)
+keeps canonical component/gameplay values and mutation safe points in Scene and
+their declaring systems. `NetworkRuntime` may invoke a registered capture adapter
+with a validated read-only owner-thread view at the network capture safe point; it
+never scans component memory or infers wire fields from ECS layout.
+
+Received replication is a bounded typed apply command carrying scene/entity,
+authority, object and schema generations. Scene revalidates them at the owner safe
+point and invokes the declaring owner's apply adapter. The adapter commits one
+valid mutation or fails without partial visibility; NetworkRuntime cannot write a
+component pool directly. Scene reload/destruction changes generation/authority
+epoch so late records cannot target reused entity slots.
+
+Standalone, authority-server, autonomous-client and simulated-client roles are
+explicit host/world capabilities. Entity locality, possession, input device and
+same-process listen-server composition never grant Scene write authority.
+
 ## Data Bus Relationship
 
 System-to-system behavior inside one deterministic tick uses direct scheduling,

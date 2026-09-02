@@ -206,6 +206,22 @@ behaviors in an "Add Behavior" or "Add Component" flow and attach them to any
 compatible scene object. The generic inspector edits the behavior's declarative
 authoring fields. Custom inspectors still belong to the editor extension contract.
 
+### Replication Declaration Boundary
+
+[ADR-099](../../adr/099-replication-ownership-authority-and-compatibility.md)
+requires gameplay/behavior owners that opt into replication to contribute inert
+stable schema/`FieldId` descriptors plus canonical bounded codecs and capture/apply
+adapters through the generated module contribution seam. C++ member names, editor
+property paths, serialized field order, reflection offsets and raw instance memory
+never become wire identity.
+
+The behavior remains canonical state/mutation owner. Its capture adapter receives a
+read-only owner-thread view and emits declared fields; its apply adapter validates
+and commits a bounded typed command at the Scene safe point. Neither adapter owns
+sessions, transport, interest or baselines, and neither may retain component views
+or bypass behavior invariants. Publishing an ordinary gameplay event does not
+replicate it; inputs/RPCs require separate direction-scoped schemas.
+
 ### Native C++ Behavior Example
 
 A native behavior is ordinary gameplay code compiled into the project gameplay
