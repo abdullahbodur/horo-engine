@@ -106,6 +106,138 @@ namespace {
         REQUIRE(capacity.ErrorValue().code.Value() == "render.frontend.resource.capacity_exhausted");
     }
 
+    TEST_CASE("Resource registry limits reject every invalid bound", "[unit][runtime][renderer][resource]") {
+        REQUIRE(RenderResourceRegistryLimits{}.IsValid());
+        REQUIRE_FALSE(RenderResourceRegistryLimits{.maximumSlots = 0}.IsValid());
+        REQUIRE_FALSE(RenderResourceRegistryLimits{.maximumPendingRequests = 0}.IsValid());
+        REQUIRE_FALSE(RenderResourceRegistryLimits{.retirementDrainBudget = 0}.IsValid());
+        REQUIRE_FALSE(RenderResourceRegistryLimits{.maximumPendingRequests = 2, .maximumOperationResults = 1}.IsValid());
+    }
+
+    TEST_CASE("Resource registry reports malformed and state-incompatible operations", "[unit][runtime][renderer][resource]") {
+        const auto owner = AcquireRenderResourceOwnerId();
+        REQUIRE(owner.HasValue());
+        RenderResourceRegistry registry{owner.Value(), {}};
+        REQUIRE(registry.Owner() == owner.Value());
+
+        const std::array malformed{
+            RenderResourceIdentity{},
+            RenderResourceIdentity{.owner = owner.Value(), .slot = 0, .generation = 1},
+            RenderResourceIdentity{.owner = owner.Value(), .slot = 1, .generation = 0},
+        };
+        for (const RenderResourceIdentity identity : malformed) {
+            const auto state = registry.State(RenderResourceClass::Buffer, identity);
+            REQUIRE(state.HasError());
+            REQUIRE(state.ErrorValue().code.Value() == "render.frontend.resource.handle_malformed");
+        }
+
+        const auto outOfRange =
+            registry.State(RenderResourceClass::Buffer, RenderResourceIdentity{.owner = owner.Value(), .slot = 1, .generation = 1});
+        REQUIRE(outOfRange.HasError());
+        REQUIRE(outOfRange.ErrorValue().code.Value() == "render.frontend.resource.slot_out_of_range");
+
+        auto reserved = registry.Reserve(RenderResourceClass::Buffer);
+        REQUIRE(reserved.HasValue());
+        const RenderResourceIdentity identity = Identity(reserved.Value());
+        REQUIRE(identity != RenderResourceIdentity{.owner = {}, .slot = identity.slot, .generation = identity.generation});
+        REQUIRE(identity != RenderResourceIdentity{.owner = identity.owner, .slot = identity.slot + 1, .generation = identity.generation});
+        REQUIRE(identity != RenderResourceIdentity{.owner = identity.owner, .slot = identity.slot, .generation = identity.generation + 1});
+
+        const auto pendingBackend = registry.BackendInstance(RenderResourceClass::Buffer, identity);
+        REQUIRE(pendingBackend.HasError());
+        REQUIRE(pendingBackend.ErrorValue().code.Value() == "render.frontend.resource.not_ready");
+        REQUIRE(registry.AddSubmissionPin(RenderResourceClass::Buffer, identity).HasError());
+        REQUIRE(registry.ReleaseSubmissionPin(RenderResourceClass::Buffer, identity).HasError());
+        REQUIRE(registry.Release(RenderResourceClass::Buffer, identity).HasError());
+
+        const auto invalidBackend = registry.Publish(RenderResourceClass::Buffer, identity, 0);
+        REQUIRE(invalidBackend.HasError());
+        REQUIRE(invalidBackend.ErrorValue().code.Value() == "render.frontend.resource.backend_instance_invalid");
+        REQUIRE(registry.Publish(RenderResourceClass::Buffer, identity, 11).HasValue());
+        REQUIRE(registry.Publish(RenderResourceClass::Buffer, identity, 12).HasError());
+
+        const Error lateFailure{ErrorCode{"render.test.late_failure"},
+                                ErrorDomainId{"render.test"},
+                                ErrorSeverity::Error,
+                                "Injected late failure.",
+                                {}};
+        REQUIRE(registry.Fail(RenderResourceClass::Buffer, identity, lateFailure).HasError());
+        REQUIRE(registry.ReleaseSubmissionPin(RenderResourceClass::Buffer, identity).HasError());
+        REQUIRE(registry.AddSubmissionPin(RenderResourceClass::Buffer, identity).HasValue());
+        REQUIRE(registry.Release(RenderResourceClass::Buffer, identity).HasValue());
+        const auto duplicateRelease = registry.Release(RenderResourceClass::Buffer, identity);
+        REQUIRE(duplicateRelease.HasError());
+        REQUIRE(duplicateRelease.ErrorValue().code.Value() == "render.frontend.resource.already_retiring");
+        REQUIRE(registry.AddSubmissionPin(RenderResourceClass::Buffer, identity).HasError());
+        REQUIRE(registry.BackendInstance(RenderResourceClass::Buffer, identity).HasError());
+        REQUIRE(registry.DrainRetirements() == 0);
+        REQUIRE(registry.ReleaseSubmissionPin(RenderResourceClass::Buffer, identity).HasValue());
+        REQUIRE(registry.DrainRetirements() == 1);
+    }
+
+    TEST_CASE("Resource registry validates dependency generations and operation identities", "[unit][runtime][renderer][resource]") {
+        const auto owner = AcquireRenderResourceOwnerId();
+        const auto foreignOwner = AcquireRenderResourceOwnerId();
+        REQUIRE(owner.HasValue());
+        REQUIRE(foreignOwner.HasValue());
+        RenderResourceRegistry registry{owner.Value(), {}};
+
+        auto ready = registry.Reserve(RenderResourceClass::Buffer);
+        auto pending = registry.Reserve(RenderResourceClass::Texture);
+        REQUIRE(ready.HasValue());
+        REQUIRE(pending.HasValue());
+        REQUIRE(registry.Publish(RenderResourceClass::Buffer, Identity(ready.Value()), 1).HasValue());
+
+        const std::array pendingDependency{Identity(pending.Value())};
+        const auto notReady = registry.Reserve(RenderResourceClass::Mesh, pendingDependency);
+        REQUIRE(notReady.HasError());
+        REQUIRE(notReady.ErrorValue().code.Value() == "render.frontend.resource.dependency_not_ready");
+
+        const std::array duplicateDependencies{Identity(ready.Value()), Identity(ready.Value())};
+        const auto duplicate = registry.Reserve(RenderResourceClass::Mesh, duplicateDependencies);
+        REQUIRE(duplicate.HasError());
+        REQUIRE(duplicate.ErrorValue().code.Value() == "render.frontend.resource.handle_malformed");
+
+        RenderResourceIdentity foreign = Identity(ready.Value());
+        foreign.owner = foreignOwner.Value();
+        const std::array foreignDependency{foreign};
+        REQUIRE(registry.Reserve(RenderResourceClass::Mesh, foreignDependency).HasError());
+
+        REQUIRE(registry.Release(RenderResourceClass::Buffer, Identity(ready.Value())).HasValue());
+        REQUIRE(registry.DrainRetirements() == 1);
+        const std::array staleDependency{Identity(ready.Value())};
+        REQUIRE(registry.Reserve(RenderResourceClass::Mesh, staleDependency).HasError());
+
+        const auto invalidOperation = registry.OperationResult({});
+        REQUIRE(invalidOperation.HasError());
+        REQUIRE(invalidOperation.ErrorValue().code.Value() == "render.frontend.resource.operation_unknown");
+        const auto unknownOperation = registry.OperationResult(ResourceOperationId{999'999});
+        REQUIRE(unknownOperation.HasError());
+        REQUIRE(unknownOperation.ErrorValue().code.Value() == "render.frontend.resource.operation_unknown");
+    }
+
+    TEST_CASE("Resource registry preserves incomplete results when its result store is full", "[unit][runtime][renderer][resource]") {
+        const auto owner = AcquireRenderResourceOwnerId();
+        REQUIRE(owner.HasValue());
+        RenderResourceRegistry registry{owner.Value(),
+                                        {.maximumSlots = 3,
+                                         .maximumPendingRequests = 2,
+                                         .retirementDrainBudget = 1,
+                                         .maximumOperationResults = 2}};
+
+        auto first = registry.Reserve(RenderResourceClass::Buffer);
+        auto second = registry.Reserve(RenderResourceClass::Texture);
+        REQUIRE(first.HasValue());
+        REQUIRE(second.HasValue());
+        REQUIRE(registry.Publish(RenderResourceClass::Texture, Identity(second.Value()), 2).HasValue());
+
+        const auto resultStoreFull = registry.Reserve(RenderResourceClass::Sampler);
+        REQUIRE(resultStoreFull.HasError());
+        REQUIRE(resultStoreFull.ErrorValue().code.Value() == "render.frontend.resource.queue_full");
+        REQUIRE(registry.OperationResult(first.Value().operation).HasError());
+        REQUIRE(registry.OperationResult(second.Value().operation).HasValue());
+    }
+
     TEST_CASE("Resource registry bounds retained operation results", "[unit][runtime][renderer][resource]") {
         const auto owner = AcquireRenderResourceOwnerId();
         REQUIRE(owner.HasValue());
