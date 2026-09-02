@@ -174,20 +174,14 @@ point. A button callback never writes ECS, renderer or asset state directly.
 
 Gameplay pause stops fixed simulation but keeps Runtime UI lifecycle, input,
 VariableUpdate, layout, rendering and required services active. UI bindings observe
-the latest committed gameplay state. Presentation animations declare one policy:
-
-```cpp
-enum class UiTimePolicy : std::uint8_t {
-    PresentationUnscaled,
-    FollowGameplay,
-    Manual,
-};
-```
-
-`PresentationUnscaled` is the default for menus, navigation, focus and accessibility
-feedback. `FollowGameplay` freezes while gameplay is paused and advances from
-committed simulation-time evidence; it never multiplies variable delta by a guessed
-pause/rate value. `Manual` advances only through an admitted owner command.
+the latest committed gameplay state.
+[ADR-077](077-runtime-ui-animation-clock-and-time-domain.md) replaces this ADR's
+provisional three-value `UiTimePolicy` sketch with the normative Simulation,
+PresentationUnscaled, ScreenTransition, EditorPreview, DeterministicTest and Manual
+domain/sample/policy contract. PresentationUnscaled remains the default for menus,
+navigation, focus and accessibility feedback. Simulation time freezes when no
+fixed tick commits and never multiplies a guessed pause/rate value. Manual time
+advances only through an admitted owner command.
 
 A UI action may request pause/resume through an application pause capability, but
 Runtime UI does not own pause tokens or set scheduler state. Single-step advances

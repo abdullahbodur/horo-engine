@@ -106,10 +106,12 @@ the player cannot click geometry that was never visible.
 ## Pause, Suspension And Teardown
 
 Gameplay pause stops fixed simulation, not Runtime UI lifecycle, input, layout or
-rendering. UI presentation time is explicitly `PresentationUnscaled`,
-`FollowGameplay` or `Manual`; menus/navigation default to unscaled. Pause/resume is
-requested through the application pause capability, not owned by a UI element.
-Single-step advances one fixed tick followed by one ordinary UI VariableUpdate.
+rendering. ADR-077 makes Simulation, PresentationUnscaled, ScreenTransition,
+EditorPreview, DeterministicTest and Manual distinct domains; menus/navigation
+default to unscaled while gameplay-bound UI advances from committed simulation
+evidence. Pause/resume is requested through the application pause capability, not
+owned by a UI element. Single-step advances one fixed tick followed by one ordinary
+UI VariableUpdate.
 
 Host suspension skips UI variable/extraction/render work and releases interactive
 capture according to Input policy. Resume resets presentation delta and revalidates
@@ -367,6 +369,37 @@ render/interaction-correlated style snapshot. Required failure retains last-good
 state, and old computed styles/dependencies remain leased until old frames retire.
 HoroEditor authors and previews these assets through an isolated runtime adapter;
 its own design-system theme is never a runtime inheritance source.
+
+## Animation Clock And Time Domains
+
+[ADR-077](../../adr/077-runtime-ui-animation-clock-and-time-domain.md) replaces raw
+variable delta with generation-scoped `UiClockSample` snapshots and six closed
+domains: Simulation, PresentationUnscaled, ScreenTransition, EditorPreview,
+DeterministicTest and Manual. Runtime UI owns timeline accumulation/lifecycle while
+the host supplies committed simulation and clamped monotonic presentation evidence.
+Renderer, Platform, skeletal Animation and Sequencer do not advance UI timelines.
+
+Simulation advances only from committed fixed ticks and therefore follows gameplay
+pause/rate/single-step without double scaling. PresentationUnscaled is the default
+for interactive menus and ignores gameplay pause/time scale. ScreenTransition is a
+presentation child clock gated by one exact route/screen generation. Preview is
+isolated editor session state; deterministic test and manual time advance only from
+explicit ordered commands.
+
+Clock/cursor/rate accumulation uses checked integer/rational arithmetic with carried
+remainders. Host suspension holds presentation/transition/preview live playback and
+resume starts with zero delta. Multiple viewports, extraction retries or repeated
+rendering cannot advance an animation.
+
+Enter/exit transitions may block screen activation/retirement only when declared
+required and within finite deadlines. Element/screen/scope removal, replacement,
+dependency failure, reload policy or shutdown completes/cancels one generation
+exactly once. Reduced-motion policy resolves before publication and can make motion
+zero-duration while still completing the lifecycle in the same VariableUpdate.
+
+VariableUpdate freezes one clock snapshot, evaluates timelines once in stable order,
+then resolves style/layout/focus and publishes immutable values. Render phases only
+consume those values; they never sample time or fire completion markers.
 
 ## Rendering Contract
 

@@ -145,6 +145,14 @@ them. Runtime game UI is not `RenderGui`; that phase remains host/editor/develop
 GUI composition. Presentation success adopts the next interaction revision and
 deferred lifecycle commit retires old scope/render generations.
 
+[ADR-077](../../adr/077-runtime-ui-animation-clock-and-time-domain.md) refines UI
+time without adding a phase or changing host clock ownership. Before Runtime UI
+VariableUpdate, the host supplies one immutable clock-evidence snapshot containing
+committed simulation ticks and admitted presentation time. Runtime UI derives its
+simulation, unscaled, screen-transition, preview, deterministic-test and manual
+domains and evaluates every active UI timeline exactly once before style/layout
+publication. Render extraction/execution never advances them.
+
 ## Time Model
 
 The host tracks:
@@ -266,7 +274,8 @@ Variable update is used for:
 
 - editor camera and presentation behavior
 - interpolation of committed animation poses and isolated editor preview playback
-- Runtime UI input, binding, presentation animation and layout under ADR-073
+- Runtime UI input, binding, ADR-077 domain-driven animation and layout under
+  ADR-073
 - job progress and query refresh
 - audio presentation updates where supported
 - streaming and resource coordination
