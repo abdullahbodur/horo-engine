@@ -246,6 +246,11 @@ horo-engine/
 │       │   │   ├── NetworkSession.h
 │       │   │   ├── ReplicationManager.h
 │       │   │   └── ReplicationTraits.h
+│       │   ├── Terrain/
+│       │   │   ├── TerrainTypes.h
+│       │   │   ├── TerrainDescriptors.h
+│       │   │   ├── TerrainRuntime.h
+│       │   │   └── TerrainSnapshots.h
 │       │   ├── GameUI.h
 │       │   ├── DebugConsole.h
 │       │   ├── PlatformServices.h
@@ -403,6 +408,13 @@ horo-engine/
 │   │   │   ├── constraints/
 │   │   │   ├── integration/
 │   │   │   └── queries/
+│   │   ├── terrain/
+│   │   │   ├── api/
+│   │   │   ├── runtime/
+│   │   │   ├── streaming/
+│   │   │   ├── render_bridge/
+│   │   │   ├── physics_bridge/
+│   │   │   └── navigation_bridge/
 │   │   ├── audio/
 │   │   │   ├── frontend/
 │   │   │   ├── mixer/

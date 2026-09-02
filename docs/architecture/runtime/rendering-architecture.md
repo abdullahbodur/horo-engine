@@ -1036,6 +1036,14 @@ consumers apply their own history policy from that evidence. Cinematic Runtime n
 calls backend/provider-specific reset hooks, and rendering never decides whether a
 gameplay, cinematic or editor proposal wins.
 
+[ADR-137](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
+applies the same boundary to Terrain/Foliage. TerrainRuntime publishes a bounded,
+immutable, generation/revision-tagged extraction snapshot and retains its lease through
+frame extraction. RenderFrontend owns conversion to RenderApi resources/graph work;
+the selected backend alone owns native buffers, culling commands, draws and deferred
+GPU retirement. Rendering cannot mutate terrain residency/source/overlays, treat a
+native handle as Terrain identity or infer a Terrain tier from the backend name.
+
 The scene runtime produces frame-owned render data:
 
 ```cpp
@@ -1485,6 +1493,8 @@ Required tests cover:
 - deterministic pass ordering
 - stale resource handle rejection
 - upload cancellation and generation replacement
+- terrain/foliage extraction generation, tier/capability rejection and GPU-resource
+  retirement without native identity leaking back to Terrain
 - resize, minimize, and target recreation
 - deferred destruction after frame completion
 - shader reflection/material validation
@@ -1510,3 +1520,4 @@ Required tests cover:
 - [Ownership And Resource Lifetime](../foundation/ownership-and-resource-lifetime.md)
 - [Platform Abstraction](../foundation/platform-abstraction.md)
 - [XR Architecture](./vr-ar-architecture.md)
+- [ADR-137: Terrain and Foliage Ownership, Data, Tier and Lifecycle](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)

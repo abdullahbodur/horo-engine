@@ -302,6 +302,15 @@ cannot discard activation-critical resources beneath an Active cell. They reques
 cell eviction or an admitted fallback transition through the authority. Navigation
 scratch and tile leases likewise remain within its share, including retired tiles.
 
+[ADR-137](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
+applies this authority to Terrain/Foliage: TerrainRuntime owns provider-local tile/
+cluster semantics and disposable cache policy only inside its admitted slice, while
+this authority retains cell demand, priority, aggregate reservation and commit/evict
+barriers. Terrain readiness is generation-scoped and multi-dimensional; a cell cannot
+infer required collision/navigation/visual readiness from decoded height data alone.
+Old/new dataset generations, staging/upload copies and dependent-system retirement stay
+charged until their respective owners release the shared reservation identity.
+
 ## Streaming Volumes, Priority And Retry Policy
 
 Camera, Gameplay, NetworkRelevance and Preload volumes create bounded residency
@@ -918,6 +927,7 @@ See [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin
 - [Scene Runtime](./scene-runtime.md): ECS entity storage, candidate preparation, and transactional structural mutations.
 - [Asset Pipeline](./asset-pipeline.md): Streaming cell assets, chunked package archives, and async I/O with `CancellationToken`.
 - [Terrain And Foliage Architecture](./terrain-and-foliage-architecture.md): Terrain clipmap streaming and cell-aligned foliage clusters.
+- [ADR-137](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md): Terrain/Foliage data, tier, lifecycle, readiness and reservation ownership.
 - [Physics Architecture](./physics-architecture.md): Static mesh collider registration and scene binding.
 - [Networking Architecture](./networking-architecture.md): Server-authoritative cell relevance and replication.
 - [Concurrency And Job System](../foundation/concurrency-and-jobs.md): Job workers, cancellation tokens, and thread roles.

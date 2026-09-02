@@ -144,6 +144,14 @@ spatial evaluation. Gameplay consumes typed admission/query interfaces, and navi
 includes behavior nodes or script bindings. Host adapters bridge Assets, World Streaming,
 and scene lifetime without making them providers' dependencies.
 
+[ADR-137](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
+keeps Terrain/Foliage on that decoupled boundary. Terrain produces immutable,
+generation-tagged cooked topology/source or runtime-overlay evidence; Navigation owns
+tile preparation, provider objects, query consistency, publication and retirement.
+Visual terrain or a committed hole/deformation cannot mutate live NavMesh state or
+imply navigation readiness. ADR-108 conservative exclusion plus explicit recook/rebuild
+governs topology change, and aggregate scene/cell activation checks exact generations.
+
 ## Navigation Integration Contracts
 
 ### Submission, Jobs, And Publication
@@ -1784,6 +1792,7 @@ These are required downstream runtime/CI tests, not tests implemented by this AD
 - [Concurrency And Jobs](../foundation/concurrency-and-jobs.md): Parallel crowd and perception jobs
 - [Save Game And Persistence](./save-game-and-persistence.md): durable perception-memory capture and staged restore
 - [ADR-114: Canonical Runtime World Persistence Boundary](../../adr/114-canonical-runtime-world-persistence-boundary.md)
+- [ADR-137: Terrain and Foliage Ownership, Data, Tier and Lifecycle](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md)
 - [Navigation Bake UI HTML Reference](./navigation-bake.html): non-normative
   static UI reference
 - [Debug Console And Overlays](./debug-console-and-overlays.md): AI debug visualization
