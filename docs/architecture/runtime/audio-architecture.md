@@ -291,7 +291,15 @@ documented fallback policy. They must not silently use an arbitrary camera.
 
 ## Mixer Graph
 
-The mixer graph contains named buses:
+[ADR-065](../../adr/065-mixer-topology-and-constrained-dag.md) is the single
+normative owner of legal bus/send/return topology, feedback policy, deterministic
+processing order, graph compilation, publication, and retirement. The mixer is a
+constrained DAG: every non-Master bus has one primary parent route, sends add
+explicit cross-tree routes, and all audio plus same-block control dependencies
+must remain acyclic. Baseline feedback paths, including implicit one-block-delay
+feedback, are rejected before a graph can reach the callback.
+
+The default mixer template contains named buses:
 
 ```text
 Master
@@ -302,7 +310,7 @@ Master
   +-- Ambient
 ```
 
-The core bus/category set is:
+The default core bus/category set is:
 
 | Bus | Purpose |
 |---|---|
@@ -313,9 +321,19 @@ The core bus/category set is:
 | Voice | Dialogue and voice lines. |
 | Ambient | Long-running ambience and environmental beds. |
 
-Buses support typed gain, mute, pause, routing, and effect descriptors. Graph
-changes are prepared off-thread and committed through bounded real-time
-commands.
+Buses use stable `AudioBusId` identity; their names and authoring positions are
+presentation data. One `MasterOutput` root feeds the output adapter. Sends carry
+stable route IDs, typed pre/post-fader taps, gain, and explicit destinations;
+return buses are ordinary typed buses with one primary route toward Master.
+
+Buses support typed gain, mute, pause, routing, and effect descriptors. The Audio
+control runtime compiles complete immutable render-plan generations off the
+callback. Compilation validates the rooted primary tree, combined DAG, layouts,
+providers, and budgets, then derives one stable-ID topological order and canonical
+incoming-route/voice/effect accumulation order. Graph changes commit through a
+bounded `SwapMixerGraph` command at a buffer boundary. Failed or stale builds
+leave the last good generation active, and old plans retire only after matching
+callback acknowledgement and owner-lease/tail policy completion.
 
 Each bus may use the default stereo panner or a custom spatializer slot:
 
@@ -941,6 +959,11 @@ Required tests cover:
 - runtime/device/callback-epoch legal transitions and stale acknowledgement rejection
 - startup cancellation/failure unwind at every acquired stage and callback-ready timeout
 - mixer routing and gain behavior
+- constrained-DAG root, parent, send/return, route, and feedback validation
+- deterministic stable-ID topological and accumulation order across serialization,
+  registration, and job-completion order
+- graph-build failure, stale revision, atomic swap, last-good retention, and
+  generation-safe DSP/provider retirement
 - voice capacity policies
 - real-time queue saturation
 - streaming underrun recovery

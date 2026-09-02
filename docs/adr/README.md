@@ -76,6 +76,7 @@ to the replacement.
 | [062](062-audio-runtime-ownership-and-update-order.md) | Audio Runtime Ownership and Update Order | Proposed | 2026-09-02 |
 | [063](063-audio-sample-format-and-channel-layout.md) | Audio Sample Format and Channel Layout | Proposed | 2026-09-02 |
 | [064](064-audio-asset-and-cook-boundary.md) | Audio Asset and Cook Boundary | Proposed | 2026-09-02 |
+| [065](065-mixer-topology-and-constrained-dag.md) | Mixer Topology and Constrained DAG | Proposed | 2026-09-02 |
 
 ## Conventions
 
