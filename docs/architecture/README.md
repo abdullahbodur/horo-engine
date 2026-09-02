@@ -372,6 +372,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Cinematic Trigger Sources and Capability Policy](../adr/122-cinematic-trigger-sources-and-capability-policy.md):
   common typed start admission for gameplay, scene, event and tooling sources;
   capability/trust/authority checks, packaged-build gating and typed denials.
+- [VFX CPU Stage Order, Determinism and Gameplay Coupling](../adr/123-vfx-cpu-stage-order-determinism-and-gameplay-coupling.md):
+  ordered CPU particle stages, atomic commit, counter-based per-particle RNG,
+  qualified cross-platform reproduction and typed gameplay payload boundaries.
 - [Post-Processing And Effects Architecture](./runtime/post-processing-and-effects-architecture.md):
   screen-space effects, HDR post chain, tonemapping, color grading, and
   accessibility pass ordering.
