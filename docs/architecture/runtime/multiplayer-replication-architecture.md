@@ -24,6 +24,9 @@ dedicated-server composition and transport integration.
   devices never grant authority.
 - Only ADR-098 `Active` sessions reach replication/RPC dispatch.
 - Automatic ECS-memory and generic event-bus replication are prohibited.
+- ADR-102 host plans map standalone/client/listen/dedicated modes to finite world
+  roles before publication. Gameplay receives only a generation-scoped role view;
+  process globals and same-process locality never expose authority.
 
 ## Ownership Boundary
 
@@ -74,6 +77,13 @@ that both live in one process, share a player, or use loopback transport does no
 grant the client world authority. Autonomous means permitted input submission and
 possibly a separately qualified prediction capability; it never means canonical
 server write permission.
+
+`ReplicationExecutionRole` describes one world, not the process. ADR-102 resolves
+the complete host mode plan and supplies the current plan, host, scene, session and
+authority generations in a read-only gameplay role view. Every capture, apply,
+input/RPC submission and prediction request revalidates that view plus its
+object-level grant. A process-global `IsServer`, executable/build kind, listener,
+headless state, local player, possession or loopback connection cannot substitute.
 
 ## Replication Schema and Field Identity
 
@@ -311,7 +321,19 @@ Interest is a read-only routing input. It cannot grant authority, mutate Scene,
 mark values dirty or change schema compatibility. Despawn and permission revocation
 use the reserved lifecycle class rather than ordinary relevance deferral.
 
-## Dedicated Server
+## Runtime Mode Projection
+
+[ADR-102](../../adr/102-runtime-network-modes-and-authority-exposure.md) maps host
+modes onto the roles above:
+
+- standalone publishes one `Standalone` world and creates no network authority
+  epoch, session or replication work;
+- client publishes one client world whose autonomous/simulated capabilities exist
+  only through the current Active session and server-issued object grants;
+- listen server publishes distinct authority-server and local-client worlds and
+  crosses the same admitted schema/command boundaries as a remote composition; and
+- dedicated server publishes one authority-server world with no local-player or
+  presentation capabilities.
 
 Dedicated servers run headless with full gameplay/physics simulation, authority-
 server role, client admission, replication capture and observability. They compose
@@ -323,6 +345,10 @@ horo-engine server --project /path/to/MyGame --map MainLevel --port 7777
 
 Listen and dedicated servers share the same authority, schema and admission
 contracts. A listen server's co-located client uses a separate client role/world.
+Travel replaces world/authority generations without changing the host mode.
+Reconnect replaces the client session generation; disconnect cannot promote a
+client world to standalone or transfer listen-server authority. Shutdown removes
+all gameplay role views and invalidates grants before retiring worlds and sessions.
 
 ## Network Transport
 
@@ -391,6 +417,9 @@ Required automated coverage includes:
   compatibility translators;
 - standalone/server/autonomous/simulated capability matrices and co-located
   listen-server worlds without locality-derived authority;
+- valid/invalid standalone/client/listen/dedicated host plans; unsupported package
+  modes, process/headless/listener/local-player inference and mutually incompatible
+  role capabilities are rejected before world publication;
 - rename/reorder/layout changes preserving `FieldId`, with explicit rejection of
   `PropertyPath`, offset, pointer and raw-memory fixtures;
 - exact, additive-minor and explicit-major translation plus missing/unknown/
@@ -427,6 +456,7 @@ exclude field payloads by default.
 - [ADR-099: Replication Ownership, Authority and Compatibility](../../adr/099-replication-ownership-authority-and-compatibility.md)
 - [ADR-100: Prediction Capability Tiers and Determinism Policy](../../adr/100-prediction-capability-tiers-and-determinism-policy.md)
 - [ADR-101: Interest, Priority and Network Budget Model](../../adr/101-interest-priority-and-network-budget-model.md)
+- [ADR-102: Runtime Network Modes and Authority Exposure](../../adr/102-runtime-network-modes-and-authority-exposure.md)
 - [Networking Architecture](./networking-architecture.md)
 - [Scene Runtime](./scene-runtime.md)
 - [Gameplay Behavior Authoring](../extensions/gameplay-behavior-authoring.md)

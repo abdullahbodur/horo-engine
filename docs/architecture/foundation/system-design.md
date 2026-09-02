@@ -10,6 +10,14 @@ Horo Engine has two supported hosts:
 Both hosts expose MCP. MCP is a standard engine capability, not a separate
 product mode.
 
+Standalone, client, listen-server and dedicated-server are typed runtime network
+plans selected by a host, not additional executables or ambient process modes.
+The product artifact declares which plans it can support; one invocation validates
+and activates exactly one plan before world/application publication. Gameplay
+observes only its world-scoped, generation-checked role view under
+[ADR-102](../../adr/102-runtime-network-modes-and-authority-exposure.md), never an
+executable-name, headless-state or process-global authority flag.
+
 `horopak` is a purpose-built packaging executable, not a third engine host. It
 composes pipeline and platform capabilities for deterministic package creation
 and does not expose the full application surface, an interactive runtime, or an
