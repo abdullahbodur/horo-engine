@@ -268,6 +268,12 @@ record into the immutable typed model defined by
 unknown required field, unresolved typed identity or mismatched role cannot enter
 package composition, trust planning or ExtensionHost.
 
+Audio packages use this same verified descriptor/install-record/trust handoff.
+[ADR-069](../../adr/069-audio-extension-capability-and-abi.md) adds Audio-family
+descriptors and a stricter RT ABI only after generic activation; it does not create
+a second package, resolver, install, enablement, or trust authority. Approval for a
+generic module role does not implicitly approve in-process callback execution.
+
 ## Package Sources
 
 The package system is source-agnostic, but source identity and precedence follow
