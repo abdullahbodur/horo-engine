@@ -106,7 +106,8 @@ struct VirtualPageRangeEntry {
     ByteOffset offset;
     ByteCount storedBytes;
     ByteCount decodedBytes;
-    ArtifactDigest digest;
+    ArtifactDigest storedDigest;
+    ArtifactDigest decodedDigest;
 };
 ```
 
@@ -117,6 +118,9 @@ storage unit. Pages do not receive independent source `AssetId`s, sidecars,
 defines complete membership and canonical order.
 
 Packs bound file/object count while permitting finite range reads and localized retry.
+Immediately after a range read and before decompression, the provider or VTX runtime
+validates `storedDigest` over the exact encoded bytes. Only then may bounded decode run;
+the decoded semantic bytes must independently match `decodedDigest` before admission.
 Pack grouping is a deterministic cook-policy input based on typed page coordinates,
 mip/tail policy and declared bounds. Completion order, worker count and storage path do
 not influence grouping. Mip-tail data may use a dedicated pack but remains manifest-

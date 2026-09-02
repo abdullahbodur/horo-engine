@@ -278,8 +278,10 @@ Coordinates the active rendering camera and cinematic camera transitions:
 struct CameraCutKeyframe {
     SequenceTime        time;
     StableObjectId      cameraObject;       // Target camera entity
-    float               blendDuration;      // Cross-fade duration into next camera
-    CameraBlendCurve    blendCurve;         // Linear, EaseIn, EaseOut, EaseInOut
+    CameraTransitionTier transitionTier;    // HardCut, SingleViewBlend, or DualViewCrossFade
+    CameraTransitionFallback fallback;      // Explicit admitted fallback or Fail
+    SequenceTime        transitionDuration; // Zero for HardCut; finite otherwise
+    CameraBlendCurve    transitionCurve;    // Used only by a blending tier
 };
 ```
 

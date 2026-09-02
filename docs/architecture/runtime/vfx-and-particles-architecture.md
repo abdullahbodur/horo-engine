@@ -106,7 +106,8 @@ the same request once for each emitter or clock.
    FIFO order; requests produced during the drain/update become eligible next tick.
    No backend invokes a spawn completion inline from submission.
 2. Advance CPU candidate state in the ADR-123 order `Spawn -> Initialize -> Forces ->
-   Integrate -> Collide -> Kill`, with a barrier between semantic stages. CPU work may
+   Integrate -> Collide -> Kill -> Extract`, with a barrier between semantic stages;
+   Extract is read-only and follows successful candidate commit. CPU work may
    use Foundation JobSystem/JobId over exclusive preassigned staging slices. Completion
    records are applied on the declared owner phase, never by worker callbacks mutating
    live ECS. The whole candidate commits atomically or is discarded.
@@ -321,8 +322,9 @@ device-to-host copy, maximum byte/work and pending-result limits. Missing option
 readback produces an explicit degraded resolution while the GPU visual may continue.
 Missing required visual readback uses an authored compatible fallback or typed
 `VfxReadbackUnavailable`. Missing compute uses the same matrix: `RequireGPU` does not
-fall back implicitly; `PreferGPU`/`Automatic` may select an admitted compatible CPU
-kernel, authored substitute or permitted suppression in that order. No outcome
+fall back and immediately returns `VfxComputeUnavailable`; `PreferGPU`/`Automatic` may
+select an admitted compatible CPU kernel, authored substitute or permitted suppression
+in that order. No outcome
 selects another graphics backend or makes Null an interactive-renderer fallback.
 
 ### Null Timing And Gameplay Parity
@@ -813,6 +815,9 @@ struct DecalDescriptor {
     Transform64 localOrWorldTransform;
     Vec3 positiveHalfExtents;
     DecalReceiverMask receivers;
+    float normalFadeCosine;
+    float distanceFadeStart;
+    float distanceFadeEnd;
     DecalLifetimePolicy lifetime;    // Permanent, TimedFade or EventDriven
     DecalPathPreference path;        // defaults to PreferDeferred
 };
@@ -827,8 +832,11 @@ struct DecalDescriptor {
   owner/channel/key removal. `DecalManager` alone advances/removes logical instances.
 - **Capacity**: Per-effect/owner/cell and aggregate bounds are admitted before spawn;
   the desktop aggregate default remains 256. Exhaustion rejects the incoming decal
-  with `DecalCapacityExceeded`; permanent/event-driven entries do not trigger hidden
-  oldest/farthest eviction or frame-path pool growth.
+  with `DecalCapacityExceeded` by default. An explicitly selected deterministic
+  `EvictOldestTimedFade` policy may retire only an unpinned `TimedFade` cosmetic decal,
+  using spawn ordinal then `DecalId` as the stable tie-break. Permanent, event-driven,
+  required and pinned entries are never eviction candidates; there is no implicit
+  farthest eviction or frame-path pool growth.
 - **Rendering path**: PreferDeferred is default and uses the dedicated deferred-decal
   pass only on a compatible admitted Deferred recipe. Forward-only tiers require an
   authored compatible bounded forward variant. RequireDeferred/RequireForward never
@@ -865,8 +873,12 @@ The resolved schematic payload is copied into queue-owned storage:
 
 ```cpp
 struct VfxSpawnRequest {
+    DestructionEventOccurrenceId sourceOccurrence;
+    DestructionEventBindingTableGeneration bindingGeneration;
+    DestructionEventDestinationId destination;
+    uint32_t layerOrdinal;
     AssetId effectAsset;
-    Transform worldTransform;
+    Transform64 worldTransform;
     std::optional<Vec3> impactNormal;
     float scale{1.0f};
     VfxParameterBlock parameters; // fixed-capacity, schema-typed values

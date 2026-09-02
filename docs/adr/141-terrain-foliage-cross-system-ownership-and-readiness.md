@@ -106,8 +106,8 @@ The shared receipt shape is equivalent to:
 ```cpp
 enum class TerrainConsumerStage : uint8_t {
     Pending,
-    Ready,
-    ReadyFallback,
+    Staged,
+    StagedFallback,
     Prepared,
     Published,
     Retiring,
@@ -132,8 +132,12 @@ struct TerrainConsumerReceipt {
 };
 ```
 
+`Staged`/`StagedFallback` mean the consumer owns a complete private candidate that is
+not gameplay-visible. Only the aggregate state named `Ready` in Decision 7 means the
+RuntimeScene/World Streaming root has committed and is visible to gameplay.
+
 A receipt is immutable evidence from the owning adapter, not a public constructor or
-boolean that Terrain/gameplay can forge. `Ready` means all fallible I/O/decode/native
+boolean that Terrain/gameplay can forge. `Staged` means all fallible I/O/decode/native
 resource preparation is privately staged and validated but not live. `Prepared` means
 the owner has scheduled/validated a no-fail publication action for the exact activation
 ticket at its declared safe point. `Published` means the private generation is installed
@@ -153,7 +157,7 @@ validated Terrain/Scene/cell product plan:
 - `Required` must reach Prepared/Published before aggregate activation;
 - `Optional` may be explicitly NotRequested/Unavailable without blocking activation,
   but cannot later be inferred Ready; and
-- `Degradable` may return `ReadyFallback` only for a predeclared substitute whose typed
+- `Degradable` may return `StagedFallback` only for a predeclared substitute whose typed
   contract satisfies all dependents.
 
 Headless/server visual absence may be optional. Collision or navigation may be required
@@ -179,7 +183,7 @@ The coordinator executes this bounded sequence:
    detached candidates only.
 5. Poll non-blocking typed receipts. Growth requests occur before allocation and can be
    denied without oversubscription.
-6. After every required/degradable candidate is Ready/ReadyFallback, request
+6. After every required/degradable candidate is Staged/StagedFallback, request
    `PreparePublish` on each owning safe-point lane.
 7. Revalidate all generations, cancellation and reservation ownership at the commit gate.
 
@@ -359,7 +363,7 @@ Required coverage includes:
   deadline/cost rejection and no ambient registration side effects;
 - canonical bounded producer snapshots with exact revision/origin/cell/request evidence,
   lease lifetime and no mutable/native/unbounded data;
-- each consumer's Pending/Ready/ReadyFallback/Prepared/Published/Retiring/Retired and
+- each consumer's Pending/Staged/StagedFallback/Prepared/Published/Retiring/Retired and
   Unavailable/Failed transitions, including duplicate/out-of-order/stale receipts;
 - Required/Optional/Degradable matrices and dependency validation with no implicit
   fallback, hardcoded consumer-name criticality or missing-receipt success;

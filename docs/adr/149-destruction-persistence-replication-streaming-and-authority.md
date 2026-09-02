@@ -258,7 +258,8 @@ Typed results distinguish `AuthorityDenied`, `StaleAuthorityEpoch`, `StaleRevisi
 `ContentIncompatible`, `MigrationUnavailable`, `InvalidChunkMask`,
 `InvalidSupportState`, `PhysicsStateMismatch`, `ReplicationGap`,
 `LateJoinBufferExceeded`, `DormantHandoffDenied`, `PersistentWorldCapacityExceeded`,
-`CancelledBeforeCommit` and `ShutdownInProgress`. Results retain bounded identity,
+`StaleGeneration`, `IntegrityFailure`, `CancelledBeforeCommit` and
+`ShutdownInProgress`. Results retain bounded identity,
 revision/epoch and owner-stage provenance without native handles.
 
 Metrics cover captured/restored/replicated destructibles/chunks/bytes, delta/baseline

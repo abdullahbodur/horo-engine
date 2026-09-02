@@ -68,7 +68,8 @@ language/direction, live-region policy and logical bounds/visibility evidence.
 Core roles include application, window/screen, dialog, alert, group, heading,
 static text, button, toggle, checkbox, radio, slider, text field, link, image,
 progress, list/list item, menu/menu item, tab/tab item, tree/tree item and table
-roles. Extending the set requires a schema version and platform-mapping review;
+roles (`Table`, `Row` and `Cell`). Extending the set requires a schema version and
+platform-mapping review;
 custom strings do not become roles.
 
 Role-valid state/action combinations are schema checked. Examples include checked
@@ -174,6 +175,12 @@ Snapshot/delta overflow marks the native projection stale. Announcements are not
 blindly replayed; node state performs a bounded full-snapshot resynchronization at
 the next admitted boundary. Native callbacks carry an adapter/session generation so
 late responses cannot target a reused runtime.
+
+If that full resynchronization fails its attempt/byte/work limits, the bridge
+generation transitions to `Unavailable`, closes delta admission and emits one typed
+`ResynchronizationExhausted` diagnostic. Runtime UI retains the last-good semantic
+snapshot but makes no native-tree freshness claim. Recovery requires a new bridge
+generation and successful full snapshot; partial deltas cannot revive the stale one.
 
 ### 8. Null, recording and native adapters make different claims
 

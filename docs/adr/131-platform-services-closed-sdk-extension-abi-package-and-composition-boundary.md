@@ -38,7 +38,7 @@ extension ABI definitions/adapters, `PlatformServicesFrontend`, Null, public ABI
 conformance fixtures and Mock test support. No public or core target may include,
 forward-declare, link, delay-load, fetch or generate from proprietary platform SDK
 headers/libraries. Their paths and license-controlled identifiers do not appear in
-installed public headers or public/interace CMake usage requirements.
+installed public headers or public/interface CMake usage requirements.
 
 Closed SDK integration lives in a separately built private provider package, for
 example `horo-platform-steam` or a certification-controlled console package. That
@@ -159,10 +159,16 @@ Failure before publication destroys provider candidate/native state, revokes sin
 unloads the candidate library and releases package leases in reverse order. It leaves
 the old active provider/frontend untouched and publishes no partial capability.
 
-Replacement prepares and validates the full candidate while the old generation stays
-active and charged. At the safe point, the frontend closes old admission, drains or
-cancels according to ADR-130, generation-fences late callbacks, publishes the new
-binding only after old live semantic authority is closed, and retires old code after
+Replacement may validate package bytes, ABI, trust and static capability metadata while
+the old generation stays active and charged, but a process-singleton native SDK is not
+initialized concurrently. At the safe point, the frontend closes old admission,
+drains or cancels according to ADR-130, generation-fences late callbacks, fully shuts
+down the old native SDK and unloads its code, then initializes and publishes the new
+binding. If new initialization fails, the frontend remains explicitly unavailable and
+reports the failed cutover; it does not reactivate uncertain old native state or run
+two singleton SDK generations. Non-singleton providers may prepare private candidate
+state earlier, but still publish only after old live semantic authority is closed and
+retire old code after
 all operations/callback epochs release it. There is never routing by whichever of two
 providers answers first.
 

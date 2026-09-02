@@ -209,8 +209,8 @@ generations and releases dependencies only after workers/results retire.
 
 Typed failures distinguish producer/schema unsupported, invalid/missing/stale input,
 dependency cycle/mismatch, nondeterministic output, invalidation overflow, VTX cook/
-publication failure, cell reservation/readiness, package reachability/fallback missing,
-server-incompatible artifact and retirement stall.
+publication failure, cell reservation/readiness, package reachability failure,
+required fallback missing, server-incompatible artifact and retirement stall.
 
 Diagnostics expose safe producer/source/content/artifact/cell generations, bounded
 affected counts/costs, package reachability reason and normalized causes. They do not

@@ -98,7 +98,9 @@ struct CharacterDynamicInteractionPolicy {
 
 Scene preparation resolves it against Physics capabilities and publishes an
 immutable effective record with requested/effective modes, capability, filter and
-profile generations, plus an explicit fallback reason when used.
+profile generations, plus a mandatory typed resolution reason (`ExactRequested`,
+the admitted fallback reason, or the rejection reason). A rejected candidate still
+returns that reason in diagnostics and never publishes a partial effective record.
 
 Fallback is allowed only when the descriptor names the exact lower mode. Missing
 capability with no admitted fallback rejects the candidate. Horo never silently
@@ -161,6 +163,11 @@ Commands sort by Character ID, body ID, subshape ID and contact ordinal. Per-bod
 and aggregate budgets are checked before mutation. Overflow, stale identity or
 non-finite reduction fails the attempted tick; Horo never drops the last callback
 or clamps by arrival order.
+
+The contact ordinal is scoped to the exact `(tick, Character ID, body ID, subshape
+ID)` tuple. It is assigned after canonical contact reduction by contact point,
+normal and feature identity, starting at zero, so callback order cannot change the
+sort key.
 
 The exact equation belongs to implementation, but it is a versioned Horo algorithm
 over committed evidence and the fixed tick. It cannot forward an upstream callback

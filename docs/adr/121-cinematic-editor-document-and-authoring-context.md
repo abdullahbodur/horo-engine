@@ -41,8 +41,10 @@ document tab host owns the persistent visible route and supplies document comman
 query and subscription capabilities to the timeline, curve editor, details and
 binding panels.
 
-Only one writable document session for the same asset/revision is admitted in one
-workspace. Opening the asset focuses its existing tab. A deliberate read-only compare
+Only one writable document session for the same stable `AssetId` is admitted in one
+workspace, regardless of which source revision was used to open it. Opening another
+revision of that asset focuses the existing tab and enters the normal reload/conflict
+flow. A deliberate read-only compare
 or historical view has separate typed identity and cannot submit commands or save as
 the canonical asset.
 
@@ -113,6 +115,13 @@ enumeration and recording. It owns no sequence or scene content. A sequence rema
 editable without a scene context; object-bound tracks display unresolved contextual
 state while timeline/range/curve/payload edits remain available.
 
+The context pins exactly one immutable scene/binding snapshot for one inspection or
+authoring operation; it is not a long-lived mutable cache of the scene head. When the
+scene head advances, `EditorWorkspaceController` installs a replacement context with
+the new `sceneRevision`, registry revision and generation at the next document-safe
+point. A command carrying an older expected revision fails stale or enters the explicit
+rebase flow; no caller updates this context object in place.
+
 Attaching/detaching/switching context changes editor presentation state, not authored
 sequence data, unless the user explicitly commits a binding command. Opening a scene
 does not rewrite bindings, and opening a sequence does not load or select an inferred
@@ -164,8 +173,14 @@ its own history/dirty/save identity; UI cannot simulate atomicity by running two
 uncoordinated commands or maintain a third cross-document undo stack.
 
 Undo that would violate the other document's current dependency fails with a typed
-conflict and offers an explicit repair/rebase flow. It never silently rewrites the
-other document or a durable file.
+conflict and offers an explicit repair/rebase flow. Before applying an inverse, the
+application transaction queries an immutable reverse-dependency index built from the
+captured `BindingRegistryRevision` and both documents' current
+`AuthoringContextGeneration` values. It revalidates every referenced stable object,
+component/property schema and linked transaction revision against the pinned document
+heads. Missing, changed or newly introduced dependants reject the inverse as a typed
+cross-document conflict. Undo never silently rewrites the other document or a durable
+file.
 
 ### 7. Reload and external conflict follow document policy
 

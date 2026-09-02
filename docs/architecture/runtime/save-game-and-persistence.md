@@ -297,7 +297,9 @@ Every required participant produces a canonical logical byte stream before entry
 packing, compression, signing or publication metadata. The whole-save canonical
 stream contains the stable project/world/base-scene and base-dataset identities,
 `SaveSchemaVersion`, then participant ID, `ParticipantSchemaVersion` and canonical
-payload tuples sorted by `StableTypeId` bytes. Optional participant presence is part
+payload tuples sorted by `StableTypeId` bytes. Every variable-length identity and
+payload is prefixed by its canonical unsigned byte length before its bytes, so tuple
+concatenation is unambiguous. Optional participant presence is part
 of the logical stream when its state participates in restore.
 
 Canonical participant codecs use stable numeric field IDs and schema-defined

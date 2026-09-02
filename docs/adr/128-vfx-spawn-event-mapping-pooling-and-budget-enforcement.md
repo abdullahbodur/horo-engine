@@ -52,7 +52,7 @@ struct GameplayVfxEvent {
     SimulationTick tick;
     ProducerId producer;
     uint32_t producerSequence;
-    Transform worldTransform;
+    Transform64 worldTransform;
     VfxEventPayload payload;
 };
 
@@ -61,7 +61,7 @@ struct GameplayVfxBinding {
     VfxEffectAssetId effect;
     VfxPayloadSchemaId payloadSchema;
     VfxSpawnPolicyId spawnPolicy;
-    VfxOwnershipPolicy ownership;
+    VfxOwnershipPolicy ownershipScope;
 };
 ```
 

@@ -366,7 +366,7 @@ struct FoliageSpawnRequest {
     WorldCoordinate position;
     FoliageScale scale;
     FoliagePlacementSeed seed;
-    FoliageLifetime lifetime;
+    FoliageLifetimePolicy lifetime;
     FoliageOverflowPolicy overflow;
     GameplayAuthorityContext authority;
 };
@@ -487,7 +487,7 @@ cell/fence/request and origin evidence. It contains no mutable Terrain pointer o
 native handle. TRF-005.2 freezes the exact collision/navigation projection schemas.
 
 Each consumer prepares private state under its own worker/native affinity and returns an
-immutable typed receipt through `Pending`, `Ready`/`ReadyFallback`, `Prepared`,
+immutable typed receipt through `Pending`, `Staged`/`StagedFallback`, `Prepared`,
 `Published`, `Retiring` and `Retired` (or explicit `Unavailable`/`Failed`). `Prepared`
 means all fallible work is complete and a no-fail owner-safe-point publication is ready;
 it does not make state live. Render, Physics, Navigation and Terrain publish private roots

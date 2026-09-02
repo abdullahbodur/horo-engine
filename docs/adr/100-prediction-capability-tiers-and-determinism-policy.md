@@ -44,7 +44,7 @@ enum class PredictionCapabilityTier : std::uint8_t {
 | Tier | Client simulation | Required retained history | Correction behavior |
 |---|---|---|---|
 | `NonPredicted` | No speculative canonical simulation | None; bounded presentation samples may exist separately | Apply authoritative snapshot, optionally smooth presentation |
-| `LocalPrediction` | Autonomous client's declared local candidate advances from fixed-tick inputs | Bounded pending input/sequence ledger and current candidate; no historical world checkpoints | Replace/correct current candidate, discard acknowledged inputs and continue; no rewind to an old tick |
+| `LocalPrediction` | Autonomous client's declared local candidate advances from fixed-tick inputs | Bounded pending input/sequence ledger, current candidate and visual error proxy; no historical world checkpoints | Replace the current candidate, retain unacknowledged inputs for transport/future ticks and decay only the visual error; no rewind to an old tick |
 | `RollbackResimulation` | Declared aggregate prediction world advances from canonical fixed-tick inputs | Bounded ordered inputs, checkpoints/deltas, hashes, occurrences and authoritative receipts | Restore a compatible checkpoint, apply authoritative correction, replay ordinary fixed-tick pipeline within budget |
 
 `NonPredicted` is the default and complete production capability. It allocates no
@@ -53,9 +53,13 @@ prediction capture/restore work. Presentation interpolation is not simulation
 authority and cannot be used as a checkpoint.
 
 `LocalPrediction` improves immediate response but promises no historical rewind or
-cross-host deterministic equivalence. A correction may snap the simulation
-candidate and smooth only its visual projection. It cannot retroactively validate
-side effects or claim rollback support.
+cross-host deterministic equivalence. A correction atomically replaces the current
+simulation candidate at the received authoritative cut. A bounded presentation-only
+error proxy preserves the pre-correction visual pose and decays toward the corrected
+pose, so simulation authority changes immediately without a mandatory visible hard
+snap. Acknowledged inputs leave the ledger; unacknowledged inputs remain sequenced
+for retransmission and future ticks but are not replayed over past state. It cannot
+retroactively validate side effects or claim rollback support.
 
 `RollbackResimulation` is admitted only when the entire participating state closure
 is qualified. No profile may advertise a tier it cannot prove.
@@ -86,8 +90,14 @@ then identifies which autonomous objects/input schemas may use it.
 
 Validation rejects missing/duplicate/foreign IDs, unsupported tier, zero/overflowed
 limits, mismatched fixed rate, missing input/state schema, incomplete hook set,
-unqualified providers, incompatible determinism fingerprint, ambiguous provider
-order and policies that can exceed configured memory/work.
+unqualified providers, incompatible determinism fingerprint, missing/cyclic provider
+dependencies and policies that can exceed configured memory/work.
+
+`checkpointProviders` declares membership, not execution order. Each registered
+provider descriptor names its required provider IDs; validation computes one stable
+topological order with `CheckpointProviderId` as the tie-break for independent
+nodes. Missing dependencies or cycles reject the complete descriptor, and the
+resolved order is included in its semantic fingerprint.
 
 Hooks are tier-specific:
 

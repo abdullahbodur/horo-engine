@@ -247,10 +247,12 @@ horo-engine/
 │       │   │   ├── ReplicationManager.h
 │       │   │   └── ReplicationTraits.h
 │       │   ├── Terrain/
-│       │   │   ├── TerrainTypes.h
-│       │   │   ├── TerrainDescriptors.h
-│       │   │   ├── TerrainRuntime.h
-│       │   │   └── TerrainSnapshots.h
+│       │   │   ├── Api/
+│       │   │   │   ├── TerrainTypes.h
+│       │   │   │   ├── TerrainDescriptors.h
+│       │   │   │   └── TerrainSnapshots.h
+│       │   │   └── Runtime/
+│       │   │       └── TerrainRuntime.h
 │       │   ├── GameUI.h
 │       │   ├── DebugConsole.h
 │       │   ├── PlatformServices.h

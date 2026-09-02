@@ -124,6 +124,7 @@ struct CookedPCGPlan {
     BoundedArray<PCGOutputDeclaration> outputs;
     PCGCapabilityRequirements capabilities;
     PCGCostEnvelope peakCosts;
+    PCGOverlapBound oldNewOverlap;
     PCGDeterminismContract determinism;
 };
 ```

@@ -67,15 +67,23 @@ enum class CinematicControlChannel : uint8_t {
     CharacterTranslation,
     CharacterHeading,
     CharacterStance,
+    CharacterJump,
+    CharacterTeleport,
     GameplayAction
 };
 
 enum class CinematicClaimMode : uint8_t {
     ObserveOnly,
     Exclusive,
-    Blend
+    Blend,
+    PresentationOverlay
 };
 ```
+
+`PresentationOverlay` is valid only for `SkeletalPose`; activation records that it
+owns no simulation channel and rejects any root-motion, collision, event or later-
+tick feedback claim. Jump and teleport remain distinct Character capabilities so a
+translation lease cannot implicitly authorize either discontinuous action.
 
 Claims include stable actor/channel/property/joint-mask identity, required/optional
 status, player priority/order identity, admitted evaluation seam, blend contract and

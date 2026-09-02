@@ -78,6 +78,9 @@ struct GpuVfxReadbackDescriptor {
 };
 ```
 
+`cadenceSteps` is always at least one. Zero is invalid at cook/admission and is never
+interpreted as every step, disabled or an unbounded cadence.
+
 The cooked schema lists only normalized Horo scalar/vector/ID fields, their encoding,
 stride, order, numeric qualification and aggregate/sample selection. It cannot expose
 native buffers, pointers, descriptors, mapped memory, shader-private padding or
@@ -164,7 +167,7 @@ Domain resolution retains ADR-011's order and specializes GPU/readback outcomes:
 |---|---|
 | CPU-mandatory gameplay or CPU geometry query | Run the compatible admitted CPU kernel; `RequireGPU` is an incompatible-asset error |
 | `RequireCPU` | Run the admitted CPU kernel or fail typed admission |
-| `RequireGPU` | Use only a separately authored compatible fallback effect satisfying the requirement; otherwise `VfxComputeUnavailable`/`VfxReadbackUnavailable` |
+| `RequireGPU` | Missing compute immediately returns `VfxComputeUnavailable`; the requirement forbids CPU/substitute/suppression fallback. Missing required readback returns `VfxReadbackUnavailable` before activation |
 | `PreferGPU` or GPU-selected `Automatic` | Try an authored compatible CPU kernel within its fallback envelope and CPU budget, then an authored substitute, then permitted visual suppression; otherwise typed unavailability |
 | GPU-only node/feature | Use its authored substitute or permitted suppression; never silently delete a required node or pretend the original CPU kernel exists |
 | Optional readback only | Run the GPU effect without readback and publish a degraded admission/result diagnostic |

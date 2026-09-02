@@ -140,9 +140,9 @@ struct EffectiveNetworkConfiguration {
     NetworkProjectPolicyRevision projectRevision;
     std::optional<NetworkReleaseProfileId> releaseProfile;
     std::optional<ProductBuildId> productBuild;
-    RuntimeNetworkModeRequest modeRequest;
-    NetworkProjectProfileId schedulingProfile;
-    NetworkTrustPolicyId trustPolicy;
+    RuntimeNetworkMode effectiveMode;
+    NetworkProjectProfileId effectiveProfile;
+    NetworkTrustPolicyId effectiveTrustPolicy;
     NetworkTransportProviderId transportProvider;
     NetworkEndpointPolicy endpoints;
     CredentialRequirementSet credentialRequirements;

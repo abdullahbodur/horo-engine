@@ -108,8 +108,11 @@ zero, non-finite or singular scale always rejects.
 
 Non-uniform scale is admitted only when the shape kind/cook profile explicitly
 supports a baked result. Runtime body transform scale is identity for Physics; a
-scene transform scale change requests a new cooked/resolved shape generation and
-safe-point replacement, not an in-place native scale mutation.
+scene transform scale change may resolve only an exact compatible artifact that was
+already cooked and admitted for that scale. If no such artifact is resident, the
+runtime command rejects and requests an authoring/asset recook; it never invokes a
+runtime cooker. A resolved artifact uses safe-point replacement, not an in-place
+native scale mutation.
 
 ### 5. Motion-mode compatibility is semantic policy
 
@@ -181,6 +184,10 @@ Cook runs through the normal Assets operation with immutable captured inputs,
 cancellation, bounded writers and target identity. It may use JobSystem for isolated
 CPU work but owns no global thread pool, mutable catalog or output path. Completion
 posts to the cook owner; workers cannot publish artifacts or touch an active world.
+
+Packaged/runtime compositions contain no lightweight or partial cooker. Arbitrary
+runtime scale edits are therefore unsupported unless their exact scaled artifact
+was produced ahead of time and included in the cook catalog.
 
 Cook order is deterministic by stable dependency/subresource/child/material IDs.
 For the same complete inputs and qualified target, the Horo envelope and semantic

@@ -60,8 +60,8 @@ struct NetworkProductModeSupport {
 
 struct RuntimeNetworkModeRequest {
     RuntimeNetworkMode requestedMode;
-    NetworkModeProfileId profile;
-    NetworkTrustPolicyId trustPolicy;
+    NetworkProjectProfileId requestedProfile;
+    NetworkTrustPolicyId requestedTrustPolicy;
 };
 ```
 
@@ -170,8 +170,11 @@ struct GameplayNetworkRoleView {
 ```
 
 The capability set is derived only from the validated mode/world plan plus active
-ADR-098 session and ADR-099 object grants. It is not configurable independently.
-The finite capabilities distinguish local canonical mutation, authoritative
+ADR-098 session and contains world-role permissions such as snapshot receive,
+snapshot publication and bounded input submission. It is not configurable
+independently. ADR-099 object grants are checked separately for every privileged
+object command and are never summarized into this broad world view. The finite
+capabilities distinguish local canonical mutation, authoritative
 capture/publication, bounded client input submission, autonomous prediction and
 authoritative snapshot application. Validation rejects incompatible pairs such as
 authoritative publication with client snapshot apply, or server authority with

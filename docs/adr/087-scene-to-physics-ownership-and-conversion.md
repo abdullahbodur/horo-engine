@@ -199,9 +199,12 @@ Collider and constraint anchors are converted to the referenced body's local fra
 with checked finite transforms. Body scale is identity; collider scale follows
 ADR-085's validated cook/bake policy.
 
-Non-finite, singular, reflected/unsupported scale, shear, invalid quaternion,
-hierarchy cycle or out-of-profile local-cluster pose rejects conversion. Physics
-does not drop parent transforms, clamp positions or approximate shear.
+Non-finite, singular, unsupported scale, shear, invalid quaternion, hierarchy cycle
+or out-of-profile local-cluster pose rejects conversion. A reflected authored
+transform is admitted only when ADR-085 has already produced the exact mirrored
+cooked artifact; conversion then uses that artifact with a proper non-reflected
+body/collider transform. Without it, reflected conversion rejects. Physics does not
+drop parent transforms, clamp positions or approximate shear.
 
 Static authored transforms seed static bodies. Kinematic targets flow from scene/
 gameplay during PrePhysics. Dynamic results write only to the declared body-owner
@@ -433,6 +436,11 @@ The cost is a typed Physics payload/plan layer, explicit component bundles and b
 references, detached old/new memory overlap and a generic participant seam in scene
 activation. Authoring conveniences must materialize complete components instead of
 depending on hidden runtime inference.
+
+Because native contact caches/manifolds are never transferred, a successful reload
+starts its new Physics world cold. Resting dynamic bodies may visibly settle or
+jitter for initial ticks; products that cannot tolerate that presentation effect
+must hide/fade the reload or avoid live world replacement, not copy native caches.
 
 ## Rejected Alternatives
 

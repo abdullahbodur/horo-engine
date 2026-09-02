@@ -116,13 +116,24 @@ monotonic `DestructionEventCursor`; registered dispatchers read committed batche
 cursor at the Destruction/application owner boundary. A temporary adapter delay or
 lossy notification cannot erase required facts. If a consumer cursor falls behind the
 retained window, it receives `DestructionEventGap` and re-queries the canonical
-Destruction snapshot/revision instead of guessing or replaying unbounded history.
+Destruction snapshot/revision instead of guessing or replaying unbounded history. Gap
+recovery is always full state reconciliation: the consumer captures one immutable
+canonical snapshot at the reported revision, rebuilds its projection idempotently,
+then installs a cursor returned with that snapshot. DFR does not synthesize an
+unbounded state diff.
 
 The canonical snapshot remains the state authority. The journal is not a save archive,
 replication log or unlimited audit store. Product limits bound retained revisions,
 records, payload bytes, outstanding cursors and required acknowledgements. Required
 adapter reservations and retention are charged before transition commit. Cosmetic-only
 adapters cannot extend canonical journal lifetime indefinitely.
+
+Every required adapter has a finite acknowledgement deadline and maximum retained
+cursor lag in the product profile. Crossing either closes new DFR transition admission,
+records `DestructionRequiredConsumerStalled` and faults the owning host/session through
+its lifecycle policy. The journal remains bounded and charged while shutdown/recovery
+retires the stalled cursor; it never grows indefinitely or silently drops required
+facts.
 
 `EngineDataBus` may announce a coalesced
 `DestructionEventJournalRevisionChanged` after append. That notification carries only

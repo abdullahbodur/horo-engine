@@ -251,9 +251,11 @@ Heading composition is deterministic:
    ignore Gameplay desired heading for this tick;
 6. normalize/canonicalize sign and reject non-finite/degenerate results.
 
-Root translation uses the heading after steps 1–3 and before root twist. Capsule
-collision is rotationally symmetric around up; heading still owns gameplay/visual
-forward and local-root translation.
+For `Additive`, root translation uses the heading after step 3 and before root
+twist. For `Override`, it uses the carried pre-Gameplay heading after step 2—the
+same base to which step 5 applies root twist—so ignored Gameplay heading cannot
+rotate translation. Capsule collision is rotationally symmetric around up; heading
+still owns gameplay/visual forward and local-root translation.
 
 ### 10. Moving-platform carry uses explicit tick evidence
 

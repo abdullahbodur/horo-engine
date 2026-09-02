@@ -143,8 +143,9 @@ budgets/lifecycle from ADR-010/ADR-022.
 Thread-safety rules are conservative and explicit:
 
 - Recast bake parallelism is across independent tiles/jobs. Each job owns its
-  `rcContext`, intermediate structures, allocator domain and input/output buffers;
-  no mutable build object or temporary allocator is shared.
+  `rcContext`, intermediate structures, allocator domain and output buffers. Jobs
+  may share immutable leased input-geometry artifacts; no mutable input/build object
+  or temporary allocator is shared.
 - A query job exclusively leases one `dtNavMeshQuery` plus node pools/scratch. It
   reads one pinned immutable `dtNavMesh` snapshot; sliced query state is never
   shared or resumed by another job.

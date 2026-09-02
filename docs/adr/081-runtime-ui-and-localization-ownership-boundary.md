@@ -116,9 +116,13 @@ struct ResolvedLocalizedMessage {
     NormalizedLocale locale;
     TextDirectionHint directionHint;
     Utf8Text text;
-    std::span<const TypedTextSpan> spans;
+    std::vector<TypedTextSpan> spans;
 };
 ```
+
+`text` and `spans` own their storage. Spans use validated byte offsets into `text`,
+not pointers or views, so copying or moving the resolved message cannot invalidate
+their targets.
 
 Arguments use a closed type set such as integer, decimal, boolean, date/time,
 duration, stable enum, path display value, shortcut and safe typed rich span.

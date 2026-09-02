@@ -225,7 +225,9 @@ results join a later boundary only when every request generation remains current
 [ADR-123](../../adr/123-vfx-cpu-stage-order-determinism-and-gameplay-coupling.md)
 specializes each gameplay-coupled VFX fixed step without adding a host phase. Within
 the VFX scheduler node, one candidate runs Spawn, Initialize, Forces, Integrate,
-Collide and Kill in order against the tick's immutable inputs/query snapshots. The
+Collide and Kill in order against the tick's immutable inputs/query snapshots. After
+successful candidate commit, read-only Extract publishes immutable output without
+adding another host phase. The
 candidate particle generation and bounded gameplay occurrences publish only with
 successful tick commit. RenderExtraction later reads the committed post-Kill state.
 Failure/cancel discards all stages, and gameplay consumes committed output at its next

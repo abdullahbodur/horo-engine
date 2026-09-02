@@ -129,7 +129,10 @@ CandidateReady
 
 Before preparation it revalidates scene/world/cell, graph/plan/input, authority epoch,
 expected target revisions, currentness policy and complete peak/overlap reservation.
-Immediately before commit it revalidates the applicable fields again.
+Immediately before commit it revalidates, at minimum, authority epoch, scene/world/cell
+generation, graph/plan/input generation, every expected target owner/capability/state
+revision, currentness policy and the reservation identity. No target may omit one of
+these fields as “not applicable”; a target-specific extension may only add checks.
 
 All required owners publish their prepared roots at the one declared owner-safe
 aggregate boundary, or none publish. The no-fail section contains only prevalidated

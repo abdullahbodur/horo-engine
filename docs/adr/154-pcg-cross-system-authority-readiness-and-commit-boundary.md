@@ -78,6 +78,19 @@ struct PCGAggregateTransactionPlan {
 };
 ```
 
+```cpp
+struct PCGTargetPlanEntry {
+    PCGTargetOwnerId owner;
+    PCGTargetOwnerGeneration ownerGeneration;
+    PCGTargetCapabilityGeneration capabilityGeneration;
+    PCGTargetRequirementPolicy requirement;
+    PCGTargetCommandKind kind;
+    BoundedArray<PCGTargetOwnerId> dependencies;
+    PCGTargetCostEnvelope costs;
+    PCGTargetCommitPhase phase;
+};
+```
+
 Each target entry identifies one registered owner/adapter, exact expected owner and
 capability generations, required/optional policy, typed command kind, dependencies,
 complete prepare/resident/overlap/retirement costs and legal commit phase. The plan has
@@ -98,12 +111,13 @@ struct PCGTargetReadinessReceipt {
     PCGTransactionId transaction;
     PCGTargetOwnerId owner;
     PCGTargetCapabilityGeneration capability;
-    PCGTargetExpectedRevision expected;
+    PCGTargetExpectedGeneration expected;
     PCGPreparedGeneration prepared;
     PCGTargetReadiness readiness;
     PCGTargetCostReceipt costs;
     PCGTargetDependencyFingerprint dependencies;
     PCGTargetPreparedDigest digest;
+    PCGTargetDiagnosticCode diagnostic;
 };
 ```
 
@@ -112,6 +126,9 @@ struct PCGTargetReadinessReceipt {
 receipt proves preparation only for the named transaction, owner, generations,
 dependencies and reservation. It cannot be reused after replacement or treated as the
 target's canonical state.
+For `Failed`, `Unsupported` or `Stale`, `diagnostic` is mandatory bounded typed evidence
+that identifies the failed predicate/class; successful readiness uses `None`. It is
+diagnostic only and cannot select fallback or mutate policy.
 
 The coordinator accepts the aggregate only when every required target has compatible
 readiness, all cross-target dependency fingerprints agree and the total receipt costs

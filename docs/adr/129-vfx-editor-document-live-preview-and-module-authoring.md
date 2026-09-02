@@ -37,8 +37,8 @@ or leave module ownership undecided.
 
 ### 1. Each effect asset opens as one persistent document
 
-Every editable VFX effect asset opens as one `VfxEffectDocument` rooted at stable
-`VfxEffectAssetId`/`AssetId`, canonical source identity and accepted source revision.
+Every editable VFX effect asset opens as one `VfxEffectDocument` rooted only at its
+stable `VfxEffectAssetId`/`AssetId`.
 Existing top-level particle-system assets migrate through the VFX source schema into
 this document identity; they do not remain a second live document class.
 
@@ -49,8 +49,9 @@ compile/preview revisions. `EditorPanelHost` owns the persistent tab route, plac
 focus and presentation lifecycle. The tab owns only selection, filters, expansion,
 scroll/zoom, viewport camera and other bounded presentation state.
 
-Only one writable session for the same canonical effect asset/revision is admitted in
-a workspace. Reopening focuses the existing tab. Read-only compare, recovery and
+Only one writable session for the same stable canonical effect `AssetId` is admitted in
+a workspace, regardless of source revision. Reopening another revision focuses the
+existing tab and enters the normal reload/conflict flow. Read-only compare, recovery and
 historical views carry separate typed identities and cannot submit canonical commands
 or save over the source.
 

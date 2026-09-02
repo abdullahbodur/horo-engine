@@ -83,6 +83,13 @@ struct DestructibleSceneBinding {
 };
 ```
 
+`DestructionFeatureRequirements` is a granular provider-neutral capability mask, not a
+tier selector. The product first selects an allowed tier/limit profile, then resolves
+every required bit against that tier's effective capability snapshot. A required bit
+missing from the selected tier fails admission; the resolver never upgrades tiers or
+drops a bit implicitly. Optional capabilities may choose only fallbacks declared by the
+binding and admitted by the selected tier.
+
 RuntimeScene maps the binding to one generation-checked `DestructionHandle`. Gameplay,
 Physics, Network, Renderer and effects query immutable state or submit typed commands;
 they never mutate a component field or chunk bitset directly.
@@ -105,6 +112,9 @@ struct DestructionStateSnapshot {
     DestructionSemanticPhase phase;
     DestructionHealth health;
     DestructionChunkSet broken;
+    DestructionChunkSet detached;
+    DestructionChunkSet dormant;
+    DestructionChunkSet removed;
     DestructionSupportState support;
 };
 ```

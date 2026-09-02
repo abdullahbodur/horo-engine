@@ -149,6 +149,12 @@ permission, tracking, profile, reference-space, origin, device or session revisi
 make its values logically stale. Consumers reject wrong-owner and stale generations
 before use.
 
+Native input beyond any admitted device/pose/action/joint/transition bound rejects the
+entire affected record with `XRTrackingCapacityExceeded`; it is never truncated,
+priority-sampled or written past capacity because omission could change gesture or gaze
+meaning. Other independently bounded records may still publish, while a required record
+overflow invalidates the candidate snapshot under its product profile.
+
 Head/view poses located for predicted presentation are a separate XR frame snapshot.
 Renderer may use a newer admitted pose for visual presentation/late update, but that
 pose cannot rewrite the committed Input snapshot, simulation state, network command or
@@ -227,6 +233,10 @@ The Input/application haptic coordinator validates caller scope and routes the c
 through XRRuntime. XROpenXR applies/stops the native haptic and returns a bounded native
 result. Request acceptance, native submission and physical completion are distinct
 states; absence of runtime completion evidence cannot be reported as confirmed output.
+OpenXR submission success therefore completes only the `SubmittedToRuntime` state. A
+caller that needs lifecycle cleanup waits on owner cancellation/expiry and device/
+session generation retirement, not on presumed physical completion; `PhysicallyComplete`
+is published only when an optional provider capability supplies explicit evidence.
 
 Focus/context loss, owner destruction, device/profile/session change, permission loss,
 timeout, shutdown or explicit cancellation stops or invalidates the effect. Shutdown
@@ -257,7 +267,11 @@ excluded from ordinary logs, crash dumps, metrics dimensions, replay, analytics,
 context and support bundles. Explicit diagnostic/capture products require a separate
 purpose, visible state, bounded duration, retention/export policy and redaction.
 Revocation closes new collection, cancels dependent work, neutralizes derived actions
-and invalidates outstanding snapshot leases at the next owner safe point.
+and atomically advances a shared `XRPrivacyRevocationGeneration` immediately. Snapshot
+leases expose values only through checked accessors that compare their captured privacy
+generation with this atomic generation; a mismatch returns `XRPrivacyLeaseRevoked`
+without exposing joints/gaze. The next owner safe point performs orderly action
+neutralization and storage retirement, but access invalidation does not wait for it.
 
 Gaze, a gesture, tracked contact or haptic response never constitutes approval for an
 editor, purchase, privacy or destructive operation. Approval remains a typed UI/

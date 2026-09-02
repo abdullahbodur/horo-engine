@@ -99,7 +99,7 @@ dependency order.
 |---|---|---|
 | GameActivity integration and callback queue | AndroidHost | Runtime and features |
 | Activity, JavaVM/JNI attachment policy | AndroidHost with PlatformAndroid operations | Renderer and XR feature code |
-| `ANativeWindow` retained reference and generation | PlatformAndroid | Renderer only borrows an admitted generation |
+| `ANativeWindow` retained reference and generation | PlatformAndroid | Renderer |
 | Vulkan objects and presentation retirement | RenderVulkanAndroid | PlatformAndroid |
 | Input, permissions, sensors, storage and Android services | PlatformAndroid | Portable Runtime |
 | OpenXR loader/session/action objects | XROpenXR | PlatformAndroid and Renderer |

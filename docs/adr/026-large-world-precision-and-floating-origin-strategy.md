@@ -65,7 +65,7 @@ Key design constraints:
    - All spatial transformations, conversions, and rebase transactions return `Horo::Result<T, Error>` under the `horo.runtime.precision` and `horo.runtime.world_streaming` error domains per [ADR-008](008-error-model-exception-boundary-and-registry.md).
 
 [ADR-084](084-canonical-physics-solver-units-and-tolerances.md) specializes this
-local Physics cluster as pinned float-precision Jolt CanonicalV1, with a `4096 m`
+local Physics cluster as pinned float-precision Jolt CanonicalV1, with a `512 m`
 qualified high-fidelity dynamic-contact radius inside the existing `8192 m` hard
 half-extent and explicit SI/tolerance/scale policy.
 

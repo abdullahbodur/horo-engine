@@ -46,9 +46,9 @@ struct NetworkProjectProfileV1 {
 
     CountLimit maxCapturedObjectsPerTick;
     CountLimit maxSerializedFieldsPerConnectionPerTick;
-    Microseconds maxInterestWorkPerTick;
-    Microseconds maxCaptureWorkPerTick;
-    Microseconds maxSchedulingWorkPerTick;
+    Microseconds maxGlobalInterestWorkPerTick;
+    Microseconds maxGlobalCaptureWorkPerTick;
+    Microseconds maxGlobalSchedulingWorkPerTick;
 
     BytesPerSecond targetBytesPerConnection;
     ByteCount burstBytesPerConnection;
@@ -67,6 +67,10 @@ Every wrapper validates a finite non-zero value and its documented unit. The
 profile additionally declares bounded priority classes, reservations/weights,
 interest-provider limits, distance quantization, hysteresis margins, coalescing and
 disconnect policy. Missing fields have no ambient hardware-derived default.
+
+The three `maxGlobal*WorkPerTick` fields are authority-world caps. Per-connection
+ledgers charge their contribution against those shared caps and their own finite
+fairness reservation; no connection owns or may reset the global budget.
 
 Profiles are network assets/configuration selected by product role, match/game mode
 and qualification evidence. Renderer backend/tier, screen resolution, render LOD,

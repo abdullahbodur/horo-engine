@@ -61,8 +61,8 @@ using StatId = StrongId<StatTag, PlatformServiceStableId>;
 using PresenceStatusId = StrongId<PresenceStatusTag, PlatformServiceStableId>;
 ```
 
-The wrappers are not implicitly interchangeable with each other, a provider-native
-identifier, array index, runtime handle or raw integer. `0` is invalid and reserved.
+The wrappers are not implicitly interchangeable with one another or with a provider-
+native identifier, array index, runtime handle or raw integer. `0` is invalid and reserved.
 Primary numeric values are globally unique across all four kinds so logs, ABI
 envelopes and generic tooling cannot ambiguously identify a record after losing a
 static wrapper.
@@ -126,8 +126,8 @@ canonical key. An unrelated semantic definition receives a new canonical key and
 For a validated primary definition, Horo builds this byte sequence:
 
 ```text
-ASCII("horo.platform-services.stable-id.v1")
-0x00
+ASCII("horo.platform-services.stable-id.v1")         (no terminating NUL)
+0x00                                                   (one explicit separator byte)
 project salt                                      (16 raw bytes)
 kind                                              (one uint8 tag above)
 canonical-key byte count                          (uint16, big-endian)

@@ -111,7 +111,7 @@ local physics cluster. Global persistence, streaming and replication stay in
 `OriginGeneration`.
 
 The physics hard local half-extent remains ADR-026's default `8192 m`. The qualified
-high-fidelity dynamic-contact envelope is a radius of `4096 m` about the active
+high-fidelity dynamic-contact envelope is a radius of `512 m` about the active
 physics origin. Admission outside that envelope requires an explicit world-streaming
 sleep/transfer policy; it cannot silently continue as ordinary high-quality dynamic
 simulation. Static geometry may span up to the scale bounds below while remaining
@@ -135,7 +135,7 @@ The CanonicalV1 authoring/runtime validation envelope is:
 |---|---|
 | ordinary dynamic characteristic length | `0.1 m .. 10 m` |
 | ordinary static characteristic length | `0.1 m .. 2000 m` |
-| ordinary dynamic speed | `0 m/s .. 500 m/s` |
+| ordinary dynamic speed | `0 m/s .. 50 m/s` |
 | gravity magnitude for qualified defaults | `0 m/s² .. 20 m/s²` |
 | positive mass | finite `0.001 kg .. 1.0e9 kg` |
 | density | finite `0.001 kg/m³ .. 1.0e7 kg/m³` |
@@ -256,7 +256,7 @@ solver commit, compile-profile, Horo schema, target architecture, endianness and
 semantic source digests. A mismatch invalidates and recooks the cache. It is not
 migrated as save data or trusted across solver upgrades.
 
-[ADR-085](085-physics-shape-authoring-cook-and-runtime-boundary.md) defines that
+[ADR-085](085-physics-shape-authoring-cook-and-runtime-boundary.md) defines the
 derived shape envelope, target key, bounded validation and immutable runtime lease
 contract while preserving the private solver boundary established here.
 

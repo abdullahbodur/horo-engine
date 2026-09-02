@@ -100,7 +100,9 @@ No sort writes the CPU SoA, GPU simulation state, durable particle attributes or
 effect's next-step input. Multiple views reuse the same simulation generation but own
 separate index/key outputs.
 
-The canonical back-to-front key is the tuple:
+The canonical back-to-front key is the tuple. `view-depth` is the finite canonical
+linear signed distance from the frozen camera plane along the view-forward axis; larger
+positive distances are farther from the camera and sort first:
 
 ```text
 finite canonical view-depth descending
@@ -230,6 +232,11 @@ topology combinations and backend/pass declarations in effect data. Frontend
 validation returns `VfxSortCapacityExceeded`, `VfxSortKeyInvalid`,
 `VfxSortCapabilityUnavailable`, `StaleVfxGeneration` or `VfxSortResultLate` without
 publishing a partial index generation.
+
+`VfxSortResultLate` means a previously admitted GPU sort result was not signalled ready
+by the consuming graph boundary. Readiness is observed through the renderer's normal
+asynchronous graph/fence evidence; the CPU does not poll, map or wait. The whole batch
+is omitted for that frame and the late generation is retired normally.
 
 Every failure/omission carries effect/emitter/batch, source/view/frame generations,
 requested blend/sort semantics, algorithm/capability/policy revisions and the failed

@@ -199,6 +199,10 @@ bindings, without changing logical VTX/artifact identity. Recovery follows ADR-0
 the host admits a compatible new realization, VTX reissues finite mapping intent from
 its valid logical residency/artifact leases, and Materials resolve new binding
 snapshots. Old native handles are never serialized, compared or restored.
+Restoration obeys the same per-plan count/byte/work bounds as ordinary mapping. When the
+resident set exceeds one plan, VTX emits sequential bounded mapping revisions in stable
+page order; each revision commits atomically, and content not yet restored remains
+explicitly unavailable rather than overflowing one recovery plan.
 
 ### 10. Diagnostics and qualification stay backend neutral
 

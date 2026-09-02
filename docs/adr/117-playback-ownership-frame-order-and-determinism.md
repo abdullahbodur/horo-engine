@@ -90,6 +90,12 @@ Requested -> Preparing -> Ready -> Playing <-> Held
 all non-terminal states ----------------> Closing -> Stopped
 ```
 
+`Stopping` is the orderly, player-requested path: it closes future evaluation and
+drains already admitted occurrences according to the compiled stop policy before
+publishing `Stopped`. `Closing` is the host/owner disposal path for cancellation,
+scene/session loss or shutdown; it closes all admission immediately, cancels what
+can be cancelled, retires outstanding leases, and cannot return to playback.
+
 Preparation validates the asset and nested graph, compiles the evaluation plan,
 reserves aggregate capacity, resolves required adapters/bindings and acquires tokens
 in a rollback-safe order. Only a completely prepared player becomes visible in an
@@ -143,7 +149,7 @@ The root order key is:
 
 1. evaluation seam/domain;
 2. declared priority, highest first;
-3. `SequencePlayerId`, ascending stable byte order; and
+3. `SequencePlayerId`, ascending lexicographic order of its opaque canonical bytes; and
 4. player generation, ascending, only to distinguish retained diagnostic/replay data.
 
 Nested players immediately follow their parent position ordered by stable track ID,
@@ -254,7 +260,7 @@ Events remain interval state, not value samples. Default seek resets cursor,
 traversal/loop identity and presentation/provider baseline without emitting skipped
 occurrences. Explicit `DispatchCrossedEvents` uses one bounded directed interval and
 ordinary authority/budget/commit rules; it is not replay-from-zero. Audio, VFX and
-other stateful destinations receive typed seek/resynchronize intent or Unsupported and
+other stateful destinations receive typed seek/resynchronize intent or `Unsupported` and
 never reconstruct state by executing historical side effects.
 
 ### 9. Qualification covers ordering, lifetime and numeric scope

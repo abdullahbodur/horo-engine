@@ -170,13 +170,16 @@ shape is:
 ```text
 <product-state-root>/
   <environment-id>/
-    <owner-id>/
+    <owner-kind>/<owner-id>/
       catalog
       slots/<save-slot-id>.horosave
       staging/<owned-operation-id>.temporary
 ```
 
 Every component uses a fixed lossless filesystem-safe encoding of its opaque ID.
+For `UserProfileOwner`, `<owner-id>` is the canonical composite of local-user ID and
+game-profile ID, with both length-delimited before encoding; neither alone names the
+directory. Device and anonymous owners use their own disjoint `<owner-kind>`.
 Free-form product/user/profile/category/slot labels are never path components. The
 adapter validates containment and no-follow semantics and owns catalog publication,
 per-slot leases, temporary naming, atomic replacement, durability reconciliation and

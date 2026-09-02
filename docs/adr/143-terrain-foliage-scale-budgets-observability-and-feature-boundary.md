@@ -77,8 +77,8 @@ The workload uses square tiles; changing dimensions creates a new workload revis
 | Required envelope | `TerrainCore1_0` | `TerrainHighEnd1_0` |
 |---|---:|---:|
 | Simultaneously Active terrain tiles | 256 | 1,024 |
-| Active foliage clusters | 1,024 | 8,192 |
-| Active baked + durable + ephemeral foliage instances | 262,144 | 2,097,152 |
+| Active foliage clusters | 1,024 | 4,096 |
+| Active baked + durable + ephemeral foliage instances | 262,144 | 1,048,576 |
 | TerrainRuntime steady resident logical/decoded bytes | 256 MiB | 1,024 MiB |
 | Foliage steady resident logical/decoded bytes | 256 MiB | 1,024 MiB |
 | Candidate/decode/upload staging allowance | 128 MiB | 512 MiB |
@@ -241,8 +241,9 @@ not runtime control flow.
 
 ### 10. Measurement and regression follow ADR-051
 
-Interactive steady workloads use 300 warm-up frames, at least 1,200 measured frames/
-20 seconds and seven process iterations. They retain at least 99% valid samples. Editor,
+Interactive steady workloads use 300 warm-up frames and at least 20 seconds of measured
+frames: 1,200 frames for the 60 Hz Core cohort and 2,400 frames for the 120 Hz High-End
+cohort. They use seven process iterations and retain at least 99% valid samples. Editor,
 cook and headless workload windows above override operation counts while preserving
 seven independent iterations unless their versioned descriptor explicitly requires a
 stricter plan.

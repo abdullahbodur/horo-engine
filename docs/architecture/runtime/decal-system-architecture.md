@@ -87,6 +87,10 @@ Decals can be:
 
 ```cpp
 struct DecalSpawnRequest {
+    DestructionEventOccurrenceId sourceOccurrence;
+    DestructionEventBindingTableGeneration bindingGeneration;
+    DestructionEventDestinationId destination;
+    uint32_t layerOrdinal;
     AssetId          decalMaterial;
     WorldTransform   transform;
     Vector3          extents;

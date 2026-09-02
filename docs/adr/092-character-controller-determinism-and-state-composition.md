@@ -57,6 +57,13 @@ Runtime handles may index live storage but are never canonical identity. Records
 are ordered by stable scene object ID and authored Character component/slot ID.
 Duplicate, missing, zero or out-of-order identities reject decode/restore.
 
+That strict rule governs deterministic checkpoint/replay/session restore. Durable
+Save Game restoration may first run an explicitly versioned content migration that
+tombstones removed controller identities and materializes newly required controllers
+from the target scene's authored defaults. Migration produces a complete canonical
+payload before this codec runs; the codec itself never skips unknown records or
+invents defaults, and Tier 2/3 restore never admits the permissive migration path.
+
 ### 2. The checkpoint header binds the complete simulation cut
 
 Every Character checkpoint contains:
@@ -76,6 +83,8 @@ struct CharacterCheckpointHeaderV1 {
     CharacterProfileRevision profileRevision;
     CharacterCommandProtocolVersion commandProtocol;
     std::uint32_t controllerCount;
+    Digest256 controllerTableDigest;
+    Digest256 worldDigest;
 };
 ```
 
@@ -140,9 +149,13 @@ restore but are not duplicated as another authority.
   by ADR-089's next-tick carry prediction;
 - pending detach/transfer reason only when it has committed continuation semantics.
 
-The stable support binding resolves against the paired Physics checkpoint. A native
-body ID or pointer is never stored. An unresolved required support reference rejects
-the aggregate candidate rather than silently grounding against the world.
+The stable support binding uses an authored, persisted collider/subshape ID carried
+through the Physics cook mapping; it is never a native index or a hash of mutable
+topology. Generated source subparts require a persisted source-subresource ID, and a
+recook that cannot preserve that mapping is explicitly incompatible. The binding
+resolves against the paired Physics checkpoint. A native body ID or pointer is never
+stored. An unresolved required support reference rejects the aggregate candidate
+rather than silently grounding against the world.
 
 #### Command and occurrence watermarks
 
@@ -225,7 +238,9 @@ Each controller digest is SHA-256 over the ASCII domain
 `HORO.CHARACTER.STATE.CONTROLLER.V1`, a zero separator and the exact canonical
 controller bytes. The world digest is SHA-256 over
 `HORO.CHARACTER.STATE.WORLD.V1`, a zero separator, the canonical header excluding
-stored digest fields, and every ordered controller record length plus digest.
+the two stored digest fields, and every ordered controller record length plus
+digest. `controllerTableDigest` covers that ordered length/digest table;
+`worldDigest` stores the resulting world digest.
 
 Equivalent decoded state must re-encode byte-for-byte. Incremental and batch hashing
 must produce the same digest. Digests are state identity/evidence, not authentication;
@@ -289,6 +304,12 @@ invalid reaction, capacity failure or cancellation destroys only the candidate.
 The active Scene/Physics/Character bundle and public generations remain unchanged.
 Restore emits no contacts, locomotion facts, root motion, Audio/VFX or Gameplay
 side effects for the checkpoint tick.
+
+For durable Save Game migration only, an unresolved support binding may apply a
+declared `ClearSupportAndResumeAirborne` migration: it clears attachment/carry
+continuation, marks the controller airborne, and records the migration in archive
+evidence before canonical validation. Deterministic replay/session restore and
+unregistered migrations still reject the complete aggregate.
 
 Partial controller restore into a live world is forbidden. A future structural
 subset operation must be a separately versioned gameplay/scene command with explicit

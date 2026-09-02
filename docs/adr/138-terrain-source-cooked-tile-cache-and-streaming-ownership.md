@@ -102,7 +102,11 @@ struct CookedTerrainDatasetManifest {
 };
 ```
 
-Each sorted tile/cluster entry carries its stable ID, integer grid/LOD address, exact
+Each `TerrainTileManifestEntry` describes exactly one tile and one LOD. The bounded
+manifest therefore scales with tile-times-LOD count and is paged/indexed under declared
+hard limits; streaming may batch adjacent entries but never treats one artifact as an
+ambiguous multi-LOD payload. Each sorted tile/cluster entry carries its stable ID,
+integer grid/LOD address, exact
 bounds, semantic/seam/dependency signatures, artifact identity, byte size, content
 digest, peak decode/prepare estimates and declared consumer payloads. Entries are
 ordered by canonical typed address, never filesystem or job completion order.
@@ -237,7 +241,11 @@ mutate a running TerrainRuntime. Editor hot reload/application code pins the new
 generation, validates the dataset manifest and requests a Terrain replacement candidate
 against the old content/runtime generation.
 
-The manifest declares a dependency/seam closure for changed tiles. Terrain may retain
+Seam signatures hash canonical geometric and material boundary samples plus seam-schema
+and cook-profile identity. They deliberately exclude tile coordinates and neighbour
+IDs so identical boundary content remains cache-reusable; the placement manifest
+separately validates the exact neighbour identities, revisions and adjacency. The
+manifest declares a dependency/seam closure for changed tiles. Terrain may retain
 unchanged old payloads only when their full artifact identity and neighbor seam/
 dependency signatures match the new manifest. Otherwise it prepares the affected
 closure together. A visible/physical/nav-required cohort cannot mix incompatible
@@ -288,8 +296,11 @@ until worker, snapshot, Render, Physics and Navigation acknowledgements complete
 
 World Streaming retains cells/reservations in Retiring while Terrain retirement is
 pending. Assets generation/cache storage remains independently valid; runtime shutdown
-does not delete source, cooked generations or cook cache. A deadline reports typed
-incomplete retirement and cannot force-free or mark a cell Absent early.
+does not delete source, cooked generations or cook cache. A bounded retirement deadline
+transitions the generation to `RetirementBlocked`: it remains quarantined and fully
+charged, rejects replacement/new tile admission for the affected budget slice and emits
+a fatal typed diagnostic for host policy. The deadline never force-frees resources or
+marks a cell Absent early; only the missing owner acknowledgements can release it.
 
 ### 12. Errors, diagnostics and qualification are typed and bounded
 

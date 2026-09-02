@@ -113,6 +113,9 @@ stereo configuration with exactly two runtime views. One-view data may be used o
 an explicit simulator/test profile; it does not satisfy `XRProjection1_0`. Quad-view,
 foveated-inset or any other greater-than-two configuration is reported as discovered but
 unsupported until its full Renderer path and product profile are implemented/qualified.
+Even in this two-view profile, first-party bridge storage, validation and graph
+construction iterate the bounded N-view descriptor set and map by `XRViewId`; no internal
+two-element array or left/right branch is permitted.
 
 View count, ordering, extents and renderer limits are validated before swapchain/image
 acquisition. An unsupported count returns a typed preflight result and creates no
@@ -148,6 +151,10 @@ stand in for the typed identity.
 Renderer external registration borrows the native allocation for the lease duration. It
 does not adopt or destroy it. XROpenXR cannot release/reuse the image until Renderer
 returns completion evidence for every queue/reference covered by the lease.
+That evidence prefers backend-neutral GPU synchronization primitives that the selected
+Renderer/OpenXR bridge can hand to the compositor asynchronously. CPU fences or waits
+are used only when the admitted backend/runtime contract has no qualified GPU handoff;
+ordinary submission never requires the CPU to wait for GPU completion.
 
 ### 5. One XR frame scope owns the cross-system transaction
 
@@ -326,6 +333,7 @@ Required automated coverage includes:
 
 - dependency/public-header tests proving native OpenXR/graphics handles remain private;
 - runtime-driven descriptor bounds/order/role/generation validation;
+- first-party bridge N-view iteration/mapping tests even under the two-view 1.0 profile;
 - exact primary-stereo admission plus one-view test-profile handling and greater-than-two
   rejection before image acquisition with no truncation/partial targets;
 - format/usage/sample/layout/color-role negotiation across every selected renderer;

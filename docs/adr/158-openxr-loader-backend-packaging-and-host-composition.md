@@ -155,7 +155,7 @@ After install verification and before native allocation, the application creates
 struct XRBackendCompositionPlan {
     XRBackendId backend;
     XRBackendContractVersion contractVersion;
-    XROpenXRInstallRecordId installRecord;
+    XRInstallRecordId installRecord;
     XRLoaderSourcePolicy loaderSource;
     PlatformHostGeneration platform;
     RendererBackendId rendererBackend;

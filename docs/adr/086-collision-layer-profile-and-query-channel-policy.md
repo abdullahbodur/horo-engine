@@ -52,8 +52,10 @@ using CollisionProfileId = StrongId<CollisionProfileTag, UInt128>;
 using PhysicsQueryChannelId = StrongId<PhysicsQueryChannelTag, UInt128>;
 ```
 
-The committed project collision configuration stores each ID in canonical lower-
-case UUID text. The binary/runtime form is the same 128 bits. IDs are nonzero,
+The committed project collision configuration stores each ID as the RFC 9562 UUID
+canonical textual form: exactly 36 lowercase ASCII characters in `8-4-4-4-12`
+hexadecimal groups separated by hyphens, with no braces or `urn:uuid:` prefix. The
+binary/runtime form is the same 128 bits. IDs are nonzero,
 generated once by the project-authoring operation and stable across display-name
 changes, list reordering, file moves, cook, package and save/load.
 
@@ -131,6 +133,10 @@ typed IDs, so `(A, B)` and `(B, A)` cannot disagree.
 that an event subscriber exists. `Overlap` is a collision-filter semantic and does
 not change a collider into an editor `TriggerVolume`; trigger ownership and runtime
 conversion remain separate typed contracts.
+
+The symmetric matrix response is authoritative: `Ignore` overrides body-mode,
+material and contact policy for that pair, and none may promote it to `Overlap` or
+`Block`.
 
 Profiles cannot override individual simulation pairs. This preserves one symmetric
 source of truth. A different pair behavior requires a distinct project layer or an

@@ -101,11 +101,26 @@ public:
 };
 ```
 
+`OwnedCanonicalSnapshot` owns an immutable, concurrently readable byte/root view;
+after `Capture` returns, background serialization may read it while the owner resumes
+mutation. Large owners use versioned immutable roots or copy-on-write pages so the
+safe-point capture is bounded; returning a borrowed mutable view or requiring the
+owner thread to remain blocked is forbidden.
+
+`CanonicalRestoreContext` exposes a read-only lookup of already prepared dependency
+candidates keyed by `StableTypeId`. The host populates it strictly in the validated
+dependency DAG order. A participant cannot inspect later candidates, publish through
+the lookup, or retain a candidate beyond aggregate commit/rollback.
+
 Descriptors are inert metadata. Creating/validating them performs no registration,
 service lookup, capture or lifecycle callback. Host composition binds adapters,
 validates unique participant/field ownership, schema/migration paths, required/
 optional policy, dependency DAG, scopes, affinity, resource limits and no-fail
 publication before a session can save.
+
+Sealing builds an immutable `CanonicalFieldId -> participant/ownerSubsystem` map.
+Duplicate claims reject the complete composition before session activation; runtime
+capture never resolves field ownership by registration order or last writer.
 
 A component descriptor may declare stable fields belonging to an adapter, but it does
 not receive an independent generic `Serialize(Component&)` escape hatch. A gameplay
@@ -230,6 +245,12 @@ bundle.
 The manifest records required participant IDs/scopes. Loading under a host that lacks
 required authority/capability rejects before preparation; it does not reinterpret a
 server participant as client-local data or silently drop it.
+
+Server restore validates every manifest participant scope against the authenticated
+host/session authority plan before reading participant payloads. A client-supplied or
+untrusted archive containing `ServerWorld` scope is rejected as
+`AuthorityScopeMismatch`; archive metadata cannot grant server authority or select a
+server-only adapter.
 
 ### 10. Qualification proves classification and single ownership
 

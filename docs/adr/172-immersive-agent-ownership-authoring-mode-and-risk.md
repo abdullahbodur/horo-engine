@@ -85,8 +85,11 @@ Approval is a distinct non-voice UI/controller/accessibility action presented as
 unambiguous review control. It binds the authenticated local user, proposal digest,
 human-readable impact summary, project/document identity and revision, target object
 generations, mode, permission snapshot, tool plan and expiry. It is single-use. Any bound
-change, timeout, cancellation, focus loss, XR session replacement or tracking invalidation
-returns to review or cancels the proposal.
+change, timeout, cancellation, focus loss or XR session replacement returns to review or
+cancels the proposal. Momentary tracking loss freezes the proposal and approval control
+for a policy-bounded 750 ms recovery window; it cannot accept input or update spatial
+evidence during the grace period. Recovery must match the same XR session/reference-space
+generations. Persistent loss or a generation change cancels the proposal.
 
 ### 4. Owners and deliberate non-owners are fixed
 
@@ -112,7 +115,11 @@ context.
 The model produces typed tool-plan candidates. MCP validates schemas and authorization;
 the application resolves them into a complete editor transaction candidate without
 publishing state. Ghost previews use transient editor-owned overlays and cannot affect
-queries, simulation, save data, networking or runtime authority.
+canonical world queries, simulation, save data, networking or runtime authority. A
+proposal-scoped AIA inspection capability may query the overlay by proposal ID and
+returns values explicitly tagged `ProposedNonCanonical` plus the proposal digest and
+generation. This lets follow-up turns reason about their own candidate without making
+the ghost visible to ordinary scene/gameplay queries or treating it as committed state.
 
 After explicit approval, the editor owner revalidates all bound identities, permissions,
 locks, preconditions, cost limits and document revisions at its safe point, then commits

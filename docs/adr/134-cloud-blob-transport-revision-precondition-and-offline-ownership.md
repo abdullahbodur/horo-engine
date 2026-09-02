@@ -183,7 +183,7 @@ validation into `NotFound`, an empty save or an older winner.
 using CloudWritePrecondition =
     Variant<CreateIfAbsent, MatchProviderRevision>;
 
-struct CloudWriteRequest {
+struct CloudBlobWriteRequest {
     CloudSaveObjectKey key;
     CloudBlobReadSource source;
     std::uint64_t exactSizeBytes;
@@ -192,7 +192,7 @@ struct CloudWriteRequest {
     CloudMutationId mutation;
 };
 
-struct CloudDeleteRequest {
+struct CloudBlobDeleteRequest {
     CloudSaveObjectKey key;
     ProviderObjectRevision expectedRevision;
     CloudMutationId mutation;

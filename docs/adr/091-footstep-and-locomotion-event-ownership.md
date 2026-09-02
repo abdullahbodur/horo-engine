@@ -51,8 +51,11 @@ timing events and do not directly start Audio/VFX.
 
 ### 2. Animation publishes a typed committed occurrence
 
-Cooked animation data maps authoring marker names to registered typed IDs. The
-baseline footstep occurrence is:
+Cooked animation data maps authoring marker names to registered typed IDs. A marker
+declared as the registered `Footstep` event carries a required typed
+`FootContactSlot` field in its cooked payload; cook rejects a missing/unknown slot.
+Names such as `Footstep.Left` are display/authoring conveniences and are never
+parsed at runtime. The baseline footstep occurrence is:
 
 ```cpp
 struct FootstepMarkerOccurrence {
@@ -73,7 +76,7 @@ struct FootstepMarkerOccurrence {
 The occurrence is fixed-capacity value data. It contains no strings, mutable pose,
 native animation state, sound/VFX asset, Physics handle or consumer callback.
 `occurrence` is stable for the exact instance generation, clip revision, marker,
-directed traversal ordinal and tick.
+directed traversal ordinal, loop ordinal and tick.
 
 Animation stages occurrences during ADR-061 stage 2 but publishes them only with
 successful tick commit. Failed ticks, presentation sampling, editor scrub and silent
@@ -108,8 +111,10 @@ Character snapshot for `occurrence.tick`:
 
 1. validate the Character binding/generation and exact tick;
 2. require a valid grounded/support state under the locomotion presentation policy;
-3. prefer an admitted foot-specific contact when the Character/IK contract provides
-   one for the declared `FootContactSlot`;
+3. prefer optional `FootContactEvidence` keyed by the declared `FootContactSlot`
+   when the committed `CharacterLocomotionSnapshot` contains it; Character produces
+   that evidence from its declared stage-7 collision/foot-probe policy, while visual
+   pose/IK output is never read back into this path;
 4. otherwise use the canonical grounded support contact;
 5. use Character's already-resolved non-null `SurfaceMaterialId` and committed
    contact point/normal;

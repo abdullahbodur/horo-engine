@@ -172,6 +172,9 @@ horo-engine save inspect
 horo-engine save import
 horo-engine save export
 horo-engine save migrate
+horo-engine save load
+horo-engine save delete
+horo-engine save resolve-conflict
 horo-engine build
 horo-engine release
 horo-engine test
@@ -610,8 +613,9 @@ Required tests cover:
 - redaction of arguments and credentials in logs and diagnostics
 - headless commands executing without GUI or renderer targets
 - equivalence of GUI, CLI, and MCP use-case results
-- save inspect/import/export/migrate capability separation, bounded hostile input,
-  shipping-profile denial and raw-state/path/credential redaction
+- save inspect/import/export/migrate/load/delete/resolve-conflict capability
+  separation, bounded hostile input, shipping-profile denial and raw-state/path/
+  credential redaction
 - `horopak` isolation (absence of GUI/RenderApi linkage)
 
 ## Related Documents

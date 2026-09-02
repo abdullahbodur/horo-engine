@@ -185,7 +185,7 @@ immutable input leases. Completion enqueues data, never a callback that writes l
 state. Owner-thread `NavIntentCommit` consumes eligible results in stable request/agent order,
 rechecks incarnation, handle generation, authority, cancellation, and relevant revisions, and
 publishes paths/desired velocities before character locomotion. Stale results return
-`StaleTopology` or `InvalidHandle` and may be resubmitted within budget; they are never applied
+`StaleSnapshot` or `InvalidHandle` and may be resubmitted within budget; they are never applied
 to replacement agents or tiles. A held path/corridor must be revalidated before later use too.
 
 ADR-018 `OwnerThreadNextFrame` console handlers submit typed navigation commands for this

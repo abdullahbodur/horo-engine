@@ -154,7 +154,8 @@ Eviction has two phases:
 
 1. VTX revokes logical availability at its safe point, stops new demand attachment and
    requests exact renderer/provider retirement.
-2. After every snapshot, byte lease, worker and relevant GPU queue acknowledges
+2. After every referencing snapshot and byte lease, each worker, and each relevant GPU
+   queue acknowledge
    retirement, VTX commits `Absent` and asks the global/Renderer owners to release or
    reclassify their charges.
 

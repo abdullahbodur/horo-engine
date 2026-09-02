@@ -327,7 +327,7 @@ struct ObjectSchedulingInput {
 ```
 
 Spatial cell/distance, explicit subscriptions/groups and authority-required
-lifecycle are baseline interest sources. Results are unioned/filter by stable
+lifecycle are baseline interest sources. Results are unioned/filtered by stable
 object ID under candidate/relevant limits. Enter/exit thresholds and dwell ticks
 provide hysteresis. Boundary-change work is capped per connection/tick; excess is
 deferred in stable object-ID order and revalidated next tick.

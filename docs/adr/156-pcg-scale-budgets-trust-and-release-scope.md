@@ -73,7 +73,7 @@ receipt assigns the allocation elsewhere.
 | Attributes per point | 16 | 32 | 64 |
 | Canonical attribute value bytes per point | 256 | 512 | 1,024 |
 | Points in one node output | 16,384 | 262,144 | 2,097,152 |
-| Total materialized point records per evaluation | 65,536 | 1,048,576 | 8,388,608 |
+| Total materialized point records per evaluation | 65,536 | 1,048,576 | 2,097,152 |
 | Output intents per generated set | 16,384 | 262,144 | 2,097,152 |
 | Cooked plan plus PCG auxiliary artifacts | 2 MiB | 16 MiB | 64 MiB |
 | Bounded diagnostics per operation | 256 / 1 MiB | 1,024 / 4 MiB | 4,096 / 16 MiB |
@@ -88,6 +88,12 @@ bounds. Cook proves each stage and the whole plan stay within the profile. Runti
 recomputes/validates declared envelopes before allocation. Addition, multiplication,
 alignment and conversion use checked arithmetic; overflow is a typed invalid-plan/input
 failure, never saturation or wraparound.
+
+The total materialized-record ceiling counts all simultaneously retained intermediate
+node outputs plus the final candidate. It is not a cumulative count of records processed
+after an intermediate has been deterministically released. Cook liveness analysis must
+prove the peak across graph stages; a wide/deep graph that retains too many outputs is
+rejected even when each individual node stays below its per-output ceiling.
 
 ### 3. Memory and in-flight limits include all lifecycle strata
 

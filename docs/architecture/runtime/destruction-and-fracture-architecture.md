@@ -87,12 +87,17 @@ Pre-fractured meshes are authored and cooked offline through ADR-145:
 struct CanonicalFractureArtifact {
     FractureArtifactId artifact;
     FractureArtifactRevision revision;
+    FractureFingerprint semanticFingerprint;
+    FractureIntegrityDigest integrityDigest;
     AssetId sourceMesh;
     FractureRecipeId recipe;
     FractureChunkTable chunks;
     FractureConnectivityGraph connectivity;
     FractureGeometryTables geometry;
     FractureCollisionInputTable collisionInputs;
+    LocalBounds bounds;
+    MassIntegrationInputs massProperties;
+    float volume;
 };
 ```
 

@@ -207,9 +207,9 @@ renderer data, pointers or native Physics handles.
 After commit, an application adapter drains the immutable batch at the gameplay
 owner's next safe point. Delivery cannot reenter the current VFX step or retroactively
 change it. Required output capacity is reserved at activation/step preflight;
-overflow fails the candidate rather than dropping gameplay events. GPU readback,
-RenderOnly channels, extraction and Null simulation never produce authoritative
-GameplayOutput.
+overflow fails the candidate rather than dropping gameplay events. No authoritative
+GameplayOutput is produced by GPU readback, RenderOnly channels, extraction or Null
+simulation.
 
 Gameplay may query only declared immutable effect-level aggregate snapshots from the
 last committed generation. Per-particle queries are not baseline gameplay API; a

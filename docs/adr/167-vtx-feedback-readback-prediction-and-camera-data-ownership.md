@@ -122,7 +122,7 @@ coverage/frequency, not physical atlas slots, native addresses or mutable reside
 Canonical ordering and duplicate aggregation are defined by schema. Completion repeats
 the exact operation/resource generations and declared bounds.
 
-VTX rejects or retires wrong-schema, stale texture/device/view generation, malformed,
+VTX rejects or retires wrong-schema, stale texture/device/view generations, malformed,
 oversized or impossible entries. Reordered delivery is processed by source identity and
 captured policy, not callback order. Duplicate completion is idempotently ignored.
 Observation age is explicit; VTX never presents delayed data as current-frame truth.

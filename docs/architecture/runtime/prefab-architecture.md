@@ -648,6 +648,7 @@ enum class PrefabError : std::uint32_t {
     ComponentTypeUnregistered, // Cooked template references an unavailable component type
     ComponentAllocationFailed, // Memory allocation failed for component pool
     InvalidReference,          // Unsupported or unresolved persisted reference class
+    DuplicateOrConflictingOverride, // One layer contains competing semantic operations
     BindingSlotInvalid,        // Declaration/use/re-exposure schema is invalid
     RequiredBindingMissing,    // Required instance/spawn slot has no binding
     BindingTargetInvalid,      // Supplied target is stale, cross-scene or incompatible

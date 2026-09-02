@@ -68,10 +68,14 @@ display labels leaves identity unchanged.
 
 Each linked instance stores its template asset ID, accepted semantic revision,
 instance ID, typed argument values, slot fragments and required compatibility
-range. Nested instances extend an explicit instance-scope path. Expansion derives
+range. Nested instances extend an immutable lineage of stable
+`UiTemplateInstanceId` values. Expansion derives
 candidate `UiElementId` values with a fixed versioned hash over owning document,
-instance-scope path and local element ID, then collision-checks the complete target
+instance-ID lineage and local element ID, then collision-checks the complete target
 document. A collision rejects publication; hashing never authorizes overwrite.
+Moving or renaming an instance without changing its stable ID leaves expanded IDs
+unchanged; reparenting changes only lineage membership when it changes the semantic
+instance owner.
 
 ### 3. The template document schema is finite and self-describing
 
@@ -105,11 +109,21 @@ Each public parameter declares stable ID, display/localization metadata, closed
 value type, required/default policy, constraints and one or more exact targets:
 
 ```cpp
-struct UiTemplateParameterTarget {
+struct UiTemplateElementPropertyTarget {
+    std::span<const UiTemplateInstanceId> instanceLineage;
     UiTemplateLocalElementId element;
     UiStylePropertyId property;
     UiTemplateParameterTransform transform;
 };
+
+struct UiTemplateNestedParameterTarget {
+    std::span<const UiTemplateInstanceId> instanceLineage;
+    UiTemplateParameterId parameter;
+    UiTemplateParameterTransform transform;
+};
+
+using UiTemplateParameterTarget =
+    std::variant<UiTemplateElementPropertyTarget, UiTemplateNestedParameterTarget>;
 ```
 
 The value set includes bounded scalar/integer/boolean/enum, text content or
@@ -123,6 +137,12 @@ deterministic transform. Parameters cannot target identity, parentage, element k
 owner scope, package trust, native/renderer handles or hidden executable state.
 Duplicate/conflicting target writes, invalid defaults and cyclic parameter-derived
 expressions reject the template.
+
+Nested-parameter targets forward a parent argument through an exact stable instance
+lineage before the child expands. The child parameter must exist and accept the
+source type or a registered deterministic transform. Forwarding cannot target a
+descendant outside that lineage, write identity, or form a parameter dependency
+cycle; the complete forwarding graph is validated before any expansion output.
 
 Parameter removal/type change is breaking. Adding an optional parameter with a
 default is compatible. Constraints may tighten only under a new incompatible
@@ -174,8 +194,9 @@ module activation, widget construction, binding-provider call, gameplay command,
 renderer allocation or lifecycle callback. All dependencies are resolved and
 pinned before expansion.
 
-Cycles are detected by asset plus accepted semantic revision across the active
-lineage. Limits apply to source and fully expanded depth, elements, nested instances,
+Cycles are detected by `AssetId` alone across the active lineage; selecting another
+revision of an already active asset does not make recursion valid. Limits apply to
+source and fully expanded depth, elements, nested instances,
 parameters, slots, argument bytes, payload bytes and dependency count. Incremental
 checks stop before exceeding budgets; truncation is never valid output.
 

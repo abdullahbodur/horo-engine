@@ -71,8 +71,10 @@ admission validates size and structural shape but does not mutate the world.
 Physics contact callbacks may write only bounded immutable contact evidence into a
 pre-reserved Physics-owned buffer. Evidence contains Horo body/chunk bindings, world and
 binding generations, fixed-tick ID, canonical pair ordering and finite impulse/contact
-facts. It contains no borrowed solver pointer. Overflow is an explicit tick result and
-cannot invoke gameplay or allocate an unbounded spill buffer.
+facts. It contains no borrowed solver pointer. Evidence beyond the pre-reserved prefix
+is discarded deterministically, marks the tick with an explicit overflow result and
+increments the overflowed-evidence counter; it cannot invoke gameplay or allocate an
+unbounded spill buffer.
 
 The fixed-tick order is:
 
@@ -91,7 +93,11 @@ The fixed-tick order is:
    `CommitDeferredLifecycleChanges`; canonical events become observable afterward.
 
 A contact observed during tick `N` cannot change solver topology or public destruction
-state inside tick `N` callbacks. It can first contribute to a legal later transition.
+state inside tick `N` callbacks. The frozen evidence may be consumed and the aggregate
+transition committed after that step, making prepared topology first available to
+Physics tick `N+1`. Step 4 does not require a second queued-command cycle: “admit” means
+validate the evidence-derived transition under the same post-step owner boundary.
+Policies that deliberately defer work record a later eligible tick explicitly.
 DFR-003.2 defines how evidence and gameplay damage produce threshold decisions; this ADR
 defines only the safe transport and commit order.
 
@@ -272,16 +278,22 @@ private evidence attached by their adapter.
 Metrics use bounded dimensions such as result, stage, feature tier and product profile;
 they never use asset paths, chunk IDs or native handles as dimensions. Traces may carry
 the ticket and stable Horo identities under observability privacy policy. Counters cover
-admitted/rejected commands, stale evidence, planned direct/support chunks,
+admitted/rejected commands, stale and overflowed evidence, planned direct/support chunks,
 prepare/commit/retire latency, candidate bytes, active/dormant bodies and cleanup
 outcomes. Diagnostics cannot mutate or retry a transition.
 
 Shutdown closes new command/evidence admission, freezes publication, cancels candidate
-task groups, invalidates unpublished tickets and requests reverse-dependency retirement:
+task groups, invalidates tickets that have not reached the aggregate Public commit and
+requests reverse-dependency retirement:
 presentation consumers, RuntimeScene mappings, Physics/Render objects, then artifact
 leases and Destruction storage. Owners retain modules, queues, receipts and resources
 until exact-generation readers acknowledge release. A deadline reports incomplete
 shutdown and never force-frees potentially referenced native state.
+
+An owner candidate already `PrivatelyPublished` remains hidden behind its activation
+ticket during shutdown. Its owner retires that exact private generation through the
+same reverse-dependency path and retains all resources/receipts until acknowledgement;
+it is never promoted merely to simplify cleanup.
 
 ## Compatibility And Follow-Ups
 

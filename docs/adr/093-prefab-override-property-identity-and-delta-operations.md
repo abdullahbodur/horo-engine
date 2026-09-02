@@ -77,6 +77,7 @@ The component schema registry defines:
 struct ComponentTypeId { StableId128 value; };
 struct ComponentInstanceId { StableId64 value; };
 struct PropertyId { StableId64 value; };
+struct AlternativeId { StableId64 value; };
 struct CollectionElementId { StableId64 value; };
 ```
 
@@ -168,6 +169,11 @@ anchors, never numeric indexes.
 | `AssignElementValue` | Existing stable/map element | Replace the identified element's complete typed value |
 | `AddComponent` | Existing prefab object | Add one new component instance with type/schema and complete canonical payload |
 | `RemoveComponent` | Existing source component instance | Tombstone the complete component occurrence |
+
+Its canonical operation rank is a wire constant, not declaration order:
+`AssignValue=0`, `InsertElement=1`, `RemoveElement=2`, `MoveElement=3`,
+`AssignElementValue=4`, `AddComponent=5`, and `RemoveComponent=6`. Unknown ranks
+reject; a later schema may append operations but cannot renumber V1.
 
 `ClearOverride`/revert is not a persisted operation. The document command removes
 the selected record(s), allowing the effective source value/component to flow

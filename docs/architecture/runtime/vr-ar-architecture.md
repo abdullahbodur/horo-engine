@@ -417,26 +417,6 @@ submission separately from physical completion.
 
 ## Interaction, Runtime UI, And Comfort
 
-XR interaction adapts ray, direct-touch, proximity, grab, and spatial hit
-evidence into existing runtime UI and gameplay contracts. It does not duplicate
-physics queries, UI focus/capture, or scene authority.
-
-World-space canvases remain runtime UI documents projected into world space.
-They use the same semantic focus, navigation, accessibility, localization, and
-input-action model as non-XR UI. Stereo presentation and occlusion belong to the
-renderer/UI projection adapter.
-
-Locomotion produces intent for the character-movement owner. Teleport, smooth
-move, snap turn, arm-swing, and room-scale behavior are policy/configuration, not
-hard-coded controller logic. Comfort settings include turning, vignette,
-movement, height, seated/standing, handedness, boundary awareness, and reduced
-motion where supported.
-
-Refresh rate, view extent, and frame budget come from runtime/device capability
-snapshots. Architecture does not prescribe a universal 90 Hz minimum. Each
-qualified tuple records its supported modes and measured comfort/performance
-evidence.
-
 XR interaction sources publish bounded generation-scoped ray/direct/proximity evidence.
 Host adapters may combine it with read-only Physics/Scene queries, but a hit remains a
 candidate. Runtime UI alone resolves its last-presented hit tree, hover, focus, capture
@@ -459,6 +439,10 @@ snap-turn configuration, speed/handedness, seated/standing/recenter behavior, mo
 reduction controls and declared teleport/continuous availability remain visible across
 renderer/device tiers. Missing authored alternatives are explicit limitations, never
 silent fallbacks.
+
+Refresh rate, view extent and frame budget come from runtime/device capability
+snapshots; architecture does not prescribe a universal 90 Hz minimum. Each qualified
+tuple records its supported modes and measured comfort/performance evidence.
 
 ## Mixed Reality And Privacy
 

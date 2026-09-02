@@ -132,8 +132,9 @@ boundary. The owner revalidates session, base revision, dependency fingerprints,
 generator/schema generation, capability and reservation before exposing the candidate
 as `ReadyForReview`. Stale completion is discarded after owned readers drain.
 
-Only an explicit `AcceptGenerationCandidate` operation can apply the proposed authored
-patch. Acceptance first closes its full affected identity/property/graph set, reserves
+Only an explicit `AcceptGenerationCandidate` operation carrying the candidate's exact
+`FractureGenerationOperationId` can apply the proposed authored patch. Acceptance first
+closes its full affected identity/property/graph set, reserves
 history/source storage and validates invariants, then commits one new document revision.
 Reject/cancel drops the candidate. Generator completion alone never dirties, saves or
 publishes the document and never replaces production runtime content.
@@ -156,6 +157,7 @@ struct FractureDocumentHistoryRecord {
     FractureDocumentOperationId operation;
     FractureDocumentRevision baseRevision;
     FractureDocumentRevision committedRevision;
+    FractureContentStateId resultingContentState;
     ImmutableFractureAuthoringPatch before;
     ImmutableFractureAuthoringPatch after;
     FractureDependencyInvalidation invalidation;

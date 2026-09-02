@@ -105,12 +105,17 @@ rules; same-tick effect is not implied.
 
 `CinematicEventOccurrenceId` is the idempotency identity. It includes the player
 generation plus traversal/loop/direction, track and key identity. The dispatcher
-records a bounded terminal/admitted result per live generation so a retried queue
-submission cannot invoke the same handler twice. It does not deduplicate by event
-name, payload or timestamp.
+records either a bounded terminal result or a retryable-attempt record per live
+generation. `Accepted`, `OperationStarted` and non-retryable failures are terminal;
+a policy-admitted retryable failure records attempt count/backoff but leaves the
+same occurrence eligible. A retried queue submission cannot invoke a handler after
+a terminal result. It does not deduplicate by event name, payload or timestamp.
 
-Queue capacity is preflighted before the player cursor/value state commits. Required
-occurrences are never silently dropped. Exhaustion returns
+Queue capacity is atomically reserved for the exact occurrence batch before the
+player cursor/value state commits. The reservation is generation-bound and is
+consumed by commit or released on rollback/cancellation; concurrent players cannot
+spend it between preflight and enqueue. Required occurrences are never silently
+dropped. Reservation exhaustion returns
 `EventDispatchCapacityExceeded` and holds/fails the player according to its compiled
 policy without partial interval publication. Optional presentation-only signals may
 use a separately declared coalescing policy, but they are not gameplay EventTrack
@@ -135,7 +140,7 @@ A handler returns one bounded typed outcome such as:
 
 | Outcome | Meaning |
 |---|---|
-| `Accepted` | Destination accepted a synchronous domain command/value for later owner processing |
+| `Accepted` | Destination owner admitted the command; state mutation occurs at the owner's next commit phase |
 | `OperationStarted` | Destination returned a stable application-owned `OperationId`; completion is asynchronous |
 | `SuppressedByAuthority` | Current gameplay/network/cinematic authority rejects the requested effect |
 | `CapabilityUnavailable` | Required destination capability is absent in this context/build |
@@ -158,7 +163,8 @@ function pointer in a compiled sequence.
 Default required-event failure stops future effects from that track and reports the
 typed result; it does not roll back a tick whose other owner effects already
 committed. Retry is allowed only when the descriptor declares bounded idempotent
-retry and reuses the same occurrence ID. Optional-event failure disables or skips
+retry, the outcome is classified retryable, and the same occurrence ID and reserved
+semantic payload are reused. Optional-event failure disables or skips
 according to its explicit compiled policy and remains observable.
 
 ### 6. Unknown events fail before playback whenever possible

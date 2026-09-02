@@ -139,9 +139,12 @@ Permanent and event-driven instances consume a slot for their full owner lifetim
 
 `TrySpawnDecal` admits identity, logical slot, result/retirement record, material/atlas
 reference and renderer cost before publication. Capacity exhaustion rejects the
-incoming decal with `DecalCapacityExceeded`; it does not evict an existing permanent,
-oldest or farthest instance and does not grow a pool in the frame path. Optional effect
-logic may observe rejection and follow a separately authored cosmetic response.
+incoming decal with `DecalCapacityExceeded` by default and never grows a pool in the
+frame path. A product may explicitly select `EvictOldestTimedFade` for cosmetic
+pressure: it retires only an unpinned, non-required `TimedFade` instance and chooses
+the lowest spawn ordinal, then `DecalId`, deterministically. Permanent, event-driven,
+required and pinned instances are never eviction candidates. Optional effect logic may
+observe rejection and follow a separately authored cosmetic response.
 
 Gameplay-required outcomes cannot depend on decal visibility or successful visual
 admission. Decals remain visual; a bullet-hit/gameplay fact exists independently on
@@ -255,7 +258,8 @@ Required implementation evidence includes:
 - each lifetime at zero/exact/one-tick-beyond boundaries, pause/time scale, duplicate/
   stale/unauthorized event removal and owner/cell/scene teardown;
 - per-effect/owner/cell/aggregate limits at 255/256/257 desktop-default cases, permanent
-  and event-driven saturation, incoming rejection and no implicit eviction/growth;
+  and event-driven saturation, incoming rejection, explicit oldest-timed-fade eviction
+  with stable ties, protected instances and no implicit eviction/growth;
 - every path-preference row across Forward, Clustered Forward+ and Deferred recipes,
   missing capability/material/channel/budget and explicit suppression;
 - identical semantic receiver/fade fixtures for qualified deferred/forward variants

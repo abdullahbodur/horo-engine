@@ -86,7 +86,10 @@ revision, permissions, node catalog/schema, graph invariants, complete cost and 
 compatibility before mutation.
 
 Invalid, stale, unauthorized, empty, oversized or conflicting commands return typed
-zero-mutation results. UI code cannot edit graph vectors, set dirty flags, append
+zero-mutation results carrying a stable `PCGDocumentCommandFailureReason`, the bounded
+offending semantic identities/predicate and optional localized-message arguments. Raw
+provider strings are diagnostic attachments, never UI policy. UI code cannot edit graph
+vectors, set dirty flags, append
 history, write files, call the cooker, mutate a preview world or submit a Scene command
 directly.
 

@@ -57,7 +57,7 @@ enum class PhysicsDeterminismTier : std::uint8_t {
 
 struct PhysicsDeterminismCapability {
     PhysicsDeterminismTier maximumQualifiedTier;
-    PhysicsDeterminismFingerprint fingerprint;
+    PhysicsBuildFingerprint buildFingerprint;
     DeterminismCompatibilityGroupId compatibilityGroup;
     DeterminismExclusionSet exclusions;
     QualificationEvidenceId evidence;
@@ -70,9 +70,10 @@ world activation. Physics returns the effective supported capability for the exa
 run or a typed failure. A config checkbox, command-line flag or upstream build
 define cannot elevate `maximumQualifiedTier` without matching evidence.
 
-The capability is immutable for one process/world generation. If build, Physics
-profile, package/content, command protocol, platform or another fingerprint input
-changes, the host must negotiate a new world/session/replay compatibility result.
+The capability is immutable for one process generation and can be compared before a
+world exists. World admission separately publishes a `PhysicsSessionFingerprint`
+for its content, initial state and protocol. If either fingerprint's inputs change,
+the host must negotiate a new world/session/replay compatibility result.
 
 ### 2. Tier 0: `Unspecified` makes no repeatability claim
 
@@ -155,22 +156,28 @@ Tier 3 remains unsupported/future until an accepted profile and PHY-007.8 eviden
 exist. A product can therefore require Tier 2 without paying the future Tier 3
 profile cost.
 
-### 6. One exact determinism fingerprint defines compatibility
+### 6. Build and session fingerprints define compatibility
 
-`PhysicsDeterminismFingerprint` is a versioned Horo digest over canonical fields:
+`PhysicsBuildFingerprint` is a versioned Horo digest over fields known before world
+creation:
 
 - Horo engine/product build IDs and hashes of participating deterministic modules;
 - Jolt tag/commit, source patch digest and every compile definition;
 - compiler, standard library, target triple, ABI, build mode, codegen/ISA/CPU
   capability, sanitizer/LTO and FP flags;
 - runtime FPU environment policy and Physics owner/private job profile;
-- Horo Physics schema, scene-plan, ordering, seed, state-snapshot/hash, shape cooker,
-  filter, material, tolerance/solver and origin-rebase algorithm versions;
-- fixed timestep rational, substep/iteration policy and capacity settings that can
-  affect ordering/behavior;
+- Horo Physics schema, ordering, state-snapshot/hash, shape cooker, filter, material,
+  tolerance/solver and origin-rebase algorithm versions;
+- supported fixed-timestep, substep/iteration and capacity-policy schema versions;
+- admitted feature/exclusion bits and compatibility-group identity.
+
+`PhysicsSessionFingerprint` is created during world admission and covers dynamic
+session inputs:
+
+- exact fixed timestep rational, substep/iteration policy, capacity settings and seed;
 - exact cooked scene/shape/material/filter/package manifest fingerprints;
 - initial world/state snapshot digest and ordered input/command protocol version;
-- admitted feature/exclusion bits and compatibility-group identity.
+- the exact `PhysicsBuildFingerprint` and admitted feature/exclusion selection.
 
 Display names, file paths, timestamps, process IDs, pointers, renderer/audio state
 and observability sampling are excluded unless they feed simulation, which is itself
@@ -178,10 +185,11 @@ a contract violation. Fields use fixed encodings/order and checked length. Unkno
 required fields/versions fail comparison; no partial or string-map comparison is
 allowed.
 
-Two Tier 2 runs require identical complete fingerprint bytes. Tier 3 uses distinct
-member fingerprints plus one reviewed group manifest that explicitly declares which
-allowed platform/build fields differ and proves semantic compatibility. A group ID
-is never computed from a vague version range.
+Tier 2 preflight first requires identical build fingerprints, then world/session
+admission requires identical session fingerprints. Tier 3 uses distinct build and
+session member fingerprints plus one reviewed group manifest that explicitly
+declares which allowed platform/build fields differ and proves semantic
+compatibility. A group ID is never computed from a vague version range.
 
 ### 7. Initial state and every mutation are canonical inputs
 
@@ -247,10 +255,14 @@ reduces it after the step using stable body/subshape/material identities. Callba
 thread/order, `GetActiveBodies` order and native collector order never determine
 events or gameplay commands.
 
-Overflow is deterministic state: the same bounded capacity must overflow at the
-same canonical item, produce the same typed result and normally invalidates a
-session that required complete authoritative events. Dropping whichever callback
-arrived last is forbidden.
+Native collection has a separate hard safety ceiling large enough for the qualified
+profile and cannot choose semantic survivors. After collection, Horo canonicalizes
+and sorts the complete admitted evidence, then applies the semantic event capacity
+to that ordered output. Overflow therefore occurs at the same canonical item,
+produces the same typed result and normally invalidates a session that required
+complete authoritative events. Dropping whichever callback arrived last is
+forbidden; exceeding the native safety ceiling is a terminal determinism failure,
+not a timing-dependent partial event set.
 
 ### 10. The fixed-step and FP environment are part of the capability
 

@@ -81,6 +81,7 @@ struct PrefabBindingSlotDeclarationV1 {
     PrefabBindingSlotId id;
     PrefabBindingTargetKind targetKind;
     std::optional<ComponentTypeId> componentType;
+    std::optional<ComponentInstanceId> componentInstance;
     PrefabBindingRequirement requirement;
     RegisteredStringId displayName;
     RegisteredStringId purpose;

@@ -117,12 +117,13 @@ struct PCGPoint {
 - **Align To Surface**: Orient points to match surface normal
 - **Attribute Noise**: Add Perlin/Simplex noise to attributes
 
-**Generation Nodes** create actual scene content:
+**Generation Nodes** produce typed output intents; target owners decide whether and how
+to realize them during a later aggregate commit:
 
-- **Static Mesh Spawner**: Place static mesh instances at points
-- **Foliage Spawner**: Place foliage instances at points
-- **Actor Spawner**: Spawn gameplay entities at points
-- **Decal Spawner**: Apply decals at points
+- **Static Mesh Spawner**: Emit static-mesh placement intents at points
+- **Foliage Spawner**: Emit foliage placement intents at points
+- **Actor Spawner**: Emit gameplay-entity spawn intents at points
+- **Decal Spawner**: Emit decal projection intents at points
 
 ```cpp
 struct PCGMeshSpawnerSettings {

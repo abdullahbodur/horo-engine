@@ -61,6 +61,15 @@ are accepted on the reserved control channel. Gameplay, RPC, replication, voice,
 console and extension messages received early are rejected, counted and may close
 the connection under abuse policy. They are never buffered for later dispatch.
 
+The server publishes a generation-bound `SessionActive` acknowledgement on the
+reliable ordered control channel only after activation commits. A conforming client
+must receive it before transmitting gameplay on any channel; gameplay envelopes
+carry the acknowledged session generation, so cross-channel transport reordering
+cannot make a legitimate packet appear active early. A first bounded early packet
+is rejected and counted without closing solely for timing. Repeated early packets,
+an absent/stale activation generation, or exhaustion of the admission allowance
+follows the abuse close policy. The server never buffers pre-active gameplay.
+
 `MessageDispatcher`, `ReplicationManager` and gameplay callbacks receive messages
 only when the owner-thread session table contains the matching generation in
 `Active`. Transport callbacks, queue ordering and a forged session ID cannot
@@ -212,8 +221,8 @@ discarded.
 Malformed, incompatible and hostile peers receive only bounded safe failure codes
 where disclosure policy permits. Internal verifier detail, token contents, trust
 anchors, account existence, schema inventory and native error strings are not sent
-to the peer. Repeated early gameplay, oversized input, nonce replay, rate-limit
-evasion or invalid proof follows the configured abuse close policy.
+to the peer. Early-gameplay allowance exhaustion, oversized input, nonce replay,
+rate-limit evasion or invalid proof follows the configured abuse close policy.
 
 ### 7. Failure, cancellation and shutdown are terminal
 

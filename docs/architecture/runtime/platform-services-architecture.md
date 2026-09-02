@@ -200,7 +200,7 @@ calling thread on network I/O.
 template <typename T>
 class PlatformRequestHandle {
 public:
-    RequestId Id() const;
+    PlatformRequestId Id() const;
     FrontendGeneration Frontend() const;
 };
 
@@ -212,11 +212,14 @@ public:
     Result<PlatformRequestHandle<LeaderboardEntries>>
     GetLeaderboardEntries(LeaderboardId id, const LeaderboardQuery& query);
 
-    Result<PlatformRequestHandle<CloudReadResult>>
-    ReadCloudSave(CloudSaveObjectKey key);
+    Result<PlatformRequestHandle<CloudBlobReadResult>>
+    ReadCloudSave(CloudBlobReadRequest request);
 
     Result<PlatformRequestHandle<CloudMutationResult>>
-    WriteCloudSave(CloudWriteRequest request);
+    WriteCloudSave(CloudBlobWriteRequest request);
+
+    Result<PlatformRequestHandle<CloudMutationResult>>
+    DeleteCloudSave(CloudBlobDeleteRequest request);
 
     Result<PlatformRequestHandle<void>>
     SetPresence(const PresenceState& state);
@@ -228,7 +231,8 @@ public:
         PlatformRequestHandle<T> request,
         PlatformCompletionExecutor executor,
         PlatformTerminalObserver<T> observer);
-    Result<void> Cancel(PlatformRequestId request);
+    template <typename T>
+    Result<void> Cancel(PlatformRequestHandle<T> request);
 };
 ```
 
@@ -276,7 +280,7 @@ state. Non-terminal snapshots contain no terminal result.
    until provider/callback retirement permits reclamation.
 
 Dropping the last handle or subscription does not cancel an admitted request, erase a
-write or free provider work. Explicit `Cancel(requestId)` or owner shutdown policy is
+write or free provider work. Explicit `Cancel(typedHandle)` or owner shutdown policy is
 required. Querying expired or stale identity returns `platform.request.expired` or
 `platform.request.stale`; it does not fabricate a replacement terminal result.
 
@@ -447,6 +451,8 @@ local/server authority before runtime composition.
 
 ```cpp
 enum class ProgressionMutationKind : std::uint8_t {
+    UnlockOnce,
+    SetProgressMaximum,
     SetStatMaximum,
     SetStatMinimum,
     SetStatSnapshot,
@@ -500,9 +506,20 @@ lineage, merge, winner, retention or conflict policy.
 
 ```cpp
 struct CloudSaveObjectKey { BoundedOpaqueBytes value; };
+struct CloudSaveObjectPrefix { BoundedOpaqueBytes value; };
+struct CloudListCursor { BoundedOpaqueBytes value; };
+struct CloudBlobOwnedBytes { BoundedArray<std::byte> value; };
+struct CloudBlobSourceHandle { UInt128 value; };
 struct ProviderObjectRevision { BoundedOpaqueBytes value; };
 struct CloudBlobDigest { Sha256Digest value; };
 struct CloudMutationId { UInt128 value; };
+
+struct CreateIfAbsent {};
+struct MatchProviderRevision { ProviderObjectRevision revision; };
+struct CloudListRequest {
+    CloudSaveObjectPrefix prefix;
+    std::optional<CloudListCursor> cursor;
+};
 
 enum class CloudMutationAtomicity : std::uint8_t {
     ConditionalAtomicObject,
@@ -515,6 +532,30 @@ struct CloudObjectHead {
     std::uint64_t sizeBytes;
     std::optional<CloudBlobDigest> transportDigest;
     OptionalProviderTimestamp modifiedForPresentation;
+};
+
+struct CloudObjectPage {
+    BoundedArray<CloudObjectHead> objects;
+    std::optional<CloudListCursor> next;
+};
+
+struct CloudBlobReadRequest {
+    CloudSaveObjectKey key;
+};
+
+struct CloudBlobReadResult {
+    CloudObjectHead head;
+    CloudBlobOwnedBytes bytes;
+};
+
+struct CloudBlobReadSource {
+    CloudBlobSourceHandle source;
+};
+
+struct CloudMutationResult {
+    CloudSaveObjectKey key;
+    CloudMutationId mutation;
+    std::optional<CloudObjectHead> committedObject; // absent after successful delete
 };
 
 using CloudWritePrecondition =
@@ -635,14 +676,17 @@ platform-owned.
 ```cpp
 struct PlatformSocialSubjectHandle {
     UInt128 nonce;
-    PlatformSessionGeneration session;
-    PlatformAccessPolicyRevision access;
+    ProviderGeneration providerGeneration;
+    PlatformSessionGeneration sessionGeneration;
+    PlatformAccessPolicyRevision accessRevision;
 };
 
 struct PlatformUserPresentation {
     PlatformSocialSubjectHandle subject;
     BoundedUtf8 displayName;
     std::optional<ProviderApprovedAvatarToken> avatar;
+    PlatformPresentationSource source;
+    PlatformPresentationFreshness freshness;
 };
 
 class IFriendsService {
@@ -945,8 +989,8 @@ live capability:
 ```cpp
 struct PlatformSubjectHandle {
     UInt128 nonce;
-    ProviderGeneration provider;
-    PlatformSessionGeneration session;
+    ProviderGeneration providerGeneration;
+    PlatformSessionGeneration sessionGeneration;
 };
 
 enum class PlatformSessionPhase : std::uint8_t {

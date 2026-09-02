@@ -164,8 +164,12 @@ are normalized to finite Horo semantic values before queries. NaN, infinity, inv
 transform, degenerate primitive, overflow or unsupported coordinate conversion returns
 a typed failure rather than being silently clamped.
 
-Portable deterministic kernels use specified fixed/quantized comparisons or a
-versioned certified floating-point profile, stable traversal keys and total tie breaks.
+Portable deterministic kernels use a restricted fixed-point/integer and explicitly
+quantized operation subset, stable traversal keys and total tie breaks. They never rely
+on hardware transcendental results. A transcendental operation is portable only when
+the node declares a versioned software reference implementation with golden vectors;
+otherwise it is at most profile-deterministic under one exact certified floating-point
+fingerprint.
 Broadphase/BVH/hash-grid layout, provider-native hit order, pointer/address, thread
 schedule and unordered-container iteration never define semantic output order.
 
