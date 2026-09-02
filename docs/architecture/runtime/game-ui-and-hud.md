@@ -338,6 +338,25 @@ passthrough list may bypass them. Assignment change neutralizes old held/capture
 input before a new player/context activates. Focus, restoration, capture and active
 device modality remain per context/audience rather than process global.
 
+## Runtime Localization Boundary
+
+[ADR-081](../../adr/081-runtime-ui-and-localization-ownership-boundary.md) keeps
+catalog, namespace, locale normalization/policy evidence, typed formatting and
+translation fallback in Localization. Runtime UI serializes typed message keys and
+argument values, freezes one immutable localization snapshot during VariableUpdate
+and publishes resolved text with the matching font/shaping/layout revisions.
+
+Localization returns bounded Unicode text, semantic spans and locale evidence;
+Runtime UI Text owns segmentation, bidi, shaping, line breaking and layout. Locale
+change events carry revision identity rather than pointers/callbacks. A required
+replacement failure retains the last-good complete UI generation instead of mixing
+languages or layout revisions in one frame.
+
+Translation, font and localized visual/audio asset fallback remain independent.
+Localization supplies the normalized locale chain, ADR-075 selects font faces,
+Assets delivers declared stable asset variants, and the owning UI document chooses
+Required, UseNeutral or Omit presentation policy.
+
 ## Runtime Text And Font Contract
 
 Runtime text/style documents reference stable `FontFamilyAssetId` or typed semantic

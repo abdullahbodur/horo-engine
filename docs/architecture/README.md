@@ -212,6 +212,9 @@ dependency direction in [System Design](./foundation/system-design.md).
   orthogonal owner/audience/route/band/visibility dimensions, fixed presentation
   bands, transactional scoped stacks, loading/debug policy, input, transitions,
   and immutable rendering plans.
+- [Runtime UI and Localization Ownership Boundary](../adr/081-runtime-ui-and-localization-ownership-boundary.md):
+  catalog/locale/formatting authority, localized references, shaping/layout,
+  translation/font/asset fallback, snapshots, change notification, and unload.
 - [Networking Architecture](./runtime/networking-architecture.md): optional
   handle-based transports, session/authentication runtime, bounded I/O, and
   remote security.

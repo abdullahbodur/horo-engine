@@ -160,6 +160,21 @@ invented. `RuntimeSceneView` exposes allocation-free lookup of the opaque cooked
 bytes; decoding and typed resource installation belong to later asset/material/
 renderer slices.
 
+## Localized Catalog And Variant Assets
+
+[ADR-081](../../adr/081-runtime-ui-and-localization-ownership-boundary.md) keeps
+Assets responsible for stable identity, dependency graphs, cook/package
+publication and immutable byte transport. Localization owns catalog parsing,
+semantic validation, message-format/CLDR compatibility fingerprints and locale
+fallback; Assets never selects or formats a translated message.
+
+Localized visual/audio variants are finite authored mappings from normalized
+locale profiles to stable `AssetId` values. The owning feature declares Required,
+UseNeutral or Omit behavior, Localization supplies the fallback chain, and Assets
+resolves only declared variants. Cook closure includes required catalogs, source/
+product fallbacks, locale-specific font policy and localized asset variants; no
+runtime path scan, source import, download or undeclared substitute is allowed.
+
 ### Collision Rules
 
 - Two source files with the same name in different directories are independent

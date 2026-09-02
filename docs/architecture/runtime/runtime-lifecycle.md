@@ -174,6 +174,13 @@ ADR-073 lifecycle cutoff. VariableUpdate evaluates route-generation transitions,
 then extraction publishes immutable per-view presentation plans. Removed routes
 retire only after interaction, snapshot, render and transition leases close.
 
+[ADR-081](../../adr/081-runtime-ui-and-localization-ownership-boundary.md) starts
+Localization before Runtime UI consumers and publishes immutable catalog/locale
+snapshots. Runtime UI freezes one compatible snapshot during VariableUpdate and
+publishes text/font/layout as one generation. Locale/catalog replacement may retain
+last-good UI until preparation completes; shutdown retires UI leases before
+catalogs, formatter strategies, namespaces or Assets disappear.
+
 ## Time Model
 
 The host tracks:
