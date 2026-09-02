@@ -284,6 +284,14 @@ and client-majority correction are unsupported. Speculative side effects require
 stable occurrence IDs and bounded confirm/cancel/deduplication; irreversible
 external effects are server-authoritative only.
 
+Platform achievement, stat and leaderboard projection follows
+[ADR-133](../../adr/133-platform-progression-authority-trust-and-idempotency.md).
+A client sends ordinary gameplay input/commands, never a privileged “grant progression”
+conclusion. The server gameplay owner derives a committed fact after authoritative
+validation and uses an injected server-only progression commit capability. Prediction
+and rollback of the same stable occurrence cannot emit a second logical mutation, and
+the listen-server client world gains no authority from process locality.
+
 ## Interest Management
 
 `ReplicationScheduler` is the sole interest/priority/budget authority for an

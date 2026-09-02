@@ -128,6 +128,28 @@ path containment, transactional publication or credential isolation. Shipping an
 secure server namespaces reject policy downgrade. A valid signature is not anti-replay
 state, encryption, semantic validity, anti-cheat or a native-code sandbox.
 
+## Platform Progression Trust
+
+[ADR-133](../../adr/133-platform-progression-authority-trust-and-idempotency.md)
+separates a committed gameplay fact, Horo progression intent, frontend request and
+remote provider projection. Local-client achievement/stat/score submissions are
+tamperable and cannot authorize shared economy, competitive rewards, simulation or
+access control. Idempotency keys, provider callbacks, SDK anti-tamper features and
+signed local saves do not turn them into server evidence.
+
+Definitions with integrity impact require `AuthorityServer`. Clients send ordinary
+authenticated gameplay input/commands; the authoritative server gameplay owner derives
+the fact and uses a server-only progression commit capability. Client, listen-server
+client world, debug UI and provider login cannot mint that capability or downgrade the
+cooked policy. Server credentials and privileged provider/gateway routes stay out of
+client artifacts.
+
+Repeated conflicting mutation IDs, stale authority/session generations and impossible
+value transitions may emit bounded audit events. Mutation/diagnostic state stores typed
+Horo IDs and normalized values/outcomes, not credentials, raw provider account IDs,
+native tokens or personal display data. Idempotency deduplicates an already-authorized
+intent; it never authenticates one.
+
 ## Process Execution
 
 Process policy validates:

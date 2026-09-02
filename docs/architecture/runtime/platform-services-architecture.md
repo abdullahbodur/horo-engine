@@ -29,6 +29,11 @@ defines the one committed project identity ledger, byte-exact SHA-256 ID derivat
 canonical encodings, permanent tombstones, key aliases, clone/fork migration and the
 private provider-mapping boundary used by all service categories.
 
+[ADR-133](../../adr/133-platform-progression-authority-trust-and-idempotency.md)
+separates gameplay facts from remote projection, selects local or server authority per
+definition and makes retry/replay depend on typed mutation algebra plus qualified
+provider deduplication/atomicity rather than a blanket “idempotent write” assumption.
+
 ## Scope
 
 Platform services covered here:
@@ -301,24 +306,29 @@ physical cancellation.
 Retry is controlled by the owning frontend/service policy, not gameplay code, and all
 attempts fit within the original request deadline:
 
-- Idempotent writes such as stat updates may be retried a bounded number of
-  times before surfacing an error.
-- Reads and queries are not retried automatically unless the project policy
-  explicitly allows it.
+- Only ADR-133 operations whose declared algebra and effective provider/gateway
+  capability prove retry safety may be retried.
+- Every attempt preserves the exact progression mutation ID, payload, subject,
+  authority/policy/session/provider generations and precondition. Timeout never
+  allocates a replacement logical mutation.
+- Reads and queries receive a bounded in-memory retry only when project policy allows;
+  they never become durable progression replay intents.
 - When the backend reports normalized `Offline` or `NotSignedIn`, retriable writes move
-  to the offline queue instead of being retried immediately.
+  to the PLS-007 durable owner only when their ADR-133 replay class and captured
+  subject/session are eligible.
 
 High-frequency writes are throttled and coalesced:
 
-- `SetStat` calls for the same stat are coalesced to the most recent value
-  within a configured debounce window. The frontend emits one backend write per
-  window, not one per gameplay call.
-- `SubmitScore` calls are debounced, not coalesced: only the most recent score
-  for a leaderboard is submitted after the debounce interval, but scores are
-  not merged.
-- Achievement unlock and progress updates are not throttled because they are
-  infrequent, but duplicate unlocks for the same achievement are suppressed in
-  memory before entering the queue.
+- maximum/minimum progress or stat intents may reduce to the strongest value only
+  within one subject/policy generation;
+- `SubmitBestScore` may reduce to the mathematical best under the definition's
+  declared ordering, never the most recent arrival;
+- exact duplicate progression mutation IDs join one logical intent; and
+- conditional snapshots/replacements and `AddStatOnce` are never coalesced.
+
+Every accepted logical mutation retains an individual receipt/outcome even when a
+result-preserving aggregate uses one provider operation. Arrival or provider completion
+order never becomes stat/score conflict policy.
 
 Throttling metrics:
 
@@ -342,6 +352,9 @@ platform.request.timed_out          -- frontend deadline terminal outcome
 platform.request.expired            -- terminal observation retention ended
 platform.request.stale              -- request/frontend/provider/session generation mismatch
 platform.provider.failed            -- admitted provider operation failed
+platform.progression.authority_denied -- fact lacks the definition's required authority
+platform.progression.idempotency_conflict -- mutation ID reused with another envelope
+platform.progression.unsafe_retry   -- algebra/provider cannot safely retry ambiguity
 ```
 
 `platform.provider.failed` carries one normalized category: `Offline`, `NotSignedIn`,
@@ -365,83 +378,86 @@ the backend finishes the previous update, only the most recent state is sent.
 ### Achievements
 
 Achievements are authored once in project configuration and cooked into
-platform-specific manifests.
+platform-specific manifests. Each definition uses an ADR-132 `AchievementId`, typed
+progress schema and immutable `LocalProduct` or `AuthorityServer` policy. Display text
+is presentation and provider names remain mapping data.
 
 ```cpp
-struct AchievementId { uint64_t value; };  // stable, numeric
-
 struct AchievementDefinition {
     AchievementId id;
-    std::string displayName;
-    std::string description;
-    bool hidden;
-    uint32_t progressSteps;  // 0 or 1 for binary, >1 for progress
+    ProgressionAuthorityMode authority;
+    AchievementProgressSchema progress;
+    LocalizedAchievementPresentation presentation;
 };
 
-class IAchievementService {
-public:
-    virtual Result<PlatformRequestHandle<AchievementUnlockResult>>
-    Unlock(AchievementId id) = 0;
-
-    virtual Result<PlatformRequestHandle<AchievementProgressResult>>
-    SetProgress(AchievementId id, uint32_t current, uint32_t total) = 0;
-
-    virtual Result<PlatformRequestHandle<std::vector<AchievementState>>>
-    QueryState() = 0;
-};
+using AchievementMutation =
+    std::variant<UnlockOnce, SetProgressMaximum>;
 ```
 
-The frontend validates that `current <= total` and that the achievement ID is
-registered. Runtime code never passes raw strings or platform-specific IDs.
+Gameplay submits a committed typed fact through `IProgressionIntentSink`; it never
+calls a provider service. The product progression router validates the definition,
+value and authority. Server-mode clients send ordinary gameplay input/commands; the
+server gameplay owner derives the achievement fact and its server-only progression
+commit capability submits it. A client cannot send a privileged “unlock” conclusion.
+
+`UnlockOnce` makes unlocked true and is intrinsically idempotent only after provider
+qualification proves repeated unlock has the same effect. `SetProgressMaximum` is
+monotonic and retryable only when the provider/gateway atomically implements maximum-
+or-equal. Reset/decrement is not a runtime operation. The remote platform owns its
+account projection; querying that projection does not make it trusted gameplay state.
 
 ### Leaderboards And Stats
 
 Leaderboards are also authored once and mapped to platform backends at cook
-time.
+time. Definitions fix typed numeric domain/range, score ordering, mutation algebra and
+local/server authority before runtime composition.
 
 ```cpp
-struct LeaderboardId { uint64_t value; };
-struct StatName { StableString name; };
-
-enum class LeaderboardSort {
-    Ascending,
-    Descending
+enum class ProgressionMutationKind : std::uint8_t {
+    SetStatMaximum,
+    SetStatMinimum,
+    SetStatSnapshot,
+    AddStatOnce,
+    SubmitBestScore,
+    ReplaceScoreAtRevision,
 };
 
-struct LeaderboardQuery {
-    uint32_t rangeStart;
-    uint32_t rangeCount;
-    bool friendsOnly;
-};
-
-class ILeaderboardService {
-public:
-    // The backend receives an idempotency key so duplicate submissions from
-    // retry or offline replay do not create multiple leaderboard entries.
-    virtual Result<PlatformRequestHandle<void>>
-    SubmitScore(LeaderboardId id,
-                int64_t score,
-                IdempotencyKey key) = 0;
-
-    virtual Result<PlatformRequestHandle<LeaderboardEntries>>
-    GetEntries(LeaderboardId id, const LeaderboardQuery& query) = 0;
-
-    virtual Result<PlatformRequestHandle<void>>
-    SetStat(StatName name, int64_t value) = 0;
-
-    virtual Result<PlatformRequestHandle<std::optional<int64_t>>>
-    GetStat(StatName name) = 0;
+struct ProgressionMutationEnvelope {
+    ProgressionMutationId mutation;
+    ProgressionSubjectScope subject;
+    ProgressionDefinitionId definition;
+    ProgressionMutationKind kind;
+    ProgressionValue value;
+    ProgressionPrecondition precondition;
+    ProgressionAuthorityEvidence authority;
+    ProgressionPolicyRevision policy;
 };
 ```
 
-`IdempotencyKey` is generated by the frontend from a monotonic write sequence
-and the stable operation identity. The same key is reused across frontend
-retries and offline queue replay. The backend must treat the second call with
-an identical key as a no-op and return the same result.
+The correct semantic authority allocates one nonzero 128-bit
+`ProgressionMutationId` when it first accepts a logical fact. The exact canonical
+envelope follows that intent through retries, durable replay and reconciliation. An
+exact duplicate joins the existing intent; reuse of the ID with different fields is
+`platform.progression.idempotency_conflict`. A key is deduplication identity, not
+authentication.
 
-Stats are server-authoritative where the platform allows. The frontend keeps a
-read-through local cache for stats that gameplay reads frequently, but writes
-always go to the backend.
+Maximum/minimum stats and best-score submissions retry only with matching atomic
+provider semantics. Snapshot/score replacement requires an exact opaque revision and
+atomic precondition. `AddStatOnce` requires durable mutation-ID dedupe in the provider
+or trusted gateway. Horo never emulates these with read-then-unconditional-write. A
+provider without the required primitive reports the operation unavailable rather than
+silently weakening it.
+
+Timeout or transport loss after submission can leave `RemoteOutcomeUnknown`. The
+original ADR-130 request remains `TimedOut`; safe algebra may resubmit the same
+envelope, conditional operations query/reconcile revision, and an unsafe non-deduped
+operation stops automatic retry. Late provider evidence may resolve coordinator
+reconciliation but never rewrites the terminal request or invokes observers twice.
+
+Stat and leaderboard queries return bounded provider/account projections at a captured
+generation/revision. Leaderboard order is provider-owned under the cooked definition.
+These values support UI and local hints; clients cannot use them as authority for
+shared economy, rewards, simulation or access control.
 
 ### Cloud Save
 
@@ -772,30 +788,37 @@ increments generation; stale completion evidence cannot publish into the replace
 
 ## Offline And Degraded Behavior
 
-The frontend maintains a persistent local queue for operations that can be
-safely retried:
+PLS-007 owns the generic durable queue mechanics. It may admit only ADR-133 logical
+mutation envelopes whose algebra and effective provider/gateway capability make replay
+safe:
 
-- achievement unlocks
-- achievement progress updates
-- leaderboard score submissions
-- stat writes
+- qualified `UnlockOnce` and atomic `SetProgressMaximum`;
+- atomic `SetStatMaximum` / `SetStatMinimum`;
+- conditional stat/score replacement retaining its exact revision; and
+- `AddStatOnce` or other non-intrinsic effects only with durable provider/gateway
+  mutation-ID deduplication.
 
-Each queued operation carries an `IdempotencyKey`. The key is generated once
-when the operation enters the frontend and is preserved across persistence,
-retry, and replay. This prevents a retry + queue replay combination from
-producing duplicate backend effects.
+The progression coordinator allocates the mutation ID when the correct semantic
+authority accepts the fact, before the first provider attempt. The queue preserves the
+exact ID, payload, subject, authority/policy/registry and provider requirements across
+restart. It never allocates an ID during replay, retargets another account/session or
+turns an ambiguous unsafe attempt into “not attempted.”
 
 When the backend reports normalized `Offline` or `NotSignedIn`, the frontend:
 
-1. assigns an idempotency key if the operation does not already have one
-2. persists the operation to the local queue
-3. deduplicates against the queue using the operation type, target ID, and key
-4. emits an `offline_queued` metric
-5. returns a result indicating queued state
-6. replays the queue in order when the platform session becomes active
+1. returns the ADR-130 typed attempt outcome to the progression coordinator;
+2. lets the single PLS-007 owner validate replay eligibility and persist the existing
+   logical envelope;
+3. joins an exact duplicate mutation ID or rejects a conflicting payload;
+4. keeps subject/session and authority generations partitioned; and
+5. schedules a new bounded request only after recovery/reconciliation and capability
+   revalidation.
 
 Operations that cannot be safely replayed, such as cloud save reads or
-leaderboard queries, fail immediately with the appropriate error.
+leaderboard/stat/achievement queries, are never durable progression intents. An
+AuthorityServer definition does not let an offline client manufacture a queued remote
+mutation; the server must later derive/accept the gameplay fact through its ordinary
+authority path.
 
 Cloud archive writes/deletes are deliberately absent from this generic queue. Their
 immutable payload lease, slot lineage, expected provider revision, retry identity and
@@ -803,14 +826,11 @@ profile-session scope are durably owned by ADR-115's `CloudSaveCoordinator`. Aft
 offline recovery it reconciles remote state before conditional mutation; it never
 replays a stale FIFO upload under a later local generation or different user.
 
-Replay rules:
-
-- Queue order is preserved per user account.
-- If a queued operation fails with a non-retriable error (for example,
-  normalized `Forbidden`), it is removed from the queue and the failure is surfaced.
-- If the backend accepts an idempotent operation, the queue advances.
-- Duplicate keys are ignored: the frontend checks the queue file and the set of
-  in-flight requests before submitting.
+Detailed queue ordering, expiry, compaction, retention and shutdown are PLS-007 policy.
+Those mechanics cannot broaden the replay classes above. `Forbidden`, authority/
+subject mismatch, unsupported capability and permanent semantic failure never retry.
+A remote ambiguous outcome remains retained for reconciliation according to its
+algebra; it is not dropped as a generic failure or reported as success.
 
 The Null backend is a valid explicit headless/test/product composition. It reports all
 remote services unavailable with `NullProviderSelected`. Every read and write fails
@@ -1051,7 +1071,17 @@ Required tests cover:
   request, offline entry or idempotency record
 - mock backend replays scripted responses
 - frontend routes calls to the correct backend service
-- offline queue persists and replays in order
+- local/server authority routing exposes no server commit capability to clients or the
+  listen-server client world; prediction replay emits one logical mutation
+- every achievement/stat/leaderboard operation exercises its exact algebra and
+  capability requirement, including provider variants without safe primitives
+- exact mutation duplicates join, conflicting payload reuse fails and every retry/
+  durable replay preserves envelope identity and scope
+- timeout/late completion races preserve ADR-130 terminal state while progression
+  ambiguity reconciles without a second remote effect
+- max/min/best coalescing is result-preserving under every input order and retains an
+  outcome for each logical receipt; conditional/additive operations never coalesce
+- offline queue persists and replays only eligible mutation classes
 - request cancellation does not leak state
 - stable ID registries reject unregistered names
 - stable ID golden vectors agree across hosts; malformed salts/encodings, stored/
@@ -1104,9 +1134,11 @@ Tests use the mock backend to verify:
 
 - correct request routing and error translation
 - timeout handling when `delay` exceeds the policy
-- offline queue behavior when the backend returns normalized `Offline`
-- idempotency key stability across retries and replay
-- stat coalescing and leaderboard debounce logic
+- offline eligibility when the backend returns normalized `Offline`
+- progression mutation ID/envelope stability across retry, replay and reconciliation
+- stat max/min and leaderboard best-score coalescing under reordered inputs
+- conditional revision, durable dedupe, unsupported operation and ambiguous-outcome
+  provider capability variants
 
 Platform-specific backend tests live in the private platform repositories.
 
@@ -1119,6 +1151,9 @@ Platform-specific backend tests live in the private platform repositories.
 - [ADR-132](../../adr/132-platform-services-project-salt-stable-id-tombstone-and-provider-mapping.md):
   deterministic project IDs, canonical encoding, tombstones, aliases and provider
   mapping ownership.
+- [ADR-133](../../adr/133-platform-progression-authority-trust-and-idempotency.md):
+  achievement/stat/leaderboard authority, trust, typed mutation algebra, retry and
+  ambiguity policy.
 - [Platform Services Config UI Reference](./platform-services-config.html): achievements, leaderboards, cloud saves, presence, and platform adapters panel.
 
 - [Audio Architecture](./audio-architecture.md)
