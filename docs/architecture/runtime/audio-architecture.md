@@ -15,8 +15,9 @@ that lifecycle decision.
 ## Core Decisions
 
 - Engine audio APIs are backend-neutral.
-- One audio runtime owns the active device, mixer graph, voices, and real-time
-  command processing.
+- One audio control runtime owns lifecycle and exactly one selected output
+  composition. The selected adapter owns native device objects; the integration
+  model declares whether Horo or middleware owns the final mixer/voices.
 - The audio callback performs no heap allocation, blocking I/O, logging, or
   contended locking.
 - Canonical mixer/DSP blocks use 64-byte-aligned planar binary32 samples and an
@@ -31,8 +32,10 @@ that lifecycle decision.
 - Headless hosts may omit audio or use a null backend.
 - Core audio targets a practical Unity/Godot-level foundation: sources,
   listeners, buses, 2D/3D playback, streaming, basic effects, and profiling.
-- Procedural audio graphs, advanced spatial audio, and middleware integrations
-  are extension/package boundaries unless explicitly promoted to core later.
+- The 1.0 product includes the typed extension contracts, basic spatial and
+  environmental baseline, native backends, authoring, and qualification. Capture,
+  procedural synthesis, advanced acoustic propagation, adaptive music systems,
+  and middleware implementations remain Post-1.0 capabilities.
 - Procedural graphs compile to separate immutable sound generators and reuse the
   ordinary AudioFrontend, voice, spatialization, mixer routing, and lifecycle
   contracts under [ADR-071](../../adr/071-procedural-audio-graph-ownership.md).
@@ -40,23 +43,117 @@ that lifecycle decision.
   construction; one runtime has one final mixer/device owner under
   [ADR-072](../../adr/072-audio-middleware-integration-model.md).
 
+## Product Boundary And Roadmap
+
+This document is the normative target architecture, not an implementation-status
+inventory. An M0 architecture decision may define a safe extension seam for a
+Post-1.0 feature without promoting that feature into 1.0. Likewise, a parent
+capability milestone records the product checkpoint that requires the integrated
+outcome; it is not dependency order. Native `blocked by` relationships, not issue
+numbers or milestone numbers, own technical execution order.
+
+[AUD-001.12](https://github.com/abdullahbodur/horo-engine/issues/691) is the M0
+reconciliation checkpoint for this document. The parent capability milestones are:
+
+| Capability | Product checkpoint | Boundary summarized here |
+|---|---|---|
+| [AUD-001](https://github.com/abdullahbodur/horo-engine/issues/524) Real-time runtime, clock and commands | M3 — Alpha | Process/control/callback ownership, bounded transport, clocks, Null and teardown |
+| [AUD-002](https://github.com/abdullahbodur/horo-engine/issues/536) Assets, codecs and streaming | M4 — Beta | Audio/AST cook authority, resident/streamed media and codec contributions |
+| [AUD-003](https://github.com/abdullahbodur/horo-engine/issues/550) Voice playback and concurrency | M4 — Beta | Voice identity, admission, priority, virtualization and completion |
+| [AUD-004](https://github.com/abdullahbodur/horo-engine/issues/561) Mixer, automation and DSP | M5 — 1.0 | Constrained bus DAG, effects, ramps, latency, tails and publication |
+| [AUD-005](https://github.com/abdullahbodur/horo-engine/issues/576) Spatial audio | M5 — 1.0 | Core renderer plus typed optional/required provider policy |
+| [AUD-006](https://github.com/abdullahbodur/horo-engine/issues/586) Environmental audio | M5 — 1.0 | Basic raycast occlusion, material contribution, zones and environment sends |
+| [AUD-007](https://github.com/abdullahbodur/horo-engine/issues/594) Devices and backends | M5 — 1.0 | Qualified native desktop, SDL3 reference and Null peers |
+| [AUD-008](https://github.com/abdullahbodur/horo-engine/issues/606) Timeline and music transport | M5 — 1.0 | Sample-clock transport and cross-system scheduling; not adaptive-music policy |
+| [AUD-009](https://github.com/abdullahbodur/horo-engine/issues/615) Authoring and mixer tools | M5 — 1.0 | Production-path preview, asset/source/mixer/settings/debug workflows |
+| [AUD-010](https://github.com/abdullahbodur/horo-engine/issues/626) Diagnostics and qualification | M5 — 1.0 | Bounded metrics/faults, signal/RT tests and platform qualification |
+| [AUD-011](https://github.com/abdullahbodur/horo-engine/issues/637) Extension contracts | M5 — 1.0 | Versioned codec/DSP/spatial/acoustic/service capability and Audio RT ABI seams |
+| [AUD-012](https://github.com/abdullahbodur/horo-engine/issues/644) Capture and voice I/O | Post-1.0 | Reserved permission-aware capture/recording/NET/speech boundary |
+| [AUD-013](https://github.com/abdullahbodur/horo-engine/issues/654) Procedural audio | Post-1.0 | Reserved compiled sound-generator and editor graph boundary |
+| [AUD-014](https://github.com/abdullahbodur/horo-engine/issues/664) Advanced acoustics | Post-1.0 | Rooms, portals, diffraction, baked/geometric propagation and advanced reflections |
+| [AUD-015](https://github.com/abdullahbodur/horo-engine/issues/672) Adaptive music | Post-1.0 | Gameplay/package orchestration over the 1.0 music transport |
+| [AUD-016](https://github.com/abdullahbodur/horo-engine/issues/681) Middleware | Post-1.0 | Reserved event-bridge/backend-replacement, bank and distribution boundary |
+
+The 1.0 extension ABI must be capable of hosting later packages, but passing its
+contract does not make AUD-012 through AUD-016 required 1.0 implementations.
+Post-1.0 sections below define compatibility and ownership constraints only.
+
+## Normative Contract Map
+
+Detailed ADRs are the single owners of their decisions. This document projects
+them and must not redefine a competing rule:
+
+| Concern | Single normative owner | Delivery boundary |
+|---|---|---|
+| Runtime/control/callback lifecycle, clock mapping and teardown | [ADR-062](../../adr/062-audio-runtime-ownership-and-update-order.md) | AUD-001, 1.0 foundation |
+| Processing sample representation and channel layout | [ADR-063](../../adr/063-audio-sample-format-and-channel-layout.md) | AUD-001, 1.0 foundation |
+| Audio/AST import, cook, cache and runtime media boundary | [ADR-064](../../adr/064-audio-asset-and-cook-boundary.md) | AUD-002, 1.0 |
+| Mixer bus/send/return topology and deterministic compilation | [ADR-065](../../adr/065-mixer-topology-and-constrained-dag.md) | AUD-004, 1.0 |
+| Spatial provider identity, required capability and fallback | [ADR-066](../../adr/066-spatial-provider-and-required-capability.md) | AUD-005, 1.0 |
+| WASAPI/Core Audio/PipeWire/SDL3/Null backend strategy | [ADR-067](../../adr/067-platform-audio-backend-strategy.md) | AUD-007, 1.0 |
+| Music transport and cross-system clock/semantic ownership | [ADR-068](../../adr/068-music-transport-and-cross-system-ownership.md) | AUD-008 transport in 1.0; adaptive policy Post-1.0 |
+| Audio extension capability identity, RT ABI, trust and unload | [ADR-069](../../adr/069-audio-extension-capability-and-abi.md) | AUD-011 contract in 1.0 |
+| Capture, recording, network voice and speech boundaries | [ADR-070](../../adr/070-capture-and-voice-io-ownership.md) | AUD-012, Post-1.0 |
+| Procedural graph assets, compilation and generator execution | [ADR-071](../../adr/071-procedural-audio-graph-ownership.md) | AUD-013, Post-1.0 |
+| Middleware event bridge and backend replacement | [ADR-072](../../adr/072-audio-middleware-integration-model.md) | AUD-016, Post-1.0 |
+
 ## Layer Model
 
 ```text
-Scene / Gameplay
-      |
-      v
-Audio Frontend
-  sources, listeners, buses, commands
-      |
-      v
-Real-Time Mixer
-      |
-      v
-Platform Audio Backend / Null Backend
+Scene / Gameplay / Cinematic / Animation / Editor / Streaming
+                         |
+                         | owned typed snapshots and intent
+                         v
+                  AudioFrontend / API
+                         |
+                         | validate, normalize, map clocks, stage
+                         v
+              Audio control runtime (owner thread)
+               assets  voices  graphs  device state
+                         |
+                         | immutable generations + bounded commands
+                         v
+                 real-time render core
+        voices -> generators/DSP/spatial -> mixer Master
+                         |
+                         v
+         selected platform/middleware/Null output adapter
 ```
 
-Backend device APIs and native handles remain private to the backend.
+Producers never share mutable ECS/editor/asset state with Audio control or the
+callback. Control is the only state-transition and publication authority. The
+callback consumes one preallocated render epoch and emits bounded facts; it does
+not perform policy, discovery, recovery, compilation or ordinary diagnostics.
+Backend device APIs and native handles remain private to the selected adapter.
+
+## Authority Matrix
+
+| Concern | Authority | Callback access |
+|---|---|---|
+| Product composition, omitted/Null/device/model selection and fallback list | Application/process host | None |
+| Runtime/device/scene-context states, command validation, graph publication and completion reconciliation | Audio control runtime under ADR-062 | Immutable epoch plus bounded commands/acknowledgements only |
+| Persistent asset identity, cache, staging, publication and package delivery | AST/PKG/Release | No registry/file/package access |
+| Codec/layout/loop/gapless/cook/runtime-media semantics | AudioModel/AudioCook under ADR-064 | Prepared decoded/stream blocks only |
+| Bus topology, routes, DSP order, buffers, latency and tails | Mixer compiler/control under ADR-065 | Immutable compiled plan and preallocated state |
+| Scene transforms, physics/world queries and acoustic facts | Scene/Physics extraction and admitted providers | Prepared numeric source/listener/acoustic inputs only |
+| Native device objects, format conversion and callback registration | Selected backend adapter | Exact private native buffer/callback boundary |
+| Editor documents, undo/redo, selection, solo/meters and preview UI | Editor | No widget/document state |
+| Metric storage/export, formatting and profiler UI | OBS/control adapters | Preallocated counters and bounded records only |
+
+## Clock And Scheduling Authority
+
+The output callback's generation-scoped `AudioSampleClock` is authoritative for
+the sample at which audible state changes. It is not wall, simulation, sequence,
+animation, media or device-policy time. Audio control owns immutable correlation
+snapshots that map admitted producer clock evidence into the current sample epoch.
+Only resolved sample/buffer targets enter the callback.
+
+Device reset, suspend/resume, backend/runtime replacement and transport seek create
+named discontinuities or new generations. The same integer frame in another epoch
+is not the same time. Producers retain semantic occurrence/request IDs and their
+own clocks; callback observations are evidence returned through control, not
+authority to rewrite a gameplay, sequence or animation playhead. Wall time is for
+deadlines/diagnostics and never schedules audible work directly.
 
 ## Runtime Ownership
 
@@ -69,6 +166,11 @@ AudioRuntime
   +-- CommandQueue
   +-- EventQueue
 ```
+
+This tree is the native/event-bridge composition. A backend-replacement adapter
+may privately own the final mixer/voices and omit corresponding native runtime
+objects only after ADR-072 capability preflight; it still participates in the same
+AudioRuntime state, frontend, scene-context and completion authority.
 
 The process host owns `AudioRuntime`. A game runtime may create one scene audio
 context per active scene or listener policy.
@@ -113,6 +215,13 @@ only when profile/provider limits permit. Discrete channels carry no speaker
 meaning. Native/file/middleware layouts map explicitly at adapters and never leak
 their format enums into runtime contracts.
 
+Sample rate is an explicit checked value in every block and published render plan;
+there is no universal hidden 44.1 kHz or 48 kHz mixer constant. Source, cooked,
+decoded, effective mixer and native-device rates remain distinct with provenance.
+Layout conversion never changes rate, and resampling never reinterprets channel
+roles. Rate conversion is prepared outside the callback and executes only through
+a bounded admitted resampler plan.
+
 Internal buses may exceed nominal `[-1, +1]` full scale. Declared DSP/limiter
 nodes own intentional saturation; one finite safety clamp occurs immediately
 before native output conversion. Denormals normalize under the approved callback
@@ -122,6 +231,8 @@ tail, denormal, clipping, and validation rules.
 
 ## Audio Assets
 
+[AUD-002](https://github.com/abdullahbodur/horo-engine/issues/536) delivers this
+resident/streaming asset baseline by M4 — Beta as part of the 1.0 product.
 [ADR-064](../../adr/064-audio-asset-and-cook-boundary.md) is the single
 normative owner of the Audio/AST import, cook, cache, publication, and runtime
 media boundary. AST owns stable identity, admitted source access, generic
@@ -226,6 +337,10 @@ public:
 };
 ```
 
+This C++ interface illustrates the internal strategy shape; it is not a stable
+third-party binary ABI. Package codecs use the versioned capability/ABI and owner-
+lease rules in ADR-069 while preserving the same semantic boundary.
+
 Audio owns the decoder registry and its typed codec/container semantics. Import
 and cook invoke a pinned registry snapshot through the Audio contribution while
 AST retains source limits, cancellation, cache, staging, and publication
@@ -244,9 +359,9 @@ playback source without exposing backend voice handles:
 
 ```cpp
 enum class AudioSourceKind : uint8_t {
-    NativeClip,
-    ProceduralGenerator,
-    MiddlewareEvent
+    NativeClip,           // 1.0 source kind
+    ProceduralGenerator,  // reserved AUD-013 Post-1.0 extension kind
+    MiddlewareEvent       // reserved AUD-016 Post-1.0 extension kind
 };
 
 struct AudioSourceComponent {
@@ -370,6 +485,10 @@ public:
 };
 ```
 
+This virtual interface is an internal semantic sketch, not the third-party ABI.
+External spatial providers use ADR-069's family-specific versioned Audio RT table;
+backend-native types and compiler-specific C++ ownership never cross the seam.
+
 The core provides an explicit deterministic stereo provider. Packages may register
 HRTF, Ambisonic, platform-native, or middleware spatializers with typed stable IDs,
 capabilities, limits, layouts, ABI, owner leases, and real-time declarations.
@@ -403,6 +522,10 @@ debug profile requests it. Runtime-affecting controls submit mixer graph changes
 through the audio frontend; they do not edit backend state directly.
 
 ## Effects And DSP Boundary
+
+[AUD-004](https://github.com/abdullahbodur/horo-engine/issues/561) delivers the
+core mixer/DSP baseline for M5 — 1.0. Built-in nodes may use private C++ strategies;
+third-party nodes use ADR-069 rather than this illustrative virtual interface.
 
 Core effects are intentionally small and deterministic:
 
@@ -449,7 +572,8 @@ normative owner of procedural graph asset identity, compilation, deterministic
 inputs, extension nodes, editor boundaries, runtime limits and retirement. A
 procedural graph is a separate compiled sound generator for one voice; it is not a
 mixer graph, bus DSP chain, adaptive-music state machine or executable editor
-document.
+document. The contract is fixed at M0 for compatibility, while implementation and
+product delivery remain AUD-013 Post-1.0.
 
 ### Procedural Audio Graphs
 
@@ -563,8 +687,11 @@ state directly from the real-time path.
 Doppler is core because the required source/listener velocity data already
 exists in scene extraction and the calculation is deterministic. It is controlled
 by `AudioSourceComponent::enableDoppler` so projects that do not need it pay no
-per-source policy cost. Occlusion, obstruction, diffraction, HRTF, and
-platform-specific spatial audio remain extension points.
+per-source policy cost. HRTF, Ambisonic/object and platform-specific spatializers
+remain optional providers behind the 1.0 ADR-066 contract. Basic raycast occlusion,
+acoustic-material contribution, zones and environment sends are the AUD-006 M5 —
+1.0 environmental baseline; rooms/portals, diffraction, baked/geometric
+propagation and advanced reflections are AUD-014 Post-1.0.
 
 ### Occlusion Provider Interface
 
@@ -585,10 +712,14 @@ public:
 };
 ```
 
-The core ships a null provider. A physics-backed provider may raycast or perform
-portal/room queries outside the real-time callback, then feed the result back at
-most one game frame later as ramped gain, filter, or send parameters. Missing a
-deadline is a provider bug: the runtime applies the last known valid result
+The interface is an internal semantic sketch. Package providers use their typed
+ADR-069 acoustic capability and may not expose Physics/native types through Audio.
+
+The 1.0 baseline ships a null/reference provider plus a qualified basic physics-
+backed raycast provider. It may raycast outside the real-time callback, then feed
+the result back at most one game frame later as ramped gain, filter, or send
+parameters. Rooms, portals and diffraction are not part of this provider baseline.
+Missing a deadline is a provider bug: the runtime applies the last known valid result
 ramped toward a documented safe fallback and emits a staleness metric. The audio
 callback never performs raycasts or scene queries.
 
@@ -631,8 +762,9 @@ Dialogue starts
 ```
 
 Advanced adaptive music and procedural modulation remain package or extension
-features. The core snapshot system is for predictable ducking and mix-state
-transitions.
+features. Adaptive-music product delivery is AUD-015 Post-1.0; the 1.0 core
+snapshot and music transport systems provide predictable ducking, mix-state
+transitions and sample-clock scheduling without owning gameplay state policy.
 
 Adaptive music systems are higher-level orchestrators over this command and
 snapshot model. They may run state machines, vertical remixing, stem crossfades,
@@ -667,10 +799,12 @@ and native handles are never serialized.
 
 ## Audio Zones
 
-`AudioZoneComponent` is a later engine feature, not required for the initial
-core. When added, it owns area-based environment sends such as reverb routing,
-low-pass regions, or bus overrides. Until then, reverb send is controlled by
-source/bus parameters.
+`AudioZoneComponent` is not required for the initial M1/M2 prototype foundation.
+It is part of the AUD-006 M5 — 1.0 environmental
+baseline and owns area-based environment sends such as reverb routing, low-pass
+regions, or bus overrides. A product checkpoint that has not yet delivered zones
+must not expose a create action or claim AUD-006 qualification; reverb sends remain
+controllable by ordinary source/bus parameters meanwhile.
 
 Audio zones should integrate through the same non-real-time query/update model
 as occlusion. Scene extraction determines source/listener relation to zones,
@@ -766,6 +900,10 @@ lock-free or wait-free queue consumed by the owning main-thread service.
 
 ## Streaming
 
+[AUD-002](https://github.com/abdullahbodur/horo-engine/issues/536) delivers the
+qualified resident/streaming baseline by M4 — Beta. Streaming is part of 1.0, not
+an optional Post-1.0 extension.
+
 Streaming uses worker or I/O jobs to fill preallocated ring buffers. The audio
 callback consumes available frames without waiting.
 
@@ -783,6 +921,10 @@ decoded resident clips. Per-platform cook settings may override compression,
 sample rate, channel layout, and streaming thresholds.
 
 ## Editor Tooling
+
+[AUD-009](https://github.com/abdullahbodur/horo-engine/issues/615) delivers these
+workflows for M5 — 1.0. Middleware/procedural/capture-specific authoring surfaces
+follow their Post-1.0 capability boundaries and are not implied by the core tools.
 
 HoroEditor provides audio authoring tools:
 
@@ -802,6 +944,8 @@ does not bypass real-time thread rules.
 
 ## Device Lifecycle
 
+[AUD-007](https://github.com/abdullahbodur/horo-engine/issues/594) delivers the
+qualified desktop backend/device baseline for M5 — 1.0.
 [ADR-067](../../adr/067-platform-audio-backend-strategy.md) is the single
 normative owner of output-backend roles, the supported 1.0 platform matrix,
 compile-time composition, startup selection, common parity, and qualification.
@@ -838,6 +982,11 @@ Sample-rate, channel-layout, and buffer-size changes are committed at a safe
 boundary.
 
 ## Input Capture And Speech Boundary
+
+[AUD-012](https://github.com/abdullahbodur/horo-engine/issues/644) delivery is
+Post-1.0 and is not required for 1.0 qualification. ADR-070 defines its boundary at
+M0 so later integrations cannot move permissions, privacy, NET packets, speech, or
+editor-agent intent into Audio.
 
 [ADR-070](../../adr/070-capture-and-voice-io-ownership.md) is the single normative
 owner of Audio, Platform, Security, NET, speech and Editor capture boundaries.
@@ -905,8 +1054,12 @@ ownership or observability invariants.
 
 ## Null Backend
 
-The null backend validates resources, commands, handles, and lifecycle without
-opening a device. It may advance deterministic playback clocks for tests.
+The [AUD-001.10](https://github.com/abdullahbodur/horo-engine/issues/534) Null
+backend is an M1 — Engine Prototype delivery and remains a required 1.0 test/
+headless peer. It validates resources, commands, handles, clock generations and
+lifecycle without opening a device, and advances the deterministic sample clock
+under the same frontend/render contract. It does not claim hardware latency,
+hotplug, device quality or interactive fallback.
 
 ## Middleware And Extension Boundary
 
@@ -932,7 +1085,8 @@ frontend frames, stable event/parameter bindings, final device/mixer ownership,
 native coexistence, global budgets, transactional banks, profiling and release
 gates. Middleware contributes one closed `audio.middleware.event_bridge` or
 `audio.middleware.backend` capability through ADR-069; it does not introduce a
-generic third integration shape.
+generic third integration shape. The contract is fixed at M0, while middleware
+adapter/bank/tooling implementation and product delivery remain AUD-016 Post-1.0.
 
 Core provides:
 
@@ -949,6 +1103,12 @@ Core provides:
 - audio import and cook integration
 - decoder plugin registry for import/cook
 - DSP node and spatializer extension slots
+
+The lists below describe ownership and supported extension seams, not the 1.0
+delivery checklist. The roadmap table above is authoritative for product scope.
+In particular, adaptive music systems, capture, procedural graphs, advanced
+propagation and middleware implementations remain Post-1.0 even though their
+contracts are documented now.
 
 Packages or extensions may provide:
 
@@ -1015,6 +1175,11 @@ public:
                                       AudioCommandTiming timing) = 0;
 };
 ```
+
+These classes illustrate Horo's internal semantic adapter shape; they are not a
+third-party C++ ABI. Packaged middleware negotiates ADR-069/ADR-072 versioned C
+tables and is wrapped by a private Horo adapter target. STL, exceptions, vendor SDK
+types and allocator ownership do not cross that binary seam.
 
 Backend replacement may bypass Horo's native `MixerGraph` and `VoiceRegistry`,
 but it must still consume normalized frontend frames, apply the effective Horo
@@ -1109,6 +1274,11 @@ mobile focus loss, and continue-everything for dedicated audio preview windows.
 
 ## Metrics
 
+[AUD-010](https://github.com/abdullahbodur/horo-engine/issues/626) delivers the
+bounded metrics, profiler correlation and qualification baseline for M5 — 1.0.
+Feature-specific Post-1.0 metrics extend this catalogue only when that feature is
+included; their architecture definitions are not evidence that the feature ships.
+
 Audio exposes:
 
 - callback duration and budget utilization
@@ -1132,7 +1302,13 @@ No ordinary log formatting occurs on the callback thread.
 
 ## Testing
 
-Required tests cover:
+The following is the cumulative contract catalogue. The 1.0 qualification gate
+requires the AUD-001 through AUD-011 items that are implemented by that checkpoint.
+Capture, procedural, advanced-propagation, adaptive-music and middleware items
+become required only for products/packages that include those Post-1.0
+capabilities. Documenting their tests now is not a 1.0 support claim.
+
+Required applicable tests cover:
 
 - voice and resource handle generations
 - runtime/device/callback-epoch legal transitions and stale acknowledgement rejection
@@ -1292,7 +1468,7 @@ or feature plan must be updated in the same change.
 | 1. Asset import | Project panel → Assets/Audio/SFX → Import Asset → `explosion.wav` | Import dialog → AssetImporter validates WAV → AudioCooker builds platform formats → AudioClip asset + registry | Asset browser'da görünür; inspector'da duration, sample rate, loop settings okunur |
 | 2. Audio Source ekleme | Hierarchy → Player → Add Component → Audio → Audio Source → sound (clip veya variation container)/bus/mode/spatial/preview | AudioSourceComponent sahneye serileşir → SceneRuntime transform çıkarır → sound resolve edilir → CreateVoice → MPSC → SPSC → callback → SFX bus → mixer | Preview ayrı bir bypass değil, normal command queue ile çalışır |
 | 3. Mixer'da bus ayarı | Window → Audio → Mixer → SFX bus volume -6 dB, mute; solo (editor-only) | AudioFrontend redundant command birleştirir → SwapMixerGraph / SetVoiceParameters → buffer boundary'de uygulanır | SFX bus runtime'da mute; solo sahneye yazılmaz |
-| 4. Middleware event | Inspector → Audio Source Kind: Middleware Event → StableEventId from registry (authoring name `enemy_footstep`) | AudioFrontend → IAudioMiddlewareEventBridge → VoiceRegistry proxy slot → AudioEventInstanceId | Native ve middleware voice aynı voice bütçesini ve policy'yi paylaşır |
+| 4. Post-1.0 middleware event | Inspector → Audio Source Kind: Middleware Event → StableEventId from registry (authoring name `enemy_footstep`) | AudioFrontend → IAudioMiddlewareEventBridge → VoiceRegistry proxy slot → AudioEventInstanceId | Native ve middleware voice aynı voice bütçesini ve policy'yi paylaşır |
 | 5. Snapshot tetikleme | Game code: `AudioMixer.ApplySnapshot("pause_menu")` | AudioFrontend snapshot command → Mixer ramps Music↓, UI↑, SFX↓ | Ducking click/pop olmadan uygulanır |
 | 6. Animation event | Animation editor → frame 42 → Event type: Play Audio Clip → `footstep_run` | Animation system command producer olur → CreateVoice + StartVoice with timestamp | Animation sistemini audio thread'den poll etmeden senkron ses |
 | 7. Timeline senkron ses | Timeline → explosion/dialogue/music cue'ları aynı zaman damgasına hizala | Timeline → ScheduledCommandBatch → SPSC → callback atomik uygular | Sesler sample-accurate sync başlar |

@@ -147,8 +147,9 @@ dependency direction in [System Design](./foundation/system-design.md).
   materials, and surface events.
 - [Physics Architecture](./runtime/physics-architecture.md): fixed-step world
   ownership, transform authority, collision events, queries, and determinism.
-- [Audio Architecture](./runtime/audio-architecture.md): real-time mixer, voices,
-  streaming, devices, scene integration, and null audio.
+- [Audio Architecture](./runtime/audio-architecture.md): ADR-backed ownership,
+  clocks, formats, assets, mixer, spatial, devices, tooling and explicit 1.0 versus
+  Post-1.0 product boundaries.
 - [Audio Runtime Ownership and Update Order](../adr/062-audio-runtime-ownership-and-update-order.md):
   process/control/callback authority, runtime and device states, scene-context
   barriers, suspend/recovery, fatal failure, and teardown.
