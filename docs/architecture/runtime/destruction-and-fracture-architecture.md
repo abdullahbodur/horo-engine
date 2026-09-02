@@ -21,6 +21,11 @@ evidence enter at bounded Destruction safe points; Physics prepares exact pre-co
 chunk bodies privately; RuntimeScene alone exposes semantic, entity, Physics and Render
 changes through one aggregate commit. Sleep or visibility never grants cleanup
 authority, and rollback preserves the old root only before that commit.
+[ADR-147](../../adr/147-destruction-event-and-cosmetic-consumer-ownership.md)
+defines what happens afterward. Destruction appends bounded typed facts to its committed
+journal; an application-owned dispatcher maps them to gameplay, VFX, Decal, Audio and
+accessibility requests at destination safe points. Consumers own mapping realization,
+admission, playback/simulation and native lifetime and cannot change DFR success.
 
 ## Ownership
 
@@ -123,8 +128,10 @@ not fracture objects directly. On a successful pre-cooked transition:
    safe point, without making them public.
 4. RuntimeScene commits semantic state, intact/chunk visibility, entities and required
    bodies through one activation-ticket-scoped aggregate root.
-5. Canonical gameplay/network/save events publish only after commit.
-6. Optional VFX, Audio and Decal presentation requests consume the committed event.
+5. Canonical destruction facts append to the bounded queryable journal only after
+   commit.
+6. The application dispatcher maps committed facts to gameplay/network/save adapters
+   and optional VFX, Audio, Decal and accessibility requests at owner safe points.
 
 Failure or cancellation before commit preserves the intact/previous generation. Old
 representations remain leased and charged until every consumer acknowledges retirement.
@@ -195,6 +202,31 @@ Fracture chunks use the physics system:
 - Gameplay-authoritative and durable chunks retire only through explicit policy and,
   where required, a successful Runtime Save/Persistent World handoff
 - Cosmetic debris is VFX-owned, finite-lived and excluded from canonical chunk state
+
+## Event And Consumer Integration
+
+`DestructionWorld` publishes immutable facts with stable world/destructible generation,
+state revision, transition ticket, tick, kind and occurrence identity. Facts describe
+committed damage, chunk activation, support loss, dormancy, reactivation or availability;
+they do not name effect graphs, decal materials, audio media/voices or callbacks.
+
+The application composition root owns the cooked semantic binding table and one
+session-scoped `DestructionEventDispatcher`. It reads the bounded Destruction journal by
+cursor after aggregate commit, fans out in cooked order and copies fixed-capacity values
+into destination-owned queues. Required gameplay/accessibility delivery capacity is
+reserved before the source transition commits. Optional cosmetic capacity failure is a
+typed destination outcome and never rolls back canonical state.
+
+VFX owns effect mapping realization, queue/pool admission, simulation and Render
+extraction. The Decal presentation owner owns projection, attachment, lifetime and
+retirement. Audio owns cue/media readiness, sample scheduling, voices, mixing and device
+callbacks. Gameplay adapters may submit later domain commands but cannot reenter the
+source commit. Every layer derives its request identity from the DFR occurrence, binding
+generation, destination and layer ordinal so retries/reload cannot duplicate effects.
+
+`EngineDataBus` may publish a coalesced journal-revision notification, not the required
+fact payload. Save restore and late join reconstruct canonical state and do not replay
+historical effects by default; prediction uses a separate cosmetic occurrence namespace.
 
 ## Network Replication
 
@@ -271,7 +303,8 @@ Required coverage includes authority/revision checks, every semantic/lifecycle
 transition, deterministic contact ordering, cooked chunk closure, proof that core paths
 perform no runtime geometry/collision cook, aggregate consumer rollback/replacement,
 capacity and durable cleanup, save/restore, late join, authoritative/cosmetic motion,
-headless/Null/all interactive backends, cancellation and repeated shutdown.
+headless/Null/all interactive backends, committed fact ordering, journal gaps, consumer
+dedup/overload independence, cancellation and repeated shutdown.
 
 ## Related Documents
 
@@ -295,3 +328,6 @@ headless/Null/all interactive backends, cancellation and repeated shutdown.
 - [ADR-146](../../adr/146-destruction-runtime-activation-physics-cleanup-and-rollback.md):
   command and contact safe points, deterministic support loss, private Physics body
   preparation, aggregate publication, cleanup, rollback, replacement and shutdown
+- [ADR-147](../../adr/147-destruction-event-and-cosmetic-consumer-ownership.md):
+  committed fact identity/journal, application dispatch, destination safe points,
+  deduplication and gameplay/VFX/Decal/Audio ownership

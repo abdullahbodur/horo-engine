@@ -631,6 +631,13 @@ must not rely on this lossy notification queue. Their authoritative result lives
 in the owning job/use-case state and remains queryable after a progress event is
 dropped.
 
+The same rule applies to committed destruction facts under
+[ADR-147](../../adr/147-destruction-event-and-cosmetic-consumer-ownership.md).
+`EngineDataBus` may coalesce a destruction-journal revision notification, but gameplay,
+VFX, Decal, Audio and accessibility adapters read the owner-retained fact by cursor.
+Bus loss, duplication or subscriber order cannot define occurrence order, delivery
+success or destruction state.
+
 ```mermaid
 sequenceDiagram
     participant Worker as Worker Thread

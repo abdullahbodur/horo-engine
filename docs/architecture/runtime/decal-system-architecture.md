@@ -30,6 +30,7 @@ struct DeferredDecal {
 ```
 
 Blend modes:
+
 - **Translucent**: Alpha-blended overlay (bullet holes, dirt)
 - **Stain**: Multiplicative color (blood, scorch marks)
 - **Normal**: Replace or blend normal map (surface detail)
@@ -98,6 +99,23 @@ struct DecalSpawnRequest {
 Pooled decals use a fixed-size ring buffer per decal type. When the buffer is
 full, the oldest decal is recycled.
 
+## Destruction Event Integration
+
+[ADR-147](../../adr/147-destruction-event-and-cosmetic-consumer-ownership.md)
+keeps destruction semantics outside the Decal system. DFR publishes a bounded committed
+fact without decal assets or handles. The application-owned dispatcher resolves a
+cooked mapping and submits a typed `DecalSpawnRequest` at the Decal/VFX owner boundary.
+The request retains the DFR occurrence, binding generation, destination and layer ordinal
+as its dedup identity.
+
+The Decal/VFX owner validates exact surface evidence, projection/attachment policy,
+material readiness, lifetime and pool capacity. It owns render descriptors and resource
+retirement; DFR never polls a decal or keeps a canonical chunk alive through a cosmetic
+pointer. Missing surface/material, stale attachment and capacity pressure return typed
+consumer outcomes and cannot roll back the destruction revision. Any oldest-entry reuse
+is limited to a declared cosmetic policy with stable eligibility/ties; permanent,
+event-driven or required work is never implicitly recycled.
+
 ## Decal Atlas
 
 For performance, many small decals can be batched into a decal atlas:
@@ -145,3 +163,5 @@ Decal placement tools in the editor:
 - [Material And Shader Model](./material-and-shader-model.md): decal material domain
 - [VFX And Particles Architecture](./vfx-and-particles-architecture.md): VFX-driven decal spawning
 - [Scene Runtime](./scene-runtime.md): decal component and placement
+- [ADR-127: VFX Decal Projection, Lifetime and Rendering Path](../../adr/127-vfx-decal-projection-lifetime-and-rendering-path-policy.md)
+- [ADR-147: Destruction Event and Cosmetic Consumer Ownership](../../adr/147-destruction-event-and-cosmetic-consumer-ownership.md)

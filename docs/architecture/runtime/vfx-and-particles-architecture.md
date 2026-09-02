@@ -38,6 +38,13 @@ places semantic event-to-effect bindings at the application boundary, requires
 allocation-free playback from prepared pools, unifies count/work/time/memory budgets
 and makes cosmetic overload plus sleep/wake explicit and deterministic.
 
+[ADR-147](../../adr/147-destruction-event-and-cosmetic-consumer-ownership.md)
+specializes the destruction producer seam. DFR publishes only committed typed facts;
+the application dispatcher resolves a captured binding generation and submits one
+bounded request per cooked layer. `VfxWorld` retains effect choice realization,
+admission, simulation, pooling, overload and Render extraction ownership. Missing or
+suppressed VFX cannot alter the committed destruction revision.
+
 [ADR-129](../../adr/129-vfx-editor-document-live-preview-and-module-authoring.md)
 makes each effect asset a persistent document tab, keeps stack and graph as independent
 frontends, runs live preview through the ordinary cooked runtime pipeline and routes
@@ -846,6 +853,13 @@ finite fan-out order and submits each deduplicated layer through fallible bounde
 admission. Binding hot reload publishes atomically at an owner safe point; accepted
 requests retain their original binding generation. Missing/duplicate/unauthorized
 bindings and payload mismatch are typed zero-mutation failures.
+
+For destruction, the producer identity is the stable
+`DestructionEventOccurrenceId`. Each VFX layer request derives its dedup key from that
+occurrence, the captured binding generation, destination binding and layer ordinal.
+DFR does not select an effect asset, inspect visibility/GPU completion or retain the VFX
+instance. Retry, adapter reload, restore and late join cannot create a new effect unless
+their explicit policy supplies a new qualified presentation occurrence.
 
 The resolved schematic payload is copied into queue-owned storage:
 
