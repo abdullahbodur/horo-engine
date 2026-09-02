@@ -165,6 +165,21 @@ private runtime/native tables; scene data never stores display names, bit positi
 or solver object layers. Missing or stale profile/channel IDs block activation
 rather than using the project's authoring default.
 
+[ADR-087](../../adr/087-scene-to-physics-ownership-and-conversion.md) defines the
+owning conversion and activation transaction. Scene Model carries explicit typed
+rigid-body, collider and constraint intent; Physics alone validates semantics and
+builds a canonical `PhysicsScenePlan` plus detached world candidate. A collider
+never infers a body from hierarchy/render data, and a constraint never binds a
+runtime entity handle or creates a missing endpoint.
+
+The host injects Physics through the generic scene activation-participant seam;
+RuntimeScene does not interpret solver semantics or discover services. The one
+`RuntimeSceneService::QueuePreparation` candidate owns detached ECS storage and
+all participant candidates. At `CommitDeferredLifecycleChanges`, ECS, resource
+leases, Physics world and the private generation-scoped binding table publish as a
+single no-fail bundle. Any earlier failure/cancellation destroys only candidate
+state, consumes no public identities and preserves the prior active scene/world.
+
 ## Runtime UI Scope Boundary
 
 [ADR-073](../../adr/073-runtime-ui-ownership-scope-and-update-order.md) makes

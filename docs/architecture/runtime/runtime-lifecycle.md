@@ -408,6 +408,14 @@ Scene load, reload, unload, and replacement use the state model in
 [Scene Runtime](./scene-runtime.md). Worker preparation may occur
 asynchronously; final activation happens at a runtime safe point.
 
+[ADR-087](../../adr/087-scene-to-physics-ownership-and-conversion.md) requires
+Physics to join the one aggregate scene candidate through an explicitly injected
+activation participant. Core ECS storage, resource leases, the detached Physics
+world and its binding table publish together at
+`CommitDeferredLifecycleChanges` only after all fallible conversion/native startup
+work succeeds. A failed replacement leaves the prior active scene and Physics world
+unchanged; the new world's first fixed tick occurs after publication.
+
 A stale completed load cannot replace a newer request. Transition requests
 carry runtime session and generation identities.
 

@@ -49,6 +49,10 @@ Neither Assets nor Renderer interprets collider semantics. Physics does not open
 source paths, manage package/cache roots or publish artifact generations. Editor
 does not retain native shapes as document state.
 
+[ADR-087](087-scene-to-physics-ownership-and-conversion.md) defines how explicit
+authored body/collider/constraint components become a canonical Physics scene plan,
+detached world candidate and atomically published scene-generation binding table.
+
 ### 2. Authored collider identity is portable and typed
 
 `ColliderShapeDescriptor` is a closed typed variant. Inline analytic descriptors

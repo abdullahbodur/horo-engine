@@ -314,6 +314,14 @@ Conversion:
 - emits structured diagnostics
 - never gives runtime systems mutable document access
 
+[ADR-087](../../adr/087-scene-to-physics-ownership-and-conversion.md) limits this
+editor service to mapping explicit authored rigid-body, collider, trigger and
+constraint components into typed Horo payloads with stable object/component/slot
+IDs and source evidence. It does not infer bodies from hierarchy/render meshes,
+choose native shapes/filters or allocate Physics objects. The Physics-owned plan
+builder performs semantic conversion for editor, packaged and headless paths, and
+the aggregate scene candidate owns activation/rollback.
+
 Play and preview sessions record the document revision from which they were
 built.
 

@@ -333,6 +333,13 @@ explicit default `CollisionProfileId` (or the command's explicit profile) under
 Runtime conversion never resolves a missing profile by primitive kind, display
 name, array index or fallback mask.
 
+Under [ADR-087](../../adr/087-scene-to-physics-ownership-and-conversion.md), a
+primitive mesh descriptor alone remains visual data and creates no body. An
+authoring action that offers a collider convenience persists an explicit rigid-
+body + collider component bundle with stable slots in one document transaction.
+Runtime conversion never repeats that inference or publishes scene entities before
+the required Physics candidate is ready.
+
 ## CLI And MCP Integration
 
 CLI and MCP creation commands do not hardcode object types. They accept a
