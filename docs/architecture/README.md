@@ -311,6 +311,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Navigation And AI Architecture](./runtime/navigation-and-ai-architecture.md):
   NavMesh, pathfinding, dynamic obstacle overlays, perception, crowd, blackboard,
   and editor bake tooling.
+- [Default Navigation Provider and Recast-Detour Adoption](../adr/104-default-navigation-provider-and-recast-detour-adoption.md):
+  exact Recast/Detour pin, private module/build profile, threading/determinism,
+  optional tile-cache/crowd capabilities and grounded-only scope.
 
 - [Cinematic Sequencer Architecture](./runtime/cinematic-sequencer-architecture.md):
   timeline, tracks, clock authority, typed property bindings, evaluation phase,

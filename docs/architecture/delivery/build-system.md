@@ -409,6 +409,15 @@ FetchContent_Declare(
 When updating a dependency, the SHA change is reviewed like a source code
 change. The old SHA and the new SHA must both be visible in the diff.
 
+[ADR-104](../../adr/104-default-navigation-provider-and-recast-detour-adoption.md)
+selects Recast Navigation commit
+`9f4ce64458dfae86e1239c525ddc219c4e9e06f1` for the first grounded NavMesh
+provider. Its implementation change must declare that exact revision here,
+register it in the dependency fingerprint/manifest and lock the reviewed native
+options. Runtime-only products link Detour plus only requested optional modules;
+bake/cook compositions add Recast privately. Tags, system packages and a floating
+`main` checkout are not compatible substitutions.
+
 ### Configure Performance
 
 By default `FetchContent` checks the remote on every configure call. This is

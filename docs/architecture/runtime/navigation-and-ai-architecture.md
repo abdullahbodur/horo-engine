@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document defines the navigation (NavMesh), pathfinding, tactical environment queries, and AI subsystems
+This document defines grounded navigation (NavMesh), pathfinding, tactical environment queries, and AI subsystems
 for Horo Engine. It covers navigation mesh generation, runtime pathfinding,
 dynamic obstacle avoidance, AI perception, behavior integration, crowd
 simulation, fixed-tick simulation phase ordering, network authority roles,
@@ -38,6 +38,22 @@ CMake target. These dependencies provide `WorldCoordinate64`, `Vec3`, `Aabb`, an
 `Quaternion`; navigation does not invent another math library. Asset, world-streaming,
 and scene adapters are composed by the host; they do not add reverse dependencies
 from these four navigation targets to application, Gameplay, Rendering, or GUI.
+
+### Default Provider And Module Profile
+
+[ADR-104](../../adr/104-default-navigation-provider-and-recast-detour-adoption.md)
+selects `recastnavigation/recastnavigation` commit
+`9f4ce64458dfae86e1239c525ddc219c4e9e06f1` as the first production
+grounded NavMesh provider. Detour is the required real runtime query/topology
+baseline. Recast is required only in bake/cook compositions. DetourTileCache is
+the optional `DynamicTileCarving` capability and DetourCrowd is the optional
+`DetourLocalAvoidance` capability; neither is implied by selecting real pathfinding.
+DebugUtils, RecastDemo and examples are absent from product targets/packages.
+
+The exact commit, private 64-bit poly-reference build and other locked native
+options form the provider fingerprint. Public and durable identity remains Horo-
+owned; a provider pin or option change invalidates matching derived caches and
+requires the ADR-104 upgrade/recook/qualification process.
 
 ### NavigationApi: Consumer Contracts
 
@@ -92,6 +108,12 @@ The host activates inert provider descriptors or calls Horo-only factories and i
 owned query/topology/crowd interfaces into the coordinator. Selection happens before scene
 activation. Stop admission, cancel/drain outstanding work under ADR-010, release snapshots,
 then destroy providers before unloading their module; no callback or lease may outlive it.
+
+Recast tile builds own separate contexts, intermediate data and allocator domains.
+Each Detour query job exclusively leases one `dtNavMeshQuery` and scratch/node
+pool against a pinned immutable mesh snapshot. Mutable native topology,
+`dtTileCache` and `dtCrowd` instances have one owner/writer per batch. The provider
+creates no thread pool; all admission and execution use Foundation JobSystem.
 
 ### NavigationNull: Feature Absent, Not Fake Navigation
 
@@ -297,7 +319,9 @@ struct NavMeshBuildSettings {
 };
 ```
 
-Multiple NavMesh surfaces can exist for different agent types (human, large creature, flying).
+Multiple grounded NavMesh surfaces can exist for profiles such as humans, large
+creatures and ground vehicles. Flying, swimming and space traversal require a
+future volumetric provider/artifact; they are not ordinary grounded profiles.
 
 ### NavMesh Asset And Cook Contract
 
@@ -388,7 +412,9 @@ Moving obstacles (other agents, vehicles, doors) affect navigation:
 
 - Dynamic obstacles are applied as a scene-scoped runtime avoidance overlay; cooked `NavMeshData` is not mutated
 - Carving uses cylindrical or box-shaped cutouts
-- Carving is local to the affected NavMesh tiles
+- When the optional `DynamicTileCarving` capability is composed, carving stages a
+  bounded candidate for affected tiles; without it, the conservative overlay and
+  path invalidation remain available without native tile rebuilding
 - Paths are re-computed when an agent's path intersects a new obstacle
 
 ```cpp
@@ -1303,9 +1329,9 @@ without applying wall-clock offline time.
 
 ## Crowd Simulation
 
-For groups of agents, crowd simulation provides:
+When an `INavigationCrowdBackend` is composed, group coordination may request:
 
-- Local avoidance (reciprocal velocity obstacles)
+- Local steering and dynamic avoidance
 - Formation movement (line, wedge, column, circle)
 - Lane formation in corridors
 - Density-based speed modulation
@@ -1321,8 +1347,16 @@ struct CrowdAgentConfig {
 };
 ```
 
-Crowd simulation runs as a parallel job over agent groups. Agents within a
-group share avoidance data; groups are independent.
+NavigationRuntime owns logical agents, budgets, grouping, fixed-tick order and
+desired-velocity publication. The optional DetourCrowd adapter owns only private
+local path/steering/avoidance state and is initially best-effort rather than a
+qualified deterministic capability. Formation, density and corridor-formation
+policy remain Horo Gameplay/AI orchestration above the provider. Traffic/road lane
+graphs are a separate future navigation domain, not a crowd flag.
+
+Crowd simulation runs as bounded jobs over admitted agent groups. Character/
+Physics retains final movement and transform authority. Products needing only
+grounded paths do not link or allocate DetourCrowd.
 
 ## Asynchronous AI Tasks And Job System Integration
 
@@ -1549,7 +1583,8 @@ changes require workload, platform, and measurement evidence, not a new ADR.
 |---|---|
 | Api-only consumer uses SceneMath | Builds through Foundation without invented SceneMath target |
 | Runtime linked without a concrete provider | Builds; host injection supplies capabilities |
-| Runtime-only server without builder/graphics | Real queries/crowd work; no bake or graphics link requirement |
+| Runtime-only server without builder/graphics | Real queries and optional crowd only when selected; no bake or graphics link requirement |
+| Pinned Recast/Detour source/options/modules | Exact commit/fingerprint, no floating/system source; Detour runtime and Recast bake baselines with TileCache/Crowd opt-in only |
 | Direct/transitive vendor include or public vendor type | Boundary negative fixture fails; no ABI leak |
 | Concurrent queries, obstacle edits, and carving | Immutable revisions; no shared mutable vendor instance races |
 | Unrelated region changes / contributing tile changes | Unrelated cache entries may survive; affected entries and late paths cannot publish stale topology |
@@ -1563,6 +1598,7 @@ changes require workload, platform, and measurement evidence, not a new ADR.
 | Cooked version/digest/indices invalid | Typed failure before tile installation |
 | Provider allocation failure / destruction | Tracked bounded failure; no leaks, partial publication, or hook-lifetime violation |
 | Origin rebase with a query in flight | Dynamic coordinates converted/rejected consistently; static topology identity unchanged |
+| Flying/swimming/space or traffic/lane request | Explicit distinct-capability unsupported result; never coerced into a grounded agent profile/area flag |
 
 These are required downstream runtime/CI tests, not tests implemented by this ADR-only change.
 
@@ -1579,6 +1615,7 @@ These are required downstream runtime/CI tests, not tests implemented by this AD
 - [World Streaming](./world-streaming-architecture.md)
 - [Header Visibility and Ownership](../foundation/header-visibility-and-ownership.md)
 - [ADR-016: Navigation Target Ownership and Dependency Boundary](../../adr/016-navigation-target-ownership-and-dependency-boundary.md)
+- [ADR-104: Default Navigation Provider and Recast-Detour Adoption](../../adr/104-default-navigation-provider-and-recast-detour-adoption.md)
 - [Navigation Bake UI Reference](./navigation-bake.html)
 
 - [ADR-021: Gameplay AI Ownership, Scheduling and Behavior Boundary](../../adr/021-gameplay-ai-ownership-scheduling-and-behavior-boundary.md)
