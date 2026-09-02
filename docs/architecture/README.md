@@ -442,6 +442,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [VTX Feature-Local Residency and Eviction Within Global Reservations](../adr/166-vtx-feature-local-residency-and-eviction-within-global-reservations.md):
   global versus feature-local scheduling, multidimensional reservation slices, typed
   pins, shared-page charging, two-phase eviction and pressure accounting.
+- [VTX Feedback, Readback, Prediction and Camera-Data Ownership](../adr/167-vtx-feedback-readback-prediction-and-camera-data-ownership.md):
+  Renderer-owned feedback/readback resources, immutable delayed observations, typed
+  camera/producer hints, bounded prediction and non-authoritative demand evidence.
 - [Destruction And Fracture Architecture](./runtime/destruction-and-fracture-architecture.md):
   fracture assets, chunk physics, debris, authority, and network reconstruction.
 - [Destruction Ownership, Authority, State and Runtime Geometry Boundary](../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md):

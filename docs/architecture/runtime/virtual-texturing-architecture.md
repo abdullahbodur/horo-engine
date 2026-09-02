@@ -103,6 +103,25 @@ pages are eviction candidates. Eviction first revokes logical availability, then
 for Assets, worker, snapshot and Renderer acknowledgements. `Evicting` state remains
 charged; cancellation or page-table removal alone never refunds capacity.
 
+## Feedback, Camera Hints And Prediction
+
+[ADR-167: VTX Feedback, Readback, Prediction and Camera-Data Ownership](../../adr/167-vtx-feedback-readback-prediction-and-camera-data-ownership.md)
+owns this boundary. VTX contributes a bounded semantic feedback plan. Renderer owns
+render-graph placement, GPU feedback/compaction/copy resources, asynchronous readback
+and retirement, then publishes immutable delayed observations with exact texture,
+device, frame and view generations.
+
+Camera/view owners publish immutable per-view snapshots with explicit cut, teleport,
+origin-rebase, projection and dynamic-resolution discontinuities. Producers publish
+typed bounded hints with provenance. VTX retains neither live Camera/Scene pointers nor
+producer containers and cannot select camera authority.
+
+VTX deterministically merges observations and predicts bounded demand candidates.
+Feedback and prediction are evidence only: candidates still pass ADR-166 coalescing,
+pin, priority and reservation policy. Missing/sampled/overflowed/cancelled observations
+carry explicit completeness; normal frames never wait for readback or allocate a larger
+buffer in response to overflow.
+
 ## Capability And Product Scope
 
 VTX uses feature-local tiers:

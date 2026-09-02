@@ -178,6 +178,7 @@ to the replacement.
 | [164](164-virtual-texturing-ownership-product-scope-and-capability-tier.md) | Virtual Texturing Ownership, Product Scope and Capability Tier | Proposed | 2026-09-02 |
 | [165](165-virtual-texture-source-cooked-artifact-page-store-and-cache-ownership.md) | Virtual Texture Source, Cooked Artifact, Page Store and Cache Ownership | Proposed | 2026-09-02 |
 | [166](166-vtx-feature-local-residency-and-eviction-within-global-reservations.md) | VTX Feature-Local Residency and Eviction Within Global Reservations | Proposed | 2026-09-02 |
+| [167](167-vtx-feedback-readback-prediction-and-camera-data-ownership.md) | VTX Feedback, Readback, Prediction and Camera-Data Ownership | Proposed | 2026-09-02 |
 
 ## Conventions
 

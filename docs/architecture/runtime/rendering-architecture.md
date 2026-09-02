@@ -32,6 +32,10 @@ The equal first-class obligations of interactive backend modules are defined by
   [ADR-164](../../adr/164-virtual-texturing-ownership-product-scope-and-capability-tier.md).
   Renderer owns admitted physical atlas/sparse resources, uploads, mappings, graph
   passes and GPU-safe retirement; it does not become logical page authority.
+- Under [ADR-167](../../adr/167-vtx-feedback-readback-prediction-and-camera-data-ownership.md),
+  Renderer also owns VTX feedback/compaction/copy passes, native resources and delayed
+  readback lifetime. It publishes bounded immutable observations; it neither predicts
+  page demand nor waits for same-frame CPU consumption.
 
 ## Layer Model
 
