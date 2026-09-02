@@ -122,6 +122,15 @@ application use cases; inspection authority cannot publish or restore a slot. Ra
 participant state, unrestricted local paths, provider identity and credentials are
 excluded from ordinary tool results and history.
 
+[ADR-134](../../adr/134-cloud-blob-transport-revision-precondition-and-offline-ownership.md)
+requires a provider-authenticated cloud read to publish only complete, revision-
+consistent, length/digest-checked opaque bytes. That is transport integrity, not save
+trust: the complete download still begins local ADR-116 admission as untrusted bytes.
+Partial/multipart staging never escapes, and the transport cannot choose trust policy,
+interpret archive state or turn failed validation into an empty/not-found success.
+Only the ADR-115 coordinator owns durable upload/delete intent and reconciliation;
+generic Platform Services retry storage contains no second cloud mutation copy.
+
 Development may admit isolated unsigned/modded namespaces and additional inspection
 tools, but it never disables framing arithmetic, parser/decompression/work limits,
 path containment, transactional publication or credential isolation. Shipping and

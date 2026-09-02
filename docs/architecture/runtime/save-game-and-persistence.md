@@ -920,6 +920,20 @@ upload/delete while local save/load remains functional.
 The provider's opaque revision is only a compare-and-swap token; it is not
 `SlotGenerationId`, ordered gameplay state or portable archive identity.
 
+[ADR-134](../../adr/134-cloud-blob-transport-revision-precondition-and-offline-ownership.md)
+defines that narrow transport: list pages are bounded, reads return complete bytes and
+metadata from one exact revision, and automatic create/replace/delete is atomically
+guarded by absence or exact provider revision. Whole-blob SHA-256 transport digest and
+exact length detect partial/substituted transfer but do not replace archive trust.
+Provider multipart staging never becomes visible as a Horo object; cancellation,
+timeout and short transfer publish no partial bytes.
+
+The coordinator allocates the durable `CloudMutationId` and retains exact payload
+lease/digest, precondition and reconciliation state in its existing journal. Platform
+Services holds only an in-memory request and the generic offline queue holds no cloud
+upload/delete copy. Quota observations are advisory: transport cannot delete,
+truncate, split or select another local generation when provider capacity changes.
+
 On startup/reconnect the coordinator opens local state first, then reconciles verified
 local and remote heads. Same generation/hash is InSync. A known remote ancestor of
 local permits conditional upload; a known local ancestor of remote permits verified

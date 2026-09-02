@@ -34,6 +34,12 @@ separates gameplay facts from remote projection, selects local or server authori
 definition and makes retry/replay depend on typed mutation algebra plus qualified
 provider deduplication/atomicity rather than a blanket “idempotent write” assumption.
 
+[ADR-134](../../adr/134-cloud-blob-transport-revision-precondition-and-offline-ownership.md)
+ratifies Platform Services as authenticated opaque-object transport: complete
+revision-consistent reads, conditional atomic mutations, finite quota/transfer limits,
+whole-blob integrity and partial/ambiguous outcomes while the ADR-115 coordinator stays
+the only durable cloud-intent owner.
+
 ## Scope
 
 Platform services covered here:
@@ -461,86 +467,109 @@ shared economy, rewards, simulation or access control.
 
 ### Cloud Save
 
-Cloud save is platform-managed synchronization of save data blobs. It is not a
-replacement for the local save system; it is an upload/download layer on top of
-local save files.
+Cloud save is authenticated transport of opaque complete objects. It is not a
+replacement for the local save system and owns no local generation, archive parsing,
+lineage, merge, winner, retention or conflict policy.
 
 ```cpp
 struct CloudSaveObjectKey { BoundedOpaqueBytes value; };
 struct ProviderObjectRevision { BoundedOpaqueBytes value; };
+struct CloudBlobDigest { Sha256Digest value; };
+struct CloudMutationId { UInt128 value; };
 
-enum class CloudConcurrencyCapability : uint8_t {
-    ConditionalRevision,
-    UncoordinatedBlob
+enum class CloudMutationAtomicity : std::uint8_t {
+    ConditionalAtomicObject,
+    UncoordinatedBlob,
 };
 
-struct CloudSaveMetadata {
+struct CloudObjectHead {
     CloudSaveObjectKey key;
     ProviderObjectRevision revision;
-    Timestamp modifiedTime; // presentation/provenance only, never causality
-    uint64_t sizeBytes;
+    std::uint64_t sizeBytes;
+    std::optional<CloudBlobDigest> transportDigest;
+    OptionalProviderTimestamp modifiedForPresentation;
 };
 
 using CloudWritePrecondition =
-    Variant<RequireObjectAbsent, MatchProviderRevision>;
+    Variant<CreateIfAbsent, MatchProviderRevision>;
 
-struct CloudReadResult {
-    CloudSaveMetadata metadata;
-    OwnedImmutableBytes archive;
-};
-
-struct CloudWriteRequest {
+struct CloudBlobWriteRequest {
     CloudSaveObjectKey key;
-    OwnedImmutableBytes archive;
+    CloudBlobReadSource source;
+    std::uint64_t exactSizeBytes;
+    CloudBlobDigest expectedDigest;
     CloudWritePrecondition precondition;
-    IdempotencyKey retryIdentity;
+    CloudMutationId mutation;
 };
 
-struct CloudMutationResult {
-    std::optional<ProviderObjectRevision> resultingRevision;
-    std::optional<CloudSaveMetadata> metadata;
+struct CloudBlobDeleteRequest {
+    CloudSaveObjectKey key;
+    ProviderObjectRevision expectedRevision;
+    CloudMutationId mutation;
 };
 
-class ICloudSaveService {
+class ICloudBlobTransport {
 public:
-    virtual CloudConcurrencyCapability ConcurrencyCapability() const = 0;
-
-    virtual Result<PlatformRequestHandle<std::vector<CloudSaveMetadata>>>
-    List() = 0;
-
-    virtual Result<PlatformRequestHandle<CloudReadResult>>
-    Read(CloudSaveObjectKey key) = 0;
-
+    virtual Result<PlatformRequestHandle<CloudObjectPage>>
+    List(CloudListRequest request) = 0;
+    virtual Result<PlatformRequestHandle<CloudBlobReadResult>>
+    Read(CloudBlobReadRequest request) = 0;
     virtual Result<PlatformRequestHandle<CloudMutationResult>>
-    Write(CloudWriteRequest request) = 0;
-
+    Write(CloudBlobWriteRequest request) = 0;
     virtual Result<PlatformRequestHandle<CloudMutationResult>>
-    Delete(CloudSaveObjectKey key, ProviderObjectRevision expected) = 0;
+    Delete(CloudBlobDeleteRequest request) = 0;
 };
 ```
 
 Under ADR-113, gameplay and UI never create `CloudSaveObjectKey` from a string. The
-save/cloud coordinator derives it from the typed product/environment/profile/slot
-address and authenticated provider-user context. Installation-local user IDs are not
-serialized into it. It is not a local path, display name or `SaveGameSlotId` with
-erased scope. The backend treats both key and finalized archive bytes as opaque and
-never edits the local format or catalog.
+coordinator derives it from the typed product/environment/profile/slot address and
+private authenticated provider-user context. It is not a path, display name, raw
+account ID or erased `SaveGameSlotId`. `ProviderObjectRevision` is bounded opaque bytes
+scoped to one provider/session/key and compared only for exact equality; it is not
+ordered, portable, a timestamp or a save generation.
 
-Provider revisions and timestamps are returned as transport metadata. They do not
-select a winning local/cloud generation automatically. Under ADR-115, automatic
-mutation requires qualified `ConditionalRevision` semantics. `UncoordinatedBlob`
-disables background write/delete while local saves remain available. The save/cloud
-coordinator owns durable intent, lineage,
-preconditions and divergent-generation resolution; UI may present a choice but never
-becomes sync authority.
+The immutable cloud capability snapshot declares finite object/namespace bytes, object
+count, key/revision length, list page, chunk and concurrent-transfer limits plus list/
+read consistency, conditional create/replace/delete, durable mutation-ID dedupe,
+digest/progress and cancellation behavior. Quota usage is advisory and can change
+after observation; `QuotaExceeded` remains possible after preflight and cannot trigger
+automatic deletion/truncation/splitting.
 
-Provider authentication, TLS success, object ownership and a completed download do
-not make archive bytes trusted. Under ADR-116, Platform Services enforces transport
-byte/time bounds and returns operation-owned opaque bytes plus provider metadata. The
-save/cloud coordinator then applies local framing, integrity, signature/scope,
-compatibility, semantic and namespace policy before any local publication or load.
-The backend cannot select a trust root, request a parser exception or reinterpret a
-verification failure as an empty/older remote object.
+List is bounded/cursor-based. Because provider lists may not be snapshot-consistent,
+the coordinator re-reads an exact key before deciding. Successful read returns one
+complete immutable byte owner and `CloudObjectHead` for the same revision. Separate
+metadata/byte APIs must revision-check around transfer; a change is
+`platform.cloud.revision_changed`, never mixed success. Host-owned sinks enforce exact
+length, checked chunk/byte bounds and SHA-256 transport digest before publication; no
+partial span escapes.
+
+Automatic mutation requires qualified `ConditionalAtomicObject`. Create requires
+absence; replace/delete requires the exact current revision. Success atomically exposes
+all new bytes or deletion and returns required revision/digest evidence. A stale value
+is `PreconditionFailed`; the coordinator refetches/reclassifies and never retries
+unconditionally. `UncoordinatedBlob` disables automatic write/delete while local
+save/load and explicit policy-approved import/export remain usable.
+
+Provider-native multipart/temp objects remain private and never become visible at the
+public key. Failure/cancel/timeout exposes no partial result or success; staging cleanup
+is best effort and keeps provider code leased until callbacks/parts retire. Upload
+pulls bounded call-borrowed chunks from a coordinator-owned immutable archive lease;
+download pushes to request-owned bounded staging. Progress is deferred observational
+data and never proves commit.
+
+`CloudSaveCoordinator` allocates and durably owns one `CloudMutationId`, exact payload
+digest/size, precondition, generation/lineage, source lease, retry and reconciliation
+state. Platform Services owns only an in-memory ADR-130 request and never writes cloud
+upload/delete into the generic PLS-007 queue. Frontend retry preserves the exact
+request inside its original deadline. Timeout/late commit remains an ambiguous durable
+intent until the coordinator reads the key and recognizes matching content, retries
+the still-uncommitted precondition or enters ADR-115 conflict handling.
+
+Authentication, TLS, provider ownership and a matching transport digest do not make
+archive bytes trusted. The coordinator still applies ADR-116 framing, archive hash,
+signature/scope, compatibility, semantic, namespace and local lease/generation gates.
+The provider cannot inspect save contents, select a trust root or reinterpret failure
+as empty/not-found/older success.
 
 ### Presence
 
@@ -1094,6 +1123,14 @@ Required tests cover:
   automatic winner selection
 - conditional write/delete and precondition failure; uncoordinated providers never
   receive background mutations
+- list/read revision consistency, exact length/digest and malformed/partial/oversized
+  transfer rejection with no partial bytes published
+- atomic create/replace/delete races and native multipart failure/cancel/timeout with
+  no staging object visible as the public key
+- object/count/namespace/staging/concurrency quota boundaries and no destructive
+  transport-owned cleanup
+- cloud mutation-ID replay/conflict plus committed/uncommitted/conflicting ambiguity
+  reconciliation; exactly one ADR-115 journal and no generic queue copy
 - cloud archive writes/deletes never enter the generic offline queue
 - authenticated-provider downloads remain untrusted until local bounded admission;
   malformed/oversized results cannot publish or replace a local generation
@@ -1139,6 +1176,8 @@ Tests use the mock backend to verify:
 - stat max/min and leaderboard best-score coalescing under reordered inputs
 - conditional revision, durable dedupe, unsupported operation and ambiguous-outcome
   provider capability variants
+- cloud list/read consistency, partial transfer, atomic revision CAS, quota and
+  committed-after-timeout scripts with exact caller-owned reconciliation evidence
 
 Platform-specific backend tests live in the private platform repositories.
 
@@ -1154,6 +1193,9 @@ Platform-specific backend tests live in the private platform repositories.
 - [ADR-133](../../adr/133-platform-progression-authority-trust-and-idempotency.md):
   achievement/stat/leaderboard authority, trust, typed mutation algebra, retry and
   ambiguity policy.
+- [ADR-134](../../adr/134-cloud-blob-transport-revision-precondition-and-offline-ownership.md):
+  authenticated opaque blobs, revision CAS, quota/integrity/partial transfer and
+  caller-owned durable cloud intent.
 - [Platform Services Config UI Reference](./platform-services-config.html): achievements, leaderboards, cloud saves, presence, and platform adapters panel.
 
 - [Audio Architecture](./audio-architecture.md)
