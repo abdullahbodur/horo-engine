@@ -18,6 +18,11 @@ specializes GPU units: they remain visual-only; cooked readback is bounded,
 asynchronous and observational; compute-less fallback is authored and admitted; and
 CPU, GPU, shared and readback costs remain one auditable plan.
 
+[ADR-125](../../adr/125-vfx-transparency-sorting-and-pass-placement.md)
+specializes render output: every baseline blend class has one semantic pass/depth
+contract, translucent ordering uses stable per-view CPU/GPU plans, additive skips
+strict sorting and finite work/time budgets govern admission and diagnostics.
+
 DCC workflows, full fluid solvers, atmospheric scattering and screen-space
 post-processing remain outside this subsystem; see
 [Advanced Rendering Architecture](./advanced-rendering-architecture.md).
@@ -509,24 +514,69 @@ particle age. Soft-particle fading samples declared scene depth in the draw pass
 | Translucent/ribbons | Per-view sort then translucent forward; depth test, no depth write |
 | Additive | Additive forward; depth test, no depth write, no distance sort |
 
+The baseline scene-linear order is completed opaque lighting/depth, stable sorted
+`VfxTranslucentForward`, then the commutative `VfxAdditiveForward` band. Translucent
+and additive never enter a Deferred GBuffer. Soft-particle draw fading reads completed
+opaque depth; it cannot introduce a current-pass write/read cycle. Effects declare
+semantic class only, never graph pass names, attachments, queues or native state.
+
 Shadow casting is supported here only for opaque/masked mesh particles. Requesting
 OpaqueMaskedCaster on ribbons, translucent/additive particles, decals or volumes is
 an unsupported combination requiring authored substitute or typed rejection. It is
 not a bool that silently inserts arbitrary shadow passes.
 
 Each RenderViewId (game, editor, split screen, XR or reflection) gets its own sort/cull
-indices and keys over compatible immutable data. CPU radix sorting operates on packed
-frame data or an index copy in extraction/render preparation, never reorders the
-simulation SoA or writes particle distance fields. sortDistance lives only in
-VfxViewSortKey. Equal distances use stable batch/particle identity; reject nonfinite
-keys. GPU sort likewise writes separate per-view index buffers after simulation.
-Sorting one view cannot change another view or advance the emitter again.
+indices and keys over compatible immutable data. The canonical back-to-front tuple is
+finite view depth descending, stable VfxBatchId, then stable particle identity. Depth
+encoding/comparison is versioned; reject nonfinite/stale inputs. Source slots, atomic
+append order, worker completion and native subgroup order never break ties. Sorting
+one view cannot change another view, mutate simulation state or advance the emitter.
 
-CPU sorting may use JobSystem staging with completion published before consuming the
-view. It cannot block extraction/render on a pending worker. If its bounded work is
-not ready, the declared cosmetic view fallback omits that batch and reports it; it
-does not submit unsorted alpha as though sorting succeeded. The frontend sorts opaque
-batches front-to-back alongside ordinary meshes. Additive sorting is skipped.
+For CPU sources, frontend CPU preparation uses admitted immutable key/index scratch
+and stable radix sorting; it never reorders the simulation SoA. JobSystem ranges
+publish only one complete result at the frontend owner boundary. A pending/failed
+result cannot block the frame: omit and report the whole translucent batch rather
+than submitting unsorted or partial alpha.
+
+For GPU sources, the frontend emits a backend-neutral stable compute-sort plan after
+simulation/key-build and before the translucent draw. The baseline selects bitonic at
+admitted visible counts up to 2,048 (with explicit non-draw sentinels) and stable radix
+above 2,048 using versioned digit/pass/scatter rules. Actual qualified algorithms and
+limits are effective capabilities; the asset/backend cannot substitute native order.
+
+Opaque/masked batches use the renderer's normal coarse front-to-back ordering.
+Additive emits no per-particle distance keys and consumes no translucent sort budget.
+`None`, age or source order cannot weaken required translucent back-to-front order;
+other techniques require a separately cooked/admitted transparency recipe.
+
+### Sort Work And Time Budget
+
+`VfxSortBudget` aggregates every VFX view in one rendered frame. Initial defaults are:
+
+| VFX profile | CPU keys hard ceiling | GPU keys hard ceiling | CPU/GPU time targets | Aggregate target |
+|---|---:|---:|---:|---:|
+| Headless/test | 0 | 0 | 0.00 ms / 0.00 ms | 0.00 ms |
+| Low visual budget | 8,192 | 65,536 | 0.25 ms / 0.35 ms | 0.60 ms |
+| Desktop baseline | 16,384 | 262,144 | 0.35 ms / 0.65 ms | 1.00 ms |
+| High visual budget | 32,768 | 524,288 | 0.50 ms / 1.00 ms | 1.50 ms |
+
+These are validated finite product defaults/qualification targets, not measured
+performance claims or permission to work until a clock expires. Count, scratch, byte
+and dispatch ceilings are hard admission limits. CPU time sums VFX key/sort job spans;
+GPU time brackets only VFX key/sort passes and excludes unrelated queue wait; aggregate
+is their conservative sum. Evidence retains build, platform, backend/device/driver,
+view/key workload and algorithm. Frozen view-group priority then stable batch priority/
+ID consumes the ceiling, admitting complete batches only. Required XR view groups are
+atomic; pressure never sorts one required eye alone. Snapshot reuse and each eye/view
+do not receive an independent full budget.
+
+Predicted overflow omits the lowest-priority cosmetic translucent batch, uses an
+already admitted authored transparency substitute, or fails/suspends required visual
+content. There is no frame allocation, partial sort, unsorted alpha or implicit
+profile/domain change. Measured target overrun reports `VfxSortBudgetExceeded` with
+frame/view, profile/policy/capability generation, domain/algorithm, key/scratch/copy
+counts and available CPU/GPU target/duration evidence. Unavailable delayed GPU timing
+is not zero; repeated overruns can only inform an explicitly re-admitted later policy.
 
 ## Particle System Data Model
 
@@ -753,6 +803,11 @@ handling. Cancelled/StaleGeneration suppress publication but still route matchin
 retirement acknowledgements. RetirementIncomplete keeps resources/dependencies
 charged and alive; it is never translated into successful shutdown.
 
+Sort-specific failures preserve batch/view/source/frame generation, blend semantics,
+algorithm and the failed count/scratch/time predicate. `VfxSortCapacityExceeded`,
+`VfxSortKeyInvalid`, `VfxSortCapabilityUnavailable` and `VfxSortResultLate` never
+publish a partial index generation. Native text is bounded evidence, not policy input.
+
 ## Testing And Verification Requirements
 
 These are qualification scenarios for implementation, not tests delivered by this
@@ -782,6 +837,16 @@ architecture-only change:
 - Render one snapshot in multiple views/frames: submit each GPU step once; sort each
   view independently; preserve SoA and stable ties; reject nonfinite keys and invalid
   shadow/volume/decal combinations. Exercise a missing previous-depth snapshot.
+- Exercise every ADR-125 blend row across Forward, Clustered Forward+ and Deferred:
+  matching masked coverage, exact depth read/write, scene-linear translucent/additive
+  order, no GBuffer transparency and no soft-particle current-depth dependency cycle.
+- Verify stable CPU radix and GPU bitonic/radix boundaries, sentinel padding, equal-key
+  identity ties and matching canonical fixture order. Additive must schedule zero
+  per-particle sort work; late/failed translucent work omits the complete batch.
+- Exercise each aggregate sort profile at its exact CPU/GPU key/time target and one
+  beyond across multiple views. Verify frozen priority, atomic required-view groups,
+  no duplicated snapshot budget, qualified measurement identity, typed overrun
+  evidence and explicitly unavailable delayed GPU timing.
 - Verify graph compute/read/write/sort/draw dependencies and native affinity on each
   supported backend/capability profile, including an explicit no-compute composition.
 - Verify no-readback emitters schedule no copies; exercise every cooked schema/cadence/
@@ -806,6 +871,8 @@ architecture-only change:
   Normative CPU stage, RNG, payload and gameplay publication contract.
 - [ADR-124: VFX GPU Simulation, Readback and Compute Fallback](../../adr/124-vfx-gpu-simulation-readback-and-compute-fallback.md):
   Normative GPU authority, observation, fallback and shared-admission contract.
+- [ADR-125: VFX Transparency, Sorting and Pass Placement](../../adr/125-vfx-transparency-sorting-and-pass-placement.md):
+  Normative particle blend/pass, stable sorting and sort-budget contract.
 - [Particle Editor UI Reference](./particle-editor.html): Emitter stack, curve editing,
   and live preview panel.
 - [Material And Shader Model](./material-and-shader-model.md): Particle and decal materials.

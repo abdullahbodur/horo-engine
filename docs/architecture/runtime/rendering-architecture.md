@@ -1159,6 +1159,13 @@ generation-tagged delayed observation. The backend privately owns staging, mappi
 cache maintenance and fences. No renderer path waits for same-frame VFX data, grants
 it gameplay authority, chooses an effect fallback or changes the selected backend.
 
+[ADR-125](../../adr/125-vfx-transparency-sorting-and-pass-placement.md) fixes the
+VFX mapping inside every raster recipe: opaque/masked outputs join standard depth and
+opaque work; sorted translucent forward reads but does not write completed depth; and
+the scene-linear additive band follows it without per-particle distance sorting. The
+frontend owns per-view stable CPU/GPU sort plans, aggregate work admission and overrun
+evidence. Assets/backends cannot name/reorder these semantic passes or depth policies.
+
 ## XR Views And External Presentation Targets
 
 XR supplies a bounded runtime-driven set of view descriptors and
