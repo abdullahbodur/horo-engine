@@ -12,6 +12,8 @@ ADR-113 freezes product/environment/user/profile namespaces, logical slot addres
 and storage mapping for HORO-1425 #1425 [SAV-003.1].
 ADR-114 freezes authoring/runtime state composition and subsystem-owned canonical
 adapters for HORO-1438 #1438 [SAV-004.1].
+ADR-115 freezes local/cloud authority, provider revisions and conflict preservation
+for HORO-1466 #1466 [SAV-006.1].
 
 - RuntimeSaveService coordinates one runtime save/restore authority under the
   application/session lifetime. It never retains an unleased reference to a scene
@@ -499,12 +501,13 @@ from a synchronous EnumerateSaveSlots call. No portable crash guarantee is assum
 for an unqualified filesystem/platform container.
 
 Cloud registration occurs only for the final validated local slot generation after
-PublishedDurable. It pins that generation or revalidates its `ArchiveContentHash`
-before transfer so a concurrent later save cannot be uploaded under an older
-generation. A bounded
-pending-sync record is reconstructed from the catalog on restart if the process dies
-between durable save and registration. Completed means local durability; cloud state
-(Pending/Synced/Failed) is separate and cannot turn local success into false rollback.
+PublishedDurable. The coordinator durably journals the exact address, generation,
+parent, archive hash, expected provider revision and retry identity, then pins or
+revalidates that archive before transfer. A concurrent later save explicitly
+supersedes intent; an older upload cannot be reported as the newer generation.
+Startup reconciles the journal rather than blindly replaying a generic FIFO. Completed
+means local durability; cloud state is separate and cannot turn local success into
+false rollback.
 
 ## Transactional Restore
 
@@ -874,32 +877,49 @@ Catalog UI consumes immutable records keyed by `SaveAddress`; no filesystem path
 raw platform handle crosses the surface. The save/cloud coordinator derives a bounded
 `CloudSaveObjectKey` from the typed address and authenticated provider context.
 Platform Services treats that key and finalized archive bytes as opaque and cannot
-edit local storage. Provider timestamps remain presentation/provenance only. SAV-006
-owns cloud revisions, write preconditions, offline authority and divergence policy.
+edit local storage. The application/profile-owned `CloudSaveCoordinator` is the one
+sync state authority; Platform Services and UI are transport/presentation adapters.
 
-Cloud adapters receive only final signed/unsigned archives allowed by the namespace
-policy. Conflict detection compares `SlotGenerationId` lineage and
-`ArchiveContentHash`; `CanonicalStateHash` may show logical equivalence but cannot win
-a compare-and-swap. Timestamps are presentation metadata, not causality or authority
-to overwrite local data. Conflict UI or headless host policy consumes typed
-local/remote generations, content/state hashes, times and play duration. Optional
-game-specific summaries come from a bounded host presenter; engine code does not
-assume character levels or a Main Menu.
+Automatic remote mutation requires provider-enforced conditional revision. A read
+followed by unconditional write, a process-local mutex, advisory lease or provider
+timestamp is insufficient. An uncoordinated blob backend disables background
+upload/delete while local save/load remains functional.
+The provider's opaque revision is only a compare-and-swap token; it is not
+`SlotGenerationId`, ordered gameplay state or portable archive identity.
 
-Before choosing a remote copy, verify it under the same signature/scope/schema rules.
-Preserve the losing valid copy in a new opaque conflict-slot ID (with original archive
-identity/provenance retained in the catalog) before replacement. Recheck source and
-destination revisions under the lease; preserve failure/quota outcomes. Signed
-content's embedded slot identity cannot be rewritten to fit a conflict filename:
-backup catalog records distinguish storage ID from the signed logical slot identity,
-and only an explicit restore/import mapping can authorize that association. No archive
-bytes are modified in place to update display/conflict metadata.
+On startup/reconnect the coordinator opens local state first, then reconciles verified
+local and remote heads. Same generation/hash is InSync. A known remote ancestor of
+local permits conditional upload; a known local ancestor of remote permits verified
+download and local durable application preserving that remote generation. Same
+generation/different hash is an integrity violation. Unknown ancestry, absent data
+without verified deletion evidence, or two non-ancestor complete heads is Conflict.
+`CanonicalStateHash` may report logical equivalence but cannot authorize overwrite.
+Provider/device timestamps and play duration remain presentation/provenance only.
 
-Local durability and cloud durability are separate status domains. Upload failure
-keeps a bounded retry intent and visible diagnostics; a later local save does not
-silently relabel an older upload as current. Startup reconciles pending sync from
-validated local revisions. Required-signature policy also applies to downloads and
-migration; cloud availability cannot authorize unsigned downgrade.
+Downloaded data is untrusted until bounds, content hash, signature/scope and
+compatibility checks pass. It enters local storage only through a slot lease, expected
+generation recheck and atomic durable transaction; Platform Services never edits a
+local file. Failed verification/publication leaves the previous local generation.
+
+Divergent complete generations are never field/record merged and never resolved by
+automatic last-write-wins. Before KeepLocal or KeepRemote can replace anything, both
+verified byte sets must be durable: the active local slot plus a conflict recovery
+record/blob carrying exact archive identity and provenance. KeepBoth may import one as
+a newly finalized slot publication when scope/signing policy permits. Quota/retention
+failure blocks destructive resolution instead of discarding the losing archive.
+
+Conflict UI or headless host policy sees immutable coordinator snapshots and submits
+a typed KeepLocal, KeepRemote, KeepBoth or Defer command capturing local generation/
+hash and remote provider revision/generation/hash. The coordinator revalidates local
+lease and provider CAS before applying it; stale input returns to reconciliation.
+Closing UI changes no state. Signed slot identity is never rewritten merely to fit a
+conflict filename.
+
+Offline saves advance local lineage and retain bounded visible retry state. Profile
+switch/sign-out closes old scheduling so intent never replays under a new provider
+user. Required-signature policy also applies to downloads and migration; cloud
+availability cannot authorize unsigned downgrade. Remote absence is not automatic
+delete authority until a synchronized tombstone contract exists.
 
 ## Failure, Cancellation And Shutdown Summary
 
@@ -970,7 +990,11 @@ documentation change:
 - Slot ID/path attack cases, symlink/reparse races, active-temp cleanup exclusion,
   other-process mutation, named-slot import and signed conflict-copy identity mapping.
 - Busy autosave coalescing, bounded retry exhaustion, rotation only after success,
-  cloud upload/download conflicts, crash between save and sync registration.
+  cloud conditional upload/download conflicts, offline lineage branches, clock skew,
+  stale retries and crashes at journal/provider/local-publication boundaries.
+- Same/ancestor/divergent/unknown/same-generation-different-hash classification;
+  KeepLocal/KeepRemote/KeepBoth/Defer preserve both verified conflict archives and do
+  not perform semantic record merge.
 - Shutdown while a save is past commit, while candidates hold modules/assets, and
   while optional GPU thumbnails are pending; no early free or silent incomplete unload.
 
@@ -998,4 +1022,5 @@ and regression coverage.
 - [ADR-112](../../adr/112-save-archive-container-and-compatibility-policy.md): Portable container, canonical state, version axes, identities and compatibility horizon.
 - [ADR-113](../../adr/113-local-storage-user-profile-and-slot-ownership.md): Product/user/profile namespaces, logical slot addressing and physical storage ownership.
 - [ADR-114](../../adr/114-canonical-runtime-world-persistence-boundary.md): Authoring/runtime composition, state classification and subsystem-owned canonical adapters.
+- [ADR-115](../../adr/115-cloud-save-authority-revision-and-conflict-policy.md): Local/cloud authority, provider CAS revisions, offline lineage and conflict preservation.
 - [Application Security](../security/application-security.md): Trust and untrusted-input boundaries.

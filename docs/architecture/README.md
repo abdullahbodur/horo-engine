@@ -317,6 +317,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Canonical Runtime World Persistence Boundary](../adr/114-canonical-runtime-world-persistence-boundary.md):
   authoring-base/runtime-override composition, state classification,
   subsystem-owned canonical adapters and aggregate capture/restore.
+- [Cloud Save Authority, Revision and Conflict Policy](../adr/115-cloud-save-authority-revision-and-conflict-policy.md):
+  local authority, provider CAS/lease revisions, offline lineage classification,
+  conflict preservation and coordinator-owned resolution.
 - [Navigation And AI Architecture](./runtime/navigation-and-ai-architecture.md):
   NavMesh, pathfinding, dynamic obstacle overlays, perception, crowd, blackboard,
   and editor bake tooling.

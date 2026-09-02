@@ -107,11 +107,11 @@ public:
     PlatformServiceRequest<LeaderboardEntries>
     GetLeaderboardEntries(LeaderboardId id, const LeaderboardQuery& query);
 
-    PlatformServiceRequest<CloudSaveMetadata>
+    PlatformServiceRequest<CloudReadResult>
     ReadCloudSave(CloudSaveObjectKey key);
 
-    PlatformServiceRequest<void>
-    WriteCloudSave(CloudSaveObjectKey key, std::span<const std::byte> data);
+    PlatformServiceRequest<CloudMutationResult>
+    WriteCloudSave(CloudWriteRequest request);
 
     PlatformServiceRequest<void>
     SetPresence(const PresenceState& state);
@@ -199,6 +199,8 @@ not_signed_in     -- no authenticated user
 forbidden         -- platform policy or user consent blocks the call
 not_supported     -- the active backend does not implement this service
 rate_limited      -- call must be retried later
+precondition_failed -- remote revision changed; caller must refetch/reclassify
+quota_exceeded    -- provider cannot retain the requested object
 platform_error    -- backend-specific error, diagnostic detail available
 request_cancelled -- caller cancelled
 timeout           -- frontend timeout before backend completion
@@ -206,17 +208,10 @@ timeout           -- frontend timeout before backend completion
 
 ### Ordering And Coalescing
 
-Independent requests may complete out of order. Dependent operations must be
-chained explicitly by the caller:
-
-```cpp
-frontend.ReadCloudSave(slot)
-    .OnComplete([&](Result<CloudSaveMetadata> meta) {
-        if (meta) {
-            frontend.WriteCloudSave(slot, newData);
-        }
-    });
-```
+Independent requests may complete out of order. Dependent operations are chained by
+their owning coordinator. In particular, cloud mutation always carries the exact
+provider revision returned by the reconciled read/list (or create-if-absent); generic
+callers cannot turn a read completion into an unconditional write.
 
 Presence updates are coalesced. If `SetPresence` is called many times before
 the backend finishes the previous update, only the most recent state is sent.
@@ -314,6 +309,11 @@ local save files.
 struct CloudSaveObjectKey { BoundedOpaqueBytes value; };
 struct ProviderObjectRevision { BoundedOpaqueBytes value; };
 
+enum class CloudConcurrencyCapability : uint8_t {
+    ConditionalRevision,
+    UncoordinatedBlob
+};
+
 struct CloudSaveMetadata {
     CloudSaveObjectKey key;
     ProviderObjectRevision revision;
@@ -321,19 +321,41 @@ struct CloudSaveMetadata {
     uint64_t sizeBytes;
 };
 
+using CloudWritePrecondition =
+    Variant<RequireObjectAbsent, MatchProviderRevision>;
+
+struct CloudReadResult {
+    CloudSaveMetadata metadata;
+    OwnedImmutableBytes archive;
+};
+
+struct CloudWriteRequest {
+    CloudSaveObjectKey key;
+    OwnedImmutableBytes archive;
+    CloudWritePrecondition precondition;
+    IdempotencyKey retryIdentity;
+};
+
+struct CloudMutationResult {
+    std::optional<ProviderObjectRevision> resultingRevision;
+    std::optional<CloudSaveMetadata> metadata;
+};
+
 class ICloudSaveService {
 public:
+    virtual CloudConcurrencyCapability ConcurrencyCapability() const = 0;
+
     virtual PlatformServiceRequest<std::vector<CloudSaveMetadata>>
     List() = 0;
 
-    virtual PlatformServiceRequest<std::vector<std::byte>>
+    virtual PlatformServiceRequest<CloudReadResult>
     Read(CloudSaveObjectKey key) = 0;
 
-    virtual PlatformServiceRequest<void>
-    Write(CloudSaveObjectKey key, std::span<const std::byte> data) = 0;
+    virtual PlatformServiceRequest<CloudMutationResult>
+    Write(CloudWriteRequest request) = 0;
 
-    virtual PlatformServiceRequest<void>
-    Delete(CloudSaveObjectKey key) = 0;
+    virtual PlatformServiceRequest<CloudMutationResult>
+    Delete(CloudSaveObjectKey key, ProviderObjectRevision expected) = 0;
 };
 ```
 
@@ -345,9 +367,12 @@ erased scope. The backend treats both key and finalized archive bytes as opaque 
 never edits the local format or catalog.
 
 Provider revisions and timestamps are returned as transport metadata. They do not
-select a winning local/cloud generation automatically. SAV-006 owns write
-preconditions, offline authority and divergent-generation resolution; UI may present
-a choice but never becomes sync authority.
+select a winning local/cloud generation automatically. Under ADR-115, automatic
+mutation requires qualified `ConditionalRevision` semantics. `UncoordinatedBlob`
+disables background write/delete while local saves remain available. The save/cloud
+coordinator owns durable intent, lineage,
+preconditions and divergent-generation resolution; UI may present a choice but never
+becomes sync authority.
 
 ### Presence
 
@@ -496,7 +521,6 @@ safely retried:
 - achievement progress updates
 - leaderboard score submissions
 - stat writes
-- cloud save writes
 
 Each queued operation carries an `IdempotencyKey`. The key is generated once
 when the operation enters the frontend and is preserved across persistence,
@@ -514,6 +538,12 @@ When the backend reports `offline` or `not_signed_in`, the frontend:
 
 Operations that cannot be safely replayed, such as cloud save reads or
 leaderboard queries, fail immediately with the appropriate error.
+
+Cloud archive writes/deletes are deliberately absent from this generic queue. Their
+immutable payload lease, slot lineage, expected provider revision, retry identity and
+profile-session scope are durably owned by ADR-115's `CloudSaveCoordinator`. After
+offline recovery it reconciles remote state before conditional mutation; it never
+replays a stale FIFO upload under a later local generation or different user.
 
 Replay rules:
 
@@ -734,6 +764,9 @@ Required tests cover:
 - stable ID registries reject unregistered names
 - typed cloud-object addressing, provider revision propagation and no timestamp-based
   automatic winner selection
+- conditional write/delete and precondition failure; uncoordinated providers never
+  receive background mutations
+- cloud archive writes/deletes never enter the generic offline queue
 - session sign-in/out triggers queue replay and state callbacks
 - unavailable services return `not_supported`
 - presence updates coalesce to the most recent state
@@ -781,5 +814,7 @@ Platform-specific backend tests live in the private platform repositories.
 - [Platform Abstraction Architecture](../foundation/platform-abstraction.md)
 - [ADR-113](../../adr/113-local-storage-user-profile-and-slot-ownership.md): product,
   user/profile and logical-slot addressing across local and cloud boundaries.
+- [ADR-115](../../adr/115-cloud-save-authority-revision-and-conflict-policy.md): local
+  authority, provider preconditions, offline journal and conflict preservation.
 - [Extension System](../extensions/plugin-system.md)
 - [Release Security](../release/release-security.md)
