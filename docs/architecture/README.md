@@ -258,6 +258,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Prefab Override Property Identity and Delta Operations](../adr/093-prefab-override-property-identity-and-delta-operations.md):
   stable component/property/element addressing, typed delta algebra, canonical
   equality/order, transactional rebase and lossless conflict/orphan preservation.
+- [Prefab Nested Composition and Variant Inheritance](../adr/094-prefab-nested-composition-and-variant-inheritance.md):
+  stable nested-placement edges, single-parent variants, deterministic precedence,
+  combined-graph validation, transactional propagation and flattened cook output.
 - [Built-In Scene Primitives](./runtime/built-in-scene-primitives.md): core
   procedural meshes, collider shapes, and scene object primitives available
   without external packages.

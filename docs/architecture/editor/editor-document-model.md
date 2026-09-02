@@ -160,6 +160,22 @@ An external publication with uncertain/partial outcome receives an explicit
 reconciliation record; the editor cannot claim in-memory rollback undid an already
 published source file.
 
+[ADR-094](../../adr/094-prefab-nested-composition-and-variant-inheritance.md)
+extends the same transaction boundary to nested-placement and single-parent variant
+resolution. The application pins one Asset Registry snapshot, validates the
+combined `NestedPlacement`/`VariantParent` graph, resolves affected assets in
+deterministic dependency order and prepares every ADR-093 rebase before commit.
+The visible document and viewport receive one complete candidate; a cycle, missing
+revision, conflict, cancellation or stale async completion leaves the prior graph,
+projection, dirty state and history unchanged.
+
+The editor exposes concrete, variant, nested-placement and scene-instance layers
+separately through bounded provenance. A variant has exactly one immediate parent.
+Inspector and graph controls cannot add a second parent, run construction scripts,
+edit the flattened projection or mutate dependants from a file-watcher callback.
+They submit typed commands against stable `AssetId`, source revision and persisted
+placement `LocalObjectId` scope.
+
 Intermediate transaction state is not observable by tabs or panels until the
 transaction commits, unless the transaction is explicitly marked as a preview
 transaction.
