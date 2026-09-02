@@ -498,7 +498,10 @@ points. This allows an add-on package to contribute a settings section, import
 wizard page, diagnostics page, or tool-specific configuration page without
 forking the owning modal.
 
-Page contributions are descriptors, not imperative UI mutations:
+Page contributions are descriptors and host-rendered typed UI schemas, not
+imperative UI mutations. External pages follow
+[ADR-056](../../adr/056-external-editor-ui-boundary.md): they do not implement a
+C++ modal/page interface or receive ImGui, input, renderer or modal-host objects.
 
 ```cpp
 struct EditorModalPageContribution {
@@ -512,31 +515,39 @@ struct EditorModalPageContribution {
 };
 ```
 
-The owning modal validates and orders pages, constructs page instances through
-registered factories, and controls navigation, validation, dirty state, preview,
-apply, cancel, and close policy. Extension pages cannot directly close the root
-modal, bypass confirmation policy, commit settings, or publish committed
-authority events.
+The owning modal validates and orders pages. A host-owned page session renders
+the copied schema and binds its declared actions/fields to approved capabilities;
+first-party pages may still use internal factories. The modal controls navigation,
+validation, dirty state, preview, apply, cancel, focus and close policy. Extension
+pages cannot directly close the root modal, bypass confirmation policy, commit
+settings, or publish committed authority events.
 
 ```mermaid
 sequenceDiagram
-    participant Ext as Extension Page
+    participant Ext as Extension Controller
     participant Settings as Settings Modal
+    participant Session as Host UI Session
     participant Draft as Settings Draft
     participant Store as Settings Store
     participant Bus as EditorDataBus
 
-    Settings->>Ext: Construct with page context
-    Ext->>Draft: Bind fields to validated draft keys
-    Ext-->>Settings: Return validation diagnostics
+    Settings->>Session: Attach copied schema/state + scoped actions
+    Session->>Draft: Bind declared keys through host capability
+    Session->>Bus: Subscribe through host-owned token
+    Session->>Ext: Request typed refresh outside render traversal
+    Ext-->>Session: Return copied state + validation snapshot
+    Session-->>Settings: Emit typed page action/validation result
     Settings->>Store: Apply typed settings transaction
     Store->>Bus: Publish committed settings notification
-    Bus-->>Ext: Invalidate page view if still open
+    Bus-->>Session: Deliver allowlisted invalidation hint
+    Session->>Session: Invalidate projection if still open
 ```
 
-Extension pages may subscribe to `EditorDataBus` for the same invalidation model
-as built-in pages. They receive only page-scoped capabilities and must release
-subscriptions before the page or provider module is destroyed.
+External extension code never subscribes directly to the C++ `EditorDataBus`.
+The host-owned UI session holds the subscription token and delivers only
+allowlisted invalidation hints through the versioned schema/state protocol or the
+extension's scoped capability context. The session re-queries authoritative state
+and releases its subscription before the page or provider module is destroyed.
 
 ## Build And Release Modal
 

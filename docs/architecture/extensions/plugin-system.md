@@ -88,6 +88,10 @@ Use these names deliberately:
   backend- and GUI-neutral v1 model from
   [ADR-055](../../adr/055-extension-manifest-v1-typed-model.md). Only that
   validated value may enter package composition, trust planning or activation.
+- Embedded third-party editor surfaces are host-rendered typed schemas under
+  [ADR-056](../../adr/056-external-editor-ui-boundary.md). The extension C ABI
+  carries copied schema/state/action values and lifecycle, never ImGui, SDL,
+  renderer handles or C++ panel objects.
 - Extension packages may be backend-only, frontend-only, or hybrid. GUI support
   is optional presentation over host-approved backend capabilities; it is not
   the definition of an extension.
@@ -732,15 +736,16 @@ state.
 
 ### Data Bus Participation
 
-Extension surfaces are normal `EditorDataBus` subscribers. They may observe
-allowlisted editor-session notifications, invalidate local presentation caches,
-and query authoritative stores. They may publish only event types they own or
-notifications for transient state they own.
+Host-owned surface sessions are normal `EditorDataBus` subscribers. They may
+observe allowlisted editor-session notifications, invalidate copied presentation
+snapshots, and query authoritative stores through approved capabilities. External
+controller/module code never receives the C++ bus; it receives versioned bounded
+invalidation hints through its UI session or capability context.
 
 Rules:
 
-- Extension tabs and panels subscribe through move-only RAII tokens and release
-  them during detach.
+- Host UI sessions for extension tabs and panels subscribe through move-only RAII
+  tokens and release them during detach.
 - An extension does not subscribe directly to `EngineDataBus` from a GUI surface;
   process events enter the editor through `EditorEngineEventBridge` allowlists.
 - Extension event types use the extension's stable module ID as a prefix and are
@@ -753,13 +758,13 @@ Rules:
 - Subscriber order is not part of the contract. Coordination that requires a
   result uses typed commands or use cases, not event ordering.
 
-GUI surfaces use `EditorDataBus` rather than direct `EngineDataBus`
+Host UI sessions use `EditorDataBus` rather than direct `EngineDataBus`
 subscriptions because their lifetime is tied to one editor session, not the
 whole process. Process-level events that matter to UI are imported through an
 allowlisted bridge so payloads can be permission-checked, redacted, normalized,
 and scoped to the active workspace. Add-ons that need true process-level
 observation declare a separate process-observer contribution or event-import
-request instead of hiding that dependency inside a tab factory.
+request instead of hiding that dependency inside a surface schema.
 
 ### Modal And Settings Page Contributions
 
@@ -773,9 +778,10 @@ cancel, and close policy. Extension pages provide page content, validation
 diagnostics, and draft-field bindings; they do not commit settings directly or
 close the root modal by mutating modal-host state.
 
-Extension modal pages may subscribe to `EditorDataBus` through their provided
-context. They follow the same interaction and focus rules as built-in modal
-content and cannot bypass the active modal scope.
+The host UI session for an extension modal page may subscribe to `EditorDataBus`;
+the external controller receives only allowlisted invalidation hints through its
+versioned session/capability contract. Extension pages follow the same interaction
+and focus rules as built-in modal content and cannot bypass the active modal scope.
 
 ### Activity Bar Contributions
 
@@ -828,64 +834,55 @@ drawer or main view) to deliver a complete side-panel tool.
 ### Drawer Content (Panel UI)
 
 When the activity bar icon is clicked, the bound drawer opens. The module owns
-the entire content area of that drawer. Horo provides two paths for building the
-panel UI:
+the backend behavior and semantic view projection; Horo owns the content area's
+rendering, interaction and presentation state. External packages use two typed
+composition paths:
 
-#### 1. Declarative field layout (preferred for data-driven panels)
+#### 1. Declarative component layout
 
-Modules register a typed field schema. The host renders standard Horo form
-controls — text inputs, dropdowns, checkboxes, sliders, color pickers — without
-the module writing any ImGui code. The schema supports conditional visibility,
-read-only states, and validation.
+Modules register a bounded `EditorUiSchemaV1`. The host renders standard Horo
+layout, text, input, choice, list, table, progress, diagnostics, image and action
+components without module drawing code. The schema owns stable semantic IDs,
+localization keys, accessibility metadata, typed value bindings and actions.
 
-```cpp
-// Module registers field descriptors — host handles layout and rendering
-struct CurveEditorFields {
-    static constexpr std::string_view PanelId = "com.vendor.curve-tools.drawer";
-
-    static std::vector<EditorFieldDescriptor> Describe() {
-        return {
-            EditorFieldDescriptor::Float("tension", 0.5f, 0.0f, 1.0f),
-            EditorFieldDescriptor::Float("bias", 0.0f, -1.0f, 1.0f),
-            EditorFieldDescriptor::Bool("closedLoop", false),
-            EditorFieldDescriptor::Enum("interpolation", {"Linear","CatmullRom","Bezier"}, 1),
-        };
-    }
-};
+```json
+{
+  "schemaVersion": 1,
+  "root": {
+    "type": "column",
+    "children": [
+      { "type": "number-field", "id": "tension", "label": "curve.tension" },
+      { "type": "number-field", "id": "bias", "label": "curve.bias" },
+      { "type": "toggle", "id": "closed-loop", "label": "curve.closed_loop" },
+      { "type": "action", "id": "preview", "label": "curve.preview" }
+    ]
+  }
+}
 ```
 
-#### 2. Custom ImGui rendering (for graphical or interactive panels)
+User interaction becomes a typed action request to an approved backend capability.
+The GUI frame renders the latest host-owned immutable snapshot and does not call
+module code during widget traversal or draw submission.
 
-Modules receive an `EditorDrawerContext` with a dedicated ImGui container.
-They can draw any ImGui content — plots, node graphs, custom widgets — inside
-that region. The host owns the window, scroll, focus, and teardown; the module
-owns the pixels inside the content area.
+#### 2. Registered specialized typed views
 
-```cpp
-// Module receives a render callback inside the drawer
-class CurveEditorDrawer : public IEditorDrawerSurface {
-public:
-    void OnDraw(EditorDrawerContext& ctx) override {
-        ImGui::Text("Curve Editor");
-        ImGui::SliderFloat("Tension", &mTension, 0.0f, 1.0f);
-        ImGui::PlotLines("##curve", mSamples.data(), mSamples.size());
-        // ... custom ImGui content
-    }
-private:
-    float mTension = 0.5f;
-    std::vector<float> mSamples;
-};
-```
+Graphical tools use registered plot, timeline, node-graph, image/canvas annotation
+or property-inspector schemas. Each view defines bounded data, semantic keyboard/
+accessibility behavior, input actions and a performance budget. Missing advanced
+semantics require a reviewed extension-point/schema revision; they do not grant a
+generic drawing callback.
 
-Modules can mix both approaches — use declarative fields for simple property
-editing and reserve custom ImGui for visualization or bespoke interaction.
-The host guarantees that only the active drawer receives render calls, and that
-drawers are detached cleanly on disable, update, or unload.
+External modules never receive `ImGuiContext`, draw lists, SDL events, native
+windows, dock IDs, GPU textures or Horo internal panel/component objects. A
+separate external application may be launched through an approved process
+capability, but its window is not embedded or docked and it does not inherit Horo
+theme/accessibility guarantees. The complete in-process, C ABI and isolated-helper
+policy is [ADR-056](../../adr/056-external-editor-ui-boundary.md).
 
 Users discover and install these modules through the Plugin Manager
 (`Window → Plugin Manager`), which fetches package metadata from the
-[registry](#marketplace-and-github-registry). After install, trust, and enable,
-the activity bar icon appears without restarting the editor.
+[registry](#marketplace-and-github-registry). Install, trust and enable follow the
+package lifecycle; native contribution activation is restart-applied by default.
 
 ### Layout, State, And Teardown
 
@@ -894,8 +891,10 @@ workspace-state byte limits, and safe teardown. Extension surfaces persist only
 bounded presentation state under their contribution ID. State for a missing
 provider remains opaque and cannot grant capabilities when the provider returns.
 
-GUI modules do not draw outside their assigned surface, bypass modal interaction
-exclusivity, install process-global shortcuts, or retain direct editor internals.
+GUI modules do not draw directly, bypass modal interaction exclusivity, install
+process-global shortcuts, or retain direct editor internals. The host performs
+all hit testing, focus, accessibility traversal and rendering from copied typed
+state.
 During disable, update, shutdown, or future live unload, contributed surfaces are
 detached before module shutdown and all subscriptions, callbacks, jobs, and
 queued continuations into module code are drained or rejected.

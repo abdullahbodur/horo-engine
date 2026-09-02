@@ -464,35 +464,38 @@ Extension tab descriptors declare:
   log queries, metric queries, or specific editor commands;
 - workspace-state schema version and byte limits.
 
-The host validates the descriptor, resolves capabilities, creates the surface
-factory, and then calls the ordinary `RegisterTab()` or `RegisterPanel()` path.
-The factory receives an extension-scoped context; it does not receive the whole
-`EditorLayer`, raw ImGui dock IDs, renderer backend objects, or process-global
-services.
+The host validates the descriptor and resolves capabilities. First-party product
+code may create an internal surface factory and call the ordinary `RegisterTab()`
+or `RegisterPanel()` path. An external package instead supplies the validated
+typed UI schema/state/action contract from
+[ADR-056](../../adr/056-external-editor-ui-boundary.md); a host-owned adapter
+registers that projection through the same layout path. External code does not
+implement `IWorkspacePanel` or receive the whole `EditorLayer`, raw ImGui dock
+IDs, renderer backend objects, C++ component objects or process-global services.
 
 ```mermaid
 sequenceDiagram
     participant EM as Extension Manager
     participant Registry as Editor Surface Registry
     participant Host as EditorPanelHost
-    participant Tab as Extension Tab
+    participant Tab as Host UI Session
     participant Bus as EditorDataBus
 
     EM->>Registry: Commit editor.tab descriptor
-    Registry->>Host: Register factory + fallback placement
-    Host->>Tab: Construct with extension-scoped context
-    Host->>Tab: OnAttach(EditorTabContext)
-    Tab->>Bus: Subscribe with RAII tokens
+    Registry->>Host: Register schema + fallback placement
+    Host->>Tab: Attach copied schema/state + scoped actions
+    Tab->>Bus: Subscribe through host-owned tokens
     Bus-->>Tab: Notify selected allowlisted events
     Tab->>Tab: Invalidate local presentation cache
     Tab->>Host: Save bounded workspace state
-    Host->>Tab: OnDetach before provider shutdown
+    Host->>Tab: Close admission and detach before provider shutdown
 ```
 
 Requested event subscriptions are advisory for validation, diagnostics, and
-permission review. A tab still performs subscription through the typed
-`EditorDataBus` API at attach time. Event payloads remain invalidation hints;
-the tab queries the authoritative model or store for the data it needs.
+permission review. The host-owned UI session performs subscription through the
+typed `EditorDataBus` API at attach time; external module/controller code never
+receives the C++ bus. Event payloads remain invalidation hints, and the session
+queries the authoritative model or store through approved capabilities.
 
 Extensions may contribute new editor-local event types only under their stable
 module prefix. Those events are visible only to the active editor session unless
