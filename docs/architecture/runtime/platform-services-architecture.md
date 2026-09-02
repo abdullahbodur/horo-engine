@@ -40,6 +40,11 @@ revision-consistent reads, conditional atomic mutations, finite quota/transfer l
 whole-blob integrity and partial/ambiguous outcomes while the ADR-115 coordinator stays
 the only durable cloud-intent owner.
 
+[ADR-135](../../adr/135-platform-identity-session-generation-privacy-and-consent.md)
+separates provider account, live subject capability, local profile, gameplay identity
+and presentation data; every user-scoped commit is fenced by session/access generation
+and every consent/restriction decision is enforced by a typed capability snapshot.
+
 ## Scope
 
 Platform services covered here:
@@ -578,21 +583,27 @@ updates and coalesces them into the most recent state.
 
 ```cpp
 struct PresenceState {
-    std::string statusId;          // stable ID, mapped at cook time
-    std::string detail;            // optional free text
-    std::string largeImageKey;     // stable art key
-    std::string smallImageKey;     // stable art key
+    PresenceStatusId status;
+    std::optional<BoundedUtf8> detail;
+    std::optional<PlatformPresenceArtId> largeImage;
+    std::optional<PlatformPresenceArtId> smallImage;
 };
 
 class IPresenceService {
 public:
     virtual Result<PlatformRequestHandle<void>>
-    SetPresence(const PresenceState& state) = 0;
+    SetPresence(PlatformSubjectHandle subject, const PresenceState& state) = 0;
 
     virtual Result<PlatformRequestHandle<void>>
-    ClearPresence() = 0;
+    ClearPresence(PlatformSubjectHandle subject) = 0;
 };
 ```
+
+`PresenceStatusId` and art IDs are project-owned typed identities resolved through the
+ADR-132 registry/mapping pipeline. Optional detail is bounded untrusted presentation
+data. Publication requires a current subject plus `PresencePublish` access, and the
+captured session/access generations are revalidated before provider submission and
+observable completion.
 
 ### Friends
 
@@ -600,20 +611,30 @@ Friends access is read-only in core. Invites and friend management UI are
 platform-owned.
 
 ```cpp
-struct PlatformUserHandle {
-    std::string platformUserId;
-    std::string displayName;
+struct PlatformSocialSubjectHandle {
+    UInt128 nonce;
+    PlatformSessionGeneration session;
+    PlatformAccessPolicyRevision access;
+};
+
+struct PlatformUserPresentation {
+    PlatformSocialSubjectHandle subject;
+    BoundedUtf8 displayName;
+    std::optional<ProviderApprovedAvatarToken> avatar;
 };
 
 class IFriendsService {
 public:
-    virtual Result<PlatformRequestHandle<std::vector<PlatformUserHandle>>>
-    GetFriends() = 0;
+    virtual Result<PlatformRequestHandle<BoundedArray<PlatformUserPresentation>>>
+    GetFriends(PlatformSubjectHandle subject) = 0;
 };
 ```
 
 Friends access requires explicit user consent and platform policy support.
-Absence of the capability is typed, not a silent empty list.
+Absence of the capability is typed, not a silent empty list. Social handles are
+ephemeral, scoped to the requesting session/access revision and distinct from the
+local subject capability. Display/avatar fields are bounded consent-scoped
+presentation, never account, gameplay or durable storage identity.
 
 ## Stable ID Registries
 
@@ -811,9 +832,11 @@ exactly one compatible private binding; `Unavailable` has no binding and exactly
 reason. Missing, duplicate or mismatched bindings fail composition. Public callers do
 not inspect provider pointers, backend names or SDK flags.
 
-Connectivity, sign-in, consent and rate-limit state are request preconditions/session
-state, not a second installed-capability flag. Provider reload or session replacement
-increments generation; stale completion evidence cannot publish into the replacement.
+Installed/provider capability and effective subject access are distinct immutable
+snapshots; admission intersects them instead of collapsing them into a boolean.
+Connectivity and rate-limit state remain dynamic request preconditions. Provider
+reload, session replacement or access-policy change increments the applicable
+generation/revision; stale completion evidence cannot publish into the replacement.
 
 ## Offline And Degraded Behavior
 
@@ -871,35 +894,141 @@ successful Null operation. Tests needing success use the capability-accurate moc
 
 ## Authentication And Session Boundary
 
-Platform services do not own the game user account. They expose a platform user
-handle that the game identity layer can map to its own player profile.
-
-ADR-113 requires that mapping to produce a private provider-scoped
-`LocalUserStorageId` and then select a product-owned `GameProfileId`. Raw platform
-handles, gamertags, emails and display names are not save-directory or cloud-slot
-identity. Backends explicitly report single-local-user, current-user-only or
-multi-user capability; unsupported switching returns
-`platform.capability.unavailable` rather than sharing a guessed user namespace.
+Platform account locator, live platform subject, ADR-113 local storage/profile,
+gameplay/network player and user presentation are distinct identity domains. Equal
+display text never links them. Provider account/native identity stays inside the
+private provider/identity adapter; gameplay and broad services receive only a typed
+live capability:
 
 ```cpp
-struct PlatformSessionState {
-    bool signedIn;
-    PlatformUserHandle currentUser;
+struct PlatformSubjectHandle {
+    UInt128 nonce;
+    ProviderGeneration provider;
+    PlatformSessionGeneration session;
+};
+
+enum class PlatformSessionPhase : std::uint8_t {
+    NoSubject,
+    Authenticating,
+    Active,
+    Closing,
+    Failed,
+};
+
+struct PlatformSessionSnapshot {
+    PlatformSessionPhase phase;
+    PlatformSessionGeneration generation;
+    std::optional<PlatformSubjectHandle> subject;
+    PlatformAccessPolicyRevision accessRevision;
+    PlatformSessionCapabilities capabilities;
+    NormalizedSessionReason reason;
 };
 ```
 
-The backend reports session changes through an observer interface:
+The subject nonce is nonzero/non-reused 128-bit cryptographic randomness allocated by
+the frontend identity broker after authenticated binding. It is equality-only,
+non-guessable and valid only for its exact provider/session generations. It is not a
+provider ID, persistent account key, authorization secret or display value and is never
+serialized/logged. Gameplay cannot construct or enumerate handles.
+
+`Active` has exactly one subject and immutable effective access snapshot. Other phases
+have none for admission; there is no second `signedIn` bool or nullable provider object.
+A restricted account may be Active while individual operations are unavailable. The
+session generation increases on bind, sign-out, account switch/invalidation and
+provider replacement. Subject-preserving access changes increment the access revision;
+identity uncertainty closes/rebinds a new generation.
+
+The private identity/profile service maps a provider stable authenticated subject to a
+pseudonymous product/provider-scoped binding, ADR-113 `LocalUserStorageId` and explicit
+`GameProfileId`. Raw account ID, gamertag, email, native handle or credentials do not
+enter portable project/save/cloud/progression/offline state. If no stable provider
+subject exists, the provider advertises installation-local/single-user capability and
+cloud/linking remains unavailable; mutable personal text is never hashed as fallback.
+
+Every user-scoped admission captures subject, session, provider/frontend and access-
+policy generations plus its semantic profile/authority generation. Every result,
+cache, event, observer, journal/offline or synced-state commit revalidates the captured
+session and applicable access revision. Mismatch is `platform.session.stale`; old
+provider work may retire privately but cannot publish into a new account.
+
+Durable intent stores a protected pseudonymous subject-binding partition and policy
+requirements, never a live handle. Replay first verifies the same binding under a new
+active session and reauthorizes the operation. “Current account” cannot retarget it.
+
+### Sign-in, sign-out and account switch
+
+Sign-in prepares provider authentication, stable-subject/private profile mapping,
+restrictions/consent, capability limits and a fresh handle as a detached candidate,
+then atomically publishes Active. Authentication UI completion is evidence, not
+publication authority. Failure destroys candidate handles/credentials with no partial
+capability.
+
+Sign-out/account switch closes old admission and invalidates its generation before
+cancelling/retiring native work, stopping cache/observer publication and suspending old
+durable partitions. Credentials/handles release only after callback safety. A switch
+then prepares a wholly new binding; it never mutates a global user pointer in place or
+publishes old profile state with a new account. Failure leaves explicit NoSubject/
+Failed; reopening old state is a fresh transaction.
+
+Single/current/multiple-user support remains explicit. Multiple users have separate
+sessions, handles and request partitions. Listen-server locality, UI selection or
+provider login never changes gameplay/server authority.
+
+### Consent and restricted access
+
+Each operation declares a finite Horo purpose/data-class set such as cloud sync,
+achievement projection, leaderboard read, friends read or presence publish. Effective
+access is the intersection of provider capability/session, platform/parental/child
+restriction, region/legal/product policy, OS/provider permission and versioned product
+consent where required:
 
 ```cpp
-class IPlatformSessionObserver {
-public:
-    virtual void OnSessionStateChanged(const PlatformSessionState& state) = 0;
+enum class PlatformAccessState : std::uint8_t {
+    Granted,
+    ConsentRequired,
+    Denied,
+    Restricted,
+    Revoked,
+    Unavailable,
+};
+
+struct PlatformServiceAccess {
+    PlatformServiceOperation operation;
+    PlatformAccessState state;
+    PlatformAccessReason reason;
+    PlatformPurposeId purpose;
+    PlatformDataClassMask dataClasses;
+    ConsentPolicyVersion consentVersion;
 };
 ```
 
-The frontend dispatches these changes to gameplay systems that care about sign
-in/out. Cloud save sync and offline queue replay are triggered by sign-in
-events.
+Only Granted admits work; every other state has one typed reason and no usable binding
+for that operation. UI/overlay presents localized disclosure and submits an expected-
+revision decision to the consent authority. UI cannot grant itself; closing a prompt
+is not consent, provider permission does not replace required product consent and a
+checkbox cannot override parental/restricted policy.
+
+Consent is purpose/data-class/version specific, revocable and finitely retained. A
+policy/restriction change closes affected admission, advances access revision, blocks
+stale in-flight publication and triggers bounded service cache/observer cleanup.
+Unrelated operations continue only when their captured decision/data classes remain
+valid. Revocation does not claim already committed provider effects were rolled back.
+
+### Personal and display data
+
+`PlatformUserPresentation` and social-subject handles are bounded, untrusted,
+consent-scoped projections separate from identity. Display names, avatars, presence
+and friend data never authorize, route, identify storage or compare accounts. Text/
+images are validated/escaped before rendering. By default they remain only in bounded
+memory until request/session/consent retention expires.
+
+Durable cache, analytics/export or user-generated presence requires a separate
+declared purpose, schema, retention/deletion policy and consent. General logs, metrics,
+crash bundles, project/save files, journals, scripts and ordinary CLI/MCP results
+contain no raw account/native IDs, live/social handle bytes, personal display data,
+friends graph, presence free text, credentials or private binding locators. Safe
+observability uses aggregate counts, typed state/reason/generations and ephemeral
+non-account-derived correlation IDs.
 
 ## Shutdown And Late Completion
 
@@ -922,12 +1051,9 @@ recorded outcome without duplicating cancellation or native teardown.
 - Closed platform SDK implementations live in private repositories. The public
   engine repository contains only interfaces, registries, the null backend, and
   the mock backend.
-- Achievements and stats are unlocked/submitted through gameplay systems. For
-  competitive or online games, critical stats should be validated by the game
-  server before the client calls the platform backend, or the backend should be
-  invoked from a trusted server path. See
-  [Release Security](../release/release-security.md) for the broader trust and
-  signing model that governs backend packages.
+- ADR-133 progression definitions select local or server authority; competitive
+  clients never submit privileged conclusions and idempotency does not provide
+  authentication/anti-cheat.
 - Cloud save data is opaque untrusted input to the platform service layer. Transport
   authentication does not establish archive trust. Integrity, signature/scope,
   compatibility and optional confidentiality policy belong to Runtime Save and the
@@ -935,21 +1061,22 @@ recorded outcome without duplicating cancellation or native teardown.
 - Provider tokens and account credentials remain inside the backend's short-lived
   credential lease. They never enter archive bytes, coordinator journals, tool
   results, logs or conflict metadata.
-- Friends and presence data are subject to platform privacy policies and user
-  consent. The frontend does not cache or expose this data beyond what the
-  backend provides.
+- ADR-135 live subject handles are non-persistent generation capabilities; personal/
+  social presentation is separate bounded data and every operation passes typed
+  purpose, consent and restriction policy before admission/commit.
 
 ## Privacy And Compliance
 
-- Friends and presence require explicit user consent where the platform
-  requires it.
-- Presence free text must not include PII or user-generated content that has
-  not been reviewed.
-- Cloud save retention follows platform policy; the engine does not control it.
-- Children's accounts and restricted platforms may disable social features.
-  The frontend surfaces this as normalized `Forbidden` provider failure or
-  `platform.capability.unavailable`, according to whether a supported operation was
-  denied dynamically or the capability was excluded at composition.
+- Friends, presence and any other personal-data operation declare purpose/data class,
+  product retention and required provider/OS/product consent explicitly.
+- Child, parental, region and platform restriction is an operation capability state,
+  not UI-only visibility or a generic successful empty result.
+- Presence free text and display/social data are untrusted user/provider content;
+  retention/export/analytics requires separate consent and policy.
+- Cloud provider retention/backup is external evidence; Horo's local journal/recovery
+  retention and deletion intent remain product/coordinator policy.
+- Consent denial/revocation is typed, closes affected publication and cannot be
+  bypassed by debug tooling, configuration or development builds.
 
 ## Observability
 
@@ -1073,7 +1200,7 @@ Configuration authority lives in Project Settings:
 
 The Platform Diagnostics panel shows runtime state:
 
-- signed-in user and session state
+- session phase/generations and consent-safe presentation availability
 - backend capability availability (per service)
 - pending request count and recent errors by category
 - offline queue depth and oldest pending operation
@@ -1135,7 +1262,14 @@ Required tests cover:
 - authenticated-provider downloads remain untrusted until local bounded admission;
   malformed/oversized results cannot publish or replace a local generation
 - cloud credential/provider metadata is redacted from save diagnostics and tools
-- session sign-in/out triggers queue replay and state callbacks
+- sign-in candidate failure, sign-out/account-switch/provider-reload races and stale
+  callbacks never publish across subject/session generations
+- same-binding reauthorization may resume an eligible durable partition; a newly
+  current account never retargets old progression or cloud intent
+- every consent/restriction state and access-revision change is enforced at admission
+  and commit, including child/parental/region policy and UI/debug bypass attempts
+- social handles and bounded presentation expire with session/access scope; malformed
+  personal data and raw-ID/PII leakage into logs, metrics, crashes or tools fail closed
 - typed capability snapshot and private binding agree; missing/duplicate/mismatched
   bindings fail composition and unavailable services return
   `platform.capability.unavailable`
@@ -1178,6 +1312,8 @@ Tests use the mock backend to verify:
   provider capability variants
 - cloud list/read consistency, partial transfer, atomic revision CAS, quota and
   committed-after-timeout scripts with exact caller-owned reconciliation evidence
+- authentication-stage failure, account-switch/stale-callback and consent-revocation
+  scripts with no cross-subject cache, observer or durable-replay publication
 
 Platform-specific backend tests live in the private platform repositories.
 
@@ -1196,6 +1332,9 @@ Platform-specific backend tests live in the private platform repositories.
 - [ADR-134](../../adr/134-cloud-blob-transport-revision-precondition-and-offline-ownership.md):
   authenticated opaque blobs, revision CAS, quota/integrity/partial transfer and
   caller-owned durable cloud intent.
+- [ADR-135](../../adr/135-platform-identity-session-generation-privacy-and-consent.md):
+  platform identity-domain separation, generation-fenced subject capabilities,
+  consent/restriction authority and personal-data handling.
 - [Platform Services Config UI Reference](./platform-services-config.html): achievements, leaderboards, cloud saves, presence, and platform adapters panel.
 
 - [Audio Architecture](./audio-architecture.md)
