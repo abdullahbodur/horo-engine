@@ -288,6 +288,12 @@ Events are stored in a world-owned bounded buffer and consumed during the
 declared post-physics phase. They are not individually published to the
 process-wide data bus.
 
+An immersive editor agent admitted under
+[ADR-172](../../adr/172-immersive-agent-ownership-authoring-mode-and-risk.md)
+may consume bounded, generation-checked query or contact summaries as context.
+Physics events remain simulation facts: contact, overlap, grab and throw evidence
+never grants agent intent, proposal approval or solver-mutation authority.
+
 If overflow occurs, the world records a metric and emits one diagnostic summary.
 
 ## Queries

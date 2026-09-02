@@ -19,9 +19,15 @@ contextual entry points include viewport inline prompts, magic AI tools, and an
 optional immersive XR authoring surface. Every surface shares the same provider,
 context, permission, transaction, history, and audit owners.
 
+[ADR-172](../../adr/172-immersive-agent-ownership-authoring-mode-and-risk.md)
+is the normative authority for the immersive surface's developer-only audience,
+Edit/Simulate/Play admission, multimodal evidence classification, explicit
+approval, transaction boundary, privacy and cross-system non-ownership. Voice,
+gaze, pointing and physical interaction never constitute proposal approval.
+
 ## System Overview
 
-```
+```text
 ┌──────────────────────────────────────────────────────────┐
 │  Editor UI (HTML / ImGui)                                │
 │  ┌──────────────────────┐  ┌────────────────────────────┐│
@@ -178,6 +184,19 @@ Voice, gaze, a pointing gesture, contact, or a physical throw cannot transition
 `ReadyForReview` to `Applying`. Approval uses an explicit admitted controller,
 keyboard, or accessible UI action bound to the exact proposal and document
 revision. Camera and world-transform changes receive heightened impact warning.
+
+Authoring mode is part of admission, not presentation state:
+
+| Mode | Immersive agent contract |
+|---|---|
+| Edit | Query, propose, preview and explicitly approve one editor transaction |
+| Simulate | Inspect the isolated simulation and prepare a candidate; return to Edit, revalidate and approve before document mutation |
+| Play / PIE | Bounded diagnostics/capture only; no runtime or document mutation |
+| Packaged game/server | Capability absent |
+
+Mode, document, project or XR-session replacement invalidates outstanding
+approval. A retained proposal remains non-authoritative and must be reviewed
+against fresh context.
 
 Long-running transcription, planning, tool execution, and preview generation
 are cancellable and expose stable progressive feedback. They do not hide
@@ -440,7 +459,7 @@ request reaches the LLM.
 
 ## Request Pipeline
 
-```
+```text
 User types message
       │
       ▼
@@ -561,7 +580,7 @@ and UI refresh. Agent tools do not bypass it.
 
 ### Communication Flow
 
-```
+```text
 Viewport / Side Panel / AI Brush
       │
       ▼
@@ -892,7 +911,7 @@ changes receive a more prominent impact summary.
 
 ### Example: Fix This Corner
 
-```
+```text
 User: "clean up this area"
 Context:
   - editor camera pose

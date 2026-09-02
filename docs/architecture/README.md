@@ -586,6 +586,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Editor AI Agent Architecture](./editor/editor-ai-agent-architecture.md):
   editor-integrated conversational agent, viewport inline editing, MCP tool-calling,
   magic AI tools, conversation persistence, and privacy model.
+- [Immersive Agent Ownership, Authoring Mode and Risk](../adr/172-immersive-agent-ownership-authoring-mode-and-risk.md):
+  developer-only XR authoring, Edit/Simulate/Play admission, multimodal evidence,
+  proposal-bound approval, transaction authority and privacy/risk boundaries.
 - [Project Model](./editor/project-model.md): project directory, settings, workspace
   persistence, scene documents, and asset index.
 

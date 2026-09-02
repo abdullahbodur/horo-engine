@@ -471,6 +471,13 @@ unpublishes the client session view and cannot promote a client to standalone.
 Shutdown unpublishes views and invalidates grants before worlds, sessions,
 listeners or transports are destroyed.
 
+Immersive Editor AI under
+[ADR-172](../../adr/172-immersive-agent-ownership-authoring-mode-and-risk.md)
+does not alter this authority model. Local XR presence, an agent/MCP session,
+voice or physical interaction cannot mint a peer, session, object or server-world
+grant. Remote participants cannot impersonate local proposal approval, and
+network content remains untrusted context rather than editor-tool authority.
+
 ## Project Configuration and Product Capability
 
 [ADR-103](../../adr/103-network-project-configuration-and-build-profile-ownership.md)
