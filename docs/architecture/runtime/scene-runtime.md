@@ -337,6 +337,13 @@ settings/achievements remain outside that transaction. This composite commit is 
 implementation requirement beyond SCN-001, not a second public activation path.
 Old scene/provider resources retire asynchronously with their leases preserved.
 
+[ADR-092](../../adr/092-character-controller-determinism-and-state-composition.md)
+requires the Character provider snapshot to share the exact committed tick, scene/
+structural revision, origin, determinism fingerprint and paired Physics checkpoint.
+Restore resolves all stable support/controller bindings inside the detached aggregate
+candidate; a standalone, partial or mixed-generation Character restore cannot enter
+the publication gate.
+
 ## Runtime Scene Definition
 
 The definition contains:

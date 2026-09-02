@@ -171,6 +171,14 @@ creation, target updates, filter/schema generations, contact evidence and retire
 are part of the same scene/world/Character lifecycle and fail closed when the exact
 capability or qualified determinism tier is unavailable.
 
+[ADR-092](../../adr/092-character-controller-determinism-and-state-composition.md)
+requires every Character checkpoint to bind one exact committed Physics/world
+checkpoint, tick, origin, structure and determinism fingerprint. Stable support-body
+bindings resolve against that detached Physics candidate during restore. Character
+cannot restore independently or persist Jolt bodies, proxy state, manifolds, query
+caches or native IDs. Aggregate failure leaves the active Scene/Physics/Character
+bundle unchanged.
+
 ## Fixed-Step Pipeline
 
 One physics tick:

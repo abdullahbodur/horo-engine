@@ -79,6 +79,44 @@ staged impulses to Jolt. It never mutates bodies from a native collector.
 There is no public backend selector. Replacing the private Physics query adapter
 must pass the same Horo golden, determinism and performance qualification.
 
+## Canonical State, Checkpoint And Restore
+
+[ADR-092](../../adr/092-character-controller-determinism-and-state-composition.md)
+defines `CanonicalCharacterStateV1` and `CharacterStateCodecV1` as the only state
+that may resume Character simulation. Save, replay and future networking consume
+that shared typed model/codec; transport/envelope policy cannot create another
+authoritative field set.
+
+The canonical world header binds the committed tick, scene/structural revision,
+paired Physics checkpoint, determinism fingerprint, exact world-origin state,
+collision/profile revisions and command protocol. Ordered controller records contain
+only resume-required semantic state:
+
+- stable authored controller binding, descriptor/profile revisions and state
+  sequence;
+- global collision root, up/heading, achieved and gravity/free-fall velocity;
+- stance/geometry transition continuation and fixed-point remainders;
+- grounding/support attachment, resolved surface and platform carry evidence;
+- command/root-motion/teleport/stance/fact watermarks;
+- pending transfer velocity and ADR-090 dynamic reaction;
+- any versioned algorithm remainder or named Character-owned random stream.
+
+Native handles/proxies/manifolds/query caches, scratch, candidate state, immutable
+descriptor duplicates, published output payloads, presentation/pose/debug state and
+foreign Gameplay/Animation/Network history are excluded. Derived private state is
+rebuilt against a detached Physics candidate.
+
+SHA-256 over domain-separated canonical bytes is the exact determinism authority.
+Field-specific numeric tolerances are diagnostic only and cannot accept restore or
+make a failed exact comparison pass. Capture takes one aggregate committed
+Scene/Physics/Character cut. Restore validates and publishes that complete candidate
+atomically; standalone or partial Character restore is forbidden.
+
+Bounded full/delta history may retain canonical bytes and hashes. The resimulation
+coordinator separately owns complete ordered producer command histories and replays
+the ordinary fixed-tick pipeline. History exhaustion or missing input ends the
+rewind horizon explicitly.
+
 ## Character Controller Component
 
 ```cpp
@@ -489,6 +527,8 @@ Runtime variables:
 - One-way command canonicalization, proxy pair exclusivity, no double impulse,
   bounded next-tick reaction and no post-Physics root write.
 - Proxy spawn/resize/teleport/reload/removal/origin-shift generation and rollback.
+- Canonical state golden bytes/hash, field completeness/exclusion, mixed-checkpoint
+  rejection, aggregate restore rollback and bounded full/delta resimulation history.
 - Private Physics-query adapter parity against Horo controller golden fixtures.
 - Performance tests for many concurrent controllers.
 

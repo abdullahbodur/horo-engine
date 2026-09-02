@@ -327,6 +327,15 @@ variable update and wall time cannot select command order, streaming/origin comm
 tick or authoritative query results. A first divergence invalidates the stronger
 session and follows its explicit fail-closed policy.
 
+[ADR-092](../../adr/092-character-controller-determinism-and-state-composition.md)
+captures Character only from the atomically committed stage-9 state and pairs it
+with the exact Scene/Physics/world tick, structure, origin and determinism
+fingerprint. The lifecycle safe point lends immutable owned checkpoint data to
+workers; it never exposes candidate state or blocks simulation on hashing/storage.
+Restore prepares the complete aggregate and publishes at
+`CommitDeferredLifecycleChanges`; no standalone or partial Character state becomes
+visible.
+
 System ordering is declared by the scene runtime and validated before execution.
 The data bus is not used to establish per-tick system order.
 
