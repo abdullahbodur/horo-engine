@@ -25,6 +25,9 @@ that lifecycle decision.
 - Game and scene code use typed handles and enqueue commands.
 - Decoding and streaming I/O occur outside the real-time thread.
 - Audio assets use the common asset identity, cooking, and cache contracts.
+- Spatial profiles distinguish optional provider fallback from required-capability
+  activation failure under
+  [ADR-066](../../adr/066-spatial-provider-and-required-capability.md).
 - Headless hosts may omit audio or use a null backend.
 - Core audio targets a practical Unity/Godot-level foundation: sources,
   listeners, buses, 2D/3D playback, streaming, basic effects, and profiling.
@@ -335,7 +338,14 @@ bounded `SwapMixerGraph` command at a buffer boundary. Failed or stale builds
 leave the last good generation active, and old plans retire only after matching
 callback acknowledgement and owner-lease/tail policy completion.
 
-Each bus may use the default stereo panner or a custom spatializer slot:
+[ADR-066](../../adr/066-spatial-provider-and-required-capability.md) is the single
+normative owner of spatial provider identity, typed capabilities, profile
+resolution, activation preflight, fallback, runtime failure, and observability.
+Each output/listener context resolves one `SpatialRenderProfile` to a prepared
+provider before callback publication. Buses and voices select modes supported by
+that provider; they do not discover providers during rendering.
+
+The profile may resolve the core stereo panner or a custom spatializer:
 
 ```cpp
 class IAudioSpatializer {
@@ -345,10 +355,12 @@ public:
 };
 ```
 
-The core provides a deterministic stereo panner. Packages may register HRTF,
-ambisonics, platform-native, or middleware spatializers. Spatializer processing
-must consume prevalidated per-voice spatial input and must not query scene or
-physics state from the real-time thread.
+The core provides an explicit deterministic stereo provider. Packages may register
+HRTF, Ambisonic, platform-native, or middleware spatializers with typed stable IDs,
+capabilities, limits, layouts, ABI, owner leases, and real-time declarations.
+Spatializer processing consumes prevalidated per-voice spatial input and ADR-063
+blocks; it must not query scene, physics, configuration, files, package discovery,
+or network from the real-time thread.
 
 A spatializer computes per-voice 3D positioning, such as panning, HRTF, or
 object-based spatial rendering. DSP nodes process bus-level signals such as
@@ -356,9 +368,14 @@ filters, reverb sends, or ambisonics decoding. A spatializer that needs bus-leve
 processing may internally use DSP nodes, but its public contract to the mixer is
 per-voice positioning.
 
-If a registered spatializer fails validation or is unavailable on the active
-backend, the bus falls back to the default stereo panner. The fallback is
-observable through metrics and must not reject otherwise valid voices.
+An optional profile may use core stereo only when its persisted policy explicitly
+allows fallback and core satisfies every remaining hard content/layout limit. The
+result is a durable observable `ActiveFallback` generation naming the requested
+and selected providers and reason. A required missing/incompatible provider or
+capability fails activation preflight; it never starts unnoticed with stereo.
+Runtime faults follow the same policy through control-owned prepared generation
+replacement. The callback emits a bounded fault and compiled silence behavior; it
+does not select or instantiate a fallback.
 
 User volume settings are configuration values. Per-frame GUI controls do not
 directly edit backend state.
@@ -475,7 +492,7 @@ Audio sources support two spatial modes:
 Core 3D audio provides:
 
 - distance attenuation
-- stereo or backend-supported panning
+- panning through the preflight-resolved spatial provider and output layout
 - optional per-source doppler pitch shift
 - configurable min/max distance and rolloff curve
 
@@ -995,6 +1012,10 @@ Required tests cover:
 - decoder plugin registration and cook-time selection
 - DSP node prepare/process real-time contract
 - spatializer registration and fallback behavior
+- exact/ordered/automatic spatial-provider resolution independent of registration
+  order, including required-capability preflight failure with no stereo fallback
+- optional spatial fallback observability, runtime provider fault recovery,
+  device/profile/content re-preflight, and generation-safe provider retirement
 - occlusion provider one-frame-late ramp behavior
 - scheduled batch atomicity for timeline and animation events
 - middleware event and parameter bridge validation
