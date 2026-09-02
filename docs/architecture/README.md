@@ -176,6 +176,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Capture and Voice I/O Ownership](../adr/070-capture-and-voice-io-ownership.md):
   permission-aware input sessions, bounded timestamped PCM, monitoring, recording,
   NET packet-policy exclusion, speech/editor boundaries, and privacy.
+- [Procedural Audio Graph Ownership](../adr/071-procedural-audio-graph-ownership.md):
+  compiled sound-generator assets, deterministic typed graphs, frontend/mixer
+  reuse, extension nodes, editor boundaries, runtime limits, and retirement.
 - [Input Architecture](./runtime/input-architecture.md): input snapshots, action
   maps, focus, capture, modal routing, and simulation input frames.
 - [Game UI And HUD](./runtime/game-ui-and-hud.md): runtime game menus, HUDs,

@@ -82,6 +82,7 @@ to the replacement.
 | [068](068-music-transport-and-cross-system-ownership.md) | Music Transport and Cross-System Ownership | Proposed | 2026-09-02 |
 | [069](069-audio-extension-capability-and-abi.md) | Audio Extension Capability and ABI | Proposed | 2026-09-02 |
 | [070](070-capture-and-voice-io-ownership.md) | Capture and Voice I/O Ownership | Proposed | 2026-09-02 |
+| [071](071-procedural-audio-graph-ownership.md) | Procedural Audio Graph Ownership | Proposed | 2026-09-02 |
 
 ## Conventions
 
