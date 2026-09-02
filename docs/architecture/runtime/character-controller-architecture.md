@@ -292,15 +292,15 @@ struct SurfaceMaterial {
 Surface materials are assigned to colliders, not to meshes. A single mesh may
 use multiple surface materials through material IDs or collision sub-shapes.
 
-## Surface Events
+## Locomotion Facts And Footstep Correlation
 
-The controller emits events based on contacts and state changes.
+The controller publishes bounded physical facts based on committed contacts and
+state changes. It does not own animation cadence and never emits `Footstep`.
 
 Events:
 
 | Event | Trigger |
 |---|---|
-| `Footstep` | Foot touches ground during locomotion. |
 | `Landed` | Transition from airborne to grounded. |
 | `LeftGround` | Transition from grounded to airborne. |
 | `HitWall` | Horizontal movement blocked by surface. |
@@ -315,20 +315,22 @@ Events carry:
 - impact velocity
 - controller reference
 
-Gameplay and audio systems subscribe to these events. The controller does not
-play sounds or spawn VFX directly.
+Facts carry stable scene/controller/tick/result identity plus bounded material,
+contact and achieved/impact velocity evidence where applicable. Repeated raw
+contacts do not create another state-transition fact.
 
-## Audio And VFX Coupling
+[ADR-091](../../adr/091-footstep-and-locomotion-event-ownership.md) makes committed
+Animation marker occurrences the authoritative timing source for animation-driven
+footsteps. After atomic tick commit, an application/Gameplay-owned locomotion
+presentation adapter correlates the occurrence with the exact same-tick Character
+snapshot and its resolved support material/contact. It then submits immutable,
+deduplicated cue intents to Audio and VFX through their own admission contracts.
 
-Surface events drive audio and VFX:
-
-- `Footstep` -> play randomized footstep sound from `footstepSoundSet`
-- `Landed` -> play landing sound scaled by impact velocity
-- `HitWall` / `HitCeiling` -> play impact sound and optionally spawn decal/VFX
-- `SurfaceChanged` -> update active movement audio loop (e.g., footstep material)
-
-The controller emits events; the audio and VFX systems resolve the actual asset
-playback. This preserves mixing, spatialization, and budgets.
+Missing markers produce no inferred Character footstep. Missing/stale same-tick
+ground evidence suppresses presentation without a new Physics query. Missing,
+failed or shutting-down Audio/VFX consumers cannot alter Animation, Character or
+Gameplay simulation results. Applications may map `Landed` or other facts to
+distinct presentation cues, but cannot relabel them as the marker occurrence.
 
 ## Root Motion Integration
 
@@ -475,7 +477,7 @@ Runtime variables:
 - Slope limit tests.
 - Step up/down tests on known geometry.
 - Moving platform attachment and detachment tests.
-- Surface event emission tests.
+- Locomotion fact transition tests and footstep marker/surface correlation tests.
 - Root motion collision tests.
 - Root motion duplicate/stale generation and reverse-policy tests.
 - Determinism tests for fixed-step playback under different render/catch-up grouping.

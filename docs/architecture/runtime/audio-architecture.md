@@ -895,6 +895,12 @@ atomically at the same buffer boundary. Timeline systems and animation-event
 systems use this to start multiple voices in sync without adding a separate
 real-time API.
 
+For footsteps, [ADR-091](../../adr/091-footstep-and-locomotion-event-ownership.md)
+requires an application-owned post-commit adapter to join the Animation occurrence
+with the exact Character surface snapshot first. Audio receives an immutable,
+deduplicated cue intent with committed tick/correlation identity; it does not query
+Character/Physics, infer cadence or change simulation when admission fails.
+
 The audio thread publishes bounded completion and device events through a
 lock-free or wait-free queue consumed by the owning main-thread service.
 
@@ -1470,7 +1476,7 @@ or feature plan must be updated in the same change.
 | 3. Mixer'da bus ayarı | Window → Audio → Mixer → SFX bus volume -6 dB, mute; solo (editor-only) | AudioFrontend redundant command birleştirir → SwapMixerGraph / SetVoiceParameters → buffer boundary'de uygulanır | SFX bus runtime'da mute; solo sahneye yazılmaz |
 | 4. Post-1.0 middleware event | Inspector → Audio Source Kind: Middleware Event → StableEventId from registry (authoring name `enemy_footstep`) | AudioFrontend → IAudioMiddlewareEventBridge → VoiceRegistry proxy slot → AudioEventInstanceId | Native ve middleware voice aynı voice bütçesini ve policy'yi paylaşır |
 | 5. Snapshot tetikleme | Game code: `AudioMixer.ApplySnapshot("pause_menu")` | AudioFrontend snapshot command → Mixer ramps Music↓, UI↑, SFX↓ | Ducking click/pop olmadan uygulanır |
-| 6. Animation event | Animation editor → frame 42 → Event type: Play Audio Clip → `footstep_run` | Animation system command producer olur → CreateVoice + StartVoice with timestamp | Animation sistemini audio thread'den poll etmeden senkron ses |
+| 6. Footstep marker | Animation editor → frame 42 → `Footstep.Left` marker | Tick commit → locomotion presentation adapter correlates exact Character surface → deduplicated Audio cue intent → scheduled voice | Animation owns timing; Character owns surface; neither calls the audio thread directly |
 | 7. Timeline senkron ses | Timeline → explosion/dialogue/music cue'ları aynı zaman damgasına hizala | Timeline → ScheduledCommandBatch → SPSC → callback atomik uygular | Sesler sample-accurate sync başlar |
 | 8. Mobil focus kaybı | Kullanıcı başka app'e geçer | Host focus event → Project Settings > Audio > Focus Behavior UI authors `audio-focus-policy.json` → AudioRuntime reads that policy → gameplay bus'ları pause, music devam | Oyun sesi leak etmez; dönüşte resume |
 | 9. Audio Profiler | Window → Audio → Profiler | Callback bounded metrics yayınlar → observability queue → panel okur; callback'te log/allocate yok | Gerçek zamanlı maliyet; audio thread'ı bozmaz |

@@ -336,9 +336,9 @@ struct AnimationEvent {
 };
 ```
 
-Event types:
+Example event types:
 
-- `Footstep` — spawn sound, VFX, decal
+- `Footstep.Left` / `Footstep.Right` — authoritative locomotion presentation timing
 - `WeaponSwing` — enable/disable hit box
 - `ReloadComplete` — gameplay notification
 - `SpawnProjectile` — fire event
@@ -357,6 +357,13 @@ committed tick/time under
 mapping that committed timestamp to its current sample epoch and deduplicating the
 stable occurrence. Presentation pose sampling, editor scrub, or a failed tick never
 submits Audio work, and callback completion cannot change Animation's event cursor.
+
+[ADR-091](../../adr/091-footstep-and-locomotion-event-ownership.md) specializes
+footstep ownership. Animation publishes the typed committed marker occurrence but
+does not query a surface or call Audio/VFX. After tick commit, an application-owned
+adapter correlates it with the exact same-tick Character surface snapshot and
+deduplicates one semantic request. Character never synthesizes missing footstep
+timing, and stale/missing support evidence suppresses presentation.
 
 ## Skinning
 

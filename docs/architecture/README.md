@@ -151,6 +151,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Character Dynamic-Body Visibility, Push and Proxy Policy](../adr/090-character-dynamic-body-visibility-push-and-proxy-policy.md):
   explicit disabled/obstacle/one-way/bidirectional modes, private kinematic
   presence proxy, next-tick reaction and fail-closed capability fallback.
+- [Footstep and Locomotion Event Ownership](../adr/091-footstep-and-locomotion-event-ownership.md):
+  Animation-owned footstep timing, Character-owned committed surface/facts and
+  bounded post-commit Audio/VFX presentation correlation.
 - [Physics Architecture](./runtime/physics-architecture.md): fixed-step world
   ownership, transform authority, collision events, queries, and determinism.
 - [Canonical Physics Solver, Units and Tolerances](../adr/084-canonical-physics-solver-units-and-tolerances.md):
