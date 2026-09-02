@@ -396,6 +396,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Platform Services Frontend, Request Lifetime, Timeout, Null and Error Semantics](../adr/130-platform-services-frontend-request-lifetime-timeout-null-and-error-semantics.md):
   frontend-owned asynchronous requests, exactly-once terminal publication, deferred
   callbacks, typed capability truth and distinct Null/timeout/provider failures.
+- [Platform Services Closed SDK, Extension ABI, Package and Composition Boundary](../adr/131-platform-services-closed-sdk-extension-abi-package-and-composition-boundary.md):
+  SDK-free public targets, manifest/trust-selected private providers, C ABI value and
+  callback rules, transactional activation and profile-specific composition.
 - [Post-Processing And Effects Architecture](./runtime/post-processing-and-effects-architecture.md):
   screen-space effects, HDR post chain, tonemapping, color grading, and
   accessibility pass ordering.

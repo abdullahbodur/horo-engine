@@ -18,6 +18,12 @@ result publication, deferred callback dispatch, capability truth, Null behavior,
 timeout and provider-error normalization. Later service decisions specialize this
 contract rather than creating another request lifecycle.
 
+[ADR-131](../../adr/131-platform-services-closed-sdk-extension-abi-package-and-composition-boundary.md)
+keeps proprietary SDKs in separately built private packages, assigns discovery/trust/
+load/selection to distinct owners, constrains asynchronous provider exchange to a
+versioned C ABI and freezes explicit composition for development, headless, test,
+unsupported and certification profiles.
+
 ## Scope
 
 Platform services covered here:
@@ -61,6 +67,69 @@ What the core provides:
 Concrete backends live in separate platform packages such as
 `horo-platform-steam`, `horo-platform-ps5`, `horo-platform-xbox`, and are
 loaded by the runtime like any other extension package.
+
+No public/core target includes, links, delay-loads, fetches or generates from a closed
+SDK. Public CI builds the frontend, Null, Mock and ABI conformance fixtures without SDK
+paths. A private provider package owns SDK initialization, native objects/callbacks,
+credentials, error translation and certification policy and exposes only the Horo
+`platform.services.provider` C ABI profile.
+
+## Provider Package And Composition Boundary
+
+Provider discovery reads only verified `.horopkg` install records and inert manifests;
+it never probes PATH or loads candidates to discover capabilities. Package/Trust
+services resolve integrity, signature, permissions, license and enablement. ExtensionHost
+then loads the exact target binary, negotiates ABI and creates a candidate without
+mutating live capability state. The application composition root validates the copied
+Horo capability/limit snapshot and selects exactly one provider generation or explicit
+Null before frontend admission opens.
+
+The transaction is:
+
+```text
+verified package graph
+  -> exact module/entry and ABI negotiation
+  -> private SDK candidate initialization
+  -> copied capability/limit/error descriptor validation
+  -> product-policy selection and frontend reservation
+  -> atomic provider generation publication
+```
+
+Failure before publication revokes candidate sinks, destroys partial SDK state,
+unloads the candidate and releases package leases in reverse order while preserving an
+old active generation. Replacement prepares the new candidate at full overlap, closes
+and drains the old ADR-130 frontend generation at a safe point, then unloads old code
+only after native operations and callback epochs retire. Timeout retains the module
+lease rather than force-unloading code with possible callbacks.
+
+The versioned C ABI carries fixed-width values/enums, sized structs, canonical Horo
+IDs, call-borrowed byte/string spans, host-owned bounded sinks, adapter-scoped context/
+operation tokens and Horo request/result/error envelopes. It carries no STL/C++ object,
+exception, allocator ownership, retained borrowed span, SDK/native handle, credential,
+raw account identity or unrestricted provider payload. Context/operation tokens remain
+inside the private host adapter and never become frontend/gameplay identity.
+
+Provider callbacks translate native state inside the package and copy bounded Horo
+completion into a host sink tagged with provider generation. They never call gameplay
+or observers, retain sink buffers or publish after sink revocation. Both sides catch
+exceptions at the ABI edge; ABI status represents call validity, while valid operation
+failure uses the ADR-130 typed result envelope.
+
+Composition policy is explicit:
+
+- development/editor may use one locally trusted exact provider or Null;
+- tests use Mock/Null and public ABI fixtures;
+- headless defaults to Null unless a server-capable provider is explicitly manifested;
+- unsupported targets report typed optional unavailability or fail required startup,
+  never load a closest variant; and
+- certification builds freeze package/module hashes, ABI, SDK runtime, entitlement,
+  capability and selection in the signed product manifest, with marketplace/update,
+  arbitrary local providers, Mock and development fallback excluded.
+
+Gameplay uses only narrow Horo frontend capabilities. It cannot discover/select a
+provider, invoke the extension ABI or observe SDK types/tokens. Provider mapping and
+SDK evolution remain private; new gameplay semantics require a versioned public Horo
+contract rather than a native property escape.
 
 ## High-Level Architecture
 

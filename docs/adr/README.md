@@ -142,6 +142,7 @@ to the replacement.
 | [128](128-vfx-spawn-event-mapping-pooling-and-budget-enforcement.md) | VFX Spawn Event Mapping, Pooling and Budget Enforcement | Proposed | 2026-09-02 |
 | [129](129-vfx-editor-document-live-preview-and-module-authoring.md) | VFX Editor Document, Live Preview and Module Authoring | Proposed | 2026-09-02 |
 | [130](130-platform-services-frontend-request-lifetime-timeout-null-and-error-semantics.md) | Platform Services Frontend, Request Lifetime, Timeout, Null and Error Semantics | Proposed | 2026-09-02 |
+| [131](131-platform-services-closed-sdk-extension-abi-package-and-composition-boundary.md) | Platform Services Closed SDK, Extension ABI, Package and Composition Boundary | Proposed | 2026-09-02 |
 
 ## Conventions
 

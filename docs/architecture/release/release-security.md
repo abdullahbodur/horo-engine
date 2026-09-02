@@ -191,6 +191,15 @@ Signing keys are stored outside the repository and build output. Signing
 identity and verification metadata are recorded without embedding private
 material.
 
+Under [ADR-131](../../adr/131-platform-services-closed-sdk-extension-abi-package-and-composition-boundary.md),
+a certification/shipping profile freezes each private Platform Services provider's
+package/module hash, extension ABI, SDK runtime dependency, entitlement/capability
+declaration and selected-provider identity in the signed product manifest. Public/core
+targets retain no closed SDK dependency. Marketplace/update, arbitrary local provider,
+Mock and development fallback paths are excluded from that composition; failure of a
+required certified provider blocks the declared product capability rather than
+silently selecting an uncertified alternative.
+
 The publication process verifies signatures and hashes after upload. An
 artifact is not considered published until post-upload verification succeeds.
 
