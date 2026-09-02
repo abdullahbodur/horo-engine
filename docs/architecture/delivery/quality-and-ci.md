@@ -242,6 +242,7 @@ change; CI cannot overwrite or automatically approve candidate output.
 ### Flaky Test Policy
 
 GUI and visual tests are susceptible to flakiness. The CI policy is strict:
+
 - Any test that flips between pass/fail on the same commit is automatically marked as **Flaky** by the CI runner.
 - Flaky tests are immediately **quarantined** (they run, but do not fail the pipeline).
 - A tracking ticket is automatically generated for the owning team.
@@ -256,6 +257,7 @@ image mismatch to choose a passing sample or promotes either sample as a baselin
 ### Performance Regression Testing
 
 CI tracks numerical regressions on protected branches against a **7-day rolling average baseline** to prevent noise from temporary infrastructure spikes:
+
 - **Build Time**: Alerts if a CMake target's compilation time increases by >10%.
 - **Test Duration**: Alerts if integration suites degrade in execution time.
 - **Frame Time / Memory**: Automated headless scenes run with observability metrics enabled. If `engine.frame.cpu_time` or `process.memory.resident` regressions exceed 5%, the build is flagged for review.

@@ -630,7 +630,7 @@ python3 scripts/dev.py test --all --coverage
 python3 scripts/dev.py coverage-report
 ```
 
-Coverage reports are merged across compatible jobs. Coverage data is exclusively collected from **Unit**, **Integration**, and **Contract (CLI/MCP)** test layers. 
+Coverage reports are merged across compatible jobs. Coverage data is exclusively collected from **Unit**, **Integration**, and **Contract (CLI/MCP)** test layers.
 
 GUI test coverage is intentionally excluded from official metrics to prevent flaky line-hit variance (due to frame timings) and to avoid artificially inflating coverage numbers with UI layout execution.
 
