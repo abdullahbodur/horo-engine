@@ -814,6 +814,14 @@ boundary.
 
 ## Input Capture And Speech Boundary
 
+[ADR-070](../../adr/070-capture-and-voice-io-ownership.md) is the single normative
+owner of Audio, Platform, Security, NET, Speech and Editor capture boundaries.
+Platform/private backends own native input and permission adapters; Security/host
+policy owns purpose, consent, retention and privacy; Audio owns device-neutral
+capture sessions, timestamped PCM, bounded buffers, monitoring and recording
+candidates; NET owns packet/session/encryption/jitter/moderation policy. Speech and
+Editor own transcripts and explicit agent submission.
+
 Audio owns input-device discovery, permission-aware capture lifecycle,
 timestamped PCM format, bounded capture buffers, monitoring, and recording
 publication. Capture and output may share a platform device service, but they
@@ -835,6 +843,12 @@ editor mutation.
 Raw microphone data is privacy-sensitive. It is excluded from ordinary logs,
 conversation history, diagnostic bundles, and telemetry by default. Recording
 or retaining it requires a separate explicit user action and storage policy.
+
+Recorded candidates enter AST staging and atomic publication; the capture callback
+never writes project files. Network voice consumes capture through a bounded PCM
+adapter and returns validated remote PCM as an ordinary Audio source. Audio never
+sees sockets, packets, credentials or peer authority, and a slow NET/Speech/
+recording consumer cannot block capture or output.
 
 ## Threading Rules
 

@@ -168,6 +168,12 @@ explicit for update and package operations.
 
 ## Diagnostic And Privacy Policy
 
+[ADR-070](../../adr/070-capture-and-voice-io-ownership.md) treats microphone,
+remote voice, derived features and transcripts as privacy-sensitive. Security and
+host policy own capture purpose, consent provenance, retention/export/upload and
+diagnostic inclusion; an OS microphone grant does not authorize recording,
+networking, speech processing or telemetry. Raw content is excluded by default.
+
 Security-relevant events include:
 
 - trust grant, denial, and revocation
