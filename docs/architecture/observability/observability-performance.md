@@ -185,6 +185,13 @@ Registering an unknown dimension or exceeding the series budget produces a
 rate-limited diagnostic and drops the new series rather than growing memory
 without bound.
 
+[ADR-163](../../adr/163-xr-tooling-diagnostics-privacy-and-qualification-ownership.md)
+applies this contract to XR. Registered backend/profile/capability/phase/view-class/
+renderer/outcome values may be finite dimensions. Runtime/device/headset/user names,
+serials, paths/handles, extension strings, live XR IDs, project/scene/entity IDs and any
+pose/gaze/location/geometry are forbidden dimensions. Detailed correlation belongs only
+in bounded redacted events or an explicitly armed capture.
+
 ### C++ Metrics API
 
 The Horo facade exposes typed handles resolved once during initialization:

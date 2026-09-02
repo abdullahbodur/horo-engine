@@ -194,6 +194,13 @@ least-privilege generation; provider discovery or OS permission is not consent. 
 logs, crash bundles, metrics, replay, saves, AI context and support exports exclude these
 data unless a separate visible bounded retention/export policy admits them.
 
+[ADR-163](../../adr/163-xr-tooling-diagnostics-privacy-and-qualification-ownership.md)
+requires XR inspectors and captures to use the same purpose/consent/access revisions as
+shipping runtime. Development build type is not consent. Capture requests declare
+channels, duration/frame/byte bounds, redaction, protection, retention and export; local
+runtime overrides and detailed evidence never become portable project settings or public
+support claims.
+
 ## Process Execution
 
 Process policy validates:
