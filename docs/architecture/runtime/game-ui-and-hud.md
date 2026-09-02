@@ -15,7 +15,10 @@ instance lifecycle, frame update order, pause/suspension, input/presentation
 revisions, unload, compatibility and shutdown.
 [ADR-074](../../adr/074-runtime-ui-layout-units-and-measure-arrange.md) owns the
 logical unit, box-model, constraint-precedence, measure/arrange, overflow and
-deterministic-rounding contract. This document projects both decisions into the
+deterministic-rounding contract.
+[ADR-075](../../adr/075-runtime-ui-font-asset-family-and-fallback.md) owns runtime
+font source/face/family identity, deterministic face/fallback selection, cook and
+platform-discovery boundaries. This document projects those decisions into the
 element, authoring and product model.
 
 ```text
@@ -295,6 +298,39 @@ router consumes input snapshots during VariableUpdate through one per-player/
 viewport `RuntimeUiInputContextId`. It hit-tests the last successfully presented
 interaction revision. Split-screen focus/capture is independent unless an explicit
 game-instance modal policy blocks multiple contexts.
+
+## Runtime Text And Font Contract
+
+Runtime text/style documents reference stable `FontFamilyAssetId` or typed semantic
+font tokens, never filenames, installed-family strings, collection indexes, native
+font handles or glyph-atlas slots. A Horo family descriptor owns ordered faces with
+weight, stretch, normal/italic/oblique style, variation defaults and explicit
+synthetic-style policy.
+
+[ADR-075](../../adr/075-runtime-ui-font-asset-family-and-fallback.md) matches a
+requested face deterministically by style compatibility, stretch distance, weight
+distance and stable authored order. It expands the primary, family and locale/
+script fallback families into one finite acyclic chain and selects the first face
+whose immutable coverage supports a complete shaping cluster. Fallback never scans
+the operating system or splits a grapheme cluster codepoint by codepoint.
+
+Shipping UI declares `SelfContained` or explicitly capability-gated
+`SystemAugmented` font policy. Installed-font discovery is optional Platform
+capability data and is never appended as a hidden fallback. Editor preview can show
+a discovered face as non-portable, but portable save/cook requires an authorized
+tracked font source.
+
+Assets publishes versioned cooked family/face artifacts and dependencies; Runtime
+UI owns semantic matching, coverage and logical metrics; later text shaping owns
+glyph-run generation; Renderer owns only glyph atlas/raster resource realization.
+Font/locale/style/content changes prepare a complete new font/layout generation.
+Old face bytes, metrics, shaped runs, layout and atlas resources remain leased by
+old interaction/render snapshots until retirement.
+
+Missing required family/artifact fails candidate activation and retains last-good
+state. Unsupported later content follows the declared replacement,
+omit-with-advance or strict policy with bounded redacted diagnostics; it cannot
+perform runtime source I/O, remote download or platform fallback.
 
 ## Rendering Contract
 

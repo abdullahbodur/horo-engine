@@ -664,6 +664,37 @@ through the Assets provider API and validates the Audio-owned cooked header
 before preparing resident or streamed state. Source decoding, file access, and
 asset-provider calls never occur on the audio callback.
 
+### Runtime UI Font Domain Import And Cook Boundary
+
+[ADR-075](../../adr/075-runtime-ui-font-asset-family-and-fallback.md) applies the
+same generic-Assets/domain-semantics split to Runtime UI fonts. AST owns stable
+`AssetId`, tracked source/sidecar access, importer/cooker scheduling, canonical
+cache inputs, dependency graph, staging, atomic publication, rollback and runtime
+artifact delivery. It treats font contributions as bounded typed data and does not
+parse font tables, select a face/fallback, infer platform fonts or build glyph
+atlases.
+
+The Runtime UI Font domain owns source-container validation, face/family/variation
+schemas, deterministic matching/fallback expansion, coverage/metric indexes,
+subsetting closure, semantic cook fingerprints and cooked compatibility headers.
+The host registers those strategies through the generic catalogs; neither target
+creates a parallel asset identity, scheduler, cache, output tree or publication
+record.
+
+Cook dependencies include every source face, fallback family, locale/script
+fallback profile and required feature table. `FullFace`, declared-range and closed-
+static-corpus subsetting are explicit semantic inputs. Dynamic text must have a
+declared full/range coverage contract; a missing runtime glyph cannot open source
+files, recook, download bytes or scan installed fonts.
+
+Platform font discovery is an optional capability outside generic AST. A portable
+artifact imports authorized bytes into a tracked font source. An explicitly
+`SystemAugmented` manifest records exact discovered-face fingerprints and runtime
+requirements; successful same-name discovery is not a cache dependency or silent
+substitute. Font cook output contains family/face manifests, retained shaping/
+raster tables, coverage/metrics and integrity metadata, never GPU atlases, native
+font handles, absolute source paths or editor preview state.
+
 ### Determinism And Failure Invariants
 
 A cooker receives an invocation-bounded immutable source input, immutable
