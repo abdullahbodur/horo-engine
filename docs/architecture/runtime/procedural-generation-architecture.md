@@ -7,6 +7,31 @@ Horo Engine. It covers PCG graphs, node-based generation pipelines, spatial
 queries, point-based generation, runtime vs offline generation, and editor
 authoring tools.
 
+[ADR-150](../../adr/150-pcg-graph-source-cooked-plan-cache-and-runtime-ownership.md)
+is the normative owner of graph source, cooked-plan, cache, evaluation-intermediate,
+publication, replacement and destruction boundaries. The structures below describe
+domain semantics; they do not authorize runtime source interpretation or direct scene
+mutation from graph nodes.
+
+## Authority And Artifact Model
+
+PCG separates four representations with different owners and lifetimes:
+
+1. `PCGGraphSource` is versioned authored intent. Assets owns its durable identity,
+   bytes and revision; the PCG document owns only an unsaved working candidate.
+2. `CookedPCGPlan` is the one immutable executable representation. PCG Cook lowers a
+   closed source/dependency/node-library snapshot while Assets owns scheduling, cache,
+   staging and atomic generation publication.
+3. Evaluation intermediates are bounded operation-local point sets, attributes and
+   scratch. They are disposable and never become source or a global cache.
+4. Generated outputs are typed immutable candidates. RuntimeScene, Terrain/Foliage,
+   Physics, Render, Navigation or another target subsystem owns committed state after
+   an explicit host-coordinated transaction.
+
+Offline bake, live preview and runtime generation evaluate the same validated cooked
+plan. Runtime never parses graph source, invokes a compiler, repairs a plan or chooses
+a cache entry as active content.
+
 ## PCG Model
 
 PCG is expressed as a directed acyclic graph (DAG) of nodes:
@@ -86,14 +111,19 @@ struct PCGMeshEntry {
 
 ## PCG Graph Evaluation
 
-Graph evaluation is deterministic given the same seed and inputs:
+Graph evaluation is deterministic given the same cooked plan, seed and immutable
+input snapshot:
 
-1. Topological sort of nodes
-2. Evaluate each node in order
-3. Pass output point clouds to downstream nodes via edges
-4. Generation nodes produce scene objects as a side effect
-5. Generated objects are tagged with the generating PCG graph for later
-   cleanup/re-generation
+1. Validate the cooked plan, exact dependencies, capabilities and cost envelope.
+2. Capture immutable exposed and spatial inputs plus the deterministic seed domain.
+3. Reserve the complete evaluation-intermediate and output-candidate budget.
+4. Evaluate precomputed stages and pass operation-owned point data through typed edges.
+5. Return typed generated-output candidates with stable provenance.
+6. Revalidate and prepare every target owner, then publish all required outputs through
+   one aggregate commit or roll back the candidate completely.
+
+Generation nodes do not create scene objects as an evaluation side effect. Partial,
+failed, cancelled, stale or over-budget evaluations publish no external state.
 
 ```cpp
 struct PCGExecutionContext {
@@ -124,7 +154,10 @@ enum class PCGGenerationMode {
 ```
 
 Runtime PCG uses the same graph infrastructure as offline, with additional
-constraints (time budget per frame, asynchronous evaluation).
+constraints (time budget per frame, asynchronous evaluation). Both modes consume an
+exact immutable cooked-plan generation. Publishing or evicting a cook-cache entry does
+not replace a live plan; old plans and their dependencies remain leased until every
+evaluation and generated-output candidate drains.
 
 ## Determinism And Reproducibility
 
@@ -174,6 +207,7 @@ The PCG editor provides a node-graph editing surface:
 
 ## Related Documents
 
+- [PCG Graph Source, Cooked Plan, Cache and Runtime Ownership](../../adr/150-pcg-graph-source-cooked-plan-cache-and-runtime-ownership.md)
 - [PCG Graph Editor UI Reference](./pcg-graph-editor.html)
 
 - [Scene Runtime](./scene-runtime.md): generated objects as entities
