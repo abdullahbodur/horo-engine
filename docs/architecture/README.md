@@ -167,6 +167,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Platform Audio Backend Strategy](../adr/067-platform-audio-backend-strategy.md):
   equal-peer WASAPI, Core Audio, PipeWire, SDL3, and Null roles; the supported
   1.0 matrix; compile-time composition; selection; parity; and qualification.
+- [Music Transport and Cross-System Ownership](../adr/068-music-transport-and-cross-system-ownership.md):
+  sample scheduling, gameplay/narrative decisions, cinematic and animation clock
+  bridges, localized media, captions, and semantic save-state boundaries.
 - [Input Architecture](./runtime/input-architecture.md): input snapshots, action
   maps, focus, capture, modal routing, and simulation input frames.
 - [Game UI And HUD](./runtime/game-ui-and-hud.md): runtime game menus, HUDs,

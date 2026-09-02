@@ -615,6 +615,31 @@ or transition rules in gameplay/package code, then submit scheduled audio
 commands through the normal command queue. They do not require a separate
 real-time path.
 
+## Music Transport And Cross-System Ownership
+
+[ADR-068](../../adr/068-music-transport-and-cross-system-ownership.md) is the
+single normative owner of the sample-clock music transport and its Gameplay,
+Cinematic, Animation, Localization, Accessibility, and Save boundaries. Audio
+owns generation-scoped sample time, transport cursors, tempo/marker-to-sample
+conversion, exact command batches, prepared media, and playback observations.
+It does not own gameplay/adaptive-music decisions, narrative progression,
+sequence or animation clocks, locale selection, caption presentation, or the
+save archive.
+
+Cross-system clients submit bounded generation-tagged intent with stable request
+and semantic occurrence/cue IDs, source-clock evidence, timing target, and late/
+discontinuity policy. Audio control validates and maps the intent to the current
+sample epoch; only the callback applies the prepared batch at its sample boundary.
+Render sampling never emits authoritative sounds, and callback observations reach
+domain owners only through control-owned bounded queues at their allowed boundary.
+
+Localization resolves voice/media assets before Audio. Dialogue/gameplay fans
+semantic caption cues independently to Accessibility/UI, so mute, virtualization,
+missing media/device, or Audio failure cannot suppress subtitles. Save participants
+persist only semantic music/narrative state and optional stable section/musical
+position; voice handles, device sample epochs, queues, decoder/DSP state, buffers,
+and native handles are never serialized.
+
 ## Audio Zones
 
 `AudioZoneComponent` is a later engine feature, not required for the initial
