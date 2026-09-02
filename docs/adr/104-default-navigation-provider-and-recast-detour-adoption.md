@@ -6,7 +6,7 @@
 - **Scope**: First production grounded NavMesh provider, exact dependency pin, module selection, licensing, native encapsulation, threading, determinism, tile-cache/crowd policy, non-ground navigation boundary, upgrades and migration
 - **Issue**: [NAV-001.4](https://github.com/abdullahbodur/horo-engine/issues/1227)
 - **Jira**: [HORO-1227](https://horo-engine.atlassian.net/browse/HORO-1227)
-- **Related**: [ADR-005](005-submodule-compatibility.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-016](016-navigation-target-ownership-and-dependency-boundary.md), [ADR-022](022-ai-fixed-tick-order-authority-and-simulation-budget.md), [ADR-026](026-large-world-precision-and-floating-origin-strategy.md)
+- **Related**: [ADR-005](005-submodule-compatibility.md), [ADR-010](010-job-waiting-and-operation-store-ownership.md), [ADR-012](012-world-streaming-partition-authority-and-subsystem-boundaries.md), [ADR-016](016-navigation-target-ownership-and-dependency-boundary.md), [ADR-022](022-ai-fixed-tick-order-authority-and-simulation-budget.md), [ADR-026](026-large-world-precision-and-floating-origin-strategy.md), [ADR-109](109-avoidance-crowd-and-renderer-independent-budget.md)
 - **Normative documents**: [Navigation and AI Architecture](../architecture/runtime/navigation-and-ai-architecture.md), [Build System](../architecture/delivery/build-system.md), [Asset Pipeline](../architecture/runtime/asset-pipeline.md), [World Streaming](../architecture/runtime/world-streaming-architecture.md), [Concurrency and Jobs](../architecture/foundation/concurrency-and-jobs.md)
 - **Upstream references**: [Recast Navigation](https://github.com/recastnavigation/recastnavigation), [pinned source](https://github.com/recastnavigation/recastnavigation/commit/9f4ce64458dfae86e1239c525ddc219c4e9e06f1), [zlib license](https://github.com/recastnavigation/recastnavigation/blob/9f4ce64458dfae86e1239c525ddc219c4e9e06f1/License.txt), [development roadmap](https://github.com/recastnavigation/recastnavigation/blob/9f4ce64458dfae86e1239c525ddc219c4e9e06f1/Docs/_99_Roadmap.md), [O3DE RecastNavigation Gem](https://github.com/o3de/o3de/tree/development/Gems/RecastNavigation), [Godot NavigationServer3D](https://github.com/godotengine/godot/tree/master/modules/navigation_3d), [ROS 2 Nav2](https://github.com/ros-navigation/navigation2)
 
@@ -95,7 +95,7 @@ The selected source repository does not mean every upstream module is a baseline
 | `Detour` | Required production runtime baseline | Immutable tiled topology loading, polygon queries, pathfinding, nearest-point/raycast/corridor operations and direct tile add/remove |
 | `Recast` | Required bake/cook baseline only | Offline/editor/CLI/CI grounded NavMesh generation from validated owned geometry; absent from runtime-only/server packages that do not bake |
 | `DetourTileCache` | Optional `DynamicTileCarving` capability | Compressed local tile layers and bounded obstacle-driven rebuilds; not World Streaming, asset residency or canonical authored state |
-| `DetourCrowd` | Optional `DetourLocalAvoidance` capability | Best-effort local path following/steering/avoidance behind `INavigationCrowdBackend`; not required for path queries or 1.0 deterministic simulation |
+| `DetourCrowd` | Optional `DetourLocalAvoidance` capability | Best-effort safe-velocity/local avoidance behind `INavigationCrowdBackend`, with private corridor caching only; not required for path queries or 1.0 deterministic simulation |
 | `DebugUtils` | Not shipped as a public/runtime dependency | Horo extracts bounded neutral debug geometry; Renderer/editor never consume vendor draw interfaces |
 | `RecastDemo`, examples and upstream test application | Excluded from product builds/packages | May inform development; Horo adapter/contract tests own qualification |
 
@@ -205,13 +205,15 @@ evicted data or interpret a compressed native layer as portable authored truth.
 
 ### 8. DetourCrowd is optional local avoidance, not gameplay authority
 
-DetourCrowd may provide local path management, steering and dynamic avoidance for a
-bounded agent batch. NavigationRuntime owns logical agents/handles, fixed-tick
-admission, grouping, stable order, limits and desired-velocity publication.
-Character/Physics owns final movement/collision/transform authority.
+DetourCrowd may consume Horo-owned preferred velocities and immutable corridor/
+neighbor/obstacle facts to compute safe desired velocities for a bounded agent
+batch. NavigationRuntime owns route/corridor authority, logical agents/handles,
+fixed-tick admission, grouping, stable order, project profiles and desired-velocity
+publication. Character/Physics owns final movement/collision/transform authority.
 
-Detour crowd state, proximity grids, path queues, filters and agent indices are
-private and transient. They are not serialized, replicated or used as ECS identity.
+Detour local-corridor caches, crowd state, proximity grids, path queues, filters and
+agent indices are private and transient optimizations, not path authority. They are
+not serialized, replicated or used as ECS identity.
 Save/network state records Horo semantic intent and reconstructs optional provider
 state. A provider failure or absence returns `Unsupported`/safe-stop policy; it does
 not fall back to an unbounded Horo loop inside the adapter.

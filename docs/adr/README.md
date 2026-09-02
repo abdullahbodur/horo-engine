@@ -120,6 +120,7 @@ to the replacement.
 | [106](106-navigation-bake-ownership-transaction-and-cache.md) | Navigation Bake Ownership, Transaction and Cache | Proposed | 2026-09-02 |
 | [107](107-navigation-query-consistency-and-snapshot-ownership.md) | Navigation Query Consistency and Snapshot Ownership | Proposed | 2026-09-02 |
 | [108](108-dynamic-overlay-carving-and-tile-rebuild-policy.md) | Dynamic Overlay, Carving and Tile-Rebuild Policy | Proposed | 2026-09-02 |
+| [109](109-avoidance-crowd-and-renderer-independent-budget.md) | Avoidance, Crowd and Renderer-Independent Budget | Proposed | 2026-09-02 |
 
 ## Conventions
 

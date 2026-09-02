@@ -326,6 +326,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Dynamic Overlay, Carving and Tile-Rebuild Policy](../adr/108-dynamic-overlay-carving-and-tile-rebuild-policy.md):
   change-category ownership across avoidance, blockers/gates, optional carving,
   runtime rebuild, authored recook and streamed cooked tiles.
+- [Avoidance, Crowd and Renderer-Independent Budget](../adr/109-avoidance-crowd-and-renderer-independent-budget.md):
+  path/safe-velocity/movement ownership, optional best-effort DetourCrowd,
+  deterministic admission, independent project scale/quality and safe overload.
 
 - [Cinematic Sequencer Architecture](./runtime/cinematic-sequencer-architecture.md):
   timeline, tracks, clock authority, typed property bindings, evaluation phase,
