@@ -21,11 +21,6 @@ namespace {
         std::size_t count{0};
     };
 
-    void RecordBackendRelease(void *const context, const RenderResourceClass, const std::uint64_t backendInstance) noexcept {
-        auto &released = *static_cast<ReleasedBackendResources *>(context);
-        released.instances[released.count++] = backendInstance;
-    }
-
     TEST_CASE("Resource registry publishes a pending generation and records completion", "[unit][runtime][renderer][resource]") {
         const auto owner = AcquireRenderResourceOwnerId();
         REQUIRE(owner.HasValue());
@@ -278,8 +273,9 @@ namespace {
                                          .maximumPendingRequests = 8,
                                          .retirementDrainBudget = 1,
                                          .maximumOperationResults = 8},
-                                        &released,
-                                        &RecordBackendRelease};
+                                        [&released](const RenderResourceClass, const std::uint64_t backendInstance) noexcept {
+            released.instances[released.count++] = backendInstance;
+        }};
 
         auto buffer = registry.Reserve(RenderResourceClass::Buffer);
         REQUIRE(buffer.HasValue());

@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <optional>
 #include <span>
 #include <vector>
@@ -44,13 +45,13 @@ namespace Horo::Render::Detail {
         [[nodiscard]] bool IsValid() const noexcept;
     };
 
-    using BackendResourceRelease = void (*)(void *context, RenderResourceClass resourceClass, std::uint64_t backendInstance) noexcept;
+    using BackendResourceRelease = std::function<void(RenderResourceClass resourceClass, std::uint64_t backendInstance)>;
 
     /** @brief Frontend-private owner of resident identity, state, pins, and retirement. */
     class RenderResourceRegistry final {
     public:
-        RenderResourceRegistry(RenderResourceOwnerId owner, RenderResourceRegistryLimits limits, void *releaseContext = nullptr,
-                               BackendResourceRelease releaseBackendResource = nullptr);
+        RenderResourceRegistry(RenderResourceOwnerId owner, RenderResourceRegistryLimits limits,
+                               BackendResourceRelease releaseBackendResource = {});
         ~RenderResourceRegistry() = default;
 
         RenderResourceRegistry(const RenderResourceRegistry &) = delete;
@@ -117,8 +118,7 @@ namespace Horo::Render::Detail {
         std::uint64_t nextOperation_{1};
         std::uint32_t pendingRequests_{0};
         bool acceptingRequests_{true};
-        void *releaseContext_{nullptr};
-        BackendResourceRelease releaseBackendResource_{nullptr};
+        BackendResourceRelease releaseBackendResource_;
     };
 
     [[nodiscard]] Result<RenderResourceOwnerId> AcquireRenderResourceOwnerId();
