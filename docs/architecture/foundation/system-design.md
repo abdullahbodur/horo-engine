@@ -319,6 +319,9 @@ HoroEngine::NavigationRecastDetour
 HoroEngine::NavigationNull
 HoroEngine::TerrainApi
 HoroEngine::TerrainRuntime
+HoroEngine::XRApi
+HoroEngine::XRRuntime
+HoroEngine::XROpenXR
 HoroEngine::RenderApi
 HoroEngine::RenderFrontend
 HoroEngine::RenderModuleAbi
@@ -417,6 +420,15 @@ readiness and retirement. RuntimeScene holds typed bindings, World Streaming own
 aggregate cell admission/budgets, and Render/Physics/Navigation own their realized
 resources. Hosts compose narrow integration ports without reverse dependencies or
 native handles in the Terrain API.
+
+[ADR-157](../../adr/157-xr-ownership-runtime-composition-and-capability-tier.md)
+makes XR another runtime vertical slice. `XRApi` owns Horo-only typed identities,
+capabilities, snapshots and narrow interfaces; `XRRuntime` owns engine-visible
+runtime/session/frame/space/view generations and coordination; `XROpenXR` privately
+owns loader and native OpenXR instance/system/session/action/space/swapchain/layer state.
+Application selects the XR/Platform/Renderer/Input tuple before activation. Renderer
+owns GPU work/external resources, Input owns canonical actions and Platform supplies OS
+host primitives; none owns the XR session. Native types never enter `XRApi`.
 
 [ADR-054](../../adr/054-extension-and-package-authority-boundary.md) keeps
 extension package composition in the application boundary. Package resolution,

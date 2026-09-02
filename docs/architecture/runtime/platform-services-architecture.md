@@ -69,6 +69,10 @@ Deliberately out of scope:
 - In-app purchase and DLC entitlement validation (owned by release/DRM flow)
 - Platform OS abstractions such as filesystem, window, or process
   (`platform-abstraction.md`)
+- XR loader/runtime/system/session/device/capability and mixed-reality permission state
+  ([XR Architecture](./vr-ar-architecture.md) and
+  [ADR-157](../../adr/157-xr-ownership-runtime-composition-and-capability-tier.md));
+  Platform Services account identity or presence never grants XR authority or consent
 
 ## Core vs Modular
 

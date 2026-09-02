@@ -484,6 +484,9 @@ dependency direction in [System Design](./foundation/system-design.md).
   runtime-driven view configurations, renderer/input boundaries, interaction,
   mixed reality, privacy, standalone Android dependencies, and evidence-based
   device qualification.
+- [XR Ownership, Runtime Composition and Capability Tier](../adr/157-xr-ownership-runtime-composition-and-capability-tier.md):
+  XRApi/XRRuntime/OpenXR ownership, explicit host composition, typed profile admission,
+  deliberate Platform/Renderer/Input non-owners and closed 1.0 versus post-1.0 scope.
 
 ## Extensions
 
