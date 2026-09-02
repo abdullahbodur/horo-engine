@@ -474,6 +474,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [PCG Graph Document, Preview, Bake and Undo Ownership](../adr/155-pcg-graph-document-preview-bake-and-undo-ownership.md):
   persistent typed-command graph documents, semantic history, isolated ordinary-path
   preview and explicit provenance-aware bake/undo transactions.
+- [PCG Scale Budgets, Trust and Release Scope](../adr/156-pcg-scale-budgets-trust-and-release-scope.md):
+  exact operational profile ceilings and overload behavior, hostile-input/privacy
+  boundaries, qualification workloads and closed 1.0 versus post-1.0 scope.
 - [Multiplayer Replication Architecture](./runtime/multiplayer-replication-architecture.md):
   replication roles, property deltas, RPCs, prediction, interest management,
   dedicated servers, and security.
