@@ -293,6 +293,14 @@ retain logical source-step/schema/generation identity and typed unavailable, deg
 lost or stale outcomes. Null/fakes validate bounds and delayed publication but cannot
 qualify native copy, mapping, synchronization or driver behavior.
 
+[ADR-125 VFX sorting parity](../../adr/125-vfx-transparency-sorting-and-pass-placement.md)
+requires the same semantic pass/depth mapping and canonical view-depth/batch/particle
+ordering. Backends execute frontend-selected stable bitonic/radix plans with declared
+count, scratch, key-layout and synchronization limits; they do not replace the
+algorithm, accept native order or submit unsorted alpha. Null/fakes validate plans,
+ties, ceilings and delayed timing records, while native ordering/time qualification
+still requires each shipped backend.
+
 All backends additionally obey
 [ADR-041's renderer diagnostics model](../../adr/041-backend-neutral-renderer-diagnostics-model.md).
 Equivalent unsupported, invalid, degraded, lost and recovered conditions use the

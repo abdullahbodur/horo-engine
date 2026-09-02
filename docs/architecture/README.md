@@ -378,6 +378,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [VFX GPU Simulation, Readback and Compute Fallback](../adr/124-vfx-gpu-simulation-readback-and-compute-fallback.md):
   visual-only GPU authority, cooked opt-in asynchronous readback, explicit
   compute-less fallback and unified CPU/GPU/readback admission accounting.
+- [VFX Transparency, Sorting and Pass Placement](../adr/125-vfx-transparency-sorting-and-pass-placement.md):
+  semantic particle pass/depth mapping, stable per-view CPU/GPU sorting, additive
+  exemption, finite sort ceilings and measured frame-time targets.
 - [Post-Processing And Effects Architecture](./runtime/post-processing-and-effects-architecture.md):
   screen-space effects, HDR post chain, tonemapping, color grading, and
   accessibility pass ordering.
