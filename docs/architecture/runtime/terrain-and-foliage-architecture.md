@@ -112,6 +112,15 @@ propagate to collision (excluded from collision mesh) and NavMesh (excluded
 from walkable area). Characters and physics objects pass through holed
 regions.
 
+[ADR-108](../../adr/108-dynamic-overlay-carving-and-tile-rebuild-policy.md)
+requires persistent/editor height, hole and spline changes to recook affected
+collision/navigation tiles through their owning application operations. Runtime
+terrain deformation cannot mutate cooked NavMesh or use simple obstacle carving as
+general polygonization. It first makes the affected region conservatively
+unavailable, then requires an explicitly composed transactional runtime grounded-
+tile rebuild capability; the 1.0 runtime baseline returns
+`UnsupportedDynamicChange` and keeps the safe exclusion until recook/replacement.
+
 ### Material Blending
 
 Terrain materials are blended per-vertex using weight layers:
@@ -189,11 +198,17 @@ physics system as static bodies. NavMesh carving at runtime (dynamic
 obstacle removal) is not supported for foliage; foliage collision is
 baked into the initial NavMesh generation.
 
+Removing/destructing baked navigation-blocking foliage does not automatically open
+walkability. It requires authored affected-tile recook or the explicit ADR-108
+runtime rebuild capability over authoritative post-change geometry. Adding a
+runtime blocker may use the logical overlay and supported optional carving, but
+failure/absence remains conservative and observable.
+
 ### Render Extraction
 
 Terrain and foliage submit instances to the frame via `TerrainRenderExtractor`:
 
-```
+```text
 TerrainRenderExtractor::Extract(RenderWorldSnapshot& snapshot)
   1. Iterate CPU/streaming/frustum-visible terrain tile candidates
   2. For each tile, push terrain draw commands to snapshot.opaque

@@ -323,6 +323,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Navigation Query Consistency and Snapshot Ownership](../adr/107-navigation-query-consistency-and-snapshot-ownership.md):
   combined topology/overlay snapshots, immediate versus async queries, owner-thread
   completion publication, coverage outcomes, staleness and lease-safe retirement.
+- [Dynamic Overlay, Carving and Tile-Rebuild Policy](../adr/108-dynamic-overlay-carving-and-tile-rebuild-policy.md):
+  change-category ownership across avoidance, blockers/gates, optional carving,
+  runtime rebuild, authored recook and streamed cooked tiles.
 
 - [Cinematic Sequencer Architecture](./runtime/cinematic-sequencer-architecture.md):
   timeline, tracks, clock authority, typed property bindings, evaluation phase,
