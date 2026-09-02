@@ -22,6 +22,9 @@ bus, secret vault, or replacement for authoritative runtime models.
   snapshot becomes active.
 - Unknown keys and invalid values produce diagnostics; they do not silently
   change behavior.
+- Domain projectors such as ADR-103 Network consume the one resolved snapshot and
+  apply typed cross-field/capability constraints; they do not implement another
+  source-precedence resolver.
 
 ## Configuration Domains
 
@@ -48,6 +51,28 @@ resolution, trust decisions, and development overrides follow
 [Horo Package System](../packages/package-system.md) and the dedicated
 [Package Source Policy](../../adr/058-package-source-policy.md). Generic settings
 precedence does not choose package authorities or resolve source conflicts.
+
+### Network configuration specialization
+
+[ADR-103](../../adr/103-network-project-configuration-and-build-profile-ownership.md)
+uses this resolver for every editor, CLI, MCP, CI and packaged-host entry point.
+The Network module owns inert `network.*` descriptors, legal sources, validation
+and projection into one `EffectiveNetworkConfiguration`; Foundation remains the
+only source/precedence/provenance authority.
+
+Portable project policy, local user preview preferences, product release profiles,
+memory-only host requests and private credential bindings remain distinct typed
+inputs. Precedence applies only to sources permitted by each descriptor. Product
+capability and security floors constrain the winning values: a higher-precedence
+override cannot add an unpackaged network mode/provider, weaken trust policy,
+expand a qualified network budget or import renderer/device tiers.
+
+Project files and packaged product manifests contain no credential value, private
+key or machine-specific credential binding. They may declare stable credential
+requirements; private user/CI/host input binds those requirements to opaque
+provider references, and only the consuming operation resolves a short-lived
+secure value. Safe provenance and ordinary environment summaries omit both raw
+values and machine-specific references.
 
 ## Schema
 

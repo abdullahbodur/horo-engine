@@ -24,7 +24,8 @@ package may contain both client and server support while one invocation selects
 only one mode. Conversely, a client-only package must not manufacture server
 authority because a launch argument or project value asks it to listen. The build
 profile and project-configuration ownership that produce the support declaration
-belong to NET-009.1; this decision defines the runtime seam they must satisfy.
+belong to [ADR-103](103-network-project-configuration-and-build-profile-ownership.md);
+this decision defines the runtime seam they must satisfy.
 
 Listen servers make process-global answers especially unsafe. Their authority
 server world and local client world share a process but not canonical state,
@@ -75,7 +76,8 @@ Mode selection cannot add a missing target/backend, load an undeclared module,
 weaken a trust policy or reinterpret headless/render/audio support. A package may
 support both `Client` and `DedicatedServer`; one process invocation still activates
 exactly one plan. The source, precedence and cook rules for the product declaration,
-profile and request remain NET-009.1.
+profile and request are defined by
+[ADR-103](103-network-project-configuration-and-build-profile-ownership.md).
 
 ### 2. The host validates one finite composition plan
 
