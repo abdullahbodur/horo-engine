@@ -789,6 +789,20 @@ directly. Singular parents, non-finite input, and unrepresentable transform
 updates terminate the transient preview through a typed error; they must not
 substitute identity axes or commit a partial result.
 
+Terrain/Foliage viewport tools follow
+[ADR-142](../../adr/142-terrain-foliage-document-tool-undo-and-preview-ownership.md).
+Their controllers own routed pointer capture, brush/spline visualization and an
+ephemeral revision-fenced stroke accumulator only. The foliage palette owns active type
+and filters as workspace presentation state. Tools submit typed edit intent to the
+active asset-rooted document; they cannot write canonical samples/placements, dirty
+state, history, cooked tiles, TerrainRuntime or renderer/physics/navigation state.
+
+The viewport may render a disposable interaction overlay or an immutable isolated
+preview-session result. Modal capture, tool/document switch, revision change, capacity
+denial, panel detachment or shutdown cancels the interaction without a document edit.
+Pointer release submits at most one bounded operation whose exact affected tile/patch
+closure and before/after history are owned by the document executor.
+
 ### Right Dock
 
 Visible as the Properties panel.
@@ -1064,6 +1078,10 @@ Required coverage:
   modal blocks their interaction
 - viewport panels receive a render-target view without owning backend resources
 - transform editing publishes one document event only after transaction commit
+- terrain/foliage gestures commit at most one bounded document operation and cancel
+  exactly across modal capture, tool/document switch, stale revision and panel detach
+- terrain palettes/overlays own no canonical source/history/runtime state, and isolated
+  preview close rejects stale work before retiring generation-owned resources
 
 ## Why Not Put This in Application?
 

@@ -23,6 +23,9 @@ capacity, persistence handoff and eviction ownership.
 [ADR-141](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md)
 defines immutable consumer snapshots, typed readiness receipts, owner-safe-point
 publication, aggregate activation, rollback and reverse-DAG retirement.
+[ADR-142](../../adr/142-terrain-foliage-document-tool-undo-and-preview-ownership.md)
+defines persistent authoring documents, typed tool routing, bounded tile-patch history,
+isolated preview and distinct source-save/cook/runtime-persistence boundaries.
 
 ## Ownership And Data Boundaries
 
@@ -183,12 +186,18 @@ The editor terrain tools support:
 - Hole carving (per-vertex visibility mask)
 - Spline-based path/road deformation
 
-Paint operations use the terrain data model with undo support. Undo captures
-the terrain data model state change (height/weight snapshot), not brush
-settings. Brush parameters (radius, falloff, strength) are transient UI
-state preserved per-session in the editor workspace state; the undo stack
-does not scroll brush settings. Changing the brush mid-session does not
-invalidate prior undo entries.
+Paint operations use the terrain authoring document and typed edit-operation path from
+[ADR-142](../../adr/142-terrain-foliage-document-tool-undo-and-preview-ownership.md).
+Before mutation, the document executor freezes and reserves the exact canonical set of
+affected tile/patch rectangles, including seam/apron and placement dependencies. One
+atomic history entry owns lossless bounded `before` and `after` patch snapshots. A full
+heightfield/dataset copy per edit and partial tile-by-tile commit are prohibited.
+
+Undo/redo restores those committed patches and never reruns brush/noise/scatter
+algorithms or reads current tool settings. Brush radius, falloff, strength, active layer
+and foliage type are transient per-session workspace state; changing them does not alter
+prior entries. A continuous gesture owns one revision-fenced preview overlay and commits
+at most one operation, while cancellation restores the exact committed view.
 
 Hole carving sets a per-vertex visibility flag in the terrain data. Holes
 propagate to collision (excluded from collision mesh) and NavMesh (excluded
@@ -433,6 +442,26 @@ Terrain and foliage authoring tools are registered through the
 The `EditorToolbar` only produces typed results; terrain/foliage domain
 operations are performed by the registered tools consuming those results.
 
+Each canonical dataset and its dataset-local foliage placement source are edited through
+one persistent asset-rooted authoring document. Reusable foliage-type definitions remain
+separate referenced asset documents. The panel host owns route/focus/lifetime; document
+services own source identity, revision, command/history, dirty/save/recovery/conflict
+and derived preview state. Viewport tools, the foliage palette and overlays own input
+and presentation only. They submit revision-checked `TerrainEditOperation` intent and
+cannot mutate source, cooked tiles, TerrainRuntime or consumer-native state directly.
+
+Interactive brush feedback is a disposable document interaction overlay. Higher-
+fidelity preview captures one immutable source revision, uses the ordinary Terrain cook
+contract and activates through an isolated generation-fenced preview session. Preview
+success never clears dirty state, and stale results cannot become current by matching a
+tile coordinate. Closing the document cancels owned work and retains its leases until
+preview/runtime consumers acknowledge retirement.
+
+Canonical source save is the shared atomic document-save path. Asset cook/publication,
+editor autosave/recovery and ADR-140 Runtime Save foliage deltas are separate owners and
+states. An intentional edit spanning a Scene binding and terrain/foliage source uses a
+staged multi-document application transaction rather than two UI callbacks.
+
 ## Runtime Lifecycle And Readiness
 
 TerrainRuntime uses the exhaustive aggregate states `Absent`, `Preparing`, `Prepared`,
@@ -617,7 +646,13 @@ Required coverage includes:
 - headless, dedicated server, editor preview, Null Render and every interactive backend
   consuming the same Horo contract; and
 - bounded owner/worker/native-thread handoff, frame-hot allocation/I/O checks, device
-  loss, world unload, repeated shutdown and retirement timeout.
+  loss, world unload, repeated shutdown and retirement timeout;
+- exact bounded affected-patch planning for every authoring tool, no whole-heightfield
+  history entry, deterministic apply/undo/redo symmetry and one commit per gesture;
+- authoring failure/cancel/stale completion preserving source revision, dirty state,
+  history and notifications at every staged boundary; and
+- source save, autosave/recovery, transient preview cook, published cook and Runtime Save
+  state separation, including isolated preview teardown and stale-result rejection.
 
 ## Related Documents
 
@@ -656,3 +691,6 @@ Required coverage includes:
 - [ADR-141](../../adr/141-terrain-foliage-cross-system-ownership-and-readiness.md):
   consumer snapshots and receipts, owner-safe-point staging, aggregate readiness,
   rollback, runtime failure and reverse-dependency retirement
+- [ADR-142](../../adr/142-terrain-foliage-document-tool-undo-and-preview-ownership.md):
+  persistent authoring documents, typed tool routing, bounded tile-patch undo/redo,
+  isolated preview and source-save/cook/runtime-persistence separation
