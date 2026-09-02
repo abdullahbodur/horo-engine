@@ -316,6 +316,14 @@ Rules:
 - detachment happens when the character leaves the platform, becomes airborne, or
   is teleported
 
+[ADR-108](../../adr/108-dynamic-overlay-carving-and-tile-rebuild-policy.md)
+keeps moving-platform motion and attachment under Character/Physics authority.
+Navigation may expose a stable timed or conditional link for a platform transfer,
+but the 1.0 baseline does not continuously move or rebuild grounded NavMesh with
+the platform. When transfer conditions cannot be proven, the link remains
+unavailable and the dynamic-change outcome is typed rather than inferred from
+render or Physics transforms.
+
 ## Surface Materials
 
 Surface materials describe the physical and gameplay properties of a collider.

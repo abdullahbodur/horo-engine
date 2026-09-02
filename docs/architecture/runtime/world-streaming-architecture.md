@@ -382,6 +382,15 @@ return `NoNavigationData`, while explicitly partial queries carry missing covera
 neither Navigation nor a held lease performs direct loading or turns absence into
 `NoPath`.
 
+[ADR-108](../../adr/108-dynamic-overlay-carving-and-tile-rebuild-policy.md)
+classifies streamed geometry strictly as cooked cell tile installation/removal.
+Navigation cannot rebuild from streamed Render/Physics geometry, use TileCache as a
+second loader or keep an evicted tile logically active. Cell-bound obstacle overlays
+and carve/rebuild candidates carry the exact cell generation and are revoked on
+eviction; late completions are stale. Session-persistent semantic obstacles are
+reprojected only after replacement cell topology becomes Active. All staging,
+retired layers and query leases remain charged to the existing world ledger.
+
 ## Runtime Save And Dormant Cell State
 
 [Runtime persistence](./save-game-and-persistence.md) captures a coherent revision of

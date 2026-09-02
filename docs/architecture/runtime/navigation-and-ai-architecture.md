@@ -495,14 +495,32 @@ For large worlds, hierarchical pathfinding is used:
 
 ## Dynamic Obstacles
 
-Moving obstacles (other agents, vehicles, doors) affect navigation:
+[ADR-108](../../adr/108-dynamic-overlay-carving-and-tile-rebuild-policy.md)
+separates local avoidance, logical blocker/link/modifier overlays, optional
+`DynamicTileCarving`, optional `RuntimeGroundedTileRebuild`, authored recook and
+World Streaming tile transactions. These mechanisms are not fallbacks with
+equivalent authority: cooked `NavMeshData` is immutable, and every runtime topology
+change stages and atomically publishes a new ADR-107 combined generation.
 
-- Dynamic obstacles are applied as a scene-scoped runtime avoidance overlay; cooked `NavMeshData` is not mutated
-- Carving uses cylindrical or box-shaped cutouts
-- When the optional `DynamicTileCarving` capability is composed, carving stages a
-  bounded candidate for affected tiles; without it, the conservative overlay and
-  path invalidation remain available without native tile rebuilding
-- Paths are re-computed when an agent's path intersects a new obstacle
+Moving navigation agents use path following plus bounded local avoidance/safe
+velocity; Character/Physics owns movement. They are never carved per transform.
+Large moving bodies and newly added simple blockers publish a conservative logical
+overlay first. Normal doors use stable `NavigationLinkId` gate state and an optional
+threshold blocker. Declared modifiers use typed overlay/filter revisions rather
+than direct polygon/provider-flag writes.
+
+When `DynamicTileCarving` and retained admitted tile layers are available, supported
+finite box/cylinder blockers may produce a detached affected-tile candidate. Missing
+capability/layers or unsupported shapes leave the conservative overlay visible and
+return a typed disposition. Removing a blocker restores only topology represented
+by the retained base layers.
+
+Arbitrary terrain, destruction or new-static-geometry changes require ADR-106
+authored recook, or a separately composed `RuntimeGroundedTileRebuild` capability
+over an immutable authoritative geometry snapshot. That runtime capability is not
+in the 1.0 baseline and its output remains transient; it cannot update Asset
+Registry, cook cache, `current.json` or Scene source. Streamed geometry installs/
+removes already cooked cell tiles only through World Streaming.
 
 ```cpp
 struct DynamicObstacle {
@@ -513,6 +531,13 @@ struct DynamicObstacle {
     ObstaclePriority   priority;
 };
 ```
+
+Adding/closing a blocker targets the next eligible `NavIntentCommit` and fails
+closed before asynchronous carve/rebuild work. Opening new reachability waits for a
+validated gate/topology generation. Overlay, carving, rebuild, recook and residency
+each have separate queue/work/memory/staging/retired budgets and typed outcomes;
+graphics tiers never choose them. Paths intersecting a changed dependency are
+invalidated and re-requested under ADR-107 consistency policy.
 
 ## AI Perception
 
