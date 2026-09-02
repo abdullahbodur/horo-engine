@@ -6,6 +6,7 @@
  */
 
 #include "Horo/Runtime/Render/Mesh.h"
+#include "Horo/Runtime/Render/RenderResource.h"
 
 #include <algorithm>
 #include <cmath>
@@ -64,18 +65,6 @@ namespace Horo::Render {
         }
 
         [[nodiscard]] constexpr auto operator<=>(const RenderMeshHandle &) const noexcept = default;
-    };
-
-    /** @brief Generation-safe identity of one frontend-owned offscreen target. */
-    struct RenderTargetHandle {
-        std::uint32_t index{0};
-        std::uint32_t generation{0};
-
-        [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return index != 0 && generation != 0;
-        }
-
-        [[nodiscard]] constexpr auto operator<=>(const RenderTargetHandle &) const noexcept = default;
     };
 
     /** @brief Supported backend-neutral camera projection families. */

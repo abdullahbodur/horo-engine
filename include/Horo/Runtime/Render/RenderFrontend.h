@@ -12,6 +12,10 @@
 #include <vector>
 
 namespace Horo::Render {
+    namespace Detail {
+        class RenderResourceRegistry;
+    }
+
     class RenderFrontend;
 
     /**
@@ -159,18 +163,17 @@ namespace Horo::Render {
         };
 
     public:
-        RenderFrontend(std::unique_ptr<IRenderBackend> backend, ConstructionKey) noexcept;
+        RenderFrontend(std::unique_ptr<IRenderBackend> backend, RenderResourceOwnerId resourceOwner, ConstructionKey);
 
     private:
         [[nodiscard]] bool IsLiveTarget(RenderTargetHandle target, FramebufferExtent extent) const noexcept;
 
         struct TargetRecord {
             FramebufferExtent extent{};
-            std::uint32_t generation{1};
-            bool live{false};
         };
 
         std::unique_ptr<IRenderBackend> backend_;
+        std::unique_ptr<Detail::RenderResourceRegistry> resourceRegistry_;
         RenderFrameScope *activeFrameScope_{nullptr};
         IStaticMeshPassExecutor *staticMeshPassExecutor_{nullptr};
         std::vector<TargetRecord> targets_{{}};

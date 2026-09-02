@@ -1,6 +1,7 @@
 #include "Horo/Runtime/Render/RenderFrontend.h"
 
 #include "RenderFrontendErrors.h"
+#include "RenderResourceRegistry.h"
 
 #include <string>
 #include <utility>
@@ -167,16 +168,25 @@ namespace Horo::Render {
                 MakeFrontendError(FrontendErrors::InitializeException, "Renderer backend initialization threw."));
         }
 
-        return Result<std::unique_ptr<RenderFrontend>>::Success(std::make_unique<RenderFrontend>(std::move(backend), ConstructionKey{}));
+        auto resourceOwner = Detail::AcquireRenderResourceOwnerId();
+        if (resourceOwner.HasError()) {
+            backend->Shutdown();
+            return Result<std::unique_ptr<RenderFrontend>>::Failure(resourceOwner.ErrorValue());
+        }
+        return Result<std::unique_ptr<RenderFrontend>>::Success(
+            std::make_unique<RenderFrontend>(std::move(backend), resourceOwner.Value(), ConstructionKey{}));
     }
 
-    RenderFrontend::RenderFrontend(std::unique_ptr<IRenderBackend> backend, ConstructionKey) noexcept : backend_(std::move(backend)) {}
+    RenderFrontend::RenderFrontend(std::unique_ptr<IRenderBackend> backend, const RenderResourceOwnerId resourceOwner, ConstructionKey)
+        : backend_(std::move(backend)),
+          resourceRegistry_(std::make_unique<Detail::RenderResourceRegistry>(resourceOwner, Detail::RenderResourceRegistryLimits{})) {}
 
     /** @copydoc RenderFrontend::~RenderFrontend */
     RenderFrontend::~RenderFrontend() {
         if (activeFrameScope_ != nullptr) {
             activeFrameScope_->Abort();
         }
+        resourceRegistry_->Shutdown();
         backend_->Shutdown();
     }
 
@@ -267,25 +277,40 @@ namespace Horo::Render {
         if (!extent.IsValid())
             return Result<RenderTargetHandle>::Failure(
                 MakeFrontendError(FrontendErrors::InvalidTargetExtent, "Offscreen target extent is invalid."));
-        for (std::size_t index = 1; index < targets_.size(); ++index) {
-            TargetRecord &record = targets_[index];
-            if (!record.live) {
-                record.live = true;
-                record.extent = extent;
-                return Result<RenderTargetHandle>::Success(RenderTargetHandle{static_cast<std::uint32_t>(index), record.generation});
-            }
+        auto reservation = resourceRegistry_->Reserve(Detail::RenderResourceClass::RenderTarget);
+        if (reservation.HasError()) {
+            return Result<RenderTargetHandle>::Failure(reservation.ErrorValue());
         }
-        targets_.push_back(TargetRecord{.extent = extent, .generation = 1, .live = true});
-        return Result<RenderTargetHandle>::Success(RenderTargetHandle{static_cast<std::uint32_t>(targets_.size() - 1), 1});
+        const Detail::RenderResourceIdentity identity = reservation.Value().identity;
+        if (identity.slot >= targets_.size()) {
+            targets_.resize(static_cast<std::size_t>(identity.slot) + 1);
+        }
+        targets_[identity.slot].extent = extent;
+        if (const Result<void> published = resourceRegistry_->Publish(Detail::RenderResourceClass::RenderTarget, identity, identity.slot);
+            published.HasError()) {
+            const Error publicationError = published.ErrorValue();
+            static_cast<void>(resourceRegistry_->Fail(Detail::RenderResourceClass::RenderTarget, identity, publicationError));
+            static_cast<void>(resourceRegistry_->DrainRetirements());
+            targets_[identity.slot] = {};
+            return Result<RenderTargetHandle>::Failure(publicationError);
+        }
+        return Result<RenderTargetHandle>::Success(RenderTargetHandle{identity.owner, identity.slot, identity.generation});
     }
 
     /** @copydoc RenderFrontend::ResizeOffscreenTarget */
     Result<void> RenderFrontend::ResizeOffscreenTarget(const RenderTargetHandle target, const FramebufferExtent extent) {
-        if (!extent.IsValid() || target.index >= targets_.size() || !targets_[target.index].live ||
-            targets_[target.index].generation != target.generation)
-            return Result<void>::Failure(
-                MakeFrontendError(FrontendErrors::StaleRenderTarget, "Offscreen target handle or extent is invalid."));
-        targets_[target.index].extent = extent;
+        if (!extent.IsValid()) {
+            return Result<void>::Failure(MakeFrontendError(FrontendErrors::InvalidTargetExtent, "Offscreen target extent is invalid."));
+        }
+        const Detail::RenderResourceIdentity identity{target.owner, target.slot, target.generation};
+        const auto state = resourceRegistry_->State(Detail::RenderResourceClass::RenderTarget, identity);
+        if (state.HasError()) {
+            return Result<void>::Failure(state.ErrorValue());
+        }
+        if (state.Value() != RenderResourceState::Ready) {
+            return Result<void>::Failure(MakeFrontendError(FrontendErrors::ResourceNotReady, "Offscreen target is not ready for resize."));
+        }
+        targets_[target.slot].extent = extent;
         return Result<void>::Success();
     }
 
@@ -294,19 +319,20 @@ namespace Horo::Render {
         if (activeFrameScope_ != nullptr)
             return Result<void>::Failure(
                 MakeFrontendError(FrontendErrors::TargetReleaseDuringFrame, "Offscreen target cannot be released during a frame."));
-        if (target.index >= targets_.size() || !targets_[target.index].live || targets_[target.index].generation != target.generation)
-            return Result<void>::Failure(MakeFrontendError(FrontendErrors::StaleRenderTarget, "Offscreen target handle is stale."));
-        TargetRecord &record = targets_[target.index];
-        record.live = false;
-        record.extent = {};
-        ++record.generation;
-        if (record.generation == 0)
-            ++record.generation;
+        const Detail::RenderResourceIdentity identity{target.owner, target.slot, target.generation};
+        if (const Result<void> released = resourceRegistry_->Release(Detail::RenderResourceClass::RenderTarget, identity);
+            released.HasError()) {
+            return Result<void>::Failure(released.ErrorValue());
+        }
+        targets_[target.slot] = {};
+        static_cast<void>(resourceRegistry_->DrainRetirements());
         return Result<void>::Success();
     }
 
     bool RenderFrontend::IsLiveTarget(const RenderTargetHandle target, const FramebufferExtent extent) const noexcept {
-        return target.index < targets_.size() && targets_[target.index].live && targets_[target.index].generation == target.generation &&
-               targets_[target.index].extent.width == extent.width && targets_[target.index].extent.height == extent.height;
+        const auto state =
+            resourceRegistry_->State(Detail::RenderResourceClass::RenderTarget, {target.owner, target.slot, target.generation});
+        return state.HasValue() && state.Value() == RenderResourceState::Ready && target.slot < targets_.size() &&
+               targets_[target.slot].extent.width == extent.width && targets_[target.slot].extent.height == extent.height;
     }
 }  // namespace Horo::Render
