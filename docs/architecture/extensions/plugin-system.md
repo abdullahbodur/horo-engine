@@ -174,7 +174,9 @@ path tricks do not bypass containment checks.
 contributions, service/script surfaces and requested permissions. Package
 identity, dependencies, sources, trust and enablement remain in the package
 system. The JSON below is a readable projection of the typed v1 model; consumers
-do not retain a JSON DOM or reinterpret its strings after validation:
+do not retain a JSON DOM or reinterpret its strings after validation. Every path
+in the descriptor is relative to the verified package root, not to the descriptor
+directory:
 
 ```json
 {
@@ -193,17 +195,17 @@ do not retain a JSON DOM or reinterpret its strings after validation:
       {
         "platform": "macos",
         "architecture": "arm64",
-        "path": "bin/macos-arm64/libhoro_fbx_importer.dylib"
+        "path": "extensions/com.vendor.fbx-importer.native/bin/macos-arm64/libhoro_fbx_importer.dylib"
       },
       {
         "platform": "linux",
         "architecture": "x86_64",
-        "path": "bin/linux-x64/libhoro_fbx_importer.so"
+        "path": "extensions/com.vendor.fbx-importer.native/bin/linux-x64/libhoro_fbx_importer.so"
       },
       {
         "platform": "windows",
         "architecture": "x86_64",
-        "path": "bin/windows-x64/horo_fbx_importer.dll"
+        "path": "extensions/com.vendor.fbx-importer.native/bin/windows-x64/horo_fbx_importer.dll"
       }
     ]
   },
@@ -259,6 +261,8 @@ Validation rules:
   registry.
 - Settings, events, errors, service exports and script APIs are declared as typed
   records and every reference resolves within the validated package composition.
+- A script API adds its permissions to those of its referenced service export;
+  validation, trust approval and invocation enforce the complete set union.
 - Unknown fields reject schema v1 except inside its bounded extension envelope;
   unknown required extensions reject the descriptor and unknown optional
   extensions remain inert canonical data.
@@ -763,15 +767,16 @@ state.
 
 ### Data Bus Participation
 
-Extension surfaces are normal `EditorDataBus` subscribers. They may observe
-allowlisted editor-session notifications, invalidate local presentation caches,
-and query authoritative stores. They may publish only event types they own or
-notifications for transient state they own.
+Host-owned surface sessions are normal `EditorDataBus` subscribers. They may
+observe allowlisted editor-session notifications, invalidate copied presentation
+snapshots, and query authoritative stores through approved capabilities. External
+controller/module code never receives the C++ bus; it receives versioned bounded
+invalidation hints through its UI session or capability context.
 
 Rules:
 
-- Extension tabs and panels subscribe through move-only RAII tokens and release
-  them during detach.
+- Host UI sessions for extension tabs and panels subscribe through move-only RAII
+  tokens and release them during detach.
 - An extension does not subscribe directly to `EngineDataBus` from a GUI surface;
   process events enter the editor through `EditorEngineEventBridge` allowlists.
 - Extension event types use the extension's stable module ID as a prefix and are
@@ -784,13 +789,13 @@ Rules:
 - Subscriber order is not part of the contract. Coordination that requires a
   result uses typed commands or use cases, not event ordering.
 
-GUI surfaces use `EditorDataBus` rather than direct `EngineDataBus`
+Host UI sessions use `EditorDataBus` rather than direct `EngineDataBus`
 subscriptions because their lifetime is tied to one editor session, not the
 whole process. Process-level events that matter to UI are imported through an
 allowlisted bridge so payloads can be permission-checked, redacted, normalized,
 and scoped to the active workspace. Add-ons that need true process-level
 observation declare a separate process-observer contribution or event-import
-request instead of hiding that dependency inside a tab factory.
+request instead of hiding that dependency inside a surface schema.
 
 ### Modal And Settings Page Contributions
 
@@ -804,9 +809,10 @@ cancel, and close policy. Extension pages provide page content, validation
 diagnostics, and draft-field bindings; they do not commit settings directly or
 close the root modal by mutating modal-host state.
 
-Extension modal pages may subscribe to `EditorDataBus` through their provided
-context. They follow the same interaction and focus rules as built-in modal
-content and cannot bypass the active modal scope.
+The host UI session for an extension modal page may subscribe to `EditorDataBus`;
+the external controller receives only allowlisted invalidation hints through its
+versioned session/capability contract. Extension pages follow the same interaction
+and focus rules as built-in modal content and cannot bypass the active modal scope.
 
 ### Activity Bar Contributions
 
@@ -1022,6 +1028,11 @@ module API:
 
 If any invariant cannot be proven, restart remains the only supported unload
 path.
+
+One provider may retain at most its active generation and one draining
+predecessor. Further update candidates are coalesced without activation; a drain
+deadline or retained-code budget breach requires restart instead of accumulating
+loaded libraries.
 
 ## Failure Isolation
 

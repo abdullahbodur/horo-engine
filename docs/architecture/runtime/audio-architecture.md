@@ -207,7 +207,9 @@ normative owner of real-time sample representation and channel layout. Mixer,
 voice, bus, DSP, spatializer, resampler, and extension processing consumes
 borrowed `AudioPlanarBlockView` values: one contiguous binary32 plane per ordered
 semantic channel, at least 64-byte plane alignment, common valid/capacity frame
-counts, and positive-zero silence/padding.
+counts, and positive-zero silence/padding. Persistent descriptors and prepared
+graph generations own `AudioChannelLayout`; callback blocks carry only an
+`AudioChannelLayoutView` whose span is bounded by the retained graph epoch.
 
 Speaker presets have exact Horo orders; channel count alone is never identity.
 Ambisonics uses ACN order and SN3D normalization (AmbiX), with orders 0–3 admitted
@@ -329,10 +331,17 @@ Codec support is extensible through the asset cooking pipeline, not by adding
 decoder-specific branches to runtime playback.
 
 ```cpp
+class IAudioSourceReader {
+public:
+    virtual AudioByteCount Size() const = 0;
+    virtual Result<AudioByteCount> ReadAt(
+        AudioByteOffset offset, std::span<std::byte> destination) = 0;
+};
+
 class IAudioDecoder {
 public:
     virtual bool CanDecode(AudioFormatTag format) const = 0;
-    virtual DecodeResult Decode(std::span<const std::byte> source,
+    virtual DecodeResult Decode(IAudioSourceReader& source,
                                 AudioDecodeOutput& output) = 0;
 };
 ```
@@ -348,7 +357,10 @@ authority. Runtime loaders consume cooked audio payloads and validated stream
 metadata. Packages may add Opus, ADPCM, MP3, platform-native codecs, or
 middleware bank decoders by registering Audio decoder plugins without changing
 Assets or runtime scene code. Registration order is not selection policy, and a
-plugin cannot publish files or retain AST-owned source views.
+plugin cannot publish files or retain the AST-owned source reader. The reader is
+valid only for the current invocation, enforces admitted total/read/seek budgets,
+uses caller-provided bounded destination storage, rejects overflow and out-of-range
+reads, and never implies that the complete source is resident or contiguous.
 
 ## Audio Components
 
@@ -359,9 +371,9 @@ playback source without exposing backend voice handles:
 
 ```cpp
 enum class AudioSourceKind : uint8_t {
-    NativeClip,           // 1.0 source kind
-    ProceduralGenerator,  // reserved AUD-013 Post-1.0 extension kind
-    MiddlewareEvent       // reserved AUD-016 Post-1.0 extension kind
+    NativeClip = 0,           // 1.0 source kind
+    MiddlewareEvent = 1,      // reserved AUD-016 Post-1.0 extension kind
+    ProceduralGenerator = 2   // reserved AUD-013 Post-1.0 extension kind
 };
 
 struct AudioSourceComponent {
@@ -468,6 +480,11 @@ bounded `SwapMixerGraph` command at a buffer boundary. Failed or stale builds
 leave the last good generation active, and old plans retire only after matching
 callback acknowledgement and owner-lease/tail policy completion.
 
+Rendering uses the ADR-065 pull model. Each source publishes immutable pre/post-
+fader taps into compiled storage; a destination clears its own accumulator, then
+pulls completed source taps in canonical route order. Sources never push into a
+destination accumulator, so destination clearing cannot erase upstream signal.
+
 [ADR-066](../../adr/066-spatial-provider-and-required-capability.md) is the single
 normative owner of spatial provider identity, typed capabilities, profile
 resolution, activation preflight, fallback, runtime failure, and observability.
@@ -478,10 +495,22 @@ that provider; they do not discover providers during rendering.
 The profile may resolve the core stereo panner or a custom spatializer:
 
 ```cpp
+enum class SpatialProcessStatus : std::uint8_t {
+    Rendered,
+    RenderedSilence,
+    Fault,
+};
+
+struct SpatialProcessResult {
+    SpatialProcessStatus status;
+    AudioSpatialFaultCode fault;
+};
+
 class IAudioSpatializer {
 public:
-    virtual void ProcessSpatial(const VoiceSpatialInput& input,
-                                VoiceSpatialOutput& output) = 0;
+    virtual SpatialProcessResult ProcessSpatial(
+        const VoiceSpatialInput& input,
+        VoiceSpatialOutput& output) noexcept = 0;
 };
 ```
 
@@ -495,6 +524,12 @@ capabilities, limits, layouts, ABI, owner leases, and real-time declarations.
 Spatializer processing consumes prevalidated per-voice spatial input and ADR-063
 blocks; it must not query scene, physics, configuration, files, package discovery,
 or network from the real-time thread.
+
+`SpatialProcessResult` is a fixed-size allocation-free callback result, not a
+general diagnostic object. `Fault` carries a stable bounded code; the callback
+overwrites the admitted output range with ADR-063 positive-zero silence and emits
+the detailed preallocated fault record owned by ADR-062. Providers never allocate,
+format a message, log, or invoke control/host failure handling from `ProcessSpatial`.
 
 A spatializer computes per-voice 3D positioning, such as panning, HRTF, or
 object-based spatial rendering. DSP nodes process bus-level signals such as
@@ -995,7 +1030,7 @@ M0 so later integrations cannot move permissions, privacy, NET packets, speech, 
 editor-agent intent into Audio.
 
 [ADR-070](../../adr/070-capture-and-voice-io-ownership.md) is the single normative
-owner of Audio, Platform, Security, NET, speech and Editor capture boundaries.
+owner of Audio, Platform, Security, NET, Speech and Editor capture boundaries.
 Platform/private backends own native input and permission adapters; Security/host
 policy owns purpose, consent, retention and privacy; Audio owns device-neutral
 capture sessions, timestamped PCM, bounded buffers, monitoring and recording
@@ -1027,7 +1062,7 @@ or retaining it requires a separate explicit user action and storage policy.
 Recorded candidates enter AST staging and atomic publication; the capture callback
 never writes project files. Network voice consumes capture through a bounded PCM
 adapter and returns validated remote PCM as an ordinary Audio source. Audio never
-sees sockets, packets, credentials or peer authority, and a slow NET/speech/
+sees sockets, packets, credentials or peer authority, and a slow NET/Speech/
 recording consumer cannot block capture or output.
 
 ## Threading Rules
@@ -1163,6 +1198,12 @@ public:
 
 class IAudioMiddlewareEventBridge {
 public:
+    virtual Result<AudioMiddlewareEpochToken>
+    PrepareOutputEpoch(const AudioMiddlewareOutputConfig& config) = 0;
+
+    virtual Result<void>
+    ActivateOutputEpoch(AudioMiddlewareEpochToken preparedEpoch) = 0;
+
     virtual Result<void>
     PostEvent(AudioEventInstanceId instance,
               StableEventId event,
@@ -1334,6 +1375,10 @@ Required applicable tests cover:
 - native-default and explicit startup backend resolution with no registration-
   order selection or implicit SDL3Audio/NullAudio fallback
 - requested, effective, API-reported, and measured format/buffer/latency separation
+- explicit checked sample-rate presence and invalid/overflow rejection for every
+  block and published render plan, with no hidden default-rate substitution
+- layout-only conversion preserves sample rate and resampling preserves semantic
+  channel roles; each operation requires its own admitted plan
 - scene unload with active voices
 - scene-context unload barriers under saturation, late producer completion, and replacement
 - null backend deterministic clock
@@ -1350,6 +1395,8 @@ Required applicable tests cover:
 - editor preview command path
 - mixer mute/solo/volume controls
 - middleware extension boundary does not bypass real-time thread rules
+- third-party callback contributors negotiate the versioned ADR-069 Audio RT C ABI,
+  with public-header checks rejecting vendor/native types and C++ ABI leakage
 - command staging from MPSC queue to SPSC real-time buffer
 - parameter automation and fade ramp behavior
 - audio snapshot/ducking transitions
@@ -1469,18 +1516,18 @@ or feature plan must be updated in the same change.
 
 ## Usage Scenarios
 
-| Senaryo | UI Hareketi | Runtime Yolu | Sonuç / Not |
+| Scenario | UI action | Runtime path | Result / note |
 |---|---|---|---|
-| 1. Asset import | Project panel → Assets/Audio/SFX → Import Asset → `explosion.wav` | Import dialog → AssetImporter validates WAV → AudioCooker builds platform formats → AudioClip asset + registry | Asset browser'da görünür; inspector'da duration, sample rate, loop settings okunur |
-| 2. Audio Source ekleme | Hierarchy → Player → Add Component → Audio → Audio Source → sound (clip veya variation container)/bus/mode/spatial/preview | AudioSourceComponent sahneye serileşir → SceneRuntime transform çıkarır → sound resolve edilir → CreateVoice → MPSC → SPSC → callback → SFX bus → mixer | Preview ayrı bir bypass değil, normal command queue ile çalışır |
-| 3. Mixer'da bus ayarı | Window → Audio → Mixer → SFX bus volume -6 dB, mute; solo (editor-only) | AudioFrontend redundant command birleştirir → SwapMixerGraph / SetVoiceParameters → buffer boundary'de uygulanır | SFX bus runtime'da mute; solo sahneye yazılmaz |
-| 4. Post-1.0 middleware event | Inspector → Audio Source Kind: Middleware Event → StableEventId from registry (authoring name `enemy_footstep`) | AudioFrontend → IAudioMiddlewareEventBridge → VoiceRegistry proxy slot → AudioEventInstanceId | Native ve middleware voice aynı voice bütçesini ve policy'yi paylaşır |
-| 5. Snapshot tetikleme | Game code: `AudioMixer.ApplySnapshot("pause_menu")` | AudioFrontend snapshot command → Mixer ramps Music↓, UI↑, SFX↓ | Ducking click/pop olmadan uygulanır |
-| 6. Footstep marker | Animation editor → frame 42 → `Footstep.Left` marker | Tick commit → locomotion presentation adapter correlates exact Character surface → deduplicated Audio cue intent → scheduled voice | Animation owns timing; Character owns surface; neither calls the audio thread directly |
-| 7. Timeline senkron ses | Timeline → explosion/dialogue/music cue'ları aynı zaman damgasına hizala | Timeline → ScheduledCommandBatch → SPSC → callback atomik uygular | Sesler sample-accurate sync başlar |
-| 8. Mobil focus kaybı | Kullanıcı başka app'e geçer | Host focus event → Project Settings > Audio > Focus Behavior UI authors `audio-focus-policy.json` → AudioRuntime reads that policy → gameplay bus'ları pause, music devam | Oyun sesi leak etmez; dönüşte resume |
-| 9. Audio Profiler | Window → Audio → Profiler | Callback bounded metrics yayınlar → observability queue → panel okur; callback'te log/allocate yok | Gerçek zamanlı maliyet; audio thread'ı bozmaz |
-| 10. Localized dialogue | Proje tr-TR; sahne `dialogue_greeting` clip'i kullanır | Asset pipeline `dialogue_greeting` → `dialogue_greeting_tr-TR` resolve eder → runtime resolved AssetId alır | Runtime locale bilmez, sadece son AssetId'yi görür |
+| 1. Asset import | Project panel → Assets/Audio/SFX → Import Asset → `explosion.wav` | Import dialog → AssetImporter validates WAV → AudioCooker builds platform formats → AudioClip asset + registry | The asset appears in the browser; the inspector shows duration, sample rate, and loop settings |
+| 2. Add Audio Source | Hierarchy → Player → Add Component → Audio → Audio Source → sound (clip or variation container)/bus/mode/spatial/preview | AudioSourceComponent serializes into the scene → SceneRuntime extracts the transform → sound resolves → CreateVoice → MPSC → SPSC → callback → SFX bus → mixer | Preview uses the normal command queue rather than a separate bypass |
+| 3. Configure a mixer bus | Window → Audio → Mixer → set SFX bus volume to -6 dB, mute, or editor-only solo | AudioFrontend coalesces redundant commands → SwapMixerGraph / SetVoiceParameters → apply at the buffer boundary | Mute affects the runtime SFX bus; solo is not serialized into the scene |
+| 4. Post-1.0 middleware event | Inspector → Audio Source Kind: Middleware Event → StableEventId from registry (authoring name `enemy_footstep`) | AudioFrontend → VoiceRegistry proxy slot/cost reservation → IAudioMiddlewareEventBridge → AudioEventInstanceId | Native and middleware voices share the same voice budget and policy |
+| 5. Trigger a snapshot | Game code: `AudioMixer.ApplySnapshot("pause_menu")` | AudioFrontend snapshot command → Mixer ramps Music↓, UI↑, SFX↓ | Ducking applies without clicks or pops |
+| 6. Animation event | Animation editor → frame 42 → Event type: Play Audio Clip → `footstep_run` | Animation becomes a command producer → CreateVoice + StartVoice with timestamp | Sound remains synchronized without polling Animation from the audio thread |
+| 7. Timeline-synchronized audio | Timeline → align explosion/dialogue/music cues to one timestamp | Timeline → ScheduledCommandBatch → SPSC → callback applies atomically | Sounds start with sample-accurate synchronization |
+| 8. Mobile focus loss | User switches to another application | Host focus event → Project Settings > Audio > Focus Behavior authors `audio-focus-policy.json` → AudioRuntime reads policy → gameplay buses pause while music continues | Game audio does not leak; playback resumes according to policy on return |
+| 9. Audio Profiler | Window → Audio → Profiler | Callback publishes bounded metrics → observability queue → panel reads; callback does not log or allocate | Real-time cost remains visible without disrupting the audio thread |
+| 10. Localized dialogue | Project locale is tr-TR; scene uses the `dialogue_greeting` clip | Asset pipeline resolves `dialogue_greeting` → `dialogue_greeting_tr-TR` → runtime receives the resolved AssetId | Runtime does not interpret locale; it sees only the final AssetId |
 
 ## Related Documents
 

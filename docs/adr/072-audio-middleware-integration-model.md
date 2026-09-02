@@ -29,7 +29,7 @@ startup, bank reload, device loss, package update, and shutdown.
 
 ### 1. Exactly two integration models are supported
 
-One `AudioMiddlewareIntegrationId` selects one model for an `AudioRuntime`:
+One `AudioMiddlewareModel` selects one model for an `AudioRuntime`:
 
 ```cpp
 enum class AudioMiddlewareModel : std::uint8_t {
@@ -116,6 +116,16 @@ declares bounded allocation-free render entry points. Otherwise its own qualifie
 real-time worker fills preallocated bounded rings; the Horo callback consumes only
 complete generation-tagged blocks and applies the declared underrun/discontinuity
 policy. Neither path may block the Horo callback or call gameplay/editor code.
+
+Before the first render and after any Horo device reconfiguration, Audio control
+passes the event bridge an immutable output-epoch configuration containing the
+sample/device epoch, effective sample rate and layout, maximum block frames,
+adapter-ring/latency contract, and transition deadline. The bridge prepares a
+private candidate off-callback and acknowledges readiness; Audio publishes the new
+device and bridge epochs together at the callback boundary. Failure keeps the prior
+epoch active when recoverable or fails the parent device transaction. `PostEvent`
+cannot run against an unacknowledged epoch, and neither side may silently resample
+or retain the prior block contract after publication.
 
 ### 5. Backend replacement owns the final middleware path
 
@@ -277,6 +287,16 @@ reaches zero. Timeout, unknown tail, lost device acknowledgement, stuck vendor w
 or surviving handle leaves the integration loaded and reports pending restart/
 failure. Force-unload is forbidden; shutdown is idempotent after partial startup.
 
+Retirement has a bounded control-path deadline and publishes a normalized
+`AudioMiddlewareRetirementBlockers` snapshot containing the adapter/generation,
+retirement stage, deadline outcome, counts by lease class, oldest owning generation,
+and last bounded progress timestamp. It never exposes vendor handles. On timeout,
+the editor stops waiting, marks the integration `PendingRestart`, retains the old
+code/content generation, and rejects additional live activation for that adapter/
+package so repeated reloads cannot accumulate pinned generations. Final process
+shutdown follows ADR-062's bounded fatal-retention policy if vendor callback work
+cannot quiesce; it never frees or unloads executable state that may still run.
+
 ### 13. Release distribution is a hard gate
 
 The package and release profile names exact integration packages, native runtime
@@ -313,7 +333,8 @@ Required contract coverage includes:
 - event proxy reservation, worst-case fan-out, global voice pressure, vendor
   rejection/steal/virtualization/tail reconciliation and hidden-voice detection;
 - event-bridge stems through Horo mixer/device with no second endpoint, layout/
-  latency/ring underrun and callback-bound render fixtures;
+  latency/ring underrun and callback-bound render fixtures, including initial and
+  reconfigured output-epoch preparation/acknowledgement before event admission;
 - replacement device lifecycle, required-feature preflight, native-source failure
   without `HoroSubmixInput`, and qualified coexistence when it is present;
 - capability/profile intersection independent of registration/probe/bank order,
@@ -326,7 +347,8 @@ Required contract coverage includes:
   restart attempts, partial initialization, repeated shutdown and no silent
   native/Null/other-adapter fallback;
 - package disable/update/trust revocation with active events/tails/profiler capture,
-  lease-gated retirement and pending-restart behavior;
+  lease-gated retirement, bounded blocker diagnostics, one-retained-generation
+  limit, pending-restart behavior and fatal process-shutdown retention;
 - release matrix, clean-machine package restore, native library/bank inclusion,
   notices, prohibited/unknown redistribution, signing and reference qualification.
 

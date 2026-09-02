@@ -147,6 +147,15 @@ transitions never block lifecycle completion. Owner destruction, host shutdown,
 required dependency failure or deadline expiry cancels/finishes according to the
 declared lifecycle fallback; no animation can keep a dead route alive indefinitely.
 
+These required blockers belong only to the declared screen/route/layer lifecycle.
+Removing an ordinary element such as a button or panel cancels its animations
+immediately and cannot delay screen or owner retirement. A control that needs a
+local exit effect must first enter an explicit, finite, owner-managed retiring state
+while the element generation and target properties remain valid; the owner commits
+element removal only after completion or its deadline fallback. An animation cannot
+turn an already committed removal into a delayed retirement or resurrect that
+element generation.
+
 Replacement screens receive new route/timeline generations. A completion from the
 old route cannot activate/retire the replacement. Transition time is not one
 process-global menu clock and is never inferred from current visibility alone.
@@ -273,16 +282,19 @@ sample time, interpolate an authoritative target, fire markers or complete a scr
 Each animation instance follows:
 
 ```text
-Created -> Waiting -> Running <-> Held -> Completed -> Retiring -> Destroyed
-                       |             |
-                       +-> Cancelled -+
+Created -> Waiting -> Running <-> Held -> Completed --+
+                       |                              +-> Retiring -> Destroyed
+                       +-------------> Cancelled ----+
 ```
 
-Completion and cancellation are terminal, mutually exclusive and published at most
-once for one instance generation. Cancellation reasons include explicit owner
-command, element removal, target/property incompatibility, screen replacement/
-retirement, scope/viewport destruction, style/document reload policy, dependency
-failure, lifecycle deadline, host shutdown and accessibility replacement.
+Completion and cancellation are mutually exclusive terminal outcomes and are
+published at most once for one instance generation. Both outcomes must then pass
+through `Retiring`, which releases instance-owned resources, before `Destroyed`;
+`Retiring` is cleanup and cannot change or republish the recorded outcome.
+Cancellation reasons include explicit owner command, committed element removal,
+target/property incompatibility, screen replacement/retirement, scope/viewport
+destruction, style/document reload policy, dependency failure, lifecycle deadline,
+host shutdown and accessibility replacement.
 
 Cancellation releases captures/leases owned by the animation but does not invoke
 arbitrary callbacks or directly mutate gameplay/route/renderer state. Typed evidence
@@ -306,6 +318,12 @@ Limits cover timelines/animations, duration/rate, loops, markers crossed per upd
 commands, preview/test steps, retained generations, lifecycle blockers, work per
 frame and diagnostics. Required overflow/backlog returns failure/backpressure; it
 does not silently skip time or drop a completion.
+
+A numeric clock or cursor overflow rejects the candidate update and preserves the
+last valid published UI generation while emitting bounded typed diagnostics. It
+does not destroy otherwise valid presentation state. Ordinary long host hitches are
+handled earlier by the configured presentation-admission delta and discontinuity
+policy; they do not weaken checked arithmetic or silently saturate a cursor.
 
 Cooked style/UI animation descriptors use versioned domain/policy enums, explicit
 integer widths/endianness and semantic fingerprints. Unknown required domains or

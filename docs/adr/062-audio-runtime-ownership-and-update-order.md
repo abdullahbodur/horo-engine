@@ -136,6 +136,13 @@ publish a new epoch, free the old one, stop its native stream, or commit runtime
 device state. Control does not reclaim callback-visible memory until the matching
 quiescence acknowledgement and backend callback-stop guarantee are both observed.
 
+Every acknowledgement carries runtime generation, device generation, negotiated
+format revision, and callback epoch. `Recovering` may commit to `Active` only when
+control atomically validates the complete current tuple and observes the new
+`Priming(epoch)` acknowledgement. It then publishes `Rendering(epoch)` and clears
+the recovery flag in the same control-owner transition. A stale or partial
+acknowledgement cannot activate the runtime or admit old-format commands.
+
 ### 4. Startup and partial failure
 
 Normal startup is ordered:
@@ -263,8 +270,14 @@ make that policy decision.
 
 A fatal control-thread invariant likewise closes admission and enters `Failed`.
 Control must not destroy callback-visible memory before quiescence; if a bounded
-stop cannot prove detachment, process-fatal handling retains the memory until
-process exit rather than risking use-after-free.
+stop cannot prove detachment, normal destruction is forbidden. At composition the
+process host preallocates one bounded `FatalAudioEpochRetention` slot for the audio
+runtime. The failure path moves the epoch-visible allocation, native stream/device
+owner, and backend library lease into that slot without allocating. The quarantine
+is never exposed as a service locator and is intentionally not destroyed or
+unloaded before OS process exit. The host records the retained bytes and failed
+identity, then follows its non-unwinding process-fatal termination path rather than
+reporting a clean `Stopped` state.
 
 ### 9. Shutdown and ownership release
 
@@ -286,6 +299,14 @@ Audio Runtime. The control-owned teardown is:
    and epoch memory; then close/destroy the device and backend.
 8. Release control registries, completion stores, metrics descriptors, and runtime
    dependencies; commit `Stopped` exactly once.
+
+Steps 7–8 execute only after step 5 proves that native callback entry is
+impossible. If the deadline expires without that proof, control still closes
+admission and reconciles terminal operation outcomes, but transfers the complete
+callback/native ownership island to `FatalAudioEpochRetention`; it does not free
+epoch memory, destroy the native stream/device, unload backend code, or commit
+`Stopped`. This failure branch is an intentional process-lifetime leak and ends in
+the host's fatal termination path.
 
 Shutdown after partial startup executes the applicable suffix in reverse
 acquisition order. Repeated shutdown returns the recorded outcome and performs no

@@ -430,10 +430,13 @@ element tree; layout, background, border, transform and interaction properties d
 not inherit by default.
 
 Visual states are a closed typed mask. Checked/selected, focused, hovered/dragging,
-pressed, disabled/busy and invalid overrides apply through stable Selection, Focus,
-Pointer, Activation, Availability and Validation layers. Within one layer, less
-specific blocks apply before more-specific blocks and authored order breaks ties.
-Style data observes interaction state; it cannot create it.
+pressed, invalid and disabled/busy overrides apply through stable Selection, Focus,
+Pointer, Activation, Validation and Availability layers. Terminal Availability is
+the highest state layer, so Disabled/Busy declarations override conflicting Invalid
+properties; the host Accessibility/user policy remains the final property overlay.
+Within one layer, less specific blocks apply before more-specific blocks and
+authored order breaks ties. Style data observes interaction state; it cannot create
+it.
 
 Resolution publishes immutable generation-correlated `UiComputedStyle` values.
 Measure-affecting changes prepare new layout; paint-only changes still publish a new

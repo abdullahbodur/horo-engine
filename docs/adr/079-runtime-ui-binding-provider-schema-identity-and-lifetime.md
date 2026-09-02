@@ -99,15 +99,25 @@ service lookup, instance creation, callback, file/network access or ambient stat
 mutation. The host validates a complete bounded contribution batch before module/
 game activation and atomically publishes one registry generation.
 
+The contribution's `properties` span is borrowed only for the bounded publication
+call. Before that call returns success, the host deep-copies every property and all
+transitively referenced nested schema/enum/limit metadata into immutable
+Horo-owned registry-generation storage. No registry view retains the span, a string
+view, or any other pointer into contributor memory. The contributing module may
+therefore release transient descriptor storage after publication; static or
+immortal property tables are neither required nor treated as a lifetime mechanism.
+
 Duplicate provider/property IDs, foreign namespace ownership, unsorted/duplicate
 schemas, incompatible types/access, invalid limits/privacy, empty scope masks or a
 schema fingerprint mismatch reject the complete candidate. Registration/load order
 never resolves a collision. Descriptors and property tables are immutable for one
 registry generation.
 
-Extension contributions follow ADR-054 install/trust/activation identity and retain
-`ModuleCallbackLease`/registry leases. Descriptor visibility does not grant a
-provider permission, activate an instance or keep a module loaded by itself.
+Extension contributions follow ADR-054 install/trust/activation identity. The
+registry generation leases its Horo-owned copied metadata; only an activated
+provider adapter or outstanding module callback retains a `ModuleCallbackLease`.
+Descriptor visibility does not grant provider permission, activate an instance or
+keep contributor code/data mapped by itself.
 
 ### 4. Property schemas are closed typed contracts
 
@@ -202,6 +212,7 @@ Provider instances follow:
 ```text
 Created -> Preparing -> Ready -> Active -> Revoking -> Draining -> Retired
                \-> Failed
+                                             \-> UnloadBlocked -> Retired
 ```
 
 Preparation validates registry/schema/scope/owner generations, capabilities and
@@ -284,6 +295,16 @@ for that module generation is retired. Shutdown revokes scene/player/game provid
 before Runtime UI, then module providers before ExtensionHost/module code disappears;
 repeated revocation/shutdown is idempotent.
 
+If the drain deadline expires with any lease outstanding, the generation enters
+`UnloadBlocked`: it remains mapped and quarantined, all new admission stays closed,
+and a fatal unload diagnostic records the bounded blockers. The host does not
+force-unmap, invalidate a lease, or continue activation as though unload succeeded.
+At most one blocked generation per module identity may be retained; reload or a new
+activation is rejected until the old generation drains, preventing unbounded mapped
+generation accumulation. A later final lease release resumes retirement and permits
+unmap. During process shutdown, the host may terminate after reporting the fatal
+barrier, but it never resumes execution after unsafe unmap.
+
 ### 11. Editor preview and tooling use schemas, not live runtime pointers
 
 The editor may browse immutable provider schemas, author bindings and validate
@@ -339,7 +360,9 @@ Required coverage includes:
 - read-only/write/read-write command capability, type/range/permission/expected-
   revision rejection, pending projection and stale/duplicate command sequence;
 - game/player/scene teardown, schema registry replacement, module reload/unload,
-  callback/snapshot/write draining, late completion and repeated shutdown;
+  callback/snapshot/write draining, drain timeout with mapped `UnloadBlocked`
+  retention, reload rejection, eventual release, late completion and repeated
+  shutdown;
 - editor schema browsing, isolated fixture preview, play/project close and no live
   pointer/editor state serialization;
 - descriptor/snapshot/command capacity pressure, malformed/version-skewed data,

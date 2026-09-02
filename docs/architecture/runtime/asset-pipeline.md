@@ -774,9 +774,13 @@ publication authority.
 
 ### Determinism And Failure Invariants
 
-A cooker receives an invocation-bounded immutable borrowed source view, immutable
-host-canonical cooker-input metadata, a typed target, and cancellation. Before
-invocation, the host serializes exactly the fields that the current metadata
+A cooker receives an invocation-bounded immutable source input, immutable
+host-canonical cooker-input metadata, a typed target, and cancellation. A
+contribution may receive a contiguous borrowed view only when the admitted source
+fits that contract; oversized or seek-oriented formats receive a bounded seekable
+reader backed by host-owned storage. The reader uses caller-provided buffers,
+enforces byte/read/seek limits, and cannot be retained beyond the invocation.
+Before invocation, the host serializes exactly the fields that the current metadata
 schema declares cooker-visible into `canonicalCookerMetadataBytes`: fields use
 schema-defined order, scalar encodings are fixed, strings are UTF-8, and repeated
 or map values are sorted by their canonical encoded key. The serialization is
@@ -787,8 +791,8 @@ diagnostics, and editor/UI state are not cooker input. Its cryptographic digest
 and the metadata `schemaVersion` are immutable canonical inputs; arbitrary mutable
 metadata is not.
 
-The host retains ownership of the bounded source and metadata storage for the
-entire invocation. Given the same complete `CacheKeyV1` inputs defined in
+The host retains ownership of the bounded source/reader and metadata storage for
+the entire invocation. Given the same complete `CacheKeyV1` inputs defined in
 [Incremental Cook And Cache Reuse](#incremental-cook-and-cache-reuse), the cooker
 must deterministically emit byte-identical payload, dependency, and diagnostic
 outputs through the host-owned writers. The host operation validates those

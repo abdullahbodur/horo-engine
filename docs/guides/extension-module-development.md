@@ -93,7 +93,8 @@ descriptor = "extensions/com.vendor.shader-tools.native/extension.json"
 required = false
 ```
 
-The package-scoped module descriptor is:
+The package-scoped module descriptor is below. Every path inside it is relative
+to the verified package root, not to the descriptor directory.
 
 ```json
 {
@@ -112,17 +113,17 @@ The package-scoped module descriptor is:
       {
         "platform": "macos",
         "architecture": "arm64",
-        "path": "bin/macos-arm64/libhoro_shader_tools.dylib"
+        "path": "extensions/com.vendor.shader-tools.native/bin/macos-arm64/libhoro_shader_tools.dylib"
       },
       {
         "platform": "linux",
         "architecture": "x86_64",
-        "path": "bin/linux-x64/libhoro_shader_tools.so"
+        "path": "extensions/com.vendor.shader-tools.native/bin/linux-x64/libhoro_shader_tools.so"
       },
       {
         "platform": "windows",
         "architecture": "x86_64",
-        "path": "bin/windows-x64/horo_shader_tools.dll"
+        "path": "extensions/com.vendor.shader-tools.native/bin/windows-x64/horo_shader_tools.dll"
       }
     ]
   },

@@ -524,23 +524,30 @@ settings, or publish committed authority events.
 
 ```mermaid
 sequenceDiagram
-    participant Ext as Extension Page
+    participant Ext as Extension Controller
     participant Settings as Settings Modal
+    participant Session as Host UI Session
     participant Draft as Settings Draft
     participant Store as Settings Store
     participant Bus as EditorDataBus
 
-    Settings->>Ext: Construct with page context
-    Ext->>Draft: Bind fields to validated draft keys
-    Ext-->>Settings: Return validation diagnostics
+    Settings->>Session: Attach copied schema/state + scoped actions
+    Session->>Draft: Bind declared keys through host capability
+    Session->>Bus: Subscribe through host-owned token
+    Session->>Ext: Request typed refresh outside render traversal
+    Ext-->>Session: Return copied state + validation snapshot
+    Session-->>Settings: Emit typed page action/validation result
     Settings->>Store: Apply typed settings transaction
     Store->>Bus: Publish committed settings notification
-    Bus-->>Ext: Invalidate page view if still open
+    Bus-->>Session: Deliver allowlisted invalidation hint
+    Session->>Session: Invalidate projection if still open
 ```
 
-Extension pages may subscribe to `EditorDataBus` for the same invalidation model
-as built-in pages. They receive only page-scoped capabilities and must release
-subscriptions before the page or provider module is destroyed.
+External extension code never subscribes directly to the C++ `EditorDataBus`.
+The host-owned UI session holds the subscription token and delivers only
+allowlisted invalidation hints through the versioned schema/state protocol or the
+extension's scoped capability context. The session re-queries authoritative state
+and releases its subscription before the page or provider module is destroyed.
 
 ## Build And Release Modal
 

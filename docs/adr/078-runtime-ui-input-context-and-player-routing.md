@@ -244,8 +244,12 @@ selection details within this boundary.
 Contexts follow:
 
 ```text
-Created -> Binding -> Ready -> Active <-> Suspended -> Retiring -> Destroyed
-                \-> Failed
+Created -> Binding
+Binding -> Ready | Failed | Retiring
+Ready -> Active | Retiring
+Active <-> Suspended
+Active | Suspended | Failed -> Retiring
+Retiring -> Destroyed
 ```
 
 Binding validates game/scope/audience/player/assignment/viewport/route/action-map/
@@ -259,6 +263,8 @@ outcomes/neutralization, cancels capture/composition, removes modal/focus entrie
 then releases generation leases. Late async/input completions cannot publish into a
 new context slot. Shutdown retires Runtime UI contexts before Input, Platform,
 viewports or editor focus services disappear and is idempotent after partial bind.
+Every state that may have acquired a lease reaches `Retiring`; a failed bind cannot
+jump directly to destruction and leak partial resources.
 
 ### 11. Errors, limits and compatibility are typed
 
@@ -272,9 +278,11 @@ user-sensitive input payloads.
 
 Limits cover contexts per game/player/viewport, audience players, modal depth,
 passthrough actions, focus restoration, captures/pointers, transitions/ledger rows,
-modality history and routing work. Exhaustion rejects/backpressures the candidate or
-neutralizes according to safety policy; it never leaks an exclusive transition to
-gameplay or drops a required release silently.
+modality history and routing work. Exhaustion rejects a context/policy activation
+candidate or discards only explicitly optional, lowest-priority transitions while
+recording bounded overflow evidence and neutralizing affected held state. Routing
+never blocks the real-time Input producer, leaks an exclusive transition to gameplay
+or drops a required release silently.
 
 Cooked UI/input policies use versioned typed audience, viewport, exclusivity,
 action and modality enums. Unknown required semantics reject and request recook.

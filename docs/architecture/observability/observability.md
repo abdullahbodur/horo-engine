@@ -99,13 +99,13 @@ Choose the shortest path for the task:
 | Reader or task | Read |
 |---|---|
 | Architecture or product review | This document through [Product Profiles](#product-profiles) |
-| Add a C++ log | [Logging](#logging), then the reference C++ API and level rules |
-| Add a metric | [Metrics](#metrics), then the reference metric descriptor and cardinality rules |
+| Add a C++ log | [Logging](./observability-logging.md), then the reference C++ API and level rules |
+| Add a metric | [Metrics](./observability-performance.md#metrics-architecture), then the reference metric descriptor and cardinality rules |
 | Instrument engine, game, or plugin code | [Developer Instrumentation Guide](./developer-instrumentation.md) |
-| Add profiler zones | [Profiling](#profiling), then the reference profiler capture contract |
-| Propagate request/job parameters | [Diagnostic Context](#diagnostic-context) |
+| Add profiler zones | [Profiling](./observability-performance.md#profiler-traces), then the reference profiler capture contract |
+| Propagate request/job parameters | [Diagnostic Context](./observability-logging.md#mapped-diagnostic-context) |
 | Build Console or Performance UI | [Ownership And Flow](#ownership-and-flow) |
-| Debug storage or support export | [Storage And Diagnostics](#storage-and-diagnostics) |
+| Debug storage or support export | [Storage And Diagnostics](./observability-logging.md#storage-locations) |
 | Implement or review tests | [Verification Strategy](#verification-strategy) |
 
 ## Signal Model
@@ -360,6 +360,7 @@ python3 scripts/dev.py run editor
 ```
 
 All supported options and environment variables are detailed in:
+
 - [Logging configuration](./observability-logging.md#runtime-configuration)
 - [Metrics/profiler configuration](./observability-performance.md#metrics-and-profiler-configuration)
 
@@ -368,6 +369,7 @@ All supported options and environment variables are detailed in:
 ## Verification Strategy
 
 Observability logic is tested via isolated, deterministic seams:
+
 - **Logging Verification**: Covered in [observability-logging.md#testing](./observability-logging.md#testing).
 - **Metrics & Profiler Verification**: Covered in [observability-performance.md#testing](./observability-performance.md#testing).
 

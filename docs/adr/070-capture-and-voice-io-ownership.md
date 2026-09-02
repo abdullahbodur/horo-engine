@@ -97,12 +97,12 @@ conversion. Channel count alone is never layout identity.
 
 Preallocated rings or policy-bounded pools separate the native callback from
 consumers. The callback never blocks, allocates, logs, waits for output/network/
-speech/editor, or calls consumers. Overrun policy is explicit: drop oldest or
+Speech/Editor, or calls consumers. Overrun policy is explicit: drop oldest or
 newest complete block, insert a discontinuity marker, increment bounded counters,
-and notify control. It never overwrite a leased block or claim continuity.
+and notify control. It never overwrites a leased block or claims continuity.
 
 Consumers obtain leases or bounded copied reads with independent cursors and
-backpressure. A slow NET/speech/recording consumer cannot block capture or output;
+backpressure. A slow NET/Speech/recording consumer cannot block capture or output;
 its own policy drops/cancels/fails with visible gap evidence.
 
 ### 5. Monitoring is an explicit local Audio route
@@ -184,7 +184,7 @@ separation; open/start partial failure; device/default change; timestamp wrap/
 discontinuity; format/layout conversion; long capture; overrun with leased blocks;
 slow independent consumers; monitor feedback/latency and output reset; recording
 cancel/loss/AST rollback; NET transport failure/jitter/remote PCM handoff with no
-sockets in Audio; speech cancellation and no transcript approval; privacy/redaction,
+sockets in Audio; Speech cancellation and no transcript approval; privacy/redaction,
 cleanup, late callbacks, repeated stop and shutdown.
 
 ## Consequences

@@ -102,6 +102,12 @@ does not use one untyped `ResourceHandle`, and feature code does not branch on a
 runtime resource-kind tag. Shared implementation behind the named types is
 permitted when it does not widen the public contract.
 
+The renderer-specific owner field does not change or pad the generic
+`Horo::Handle<Tag>` used by owner-local registries in other subsystems. Renderer
+handle types may share a private storage helper, but they remain distinct public
+types with the three-field identity below; a template parameter that optionally
+adds owner identity would obscure that semantic and ABI distinction.
+
 ### Resident handles
 
 Every resident resource handle has the following semantic fields:
