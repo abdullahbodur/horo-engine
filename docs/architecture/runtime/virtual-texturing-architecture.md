@@ -55,6 +55,29 @@ invalidates the operation/generation before late completions arrive. Stale work 
 its asset leases and reservations without publication. Physical slots and resources are
 reused only after the relevant GPU work and dependent leases retire.
 
+## Source, Artifact And Page-Store Model
+
+[ADR-165: Virtual Texture Source, Cooked Artifact, Page Store and Cache Ownership](../../adr/165-virtual-texture-source-cooked-artifact-page-store-and-cache-ownership.md)
+is the normative source/cook/storage decision. Assets owns tracked source identity,
+generic cook scheduling/cache/staging, atomic generation publication, packages and
+runtime byte leases. VTX import/cook owns page geometry, mip/tail, border, color,
+encoding and deterministic aggregation semantics.
+
+One immutable cooked generation contains a root manifest and canonically ordered,
+bounded page-pack artifacts. A logical page is the independently requested and
+verified content unit; a pack is the range-addressable Assets storage unit. Pages are
+not independent authored assets or mutable side files. The manifest is the sole
+membership/order authority and records exact pack/page ranges, costs and digests.
+
+Runtime pins an exact published/package generation and requests finite ranges through
+an Assets-owned provider port. Local filesystem, archive, memory/test and future remote
+providers have the same semantics. VTX never constructs paths, asks for an ambient
+"current" generation, enumerates storage or combines packs from different generations.
+
+The cook cache, published generation, provider byte cache, VTX decoded-page cache and
+Renderer physical-page cache are distinct owner/lifetime domains. Eviction in one does
+not imply publication, invalidation, unmapping or capacity release in another.
+
 ## Memory And World-Streaming Boundary
 
 [ADR-034: GPU Memory and Residency Ownership](../../adr/034-gpu-memory-and-residency-ownership.md)
