@@ -438,6 +438,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Destruction Ownership, Authority, State and Runtime Geometry Boundary](../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md):
   canonical semantic state and commands, cooked chunk activation, aggregate publication,
   provider-neutral tiers and the post-1.0 runtime mesh-cutting boundary.
+- [Destruction Source, Chunk Geometry, Collision and Cook Ownership](../adr/145-destruction-source-chunk-geometry-collision-and-cook-ownership.md):
+  normalized source/recipe inputs, canonical DFR geometry/connectivity, solver-neutral
+  collision records, Assets publication and separate Physics/Render derived products.
 - [Procedural Generation Architecture](./runtime/procedural-generation-architecture.md):
   PCG graphs, point clouds, validation, transactions, server authority, and
   streaming-cell ownership.

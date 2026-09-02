@@ -11,6 +11,10 @@ replication of destruction state.
 is the foundation contract. Destruction is a scene-scoped runtime domain with one
 semantic state authority, pre-cooked core-1.0 geometry, provider-neutral tiers and
 aggregate Scene/Physics/Render publication. Runtime mesh cutting is post-1.0 only.
+[ADR-145](../../adr/145-destruction-source-chunk-geometry-collision-and-cook-ownership.md)
+defines source normalization, canonical DFR chunk/interior/connectivity artifacts,
+solver-neutral collision inputs, Assets cache/publication and separate Physics/Render
+derived products.
 
 ## Ownership
 
@@ -46,31 +50,41 @@ inferred from the phase. The independent runtime lifecycle is `Absent`, `Prepari
 
 ## Pre-Fractured Geometry
 
-Pre-fractured meshes are authored offline:
+Pre-fractured meshes are authored and cooked offline through ADR-145:
 
-- A source mesh is fractured using Voronoi cell decomposition
-- Interior faces are generated with a configurable material
-- Fracture chunks are stored as separate mesh pieces within the asset
-- Chunks support physics collision (convex decomposition per chunk)
-- Chunk connectivity graph defines how chunks relate
+- Assets owns immutable normalized source bytes, dependency scheduling, physical cache,
+  package storage and atomic publication
+- Destruction Cook owns fracture recipes, deterministic generation/import validation,
+  canonical chunk/exterior/interior geometry and connectivity
+- The canonical DFR artifact owns solver-neutral convex input with stable chunk/subshape
+  identities, not native Physics shapes
+- Physics separately cooks solver/profile/platform-specific immutable shape artifacts
+  and owns runtime shape storage/retirement
+- Mesh/Render separately lower canonical chunk geometry and own GPU resources
 
 ```cpp
-struct FractureAsset {
-    AssetId                     sourceMeshId;
-    std::vector<FractureChunk>  chunks;
-    FractureChunkGraph          connectivity;
-    MaterialId                  interiorMaterial;
-};
-
-struct FractureChunk {
-    AssetId      chunkMeshId;
-    float        relativeMass;
-    Vector3      centerOfMass;
-    BoundingBox  localBounds;
-    uint32_t     parentChunkIndex;    // for hierarchical fracture
-    bool         isStructural;        // structural chunks affect stability
+struct CanonicalFractureArtifact {
+    FractureArtifactId artifact;
+    FractureArtifactRevision revision;
+    AssetId sourceMesh;
+    FractureRecipeId recipe;
+    FractureChunkTable chunks;
+    FractureConnectivityGraph connectivity;
+    FractureGeometryTables geometry;
+    FractureCollisionInputTable collisionInputs;
 };
 ```
+
+Stable chunk identity is not an array index, source/display name, cache path, render
+submesh or native shape ID. DFR owns canonical interior classification, winding,
+material slots and UV policy. Render cannot reclassify faces, and Physics cannot change
+chunk membership while realizing collision.
+
+The DFR cook fingerprint includes normalized source/recipe/dependency digests,
+algorithm/version/seed, coordinate/tolerance/repair policy, interior/material/UV and
+connectivity rules, selected tier/limits and artifact/toolchain schemas. Physics and
+Render add their own native target fingerprints to the accepted DFR artifact identity;
+a solver/backend upgrade invalidates its derived product without changing DFR topology.
 
 ## Runtime Pre-Cooked Fracture
 
@@ -244,3 +258,6 @@ headless/Null/all interactive backends, cancellation and repeated shutdown.
 - [ADR-144](../../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md):
   module/state authorities, command ordering, cooked activation, tiers, persistence,
   replication and post-1.0 runtime geometry boundary
+- [ADR-145](../../adr/145-destruction-source-chunk-geometry-collision-and-cook-ownership.md):
+  normalized source/recipe inputs, canonical DFR chunk/interior/connectivity artifact,
+  solver-neutral collision inputs and separate Physics/Render derived products
