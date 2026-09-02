@@ -113,7 +113,16 @@ tail, denormal, clipping, and validation rules.
 
 ## Audio Assets
 
-The asset pipeline owns source import and platform cooking for:
+[ADR-064](../../adr/064-audio-asset-and-cook-boundary.md) is the single
+normative owner of the Audio/AST import, cook, cache, publication, and runtime
+media boundary. AST owns stable identity, admitted source access, generic
+orchestration, dependency-aware cache and atomic publication. Audio owns source
+extraction, codecs, schemas, profile semantics, transforms, deterministic domain
+fingerprints, logical cooked outputs, and runtime compatibility validation. The
+Assets implementation does not depend on Audio; the application host registers
+the Audio contribution through the generic catalog.
+
+Together, the generic pipeline and Audio contribution import and cook:
 
 - decoded short clips
 - streamed music or ambience
@@ -208,10 +217,14 @@ public:
 };
 ```
 
-The decoder registry is used during import/cook. Runtime loaders consume cooked
-audio payloads and validated stream metadata. Packages may add Opus, ADPCM,
-MP3, platform-native codecs, or middleware bank decoders by registering decoder
-plugins without changing runtime scene code.
+Audio owns the decoder registry and its typed codec/container semantics. Import
+and cook invoke a pinned registry snapshot through the Audio contribution while
+AST retains source limits, cancellation, cache, staging, and publication
+authority. Runtime loaders consume cooked audio payloads and validated stream
+metadata. Packages may add Opus, ADPCM, MP3, platform-native codecs, or
+middleware bank decoders by registering Audio decoder plugins without changing
+Assets or runtime scene code. Registration order is not selection policy, and a
+plugin cannot publish files or retain AST-owned source views.
 
 ## Audio Components
 

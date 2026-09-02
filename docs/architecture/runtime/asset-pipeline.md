@@ -632,6 +632,31 @@ ownership, and C++ object ownership do not cross that ABI. The adapter must
 validate all output before it can enter the cache or a candidate cooked
 generation, so external and built-in contributions cannot bypass host invariants.
 
+### Audio Domain Import And Cook Boundary
+
+[ADR-064](../../adr/064-audio-asset-and-cook-boundary.md) is the single
+normative owner of the Audio/AST import, cook, cache, publication, and runtime
+media boundary. AST owns stable asset identity, source and sidecar access,
+generic orchestration, resource limits, dependency-aware cache keys, staging,
+atomic publication, rollback, and runtime artifact delivery. It treats Audio
+domain values as validated typed contribution data and does not parse codecs,
+choose channel layouts, interpret loop or gapless metadata, or select runtime
+decode policy.
+
+AudioModel and AudioCook own the audio source extractors, container and codec
+registry, authoring and cooked schemas, typed cook profiles, resampling and
+layout conversion, analysis, the deterministic audio fingerprint, logical
+outputs, and runtime compatibility requirements. The host composition root
+registers those contributions through the generic catalog. The Assets targets
+never depend on Audio targets, and Audio does not create a parallel scheduler,
+cache, output tree, publication record, or asset identity.
+
+AST validates the contribution envelope and declared outputs, then publishes a
+complete generation atomically. AudioRuntime consumes immutable published bytes
+through the Assets provider API and validates the Audio-owned cooked header
+before preparing resident or streamed state. Source decoding, file access, and
+asset-provider calls never occur on the audio callback.
+
 ### Determinism And Failure Invariants
 
 A cooker receives an invocation-bounded immutable borrowed source view, immutable
