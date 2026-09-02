@@ -24,6 +24,11 @@ below specialize that authority; downstream decisions may add exact schemas and 
 machines without moving ownership into Platform, Renderer, Input, Platform Services or
 post-processing.
 
+[ADR-158](../../adr/158-openxr-loader-backend-packaging-and-host-composition.md)
+specializes the first-party OpenXR target/package boundary, verified loader input,
+application composition and platform-specific loader policy. Loader discovery does not
+constitute product support, and the backend is not an ambient ExtensionHost plugin.
+
 ## Ownership
 
 ```text
@@ -75,6 +80,37 @@ generations and immutable snapshots. `XROpenXR` privately owns native loader, in
 system, session, action, space, swapchain, layer and extension state. The application
 host selects and connects the exact XR, Platform, Renderer and Input tuple before
 native/session resources exist.
+
+## OpenXR Packaging And Host Composition
+
+`XROpenXR` is an optional first-party product component. Package/install services
+verify one exact backend and loader artifact record for the product target; the
+application composition root then supplies that record with the selected Platform,
+Renderer, Input, product-profile and diagnostics generations. `XRRuntime` never scans
+for the backend, and `ExtensionHost` does not activate it as a general plugin.
+
+Loader source is an explicit product policy: a target uses either a bundled verified
+loader or a platform-provided loader controlled by that deployment contract. The
+backend never searches the current directory, project paths, `PATH`, arbitrary
+environment-provided paths or vendor-runtime libraries as fallback. Development runtime
+overrides and API layers require a typed non-shipping policy and mark evidence as
+non-release-qualified.
+
+The layers report distinct typed states:
+
+```text
+component installation
+  -> backend composition
+  -> loader availability
+  -> runtime availability
+  -> system support
+  -> session activation
+  -> capability availability
+```
+
+Success at one layer does not imply success at the next. Diagnostics preserve the
+attempt/revision and redacted failing layer; qualification remains keyed to the complete
+product tuple.
 
 ## Capability And Identity Model
 
@@ -168,6 +204,13 @@ poll runtime events
 Cancellation and shutdown finish or abandon the current frame only through
 runtime-valid transitions. The host stops producers before destroying session,
 instance, renderer, and platform dependencies.
+
+Before this native lifecycle begins, application composition validates an inert backend
+plan, Platform and Renderer prerequisites and the verified loader input. Ready publishes
+only after loader, runtime/system, capability, native resource and adapter preparation
+all succeed. Failure rolls candidate resources back in reverse order. Shutdown retires
+Input/UI projections and Renderer external images before native session/instance and
+loader dispatch, and Platform library/activity leases outlive all native users.
 
 ## Extension Negotiation And Graceful Degradation
 
@@ -439,6 +482,7 @@ device release gate.
 ## Related Documents
 
 - [XR Ownership, Runtime Composition and Capability Tier](../../adr/157-xr-ownership-runtime-composition-and-capability-tier.md)
+- [OpenXR Loader, Backend Packaging and Host Composition](../../adr/158-openxr-loader-backend-packaging-and-host-composition.md)
 - [XR Setup UI Reference](./xr-setup.html)
 - [Rendering Architecture](./rendering-architecture.md)
 - [Render Backend Parity Contract](./render-backend-parity-contract.md)

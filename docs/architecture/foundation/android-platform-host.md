@@ -30,6 +30,13 @@ The process composition root selects the application profile, renderer, and
 optional XR backend. The Android host does not discover and activate arbitrary
 renderers after a native surface has already been bound to another backend.
 
+For an XR-enabled product, packaging records one verified OpenXR backend and loader
+artifact per shipped ABI. The application passes Android application/activity
+initialization inputs through a private host capability to XROpenXR. Android Platform
+does not call OpenXR, interpret runtime manifests, select a runtime or own loader
+dispatch. A missing ABI artifact, incompatible loader, unavailable runtime and
+unsupported XR system are different typed preflight outcomes.
+
 ## Target Contract
 
 Every shipped Android profile declares:
@@ -133,6 +140,11 @@ Package assembly is deterministic for identical inputs and records provenance,
 ABI contents, native libraries, runtime assets, permissions, and manifest
 features. Machine-specific SDK paths and credentials never enter committed
 metadata.
+
+OpenXR-enabled packages additionally record the Horo backend contract, loader artifact
+identity/digest/provenance and loader source policy. They do not package a vendor runtime
+or development API layer as an implicit dependency. Non-XR Android profiles contain no
+OpenXR loader/backend artifact or runtime probe.
 
 Developer deployment selects a device explicitly. Install, launch, log capture,
 termination, timeout, and disconnect use argv-based process APIs and bounded

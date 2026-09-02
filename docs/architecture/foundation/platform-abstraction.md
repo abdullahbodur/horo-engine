@@ -234,6 +234,14 @@ defined by the [Extension System](../extensions/plugin-system.md) and
 [Gameplay Module Boundary](../extensions/gameplay-module-boundary.md). Raw
 dynamic-library handles do not escape into ordinary engine modules.
 
+The optional first-party OpenXR backend follows
+[ADR-158](../../adr/158-openxr-loader-backend-packaging-and-host-composition.md).
+Platform may resolve a product-approved bundled or platform-provided loader artifact
+and lend bounded open/symbol/close plus native-host initialization capabilities.
+XROpenXR alone owns loader API calls and dispatch. Platform does not scan runtime
+manifests, select an XR runtime, create OpenXR objects or treat a successfully opened
+library as product support.
+
 ## Crash And Emergency Services
 
 The crash service installs the smallest safe platform handlers required to:
