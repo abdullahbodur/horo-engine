@@ -625,6 +625,12 @@ access, visible focus, tooltips, accessible names, and test-visible metadata are
 required baseline behavior from the first implementation. Native screen-reader
 integration may be added per platform without changing component props.
 
+[ADR-082](../../adr/082-runtime-ui-accessibility-capability-and-ownership.md)
+applies the same truthful capability principle to Runtime UI: semantic metadata,
+recording tests and native assistive-technology integration are distinct evidence
+levels. Editor validation uses the versioned semantic schema but does not own or
+patch live runtime nodes, settings, focus or platform dispatch.
+
 The design system supports:
 
 - global UI scaling

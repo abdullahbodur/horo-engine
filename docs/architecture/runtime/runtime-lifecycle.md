@@ -181,6 +181,13 @@ publishes text/font/layout as one generation. Locale/catalog replacement may ret
 last-good UI until preparation completes; shutdown retires UI leases before
 catalogs, formatter strategies, namespaces or Assets disappear.
 
+[ADR-082](../../adr/082-runtime-ui-accessibility-capability-and-ownership.md)
+publishes semantic snapshots from that same UI/interaction generation and admits
+native exposure only after matching presentation. Platform dispatch is bounded and
+thread-affine; native actions return as revision-checked commands for a later
+VariableUpdate. Shutdown closes action/dispatch admission and retires semantic/
+native leases before Platform, Localization, Input or Configuration disappear.
+
 ## Time Model
 
 The host tracks:
