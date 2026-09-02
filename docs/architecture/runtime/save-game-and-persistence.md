@@ -939,9 +939,23 @@ timeout and short transfer publish no partial bytes.
 
 The coordinator allocates the durable `CloudMutationId` and retains exact payload
 lease/digest, precondition and reconciliation state in its existing journal. Platform
-Services holds only an in-memory request and the generic offline queue holds no cloud
+Services holds only an in-memory request and the Platform Offline Queue holds no cloud
 upload/delete copy. Quota observations are advisory: transport cannot delete,
 truncate, split or select another local generation when provider capacity changes.
+
+[ADR-136](../../adr/136-platform-offline-queue-ownership-replay-and-cloud-intent-boundary.md)
+makes that exclusion structural: no API converts cloud upload/delete into a Platform
+Offline Queue record, and no “persist offline queue” setting controls Save durability.
+The queue and `CloudSaveCoordinator` may share stateless retry/deadline/error and
+caller-owned atomic-storage helpers, but never a row, scheduler, outcome or cross-owner
+FIFO. Reconnect wakes the owners independently.
+
+The Save journal is durable before the coordinator submits its first automatic remote
+mutation. Confirmed remote completion is journalled before cleanup; a crash after
+provider commit but before local completion therefore re-enters exact-key/revision/hash
+reconciliation with the original `CloudMutationId`. It never becomes a fresh generic
+upload. Shutdown closes scheduling, checkpoints journal state and retains archive/
+provider leases through request retirement without deleting unresolved intent.
 
 On startup/reconnect the coordinator opens local state first, then reconciles verified
 local and remote heads. Same generation/hash is InSync. A known remote ancestor of
@@ -1083,6 +1097,7 @@ and regression coverage.
 - [Concurrency And Jobs](../foundation/concurrency-and-jobs.md): Worker/owner completion ownership.
 - [ADR-010](../../adr/010-job-waiting-and-operation-store-ownership.md): OperationStore and non-blocking work.
 - [ADR-012](../../adr/012-world-streaming-partition-authority-and-subsystem-boundaries.md): Cell authority and barriers.
+- [ADR-136](../../adr/136-platform-offline-queue-ownership-replay-and-cloud-intent-boundary.md): Platform offline queue ownership, replay guarantees and Save-owned cloud intent.
 - [ADR-008](../../adr/008-error-model-exception-boundary-and-registry.md): Typed error propagation.
 - [ADR-112](../../adr/112-save-archive-container-and-compatibility-policy.md): Portable container, canonical state, version axes, identities and compatibility horizon.
 - [ADR-113](../../adr/113-local-storage-user-profile-and-slot-ownership.md): Product/user/profile namespaces, logical slot addressing and physical storage ownership.

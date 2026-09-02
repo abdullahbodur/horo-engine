@@ -285,6 +285,13 @@ duration under one operation context. External process, filesystem, network,
 renderer, and serialization boundaries log enough metadata to identify the
 boundary without dumping sensitive or unbounded payloads.
 
+ADR-136 Platform Offline Queue instrumentation distinguishes durable admission,
+pending/dispatching/suspended/reconciling and explicit terminal disposition. It may
+report aggregate counts/bytes, bounded age/delay, capacity pressure and normalized
+failure by service/state. It never labels queued/expired work successful, combines
+Save cloud-journal depth with the Platform queue, or emits subject partitions,
+mutation/definition IDs, payload/presence text, raw provider identity or credentials.
+
 Empty catch blocks and silent fallback paths are not allowed. A fallback that is
 part of normal expected selection may be `Debug`; a fallback caused by a failed
 preferred path is normally `Warn`.
@@ -1312,6 +1319,10 @@ developer's process-global state.
 | Child process context | test executable that prints its received allowlist |
 | Allocation behavior | allocation probe around disabled and enabled calls |
 
+Platform offline tests additionally exercise crash/recovery and terminal checkpoint
+boundaries, queue-versus-Save owner separation, bounded cardinality and redaction of
+every durable state without exposing personal or provider-native identity.
+
 ### C++ Patterns
 
 Compile-time and runtime-disabled calls verify that expensive arguments are not
@@ -1435,3 +1446,4 @@ Release packages are smoke-tested for:
 - [Quality And CI](../delivery/quality-and-ci.md): gates and retained CI artifacts.
 - [Release Architecture](../release/release.md): job-specific logs.
 - [Release Security](../release/release-security.md): secrets, privacy, and redaction.
+- [ADR-136](../../adr/136-platform-offline-queue-ownership-replay-and-cloud-intent-boundary.md): offline durability states, owner separation and privacy-safe diagnostics.
