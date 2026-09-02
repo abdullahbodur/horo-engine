@@ -489,6 +489,15 @@ are not a memory-safety sandbox.
 
 ## Module Loading And ABI Boundary
 
+The generic module C ABI is a bootstrap/control boundary, not sufficient for every
+domain hot path. In particular,
+[ADR-069](../../adr/069-audio-extension-capability-and-abi.md) requires callback-
+executed DSP and spatial contributions to expose a separate versioned Audio RT ABI
+after generic package/trust/module activation. ExtensionHost may hand its exact
+leased activation candidate and Audio descriptors/tables to Audio, but cannot cast
+a generic callback or `void*` into the real-time path or select Audio capability
+fallback. Generic and Audio ABI versions negotiate independently.
+
 Tool/editor native modules use a stable C ABI entry point:
 
 ```c

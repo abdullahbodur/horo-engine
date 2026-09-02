@@ -836,6 +836,22 @@ opening a device. It may advance deterministic playback clocks for tests.
 
 ## Middleware And Extension Boundary
 
+[ADR-069](../../adr/069-audio-extension-capability-and-abi.md) is the single
+normative owner of Audio extension capability IDs, the generic ExtensionHost
+handoff, the separate Audio real-time ABI, registration, trust, ownership, and
+unload. EXT/PKG remains authoritative for verified package identity, dependencies,
+trust, module bootstrap, enablement, and lifecycle. Audio consumes one exact leased
+activation candidate and never scans or loads packages itself.
+
+Callback-executed third-party DSP/spatial code must implement its versioned family-
+specific Audio RT C ABI with exact ADR-063 block/layout semantics, fixed memory and
+work limits, separate prepare/process/destroy entry points, bounded fault reporting,
+and graph-generation owner leases. A generic extension callback, `void*`, runtime
+system, or application capability cannot be reinterpreted as Audio RT code. Such
+code is trusted in-process native code, not sandboxed; restart is the default for
+disable/update unless every graph, callback, job, tail, queue, state, and module
+lease is proven drained.
+
 Core provides:
 
 - AudioSource / AudioListener
