@@ -1166,6 +1166,13 @@ the scene-linear additive band follows it without per-particle distance sorting.
 frontend owns per-view stable CPU/GPU sort plans, aggregate work admission and overrun
 evidence. Assets/backends cannot name/reorder these semantic passes or depth policies.
 
+[ADR-127](../../adr/127-vfx-decal-projection-lifetime-and-rendering-path-policy.md)
+keeps logical decal placement/lifetime in VfxWorld while the frontend resolves a
+deferred-preferred or explicitly compatible forward path with the raster recipe.
+Renderer owns physical atlas storage and native passes only. `RequireDeferred` never
+silently remaps; forward-only tiers need an admitted forward variant, and neither path
+writes scene depth or renders the same decal twice in one view.
+
 ## XR Views And External Presentation Targets
 
 XR supplies a bounded runtime-driven set of view descriptors and

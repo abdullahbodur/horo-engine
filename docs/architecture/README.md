@@ -384,6 +384,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [VFX Graph Compilation and Runtime Representation Convergence](../adr/126-vfx-graph-compilation-and-runtime-representation-convergence.md):
   stack/graph authoring convergence on one compiled descriptor, offline-only
   lowering, deterministic artifacts and explicit payload/kernel compatibility.
+- [VFX Decal Projection, Lifetime and Rendering Path Policy](../adr/127-vfx-decal-projection-lifetime-and-rendering-path-policy.md):
+  typed box placement, tagged lifetime/removal authority, finite count admission
+  and deferred-default with compatible forward-tier fallback.
 - [Post-Processing And Effects Architecture](./runtime/post-processing-and-effects-architecture.md):
   screen-space effects, HDR post chain, tonemapping, color grading, and
   accessibility pass ordering.

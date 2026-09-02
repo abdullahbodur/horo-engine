@@ -28,6 +28,11 @@ makes stack and graph two authoring frontends for one `CompiledVfxEffectDescript
 Only deterministic cooked descriptors/kernel packages reach runtime; authoring graphs,
 arbitrary scripts and compiler IR never become parallel executable representations.
 
+[ADR-127](../../adr/127-vfx-decal-projection-lifetime-and-rendering-path-policy.md)
+specializes decals without changing ADR-011 ownership: typed box placement, exhaustive
+permanent/timed/event lifetime, finite admission and deferred-preferred/forward-
+compatible rendering resolution.
+
 DCC workflows, full fluid solvers, atmospheric scattering and screen-space
 post-processing remain outside this subsystem; see
 [Advanced Rendering Architecture](./advanced-rendering-architecture.md).
@@ -724,25 +729,39 @@ authored safe restart and never reinterpret particle memory under a new layout.
 
 ## Decals
 
-A decal is a projected texture applied to scene geometry within an oriented bounding box.
+A decal is a visual projection volume owned logically by the existing scene
+`DecalManager`. Scene components are inert placement descriptors; scene and effect
+decals enter the same generation-safe store, capacity and extraction path.
 
 ```cpp
 struct DecalDescriptor {
     DecalId id;
     MaterialId material;
-    ProjectionMode mode;      // BoxProjection, OrientedBox
-    Vec3 halfSize;
-    float fadeAngle;
-    float fadeOutDistance;
-    float lifetimeSeconds;
-    bool isPermanent;
+    DecalProjectionMode projection; // Box or OrientedBox
+    DecalPlacementSpace space;       // WorldLocked or OwnerLocal
+    Transform64 localOrWorldTransform;
+    Vec3 positiveHalfExtents;
+    DecalReceiverMask receivers;
+    DecalLifetimePolicy lifetime;    // Permanent, TimedFade or EventDriven
+    DecalPathPreference path;        // defaults to PreferDeferred
 };
 ```
 
-- **Projection Mode**: Default is deferred projection writing to the G-Buffer.
-  Forward decals use clustered/tiled decal lists on forward feature tiers.
-- **Lifetime**: Supports permanent environmental decals, timed fading decals
-  (e.g., bullet holes, blood splatters), and event-driven removal.
+- **Projection and placement**: Box is axis-aligned in its declared space;
+  OrientedBox permits normalized rotation, translation and positive half extents but
+  no shear/perspective. WorldLocked snapshots canonical world placement. OwnerLocal
+  follows one generation-safe entity/bone and is removed when that owner retires.
+- **Lifetime**: Permanent lasts until explicit/owner teardown; TimedFade uses declared
+  VFX clock, visible duration, fade duration and curve; EventDriven accepts one typed
+  owner/channel/key removal. `DecalManager` alone advances/removes logical instances.
+- **Capacity**: Per-effect/owner/cell and aggregate bounds are admitted before spawn;
+  the desktop aggregate default remains 256. Exhaustion rejects the incoming decal
+  with `DecalCapacityExceeded`; permanent/event-driven entries do not trigger hidden
+  oldest/farthest eviction or frame-path pool growth.
+- **Rendering path**: PreferDeferred is default and uses the dedicated deferred-decal
+  pass only on a compatible admitted Deferred recipe. Forward-only tiers require an
+  authored compatible bounded forward variant. RequireDeferred/RequireForward never
+  silently remap; no path writes scene depth or selects another backend/recipe.
 - **Atlas Management**: `DecalManager` groups logical atlas requests; the renderer
   owns texture packing/upload and deferred atlas retirement under the admitted budget.
 
@@ -900,6 +919,12 @@ architecture-only change:
 - Scan packaged/headless runtime reachability for source stack/graph parsers, authoring
   node/plugin dependencies, arbitrary particle script/JIT paths or missing-variant
   source compilation; none may be reachable from VFX execution.
+- Exercise Box/OrientedBox with WorldLocked/OwnerLocal placement, invalid transforms,
+  rebase and stale owner/cell fences. Verify each permanent/timed/event lifetime and
+  exact aggregate 255/256/257 count boundaries with incoming rejection/no eviction.
+- Resolve every decal path preference across Forward, Clustered Forward+ and Deferred,
+  including missing variants/capabilities/budgets and explicit suppression. Verify no
+  depth write, double rendering or renderer-driven lifetime change.
 - Delay workers, GPU fences and snapshot readers across cell eviction and scene
   replacement. No early free/slot reuse, stale publication or lost accounting;
   Retired remains pending and teardown timeout retains dependencies safely.
@@ -918,6 +943,8 @@ architecture-only change:
   Normative particle blend/pass, stable sorting and sort-budget contract.
 - [ADR-126: VFX Graph Compilation and Runtime Representation Convergence](../../adr/126-vfx-graph-compilation-and-runtime-representation-convergence.md):
   Normative authoring convergence, compiled artifact and compatibility contract.
+- [ADR-127: VFX Decal Projection, Lifetime and Rendering Path Policy](../../adr/127-vfx-decal-projection-lifetime-and-rendering-path-policy.md):
+  Normative decal placement, lifetime, admission and rendering-path contract.
 - [Particle Editor UI Reference](./particle-editor.html): Emitter stack, curve editing,
   and live preview panel.
 - [Material And Shader Model](./material-and-shader-model.md): Particle and decal materials.
