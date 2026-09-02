@@ -331,6 +331,13 @@ Mismatched protocol versions or invalid authentication tokens fail the **session
 
 ## Delivery Semantics and Backpressure
 
+[ADR-070](../../adr/070-capture-and-voice-io-ownership.md) keeps voice packet policy
+in NET. Network voice may consume bounded timestamped PCM from Audio and return
+validated remote PCM through the playback-source seam, but NET retains framing,
+codec/packet negotiation, encryption, peer/session routing, jitter/reorder/loss,
+bitrate, QoS, mute/block and moderation. Audio never receives sockets, packet
+headers, credentials or remote peer authority.
+
 Delivery policies:
 
 - **UnreliableUnordered**: Fast state updates (e.g. high-frequency physics/transform telemetry); latest packet overwrites previous.
