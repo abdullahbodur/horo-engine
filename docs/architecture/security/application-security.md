@@ -51,6 +51,9 @@ editor and CLI hosts.
 | Runtime console local user | Product-profile and project-policy scoped |
 | Runtime console remote client | Denied unless diagnostics policy enables authenticated access |
 | Imported asset | Untrusted parser input |
+| Local, imported, migrated or modded save archive | Untrusted parser input; source policy selects permitted operation |
+| Cloud-downloaded save archive | Untrusted parser input even after provider authentication/transport success |
+| Scope-authorized signed save archive | Authenticated bytes for that scope; compatibility, semantics and freshness remain unproven |
 | Toolchain executable | Allowed only through resolved trusted profile |
 
 Trust is scoped by project identity, plugin identity/version, capability, and
@@ -103,6 +106,27 @@ bound to the exact canonical digest returned by the parser.
 
 High-risk or historically unsafe third-party parsers may run in a restricted
 helper process with bounded I/O.
+
+## Save Data Trust
+
+[ADR-116](../../adr/116-save-data-threat-model-and-trust-policy.md) defines the
+application threat model for runtime save data. No save becomes trusted because it is
+inside a save root, listed in a catalog, downloaded under an authenticated provider
+session, produced by a migration or signed by some key. Every read begins with bounded
+untrusted bytes and advances only through explicit integrity, host-selected
+signature/scope, compatibility, semantic preparation and generation/lease gates.
+
+The save operation profile separates inspect, import, export, migrate, load, delete
+and conflict-resolution capabilities. UI, CLI and MCP are adapters over the same
+application use cases; inspection authority cannot publish or restore a slot. Raw
+participant state, unrestricted local paths, provider identity and credentials are
+excluded from ordinary tool results and history.
+
+Development may admit isolated unsigned/modded namespaces and additional inspection
+tools, but it never disables framing arithmetic, parser/decompression/work limits,
+path containment, transactional publication or credential isolation. Shipping and
+secure server namespaces reject policy downgrade. A valid signature is not anti-replay
+state, encryption, semantic validity, anti-cheat or a native-code sandbox.
 
 ## Process Execution
 
@@ -228,6 +252,8 @@ Security-relevant events include:
 - rejected executable or process request
 - MCP authentication and rate-limit failures
 - update signature failure
+- rejected save integrity/signature/scope/replay policy
+- denied save inspection/import/export/load/delete/conflict capability
 
 Records contain stable identities and safe reasons, not secrets or unnecessary
 user content. Diagnostic bundle generation shows the user what categories will
@@ -264,6 +290,9 @@ Required tests cover:
 - pre-active gameplay denial, bounded malformed admission input, timeout, revocation and shutdown races
 - parser resource limits and malformed input
 - update signature rejection
+- local/imported/cloud/migrated/modded/server-signed save admission and quarantine
+- save framing, decompression/work budgets, wrong-scope substitution and valid-old replay
+- GUI/CLI/MCP save capability separation and raw-state/path/credential redaction
 
 ## Related Documents
 
@@ -277,3 +306,5 @@ Required tests cover:
 - [Networking Architecture](../runtime/networking-architecture.md)
 - [ADR-098: Protocol, Session and Trust Policy](../../adr/098-protocol-session-and-trust-policy.md)
 - [ADR-103: Network Project Configuration and Build-Profile Ownership](../../adr/103-network-project-configuration-and-build-profile-ownership.md)
+- [ADR-116: Save Data Threat Model and Trust Policy](../../adr/116-save-data-threat-model-and-trust-policy.md)
+- [Save Game And Persistence](../runtime/save-game-and-persistence.md)

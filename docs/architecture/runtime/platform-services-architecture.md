@@ -374,6 +374,14 @@ coordinator owns durable intent, lineage,
 preconditions and divergent-generation resolution; UI may present a choice but never
 becomes sync authority.
 
+Provider authentication, TLS success, object ownership and a completed download do
+not make archive bytes trusted. Under ADR-116, Platform Services enforces transport
+byte/time bounds and returns operation-owned opaque bytes plus provider metadata. The
+save/cloud coordinator then applies local framing, integrity, signature/scope,
+compatibility, semantic and namespace policy before any local publication or load.
+The backend cannot select a trust root, request a parser exception or reinterpret a
+verification failure as an empty/older remote object.
+
 ### Presence
 
 Presence is best-effort and non-critical. The frontend batches rapid presence
@@ -604,8 +612,13 @@ events.
   invoked from a trusted server path. See
   [Release Security](../release/release-security.md) for the broader trust and
   signing model that governs backend packages.
-- Cloud save data is opaque to the platform service layer. Encryption and
-  tamper detection are the responsibility of the local save system.
+- Cloud save data is opaque untrusted input to the platform service layer. Transport
+  authentication does not establish archive trust. Integrity, signature/scope,
+  compatibility and optional confidentiality policy belong to Runtime Save and the
+  host-selected save security profile under ADR-116.
+- Provider tokens and account credentials remain inside the backend's short-lived
+  credential lease. They never enter archive bytes, coordinator journals, tool
+  results, logs or conflict metadata.
 - Friends and presence data are subject to platform privacy policies and user
   consent. The frontend does not cache or expose this data beyond what the
   backend provides.
@@ -767,6 +780,9 @@ Required tests cover:
 - conditional write/delete and precondition failure; uncoordinated providers never
   receive background mutations
 - cloud archive writes/deletes never enter the generic offline queue
+- authenticated-provider downloads remain untrusted until local bounded admission;
+  malformed/oversized results cannot publish or replace a local generation
+- cloud credential/provider metadata is redacted from save diagnostics and tools
 - session sign-in/out triggers queue replay and state callbacks
 - unavailable services return `not_supported`
 - presence updates coalesce to the most recent state
@@ -816,5 +832,7 @@ Platform-specific backend tests live in the private platform repositories.
   user/profile and logical-slot addressing across local and cloud boundaries.
 - [ADR-115](../../adr/115-cloud-save-authority-revision-and-conflict-policy.md): local
   authority, provider preconditions, offline journal and conflict preservation.
+- [ADR-116](../../adr/116-save-data-threat-model-and-trust-policy.md): untrusted cloud
+  bytes, bounded local admission, credential isolation and save tool policy.
 - [Extension System](../extensions/plugin-system.md)
 - [Release Security](../release/release-security.md)

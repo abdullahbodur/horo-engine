@@ -127,6 +127,7 @@ to the replacement.
 | [113](113-local-storage-user-profile-and-slot-ownership.md) | Local Storage, User Profile and Slot Ownership | Proposed | 2026-09-02 |
 | [114](114-canonical-runtime-world-persistence-boundary.md) | Canonical Runtime World Persistence Boundary | Proposed | 2026-09-02 |
 | [115](115-cloud-save-authority-revision-and-conflict-policy.md) | Cloud Save Authority, Revision and Conflict Policy | Proposed | 2026-09-02 |
+| [116](116-save-data-threat-model-and-trust-policy.md) | Save Data Threat Model and Trust Policy | Proposed | 2026-09-02 |
 
 ## Conventions
 
