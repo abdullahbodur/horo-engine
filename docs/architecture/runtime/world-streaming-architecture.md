@@ -311,6 +311,16 @@ infer required collision/navigation/visual readiness from decoded height data al
 Old/new dataset generations, staging/upload copies and dependent-system retirement stay
 charged until their respective owners release the shared reservation identity.
 
+[ADR-138](../../adr/138-terrain-source-cooked-tile-cache-and-streaming-ownership.md)
+defines the concrete asset/residency handoff. This authority issues typed cell- and
+generation-scoped tile/cluster requests with an accepted reservation token; Terrain
+performs provider reads, manifest/digest validation, decode and consumer preparation.
+The verified dataset manifest, not directory contents or a Terrain-private camera queue,
+defines membership. Terrain may evict disposable decoded detail inside its slice, but
+Active/pinned cells and candidate/native leases remain charged. Changed tiles replace
+with their manifest-declared seam/dependency closure, and this authority commits only
+after the aggregate required readiness barrier succeeds.
+
 ## Streaming Volumes, Priority And Retry Policy
 
 Camera, Gameplay, NetworkRelevance and Preload volumes create bounded residency
@@ -928,6 +938,7 @@ See [Coordinate Precision And Origin Rebasing](./coordinate-precision-and-origin
 - [Asset Pipeline](./asset-pipeline.md): Streaming cell assets, chunked package archives, and async I/O with `CancellationToken`.
 - [Terrain And Foliage Architecture](./terrain-and-foliage-architecture.md): Terrain clipmap streaming and cell-aligned foliage clusters.
 - [ADR-137](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md): Terrain/Foliage data, tier, lifecycle, readiness and reservation ownership.
+- [ADR-138](../../adr/138-terrain-source-cooked-tile-cache-and-streaming-ownership.md): Terrain dataset/tile manifests, cache authorities, typed residency requests and seam-safe generation replacement.
 - [Physics Architecture](./physics-architecture.md): Static mesh collider registration and scene binding.
 - [Networking Architecture](./networking-architecture.md): Server-authoritative cell relevance and replication.
 - [Concurrency And Job System](../foundation/concurrency-and-jobs.md): Job workers, cancellation tokens, and thread roles.

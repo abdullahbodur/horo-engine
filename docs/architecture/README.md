@@ -302,6 +302,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Terrain and Foliage Ownership, Data, Tier and Lifecycle](../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md):
   public/runtime module boundaries, authored/cooked/live data strata, typed identity
   and revisions, provider-neutral tier resolution, aggregate lifecycle and retirement.
+- [Terrain Source, Cooked Tile, Cache and Streaming Ownership](../adr/138-terrain-source-cooked-tile-cache-and-streaming-ownership.md):
+  canonical Terrain import/cook ownership, deterministic dataset manifests, cache
+  authorities, typed World Streaming residency and seam-safe generation replacement.
 - [World Streaming Architecture](./runtime/world-streaming-architecture.md):
   streaming cells, volumes, priority, budgets, server authority, and editor
   world-composition tools.

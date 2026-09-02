@@ -11,6 +11,9 @@ render extraction, streaming budget integration, and editor authoring tools.
 is the foundation contract for this subsystem. Terrain is a backend-neutral runtime
 vertical slice with distinct `TerrainApi` and `TerrainRuntime` ownership; it is not
 part of generic Foundation, RuntimeScene internals or a renderer backend.
+[ADR-138](../../adr/138-terrain-source-cooked-tile-cache-and-streaming-ownership.md)
+defines the complementary source, cook, tile-manifest, cache, residency and generation-
+replacement contract.
 
 ## Ownership And Data Boundaries
 
@@ -88,6 +91,31 @@ fallback and is never a runtime clamp that drops layers silently.
 
 Heightfield assets are authored in the editor or imported from external
 formats (heightmap PNG/EXR, RAW16, GeoTIFF, Houdini HeightField).
+
+### Source, Cook And Dataset Ownership
+
+External files are untrusted import inputs, not canonical terrain identity or runtime
+data. Assets/Application owns tracked source bytes, `AssetId`, generic importer/cooker
+orchestration, dependency scheduling, immutable cache storage, generation staging and
+atomic publication. Terrain Import/Model owns format interpretation and the canonical
+authored height/layer/hole/coordinate semantics; Terrain Cook owns deterministic tiling,
+seams, LOD/mips, foliage clustering and Terrain artifact schemas. Neither contribution
+creates a parallel asset graph, cache root, scheduler or publication pointer.
+
+One immutable `CookedTerrainDatasetManifest` binds the selected content revision, tier,
+coordinate profile, bounds, dependency fingerprint and canonically sorted tile/cluster
+entries. Every entry declares stable typed address, exact bounds, seam/dependency
+signatures, artifact identity, digest, byte/peak-work bounds and required neutral
+consumer payloads. Tile artifacts are independently readable and verifiable, but the
+verified manifest is the only membership authority; runtime never infers a dataset by
+enumerating files.
+
+The Terrain cook fingerprint includes the exact canonical source revision/digest, every
+accepted dependency artifact, tiling/seam/LOD/compression policy, effective tier/limits,
+Terrain schemas and algorithm versions, and generic target/toolchain envelope identity.
+Paths, timestamps, locale, job order and runtime/provider handles are excluded. Native
+GPU resources, solver objects and navigation-provider tiles remain separately keyed and
+owned by Render, Physics and Navigation.
 
 ### Terrain Collision
 
@@ -405,13 +433,19 @@ report `terrain.shutdown.incomplete`; it cannot force-free possibly referenced s
 
 ## Memory And Streaming
 
-Terrain tiles and foliage instance data are streamed based on camera
-proximity:
+World Streaming converts camera, gameplay, network and preload demand into typed,
+generation-scoped Terrain residency requests. Terrain executes admitted work as a
+bounded `Queued -> Reading -> Validating -> Decoding -> PreparingConsumers -> Prepared`
+pipeline using immutable provider byte leases and cancellation tokens. It cannot create
+a private camera-distance queue or begin allocation before the shared reservation is
+accepted. Foliage clusters use the same authority and lifecycle.
 
-- Terrain height and weight data uses a tile cache with LRU eviction
-- Foliage instance buffers are loaded per-cluster with distance-based
-  priority
-- Streaming uses the asset pipeline's async I/O with cancellation tokens
+“Terrain cache” must identify its owner. Assets owns immutable cook-cache entries and
+published cooked generations; the Assets provider owns leased artifact/chunk bytes;
+TerrainRuntime owns Horo-neutral decoded tile/cluster data; Render owns GPU residency;
+Physics owns solver artifacts/bodies; Navigation owns provider artifacts and installed
+query tiles. Each allocation has one charge and one release acknowledgement. Evicting
+one class never implies release of another.
 
 World Streaming owns the global cell priority queue and aggregate CPU/GPU/staging/
 retirement ledger. Terrain owns only its provider-local cache policy within an admitted
@@ -439,9 +473,17 @@ slices for terrain and foliage. The resolved byte/count budget is a capability t
 not an additional allowance. Terrain may evict only disposable provider-local detail
 inside its allocated slice; pressure involving a pinned/activation-critical cell is a
 typed request to World Streaming. Foliage instance buffers are loaded per-cluster with
-distance-based priority. Terrain tiles and foliage clusters are payloads within
-`StreamingCell` objects. Load priority is coordinated through the world-streaming
-priority queue; terrain does not maintain an independent priority system.
+the priority assigned by World Streaming. Terrain tiles and foliage clusters are
+payloads within `StreamingCell` objects. Active cells, replacement candidates, immutable
+snapshots and consumer installs pin their exact dataset generation and leases.
+
+Hot replacement validates a complete candidate generation before publication. A changed
+tile expands to its manifest-declared seam/dependency closure; exact-signature matches
+may reuse old immutable payloads, while incompatible neighbors prepare together. World
+Streaming commits the aggregate cell only after every required Terrain, Render, Physics
+and Navigation participant is prepared. Failure or cancellation discards candidate-
+owned state and preserves the prior Active generation. Old generations retire only
+after all byte, snapshot, native-resource and provider leases acknowledge release.
 
 ## Feature Tiers
 
@@ -480,6 +522,10 @@ Required coverage includes:
   handles, content/residency/mutation/capability revisions and leases;
 - malformed, oversized and incompatible source/cooked/scene descriptors with bounded
   decode and no mutable whole-dataset buffer crossing the public boundary;
+- canonical dataset membership/order, tile digest/bounds/seam/dependency validation,
+  complete cook-key invalidation and byte-identical deterministic recook/cache reuse;
+- independent corruption/missing-artifact rejection and package-time verification with
+  no directory enumeration or mixed-generation tile admission;
 - every tier/cooked/provider capability combination, required failure and each declared
   fallback reason without silent clamp/drop/provider selection;
 - candidate failure/cancellation and replacement at every Scene/streaming/render/
@@ -490,6 +536,8 @@ Required coverage includes:
   cooked-source mutation or implicit foliage eviction;
 - world-streaming reservation/growth/pressure accounting for staging, old/new and
   retiring generations without double charge or oversubscription;
+- source/cook/provider-byte/decoded/GPU/Physics/Navigation cache ownership, pinning and
+  release tests, including pressure and replacement seam-closure cases;
 - headless, dedicated server, editor preview, Null Render and every interactive backend
   consuming the same Horo contract; and
 - bounded owner/worker/native-thread handoff, frame-hot allocation/I/O checks, device
@@ -520,3 +568,6 @@ Required coverage includes:
 - [ADR-137](../../adr/137-terrain-foliage-ownership-data-tier-and-lifecycle.md):
   module/data authorities, typed identity and revisions, provider-neutral tier plan,
   aggregate lifecycle, readiness and shutdown baseline
+- [ADR-138](../../adr/138-terrain-source-cooked-tile-cache-and-streaming-ownership.md):
+  canonical source and deterministic tile cooking, cache authorities, World Streaming
+  residency, seam-safe replacement and generation retirement
