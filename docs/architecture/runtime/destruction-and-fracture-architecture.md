@@ -31,6 +31,11 @@ specializes editor ownership. A persistent fracture asset document owns working 
 typed operations, bounded history and dirty state; generator workers produce detached
 candidates; Assets owns durable source/cooked publication; high-fidelity preview uses an
 isolated runtime/Physics world and never production state.
+[ADR-149](../../adr/149-destruction-persistence-replication-streaming-and-authority.md)
+defines canonical save/network reconstruction, explicit server authority, snapshot-first
+late join and no-loss streaming handoff. DFR retains semantic sets/revision/seed;
+Physics owns paired active-chunk motion; Persistent World owns dormant storage; World
+Streaming alone decides residency.
 
 ## Ownership
 
@@ -237,10 +242,16 @@ historical effects by default; prediction uses a separate cosmetic occurrence na
 
 Destruction state is replicated through the normal authority and replication boundary:
 
-- The authority server commits canonical destruction commands/state
+- The authority server alone commits canonical destruction commands/state; autonomous
+  and simulated clients hold replicas and cannot gain authority from contact/visibility
 - NetworkRuntime captures versioned bounded snapshots/deltas and delivers typed apply
   commands; I/O threads do not mutate Destruction
-- Late join receives health, phase, broken/support/dormant sets and ordered later deltas
+- Save/network snapshots bind exact artifact content/chunk-table identity, semantic
+  revision, deterministic seed, health/phase and broken/active/supported/dormant sets
+- Active authoritative chunk motion is paired Physics-owned canonical state keyed by
+  stable DFR chunk identity; native solver state is never serialized
+- Late join receives a full semantic/Physics snapshot at one revision/tick, then applies
+  a bounded contiguous delta stream through aggregate activation
 - Gameplay-authoritative chunk motion uses existing Physics/network state replication;
   Destruction does not create a second transform stream
 - Cosmetic chunks/debris may simulate client-side but cannot affect gameplay, saves or
@@ -316,6 +327,11 @@ cannot evict the last durable state before the persistence owner accepts its han
 Sleeping, old or invisible chunks are not cleanup-eligible by implication. An explicit
 bounded policy chooses canonical dormancy, and required durable state must be accepted
 before live Scene/Physics/Render representations retire through another aggregate commit.
+Persistent World stores dormant DFR semantic snapshots by stable world/cell/destructible
+and exact content/revision identity, but does not interpret them. World Streaming owns
+residency and may retire the last live copy only after exact-revision handoff succeeds.
+Restore and later cell activation apply saved/dormant state before the aggregate root;
+content mismatch requires a registered stable-chunk migration or typed rejection.
 
 Shutdown closes admission, cancels task groups, invalidates candidates, requests exact-
 generation consumer retirement and retains artifacts/reservations/modules until every
@@ -360,3 +376,6 @@ work, preview isolation, cancellation and repeated shutdown.
 - [ADR-148](../../adr/148-fracture-document-generator-undo-and-preview-ownership.md):
   persistent document, typed operations, detached generation, exact bounded history,
   Assets publication and isolated preview ownership
+- [ADR-149](../../adr/149-destruction-persistence-replication-streaming-and-authority.md):
+  canonical save/network state, server authority, paired Physics motion, late join,
+  durable streaming handoff and compatibility
