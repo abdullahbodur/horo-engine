@@ -257,6 +257,8 @@ Validation rules:
   registry.
 - Settings, events, errors, service exports and script APIs are declared as typed
   records and every reference resolves within the validated package composition.
+- A script API adds its permissions to those of its referenced service export;
+  validation, trust approval and invocation enforce the complete set union.
 - Unknown fields reject schema v1 except inside its bounded extension envelope;
   unknown required extensions reject the descriptor and unknown optional
   extensions remain inert canonical data.
