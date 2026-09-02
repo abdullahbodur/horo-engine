@@ -137,6 +137,7 @@ to the replacement.
 | [123](123-vfx-cpu-stage-order-determinism-and-gameplay-coupling.md) | VFX CPU Stage Order, Determinism and Gameplay Coupling | Proposed | 2026-09-02 |
 | [124](124-vfx-gpu-simulation-readback-and-compute-fallback.md) | VFX GPU Simulation, Readback and Compute Fallback | Proposed | 2026-09-02 |
 | [125](125-vfx-transparency-sorting-and-pass-placement.md) | VFX Transparency, Sorting and Pass Placement | Proposed | 2026-09-02 |
+| [126](126-vfx-graph-compilation-and-runtime-representation-convergence.md) | VFX Graph Compilation and Runtime Representation Convergence | Proposed | 2026-09-02 |
 
 ## Conventions
 
