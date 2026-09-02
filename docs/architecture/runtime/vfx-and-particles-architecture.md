@@ -39,6 +39,13 @@ Physical renderer allocations and retained snapshot leases may outlive logical
 scene shutdown while retiring. They cannot retain raw VfxWorld/ECS pointers or gain
 access to the replacement scene. This is deferred ownership, not a live old effect.
 
+For footsteps, [ADR-091](../../adr/091-footstep-and-locomotion-event-ownership.md)
+requires an application-owned post-commit adapter to join the Animation marker
+occurrence with exact same-tick Character surface evidence. VFX receives only the
+immutable deduplicated cue intent through normal bounded admission; it does not
+query Character/Physics, infer locomotion cadence or change simulation when the
+effect is missing, culled, over budget or shutting down.
+
 ## Frame, Thread And Timing Contract
 
 Scene composition declares VFX access/dependency edges in the existing scheduler.

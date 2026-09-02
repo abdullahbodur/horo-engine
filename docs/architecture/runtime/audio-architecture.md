@@ -930,6 +930,12 @@ atomically at the same buffer boundary. Timeline systems and animation-event
 systems use this to start multiple voices in sync without adding a separate
 real-time API.
 
+For footsteps, [ADR-091](../../adr/091-footstep-and-locomotion-event-ownership.md)
+requires an application-owned post-commit adapter to join the Animation occurrence
+with the exact Character surface snapshot first. Audio receives an immutable,
+deduplicated cue intent with committed tick/correlation identity; it does not query
+Character/Physics, infer cadence or change simulation when admission fails.
+
 The audio thread publishes bounded completion and device events through a
 lock-free or wait-free queue consumed by the owning main-thread service.
 
