@@ -161,6 +161,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Mixer Topology and Constrained DAG](../adr/065-mixer-topology-and-constrained-dag.md):
   legal bus/send/return routing, deterministic processing order, feedback
   rejection, and generation-safe graph compilation and swap.
+- [Spatial Provider and Required Capability](../adr/066-spatial-provider-and-required-capability.md):
+  typed spatial profiles, deterministic provider preflight, explicit optional
+  fallback, required-capability failure, and recovery observability.
 - [Input Architecture](./runtime/input-architecture.md): input snapshots, action
   maps, focus, capture, modal routing, and simulation input frames.
 - [Game UI And HUD](./runtime/game-ui-and-hud.md): runtime game menus, HUDs,
