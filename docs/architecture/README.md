@@ -196,6 +196,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Runtime UI Font Asset, Family and Fallback](../adr/075-runtime-ui-font-asset-family-and-fallback.md):
   font source/face/family identity, deterministic matching and fallback, cook
   dependencies, platform discovery, missing coverage, and runtime lifetime.
+- [Runtime UI Style Asset, Token and Inheritance](../adr/076-runtime-ui-style-asset-token-and-inheritance.md):
+  typed runtime tokens, single-parent inheritance, element/state precedence,
+  style cook/publication, accessibility overlay, and editor separation.
 - [Networking Architecture](./runtime/networking-architecture.md): optional
   handle-based transports, session/authentication runtime, bounded I/O, and
   remote security.

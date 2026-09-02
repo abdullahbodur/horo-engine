@@ -332,6 +332,42 @@ state. Unsupported later content follows the declared replacement,
 omit-with-advance or strict policy with bounded redacted diagnostics; it cannot
 perform runtime source I/O, remote download or platform fallback.
 
+## Runtime Style And Token Contract
+
+[ADR-076](../../adr/076-runtime-ui-style-asset-token-and-inheritance.md) defines a
+runtime-only typed style model. Runtime elements reference stable style asset,
+class and token IDs; they never serialize editor theme keys, `ImGuiStyle`, native
+colors, renderer resources or computed-style slots.
+
+Token categories cover linear semantic colors, ADR-074 logical spacing/sizes,
+ADR-075 typography, typed imagery, shape/border/shadow, bounded scalar/enum values
+and motion references. Aliases must retain the exact category. Style assets and
+classes have at most one base; token, asset and class graphs are flattened and
+cycle-checked during cook/preparation.
+
+Property precedence is fixed: registered default, root-to-leaf style asset, allowed
+parent-element inheritance, element type/default class, stable authored class list,
+typed inline value, matching visual-state blocks, then host Accessibility/user
+policy. Only explicitly registered typography/text properties inherit through the
+element tree; layout, background, border, transform and interaction properties do
+not inherit by default.
+
+Visual states are a closed typed mask. Checked/selected, focused, hovered/dragging,
+pressed, invalid and disabled/busy overrides apply through stable Selection, Focus,
+Pointer, Activation, Validation and Availability layers. Terminal Availability is
+the highest state layer, so Disabled/Busy declarations override conflicting Invalid
+properties; the host Accessibility/user policy remains the final property overlay.
+Within one layer, less specific blocks apply before more-specific blocks and
+authored order breaks ties. Style data observes interaction state; it cannot create
+it.
+
+Resolution publishes immutable generation-correlated `UiComputedStyle` values.
+Measure-affecting changes prepare new layout; paint-only changes still publish a new
+render/interaction-correlated style snapshot. Required failure retains last-good
+state, and old computed styles/dependencies remain leased until old frames retire.
+HoroEditor authors and previews these assets through an isolated runtime adapter;
+its own design-system theme is never a runtime inheritance source.
+
 ## Rendering Contract
 
 Game UI rendering is backend-neutral and extracted into render data:

@@ -405,6 +405,13 @@ See [Editor Modal Host](./editor-modal-host.md).
 
 ## Theme Model
 
+The editor `Theme` and design tokens in this section style HoroEditor only.
+[ADR-076](../../adr/076-runtime-ui-style-asset-token-and-inheritance.md) defines the
+separate cooked Runtime UI style system. A game style cannot inherit this `Theme`,
+reference an editor token, import `ImGuiStyle` or capture user workspace theme
+preferences. Runtime-style authoring/preview uses an isolated Runtime UI adapter;
+any explicit conversion creates reviewed runtime values rather than a live link.
+
 All visual values are referenced through typed design tokens. Components do not
 hardcode colors, font sizes, spacing, radii, or standard dimensions.
 
