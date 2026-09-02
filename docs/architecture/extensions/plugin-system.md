@@ -315,6 +315,7 @@ runtime lifecycle contracts:
 | `behavior.provider` | Deferred runtime-facing point for script or graph runtime adapters and generated descriptor providers. It is disabled in the initial contract unless the provider also satisfies gameplay module validation, trust, `runtime.participate` permission, module fingerprint, lifetime, and safe-reload rules. | [Gameplay Behavior Authoring](./gameplay-behavior-authoring.md) |
 | `asset.runtime_loader` | Load game-owned asset types at runtime. | [Gameplay Runtime Integration](./gameplay-runtime-integration.md) |
 | `network.transport` | Provide approved network transport implementations. | [Runtime Lifecycle](../runtime/runtime-lifecycle.md) |
+| `platform.services.provider` | Provide a trusted private adapter for closed platform-service SDKs through the versioned Horo C ABI. Discovery/trust/load remain package/ExtensionHost concerns; application composition selects one provider generation. | [Platform Services Architecture](../runtime/platform-services-architecture.md) |
 
 The catalog is intentionally typed. A package cannot draw arbitrary UI, mutate
 scene state, or open sockets merely because it is installed. It must contribute
@@ -1119,6 +1120,9 @@ Required tests cover:
 - restart-required update, disable, and removal
 - shutdown ordering and no host callbacks after module teardown
 - no STL, exceptions, or cross-allocator ownership in ABI fixtures
+- platform-services provider fixtures reject SDK/native handles, retained borrowed
+  spans, callbacks after sink revocation and partial capability registration; failed
+  candidate activation rolls back without changing the active provider generation
 - marketplace registry schema, SHA-256, signature, and release URL validation
 - extension-only and hybrid `.horopkg` authority fixtures
 - raw directory and undeclared descriptor/binary activation rejection
@@ -1144,5 +1148,7 @@ snapshot-pinned importer again, and performs an identity-preserving reimport.
 - [Editor Panel Host](../editor/editor-panel-host.md)
 - [Editor Modal Host](../editor/editor-modal-host.md)
 - [Asset Pipeline](../runtime/asset-pipeline.md)
+- [Platform Services Architecture](../runtime/platform-services-architecture.md)
+- [ADR-131: Platform Services Closed SDK, Extension ABI, Package and Composition Boundary](../../adr/131-platform-services-closed-sdk-extension-abi-package-and-composition-boundary.md)
 - [MCP Architecture](../interfaces/mcp-architecture.md)
 - [Horo Package System](../packages/package-system.md): game and hybrid packages that may declare editor extensions
