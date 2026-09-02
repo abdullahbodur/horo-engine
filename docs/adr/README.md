@@ -176,6 +176,7 @@ to the replacement.
 | [162](162-mixed-reality-ownership-privacy-and-capability-tier.md) | Mixed-Reality Ownership, Privacy and Capability Tier | Proposed | 2026-09-02 |
 | [163](163-xr-tooling-diagnostics-privacy-and-qualification-ownership.md) | XR Tooling, Diagnostics, Privacy and Qualification Ownership | Proposed | 2026-09-02 |
 | [164](164-virtual-texturing-ownership-product-scope-and-capability-tier.md) | Virtual Texturing Ownership, Product Scope and Capability Tier | Proposed | 2026-09-02 |
+| [165](165-virtual-texture-source-cooked-artifact-page-store-and-cache-ownership.md) | Virtual Texture Source, Cooked Artifact, Page Store and Cache Ownership | Proposed | 2026-09-02 |
 
 ## Conventions
 

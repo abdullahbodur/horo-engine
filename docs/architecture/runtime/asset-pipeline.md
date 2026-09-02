@@ -681,6 +681,30 @@ scans an output directory, follows `current.json` independently for each tile, i
 source or cooks a missing variant. Package validation applies the same manifest, digest,
 limit and dependency checks used by fresh cook and cache reuse.
 
+### Virtual Texturing Domain Import And Cook Boundary
+
+[ADR-165](../../adr/165-virtual-texture-source-cooked-artifact-page-store-and-cache-ownership.md)
+applies the generic-Assets/domain-semantics split to virtual textures. Assets owns
+tracked source identity/bytes, immutable input borrows, generic dependency scheduling,
+content-addressed cache storage, staging, atomic generation publication, package
+membership and runtime artifact/range leases. It does not interpret virtual page,
+mip-tail, border, channel, color, addressing, encoding or pack-grouping semantics.
+
+VTX Import/Model owns canonical authored source/settings validation. VTX Cook owns
+deterministic page derivation and a versioned root manifest plus bounded immutable page
+packs. A logical page is independently requested and verified but is not an independent
+authored `AssetId`, sidecar, mutable file or current-generation pointer. The manifest is
+the only page/pack membership and canonical-order authority.
+
+Runtime pins one exact generation and uses an Assets-owned bounded page-store/range-read
+port. It cannot pass paths, request an ambient "current", enumerate storage or mix pack
+bytes from different generations. Generic envelopes/requested keys, root/pack/page
+digests, checked ranges and VTX semantics are all validated before publication.
+
+Cook cache entries, published generations, provider byte caches, VTX decoded-page
+caches and Renderer physical caches retain separate ownership and eviction effects.
+Removing one never silently unloads, unmaps or republishes another.
+
 ### VFX Domain Import And Cook Boundary
 
 [ADR-126](../../adr/126-vfx-graph-compilation-and-runtime-representation-convergence.md)

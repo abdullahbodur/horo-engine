@@ -436,6 +436,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Virtual Texturing Ownership, Product Scope and Capability Tier](../adr/164-virtual-texturing-ownership-product-scope-and-capability-tier.md):
   VTX/Assets/Materials/World Streaming/Renderer/producer ownership, typed composition,
   Atlas/Sparse admission and unsupported-path policy.
+- [Virtual Texture Source, Cooked Artifact, Page Store and Cache Ownership](../adr/165-virtual-texture-source-cooked-artifact-page-store-and-cache-ownership.md):
+  canonical source/cook authority, immutable root-plus-pack generations, bounded
+  exact-generation reads, layered integrity and distinct cache lifetimes.
 - [Destruction And Fracture Architecture](./runtime/destruction-and-fracture-architecture.md):
   fracture assets, chunk physics, debris, authority, and network reconstruction.
 - [Destruction Ownership, Authority, State and Runtime Geometry Boundary](../adr/144-destruction-ownership-authority-state-and-runtime-geometry-boundary.md):
