@@ -125,6 +125,30 @@ Unrelated scopes survive. Shutdown retires all scopes before Renderer, Assets,
 Input, Localization or Platform dependencies disappear and is idempotent after
 partial activation.
 
+## Presentation Scope, Bands And Routes
+
+[ADR-080](../../adr/080-runtime-ui-presentation-scope-layer-and-route.md) keeps
+semantic owner scope, input audience, route-stack membership, presentation band
+and visibility as independent typed dimensions. Persistence derives only from the
+ADR-073 GameInstance/Player/Scene/Viewport owner; moving content between visual
+bands or covering it never transfers ownership or extends lifetime.
+
+Core presentation order is fixed from World, HUD, Screen and Overlay through Modal,
+Loading and Debug. Backends may batch within the published plan but cannot reorder
+these semantic bands. Game, player, scene and viewport route stacks remain
+independent, with explicit cross-stack cover/arbitration for modal and loading
+presentation instead of implicit process-global z values.
+
+Push, pop, replace and cross-stack operations prepare privately, then commit or
+roll back atomically at ADR-073 lifecycle cutoffs. Routes move through Entering,
+Visible, Covered, Suppressed, Suspended, Exiting and Retiring visibility states
+without making visibility a lifetime alias. A route becomes input-eligible only
+after its matching interaction revision is successfully presented.
+
+Transition loading is GameInstance-owned so it survives scene replacement and can
+cover recovery. Debug presentation is profile-gated, non-authoritative and cannot
+gain hidden input or gameplay mutation authority.
+
 ## Core Runtime UI Primitives
 
 The engine core provides these UI primitives without packages:

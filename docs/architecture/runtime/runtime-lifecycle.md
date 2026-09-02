@@ -168,6 +168,12 @@ revision writes as commands for provider-owner safe points. Provider revocation
 closes admission and drains snapshot/command/UI leases through deferred lifecycle
 retirement before player/scene/game/module storage or code disappears.
 
+[ADR-080](../../adr/080-runtime-ui-presentation-scope-layer-and-route.md) prepares
+route operations privately and commits complete stack generations at the same
+ADR-073 lifecycle cutoff. VariableUpdate evaluates route-generation transitions,
+then extraction publishes immutable per-view presentation plans. Removed routes
+retire only after interaction, snapshot, render and transition leases close.
+
 ## Time Model
 
 The host tracks:
