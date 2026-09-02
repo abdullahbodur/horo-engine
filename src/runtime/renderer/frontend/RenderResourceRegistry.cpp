@@ -3,10 +3,12 @@
 #include "RenderFrontendErrors.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cassert>
 #include <limits>
 #include <string>
+#include <utility>
 
 namespace Horo::Render::Detail {
     namespace {
@@ -106,13 +108,14 @@ namespace Horo::Render::Detail {
     }
 
     Result<void> RenderResourceRegistry::EnsureOperationResultCapacity() {
-        while (operations_.size() >= limits_.maximumOperationResults && operations_.front().complete) {
-            operations_.pop_front();
+        if (operations_.size() < limits_.maximumOperationResults) {
+            return Result<void>::Success();
         }
-        if (operations_.size() >= limits_.maximumOperationResults) {
+        if (!operations_.front().complete) {
             return Result<void>::Failure(
                 RegistryError(FrontendErrors::ResourceQueueFull, "The bounded renderer resource result store is full."));
         }
+        operations_.pop_front();
         return Result<void>::Success();
     }
 
@@ -268,15 +271,14 @@ namespace Horo::Render::Detail {
     }
 
     std::size_t RenderResourceRegistry::DrainRetirements() {
-        std::size_t retired = 0;
-        while (retirementQueueCount_ > 0 && retired < limits_.retirementDrainBudget) {
+        const std::size_t retirementsToDrain = std::min(retirementQueueCount_, static_cast<std::size_t>(limits_.retirementDrainBudget));
+        for (std::size_t retired = 0; retired < retirementsToDrain; ++retired) {
             const std::uint32_t slot = retirementQueue_[retirementQueueHead_];
             retirementQueueHead_ = (retirementQueueHead_ + 1) % retirementQueue_.size();
             --retirementQueueCount_;
             Retire(slot);
-            ++retired;
         }
-        return retired;
+        return retirementsToDrain;
     }
 
     void RenderResourceRegistry::Shutdown() noexcept {
@@ -317,7 +319,8 @@ namespace Horo::Render::Detail {
 
     Result<std::size_t> RenderResourceRegistry::Validate(const RenderResourceClass resourceClass,
                                                          const RenderResourceIdentity identity) const {
-        if (!identity.owner.IsValid() || identity.slot == 0 || identity.generation == 0) {
+        const std::array<std::uint64_t, 3> identityFields{identity.owner.value, identity.slot, identity.generation};
+        if (std::ranges::find(identityFields, 0) != identityFields.end()) {
             return Result<std::size_t>::Failure(
                 RegistryError(FrontendErrors::ResourceHandleMalformed, "The renderer resource handle contains a zero identity field."));
         }
@@ -342,19 +345,21 @@ namespace Horo::Render::Detail {
     }
 
     RenderResourceRegistry::Entry *RenderResourceRegistry::FindExact(const RenderResourceIdentity identity) noexcept {
-        if (identity.owner != owner_ || identity.slot == 0 || identity.slot >= entries_.size()) {
-            return nullptr;
-        }
-        Entry &entry = entries_[identity.slot];
-        return entry.generation == identity.generation && entry.state != RenderResourceState::Retired ? &entry : nullptr;
+        return const_cast<Entry *>(std::as_const(*this).FindExact(identity));
     }
 
     const RenderResourceRegistry::Entry *RenderResourceRegistry::FindExact(const RenderResourceIdentity identity) const noexcept {
-        if (identity.owner != owner_ || identity.slot == 0 || identity.slot >= entries_.size()) {
+        if (identity.owner != owner_) {
+            return nullptr;
+        }
+        if (identity.slot == 0 || identity.slot >= entries_.size()) {
             return nullptr;
         }
         const Entry &entry = entries_[identity.slot];
-        return entry.generation == identity.generation && entry.state != RenderResourceState::Retired ? &entry : nullptr;
+        if (entry.generation != identity.generation || entry.state == RenderResourceState::Retired) {
+            return nullptr;
+        }
+        return &entry;
     }
 
     void RenderResourceRegistry::CompleteOperation(const ResourceOperationId operationId, std::optional<Error> error) {
@@ -367,19 +372,22 @@ namespace Horo::Render::Detail {
     void RenderResourceRegistry::QueueRetirementIfEligible(const std::size_t slot) {
         Entry &entry = entries_[slot];
         const bool retiring = entry.state == RenderResourceState::Retiring || entry.state == RenderResourceState::Failed;
-        if (retiring && entry.dependentPins == 0 && entry.submissionPins == 0 && !entry.retirementQueued) {
-            assert(retirementQueueCount_ < retirementQueue_.size());
-            entry.retirementQueued = true;
-            const std::size_t insertion = (retirementQueueHead_ + retirementQueueCount_) % retirementQueue_.size();
-            retirementQueue_[insertion] = static_cast<std::uint32_t>(slot);
-            ++retirementQueueCount_;
+        const std::array eligibility{retiring, entry.dependentPins == 0, entry.submissionPins == 0, !entry.retirementQueued};
+        if (!std::ranges::all_of(eligibility, std::identity{})) {
+            return;
         }
+        assert(retirementQueueCount_ < retirementQueue_.size());
+        entry.retirementQueued = true;
+        const std::size_t insertion = (retirementQueueHead_ + retirementQueueCount_) % retirementQueue_.size();
+        retirementQueue_[insertion] = static_cast<std::uint32_t>(slot);
+        ++retirementQueueCount_;
     }
 
     void RenderResourceRegistry::Retire(const std::size_t slot) noexcept {
         Entry &entry = entries_[slot];
         for (const RenderResourceIdentity dependency : entry.dependencies) {
-            if (Entry *dependencyEntry = FindExact(dependency); dependencyEntry != nullptr && dependencyEntry->dependentPins > 0) {
+            if (Entry *dependencyEntry = FindExact(dependency); dependencyEntry != nullptr) {
+                assert(dependencyEntry->dependentPins > 0);
                 --dependencyEntry->dependentPins;
                 QueueRetirementIfEligible(dependency.slot);
             }
