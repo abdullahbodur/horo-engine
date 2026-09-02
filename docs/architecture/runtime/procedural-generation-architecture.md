@@ -40,6 +40,27 @@ coordinator revalidates authority and target revisions, while RuntimeScene,
 Terrain/Foliage, Physics, Navigation and Render each prepare and own their committed
 state. Successful evaluation alone never grants publication authority.
 
+## Spatial Input And Node Catalog
+
+[ADR-152](../../adr/152-pcg-spatial-input-snapshot-and-node-library-ownership.md)
+is the normative owner of spatial capture, query execution, numerical determinism,
+core-node catalog and extension policy. RuntimeScene, Terrain/Foliage, spline features,
+Physics, Navigation and World Streaming retain their own mutable truth. A host safe
+point captures one coherent immutable `PCGSpatialInputSnapshot` containing copied Horo
+values and/or exact-generation read leases; PCG never retains their mutable storage or
+native objects.
+
+Evaluations select `ExactSnapshot`, `CurrentAtCommit` or bounded `CurrentOrRetry`
+consistency. A lease preserves memory but not logical currentness. Positive, negative
+and partial queries record exact provider/revision/coverage dependencies, and missing
+coverage is an unavailable input rather than an empty result.
+
+The v1 built-in catalog covers typed inputs, bounded sampling/query, filters,
+transforms, point operations and output intents. Each node has a stable ID, versioned
+schema, determinism class, capability declaration and complete cost function. The host
+publishes one immutable catalog generation; unknown nodes and untrusted on-demand code
+loading fail explicitly.
+
 ## PCG Model
 
 PCG is expressed as a directed acyclic graph (DAG) of nodes:
@@ -220,6 +241,10 @@ PCG integrates with:
 - **Foliage**: PCG can generate foliage placement
 - **NavMesh**: Generated walkable surfaces trigger NavMesh re-baking
 
+These integrations use immutable spatial snapshots and typed target-owner candidates.
+They do not expose live provider storage to PCG or grant nodes authority to mutate the
+integrated subsystem.
+
 ## Editor Authoring
 
 The PCG editor provides a node-graph editing surface:
@@ -252,6 +277,7 @@ intermediate, output and target-preparation costs are reserved before admission.
 
 - [PCG Ownership, Authority, Tier and Lifecycle](../../adr/151-pcg-ownership-authority-tier-and-lifecycle.md)
 - [PCG Graph Source, Cooked Plan, Cache and Runtime Ownership](../../adr/150-pcg-graph-source-cooked-plan-cache-and-runtime-ownership.md)
+- [PCG Spatial Input Snapshot and Node-Library Ownership](../../adr/152-pcg-spatial-input-snapshot-and-node-library-ownership.md)
 - [PCG Graph Editor UI Reference](./pcg-graph-editor.html)
 
 - [Scene Runtime](./scene-runtime.md): generated objects as entities

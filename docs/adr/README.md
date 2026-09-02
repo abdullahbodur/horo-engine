@@ -163,6 +163,7 @@ to the replacement.
 | [149](149-destruction-persistence-replication-streaming-and-authority.md) | Destruction Persistence, Replication, Streaming and Authority | Proposed | 2026-09-02 |
 | [150](150-pcg-graph-source-cooked-plan-cache-and-runtime-ownership.md) | PCG Graph Source, Cooked Plan, Cache and Runtime Ownership | Proposed | 2026-09-02 |
 | [151](151-pcg-ownership-authority-tier-and-lifecycle.md) | PCG Ownership, Authority, Tier and Lifecycle | Proposed | 2026-09-02 |
+| [152](152-pcg-spatial-input-snapshot-and-node-library-ownership.md) | PCG Spatial Input Snapshot and Node-Library Ownership | Proposed | 2026-09-02 |
 
 ## Conventions
 
