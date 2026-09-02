@@ -135,7 +135,7 @@ namespace {
         RenderResourceRegistry registry{owner.Value(),
                                         {.maximumSlots = 8,
                                          .maximumPendingRequests = 8,
-                                         .retirementDrainBudget = 8,
+                                         .retirementDrainBudget = 1,
                                          .maximumOperationResults = 8},
                                         &released,
                                         &RecordBackendRelease};

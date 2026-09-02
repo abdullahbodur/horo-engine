@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <optional>
 #include <span>
 #include <vector>
@@ -85,6 +86,7 @@ namespace Horo::Render::Detail {
             ResourceOperationId operation;
             std::vector<RenderResourceIdentity> dependencies;
             bool generationExhausted{false};
+            bool retirementQueued{false};
         };
 
         struct OperationRecord {
@@ -100,12 +102,18 @@ namespace Horo::Render::Detail {
         [[nodiscard]] Result<std::size_t> AcquireSlot();
         [[nodiscard]] Entry *FindExact(RenderResourceIdentity identity) noexcept;
         [[nodiscard]] const Entry *FindExact(RenderResourceIdentity identity) const noexcept;
+        void CompleteOperation(ResourceOperationId operation, std::optional<Error> error);
+        void QueueRetirementIfEligible(std::size_t slot);
         void Retire(std::size_t slot) noexcept;
 
         RenderResourceOwnerId owner_;
         RenderResourceRegistryLimits limits_;
         std::vector<Entry> entries_{{}};
-        std::vector<OperationRecord> operations_;
+        std::vector<std::uint32_t> freeSlots_;
+        std::vector<std::uint32_t> retirementQueue_;
+        std::size_t retirementQueueHead_{0};
+        std::size_t retirementQueueCount_{0};
+        std::deque<OperationRecord> operations_;
         std::uint64_t nextOperation_{1};
         std::uint32_t pendingRequests_{0};
         bool acceptingRequests_{true};

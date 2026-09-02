@@ -24,9 +24,11 @@ namespace Horo::Render::Detail {
 
     RenderResourceRegistry::RenderResourceRegistry(const RenderResourceOwnerId owner, const RenderResourceRegistryLimits limits,
                                                    void *const releaseContext, const BackendResourceRelease releaseBackendResource)
-        : owner_(owner), limits_(limits), releaseContext_(releaseContext), releaseBackendResource_(releaseBackendResource) {
+        : owner_(owner), limits_(limits), retirementQueue_(limits.maximumSlots), releaseContext_(releaseContext),
+          releaseBackendResource_(releaseBackendResource) {
         assert(owner_.IsValid());
         assert(limits_.IsValid());
+        freeSlots_.reserve(limits_.maximumSlots);
     }
 
     Result<ResourceReservation> RenderResourceRegistry::Reserve(const RenderResourceClass resourceClass,
@@ -53,6 +55,7 @@ namespace Horo::Render::Detail {
         entry.backendInstance = 0;
         entry.operation = ResourceOperationId{nextOperation_++};
         entry.dependencies.assign(dependencies.begin(), dependencies.end());
+        entry.retirementQueued = false;
         for (const RenderResourceIdentity dependency : dependencies) {
             ++FindExact(dependency)->dependentPins;
         }
@@ -100,23 +103,21 @@ namespace Horo::Render::Detail {
     }
 
     Result<void> RenderResourceRegistry::EnsureOperationResultCapacity() {
-        while (operations_.size() >= limits_.maximumOperationResults) {
-            const auto completed = std::ranges::find_if(operations_, &OperationRecord::complete);
-            if (completed == operations_.end()) {
-                return Result<void>::Failure(
-                    RegistryError(FrontendErrors::ResourceQueueFull, "The bounded renderer resource result store is full."));
-            }
-            operations_.erase(completed);
+        while (operations_.size() >= limits_.maximumOperationResults && operations_.front().complete) {
+            operations_.pop_front();
+        }
+        if (operations_.size() >= limits_.maximumOperationResults) {
+            return Result<void>::Failure(
+                RegistryError(FrontendErrors::ResourceQueueFull, "The bounded renderer resource result store is full."));
         }
         return Result<void>::Success();
     }
 
     Result<std::size_t> RenderResourceRegistry::AcquireSlot() {
-        for (std::size_t slot = 1; slot < entries_.size(); ++slot) {
-            const Entry &entry = entries_[slot];
-            if (entry.state == RenderResourceState::Retired && !entry.generationExhausted) {
-                return Result<std::size_t>::Success(slot);
-            }
+        if (!freeSlots_.empty()) {
+            const std::uint32_t slot = freeSlots_.back();
+            freeSlots_.pop_back();
+            return Result<std::size_t>::Success(slot);
         }
         if (entries_.size() - 1 >= limits_.maximumSlots) {
             return Result<std::size_t>::Failure(
@@ -144,12 +145,7 @@ namespace Horo::Render::Detail {
         entry.backendInstance = backendInstance;
         entry.state = RenderResourceState::Ready;
         --pendingRequests_;
-        for (OperationRecord &operation : operations_) {
-            if (operation.id == entry.operation) {
-                operation.complete = true;
-                break;
-            }
-        }
+        CompleteOperation(entry.operation, std::nullopt);
         return Result<void>::Success();
     }
 
@@ -164,14 +160,9 @@ namespace Horo::Render::Detail {
                 RegistryError(FrontendErrors::ResourceNotPending, "Only a pending resource generation can fail creation."));
         }
         entry.state = RenderResourceState::Failed;
+        QueueRetirementIfEligible(identity.slot);
         --pendingRequests_;
-        for (OperationRecord &operation : operations_) {
-            if (operation.id == entry.operation) {
-                operation.complete = true;
-                operation.error = std::move(error);
-                break;
-            }
-        }
+        CompleteOperation(entry.operation, std::move(error));
         return Result<void>::Success();
     }
 
@@ -190,6 +181,7 @@ namespace Horo::Render::Detail {
                 RegistryError(FrontendErrors::ResourceNotReady, "Only a ready resource generation can be released."));
         }
         entry.state = RenderResourceState::Retiring;
+        QueueRetirementIfEligible(identity.slot);
         return Result<void>::Success();
     }
 
@@ -268,18 +260,18 @@ namespace Horo::Render::Detail {
                 RegistryError(FrontendErrors::ResourceHandleMalformed, "The renderer resource has no submission pin to release."));
         }
         --entry.submissionPins;
+        QueueRetirementIfEligible(identity.slot);
         return Result<void>::Success();
     }
 
     std::size_t RenderResourceRegistry::DrainRetirements() {
         std::size_t retired = 0;
-        for (std::size_t slot = 1; slot < entries_.size() && retired < limits_.retirementDrainBudget; ++slot) {
-            const Entry &entry = entries_[slot];
-            if ((entry.state == RenderResourceState::Retiring || entry.state == RenderResourceState::Failed) && entry.dependentPins == 0 &&
-                entry.submissionPins == 0) {
-                Retire(slot);
-                ++retired;
-            }
+        while (retirementQueueCount_ > 0 && retired < limits_.retirementDrainBudget) {
+            const std::uint32_t slot = retirementQueue_[retirementQueueHead_];
+            retirementQueueHead_ = (retirementQueueHead_ + 1) % retirementQueue_.size();
+            --retirementQueueCount_;
+            Retire(slot);
+            ++retired;
         }
         return retired;
     }
@@ -290,21 +282,17 @@ namespace Horo::Render::Detail {
         }
         acceptingRequests_ = false;
         pendingRequests_ = 0;
-        for (Entry &entry : entries_) {
+        for (std::size_t slot = 1; slot < entries_.size(); ++slot) {
+            Entry &entry = entries_[slot];
             if (entry.state == RenderResourceState::Pending) {
-                for (OperationRecord &operation : operations_) {
-                    if (operation.id == entry.operation) {
-                        operation.complete = true;
-                        operation.error = RegistryError(FrontendErrors::ResourceRegistryStopped,
-                                                        "The pending resource operation was cancelled by frontend shutdown.");
-                        break;
-                    }
-                }
+                CompleteOperation(entry.operation, RegistryError(FrontendErrors::ResourceRegistryStopped,
+                                                                 "The pending resource operation was cancelled by frontend shutdown."));
                 entry.state = RenderResourceState::Retiring;
             } else if (entry.state == RenderResourceState::Ready) {
                 entry.state = RenderResourceState::Retiring;
             }
             entry.submissionPins = 0;
+            QueueRetirementIfEligible(slot);
         }
         while (DrainRetirements() != 0) {
         }
@@ -313,6 +301,8 @@ namespace Horo::Render::Detail {
                 Retire(slot);
             }
         }
+        retirementQueueHead_ = 0;
+        retirementQueueCount_ = 0;
     }
 
     RenderResourceOwnerId RenderResourceRegistry::Owner() const noexcept {
@@ -361,11 +351,31 @@ namespace Horo::Render::Detail {
         return entry.generation == identity.generation && entry.state != RenderResourceState::Retired ? &entry : nullptr;
     }
 
+    void RenderResourceRegistry::CompleteOperation(const ResourceOperationId operationId, std::optional<Error> error) {
+        const auto operation = std::ranges::find(operations_, operationId, &OperationRecord::id);
+        assert(operation != operations_.end());
+        operation->complete = true;
+        operation->error = std::move(error);
+    }
+
+    void RenderResourceRegistry::QueueRetirementIfEligible(const std::size_t slot) {
+        Entry &entry = entries_[slot];
+        const bool retiring = entry.state == RenderResourceState::Retiring || entry.state == RenderResourceState::Failed;
+        if (retiring && entry.dependentPins == 0 && entry.submissionPins == 0 && !entry.retirementQueued) {
+            assert(retirementQueueCount_ < retirementQueue_.size());
+            entry.retirementQueued = true;
+            const std::size_t insertion = (retirementQueueHead_ + retirementQueueCount_) % retirementQueue_.size();
+            retirementQueue_[insertion] = static_cast<std::uint32_t>(slot);
+            ++retirementQueueCount_;
+        }
+    }
+
     void RenderResourceRegistry::Retire(const std::size_t slot) noexcept {
         Entry &entry = entries_[slot];
         for (const RenderResourceIdentity dependency : entry.dependencies) {
             if (Entry *dependencyEntry = FindExact(dependency); dependencyEntry != nullptr && dependencyEntry->dependentPins > 0) {
                 --dependencyEntry->dependentPins;
+                QueueRetirementIfEligible(dependency.slot);
             }
         }
         entry.dependencies.clear();
@@ -375,10 +385,12 @@ namespace Horo::Render::Detail {
         entry.backendInstance = 0;
         entry.operation = {};
         entry.state = RenderResourceState::Retired;
+        entry.retirementQueued = false;
         if (entry.generation == std::numeric_limits<std::uint32_t>::max()) {
             entry.generationExhausted = true;
         } else {
             ++entry.generation;
+            freeSlots_.push_back(static_cast<std::uint32_t>(slot));
         }
     }
 
