@@ -56,6 +56,10 @@ Not covered:
   Physics world/filter/origin generations.
 - Character updates exactly once per attempted fixed tick and publishes the
   collision-root transform only with successful tick commit.
+- [ADR-090](../../adr/090-character-dynamic-body-visibility-push-and-proxy-policy.md)
+  defines explicit `Disabled`, `ObstacleOnly`, `OneWayPush` and
+  `BidirectionalProxy` dynamic interaction modes. Character remains root authority
+  in every mode; unsupported capability never silently changes the effective mode.
 
 ## Implementation And Ownership
 
@@ -391,6 +395,39 @@ typed selectors under ADR-086. Collider profiles answer that channel with
 identity. Trigger inclusion is explicit. Trigger enter/exit events remain owned by
 the gameplay volume/Physics event contract, not controller surface events.
 
+## Dynamic-Body Visibility And Push
+
+Query visibility, Character-to-body push and body-to-Character reaction are
+separate policies:
+
+| Effective mode | Query blocker | Push authority | Body sees Character | Character reaction |
+|---|---|---|---|---|
+| `Disabled` | No dynamic body | None | No | None |
+| `ObstacleOnly` | Selected dynamics | None | No | Support/carry only |
+| `OneWayPush` | Selected dynamics | Canonical staged Horo impulse | No | Support/carry only |
+| `BidirectionalProxy` | Selected dynamics | Physics contact with private proxy | Yes | Bounded next-tick evidence |
+
+The query channel and proxy collision profile are independent stable ADR-086
+identities. The baseline proxy collides only with explicitly admitted dynamic-body
+profiles; static, kinematic, sensor and other Character proxies ignore it. It is
+not ground, a trigger producer, a public body or a constraint endpoint.
+
+`OneWayPush` reduces query hits into fixed-capacity, stable-ID-ordered Physics
+impulse commands after collection. `BidirectionalProxy` instead stages one private
+kinematic capsule target after Character resolves movement. Physics owns the pair's
+solver impulse, so the same body receives no query-derived push in that mode.
+
+Post-step proxy contacts reduce into one bounded `CharacterDynamicReaction`. The
+current collision root is unchanged. The next attempted tick converts the committed
+reaction through the interaction profile and resolves it with ordinary sweeps. A
+stale controller/body/world/proxy generation, teleport, mode/profile change or
+overflow invalidates or fails according to the typed policy.
+
+Requested and effective modes are inspectable. A descriptor may name one exact
+fallback; without it, missing query/impulse/proxy/reaction capability or an
+unqualified determinism tier rejects scene activation. Disabled interaction is an
+explicit mode, not a runtime error fallback.
+
 ## Crouching And Size Changes
 
 The controller supports runtime size changes:
@@ -449,6 +486,11 @@ Runtime variables:
 - Platform carry point rotation, dynamic point-velocity prediction, optional heading
   twist and no post-Physics second move.
 - Capsule up, Gameplay desired heading, root twist and visual pitch/roll ownership.
+- Four-mode dynamic visibility/push/reaction truth table, including filtered,
+  unsupported-capability and explicit-fallback cases.
+- One-way command canonicalization, proxy pair exclusivity, no double impulse,
+  bounded next-tick reaction and no post-Physics root write.
+- Proxy spawn/resize/teleport/reload/removal/origin-shift generation and rollback.
 - Private Physics-query adapter parity against Horo controller golden fixtures.
 - Performance tests for many concurrent controllers.
 

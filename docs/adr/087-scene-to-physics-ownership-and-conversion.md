@@ -7,7 +7,7 @@
 - **Issue**: [PHY-006.1](https://github.com/abdullahbodur/horo-engine/issues/887)
 - **Jira**: [HORO-887](https://horo-engine.atlassian.net/browse/HORO-887)
 - **Parent**: [PHY-006](https://github.com/abdullahbodur/horo-engine/issues/833)
-- **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-017](017-prefab-role-ownership-and-capability-tiers.md), [ADR-023](023-world-index-and-cell-format-architecture-decision.md), [ADR-061](061-animation-ownership-update-order-and-clock.md), [ADR-084](084-canonical-physics-solver-units-and-tolerances.md), [ADR-085](085-physics-shape-authoring-cook-and-runtime-boundary.md), [ADR-086](086-collision-layer-profile-and-query-channel-policy.md)
+- **Related**: [ADR-008](008-error-model-exception-boundary-and-registry.md), [ADR-017](017-prefab-role-ownership-and-capability-tiers.md), [ADR-023](023-world-index-and-cell-format-architecture-decision.md), [ADR-061](061-animation-ownership-update-order-and-clock.md), [ADR-084](084-canonical-physics-solver-units-and-tolerances.md), [ADR-085](085-physics-shape-authoring-cook-and-runtime-boundary.md), [ADR-086](086-collision-layer-profile-and-query-channel-policy.md), [ADR-090](090-character-dynamic-body-visibility-push-and-proxy-policy.md)
 - **Normative documents**: [Scene Runtime](../architecture/runtime/scene-runtime.md), [Physics Architecture](../architecture/runtime/physics-architecture.md), [Runtime Lifecycle](../architecture/runtime/runtime-lifecycle.md), [Editor Document Model](../architecture/editor/editor-document-model.md), [Built-In Scene Primitives](../architecture/runtime/built-in-scene-primitives.md)
 
 ## Context
@@ -70,6 +70,12 @@ Portable components store Horo IDs and values only. Runtime `BodyHandle`,
 `ShapeHandle`, `ConstraintHandle`, native IDs/pointers, filter indices and lease
 objects live in a scene-generation-owned `PhysicsSceneBindingTable`, never in the
 authored component payload or save source of truth.
+
+Runtime-internal derived objects do not add authored producers. In particular,
+ADR-090's optional Character presence proxy is private state owned by the aggregate
+Physics/Character candidate. It cannot be serialized as a rigid body, exposed as a
+public body binding or inferred from a render/Character component without the
+explicit typed interaction policy.
 
 ### 2. Every relationship is explicit and stable
 
