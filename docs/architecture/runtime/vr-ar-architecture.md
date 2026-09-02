@@ -44,6 +44,11 @@ specializes the XR evidence-to-intent boundary across Input, Runtime UI, gamepla
 Character, Camera and Accessibility. XR never owns UI focus or authoritative movement,
 and baseline comfort semantics are independent of renderer/device tier.
 
+[ADR-162](../../adr/162-mixed-reality-ownership-privacy-and-capability-tier.md)
+keeps passthrough, anchors, scene understanding, hit tests and light estimation as
+independent post-1.0 families with purpose-bound privacy. Native providers, Horo
+snapshots, derived domain realizations and durable storage remain separate owners.
+
 ## Ownership
 
 ```text
@@ -465,6 +470,18 @@ failure states.
 - Renderer consumes admitted passthrough/composition descriptors without owning
   camera permission or environment understanding.
 
+There is no aggregate MR-enabled tier. Passthrough, spatial anchors, scene understanding,
+environment hit tests and light estimation have independent capability/access/lifecycle
+states and fallbacks. `XRProjection1_0` and `XRTrackedInteraction1_0` require none of
+them.
+
+Baseline passthrough is a runtime compositor-layer intent and exposes no raw camera
+frames. Live anchors use Horo generation-safe localization identity; durable restore is
+a separate capability with opaque protected provider references. Plane/mesh snapshots
+are bounded observed evidence and never mutate authored Scene, Physics or Navigation
+without an explicit destination-owned adapter and transaction. Hit tests cannot invoke
+UI/gameplay/editor actions, and light estimates cannot rewrite authored lights/exposure.
+
 ## Android And Standalone XR
 
 Standalone Android-class headsets require the Android runtime host in addition
@@ -572,6 +589,7 @@ device release gate.
 - [XR Action, Tracking and Input-Projection Ownership](../../adr/159-xr-action-tracking-and-input-projection-ownership.md)
 - [XR Rendering, OpenXR Compositor and Renderer Ownership](../../adr/160-xr-rendering-openxr-compositor-and-renderer-ownership.md)
 - [XR Interaction, Runtime UI, Locomotion and Accessibility Ownership](../../adr/161-xr-interaction-runtime-ui-locomotion-and-accessibility-ownership.md)
+- [Mixed-Reality Ownership, Privacy and Capability Tier](../../adr/162-mixed-reality-ownership-privacy-and-capability-tier.md)
 - [XR Setup UI Reference](./xr-setup.html)
 - [Rendering Architecture](./rendering-architecture.md)
 - [Render Backend Parity Contract](./render-backend-parity-contract.md)

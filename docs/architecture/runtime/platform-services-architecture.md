@@ -74,6 +74,12 @@ Deliberately out of scope:
   [ADR-157](../../adr/157-xr-ownership-runtime-composition-and-capability-tier.md));
   Platform Services account identity or presence never grants XR authority or consent
 
+[ADR-162](../../adr/162-mixed-reality-ownership-privacy-and-capability-tier.md)
+also keeps passthrough, anchors, environment geometry, hit tests, light estimation and
+their consent/access generations outside Platform Services. A future shared/cloud anchor
+requires a separate trust, account-mapping and sharing contract; ordinary account login,
+presence or cloud-save availability does not provide one.
+
 ## Core vs Modular
 
 Platform services are **modular**, not part of the engine core.
