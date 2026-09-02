@@ -196,6 +196,15 @@ Multiple fixed ticks may cross multiple cut keys, but only the final eligible
 selection at this boundary is promised a rendered frame. Context teardown retires
 the snapshot only after frame consumers complete.
 
+[ADR-120](../../adr/120-cinematic-event-dispatch-and-audio-coupling-boundary.md)
+also adds no phase. Cinematic EventTrack evaluation stages bounded occurrences; only
+a successfully committed source tick makes authoritative gameplay occurrences
+eligible. The session dispatcher drains them at each destination owner's next
+permitted boundary, where a typed adapter may submit a normal command/operation.
+Handlers cannot reenter the active sequence batch or imply same-tick mutation.
+AudioTrack bundles follow ADR-062's existing Audio control/callback publication
+boundaries and ADR-068 sample correlation; render interpolation never emits them.
+
 [ADR-078](../../adr/078-runtime-ui-input-context-and-player-routing.md) also adds no
 phase. `BuildInputSnapshot` publishes device/action/assignment evidence; Runtime UI
 VariableUpdate applies one ordered context stack against the last presented

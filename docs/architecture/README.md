@@ -363,6 +363,9 @@ dependency direction in [System Design](./foundation/system-design.md).
 - [Camera Authority During Cinematics](../adr/119-camera-authority-during-cinematics.md):
   per-view runtime/PIE/editor authority, cut entry and exit handoff, immutable
   frame selection, tiered transitions and backend-neutral render snapshots.
+- [Cinematic Event Dispatch and Audio Coupling Boundary](../adr/120-cinematic-event-dispatch-and-audio-coupling-boundary.md):
+  cooked typed EventTrack bindings, application-owned safe-point dispatch, explicit
+  failure outcomes and AudioFrontend coupling through AUD-family authority.
 - [Post-Processing And Effects Architecture](./runtime/post-processing-and-effects-architecture.md):
   screen-space effects, HDR post chain, tonemapping, color grading, and
   accessibility pass ordering.
