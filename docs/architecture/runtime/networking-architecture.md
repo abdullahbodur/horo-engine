@@ -36,6 +36,7 @@ Character checkpoint.
 - **Bounded Queues and Backpressure**: Inbound and outbound message queues enforce fixed capacity bounds and deterministic drop/rejection policies for overloaded connections.
 - **Explicit Schemas & Negotiation**: Messages use typed schemas and handshake negotiation. Raw C++ memory layout, vtables, pointers, and unstructured object graphs are never serialized.
 - **Deterministic Cancellation and Shutdown**: Every connection reaches a definitive terminal state. Disconnections, timeouts, cancellations, and engine shutdown follow bounded, leak-free teardown protocols.
+- **Opt-In Prediction**: NonPredicted is the baseline and constructs no history/replay machinery. LocalPrediction and RollbackResimulation require validated ADR-100 descriptors, bounded histories and owner-provided fixed-tick hooks.
 
 ## Target Topology and Module Ownership
 
@@ -497,6 +498,8 @@ The networking subsystem requires targeted automated verification:
 - [ADR-020: Network Target Ownership and Dependency Boundary](../../adr/020-network-target-ownership-and-dependency-boundary.md)
 - [ADR-097: Default Real-Time Transport Backend](../../adr/097-default-real-time-transport-backend.md)
 - [ADR-098: Protocol, Session and Trust Policy](../../adr/098-protocol-session-and-trust-policy.md)
+- [ADR-099: Replication Ownership, Authority and Compatibility](../../adr/099-replication-ownership-authority-and-compatibility.md)
+- [ADR-100: Prediction Capability Tiers and Determinism Policy](../../adr/100-prediction-capability-tiers-and-determinism-policy.md)
 - [System Design](../foundation/system-design.md)
 - [Desired Project Trees](../desired-project-tree.md)
 - [Multiplayer Replication Architecture](./multiplayer-replication-architecture.md)

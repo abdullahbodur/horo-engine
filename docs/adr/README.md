@@ -111,6 +111,7 @@ to the replacement.
 | [097](097-default-real-time-transport-backend.md) | Default Real-Time Transport Backend | Proposed | 2026-09-02 |
 | [098](098-protocol-session-and-trust-policy.md) | Protocol, Session and Trust Policy | Proposed | 2026-09-02 |
 | [099](099-replication-ownership-authority-and-compatibility.md) | Replication Ownership, Authority and Compatibility | Proposed | 2026-09-02 |
+| [100](100-prediction-capability-tiers-and-determinism-policy.md) | Prediction Capability Tiers and Determinism Policy | Proposed | 2026-09-02 |
 
 ## Conventions
 
