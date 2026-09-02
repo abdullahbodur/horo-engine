@@ -380,6 +380,34 @@ CPU frame time, GPU frame time, and presentation/wait time remain separate.
 Adding them together is not generally meaningful because CPU and GPU work can
 overlap.
 
+### Terrain And Foliage Qualification Measurements
+
+[ADR-143](../../adr/143-terrain-foliage-scale-budgets-observability-and-feature-boundary.md)
+requires Terrain/Foliage qualification to consume non-overlapping typed measurements
+from existing owners. Required families cover active/preparing/retiring tile, cluster
+and instance counts; logical/decoded resident, staging and retirement bytes; newly
+committed payload and Terrain owner work per streaming epoch; cold cook tile/placement
+throughput; editor overlay/commit/cancel latency; headless owner/collection time; and
+budget denial, stale, cancellation and retirement outcomes.
+
+Terrain logical bytes come from Terrain/World Streaming charge ledgers. Renderer GPU,
+Physics, Navigation and process memory remain separate measurements with their own
+availability and must not be added as independent copies of shared backing. The
+headless workload additionally proves that visual CPU work, GPU bytes and draw/
+dispatch/submit counts are zero when no render adapter is composed; Null Render is a
+separate workload.
+
+Workload/content/plan/capability/measurement revisions are result provenance, not
+metric dimensions. Asset, operation, dataset, tile, cluster, instance, coordinate,
+path and native-handle values are prohibited dimensions. Per-item evidence belongs to
+an explicitly requested bounded diagnostic snapshot. TRF-007.2 freezes the concrete
+descriptor set, finite allowed values/series counts and snapshot record/byte/time
+limits without changing these semantics.
+
+A required measurement that is unavailable, stale, dropped or from a mismatched
+generation invalidates qualification; it is not recorded as zero. These metrics report
+health and support gates but never drive residency, eviction, recipe or fallback policy.
+
 ### Hitch And Budget Analysis
 
 Frame metrics must preserve enough distribution information to diagnose hitches,
