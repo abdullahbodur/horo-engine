@@ -83,6 +83,15 @@ systems, but they have separate ownership and activation rules:
 Third-party renderer extensibility is outside this contract. It requires a
 separate security, compatibility, and support policy.
 
+[ADR-052](../../adr/052-first-party-renderer-component-scope.md) limits one
+component to one stable interactive backend identity. Its signed allowlist may
+contain that backend's private module, matching presentation/editor integration,
+backend-owned immutable runtime data, declared redistributable local libraries,
+metadata and notices. It cannot replace `RenderApi`, `RenderFrontend`,
+`RenderModuleHost`, component/trust services, Platform, `RenderNull`, the editor
+executable or public extension SDK. Shared application-owned runtimes remain one
+coordinated product dependency rather than competing copies inside components.
+
 ## Component Roots
 
 Renderer discovery is restricted to roots owned by the Horo product component
@@ -105,56 +114,34 @@ component record. That record is visibly untrusted/development state, is never
 portable project configuration, and is disabled in release or managed-policy
 builds unless policy allows it.
 
-## Availability State Model
+## Component State Model
 
-A renderer component has one discovery/health state at a time:
+[ADR-052](../../adr/052-first-party-renderer-component-scope.md) forbids one
+lossy linear lifecycle enum. A revisioned `RendererComponentSnapshot` carries
+orthogonal dimensions:
 
-```text
-NotInstalled
-    -> Downloading
-    -> Staged
-    -> InstalledUnchecked
-    -> Verifying
-    -> Verified
-    -> Probing
-    -> Available
-    -> Selected
-    -> Active
-```
+| Dimension | Representative states | Authority |
+|---|---|---|
+| Catalog | `Unknown`, `Known`, `Retired` | signed product catalog |
+| Install | `NotInstalled`, `Downloading`, `Staged`, `Installed`, `RepairRequired`, `Removing` | component manager/install record |
+| Verification | `Unchecked`, `Verifying`, `Verified`, `AbiMismatch`, `SignatureInvalid`, `Quarantined` | verifier/trust/ABI policy |
+| Host support | `Unknown`, `Supported`, `UnsupportedOs`, `UnsupportedArchitecture`, `UnsupportedOsVersion` | signed manifest + Platform facts |
+| Runtime availability | `Unknown`, `ProbeRequired`, `Probing`, `Available`, `MissingRuntime`, `ProbeFailed`, `ProbeTimedOut`, `ProbeCrashed`, `Stale` | probe service |
+| Selection | `NotSelected`, `Selected`, `SelectedForNextStart` | startup policy resolver |
+| Activation | `Inactive`, `Loading`, `Negotiating`, `Initializing`, `Active`, `Failed`, `Stopping` | current host composition |
 
-Failure and maintenance states:
+Installed means only that an install record exists. It does not imply verified,
+host-supported, runtime-available, selected or active. Host support is package/
+platform metadata compatibility; it is not a driver/device claim. Availability
+requires a current successful bounded probe for the exact component and host
+runtime identity. Selection is startup policy, while activation is live process
+truth after module negotiation and backend initialization.
 
-```text
-HostUnsupported
-MissingRuntime
-AbiMismatch
-SignatureInvalid
-ProbeFailed
-Quarantined
-UpdateRequired
-RepairRequired
-```
-
-State meanings:
-
-| State | Meaning |
-|---|---|
-| `NotInstalled` | No verified installation record exists for the backend ID and active editor ABI. |
-| `InstalledUnchecked` | Files are present, but current integrity and compatibility checks have not completed. |
-| `Verified` | Manifest, layout, hashes, signatures, ABI metadata, and platform identity are valid. No device claim has been made. |
-| `HostUnsupported` | Package metadata excludes the current OS, architecture, or minimum OS version. |
-| `MissingRuntime` | Required system loader, driver capability, or runtime dependency is absent. |
-| `AbiMismatch` | Module ABI is incompatible with the active editor/engine ABI. |
-| `ProbeFailed` | The helper process returned a typed failure, timed out, crashed, or produced invalid output. |
-| `Quarantined` | Security or repeated health failure prevents loading until repair or explicit policy action. |
-| `Available` | Verification and the current host probe succeeded. |
-| `Selected` | Startup policy chose the backend; no live device is implied yet. |
-| `Active` | The editor successfully loaded and initialized the selected backend. |
-| `UpdateRequired` | A compatible module update is required before activation. |
-| `RepairRequired` | Installed state is incomplete, corrupted, or inconsistent with its install record. |
-
-`Compiled`, `installed`, `verified`, `available`, and `active` are not synonyms.
-Capability hints in a manifest are not authoritative device capabilities.
+Snapshots may describe multiple installed versions and one active instance.
+Asynchronous verification/probe/install operations commit only against their
+source revision. UI/CLI may derive one summary badge/action but control flow and
+persistence retain all dimensions. Capability hints in a manifest and probe
+success are not authoritative initialized-device capabilities.
 
 ## Resolution And Selection
 
@@ -173,7 +160,7 @@ A requested backend that is missing or unavailable does not silently become a
 different backend. The result is an actionable typed diagnostic containing:
 
 - requested backend ID;
-- component lifecycle state;
+- component snapshot revision and relevant install/verification/host/runtime state;
 - editor and renderer ABI versions;
 - host OS and architecture;
 - safe failure category;
@@ -301,7 +288,8 @@ horo renderer select <id> --scope user|project
 
 Command names are architectural intent, not a statement that the current CLI
 already implements them. The Welcome/component-manager surface and CLI call the
-same application services and produce the same lifecycle states and diagnostics.
+same application services and produce the same component snapshots and
+diagnostics.
 
 Removing the active or selected backend requires explicit resolution. Uninstall
 is blocked while a running process holds a module lease. Project references do
@@ -315,7 +303,7 @@ paths. Each backend entry shows at least:
 
 - display name and stable ID;
 - installed version;
-- lifecycle/health state;
+- install, verification, host-support and runtime-availability summary;
 - host support result;
 - last probe result and safe diagnostic summary;
 - install, repair, update, diagnostics, or remove actions;

@@ -59,6 +59,13 @@ These sibling build targets produce independently packageable renderer
 components. An installed editor may contain any supported subset; runtime loading
 does not change the dependency direction.
 
+[ADR-052](../../adr/052-first-party-renderer-component-scope.md) restricts each
+first-party component to one backend identity and its matching private module/
+presentation/editor artifacts. Host-neutral contracts, component management,
+trust, selection/fallback policy and Null remain outside every interactive
+component. Installed, verified, host-supported, runtime-available, selected and
+active are separate snapshot dimensions and cannot be collapsed to claim parity.
+
 Editor integrations follow the same rule:
 
 ```text
