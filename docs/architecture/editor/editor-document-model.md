@@ -140,6 +140,26 @@ Examples:
 Only a committed transaction increments the authoritative document revision and
 publishes one coherent change notification.
 
+### Prefab Override Transactions
+
+[ADR-093](../../adr/093-prefab-override-property-identity-and-delta-operations.md)
+requires prefab override assign/add/remove/move, revert, source rebase, conflict/
+orphan resolution and apply-to-prefab to enter through typed Editor commands or a
+multi-document application use case. Inspector widgets, file watchers and
+serializers never mutate override maps or `.prefab` files directly.
+
+Commands pin the document session/revision, source prefab revision and component
+schema registry revision, build a complete canonical override/rebase candidate and
+then commit override records, conflicts/orphans, dirty state and one history entry
+atomically. Failure/cancellation preserves the old set. Undo/redo owns exact semantic
+deltas including losslessly preserved opaque records.
+
+Apply-to-prefab prepares source edits, affected instance rebase candidates,
+permissions/source-control and durable publication before removing instance records.
+An external publication with uncertain/partial outcome receives an explicit
+reconciliation record; the editor cannot claim in-memory rollback undid an already
+published source file.
+
 Intermediate transaction state is not observable by tabs or panels until the
 transaction commits, unless the transaction is explicitly marked as a preview
 transaction.
@@ -385,6 +405,10 @@ Required tests cover:
   change
 - recovery file with stale/unsupported document format version
 - bounded AffectedObjectSummary does not break subscriber correctness
+- prefab override apply/revert/rebase/conflict resolution has command symmetry,
+  one-entry history and no direct Inspector/file-watcher mutation
+- apply-to-prefab failure or uncertain external publication preserves instance
+  intent and reports reconciliation state
 
 ## Related Documents
 

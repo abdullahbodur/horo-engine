@@ -284,6 +284,12 @@ The single project version governs:
 - package/plugin contribution state stored in the project
 - future Horo-owned durable authoring documents
 
+Prefab instance/variant override sets are governed authored data. Per
+[ADR-093](../../adr/093-prefab-override-property-identity-and-delta-operations.md),
+their stable component/property/collection-element IDs, typed operation records,
+expected source digests, conflicts and opaque orphans migrate with the project and
+must not be discarded as derived cache data.
+
 ### Rebuilt derived data
 
 The following is invalidated and rebuilt after migration:
@@ -781,6 +787,14 @@ Core recipes are compiled into trusted engine tooling. Package-owned recipes are
 resolved from installed, verified packages and run through the package migration
 capability boundary. Their output is always revalidated by core document
 validators.
+
+Prefab override migration is ID- and schema-driven. A retained identity may survive
+a representation rename; a tombstoned identity may move only through a declared
+one-way mapping and total typed value conversion. Unkeyed index paths, missing
+package schemas, ambiguous split/merge or failed conversion remain preserved
+conflicts/orphans. Migration never guesses from localized labels, C++ offsets,
+reflection order or current collection indexes. Cooked prefabs remain derived and
+are recooked from the successfully migrated effective authoring state.
 
 ### Release gate
 
