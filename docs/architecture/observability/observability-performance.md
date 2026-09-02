@@ -439,6 +439,7 @@ governs concurrency, data retention, and event propagation as follows:
 ### Concurrency And Write Semantics
 
 To prevent lock contention on hot engine threads (e.g., render, update):
+
 - **Thread-Local Accumulators**: Hot-path metrics (such as draw calls, frames, and allocation counters) write directly to thread-local or sharded atomic slots.
 - **Periodic Aggregation**: The central `MetricsStore` aggregates these sharded buffers at a fixed rate (e.g., once per frame for frame metrics, or every 500ms for system/process counters) using a readers-writer lock (`std::shared_mutex`).
 - **Query Path**: Reads and presentation queries acquire a shared lock (`shared_lock`), while the aggregator thread acquires a unique write lock (`unique_lock`) only during flush phases.
@@ -764,6 +765,7 @@ Python timers use `time.perf_counter_ns()` to guarantee high-resolution monotoni
 ### Registry Thread Safety
 
 To support concurrent scripts and parallel task executions (e.g. `multiprocessing` or `threading` wrappers in release jobs):
+
 - **Locking**: The Python metrics registry in `horo_metrics.py` implements a global `threading.Lock` protecting the creation and updating of instrument handles.
 - **Process Sampler Platform Behavior**: Process CPU and resident memory usage collection uses `psutil` if available. On Linux systems where `psutil` is absent, it parses `/proc/self/stat` directly. On macOS systems without `psutil`, CPU and memory stats default to `Unavailable`. The script will gracefully mark them unavailable without raising import or runtime errors.
 
