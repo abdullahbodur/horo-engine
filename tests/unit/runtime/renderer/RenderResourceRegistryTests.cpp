@@ -114,7 +114,7 @@ namespace {
         REQUIRE_FALSE(RenderResourceRegistryLimits{.maximumPendingRequests = 2, .maximumOperationResults = 1}.IsValid());
     }
 
-    TEST_CASE("Resource registry reports malformed and state-incompatible operations", "[unit][runtime][renderer][resource]") {
+    TEST_CASE("Resource registry reports malformed identities", "[unit][runtime][renderer][resource]") {
         const auto owner = AcquireRenderResourceOwnerId();
         REQUIRE(owner.HasValue());
         RenderResourceRegistry registry{owner.Value(), {}};
@@ -142,6 +142,15 @@ namespace {
         REQUIRE(identity != RenderResourceIdentity{.owner = {}, .slot = identity.slot, .generation = identity.generation});
         REQUIRE(identity != RenderResourceIdentity{.owner = identity.owner, .slot = identity.slot + 1, .generation = identity.generation});
         REQUIRE(identity != RenderResourceIdentity{.owner = identity.owner, .slot = identity.slot, .generation = identity.generation + 1});
+    }
+
+    TEST_CASE("Resource registry rejects state-incompatible operations", "[unit][runtime][renderer][resource]") {
+        const auto owner = AcquireRenderResourceOwnerId();
+        REQUIRE(owner.HasValue());
+        RenderResourceRegistry registry{owner.Value(), {}};
+        auto reserved = registry.Reserve(RenderResourceClass::Buffer);
+        REQUIRE(reserved.HasValue());
+        const RenderResourceIdentity identity = Identity(reserved.Value());
 
         const auto pendingBackend = registry.BackendInstance(RenderResourceClass::Buffer, identity);
         REQUIRE(pendingBackend.HasError());
