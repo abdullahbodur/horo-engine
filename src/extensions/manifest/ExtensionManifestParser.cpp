@@ -167,8 +167,8 @@ namespace Horo::Extensions {
                 const Json *package = SelectPackage(document);
                 if (package == nullptr)
                     return CurrentFailure();
-                const std::string packagePath = document.contains("package") ? "$.package" : "$";
-                if (!ParseManifestSections(document, *package, packagePath, manifest))
+                if (const std::string packagePath = document.contains("package") ? "$.package" : "$";
+                    !ParseManifestSections(document, *package, packagePath, manifest))
                     return CurrentFailure();
                 return Result<ExtensionManifest>::Success(std::move(manifest));
             }
