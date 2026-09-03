@@ -30,7 +30,7 @@ Every developer machine needs:
 Optional but recommended:
 
 - clang-format 17+ (formatting is checked in CI)
-- clang-tidy 17+ (static analysis in CI)
+- clang-tidy 17+ (optional local static analysis)
 - RenderDoc or Xcode GPU Frame Capture
 
 ## Python Dependencies
