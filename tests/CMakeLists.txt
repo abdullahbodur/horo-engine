@@ -655,6 +655,14 @@ add_executable(HoroAssetSceneDropTests
 )
 target_compile_features(HoroAssetSceneDropTests PRIVATE cxx_std_20)
 target_link_libraries(HoroAssetSceneDropTests PRIVATE HoroEngine::EditorRenderExtraction)
+add_executable(HoroEditorViewportResourceTests
+        unit/editor/EditorViewportResourcesTests.cpp
+)
+target_link_libraries(HoroEditorViewportResourceTests
+        PRIVATE
+        HoroEngine::EditorViewportResources
+        HoroEngine::RenderNull
+)
 
 # White-box editor tests opt into implementation headers explicitly. Keep this
 # non-installed test interface separate from every production usage requirement;
@@ -688,6 +696,7 @@ set(HORO_EDITOR_WHITE_BOX_TEST_TARGETS
         HoroSceneDocumentPersistenceTests
         HoroEditorViewportPickingTests
         HoroAssetSceneDropTests
+        HoroEditorViewportResourceTests
 )
 foreach (target IN LISTS HORO_EDITOR_WHITE_BOX_TEST_TARGETS)
     if (TARGET ${target})
@@ -1011,6 +1020,7 @@ set(HORO_CATCH_TEST_TARGETS
         HoroAssetSceneDropTests
         HoroRenderBackendRegistryTests
         HoroRenderFrontendTests
+        HoroEditorViewportResourceTests
         HoroRuntimeLifecycleTests
         HoroRuntimeSceneTests
         HoroAssetRegistryTests

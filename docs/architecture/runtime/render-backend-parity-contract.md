@@ -517,6 +517,38 @@ Required shared cases:
 Platform-specific tests may verify GL state restoration or Metal resource and
 command-buffer lifetime, but those tests do not weaken the shared contract.
 
+### Resident Resource Lifetime Validation
+
+Resident-resource qualification is layered so deterministic headless evidence
+guards the shared contract on every host while native lanes prove API-specific
+realization and GPU completion. A lane passes only when every applicable row
+below passes; skipped native rows are unqualified, not successful.
+
+| Behavior | Null/headless evidence | OpenGL evidence | Metal evidence | Pass threshold |
+|---|---|---|---|---|
+| Descriptor and capability admission | Frontend and Null resource tests | Fake-dispatch resource tests | Fake-runtime resource tests | Every malformed or unsupported request returns the expected typed code and performs no native creation. |
+| Pending creation and publication | Frontend resource tests | Viewport GPU smoke | Viewport GPU smoke | Pending handles never resolve or enter a derived resource; each completed operation publishes exactly one ready generation. |
+| Resize and generation replacement | Headless viewport-resource tests | Viewport GPU smoke | Viewport GPU smoke | The active target remains usable until the replacement is ready; the old handle is stale immediately after the atomic swap. |
+| Mesh-source replacement | Headless viewport-resource tests | Viewport GPU smoke | Viewport GPU smoke | Existing draws retain the old generation until the replacement mesh is ready; no dependent generation is retargeted in place. |
+| Dependency and submission pins | Resource-registry tests | Native API completion rules plus GPU smoke | Command-buffer completion plus GPU smoke | No backend destroy occurs before all dependency and accepted-submission pins drain. |
+| Creation failure and rollback | Frontend failure-injection tests | Incomplete-framebuffer rollback test | Fake-runtime failure tests | The operation retains its original typed error, partial native state is released once, and the previous ready generation remains usable. |
+| Shutdown | Registry and headless viewport-resource tests | Backend lifecycle and viewport smoke tests | Backend lifecycle and viewport smoke tests | Pending work is cancelled, dependents retire before dependencies, every native instance is released once, and a second shutdown is a no-op. |
+| Backend/device loss | Deterministic failure fixtures when recovery is introduced | Required before recovery is advertised | Required before recovery is advertised | No unavailable native API is called; all old-owner handles become stale and recoverable records publish only under a new owner. |
+
+Failures must retain a registered descriptor. Its domain identifies the
+frontend, OpenGL, Metal, or Null boundary; its code identifies the operation and
+failure class; its summary and remediation hint provide the actionable cause.
+Tests compare descriptor fields rather than parsing message text.
+
+The deterministic resource tests run without a display or GPU and must pass on
+every supported CI host. Native GPU smoke tests run only in their documented
+hardware/display lanes and pass only when all pixel/readback assertions succeed
+with the API debug layer enabled where supported. A crash, timeout, unexpected
+skip, leaked native instance, non-zero test exit, or failed assertion fails the
+lane. Device-loss recovery remains unqualified until the frontend exposes that
+lifecycle; tests must not simulate success by preserving handles from the old
+resource owner.
+
 ## Build Matrix
 
 [ADR-030](../../adr/030-metal-platform-and-feature-baseline.md) limits the initial
