@@ -27,10 +27,11 @@
 
 enum {  // NOSONAR(cpp:S3642) C ABI constant group
     HORO_EXTENSION_ABI_VERSION = 1,
+    HORO_EXTENSION_ABI_MINOR_VERSION = 1,
     HORO_ASSET_IMPORTER_ABI_VERSION = 1,
 };
 
-enum HoroExtensionStatus {  // NOSONAR(cpp:S3642) C ABI enumeration
+enum HoroExtensionStatusCode {  // NOSONAR(cpp:S3642) C ABI constants; wire values use uint32_t.
     HORO_EXTENSION_SUCCESS = 0,
     HORO_EXTENSION_ERROR_VERSION_MISMATCH = 1,
     HORO_EXTENSION_ERROR_INIT_FAILED = 2,
@@ -38,38 +39,40 @@ enum HoroExtensionStatus {  // NOSONAR(cpp:S3642) C ABI enumeration
     HORO_EXTENSION_ERROR_CANCELLED = 4,
     HORO_EXTENSION_ERROR_OUTPUT_REJECTED = 5,
 };
-using HoroExtensionStatus = enum HoroExtensionStatus;
+
+typedef uint32_t HoroExtensionStatus;  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
 
 /** @brief Borrowed byte-counted UTF-8 text; it need not be null-terminated. */
 struct HoroExtensionStringView {
     const char *data;
     uint32_t length;
 };
-using HoroExtensionStringView = struct HoroExtensionStringView;
+typedef struct HoroExtensionStringView HoroExtensionStringView;  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
 
 /** @brief Host-owned byte output resized and filled by a module callback. */
 struct HoroExtensionByteSink {
     void *context;
     HoroExtensionStatus (*resize)(void *context, uint64_t byteCount, uint8_t **outBytes);
 };
-using HoroExtensionByteSink = struct HoroExtensionByteSink;
+typedef struct HoroExtensionByteSink HoroExtensionByteSink;  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
 
 /** @brief Cooperative cancellation query valid only during one callback. */
 struct HoroExtensionCancellation {
     const void *context;
     uint8_t (*isCancellationRequested)(const void *context);
 };
-using HoroExtensionCancellation = struct HoroExtensionCancellation;
+typedef struct HoroExtensionCancellation HoroExtensionCancellation;  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
 
 // Unscoped enumerators are part of the source-compatible C ABI surface.
-enum HoroAssetImportSettingKind {  // NOSONAR(cpp:S3642)
+enum HoroAssetImportSettingKindCode {  // NOSONAR(cpp:S3642) C ABI constants; wire values use uint32_t.
     HORO_ASSET_IMPORT_SETTING_BOOLEAN = 0,
     HORO_ASSET_IMPORT_SETTING_INTEGER = 1,
     HORO_ASSET_IMPORT_SETTING_FLOAT = 2,
     HORO_ASSET_IMPORT_SETTING_TEXT = 3,
     HORO_ASSET_IMPORT_SETTING_CHOICE = 4,
 };
-using HoroAssetImportSettingKind = enum HoroAssetImportSettingKind;
+
+typedef uint32_t HoroAssetImportSettingKind;  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
 
 /** @brief One tagged import-setting value. */
 struct HoroAssetImportSettingValue {
@@ -80,7 +83,7 @@ struct HoroAssetImportSettingValue {
     uint64_t choiceIndex;
     HoroExtensionStringView textValue;
 };
-using HoroAssetImportSettingValue = struct HoroAssetImportSettingValue;
+typedef struct HoroAssetImportSettingValue HoroAssetImportSettingValue;  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
 
 /** @brief One declarative choice belonging to a choice setting. */
 struct HoroAssetImportSettingChoice {
@@ -88,7 +91,7 @@ struct HoroAssetImportSettingChoice {
     HoroExtensionStringView labelKey;
     HoroAssetImportSettingValue value;
 };
-using HoroAssetImportSettingChoice = struct HoroAssetImportSettingChoice;
+typedef struct HoroAssetImportSettingChoice HoroAssetImportSettingChoice;  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
 
 /** @brief One host-rendered declarative importer setting. */
 struct HoroAssetImportSettingDescriptor {
@@ -105,7 +108,7 @@ struct HoroAssetImportSettingDescriptor {
     uint32_t choiceCount;
     uint8_t includeInPresets;
 };
-using HoroAssetImportSettingDescriptor = struct HoroAssetImportSettingDescriptor;
+typedef struct HoroAssetImportSettingDescriptor HoroAssetImportSettingDescriptor;  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
 
 /** @brief Borrowed input for one external importer invocation. */
 struct HoroAssetImportRequest {
@@ -117,7 +120,7 @@ struct HoroAssetImportRequest {
     uint32_t settingCount;
     HoroExtensionCancellation cancellation;
 };
-using HoroAssetImportRequest = struct HoroAssetImportRequest;
+typedef struct HoroAssetImportRequest HoroAssetImportRequest;  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
 
 /** @brief Host-owned output surfaces filled by one external importer invocation. */
 struct HoroAssetImportResponse {
@@ -125,7 +128,7 @@ struct HoroAssetImportResponse {
     HoroExtensionStringView assetType;
     HoroExtensionByteSink editorPayload;
 };
-using HoroAssetImportResponse = struct HoroAssetImportResponse;
+typedef struct HoroAssetImportResponse HoroAssetImportResponse;  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
 
 /** @brief Borrowed input for one rendering-neutral preview invocation. */
 struct HoroAssetPreviewRequest {
@@ -138,7 +141,7 @@ struct HoroAssetPreviewRequest {
     uint32_t height;
     HoroExtensionCancellation cancellation;
 };
-using HoroAssetPreviewRequest = struct HoroAssetPreviewRequest;
+typedef struct HoroAssetPreviewRequest HoroAssetPreviewRequest;  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
 
 /** @brief Host-owned tightly packed RGBA8 preview output. */
 struct HoroAssetPreviewResponse {
@@ -147,13 +150,13 @@ struct HoroAssetPreviewResponse {
     uint32_t height;
     HoroExtensionByteSink rgba8Pixels;
 };
-using HoroAssetPreviewResponse = struct HoroAssetPreviewResponse;
+typedef struct HoroAssetPreviewResponse HoroAssetPreviewResponse;  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
 
-using HoroAssetImportFunc = HoroExtensionStatus (*)(void *importerContext, const HoroAssetImportRequest *request,
-                                                    HoroAssetImportResponse *response);
-using HoroAssetPreviewFunc = HoroExtensionStatus (*)(void *importerContext, const HoroAssetPreviewRequest *request,
-                                                     HoroAssetPreviewResponse *response);
-using HoroAssetImporterDestroyFunc = void (*)(void *importerContext);
+typedef HoroExtensionStatus (*HoroAssetImportFunc)(  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
+    void *importerContext, const HoroAssetImportRequest *request, HoroAssetImportResponse *response);
+typedef HoroExtensionStatus (*HoroAssetPreviewFunc)(  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
+    void *importerContext, const HoroAssetPreviewRequest *request, HoroAssetPreviewResponse *response);
+typedef void (*HoroAssetImporterDestroyFunc)(void *importerContext);  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
 
 /** @brief Complete versioned descriptor registered at the asset.importer extension point. */
 struct HoroAssetImporterDescriptor {
@@ -176,10 +179,11 @@ struct HoroAssetImporterDescriptor {
     HoroAssetPreviewFunc generatePreview;
     HoroAssetImporterDestroyFunc destroyImporter;
 };
-using HoroAssetImporterDescriptor = struct HoroAssetImporterDescriptor;
+typedef struct HoroAssetImporterDescriptor HoroAssetImporterDescriptor;  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
 
 /** @brief Host callback used only while the module load transaction is active. */
-using HoroRegisterAssetImporterFunc = HoroExtensionStatus (*)(void *hostContext, const HoroAssetImporterDescriptor *descriptor);
+typedef HoroExtensionStatus (*HoroRegisterAssetImporterFunc)(  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
+    void *hostContext, const HoroAssetImporterDescriptor *descriptor);
 
 struct HoroExtensionHostApi {
     /** @brief Size of this struct for append-only ABI negotiation. */
@@ -188,8 +192,12 @@ struct HoroExtensionHostApi {
     HoroExtensionStringView engineVersion;
     void *hostContext;
     HoroRegisterAssetImporterFunc registerAssetImporter;
+    /** @brief Appended in 1.1; read only when structSize covers this field. */
+    uint32_t abiMinorVersion;
+    /** @brief Reserved for append-only negotiation; must be zero. */
+    uint32_t reserved;
 };
-using HoroExtensionHostApi = struct HoroExtensionHostApi;
+typedef struct HoroExtensionHostApi HoroExtensionHostApi;  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
 
 struct HoroExtensionModuleApi {
     /** @brief Size of this struct for append-only ABI negotiation. */
@@ -198,7 +206,34 @@ struct HoroExtensionModuleApi {
     HoroExtensionStringView moduleId;
     HoroExtensionStringView moduleVersion;
 };
-using HoroExtensionModuleApi = struct HoroExtensionModuleApi;
+typedef struct HoroExtensionModuleApi HoroExtensionModuleApi;  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
+
+enum {  // NOSONAR(cpp:S3642) C ABI function requirement bits.
+    HORO_EXTENSION_REQUIRES_ASSET_IMPORTER = 1,
+};
+
+/**
+ * @brief Inert requirements returned by the optional horo_extension_query entry point.
+ *
+ * The host initializes structSize to its writable capacity and all other fields
+ * to zero. The module writes every field and returns its complete table size.
+ * Major versions must match; minimumHostMinor must not exceed the host minor.
+ * Unknown requirement bits and nonzero reserved fields are rejected. The query
+ * must not allocate lifecycle state, register contributions, or retain pointers.
+ * Without a query entry point, a module uses the legacy 1.0 bootstrap contract.
+ */
+struct HoroExtensionRequirements {
+    uint32_t structSize;
+    uint32_t abiMajorVersion;
+    uint32_t minimumHostMinor;
+    uint32_t requiredHostApiSize;
+    uint32_t requiredFunctions;
+    uint32_t reserved;
+};
+typedef struct HoroExtensionRequirements HoroExtensionRequirements;  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
+
+/** @brief Populate requirements without receiving host capabilities; return a status, never throw. */
+typedef HoroExtensionStatus (*HoroExtensionQueryFunc)(HoroExtensionRequirements *requirements);  // NOSONAR(cpp:S5416) Shared C11 ABI.
 
 /**
  * @brief Standard native extension entry point.
@@ -206,10 +241,11 @@ using HoroExtensionModuleApi = struct HoroExtensionModuleApi;
  * @param outModule Module lifecycle state populated by the extension.
  * @return HORO_EXTENSION_SUCCESS when initialization and registrations succeed.
  */
-using HoroExtensionLoadFunc = HoroExtensionStatus (*)(const HoroExtensionHostApi *host, HoroExtensionModuleApi *outModule);
+typedef HoroExtensionStatus (*HoroExtensionLoadFunc)(  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
+    const HoroExtensionHostApi *host, HoroExtensionModuleApi *outModule);
 
 /**
  * @brief Optional native extension unload point.
  * @param extensionModule Module state originally returned by the load entry point.
  */
-using HoroExtensionUnloadFunc = void (*)(HoroExtensionModuleApi *extensionModule);
+typedef void (*HoroExtensionUnloadFunc)(HoroExtensionModuleApi *extensionModule);  // NOSONAR(cpp:S5416) Shared C11 ABI requires typedef.
