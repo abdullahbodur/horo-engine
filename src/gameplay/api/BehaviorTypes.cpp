@@ -1,32 +1,14 @@
 #include "Horo/Gameplay/BehaviorTypes.h"
 
+#include "GameplayIdentityValidation.h"
 #include "Horo/Gameplay/GameplayErrors.h"
 
-#include <algorithm>
-#include <cctype>
 #include <unordered_set>
 
 namespace Horo::Gameplay {
-    namespace {
-        [[nodiscard]] bool ValidNamespacedId(const std::string_view value) noexcept {
-            if (value.size() < 7 || value.size() > MaximumBehaviorTypeIdBytes || !value.starts_with("game."))
-                return false;
-            bool previousDot = false;
-            std::size_t dotCount = 0;
-            for (const unsigned char character : value) {
-                const bool dot = character == '.';
-                if ((!dot && character != '_' && !std::islower(character) && !std::isdigit(character)) || (dot && previousDot))
-                    return false;
-                dotCount += dot ? 1U : 0U;
-                previousDot = dot;
-            }
-            return dotCount >= 2 && !previousDot;
-        }
-    }  // namespace
-
     /** @copydoc BehaviorTypeId::Parse */
     Result<BehaviorTypeId> BehaviorTypeId::Parse(const std::string_view value) {
-        if (!ValidNamespacedId(value))
+        if (!Detail::IsNamespacedGameplayId(value, MaximumBehaviorTypeIdBytes))
             return Result<BehaviorTypeId>::Failure(MakeError(GameplayErrors::InvalidBehaviorTypeId));
         return Result<BehaviorTypeId>::Success(BehaviorTypeId{std::string{value}});
     }

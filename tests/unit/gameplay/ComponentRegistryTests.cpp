@@ -35,6 +35,7 @@ namespace {
 TEST_CASE("component identities and descriptor metadata reject ambiguous registration") {
     REQUIRE(ComponentTypeId::Parse("game.tests.movement_settings").HasValue());
     REQUIRE(ComponentTypeId::Parse("MovementSettings").HasError());
+    REQUIRE(ComponentTypeId::Parse("game.tests.mövëment").HasError());
     REQUIRE(ComponentPropertyId::Parse("move_speed").HasValue());
     REQUIRE(ComponentPropertyId::Parse("MoveSpeed").HasError());
 

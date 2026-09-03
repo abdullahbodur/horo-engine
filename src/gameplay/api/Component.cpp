@@ -1,39 +1,12 @@
 #include "Horo/Gameplay/Component.h"
 
+#include "GameplayIdentityValidation.h"
 #include "Horo/Gameplay/GameplayErrors.h"
 
-#include <algorithm>
-#include <cctype>
-
 namespace Horo::Gameplay {
-    namespace {
-        [[nodiscard]] bool IsLowercaseIdentifier(const std::string_view value, const std::size_t maximumBytes) noexcept {
-            if (value.empty() || value.size() > maximumBytes)
-                return false;
-            return std::ranges::all_of(value, [](const unsigned char character) {
-                return character == '_' || std::islower(character) || std::isdigit(character);
-            });
-        }
-
-        [[nodiscard]] bool IsNamespacedComponentId(const std::string_view value) noexcept {
-            if (value.size() < 7 || value.size() > MaximumComponentTypeIdBytes || !value.starts_with("game."))
-                return false;
-            bool previousDot = false;
-            std::size_t dotCount = 0;
-            for (const unsigned char character : value) {
-                const bool dot = character == '.';
-                if ((!dot && character != '_' && !std::islower(character) && !std::isdigit(character)) || (dot && previousDot))
-                    return false;
-                dotCount += dot ? 1U : 0U;
-                previousDot = dot;
-            }
-            return dotCount >= 2 && !previousDot;
-        }
-    }  // namespace
-
     /** @copydoc ComponentTypeId::Parse */
     Result<ComponentTypeId> ComponentTypeId::Parse(const std::string_view value) {
-        if (!IsNamespacedComponentId(value))
+        if (!Detail::IsNamespacedGameplayId(value, MaximumComponentTypeIdBytes))
             return Result<ComponentTypeId>::Failure(MakeError(GameplayErrors::InvalidComponentTypeId));
         return Result<ComponentTypeId>::Success(ComponentTypeId{std::string{value}});
     }
@@ -50,7 +23,7 @@ namespace Horo::Gameplay {
 
     /** @copydoc ComponentPropertyId::Parse */
     Result<ComponentPropertyId> ComponentPropertyId::Parse(const std::string_view value) {
-        if (!IsLowercaseIdentifier(value, MaximumComponentPropertyIdBytes))
+        if (!Detail::IsLowercaseIdentifier(value, MaximumComponentPropertyIdBytes))
             return Result<ComponentPropertyId>::Failure(MakeError(GameplayErrors::InvalidComponentDescriptor));
         return Result<ComponentPropertyId>::Success(ComponentPropertyId{std::string{value}});
     }
