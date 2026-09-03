@@ -2,6 +2,7 @@
 
 #include "editor/renderer/EditorRendererErrors.h"
 
+#include <glad/gl.h>
 #include <string>
 
 namespace Horo::Editor {
@@ -39,6 +40,15 @@ namespace Horo::Editor {
     Result<void> SdlOpenGLPresentationPort::MakeCurrent() {
         if (context_ == nullptr || !SDL_GL_MakeCurrent(window_, context_)) {
             return Result<void>::Failure(MakeSdlRenderError(RendererErrors::SdlMakeCurrentFailed, "SDL_GL_MakeCurrent failed"));
+        }
+        return Result<void>::Success();
+    }
+
+    /** @copydoc SdlOpenGLPresentationPort::LoadCommandDispatch */
+    Result<void> SdlOpenGLPresentationPort::LoadCommandDispatch() {
+        if (context_ == nullptr || gladLoadGL(SDL_GL_GetProcAddress) == 0) {
+            return Result<void>::Failure(
+                MakeSdlRenderError(RendererErrors::ViewportOpenGLDispatchFailed, "OpenGL command dispatch loading failed"));
         }
         return Result<void>::Success();
     }

@@ -2,6 +2,7 @@
 
 #include "Horo/Runtime/Render/Mesh.h"
 #include "Horo/Runtime/Render/RenderFrontend.h"
+#include "Horo/Runtime/Render/Texture.h"
 #include "RenderResourceRegistry.h"
 
 #include <deque>
@@ -14,6 +15,9 @@ namespace Horo::Render::Detail {
         enum class RequestKind : std::uint8_t {
             Buffer,
             Mesh,
+            Texture,
+            TextureView,
+            RenderTarget,
         };
 
         struct Request {
@@ -21,6 +25,9 @@ namespace Horo::Render::Detail {
             RenderResourceIdentity identity;
             RenderBufferDescriptor buffer;
             RenderMeshDescriptor mesh;
+            RenderTextureDescriptor texture;
+            RenderTextureViewDescriptor textureView;
+            RenderTargetDescriptor renderTarget;
             std::vector<std::byte> initialData;
             std::optional<RenderResourceIdentity> replacedMesh;
         };
@@ -42,6 +49,18 @@ namespace Horo::Render::Detail {
         void EnqueueMesh(const RenderResourceIdentity identity, const RenderMeshDescriptor &descriptor,
                          const std::optional<RenderResourceIdentity> replacedMesh) {
             requests_.push_back(Request{.kind = RequestKind::Mesh, .identity = identity, .mesh = descriptor, .replacedMesh = replacedMesh});
+        }
+
+        void EnqueueTexture(const RenderResourceIdentity identity, const RenderTextureDescriptor &descriptor) {
+            requests_.push_back(Request{.kind = RequestKind::Texture, .identity = identity, .texture = descriptor});
+        }
+
+        void EnqueueTextureView(const RenderResourceIdentity identity, const RenderTextureViewDescriptor &descriptor) {
+            requests_.push_back(Request{.kind = RequestKind::TextureView, .identity = identity, .textureView = descriptor});
+        }
+
+        void EnqueueRenderTarget(const RenderResourceIdentity identity, const RenderTargetDescriptor &descriptor) {
+            requests_.push_back(Request{.kind = RequestKind::RenderTarget, .identity = identity, .renderTarget = descriptor});
         }
 
         void MarkBackAsReplacement(const RenderResourceIdentity replacedMesh) noexcept {

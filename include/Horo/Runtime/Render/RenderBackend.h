@@ -7,6 +7,7 @@
 
 #include "Horo/Foundation/Result.h"
 #include "Horo/Runtime/Render/RenderScene.h"
+#include "Horo/Runtime/Render/Texture.h"
 
 #include <cmath>
 #include <cstddef>
@@ -79,17 +80,6 @@ namespace Horo::Render {
         bool supportsInteractivePresentation{false};
     };
 
-    /** @brief Pixel extent of a render surface or offscreen target. */
-    struct FramebufferExtent {
-        std::uint32_t width{0};
-        std::uint32_t height{0};
-
-        /** @brief Reports whether both dimensions can back a render target. */
-        [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return width > 0 && height > 0;
-        }
-    };
-
     /** @brief Backend-neutral presentation pacing policy. */
     enum class PresentMode : std::uint8_t {
         Fifo,
@@ -129,6 +119,8 @@ namespace Horo::Render {
         bool supportsRayTracing{false};
         bool supportsBufferResources{false};
         bool supportsMeshResources{false};
+        bool supportsTextureResources{false};
+        bool supportsRenderTargetResources{false};
     };
 
     /** @brief Describes one host frame before backend work begins. */
@@ -305,11 +297,55 @@ namespace Horo::Render {
         [[nodiscard]] virtual Result<std::uint64_t> CreateMesh(const RenderMeshDescriptor &descriptor, std::uint64_t vertexBuffer,
                                                                std::uint64_t indexBuffer) = 0;
 
+        /**
+         * @brief Realizes one validated immutable texture allocation.
+         * @param descriptor Backend-neutral allocation policy validated by the frontend.
+         * @return Non-zero backend-private texture identity, or a typed failure.
+         */
+        [[nodiscard]] virtual Result<std::uint64_t> CreateTexture(const RenderTextureDescriptor &descriptor) = 0;
+
+        /**
+         * @brief Realizes one validated view over an exact ready texture instance.
+         * @param descriptor Backend-neutral view policy validated by the frontend.
+         * @param texture Backend-private instance for descriptor.texture.
+         * @return Non-zero backend-private view identity, or a typed failure.
+         */
+        [[nodiscard]] virtual Result<std::uint64_t> CreateTextureView(const RenderTextureViewDescriptor &descriptor,
+                                                                      std::uint64_t texture) = 0;
+
+        /**
+         * @brief Realizes one validated render target over exact ready attachment views.
+         * @param descriptor Backend-neutral attachment policy validated by the frontend.
+         * @param colorAttachment Backend-private color view, or zero when absent.
+         * @param depthAttachment Backend-private depth view, or zero when absent.
+         * @return Non-zero backend-private render-target identity, or a typed failure.
+         */
+        [[nodiscard]] virtual Result<std::uint64_t> CreateRenderTarget(const RenderTargetDescriptor &descriptor,
+                                                                       std::uint64_t colorAttachment, std::uint64_t depthAttachment) = 0;
+
         /** @brief Releases one buffer instance after frontend dependency and submission pins drain. */
         virtual void DestroyBuffer(std::uint64_t backendInstance) noexcept = 0;
 
         /** @brief Releases one mesh instance after frontend dependency and submission pins drain. */
         virtual void DestroyMesh(std::uint64_t backendInstance) noexcept = 0;
+
+        /**
+         * @brief Releases one texture instance after dependency and submission pins drain.
+         * @param backendInstance Backend-private identity previously returned by CreateTexture.
+         */
+        virtual void DestroyTexture(std::uint64_t backendInstance) noexcept = 0;
+
+        /**
+         * @brief Releases one texture-view instance after dependency and submission pins drain.
+         * @param backendInstance Backend-private identity previously returned by CreateTextureView.
+         */
+        virtual void DestroyTextureView(std::uint64_t backendInstance) noexcept = 0;
+
+        /**
+         * @brief Releases one render-target instance after dependency and submission pins drain.
+         * @param backendInstance Backend-private identity previously returned by CreateRenderTarget.
+         */
+        virtual void DestroyRenderTarget(std::uint64_t backendInstance) noexcept = 0;
 
         /** @brief Starts one frame and returns the token required by later frame operations. */
         [[nodiscard]] virtual Result<FrameToken> BeginFrame(const FrameDescriptor &descriptor) = 0;

@@ -26,6 +26,7 @@ namespace {
         Create,
         CreateThrowsAfterRetain,
         MakeCurrent,
+        LoadDispatch,
         PresentMode,
         Swap,
     };
@@ -33,6 +34,7 @@ namespace {
     struct PortState {
         int createCount{0};
         int makeCurrentCount{0};
+        int loadDispatchCount{0};
         int presentModeCount{0};
         int swapCount{0};
         int destroyCount{0};
@@ -63,6 +65,14 @@ namespace {
             ++state_->makeCurrentCount;
             if (state_->failure == PortFailure::MakeCurrent) {
                 return Result<void>::Failure(MakePortError("render.test.current_failed", "Injected make-current failure."));
+            }
+            return Result<void>::Success();
+        }
+
+        Result<void> LoadCommandDispatch() override {
+            ++state_->loadDispatchCount;
+            if (state_->failure == PortFailure::LoadDispatch) {
+                return Result<void>::Failure(MakePortError("render.test.dispatch_failed", "Injected command-dispatch load failure."));
             }
             return Result<void>::Success();
         }
@@ -232,7 +242,7 @@ namespace {
     }
 
     TEST_CASE("Initialization Failures Preserve Typed Errors And Rollback Created Context", "[unit][runtime][renderer]") {
-        constexpr std::array failures{PortFailure::Create, PortFailure::MakeCurrent, PortFailure::PresentMode};
+        constexpr std::array failures{PortFailure::Create, PortFailure::MakeCurrent, PortFailure::LoadDispatch, PortFailure::PresentMode};
         for (const PortFailure failure : failures) {
             PortState portState{.failure = failure};
             FakePresentationPort port{portState};
@@ -265,7 +275,7 @@ namespace {
         Check(portState.destroyCount == 1);
     }
 
-    TEST_CASE("Generic Resources Remain Explicitly Unsupported Before OpenGL Migration", "[unit][runtime][renderer][resource]") {
+    TEST_CASE("Incomplete OpenGL Command Dispatch Rejects Generic Resources", "[unit][runtime][renderer][resource]") {
         PortState portState;
         FakePresentationPort port{portState};
         std::unique_ptr<IRenderBackend> backend = CreateBackend(port);

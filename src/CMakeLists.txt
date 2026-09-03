@@ -250,6 +250,7 @@ target_link_libraries(HoroRenderBackendRegistry PUBLIC HoroEngine::RenderApi)
 
 add_library(HoroRenderFrontend STATIC
         runtime/renderer/frontend/RenderFrontend.cpp
+        runtime/renderer/frontend/RenderFrontendResources.cpp
         runtime/renderer/frontend/RenderFrontendErrors.cpp
         runtime/renderer/frontend/RenderResourceOperations.cpp
         runtime/renderer/frontend/RenderResourceRegistry.cpp
@@ -304,6 +305,8 @@ target_link_libraries(HoroRenderNull
 
 if (HORO_BUILD_RENDER_OPENGL)
     add_library(HoroRenderOpenGL STATIC
+            runtime/renderer/modules/opengl/OpenGLBackendModule.cpp
+            runtime/renderer/modules/opengl/OpenGLCommandFunctions.cpp
             runtime/renderer/modules/opengl/OpenGLRenderBackend.cpp
             runtime/renderer/modules/opengl/OpenGLRenderBackendErrors.cpp
     )
@@ -319,6 +322,7 @@ if (HORO_BUILD_RENDER_OPENGL)
             PUBLIC
             HoroEngine::RenderBackendRegistry
             PRIVATE
+            HoroThirdParty::Glad
             OpenGL::GL
     )
 endif ()
@@ -505,7 +509,10 @@ endif ()
 if (HORO_BUILD_EDITOR_GUI AND HORO_BUILD_RENDER_OPENGL)
     add_library(HoroEditorViewportOpenGL STATIC
             editor/renderer/opengl/EditorGuiRendererOpenGL.cpp
+            editor/renderer/opengl/OpenGLViewportResourceBridge.cpp
+            editor/renderer/opengl/OpenGLStateSnapshot.cpp
             editor/renderer/opengl/EditorViewportRendererOpenGL.cpp
+            editor/renderer/opengl/OpenGLViewportResources.cpp
             editor/renderer/opengl/SdlOpenGLPresentationPort.cpp
     )
     add_library(HoroEngine::EditorViewportOpenGL ALIAS HoroEditorViewportOpenGL)
@@ -522,6 +529,7 @@ if (HORO_BUILD_EDITOR_GUI AND HORO_BUILD_RENDER_OPENGL)
             PUBLIC
             HoroEngine::EditorViewportScene
             HoroEngine::RenderOpenGL
+            HoroEngine::RenderFrontend
             ${HORO_SDL3_TARGET}
             PRIVATE
             HoroThirdParty::Glad

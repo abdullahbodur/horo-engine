@@ -47,6 +47,7 @@ namespace Horo::Tests {
         std::unique_ptr<Editor::IEditorViewportRenderer> viewportRenderer_;
         Render::RenderTargetHandle viewportTarget_{};
         Render::FramebufferExtent outputExtent_{};
+        Editor::EditorViewportSceneView previousScene_{};
         std::optional<Render::RenderFrameScope> frame_;
         std::uint64_t frameNumber_{1};
         bool guiInitialized_{false};

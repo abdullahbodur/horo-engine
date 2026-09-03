@@ -52,6 +52,9 @@ namespace Horo::Render {
         /** @brief Makes the retained graphics context current on the calling render-capable thread. */
         [[nodiscard]] virtual Result<void> MakeCurrent() = 0;
 
+        /** @brief Loads the linked OpenGL command dispatch after the retained context becomes current. */
+        [[nodiscard]] virtual Result<void> LoadCommandDispatch() = 0;
+
         /**
          * @brief Applies backend-neutral presentation pacing to the retained context.
          * @param mode Requested presentation pacing policy.

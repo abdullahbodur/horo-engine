@@ -83,6 +83,21 @@ namespace Horo::Render {
                                                                      "Metal generic mesh migration is owned by RND-001.5."));
             }
 
+            Result<std::uint64_t> CreateTexture(const RenderTextureDescriptor &) override {
+                return Result<std::uint64_t>::Failure(MakeMetalError(MetalBackendErrors::UnsupportedResourceOperation,
+                                                                     "Metal generic texture migration is owned by RND-001.5."));
+            }
+
+            Result<std::uint64_t> CreateTextureView(const RenderTextureViewDescriptor &, std::uint64_t) override {
+                return Result<std::uint64_t>::Failure(MakeMetalError(MetalBackendErrors::UnsupportedResourceOperation,
+                                                                     "Metal generic texture-view migration is owned by RND-001.5."));
+            }
+
+            Result<std::uint64_t> CreateRenderTarget(const RenderTargetDescriptor &, std::uint64_t, std::uint64_t) override {
+                return Result<std::uint64_t>::Failure(MakeMetalError(MetalBackendErrors::UnsupportedResourceOperation,
+                                                                     "Metal generic render-target migration is owned by RND-001.5."));
+            }
+
             /** @copydoc IRenderBackend::DestroyBuffer */
             void DestroyBuffer(std::uint64_t) noexcept override {
                 // Generic Metal buffers cannot exist until the focused RND-001.5 migration.
@@ -92,6 +107,12 @@ namespace Horo::Render {
             void DestroyMesh(std::uint64_t) noexcept override {
                 // Generic Metal meshes cannot exist until the focused RND-001.5 migration.
             }
+
+            void DestroyTexture(std::uint64_t) noexcept override {}
+
+            void DestroyTextureView(std::uint64_t) noexcept override {}
+
+            void DestroyRenderTarget(std::uint64_t) noexcept override {}
 
             /** @copydoc IRenderBackend::BeginFrame */
             Result<FrameToken> BeginFrame(const FrameDescriptor &descriptor) override {

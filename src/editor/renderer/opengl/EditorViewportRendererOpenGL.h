@@ -1,15 +1,17 @@
 #pragma once
 
 #include "editor/renderer/EditorViewportRenderer.h"
+#include "editor/renderer/opengl/OpenGLViewportResourceBridge.h"
+#include "editor/renderer/opengl/OpenGLViewportResources.h"
 
 #include <optional>
-#include <unordered_map>
 
 namespace Horo::Editor {
     /** @brief OpenGL editor adapter that renders backend-neutral editor scene instances into an offscreen target. */
     class EditorViewportRendererOpenGL final : public IEditorViewportRenderer {
     public:
-        EditorViewportRendererOpenGL() = default;
+        /** @brief Borrows the frontend that owns every generic viewport resource. */
+        explicit EditorViewportRendererOpenGL(Render::RenderFrontend &frontend) noexcept;
         ~EditorViewportRendererOpenGL() override;
 
         EditorViewportRendererOpenGL(const EditorViewportRendererOpenGL &) = delete;
@@ -27,25 +29,24 @@ namespace Horo::Editor {
         [[nodiscard]] EditorViewportExtent RequestedExtent() const noexcept override;
         [[nodiscard]] Math::ClipDepthRange ClipDepthRange() const noexcept override;
         [[nodiscard]] Result<void> ExecuteStaticMeshPass(const Render::StaticMeshPassDescriptor &descriptor) override;
+        [[nodiscard]] Result<std::optional<Render::RenderTargetHandle>> PrepareResources(Render::RenderFrontend &frontend,
+                                                                                         const Render::RenderSceneView &scene) override;
         [[nodiscard]] EditorViewportTextureView TextureView() const noexcept override;
         [[nodiscard]] bool IsReady() const noexcept override;
 
     private:
         [[nodiscard]] Result<void> CreateProgram();
-        [[nodiscard]] Result<void> CreateShadowResources();
+        [[nodiscard]] Result<void> CreateShadowProgram();
+        [[nodiscard]] Result<void> ValidatePassRequest(const Render::StaticMeshPassDescriptor &descriptor,
+                                                       EditorViewportExtent requestedExtent) const;
+        [[nodiscard]] Result<void> RenderViewportPass(const Render::StaticMeshPassDescriptor &descriptor,
+                                                      const std::optional<EditorViewportDirectionalShadowView> &shadow, float aspect);
         [[nodiscard]] Result<void> DrawDirectionalShadowMap(const Render::RenderSceneView &scene,
-                                                            const EditorViewportDirectionalShadowView &shadow);
+                                                            const EditorViewportDirectionalShadowView &shadow) const;
+        [[nodiscard]] Result<void> DrawSceneMeshes(const Render::RenderSceneView &scene, float aspect) const;
         [[nodiscard]] Result<void> DrawGrid(const Render::RenderCameraView &camera, float aspect, float viewportHeightPixels) const;
         [[nodiscard]] Result<void> DrawLightVisualizer(const Render::RenderCameraView &camera, float aspect);
         void UploadLighting(const Render::RenderSceneView &scene, const std::optional<EditorViewportDirectionalShadowView> &shadow) const;
-
-        struct GpuMesh {
-            std::uint32_t vertexArray{0};
-            std::uint32_t vertexBuffer{0};
-            std::uint32_t indexBuffer{0};
-            std::uint32_t indexCount{0};
-            std::uint32_t generation{0};
-        };
 
         struct UniformLocations {
             std::int32_t mvp{-1};
@@ -65,27 +66,18 @@ namespace Horo::Editor {
             std::int32_t selectionStrength{-1};
         };
 
-        [[nodiscard]] Result<void> SynchronizeMeshes(std::span<const EditorViewportMeshResourceView> resources);
-        static void DestroyMesh(GpuMesh &mesh) noexcept;
-        [[nodiscard]] Result<void> RecreateTarget(EditorViewportExtent extent);
-        void DestroyTarget() noexcept;
+        [[nodiscard]] Result<void> LoadUniformLocations();
 
         std::uint32_t program_{0};
         std::uint32_t shadowProgram_{0};
-        std::uint32_t shadowFramebuffer_{0};
-        std::uint32_t shadowDepthTexture_{0};
         std::uint32_t gridVertexArray_{0};
         std::uint32_t gridVertexBuffer_{0};
-        std::unordered_map<std::uint64_t, GpuMesh> meshes_;
-        std::uint32_t framebuffer_{0};
-        std::uint32_t colorTexture_{0};
-        std::uint32_t depthBuffer_{0};
+        Render::RenderFrontend *frontend_{nullptr};
+        OpenGLViewportResources resources_;
         UniformLocations uniforms_{};
         EditorViewportExtent requestedExtent_{};
-        EditorViewportExtent allocatedExtent_{};
         EditorViewportGridOptions gridOptions_{};
         EditorViewportLightVisualizerOptions lightVisualizerOptions_{};
-        Render::RenderTargetHandle targetHandle_{};
         bool initialized_{false};
     };
 

@@ -49,7 +49,7 @@ horo_allow_target_dependencies(TARGET HoroEditorServices
         HoroProjectMigrations
         HoroAssets)
 horo_allow_target_dependencies(TARGET HoroEditorViewportOpenGL
-    DEPENDENCIES HoroEditorViewportScene HoroRenderOpenGL)
+    DEPENDENCIES HoroEditorViewportScene HoroRenderOpenGL HoroRenderFrontend)
 horo_allow_target_dependencies(TARGET HoroEditorViewportMetal
     DEPENDENCIES HoroEditorViewportScene HoroRenderMetal)
 horo_allow_target_dependencies(TARGET HoroGui

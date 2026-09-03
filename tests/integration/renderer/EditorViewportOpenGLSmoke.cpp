@@ -21,6 +21,100 @@ namespace {
         REQUIRE((condition));
     }
 
+    /** @brief Uses a real SDL OpenGL context while omitting display-server presentation pacing in headless CI. */
+    class HeadlessOpenGLPresentationPort final : public IOpenGLPresentationPort {
+    public:
+        explicit HeadlessOpenGLPresentationPort(SDL_Window &window) noexcept : port_(window) {}
+
+        Result<void> CreateContext(const OpenGLContextDescriptor &descriptor) override {
+            return port_.CreateContext(descriptor);
+        }
+
+        Result<void> MakeCurrent() override {
+            return port_.MakeCurrent();
+        }
+
+        Result<void> LoadCommandDispatch() override {
+            return port_.LoadCommandDispatch();
+        }
+
+        Result<void> SetPresentMode(PresentMode) override {
+            return Result<void>::Success();
+        }
+
+        Result<void> SwapBuffers() override {
+            return port_.SwapBuffers();
+        }
+
+        void DestroyContext() noexcept override {
+            port_.DestroyContext();
+        }
+
+    private:
+        SdlOpenGLPresentationPort port_;
+    };
+
+    RenderTargetHandle PrepareViewportTarget(EditorViewportRendererOpenGL &viewport, RenderFrontend &frontend,
+                                             const EditorViewportSceneView &scene) {
+        for (std::size_t attempt = 0; attempt < 4; ++attempt) {
+            auto prepared = viewport.PrepareResources(frontend, RenderSceneView{ToRenderCamera(scene.camera), scene.meshResources,
+                                                                                scene.instances, scene.lights});
+            Check(prepared.HasValue());
+            Check(frontend.ProcessResourceRequests().HasValue());
+            if (prepared.Value().has_value())
+                return *prepared.Value();
+        }
+        Check(false);
+        return {};
+    }
+
+    /** @brief Verifies that replacements keep the active viewport usable until publication. */
+    void CheckSeamlessResourceTransition(EditorViewportRendererOpenGL &viewport, RenderFrontend &frontend,
+                                         const EditorViewportSceneView &scene, const RenderTargetHandle activeTarget,
+                                         const EditorViewportTextureView activeTexture) {
+        constexpr EditorViewportExtent activeExtent{512, 384};
+        constexpr EditorViewportExtent resizedExtent{384, 256};
+        std::vector<EditorViewportMeshResourceView> replacementMeshes{scene.meshResources.begin(), scene.meshResources.end()};
+        replacementMeshes.front().handle.generation = 2;
+        std::vector<EditorViewportInstance> replacementInstances{scene.instances.begin(), scene.instances.end()};
+        replacementInstances.front().mesh.generation = 2;
+        const EditorViewportSceneView replacementScene{scene.camera, replacementMeshes, replacementInstances, scene.lights};
+        const RenderSceneView renderScene{ToRenderCamera(replacementScene.camera), replacementScene.meshResources,
+                                          replacementScene.instances, replacementScene.lights};
+
+        viewport.RequestExtent(resizedExtent);
+        auto pendingPreparation = viewport.PrepareResources(frontend, renderScene);
+        Check(pendingPreparation.HasValue() && pendingPreparation.Value() == activeTarget);
+        Check(viewport.IsReady());
+        Check(viewport.TextureView().textureId == activeTexture.textureId);
+        Check(viewport.RequestedExtent() == activeExtent);
+
+        auto begun = frontend.BeginFrame(FrameDescriptor{.frameNumber = 2, .outputExtent = {640, 480}});
+        Check(begun.HasValue());
+        RenderFrameScope frame = std::move(begun).Value();
+        const std::array passes{RenderPassDescriptor{
+            .id = RenderPassId{1},
+            .kind = RenderPassKind::Graphics,
+            .staticMesh =
+                StaticMeshPassDescriptor{.target = activeTarget, .extent = {activeExtent.width, activeExtent.height}, .scene = renderScene},
+        }};
+        Check(frame.Execute(passes).HasValue());
+        Check(frame.Present().HasValue());
+
+        RenderTargetHandle resizedTarget;
+        for (std::size_t attempt = 0; attempt < 4 && !resizedTarget.IsValid(); ++attempt) {
+            viewport.RequestExtent(resizedExtent);
+            auto prepared = viewport.PrepareResources(frontend, renderScene);
+            Check(prepared.HasValue());
+            Check(frontend.ProcessResourceRequests().HasValue());
+            if (prepared.Value().has_value() && *prepared.Value() != activeTarget)
+                resizedTarget = *prepared.Value();
+        }
+        Check(resizedTarget.IsValid());
+        Check(viewport.RequestedExtent() == resizedExtent);
+        Check(viewport.TextureView().textureId != activeTexture.textureId);
+    }
+
 }  // namespace
 
 TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]") {
@@ -32,7 +126,7 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]") {
     SDL_Window *window = SDL_CreateWindow("Horo viewport smoke", 640, 480, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
     Check(window != nullptr);
 
-    SdlOpenGLPresentationPort presentationPort{*window};
+    HeadlessOpenGLPresentationPort presentationPort{*window};
     RenderBackendRegistry registry;
     Check(RegisterOpenGLRenderBackend(registry, presentationPort).HasValue());
     Check(registry.Seal().HasValue());
@@ -56,7 +150,7 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]") {
     glBindVertexArray(callerVertexArray);
     glBindBuffer(GL_ARRAY_BUFFER, callerArrayBuffer);
 
-    EditorViewportRendererOpenGL viewport;
+    EditorViewportRendererOpenGL viewport{*frontend};
     Check(viewport.Initialize().HasValue());
     Runtime::PrimitiveMeshCache meshCache;
     constexpr std::array primitiveTypes{Runtime::PrimitiveMeshType::Box,     Runtime::PrimitiveMeshType::Sphere,
@@ -105,31 +199,22 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]") {
     Check(initializedArrayBuffer == static_cast<GLint>(callerArrayBuffer));
     viewport.RequestExtent(EditorViewportExtent{width, height});
     Check(frontend->AttachStaticMeshPassExecutor(viewport).HasValue());
-    auto viewportTargetResult = frontend->CreateOffscreenTarget({width, height});
-    Check(viewportTargetResult.HasValue());
-    const RenderTargetHandle viewportTarget = viewportTargetResult.Value();
+    const RenderTargetHandle viewportTarget = PrepareViewportTarget(viewport, *frontend, viewportScene);
 
     auto begun = frontend->BeginFrame(FrameDescriptor{.frameNumber = 1, .outputExtent = {640, 480}});
     Check(begun.HasValue());
     RenderFrameScope frame = std::move(begun).Value();
-    const std::array passes{
-        RenderPassDescriptor{
-            .id = RenderPassId{1},
-            .kind = RenderPassKind::Graphics,
-            .staticMesh =
-                StaticMeshPassDescriptor{
-                    .target = viewportTarget,
-                    .extent = {width, height},
-                    .scene = RenderSceneView{ToRenderCamera(viewportScene.camera), viewportScene.meshResources, viewportScene.instances,
-                                             viewportScene.lights},
-                },
-        },
-        RenderPassDescriptor{
-            .id = RenderPassId{2},
-            .kind = RenderPassKind::Graphics,
-            .primaryOutput = PrimaryOutputAttachment{},
-        },
-    };
+    const std::array passes{RenderPassDescriptor{
+        .id = RenderPassId{1},
+        .kind = RenderPassKind::Graphics,
+        .staticMesh =
+            StaticMeshPassDescriptor{
+                .target = viewportTarget,
+                .extent = {width, height},
+                .scene = RenderSceneView{ToRenderCamera(viewportScene.camera), viewportScene.meshResources, viewportScene.instances,
+                                         viewportScene.lights},
+            },
+    }};
 
     glViewport(7, 9, 111, 113);
     glClearColor(0.2F, 0.3F, 0.4F, 0.5F);
@@ -144,6 +229,7 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]") {
     glDepthMask(GL_FALSE);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, callerDrawFramebuffer);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, callerReadFramebuffer);
+    Check(frame.Execute(passes).HasValue());
 
     GLint restoredDrawFramebuffer = 0;
     GLint restoredReadFramebuffer = 0;
@@ -184,9 +270,6 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]") {
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 
-    // The primary pass executes after external viewport GL work and re-establishes
-    // the swapchain output state before GUI rendering/presentation.
-    Check(frame.Execute(passes).HasValue());
     Check(viewport.IsReady());
     const EditorViewportTextureView firstTextureView = viewport.TextureView();
     Check(firstTextureView.IsValid());
@@ -206,8 +289,10 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]") {
     const std::size_t center = (static_cast<std::size_t>(height / 2) * width + width / 2) * 4;
     Check(pixels[center] < 150 && pixels[center + 1] > 130 && pixels[center + 2] > 150);
     Check(frame.Present().HasValue());
+
+    CheckSeamlessResourceTransition(viewport, *frontend, viewportScene, viewportTarget, firstTextureView);
+
     frontend->DetachStaticMeshPassExecutor(viewport);
-    Check(frontend->ReleaseOffscreenTarget(viewportTarget).HasValue());
     viewport.Shutdown();
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);

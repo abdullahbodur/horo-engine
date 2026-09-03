@@ -44,8 +44,14 @@ namespace {
         int resizeCount{0};
         int createBufferCount{0};
         int createMeshCount{0};
+        int createTextureCount{0};
+        int createTextureViewCount{0};
+        int createRenderTargetCount{0};
         int destroyBufferCount{0};
         int destroyMeshCount{0};
+        int destroyTextureCount{0};
+        int destroyTextureViewCount{0};
+        int destroyRenderTargetCount{0};
         bool failPresentation{false};
         bool throwDuringInitialize{false};
         bool throwDuringResize{false};
@@ -60,6 +66,8 @@ namespace {
         bool throwDuringResourceCreation{false};
         bool supportsBufferResources{true};
         bool supportsMeshResources{true};
+        bool supportsTextureResources{true};
+        bool supportsRenderTargetResources{true};
     };
 
     BackendLifecycleState lifecycleState;
@@ -69,7 +77,9 @@ namespace {
         TrackingBackend()
             : capabilities_{.backend = RenderBackendId{"tracking"},
                             .supportsBufferResources = lifecycleState.supportsBufferResources,
-                            .supportsMeshResources = lifecycleState.supportsMeshResources} {}
+                            .supportsMeshResources = lifecycleState.supportsMeshResources,
+                            .supportsTextureResources = lifecycleState.supportsTextureResources,
+                            .supportsRenderTargetResources = lifecycleState.supportsRenderTargetResources} {}
 
         Result<void> Initialize(const RenderBackendConfig &) override {
             ++lifecycleState.initializeCount;
@@ -114,12 +124,39 @@ namespace {
             return Result<std::uint64_t>::Success(lifecycleState.nextResourceInstance++);
         }
 
+        Result<std::uint64_t> CreateTexture(const RenderTextureDescriptor &) override {
+            ++lifecycleState.createTextureCount;
+            return Result<std::uint64_t>::Success(lifecycleState.nextResourceInstance++);
+        }
+
+        Result<std::uint64_t> CreateTextureView(const RenderTextureViewDescriptor &, std::uint64_t) override {
+            ++lifecycleState.createTextureViewCount;
+            return Result<std::uint64_t>::Success(lifecycleState.nextResourceInstance++);
+        }
+
+        Result<std::uint64_t> CreateRenderTarget(const RenderTargetDescriptor &, std::uint64_t, std::uint64_t) override {
+            ++lifecycleState.createRenderTargetCount;
+            return Result<std::uint64_t>::Success(lifecycleState.nextResourceInstance++);
+        }
+
         void DestroyBuffer(std::uint64_t) noexcept override {
             ++lifecycleState.destroyBufferCount;
         }
 
         void DestroyMesh(std::uint64_t) noexcept override {
             ++lifecycleState.destroyMeshCount;
+        }
+
+        void DestroyTexture(std::uint64_t) noexcept override {
+            ++lifecycleState.destroyTextureCount;
+        }
+
+        void DestroyTextureView(std::uint64_t) noexcept override {
+            ++lifecycleState.destroyTextureViewCount;
+        }
+
+        void DestroyRenderTarget(std::uint64_t) noexcept override {
+            ++lifecycleState.destroyRenderTargetCount;
         }
 
         Result<FrameToken> BeginFrame(const FrameDescriptor &descriptor) override {
@@ -315,6 +352,71 @@ namespace {
         Check(frontend->ReleaseMesh(mesh.Value().handle).HasValue());
         Check(lifecycleState.destroyMeshCount == 1);
         Check(lifecycleState.destroyBufferCount == 2);
+    }
+
+    TEST_CASE("Frontend Publishes Texture Views And Targets With Dependency-Pinned Retirement", "[unit][runtime][renderer][resource]") {
+        lifecycleState = {};
+        std::unique_ptr<RenderFrontend> frontend = CreateTrackingFrontend();
+        const RenderTextureDescriptor colorDescriptor{.extent = {320, 180},
+                                                      .format = RenderTextureFormat::Rgba8Unorm,
+                                                      .usage = RenderTextureUsage::Sampled | RenderTextureUsage::RenderAttachment};
+        const RenderTextureDescriptor depthDescriptor{.extent = {320, 180},
+                                                      .format = RenderTextureFormat::Depth24Stencil8,
+                                                      .usage = RenderTextureUsage::RenderAttachment};
+        auto color = frontend->CreateTexture(colorDescriptor);
+        auto depth = frontend->CreateTexture(depthDescriptor);
+        Check(color.HasValue() && depth.HasValue());
+        Check(frontend->CreateTextureView({}).ErrorValue().code.Value() == "render.frontend.resource.invalid_texture_view_descriptor");
+        Check(frontend
+                  ->CreateTextureView(
+                      {.texture = color.Value().handle, .format = RenderTextureFormat::Rgba8Unorm, .aspect = RenderTextureAspect::Color})
+                  .ErrorValue()
+                  .code.Value() == "render.frontend.resource.dependency_not_ready");
+        Check(frontend->ProcessResourceRequests().Value() == 2);
+
+        auto colorView = frontend->CreateTextureView(
+            {.texture = color.Value().handle, .format = RenderTextureFormat::Rgba8Unorm, .aspect = RenderTextureAspect::Color});
+        auto depthView = frontend->CreateTextureView(
+            {.texture = depth.Value().handle, .format = RenderTextureFormat::Depth24Stencil8, .aspect = RenderTextureAspect::DepthStencil});
+        Check(colorView.HasValue() && depthView.HasValue());
+        Check(frontend->ProcessResourceRequests().Value() == 2);
+        auto target = frontend->CreateRenderTarget(
+            {.colorAttachment = colorView.Value().handle, .depthAttachment = depthView.Value().handle, .extent = {320, 180}});
+        Check(target.HasValue());
+        Check(frontend->ProcessResourceRequests().Value() == 1);
+        Check(frontend->ResourceState(target.Value().handle).Value() == RenderResourceState::Ready);
+
+        Check(frontend->ReleaseTexture(color.Value().handle).HasValue());
+        Check(frontend->ReleaseTextureView(colorView.Value().handle).HasValue());
+        Check(lifecycleState.destroyTextureCount == 0);
+        Check(lifecycleState.destroyTextureViewCount == 0);
+        Check(frontend->ReleaseRenderTarget(target.Value().handle).HasValue());
+        Check(lifecycleState.destroyRenderTargetCount == 1);
+        Check(lifecycleState.destroyTextureViewCount == 1);
+        Check(lifecycleState.destroyTextureCount == 1);
+        Check(frontend->ReleaseTextureView(depthView.Value().handle).HasValue());
+        Check(frontend->ReleaseTexture(depth.Value().handle).HasValue());
+        Check(lifecycleState.destroyTextureViewCount == 2);
+        Check(lifecycleState.destroyTextureCount == 2);
+    }
+
+    TEST_CASE("Frontend Cancels Pending Resource Generations Without Leaking Late Realization", "[unit][runtime][renderer][resource]") {
+        lifecycleState = {};
+        std::unique_ptr<RenderFrontend> frontend = CreateTrackingFrontend();
+        const std::array<std::byte, 16> bytes{};
+        auto buffer = frontend->CreateBuffer({.byteSize = bytes.size(),
+                                              .usage = RenderBufferUsage::Vertex,
+                                              .access = RenderBufferAccess::DeviceLocal},
+                                             bytes);
+        Check(buffer.HasValue());
+        Check(frontend->ReleaseBuffer(buffer.Value().handle).HasValue());
+        const Result<void> completion = frontend->ResourceOperationResult(buffer.Value().operation);
+        Check(completion.HasError());
+        Check(completion.ErrorValue().code.Value() == "render.frontend.resource.operation_cancelled");
+        Check(frontend->ProcessResourceRequests().Value() == 1);
+        Check(lifecycleState.createBufferCount == 1);
+        Check(lifecycleState.destroyBufferCount == 1);
+        Check(frontend->ResourceState(buffer.Value().handle).ErrorValue().code.Value() == "render.frontend.resource.stale");
     }
 
     TEST_CASE("Frontend Mesh Replacement Preserves The Old Generation On Failure", "[unit][runtime][renderer][resource]") {

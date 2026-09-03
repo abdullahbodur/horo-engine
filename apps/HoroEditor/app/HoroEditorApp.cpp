@@ -634,7 +634,7 @@ namespace Horo::Editor {
                 if (const Result<void> initialized = guiRenderer->Initialize(); initialized.HasError()) {
                     return Result<EditorRenderComposition>::Failure(initialized.ErrorValue());
                 }
-                auto viewportRenderer = std::make_unique<EditorViewportRendererOpenGL>();
+                auto viewportRenderer = std::make_unique<EditorViewportRendererOpenGL>(*composition.frontend);
                 if (const Result<void> initialized = viewportRenderer->Initialize(); initialized.HasError()) {
                     return Result<EditorRenderComposition>::Failure(initialized.ErrorValue());
                 }
@@ -661,11 +661,13 @@ namespace Horo::Editor {
                 attached.HasError()) {
                 return Result<EditorRenderComposition>::Failure(attached.ErrorValue());
             }
-            auto viewportTarget = composition.frontend->CreateOffscreenTarget({1, 1});
-            if (viewportTarget.HasError()) {
-                return Result<EditorRenderComposition>::Failure(viewportTarget.ErrorValue());
+            if (options.rendererBackend != "opengl") {
+                auto viewportTarget = composition.frontend->CreateOffscreenTarget({1, 1});
+                if (viewportTarget.HasError()) {
+                    return Result<EditorRenderComposition>::Failure(viewportTarget.ErrorValue());
+                }
+                composition.viewportTarget = viewportTarget.Value();
             }
-            composition.viewportTarget = viewportTarget.Value();
 
             return Result<EditorRenderComposition>::Success(std::move(composition));
         }
@@ -846,11 +848,8 @@ namespace Horo::Editor {
                 passCount_ = 0;
                 const EditorViewportSceneView viewportScene = viewportSceneState_->View();
                 if (const EditorViewportExtent viewportExtent = p_->presentation.viewportRenderer.RequestedExtent();
-                    viewportExtent.IsValid()) {
-                    if (const Result<void> resized =
-                            p_->presentation.renderFrontend.ResizeOffscreenTarget(p_->presentation.viewportTarget,
-                                                                                  {viewportExtent.width, viewportExtent.height});
-                        resized.HasError())
+                    CanSubmitViewportPass(viewportExtent)) {
+                    if (const Result<void> resized = ResizeLegacyViewportTarget(viewportExtent); resized.HasError())
                         return resized;
                     passes_[passCount_++] =
                         Render::RenderPassDescriptor{.id = Render::RenderPassId{1},
@@ -884,6 +883,9 @@ namespace Horo::Editor {
             }
 
             Result<bool> BeginRenderFrame(const Runtime::FrameContext &context) {
+                if (const Result<void> prepared = PrepareViewportResources(); prepared.HasError())
+                    return Result<bool>::Failure(prepared.ErrorValue());
+
                 int drawableWidth = 0;
                 int drawableHeight = 0;
                 SDL_GetWindowSizeInPixels(p_->presentation.window, &drawableWidth, &drawableHeight);
@@ -904,6 +906,33 @@ namespace Horo::Editor {
                     return Result<bool>::Failure(begun.ErrorValue());
                 frame_.emplace(std::move(begun).Value());
                 return Result<bool>::Success(true);
+            }
+
+            Result<void> PrepareViewportResources() {
+                const EditorViewportSceneView viewportScene = viewportSceneState_->View();
+                auto prepared =
+                    p_->presentation.viewportRenderer.PrepareResources(p_->presentation.renderFrontend,
+                                                                       Render::RenderSceneView{.camera =
+                                                                                                   ToRenderCamera(viewportScene.camera),
+                                                                                               .meshResources = viewportScene.meshResources,
+                                                                                               .instances = viewportScene.instances,
+                                                                                               .lights = viewportScene.lights});
+                if (prepared.HasError())
+                    return Result<void>::Failure(prepared.ErrorValue());
+                if (prepared.Value().has_value())
+                    p_->presentation.viewportTarget = *prepared.Value();
+                return Result<void>::Success();
+            }
+
+            [[nodiscard]] bool CanSubmitViewportPass(const EditorViewportExtent extent) const noexcept {
+                return extent.IsValid() && p_->presentation.viewportTarget.IsValid() && p_->presentation.viewportRenderer.IsReady();
+            }
+
+            Result<void> ResizeLegacyViewportTarget(const EditorViewportExtent extent) {
+                if (p_->presentation.renderFrontend.Capabilities().supportsRenderTargetResources)
+                    return Result<void>::Success();
+                return p_->presentation.renderFrontend.ResizeOffscreenTarget(p_->presentation.viewportTarget,
+                                                                             {extent.width, extent.height});
             }
 
             Result<void> ExecuteFrame(const Runtime::FrameContext &) {

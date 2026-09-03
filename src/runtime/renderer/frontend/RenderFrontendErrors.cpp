@@ -94,6 +94,15 @@ namespace Horo::Render::FrontendErrors {
                                                     .retryable = false,
                                                     .userActionable = false};
 
+    const ErrorCodeDescriptor InvalidRenderTargetDescriptor{.domain = Domain,
+                                                            .code = ErrorCode{"render.frontend.resource.invalid_render_target_descriptor"},
+                                                            .defaultSeverity = ErrorSeverity::Error,
+                                                            .summary = "Render target descriptor is invalid.",
+                                                            .remediationHint =
+                                                                "Provide compatible ready color and depth texture-view generations.",
+                                                            .retryable = false,
+                                                            .userActionable = false};
+
     const ErrorCodeDescriptor InvalidResourceUploadLimits{.domain = Domain,
                                                           .code = ErrorCode{"render.frontend.resource.invalid_upload_limits"},
                                                           .defaultSeverity = ErrorSeverity::Error,
@@ -117,6 +126,23 @@ namespace Horo::Render::FrontendErrors {
                                                   .remediationHint = "Use a non-zero extent supported by the active backend.",
                                                   .retryable = false,
                                                   .userActionable = false};
+
+    const ErrorCodeDescriptor InvalidTextureDescriptor{.domain = Domain,
+                                                       .code = ErrorCode{"render.frontend.resource.invalid_texture_descriptor"},
+                                                       .defaultSeverity = ErrorSeverity::Error,
+                                                       .summary = "Render texture descriptor is invalid.",
+                                                       .remediationHint = "Provide a supported format, extent, and typed usage policy.",
+                                                       .retryable = false,
+                                                       .userActionable = false};
+
+    const ErrorCodeDescriptor InvalidTextureViewDescriptor{.domain = Domain,
+                                                           .code = ErrorCode{"render.frontend.resource.invalid_texture_view_descriptor"},
+                                                           .defaultSeverity = ErrorSeverity::Error,
+                                                           .summary = "Render texture-view descriptor is invalid.",
+                                                           .remediationHint =
+                                                               "Provide a compatible ready texture generation, format, range, and aspect.",
+                                                           .retryable = false,
+                                                           .userActionable = false};
 
     const ErrorCodeDescriptor ResizeDuringFrame{.domain = Domain,
                                                 .code = ErrorCode{"render.frontend.resize_during_frame"},
@@ -221,6 +247,14 @@ namespace Horo::Render::FrontendErrors {
                                                        .remediationHint = "Poll after the frontend processes the queued request.",
                                                        .retryable = true,
                                                        .userActionable = false};
+
+    const ErrorCodeDescriptor ResourceOperationCancelled{.domain = Domain,
+                                                         .code = ErrorCode{"render.frontend.resource.operation_cancelled"},
+                                                         .defaultSeverity = ErrorSeverity::Warning,
+                                                         .summary = "Render resource operation was cancelled.",
+                                                         .remediationHint = "Submit a new generation if the resource is still required.",
+                                                         .retryable = true,
+                                                         .userActionable = false};
 
     const ErrorCodeDescriptor ResourceOperationUnknown{.domain = Domain,
                                                        .code = ErrorCode{"render.frontend.resource.operation_unknown"},
