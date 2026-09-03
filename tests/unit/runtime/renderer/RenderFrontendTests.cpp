@@ -642,9 +642,17 @@ namespace {
         auto target = frontend->CreateOffscreenTarget({32, 24});
         Check(target.HasValue());
         Check(frontend->ResizeOffscreenTarget(target.Value(), {64, 48}).HasValue());
+        const Result<void> invalidResize = frontend->ResizeOffscreenTarget(target.Value(), {});
+        Check(invalidResize.HasError());
+        Check(invalidResize.ErrorValue().code.Value() == "render.frontend.invalid_target_extent");
         Check(frontend->ReleaseOffscreenTarget(target.Value()).HasValue());
         const Result<void> staleResize = frontend->ResizeOffscreenTarget(target.Value(), {16, 16});
         Check(staleResize.HasError());
-        Check(staleResize.ErrorValue().code.Value() == "render.frontend.stale_render_target");
+        Check(staleResize.ErrorValue().code.Value() == "render.frontend.resource.stale");
+        auto replacement = frontend->CreateOffscreenTarget({16, 16});
+        Check(replacement.HasValue());
+        Check(replacement.Value().owner == target.Value().owner);
+        Check(replacement.Value().slot == target.Value().slot);
+        Check(replacement.Value().generation == target.Value().generation + 1);
     }
 }  // namespace

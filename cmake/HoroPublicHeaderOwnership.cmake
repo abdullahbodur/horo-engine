@@ -108,6 +108,7 @@ horo_configure_target_header_boundary(HoroInput PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroRenderApi PUBLIC_HEADERS
     Horo/Runtime/Render/Mesh.h
     Horo/Runtime/Render/RenderBackend.h
+    Horo/Runtime/Render/RenderResource.h
     Horo/Runtime/Render/RenderScene.h
 )
 horo_configure_target_header_boundary(HoroRenderBackendRegistry PUBLIC_HEADERS
