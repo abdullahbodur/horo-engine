@@ -81,23 +81,24 @@ Status terms mean:
 | Platform dynamic loading | Partial | POSIX uses canonical paths with immediate, local `dlopen` resolution. Windows canonicalizes but uses `LoadLibraryA`; Unicode paths and dependency-search isolation are not covered. macOS uses the generic POSIX path without signing-specific policy. |
 | Module descriptor validation | Implemented | Host checks exact struct size, boundary version, bounded text fields, exact fingerprint, module identity, bundle revision, and descriptor/bundle agreement before factory creation. |
 | Behavior registration | Implemented | Native bundle records and Lua descriptors are validated into one registry; duplicates reject the candidate and the registry is sorted and frozen. |
-| Registration transaction | Partial | Native and Lua contributions are accumulated before activation and any diagnostic blocks Play, but there is no general `GameRegistrationContext`, component/system/service/asset registration, or host-owned metadata copy separate from factory bindings. |
-| Module lifecycle | Partial | Load calls `Create`, then `Start`; unload calls `Stop`, module-owned `Destroy`, registry release, library unload, and shadow deletion. `GameRuntimeContext` is empty and there is no separate `Register` phase. |
+| Registration transaction | Partial | Native and Lua behavior contributions plus project component descriptors are accumulated before activation. `GameRegistrationContext` exposes the host-owned component transaction, which is sorted and frozen before `Start`; system, service, and asset registration remain absent. |
+| Module lifecycle | Partial | Load calls `Create`, `Register`, freezes copied component metadata, then calls `Start`; unload calls `Stop`, module-owned `Destroy`, registry release, library unload, and shadow deletion. `GameRuntimeContext` remains empty. |
 | Behavior runtime lifecycle | Implemented | Runtime creates instances through module-owned factories and calls defined behavior lifecycle phases; instances are destroyed before their registry/module owner is released. |
 | Scene behavior persistence | Implemented | Scenes preserve instance ID, stable behavior type ID, schema version, enabled state, and tagged field values without requiring the module to be loaded. |
-| Schema evolution and unknown payloads | Partial | Raw behavior data survives ordinary save/load and an unknown type can remain in the scene model, but activation requires a current descriptor and no field migration path exists. Strict parsing rejects unsupported field encodings. |
+| Schema evolution and unknown payloads | Partial | Project component envelopes retain bounded opaque bytes independently from native layout and expose current, missing, newer, unsupported-old, or deterministic migration-required inspection. Behavior field migration and lossless scene parsing of unsupported encodings remain absent. |
 | Editor discovery | Implemented | Project discovery validates a bounded manifest, shadow-loads native code, discovers bounded Lua sources, freezes one combined registry, and gates Play on diagnostics. |
 | Lua source reload | Implemented | Compatible program replacement occurs in place; incompatible replacements retain the previous valid program. Existing runtime instances keep their program binding. |
 | Native code reload | Partial | Candidate activation occurs at a fixed-tick boundary and runtime reconstruction can roll back. Candidate module `Start` occurs during discovery, old and new modules overlap, runtime-only behavior state is not snapshotted, and there is no job/callback quiesce proof. |
 | Packaged-player loading | Missing | No packaged-runtime composition, shipping manifest, signature policy enforcement, or packaged-player caller was found. |
-| Game components, systems, services, assets | Missing | Only object-attached behavior descriptors are exposed. The normative registration and capability contexts do not exist in the public API. |
+| Game components | Implemented | Project code registers stable component and property identities, schema versions, authoring metadata, payload encoding, and deterministic forward migration edges through `GameRegistrationContext`. The host copies, sorts, and freezes metadata before startup; inspection never mutates opaque persistent bytes. |
+| Game systems, services, assets | Missing | The remaining normative registration capabilities and runtime contexts do not exist in the public API. |
 | Imported gameplay libraries | Missing | Project gameplay build does not consume reusable game libraries through the package graph. |
 | Multi-module or mod composition | Missing | One project-global primary-module path is assumed; load ordering, trust, isolation, and dependency policy do not exist. |
 | Dead production paths | None proven | `NO_MANIFEST` is test-only but actively used by the module-host fixture. Public host APIs have editor and test callers. The packaged-player promise is missing composition, not dead code. |
 
 ## Exact ABI Assumptions
 
-`GameModule.h` defines boundary version `2` and requires these symbols:
+`GameModule.h` defines boundary version `3` and requires these symbols:
 
 ```text
 GetGameModuleDescriptor
@@ -120,19 +121,20 @@ The boundary relies on all of the following assumptions:
 2. C linkage stabilizes only the four exported names. Struct layout, virtual
    dispatch, `Result<void>`, and factory signatures remain C++ ABI.
 3. Exact `sizeof` equality is required for descriptor and bundle structures.
-   Structure growth is not append-compatible within boundary version `2`.
+   Structure growth is not append-compatible within boundary version `3`.
 4. Descriptor strings, registration arrays, descriptors, and factory function
    pointers are borrowed from the loaded library. They are valid only while the
    library remains loaded.
-5. The host copies module ID and fingerprint text, but the frozen behavior
-   registry retains descriptors and factory bindings whose executable code is
-   module-owned. Registry and every behavior instance must die before unload.
+5. The host copies module ID, fingerprint text, and component descriptor metadata.
+   The frozen behavior registry retains descriptors and factory bindings whose
+   executable code is module-owned. Registry and every behavior instance must die
+   before unload.
 6. Objects created by module factories are destroyed only by their paired
    module-owned destroy functions. The host never applies `delete` across the
    boundary.
-7. `CreateGameModule` returns a non-null object. `Start` must return a typed
-   result; `Stop` and destroy must be safe after failed startup. Exceptions must
-   not escape, but comprehensive exception translation is not implemented at
+7. `CreateGameModule` returns a non-null object. `Register` and `Start` must return
+   typed results; `Stop` and destroy must be safe after failed startup. Exceptions
+   must not escape, but comprehensive exception translation is not implemented at
    every callback boundary.
 8. The module ID and fingerprint are non-empty, at most 256 bytes, and exactly
    equal between descriptor, generated bundle, expected host fingerprint, and
@@ -202,6 +204,8 @@ canonical source artifact
   -> validated descriptor and bundle
   -> host-owned BehaviorRegistry containing module factory bindings
   -> module-owned IGameModule
+  -> Register(host-owned ComponentRegistry transaction)
+  -> freeze copied component metadata
   -> Start(empty GameRuntimeContext)
   -> module-created behavior instances
 
@@ -214,8 +218,9 @@ unload:
   -> shadow artifact deletion
 ```
 
-On `Start` failure the host calls `Stop`, then module destroy, then unload. On any
-earlier validation failure no project factory executes. Shadow artifacts are
+On `Start` failure the host calls `Stop`, then module destroy, then unload. A
+`Register` or component-freeze failure destroys the module without calling `Start`
+or `Stop`. On any earlier validation failure no project factory executes. Shadow artifacts are
 removed on both failed load and normal destruction where filesystem removal
 succeeds.
 
@@ -297,6 +302,9 @@ Existing focused tests prove:
   current, and remains the last success after a later broken build;
 - Scene persistence round-trips typed behavior payloads and runtime scene
   validation rejects invalid or duplicate instance data.
+- Project component registration rejects duplicate IDs and invalid migration
+  graphs, while inspection distinguishes current, version-skewed, missing, and
+  migratable opaque payloads without modifying their bytes.
 
 The current focused suite does not directly prove:
 

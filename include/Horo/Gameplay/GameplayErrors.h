@@ -8,6 +8,12 @@
 #include "Horo/Foundation/ErrorCode.h"
 
 namespace Horo::Gameplay::GameplayErrors {
+    extern const ErrorCodeDescriptor InvalidComponentTypeId;
+    extern const ErrorCodeDescriptor InvalidComponentDescriptor;
+    extern const ErrorCodeDescriptor InvalidSerializedComponent;
+    extern const ErrorCodeDescriptor InvalidComponentMigration;
+    extern const ErrorCodeDescriptor DuplicateComponentType;
+    extern const ErrorCodeDescriptor ComponentRegistryFrozen;
     extern const ErrorCodeDescriptor InvalidBehaviorTypeId;
     extern const ErrorCodeDescriptor InvalidBehaviorInstanceId;
     extern const ErrorCodeDescriptor InvalidBehaviorComponent;

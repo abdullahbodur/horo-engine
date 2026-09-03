@@ -126,6 +126,8 @@ target_link_libraries(HoroRuntime PUBLIC HoroEngine::Foundation)
 
 add_library(HoroGameplayApi STATIC
         gameplay/api/BehaviorTypes.cpp
+        gameplay/api/Component.cpp
+        gameplay/api/ComponentRegistry.cpp
         gameplay/api/GameModule.cpp
         gameplay/api/GameplayErrors.cpp
 )

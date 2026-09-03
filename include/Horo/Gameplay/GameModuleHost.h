@@ -13,6 +13,7 @@
 
 namespace Horo::Gameplay {
     class BehaviorRegistry;
+    class ComponentRegistry;
 
     /** @brief Loaded module whose registry and callable objects are destroyed before its library unloads. */
     class LoadedGameModule final {
@@ -30,6 +31,8 @@ namespace Horo::Gameplay {
         [[nodiscard]] const std::filesystem::path &LoadedArtifactPath() const noexcept;
         /** @brief Returns the frozen descriptor registry while the module is loaded. */
         [[nodiscard]] const BehaviorRegistry &Registry() const noexcept;
+        /** @brief Returns the frozen project component metadata while the module is loaded. */
+        [[nodiscard]] const ComponentRegistry &Components() const noexcept;
 
     private:
         friend class GameModuleHost;

@@ -40,6 +40,7 @@ horo_add_gameplay_module(HoroGameGameplay
             Write(root / "source/gameplay/GameModule.cpp", R"(#include <Horo/Gameplay/GameModule.h>
 namespace { class Module final : public Horo::Gameplay::IGameModule {
 public:
+    Horo::Result<void> Register(Horo::Gameplay::GameRegistrationContext&) override { return Horo::Result<void>::Success(); }
     Horo::Result<void> Start(Horo::Gameplay::GameRuntimeContext&) override { return Horo::Result<void>::Success(); }
     void Stop(Horo::Gameplay::GameRuntimeContext&) noexcept override {}
 }; }

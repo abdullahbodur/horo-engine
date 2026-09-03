@@ -19,7 +19,9 @@
 #endif
 
 namespace Horo::Gameplay {
-    inline constexpr std::uint32_t GameplaySdkBoundaryVersion = 2;
+    class ComponentRegistry;
+
+    inline constexpr std::uint32_t GameplaySdkBoundaryVersion = 3;
     inline constexpr std::uint32_t GameplayDescriptorBundleSchemaVersion = 1;
     inline constexpr std::size_t MaximumGeneratedBehaviorDescriptors = 4096;
     inline constexpr std::size_t MaximumGeneratedDescriptorDiagnostics = 256;
@@ -44,11 +46,32 @@ namespace Horo::Gameplay {
     /** @brief Narrow startup context for project module-owned services. */
     struct GameRuntimeContext {};
 
+    /** @brief Declarative registration capabilities exposed before gameplay startup. */
+    struct GameRegistrationContext {
+        std::string_view moduleId;
+        ComponentRegistry &components;
+    };
+
     /** @brief Project-owned module lifecycle valid only for one exact compatible SDK generation. */
     class IGameModule {
     public:
         virtual ~IGameModule() = default;
+        /**
+         * @brief Registers project-owned component metadata without activating runtime behavior.
+         * @param context Host-owned open registration transaction.
+         * @return Success or a typed validation error that prevents startup.
+         */
+        [[nodiscard]] virtual Result<void> Register(GameRegistrationContext &context) = 0;
+        /**
+         * @brief Starts module-owned runtime services after every registry is frozen.
+         * @param context Narrow runtime capabilities for the active module generation.
+         * @return Success or a typed startup error.
+         */
         [[nodiscard]] virtual Result<void> Start(GameRuntimeContext &context) = 0;
+        /**
+         * @brief Stops module-owned runtime services before registered metadata and code unload.
+         * @param context Runtime context used by the active generation.
+         */
         virtual void Stop(GameRuntimeContext &context) noexcept = 0;
     };
 

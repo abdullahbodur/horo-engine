@@ -1,3 +1,4 @@
+#include "Horo/Gameplay/ComponentRegistry.h"
 #include "Horo/Gameplay/GameModule.h"
 #include "Horo/Gameplay/NativeBehavior.h"
 
@@ -31,6 +32,18 @@ HORO_BEHAVIOR(MoveBehavior, "game.tests.dynamic_mover")
 namespace {
     class Module final : public IGameModule {
     public:
+        Result<void> Register(GameRegistrationContext &context) override {
+            ComponentDescriptor descriptor{
+                .typeId = ComponentTypeId::Parse("game.tests.movement_settings").Value(),
+                .schemaVersion = 2,
+                .displayName = "Movement Settings",
+                .category = "Gameplay/Movement",
+                .properties = {{ComponentPropertyId::Parse("speed").Value(), "Speed", ComponentPropertyKind::Number, true}},
+                .migrations = {{1, 2}},
+            };
+            return context.components.Register(std::move(descriptor));
+        }
+
         Result<void> Start(GameRuntimeContext &) override {
             return Result<void>::Success();
         }
