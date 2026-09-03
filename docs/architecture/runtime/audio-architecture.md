@@ -192,13 +192,31 @@ by ADR-062.
 ## Handles
 
 ```cpp
-using AudioClipHandle = Handle<AudioClipTag>;
-using AudioVoiceHandle = Handle<AudioVoiceTag>;
-using AudioBusHandle = Handle<AudioBusTag>;
+template<typename Tag>
+struct AudioHandle {
+    AudioRuntimeId owner;
+    uint32_t slot;
+    uint32_t generation;
+};
+
+using AudioClipHandle = AudioHandle<AudioClipHandleTag>;
+using AudioVoiceHandle = AudioHandle<AudioVoiceHandleTag>;
+using AudioBusHandle = AudioHandle<AudioBusHandleTag>;
 ```
 
-Handles are generation checked. Asset IDs remain the persistent identity for
-clips and streams.
+Handles are process-local, registry-owned, and generation checked. The non-zero
+`AudioRuntimeId` owner prevents a numerically equal slot/generation from another
+runtime replacement from aliasing current state. Slot generations never wrap;
+an exhausted slot is retired permanently. Asset IDs remain the persistent
+identity for clips and sound definitions through distinct `AudioClipId` and
+`AudioSoundId` wrappers. `AudioBusId`, `AudioParameterId`, and `AudioEventId` are
+distinct stable numeric identities resolved before real-time processing.
+
+Malformed, foreign-owner, stale, capacity-exhausted, and generation-exhausted
+handles produce distinct `horo.audio` errors. Operation-specific error messages
+carry bounded owner/slot/generation context; callers branch only on the stable
+descriptor code. Native device identifiers never enter these public values;
+`AudioDeviceId` is a generation-scoped Horo handle.
 
 ## Internal Processing Format
 
