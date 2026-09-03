@@ -73,6 +73,28 @@ namespace Horo::Extensions::Discovery::Tests {
         CHECK(plan.Value().rootDiagnostics[0].disposition == RootDisposition::ApprovalRequired);
     }
 
+    TEST_CASE_METHOD(DiscoveryPlanFixture, "Ignored root IDs do not alias the next approved root", "[Extensions][Discovery]") {
+        auto ignored = root;
+        ignored.id = "aaa";
+        ignored.approval = RootApproval::Pending;
+        ignored.path.clear();
+        const std::array roots{root, ignored};
+        const std::array locations{PackageLocation{"ignored", "aaa", "../missing"}, PackageLocation{"accepted", "user", "alpha"}};
+        const auto plan = DiscoverDeclaredPackages(roots, locations, {});
+        REQUIRE(plan.HasValue());
+        REQUIRE(plan.Value().packages.size() == 1);
+        CHECK(plan.Value().packages[0].packageId == "accepted");
+        CHECK(plan.Value().packages[0].rootId == "user");
+    }
+
+    TEST_CASE_METHOD(DiscoveryPlanFixture, "Non-directory packages report a meaningful failure", "[Extensions][Discovery]") {
+        const std::array locations{PackageLocation{"com.example.file", "user", "not-a-directory"}};
+        const auto plan = Discover(locations);
+        REQUIRE(plan.HasError());
+        CHECK(plan.ErrorValue().message.find("com.example.file") != std::string::npos);
+        CHECK(plan.ErrorValue().message.find("not a directory") != std::string::npos);
+    }
+
     TEST_CASE_METHOD(DiscoveryPlanFixture, "Development provenance remains visible and opt-in", "[Extensions][Discovery]") {
         root.kind = RootKind::Development;
         const std::array locations{PackageLocation{"com.example.alpha", "user", "alpha"}};

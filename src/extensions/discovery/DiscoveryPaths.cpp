@@ -28,7 +28,7 @@ namespace Horo::Extensions::Discovery {
 
         /** @brief Compare complete components, never textual prefixes such as root and root-other. */
         bool IsStrictDescendant(const std::filesystem::path &root, const std::filesystem::path &candidate) {
-            const auto [rootPosition, candidatePosition] = std::mismatch(root.begin(), root.end(), candidate.begin(), candidate.end());
+            const auto [rootPosition, candidatePosition] = std::ranges::mismatch(root, candidate);
             return rootPosition == root.end() && candidatePosition != candidate.end();
         }
     }  // namespace
@@ -42,7 +42,7 @@ namespace Horo::Extensions::Discovery {
         if (error)
             return PathFailure(root, error.message());
         if (!std::filesystem::is_directory(canonical, error))
-            return PathFailure(root, "The approved root must be an accessible directory.");
+            return PathFailure(root, error ? error.message() : "The approved root must be an accessible directory.");
         return Result<std::filesystem::path>::Success(canonical);
     }
 

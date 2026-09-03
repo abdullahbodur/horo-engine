@@ -20,7 +20,7 @@ namespace Horo::Extensions::Discovery {
         /** @brief Validate graph references before any package path is probed. */
         bool IsInvalidLocation(const PackageLocation &location, const RootSelection &selection) {
             return location.packageId.empty() ||
-                   std::ranges::find(selection.diagnostics, location.rootId, &RootDiagnostic::rootId) == selection.diagnostics.end();
+                   !std::ranges::binary_search(selection.diagnostics, location.rootId, {}, &RootDiagnostic::rootId);
         }
 
         /** @brief Resolve one graph-owned package directory without treating it as trusted executable content. */
@@ -30,8 +30,10 @@ namespace Horo::Extensions::Discovery {
                 return Result<DiscoveredPackage>::Failure(path.ErrorValue());
             if (std::error_code error; !std::filesystem::is_directory(path.Value(), error))
                 return Result<DiscoveredPackage>::Failure(
-                    MakeError(InvalidDiscoveryPlan, "Package location is not a directory: " + location.packageId));
-            return Result<DiscoveredPackage>::Success({location.packageId, root.id, std::move(path).Value(), root.kind});
+                    MakeError(InvalidDiscoveryPlan,
+                              location.packageId + ": " + (error ? error.message() : "Package location is not a directory.")));
+            return Result<DiscoveredPackage>::Success(
+                {.packageId = location.packageId, .rootId = root.id, .canonicalPath = std::move(path).Value(), .kind = root.kind});
         }
     }  // namespace
 
@@ -50,8 +52,8 @@ namespace Horo::Extensions::Discovery {
             return Result<DiscoveryPlan>::Failure(MakeError(InvalidDiscoveryPlan, "Empty package identity or unknown discovery root."));
         DiscoveryPlan plan;
         for (const auto &location : locations) {
-            const auto root = std::ranges::find(selection.roots, location.rootId, &ApprovedRoot::id);
-            if (root == selection.roots.end())
+            const auto root = std::ranges::lower_bound(selection.roots, location.rootId, {}, &ApprovedRoot::id);
+            if (root == selection.roots.end() || root->id != location.rootId)
                 continue;
             auto package = ResolvePackage(location, *root);
             if (package.HasError())
