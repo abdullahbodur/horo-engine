@@ -23,6 +23,64 @@ namespace {
     void Check(const bool condition) {
         REQUIRE((condition));
     }
+
+    RenderTargetHandle PrepareViewportTarget(EditorViewportRendererMetal &viewport, RenderFrontend &frontend,
+                                             const EditorViewportSceneView &scene) {
+        const RenderSceneView renderScene{ToRenderCamera(scene.camera), scene.meshResources, scene.instances, scene.lights};
+        for (std::size_t attempt = 0; attempt < 4; ++attempt) {
+            auto prepared = viewport.PrepareResources(frontend, renderScene);
+            Check(prepared.HasValue());
+            Check(frontend.ProcessResourceRequests().HasValue());
+            if (prepared.Value().has_value())
+                return *prepared.Value();
+        }
+        Check(false);
+        return {};
+    }
+
+    void CheckSeamlessResourceTransition(EditorViewportRendererMetal &viewport, RenderFrontend &frontend,
+                                         const EditorViewportSceneView &scene, const RenderTargetHandle activeTarget,
+                                         const EditorViewportTextureView activeTexture) {
+        constexpr EditorViewportExtent activeExtent{128, 128};
+        constexpr EditorViewportExtent resizedExtent{96, 64};
+        std::vector<EditorViewportMeshResourceView> replacementMeshes{scene.meshResources.begin(), scene.meshResources.end()};
+        replacementMeshes.front().handle.generation = 2;
+        std::vector<EditorViewportInstance> replacementInstances{scene.instances.begin(), scene.instances.end()};
+        replacementInstances.front().mesh.generation = 2;
+        const EditorViewportSceneView replacementScene{scene.camera, replacementMeshes, replacementInstances, scene.lights};
+        const RenderSceneView renderScene{ToRenderCamera(replacementScene.camera), replacementScene.meshResources,
+                                          replacementScene.instances, replacementScene.lights};
+
+        viewport.RequestExtent(resizedExtent);
+        auto pending = viewport.PrepareResources(frontend, renderScene);
+        Check(pending.HasValue() && pending.Value() == activeTarget);
+        Check(viewport.IsReady() && viewport.TextureView().textureId == activeTexture.textureId);
+        Check(viewport.RequestedExtent() == activeExtent);
+
+        auto begun = frontend.BeginFrame(FrameDescriptor{.frameNumber = 2, .outputExtent = {256, 256}});
+        Check(begun.HasValue());
+        RenderFrameScope frame = std::move(begun).Value();
+        const std::array passes{RenderPassDescriptor{
+            .id = RenderPassId{1},
+            .kind = RenderPassKind::Graphics,
+            .staticMesh = StaticMeshPassDescriptor{.target = activeTarget, .extent = {128, 128}, .scene = renderScene},
+        }};
+        Check(frame.Execute(passes).HasValue());
+        Check(frame.Present().HasValue());
+
+        RenderTargetHandle resizedTarget;
+        for (std::size_t attempt = 0; attempt < 4 && !resizedTarget.IsValid(); ++attempt) {
+            viewport.RequestExtent(resizedExtent);
+            auto prepared = viewport.PrepareResources(frontend, renderScene);
+            Check(prepared.HasValue());
+            Check(frontend.ProcessResourceRequests().HasValue());
+            if (prepared.Value().has_value() && *prepared.Value() != activeTarget)
+                resizedTarget = *prepared.Value();
+        }
+        Check(resizedTarget.IsValid());
+        Check(viewport.RequestedExtent() == resizedExtent);
+        Check(viewport.TextureView().textureId != activeTexture.textureId);
+    }
 }  // namespace
 
 TEST_CASE("Editor Viewport Metal Smoke", "[integration][renderer][gpu]") {
@@ -46,7 +104,7 @@ TEST_CASE("Editor Viewport Metal Smoke", "[integration][renderer][gpu]") {
     Check(frontendResult.HasValue());
     std::unique_ptr<RenderFrontend> frontend = std::move(frontendResult).Value();
 
-    EditorViewportRendererMetal viewport{graphicsBridge};
+    EditorViewportRendererMetal viewport{*frontend, graphicsBridge};
     Check(viewport.Initialize().HasValue());
     Runtime::PrimitiveMeshCache meshCache;
     constexpr std::array primitiveTypes{Runtime::PrimitiveMeshType::Box,     Runtime::PrimitiveMeshType::Sphere,
@@ -87,9 +145,8 @@ TEST_CASE("Editor Viewport Metal Smoke", "[integration][renderer][gpu]") {
                                                 .instances = viewportInstances,
                                                 .lights = lights};
     Check(frontend->AttachStaticMeshPassExecutor(viewport).HasValue());
-    auto viewportTargetResult = frontend->CreateOffscreenTarget({128, 128});
-    Check(viewportTargetResult.HasValue());
-    const RenderTargetHandle viewportTarget = viewportTargetResult.Value();
+    viewport.RequestExtent(EditorViewportExtent{128, 128});
+    const RenderTargetHandle viewportTarget = PrepareViewportTarget(viewport, *frontend, viewportScene);
     Check(frontend->Resize(FramebufferExtent{256, 256}).HasValue());
     auto begun = frontend->BeginFrame(FrameDescriptor{.frameNumber = 1, .outputExtent = {256, 256}});
     Check(begun.HasValue());
@@ -127,8 +184,6 @@ TEST_CASE("Editor Viewport Metal Smoke", "[integration][renderer][gpu]") {
     Check(textureView.u0 == 0.0F && textureView.v0 == 0.0F);
     Check(textureView.u1 == 1.0F && textureView.v1 == 1.0F);
     Check(frame.Present().HasValue());
-    frontend->DetachStaticMeshPassExecutor(viewport);
-    Check(frontend->ReleaseOffscreenTarget(viewportTarget).HasValue());
     graphicsBridge.WaitUntilIdle();
 
     id<MTLTexture> texture = (__bridge id<MTLTexture>)(reinterpret_cast<void *>(textureView.textureId));
@@ -164,8 +219,10 @@ TEST_CASE("Editor Viewport Metal Smoke", "[integration][renderer][gpu]") {
     }
     Check(maximum > minimum + 32);
     const std::size_t center = (static_cast<std::size_t>(texture.height / 2) * texture.width + texture.width / 2) * 4;
-    Check(rgba[center] > 150 && rgba[center + 1] > 130 && rgba[center + 2] < 150);
+    Check(rgba[center] < 150 && rgba[center + 1] > 130 && rgba[center + 2] > 150);
 
+    CheckSeamlessResourceTransition(viewport, *frontend, viewportScene, viewportTarget, textureView);
+    frontend->DetachStaticMeshPassExecutor(viewport);
     viewport.Shutdown();
     frontend.reset();
     SDL_DestroyWindow(window);

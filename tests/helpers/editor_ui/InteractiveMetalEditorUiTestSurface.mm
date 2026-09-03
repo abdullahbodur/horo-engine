@@ -60,7 +60,7 @@ namespace Horo::Tests {
                 if (frontend.HasError())
                     ThrowRendererError(frontend.ErrorValue());
 
-                auto viewportRenderer = std::make_unique<Editor::EditorViewportRendererMetal>(*graphicsBridge_);
+                auto viewportRenderer = std::make_unique<Editor::EditorViewportRendererMetal>(*frontend.Value(), *graphicsBridge_);
                 const Result<void> viewportInitialized = viewportRenderer->Initialize();
                 if (viewportInitialized.HasError())
                     ThrowRendererError(viewportInitialized.ErrorValue());

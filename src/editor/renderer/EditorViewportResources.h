@@ -6,15 +6,25 @@
 #include <unordered_map>
 
 namespace Horo::Editor {
-    /** @brief Owns frontend-backed OpenGL viewport resources and atomic replacement state. */
-    class OpenGLViewportResources final {
+    /** @brief Resolves a ready typed texture view into the selected GUI backend's image identity. */
+    using EditorViewportImageResolver = Result<std::uintptr_t> (*)(const Render::RenderFrontend &, Render::RenderTextureViewHandle);
+
+    /** @brief Backend-specific attachment policy used by the shared viewport resource coordinator. */
+    struct EditorViewportResourceConfig {
+        Render::RenderTextureFormat depthFormat{Render::RenderTextureFormat::Depth32Float};
+        Render::RenderTextureAspect depthAspect{Render::RenderTextureAspect::Depth};
+        EditorViewportImageResolver resolveImage{nullptr};
+    };
+
+    /** @brief Owns frontend-backed viewport resources and atomic replacement state. */
+    class EditorViewportResources final {
     public:
         struct MeshBinding {
             Render::RenderMeshHandle mesh;
             std::uint32_t indexCount{0};
         };
 
-        explicit OpenGLViewportResources(Render::RenderFrontend &frontend) noexcept;
+        EditorViewportResources(Render::RenderFrontend &frontend, EditorViewportResourceConfig config) noexcept;
 
         [[nodiscard]] Result<std::optional<Render::RenderTargetHandle>> Prepare(const Render::RenderSceneView &scene,
                                                                                 EditorViewportExtent requestedExtent);
@@ -72,6 +82,7 @@ namespace Horo::Editor {
         void ReleaseViewportTarget(ViewportTargetResources &resources) noexcept;
 
         Render::RenderFrontend *frontend_{nullptr};
+        EditorViewportResourceConfig config_;
         std::unordered_map<std::uint64_t, ResidentMesh> meshes_;
         std::unordered_map<std::uint64_t, ResidentMesh> pendingMeshes_;
         ViewportTargetResources viewportTarget_;

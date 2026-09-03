@@ -1,6 +1,7 @@
 #include "EditorViewportRendererOpenGL.h"
 
 #include "OpenGLStateSnapshot.h"
+#include "OpenGLViewportResourceBridge.h"
 #include "OpenGLViewportShaders.h"
 #include "editor/renderer/EditorRendererErrors.h"
 #include "editor/renderer/grid/EditorViewportGridGeometry.h"
@@ -46,7 +47,9 @@ namespace Horo::Editor {
 
     /** @copydoc EditorViewportRendererOpenGL::EditorViewportRendererOpenGL */
     EditorViewportRendererOpenGL::EditorViewportRendererOpenGL(Render::RenderFrontend &frontend) noexcept
-        : frontend_(&frontend), resources_(frontend) {}
+        : frontend_(&frontend), resources_(frontend, {.depthFormat = Render::RenderTextureFormat::Depth24Stencil8,
+                                                      .depthAspect = Render::RenderTextureAspect::DepthStencil,
+                                                      .resolveImage = &OpenGLViewportResourceBridge::EditorImageIdentity}) {}
 
     /** @copydoc EditorViewportRendererOpenGL::~EditorViewportRendererOpenGL */
     EditorViewportRendererOpenGL::~EditorViewportRendererOpenGL() {

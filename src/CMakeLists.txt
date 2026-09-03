@@ -331,6 +331,7 @@ if (HORO_BUILD_RENDER_METAL)
     add_library(HoroRenderMetal STATIC
             runtime/renderer/modules/metal/MetalRenderBackend.cpp
             runtime/renderer/modules/metal/MetalRenderBackendErrors.cpp
+            runtime/renderer/modules/metal/MetalResourceRuntime.mm
             runtime/renderer/modules/metal/MetalRuntime.mm
     )
     add_library(HoroEngine::RenderMetal ALIAS HoroRenderMetal)
@@ -390,6 +391,22 @@ target_include_directories(HoroEditorViewportScene
 )
 target_link_libraries(HoroEditorViewportScene PUBLIC HoroEngine::EditorModel)
 
+add_library(HoroEditorViewportResources STATIC
+        editor/renderer/EditorViewportResources.cpp
+)
+add_library(HoroEngine::EditorViewportResources ALIAS HoroEditorViewportResources)
+
+target_compile_features(HoroEditorViewportResources PUBLIC cxx_std_20)
+target_include_directories(HoroEditorViewportResources
+        PRIVATE
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>
+)
+target_link_libraries(HoroEditorViewportResources
+        PUBLIC
+        HoroEngine::EditorViewportScene
+        HoroEngine::RenderFrontend
+)
+
 add_library(HoroEditorRenderExtraction STATIC
         editor/document/EditorAssetMeshCache.cpp
         editor/document/EditorRenderExtractionErrors.cpp
@@ -415,6 +432,8 @@ if (HORO_BUILD_EDITOR_GUI AND HORO_BUILD_RENDER_METAL)
     add_library(HoroEditorViewportMetal STATIC
             editor/renderer/metal/EditorGuiRendererMetal.mm
             editor/renderer/metal/EditorViewportRendererMetal.mm
+            editor/renderer/metal/MetalViewportResourceBridge.mm
+            editor/renderer/metal/MetalViewportShaders.cpp
             editor/renderer/metal/SdlMetalPresentationPort.mm
     )
     add_library(HoroEngine::EditorViewportMetal ALIAS HoroEditorViewportMetal)
@@ -429,7 +448,9 @@ if (HORO_BUILD_EDITOR_GUI AND HORO_BUILD_RENDER_METAL)
     target_link_libraries(HoroEditorViewportMetal
             PUBLIC
             HoroEngine::EditorViewportScene
+            HoroEngine::EditorViewportResources
             HoroEngine::RenderMetal
+            HoroEngine::RenderFrontend
             ${HORO_SDL3_TARGET}
             PRIVATE
             HoroThirdParty::ImGuiMetal
@@ -512,7 +533,6 @@ if (HORO_BUILD_EDITOR_GUI AND HORO_BUILD_RENDER_OPENGL)
             editor/renderer/opengl/OpenGLViewportResourceBridge.cpp
             editor/renderer/opengl/OpenGLStateSnapshot.cpp
             editor/renderer/opengl/EditorViewportRendererOpenGL.cpp
-            editor/renderer/opengl/OpenGLViewportResources.cpp
             editor/renderer/opengl/SdlOpenGLPresentationPort.cpp
     )
     add_library(HoroEngine::EditorViewportOpenGL ALIAS HoroEditorViewportOpenGL)
@@ -528,6 +548,7 @@ if (HORO_BUILD_EDITOR_GUI AND HORO_BUILD_RENDER_OPENGL)
     target_link_libraries(HoroEditorViewportOpenGL
             PUBLIC
             HoroEngine::EditorViewportScene
+            HoroEngine::EditorViewportResources
             HoroEngine::RenderOpenGL
             HoroEngine::RenderFrontend
             ${HORO_SDL3_TARGET}

@@ -648,7 +648,7 @@ namespace Horo::Editor {
                 if (const Result<void> initialized = guiRenderer->Initialize(); initialized.HasError()) {
                     return Result<EditorRenderComposition>::Failure(initialized.ErrorValue());
                 }
-                auto viewportRenderer = std::make_unique<EditorViewportRendererMetal>(graphicsBridge);
+                auto viewportRenderer = std::make_unique<EditorViewportRendererMetal>(*composition.frontend, graphicsBridge);
                 if (const Result<void> initialized = viewportRenderer->Initialize(); initialized.HasError()) {
                     return Result<EditorRenderComposition>::Failure(initialized.ErrorValue());
                 }
@@ -661,14 +661,6 @@ namespace Horo::Editor {
                 attached.HasError()) {
                 return Result<EditorRenderComposition>::Failure(attached.ErrorValue());
             }
-            if (options.rendererBackend != "opengl") {
-                auto viewportTarget = composition.frontend->CreateOffscreenTarget({1, 1});
-                if (viewportTarget.HasError()) {
-                    return Result<EditorRenderComposition>::Failure(viewportTarget.ErrorValue());
-                }
-                composition.viewportTarget = viewportTarget.Value();
-            }
-
             return Result<EditorRenderComposition>::Success(std::move(composition));
         }
 
@@ -1269,7 +1261,8 @@ namespace Horo::Editor {
 
         DestroyEditorTextures(textures, *composition.guiRenderer);
         composition.frontend->DetachStaticMeshPassExecutor(*composition.viewportRenderer);
-        (void)composition.frontend->ReleaseOffscreenTarget(composition.viewportTarget);
+        if (!composition.frontend->Capabilities().supportsRenderTargetResources)
+            (void)composition.frontend->ReleaseOffscreenTarget(composition.viewportTarget);
         composition.viewportRenderer.reset();
         composition.guiRenderer.reset();
         ImGui::DestroyContext();

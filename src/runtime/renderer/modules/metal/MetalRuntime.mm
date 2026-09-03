@@ -1,4 +1,5 @@
 #include "MetalBackendInternal.h"
+#include "MetalResourceRuntime.h"
 
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
@@ -95,7 +96,51 @@ namespace Horo::Render::Detail {
                 layer_.displaySyncEnabled = descriptor.presentMode == PresentMode::Fifo;
                 MetalEditorGraphicsAccess::PublishPersistent(*editorGraphicsBridge_, (__bridge void *)device_,
                                                              (__bridge void *)commandQueue_, this, &WaitUntilIdleThunk);
+                resources_.Initialize((__bridge void *)device_);
                 return Result<void>::Success();
+            }
+
+            Result<std::uint64_t> CreateBuffer(const RenderBufferDescriptor &descriptor,
+                                               const std::span<const std::byte> initialData) override {
+                return resources_.CreateBuffer(descriptor, initialData);
+            }
+
+            Result<std::uint64_t> CreateMesh(const RenderMeshDescriptor &descriptor, const std::uint64_t vertexBuffer,
+                                             const std::uint64_t indexBuffer) override {
+                return resources_.CreateMesh(descriptor, vertexBuffer, indexBuffer);
+            }
+
+            Result<std::uint64_t> CreateTexture(const RenderTextureDescriptor &descriptor) override {
+                return resources_.CreateTexture(descriptor);
+            }
+
+            Result<std::uint64_t> CreateTextureView(const RenderTextureViewDescriptor &descriptor, const std::uint64_t texture) override {
+                return resources_.CreateTextureView(descriptor, texture);
+            }
+
+            Result<std::uint64_t> CreateRenderTarget(const RenderTargetDescriptor &descriptor, const std::uint64_t colorAttachment,
+                                                     const std::uint64_t depthAttachment) override {
+                return resources_.CreateRenderTarget(descriptor, colorAttachment, depthAttachment);
+            }
+
+            void DestroyBuffer(const std::uint64_t backendInstance) noexcept override {
+                resources_.DestroyBuffer(backendInstance);
+            }
+
+            void DestroyMesh(const std::uint64_t backendInstance) noexcept override {
+                resources_.DestroyMesh(backendInstance);
+            }
+
+            void DestroyTexture(const std::uint64_t backendInstance) noexcept override {
+                resources_.DestroyTexture(backendInstance);
+            }
+
+            void DestroyTextureView(const std::uint64_t backendInstance) noexcept override {
+                resources_.DestroyTextureView(backendInstance);
+            }
+
+            void DestroyRenderTarget(const std::uint64_t backendInstance) noexcept override {
+                resources_.DestroyRenderTarget(backendInstance);
             }
 
             Result<void> BeginFrame(const FramebufferExtent extent) override {
@@ -185,6 +230,7 @@ namespace Horo::Render::Detail {
             void Shutdown() noexcept override {
                 AbortFrame();
                 WaitUntilIdle();
+                resources_.Shutdown();
                 MetalEditorGraphicsAccess::Clear(*editorGraphicsBridge_);
                 if (layer_ != nil) {
                     layer_.device = nil;
@@ -241,6 +287,7 @@ namespace Horo::Render::Detail {
             __strong id<MTLRenderCommandEncoder> renderEncoder_{nil};
             __strong MTLRenderPassDescriptor *renderPassDescriptor_{nil};
             __strong id<MTLCommandBuffer> lastSubmittedCommandBuffer_{nil};
+            MetalResourceRuntime resources_;
             bool surfaceCreated_{false};
         };
     }  // namespace

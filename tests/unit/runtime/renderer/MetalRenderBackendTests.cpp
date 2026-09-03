@@ -34,6 +34,8 @@ namespace {
         int abortCount{0};
         int resizeCount{0};
         int destroyCount{0};
+        int resourceCreateCount{0};
+        int resourceDestroyCount{0};
         MetalPresentationDescriptor descriptor{};
         FramebufferExtent frameExtent{};
         FramebufferExtent resizedExtent{};
@@ -93,6 +95,51 @@ namespace {
             return Result<void>::Success();
         }
 
+        Result<std::uint64_t> CreateBuffer(const RenderBufferDescriptor &, std::span<const std::byte>) override {
+            ++state_->resourceCreateCount;
+            return Result<std::uint64_t>::Success(nextResourceIdentity_++);
+        }
+
+        Result<std::uint64_t> CreateMesh(const RenderMeshDescriptor &, std::uint64_t, std::uint64_t) override {
+            ++state_->resourceCreateCount;
+            return Result<std::uint64_t>::Success(nextResourceIdentity_++);
+        }
+
+        Result<std::uint64_t> CreateTexture(const RenderTextureDescriptor &) override {
+            ++state_->resourceCreateCount;
+            return Result<std::uint64_t>::Success(nextResourceIdentity_++);
+        }
+
+        Result<std::uint64_t> CreateTextureView(const RenderTextureViewDescriptor &, std::uint64_t) override {
+            ++state_->resourceCreateCount;
+            return Result<std::uint64_t>::Success(nextResourceIdentity_++);
+        }
+
+        Result<std::uint64_t> CreateRenderTarget(const RenderTargetDescriptor &, std::uint64_t, std::uint64_t) override {
+            ++state_->resourceCreateCount;
+            return Result<std::uint64_t>::Success(nextResourceIdentity_++);
+        }
+
+        void DestroyBuffer(std::uint64_t) noexcept override {
+            ++state_->resourceDestroyCount;
+        }
+
+        void DestroyMesh(std::uint64_t) noexcept override {
+            ++state_->resourceDestroyCount;
+        }
+
+        void DestroyTexture(std::uint64_t) noexcept override {
+            ++state_->resourceDestroyCount;
+        }
+
+        void DestroyTextureView(std::uint64_t) noexcept override {
+            ++state_->resourceDestroyCount;
+        }
+
+        void DestroyRenderTarget(std::uint64_t) noexcept override {
+            ++state_->resourceDestroyCount;
+        }
+
         Result<void> ExecutePrimaryOutput(const PrimaryOutputAttachment &attachment) override {
             ++state_->executeCount;
             state_->attachment = attachment;
@@ -135,6 +182,7 @@ namespace {
     private:
         IMetalPresentationPort *presentationPort_{nullptr};
         PortState *state_{nullptr};
+        std::uint64_t nextResourceIdentity_{1};
         bool initialized_{false};
     };
 
@@ -160,6 +208,75 @@ namespace {
         auto created = registry.Create(RenderBackendId{"metal"});
         Check(created.HasValue());
         return std::move(created).Value();
+    }
+
+    struct GenericResourceIdentities {
+        std::uint64_t vertex{0};
+        std::uint64_t index{0};
+        std::uint64_t mesh{0};
+        std::uint64_t color{0};
+        std::uint64_t depth{0};
+        std::uint64_t colorView{0};
+        std::uint64_t depthView{0};
+        std::uint64_t target{0};
+    };
+
+    [[nodiscard]] GenericResourceIdentities CreateGenericResources(IRenderBackend &backend) {
+        GenericResourceIdentities identities;
+        constexpr std::array<std::byte, 12> bytes{};
+        const auto vertex =
+            backend.CreateBuffer({.byteSize = bytes.size(), .usage = RenderBufferUsage::Vertex, .access = RenderBufferAccess::DeviceLocal},
+                                 bytes);
+        const auto index =
+            backend.CreateBuffer({.byteSize = bytes.size(), .usage = RenderBufferUsage::Index, .access = RenderBufferAccess::DeviceLocal},
+                                 bytes);
+        Check(vertex.HasValue() && index.HasValue());
+        identities.vertex = vertex.Value();
+        identities.index = index.Value();
+        const auto mesh = backend.CreateMesh({.vertexBuffer = {{1}, 1, 1},
+                                              .indexBuffer = {{1}, 2, 1},
+                                              .vertexStride = sizeof(float) * 3,
+                                              .vertexCount = 1,
+                                              .indexCount = 3,
+                                              .localBounds = {{-1.0F, -1.0F, -1.0F}, {1.0F, 1.0F, 1.0F}}},
+                                             identities.vertex, identities.index);
+        Check(mesh.HasValue());
+        identities.mesh = mesh.Value();
+        const auto color = backend.CreateTexture({.extent = {64, 64},
+                                                  .format = RenderTextureFormat::Rgba8Unorm,
+                                                  .usage = RenderTextureUsage::Sampled | RenderTextureUsage::RenderAttachment});
+        const auto depth = backend.CreateTexture(
+            {.extent = {64, 64}, .format = RenderTextureFormat::Depth32Float, .usage = RenderTextureUsage::RenderAttachment});
+        Check(color.HasValue() && depth.HasValue());
+        identities.color = color.Value();
+        identities.depth = depth.Value();
+        const auto colorView = backend.CreateTextureView({.texture = {{1}, 1, 1},
+                                                          .format = RenderTextureFormat::Rgba8Unorm,
+                                                          .aspect = RenderTextureAspect::Color},
+                                                         identities.color);
+        const auto depthView = backend.CreateTextureView({.texture = {{1}, 2, 1},
+                                                          .format = RenderTextureFormat::Depth32Float,
+                                                          .aspect = RenderTextureAspect::Depth},
+                                                         identities.depth);
+        Check(colorView.HasValue() && depthView.HasValue());
+        identities.colorView = colorView.Value();
+        identities.depthView = depthView.Value();
+        const auto target = backend.CreateRenderTarget({.colorAttachment = {{1}, 1, 1}, .depthAttachment = {{1}, 2, 1}, .extent = {64, 64}},
+                                                       identities.colorView, identities.depthView);
+        Check(target.HasValue());
+        identities.target = target.Value();
+        return identities;
+    }
+
+    void DestroyGenericResources(IRenderBackend &backend, const GenericResourceIdentities &resources) {
+        backend.DestroyRenderTarget(resources.target);
+        backend.DestroyTextureView(resources.depthView);
+        backend.DestroyTextureView(resources.colorView);
+        backend.DestroyTexture(resources.depth);
+        backend.DestroyTexture(resources.color);
+        backend.DestroyMesh(resources.mesh);
+        backend.DestroyBuffer(resources.index);
+        backend.DestroyBuffer(resources.vertex);
     }
 
     TEST_CASE("Provider Is Inert And Backend Owns Presentation Lifecycle", "[unit][runtime][renderer]") {
@@ -308,6 +425,24 @@ namespace {
         Check(invalid.ErrorValue().code.Value() == "render.metal.unsupported_pass_kind");
         Check(state.executeCount == 0);
         backend->AbortActiveFrame();
+        backend->Shutdown();
+    }
+
+    TEST_CASE("Generic Resources Delegate To Metal Runtime", "[unit][runtime][renderer]") {
+        PortState state;
+        FakePresentationPort port{state};
+        MetalEditorGraphicsBridge bridge;
+        std::unique_ptr<IRenderBackend> backend = CreateBackend(port, state, bridge);
+        Check(backend->Initialize(RenderBackendConfig{}).HasValue());
+        Check(backend->Capabilities().supportsBufferResources);
+        Check(backend->Capabilities().supportsMeshResources);
+        Check(backend->Capabilities().supportsTextureResources);
+        Check(backend->Capabilities().supportsRenderTargetResources);
+
+        const GenericResourceIdentities resources = CreateGenericResources(*backend);
+        Check(state.resourceCreateCount == 8);
+        DestroyGenericResources(*backend, resources);
+        Check(state.resourceDestroyCount == 8);
         backend->Shutdown();
     }
 
