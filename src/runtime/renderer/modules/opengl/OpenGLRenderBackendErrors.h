@@ -17,4 +17,5 @@ namespace Horo::Render::OpenGLBackendErrors {
     extern const ErrorCodeDescriptor InvalidRegistration;
     extern const ErrorCodeDescriptor PresentationInUse;
     extern const ErrorCodeDescriptor UnsupportedPassKind;
+    extern const ErrorCodeDescriptor UnsupportedResourceOperation;
 }  // namespace Horo::Render::OpenGLBackendErrors

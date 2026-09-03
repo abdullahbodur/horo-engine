@@ -53,6 +53,19 @@ namespace Horo::Render {
         [[nodiscard]] constexpr auto operator<=>(const RenderBufferHandle &) const noexcept = default;
     };
 
+    /** @brief Generation-safe identity of one immutable resident mesh. */
+    struct RenderMeshHandle {
+        RenderResourceOwnerId owner;
+        std::uint32_t slot{0};
+        std::uint32_t generation{0};
+
+        [[nodiscard]] constexpr bool IsValid() const noexcept {
+            return owner.IsValid() && slot != 0 && generation != 0;
+        }
+
+        [[nodiscard]] constexpr auto operator<=>(const RenderMeshHandle &) const noexcept = default;
+    };
+
     /** @brief Generation-safe identity of one resident texture. */
     struct RenderTextureHandle {
         RenderResourceOwnerId owner;

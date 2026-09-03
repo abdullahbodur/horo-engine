@@ -61,7 +61,7 @@ TEST_CASE("Editor Viewport Metal Smoke", "[integration][renderer][gpu]") {
         Check(acquiredMesh.HasValue());
         Runtime::PrimitiveMeshLease meshLease = std::move(acquiredMesh).Value();
         const Render::MeshData &mesh = meshLease.Data();
-        const Render::RenderMeshHandle meshHandle{meshLease.Id(), 1};
+        const Render::RenderMeshSourceHandle meshHandle{meshLease.Id(), 1};
         meshResources.push_back({meshHandle, mesh.vertices, mesh.indices, mesh.localBounds});
         constexpr std::array positions{Math::Vec2{0, 0},         Math::Vec2{-1.0F, 0.7F}, Math::Vec2{0, 0.9F},    Math::Vec2{1.0F, 0.7F},
                                        Math::Vec2{-1.0F, -0.7F}, Math::Vec2{0, -0.9F},    Math::Vec2{1.0F, -0.7F}};

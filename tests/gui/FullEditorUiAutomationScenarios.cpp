@@ -192,7 +192,7 @@ namespace {
         REQUIRE(acquired.HasValue());
         Runtime::PrimitiveMeshLease meshLease = std::move(acquired).Value();
         const Render::MeshData &mesh = meshLease.Data();
-        const Render::RenderMeshHandle meshHandle{meshLease.Id(), 1};
+        const Render::RenderMeshSourceHandle meshHandle{meshLease.Id(), 1};
         const std::array meshResources{Editor::EditorViewportMeshResourceView{meshHandle, mesh.vertices, mesh.indices, mesh.localBounds}};
         const std::array instances{Editor::EditorViewportInstance{meshHandle,
                                                                   Math::Transform{}.ToMatrix(),

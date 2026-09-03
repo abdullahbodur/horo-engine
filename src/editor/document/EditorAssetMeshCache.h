@@ -15,7 +15,7 @@
 
 namespace Horo::Editor {
     struct EditorAssetMeshView {
-        Render::RenderMeshHandle handle;
+        Render::RenderMeshSourceHandle handle;
         const Render::MeshData *mesh{};
     };
 

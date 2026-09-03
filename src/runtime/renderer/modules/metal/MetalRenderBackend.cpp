@@ -71,6 +71,28 @@ namespace Horo::Render {
                 return capabilities_;
             }
 
+            /** @copydoc IRenderBackend::CreateBuffer */
+            Result<std::uint64_t> CreateBuffer(const RenderBufferDescriptor &, std::span<const std::byte>) override {
+                return Result<std::uint64_t>::Failure(MakeMetalError(MetalBackendErrors::UnsupportedResourceOperation,
+                                                                     "Metal generic buffer migration is owned by RND-001.5."));
+            }
+
+            /** @copydoc IRenderBackend::CreateMesh */
+            Result<std::uint64_t> CreateMesh(const RenderMeshDescriptor &, std::uint64_t, std::uint64_t) override {
+                return Result<std::uint64_t>::Failure(MakeMetalError(MetalBackendErrors::UnsupportedResourceOperation,
+                                                                     "Metal generic mesh migration is owned by RND-001.5."));
+            }
+
+            /** @copydoc IRenderBackend::DestroyBuffer */
+            void DestroyBuffer(std::uint64_t) noexcept override {
+                // Generic Metal buffers cannot exist until the focused RND-001.5 migration.
+            }
+
+            /** @copydoc IRenderBackend::DestroyMesh */
+            void DestroyMesh(std::uint64_t) noexcept override {
+                // Generic Metal meshes cannot exist until the focused RND-001.5 migration.
+            }
+
             /** @copydoc IRenderBackend::BeginFrame */
             Result<FrameToken> BeginFrame(const FrameDescriptor &descriptor) override {
                 if (!initialized_) {

@@ -273,14 +273,15 @@ namespace Horo::Render::Detail {
     }
 
     std::size_t RenderResourceRegistry::DrainRetirements() {
-        const std::size_t retirementsToDrain = std::min(retirementQueueCount_, static_cast<std::size_t>(limits_.retirementDrainBudget));
-        for (std::size_t retired = 0; retired < retirementsToDrain; ++retired) {
+        std::size_t retired = 0;
+        while (retired < limits_.retirementDrainBudget && retirementQueueCount_ > 0) {
             const std::uint32_t slot = retirementQueue_[retirementQueueHead_];
             retirementQueueHead_ = (retirementQueueHead_ + 1) % retirementQueue_.size();
             --retirementQueueCount_;
             Retire(slot);
+            ++retired;
         }
-        return retirementsToDrain;
+        return retired;
     }
 
     void RenderResourceRegistry::Shutdown() noexcept {

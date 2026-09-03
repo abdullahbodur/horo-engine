@@ -322,6 +322,57 @@ namespace {
         Check(initialized.ErrorValue().code.Value() == "render.null.presentation_unsupported");
     }
 
+    TEST_CASE("Null Backend Validates And Realizes Generic Resources", "[unit][runtime][renderer][resource]") {
+        RenderBackendRegistry registry;
+        Check(RegisterNullRenderBackend(registry).HasValue());
+        Check(registry.Seal().HasValue());
+        auto created = registry.Create(RenderBackendId{"null"});
+        Check(created.HasValue());
+        std::unique_ptr<IRenderBackend> backend = std::move(created).Value();
+
+        const std::array<std::byte, 12> bytes{};
+        const RenderBufferDescriptor vertexDescriptor{
+            .byteSize = bytes.size(),
+            .usage = RenderBufferUsage::Vertex,
+            .access = RenderBufferAccess::DeviceLocal,
+        };
+        Check(backend->CreateBuffer(vertexDescriptor, bytes).ErrorValue().code.Value() == "render.backend.not_initialized");
+        Check(backend->Initialize(RenderBackendConfig{}).HasValue());
+        Check(backend->Capabilities().supportsBufferResources);
+        Check(backend->Capabilities().supportsMeshResources);
+
+        Check(backend->CreateBuffer({}, {}).ErrorValue().code.Value() == "render.backend.invalid_config");
+        Check(backend->CreateBuffer(vertexDescriptor, std::span{bytes}.first<4>()).ErrorValue().code.Value() ==
+              "render.backend.invalid_config");
+        auto vertex = backend->CreateBuffer(vertexDescriptor, bytes);
+        auto index =
+            backend->CreateBuffer({.byteSize = bytes.size(), .usage = RenderBufferUsage::Index, .access = RenderBufferAccess::DeviceLocal},
+                                  bytes);
+        Check(vertex.HasValue());
+        Check(index.HasValue());
+        Check(vertex.Value() != index.Value());
+
+        const RenderMeshDescriptor meshDescriptor{
+            .vertexBuffer = {.owner = {1}, .slot = 1, .generation = 1},
+            .indexBuffer = {.owner = {1}, .slot = 2, .generation = 1},
+            .vertexStride = 4,
+            .vertexCount = 3,
+            .indexFormat = RenderIndexFormat::UInt32,
+            .indexCount = 3,
+            .topology = RenderPrimitiveTopology::Triangles,
+            .localBounds = {{0.0F, 0.0F, 0.0F}, {1.0F, 1.0F, 1.0F}},
+        };
+        Check(backend->CreateMesh({}, vertex.Value(), index.Value()).ErrorValue().code.Value() == "render.backend.invalid_config");
+        Check(backend->CreateMesh(meshDescriptor, 0, index.Value()).ErrorValue().code.Value() == "render.backend.invalid_config");
+        Check(backend->CreateMesh(meshDescriptor, vertex.Value(), 0).ErrorValue().code.Value() == "render.backend.invalid_config");
+        auto mesh = backend->CreateMesh(meshDescriptor, vertex.Value(), index.Value());
+        Check(mesh.HasValue());
+        backend->DestroyMesh(mesh.Value());
+        backend->DestroyBuffer(vertex.Value());
+        backend->DestroyBuffer(index.Value());
+        backend->Shutdown();
+    }
+
     TEST_CASE("Null Backend Rejects Invalid Configuration And Frame Extent", "[unit][runtime][renderer]") {
         RenderBackendRegistry registry;
         Check(RegisterNullRenderBackend(registry).HasValue());

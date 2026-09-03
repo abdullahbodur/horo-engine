@@ -14,7 +14,21 @@
 namespace Horo::Render {
     namespace Detail {
         class RenderResourceRegistry;
-    }
+        class RenderResourceUploadQueue;
+    }  // namespace Detail
+
+    /** @brief Finite frontend admission and per-drain limits for initial resource uploads. */
+    struct RenderResourceUploadLimits {
+        std::size_t maximumPendingBytes{64U * 1024U * 1024U};
+        std::size_t maximumBytesPerDrain{16U * 1024U * 1024U};
+        std::uint32_t maximumRequestsPerDrain{64};
+
+        /** @brief Reports whether every upload bound is finite and non-zero. */
+        [[nodiscard]] constexpr bool IsValid() const noexcept {
+            return maximumPendingBytes > 0 && maximumBytesPerDrain > 0 && maximumBytesPerDrain <= maximumPendingBytes &&
+                   maximumRequestsPerDrain > 0;
+        }
+    };
 
     class RenderFrontend;
 
@@ -92,11 +106,13 @@ namespace Horo::Render {
          * @param registry Host-owned sealed backend registry.
          * @param backendId Canonical backend identity selected by host policy.
          * @param config Backend-neutral initialization policy.
+         * @param uploadLimits Finite initial-upload queue and per-safe-point work limits.
          * @return Owned frontend, or the backend creation/initialization failure.
          */
         [[nodiscard]] static Result<std::unique_ptr<RenderFrontend>> Create(const RenderBackendRegistry &registry,
                                                                             const RenderBackendId &backendId,
-                                                                            const RenderBackendConfig &config);
+                                                                            const RenderBackendConfig &config,
+                                                                            RenderResourceUploadLimits uploadLimits = {});
 
         /** @brief Shuts down and releases the owned backend. */
         ~RenderFrontend();
@@ -154,6 +170,52 @@ namespace Horo::Render {
         /** @brief Releases a live target and invalidates its generation; repeated stale release is rejected. */
         [[nodiscard]] Result<void> ReleaseOffscreenTarget(RenderTargetHandle target);
 
+        /**
+         * @brief Queues an owned initial upload for one immutable buffer generation.
+         * @param descriptor Valid backend-neutral buffer descriptor.
+         * @param initialData Bytes copied into the bounded frontend queue before return.
+         * @return Pending typed handle and completion operation, or an admission failure.
+         */
+        [[nodiscard]] Result<ResourceCreation<RenderBufferHandle>> CreateBuffer(const RenderBufferDescriptor &descriptor,
+                                                                                std::span<const std::byte> initialData);
+
+        /**
+         * @brief Queues one immutable mesh over exact ready vertex and index buffers.
+         * @param descriptor Valid mesh descriptor whose dependencies belong to this frontend.
+         * @return Pending typed handle and completion operation, or a validation/admission failure.
+         */
+        [[nodiscard]] Result<ResourceCreation<RenderMeshHandle>> CreateMesh(const RenderMeshDescriptor &descriptor);
+
+        /**
+         * @brief Queues a new mesh generation and retires the old generation only after publication.
+         * @param current Ready mesh generation to replace without retargeting its dependents.
+         * @param descriptor Descriptor for the independent replacement generation.
+         * @return Pending replacement and completion operation, or a validation/admission failure.
+         */
+        [[nodiscard]] Result<ResourceCreation<RenderMeshHandle>> ReplaceMesh(RenderMeshHandle current,
+                                                                             const RenderMeshDescriptor &descriptor);
+
+        /**
+         * @brief Processes one bounded upload batch on the render-capable owner thread.
+         * @return Number of completed requests, including typed backend failures.
+         */
+        [[nodiscard]] Result<std::size_t> ProcessResourceRequests();
+
+        /** @brief Returns the current state of one buffer generation. */
+        [[nodiscard]] Result<RenderResourceState> ResourceState(RenderBufferHandle buffer) const;
+
+        /** @brief Returns the current state of one mesh generation. */
+        [[nodiscard]] Result<RenderResourceState> ResourceState(RenderMeshHandle mesh) const;
+
+        /** @brief Returns success, pending, or the stored typed result for one resource operation. */
+        [[nodiscard]] Result<void> ResourceOperationResult(ResourceOperationId operation) const;
+
+        /** @brief Logically releases one buffer generation; dependent meshes retain its native realization. */
+        [[nodiscard]] Result<void> ReleaseBuffer(RenderBufferHandle buffer);
+
+        /** @brief Logically releases one mesh generation and drains newly eligible dependencies. */
+        [[nodiscard]] Result<void> ReleaseMesh(RenderMeshHandle mesh);
+
     private:
         friend class RenderFrameScope;
 
@@ -163,19 +225,29 @@ namespace Horo::Render {
         };
 
     public:
-        RenderFrontend(std::unique_ptr<IRenderBackend> backend, RenderResourceOwnerId resourceOwner, ConstructionKey);
+        RenderFrontend(std::unique_ptr<IRenderBackend> backend, RenderResourceOwnerId resourceOwner,
+                       RenderResourceUploadLimits uploadLimits, ConstructionKey);
 
     private:
         [[nodiscard]] bool IsLiveTarget(RenderTargetHandle target, FramebufferExtent extent) const noexcept;
+        [[nodiscard]] Result<void> ValidateMeshDependencies(const RenderMeshDescriptor &descriptor) const;
+        [[nodiscard]] bool IsMeshBufferLayoutCompatible(const RenderMeshDescriptor &descriptor) const noexcept;
 
         struct TargetRecord {
             FramebufferExtent extent{};
         };
 
+        struct BufferRecord {
+            std::uint32_t generation{0};
+            RenderBufferDescriptor descriptor;
+        };
+
         std::unique_ptr<IRenderBackend> backend_;
         std::unique_ptr<Detail::RenderResourceRegistry> resourceRegistry_;
+        std::unique_ptr<Detail::RenderResourceUploadQueue> resourceUploadQueue_;
         RenderFrameScope *activeFrameScope_{nullptr};
         IStaticMeshPassExecutor *staticMeshPassExecutor_{nullptr};
         std::vector<TargetRecord> targets_{{}};
+        std::vector<BufferRecord> buffers_{{}};
     };
 }  // namespace Horo::Render

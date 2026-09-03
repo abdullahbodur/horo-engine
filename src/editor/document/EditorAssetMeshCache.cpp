@@ -109,7 +109,7 @@ namespace Horo::Editor {
             return Result<Render::MeshData>::Success(std::move(mesh));
         }
 
-        [[nodiscard]] Render::RenderMeshHandle HandleFor(const Assets::AssetId asset) noexcept {
+        [[nodiscard]] Render::RenderMeshSourceHandle HandleFor(const Assets::AssetId asset) noexcept {
             std::uint64_t value = 1469598103934665603ULL;
             for (const std::uint8_t byte : asset.Bytes()) {
                 value ^= byte;

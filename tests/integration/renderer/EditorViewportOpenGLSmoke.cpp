@@ -71,7 +71,7 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]") {
         Check(acquiredMesh.HasValue());
         Runtime::PrimitiveMeshLease meshLease = std::move(acquiredMesh).Value();
         const MeshData &mesh = meshLease.Data();
-        const RenderMeshHandle meshHandle{meshLease.Id(), 1};
+        const RenderMeshSourceHandle meshHandle{meshLease.Id(), 1};
         meshResources.push_back({meshHandle, mesh.vertices, mesh.indices, mesh.localBounds});
         constexpr std::array positions{Math::Vec2{0, 0},         Math::Vec2{-1.0F, 0.7F}, Math::Vec2{0, 0.9F},    Math::Vec2{1.0F, 0.7F},
                                        Math::Vec2{-1.0F, -0.7F}, Math::Vec2{0, -0.9F},    Math::Vec2{1.0F, -0.7F}};
