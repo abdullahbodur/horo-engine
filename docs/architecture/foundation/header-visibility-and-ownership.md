@@ -88,3 +88,11 @@ It may become private only after those signatures migrate to Horo-owned types.
 `ProjectAssetImportCommitter` remains target-private behind an out-of-line
 `AssetImportModal` destructor; do not reintroduce its `src/` include in the public
 modal header.
+
+## AUD-001.2 Migration Notes
+
+`HoroEngine::AudioApi` now owns `Horo/Audio/AudioIdentity.h` and
+`Horo/Audio/AudioErrors.h`. New audio consumers must link that target instead of
+copying untyped integers or depending on a concrete device backend. There are no
+existing audio API callers to migrate. The handle registry remains target-private;
+only stable IDs and generation-safe client handles cross the public boundary.

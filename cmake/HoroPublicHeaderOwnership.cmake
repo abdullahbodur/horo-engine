@@ -107,6 +107,10 @@ horo_configure_target_header_boundary(HoroAssets PUBLIC_HEADERS
     Horo/Assets/CookCatalog.h
     Horo/Assets/MeshEditorPayload.h
 )
+horo_configure_target_header_boundary(HoroAudioApi PUBLIC_HEADERS
+    Horo/Audio/AudioErrors.h
+    Horo/Audio/AudioIdentity.h
+)
 horo_configure_target_header_boundary(HoroInput PUBLIC_HEADERS
     Horo/Runtime/Input.h
 )

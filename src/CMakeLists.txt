@@ -247,6 +247,14 @@ target_link_libraries(HoroAssets
 )
 target_link_libraries(HoroRuntimeScene PUBLIC HoroEngine::Assets)
 
+add_library(HoroAudioApi STATIC
+        audio/api/AudioErrors.cpp
+        audio/api/AudioHandleRegistry.h
+)
+add_library(HoroEngine::AudioApi ALIAS HoroAudioApi)
+target_compile_features(HoroAudioApi PUBLIC cxx_std_20)
+target_link_libraries(HoroAudioApi PUBLIC HoroEngine::Foundation HoroEngine::Assets)
+
 add_library(HoroInput STATIC
         runtime/input/Input.cpp
         runtime/input/InputErrors.cpp

@@ -132,6 +132,13 @@ add_executable(HoroInputTests
 )
 target_compile_features(HoroInputTests PRIVATE cxx_std_20)
 target_link_libraries(HoroInputTests PRIVATE HoroEngine::Input)
+add_executable(HoroAudioApiTests
+        unit/runtime/audio/AudioIdentityTests.cpp
+)
+target_include_directories(HoroAudioApiTests PRIVATE ${PROJECT_SOURCE_DIR}/src/audio/api)
+target_compile_features(HoroAudioApiTests PRIVATE cxx_std_20)
+target_link_libraries(HoroAudioApiTests PRIVATE HoroEngine::AudioApi)
+horo_register_catch_test(HoroAudioApiTests LABELS "unit;audio;headless")
 add_executable(HoroGameplayRuntimeTests
         unit/gameplay/BehaviorRuntimeTests.cpp
         unit/gameplay/ComponentRegistryTests.cpp

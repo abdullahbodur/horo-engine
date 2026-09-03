@@ -179,7 +179,7 @@ conflicts are recorded rather than treated as additional implementations.
 | `HoroEngine::SceneModel` | Partial | Target exists but publicly depends on RenderApi, contrary to the documented Foundation-only level. |
 | `HoroEngine::RuntimeScene` | Implemented | `HoroRuntimeScene`; Build System still calls this `HoroEngine::SceneRuntime`. |
 | `HoroEngine::Physics` | Planned | Architecture and placeholder paths exist; no production target. |
-| `HoroEngine::AudioApi` | Planned | Architecture and placeholder public path exist; no production target. |
+| `HoroEngine::AudioApi` | Partial | Target owns typed audio identities, generation-safe handles and stable errors; runtime commands and processing contracts remain planned. |
 | `HoroEngine::AudioRuntime` | Planned | Architecture exists; no production target. |
 | `HoroEngine::AudioPlatform` | Absent | No target or implementation path. |
 | `HoroEngine::AudioNull` | Absent | No target or implementation path. |
