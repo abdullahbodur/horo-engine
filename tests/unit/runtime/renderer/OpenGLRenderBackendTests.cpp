@@ -265,6 +265,26 @@ namespace {
         Check(portState.destroyCount == 1);
     }
 
+    TEST_CASE("Generic Resources Remain Explicitly Unsupported Before OpenGL Migration", "[unit][runtime][renderer][resource]") {
+        PortState portState;
+        FakePresentationPort port{portState};
+        std::unique_ptr<IRenderBackend> backend = CreateBackend(port);
+        const std::array<std::byte, 4> bytes{};
+
+        Check(!backend->Capabilities().supportsBufferResources);
+        Check(!backend->Capabilities().supportsMeshResources);
+        const auto buffer =
+            backend->CreateBuffer({.byteSize = bytes.size(), .usage = RenderBufferUsage::Vertex, .access = RenderBufferAccess::DeviceLocal},
+                                  bytes);
+        Check(buffer.HasError());
+        Check(buffer.ErrorValue().code.Value() == "render.opengl.unsupported_resource_operation");
+        const auto mesh = backend->CreateMesh({}, 1, 2);
+        Check(mesh.HasError());
+        Check(mesh.ErrorValue().code.Value() == "render.opengl.unsupported_resource_operation");
+        backend->DestroyBuffer(1);
+        backend->DestroyMesh(2);
+    }
+
     TEST_CASE("Shared Presentation Port Rejects Overlapping Initialized Backends", "[unit][runtime][renderer]") {
         PortState portState;
         FakePresentationPort port{portState};

@@ -108,4 +108,12 @@ namespace Horo::Render::NullBackendErrors {
                                                       .remediationHint = "Use a presentation-capable backend or disable presentation.",
                                                       .retryable = false,
                                                       .userActionable = false};
+
+    const ErrorCodeDescriptor ResourceInstanceExhausted{.domain = Domain,
+                                                        .code = ErrorCode{"render.null.resource_instance_exhausted"},
+                                                        .defaultSeverity = ErrorSeverity::Error,
+                                                        .summary = "Null renderer resource instance space is exhausted.",
+                                                        .remediationHint = "Restart the backend after all resource work is retired.",
+                                                        .retryable = false,
+                                                        .userActionable = false};
 }  // namespace Horo::Render::NullBackendErrors

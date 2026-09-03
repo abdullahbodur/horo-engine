@@ -17,4 +17,5 @@ namespace Horo::Render::MetalBackendErrors {
     extern const ErrorCodeDescriptor PresentationInUse;
     extern const ErrorCodeDescriptor UnsupportedFramesInFlight;
     extern const ErrorCodeDescriptor UnsupportedPassKind;
+    extern const ErrorCodeDescriptor UnsupportedResourceOperation;
 }  // namespace Horo::Render::MetalBackendErrors

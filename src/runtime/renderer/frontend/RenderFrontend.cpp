@@ -1,7 +1,12 @@
 #include "Horo/Runtime/Render/RenderFrontend.h"
 
 #include "RenderFrontendErrors.h"
+#include "RenderResourceOperations.h"
+#include "RenderResourceRegistry.h"
+#include "RenderResourceUploadQueue.h"
 
+#include <array>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -10,6 +15,7 @@ namespace Horo::Render {
         [[nodiscard]] Error MakeFrontendError(const ErrorCodeDescriptor &descriptor, std::string message) {
             return MakeError(descriptor, std::move(message));
         }
+
     }  // namespace
 
     /** @copydoc RenderFrameScope::~RenderFrameScope */
@@ -149,7 +155,12 @@ namespace Horo::Render {
 
     /** @copydoc RenderFrontend::Create */
     Result<std::unique_ptr<RenderFrontend>> RenderFrontend::Create(const RenderBackendRegistry &registry, const RenderBackendId &backendId,
-                                                                   const RenderBackendConfig &config) {
+                                                                   const RenderBackendConfig &config,
+                                                                   const RenderResourceUploadLimits uploadLimits) {
+        if (!uploadLimits.IsValid()) {
+            return Result<std::unique_ptr<RenderFrontend>>::Failure(
+                MakeFrontendError(FrontendErrors::InvalidResourceUploadLimits, "Renderer resource upload limits are invalid."));
+        }
         auto createdBackend = registry.Create(backendId);
         if (createdBackend.HasError()) {
             return Result<std::unique_ptr<RenderFrontend>>::Failure(createdBackend.ErrorValue());
@@ -167,16 +178,37 @@ namespace Horo::Render {
                 MakeFrontendError(FrontendErrors::InitializeException, "Renderer backend initialization threw."));
         }
 
-        return Result<std::unique_ptr<RenderFrontend>>::Success(std::make_unique<RenderFrontend>(std::move(backend), ConstructionKey{}));
+        auto resourceOwner = Detail::AcquireRenderResourceOwnerId();
+        if (resourceOwner.HasError()) {
+            backend->Shutdown();
+            return Result<std::unique_ptr<RenderFrontend>>::Failure(resourceOwner.ErrorValue());
+        }
+        return Result<std::unique_ptr<RenderFrontend>>::Success(
+            std::make_unique<RenderFrontend>(std::move(backend), resourceOwner.Value(), uploadLimits, ConstructionKey{}));
     }
 
-    RenderFrontend::RenderFrontend(std::unique_ptr<IRenderBackend> backend, ConstructionKey) noexcept : backend_(std::move(backend)) {}
+    RenderFrontend::RenderFrontend(std::unique_ptr<IRenderBackend> backend, const RenderResourceOwnerId resourceOwner,
+                                   const RenderResourceUploadLimits uploadLimits, ConstructionKey)
+        : backend_(std::move(backend)),
+          resourceRegistry_(std::make_unique<Detail::RenderResourceRegistry>(resourceOwner, Detail::RenderResourceRegistryLimits{},
+                                                                             [this](const Detail::RenderResourceClass resourceClass,
+                                                                                    const std::uint64_t backendInstance) {
+                                                                                 if (resourceClass == Detail::RenderResourceClass::Buffer) {
+                                                                                     backend_->DestroyBuffer(backendInstance);
+                                                                                 } else if (resourceClass ==
+                                                                                            Detail::RenderResourceClass::Mesh) {
+                                                                                     backend_->DestroyMesh(backendInstance);
+                                                                                 }
+                                                                             })),
+          resourceUploadQueue_(std::make_unique<Detail::RenderResourceUploadQueue>(uploadLimits)) {}
 
     /** @copydoc RenderFrontend::~RenderFrontend */
     RenderFrontend::~RenderFrontend() {
         if (activeFrameScope_ != nullptr) {
             activeFrameScope_->Abort();
         }
+        resourceUploadQueue_->Clear();
+        resourceRegistry_->Shutdown();
         backend_->Shutdown();
     }
 
@@ -190,6 +222,10 @@ namespace Horo::Render {
         if (activeFrameScope_ != nullptr) {
             return Result<RenderFrameScope>::Failure(
                 MakeFrontendError(FrontendErrors::FrameAlreadyActive, "Renderer frontend already owns an active frame scope."));
+        }
+
+        if (const Result<std::size_t> processed = ProcessResourceRequests(); processed.HasError()) {
+            return Result<RenderFrameScope>::Failure(processed.ErrorValue());
         }
 
         try {
@@ -267,25 +303,40 @@ namespace Horo::Render {
         if (!extent.IsValid())
             return Result<RenderTargetHandle>::Failure(
                 MakeFrontendError(FrontendErrors::InvalidTargetExtent, "Offscreen target extent is invalid."));
-        for (std::size_t index = 1; index < targets_.size(); ++index) {
-            TargetRecord &record = targets_[index];
-            if (!record.live) {
-                record.live = true;
-                record.extent = extent;
-                return Result<RenderTargetHandle>::Success(RenderTargetHandle{static_cast<std::uint32_t>(index), record.generation});
-            }
+        auto reservation = resourceRegistry_->Reserve(Detail::RenderResourceClass::RenderTarget);
+        if (reservation.HasError()) {
+            return Result<RenderTargetHandle>::Failure(reservation.ErrorValue());
         }
-        targets_.push_back(TargetRecord{.extent = extent, .generation = 1, .live = true});
-        return Result<RenderTargetHandle>::Success(RenderTargetHandle{static_cast<std::uint32_t>(targets_.size() - 1), 1});
+        const Detail::RenderResourceIdentity identity = reservation.Value().identity;
+        if (identity.slot >= targets_.size()) {
+            targets_.resize(static_cast<std::size_t>(identity.slot) + 1);
+        }
+        targets_[identity.slot].extent = extent;
+        if (const Result<void> published = resourceRegistry_->Publish(Detail::RenderResourceClass::RenderTarget, identity, identity.slot);
+            published.HasError()) {
+            const Error publicationError = published.ErrorValue();
+            static_cast<void>(resourceRegistry_->Fail(Detail::RenderResourceClass::RenderTarget, identity, publicationError));
+            static_cast<void>(resourceRegistry_->DrainRetirements());
+            targets_[identity.slot] = {};
+            return Result<RenderTargetHandle>::Failure(publicationError);
+        }
+        return Result<RenderTargetHandle>::Success(RenderTargetHandle{identity.owner, identity.slot, identity.generation});
     }
 
     /** @copydoc RenderFrontend::ResizeOffscreenTarget */
     Result<void> RenderFrontend::ResizeOffscreenTarget(const RenderTargetHandle target, const FramebufferExtent extent) {
-        if (!extent.IsValid() || target.index >= targets_.size() || !targets_[target.index].live ||
-            targets_[target.index].generation != target.generation)
-            return Result<void>::Failure(
-                MakeFrontendError(FrontendErrors::StaleRenderTarget, "Offscreen target handle or extent is invalid."));
-        targets_[target.index].extent = extent;
+        if (!extent.IsValid()) {
+            return Result<void>::Failure(MakeFrontendError(FrontendErrors::InvalidTargetExtent, "Offscreen target extent is invalid."));
+        }
+        const Detail::RenderResourceIdentity identity{target.owner, target.slot, target.generation};
+        const auto state = resourceRegistry_->State(Detail::RenderResourceClass::RenderTarget, identity);
+        if (state.HasError()) {
+            return Result<void>::Failure(state.ErrorValue());
+        }
+        if (state.Value() != RenderResourceState::Ready) {
+            return Result<void>::Failure(MakeFrontendError(FrontendErrors::ResourceNotReady, "Offscreen target is not ready for resize."));
+        }
+        targets_[target.slot].extent = extent;
         return Result<void>::Success();
     }
 
@@ -294,19 +345,205 @@ namespace Horo::Render {
         if (activeFrameScope_ != nullptr)
             return Result<void>::Failure(
                 MakeFrontendError(FrontendErrors::TargetReleaseDuringFrame, "Offscreen target cannot be released during a frame."));
-        if (target.index >= targets_.size() || !targets_[target.index].live || targets_[target.index].generation != target.generation)
-            return Result<void>::Failure(MakeFrontendError(FrontendErrors::StaleRenderTarget, "Offscreen target handle is stale."));
-        TargetRecord &record = targets_[target.index];
-        record.live = false;
-        record.extent = {};
-        ++record.generation;
-        if (record.generation == 0)
-            ++record.generation;
+        const Detail::RenderResourceIdentity identity{target.owner, target.slot, target.generation};
+        if (const Result<void> released = resourceRegistry_->Release(Detail::RenderResourceClass::RenderTarget, identity);
+            released.HasError()) {
+            return Result<void>::Failure(released.ErrorValue());
+        }
+        targets_[target.slot] = {};
+        static_cast<void>(resourceRegistry_->DrainRetirements());
         return Result<void>::Success();
     }
 
+    /** @copydoc RenderFrontend::CreateBuffer */
+    Result<ResourceCreation<RenderBufferHandle>> RenderFrontend::CreateBuffer(const RenderBufferDescriptor &descriptor,
+                                                                              const std::span<const std::byte> initialData) {
+        if (activeFrameScope_ != nullptr) {
+            return Result<ResourceCreation<RenderBufferHandle>>::Failure(
+                MakeFrontendError(FrontendErrors::ResourceChangeDuringFrame, "A buffer cannot be created during an active frame."));
+        }
+        if (!descriptor.IsValid()) {
+            return Result<ResourceCreation<RenderBufferHandle>>::Failure(
+                MakeFrontendError(FrontendErrors::InvalidBufferDescriptor, "The buffer descriptor is structurally invalid."));
+        }
+        if (!backend_->Capabilities().supportsBufferResources) {
+            return Result<ResourceCreation<RenderBufferHandle>>::Failure(
+                MakeFrontendError(FrontendErrors::ResourceUnsupported, "The active renderer backend does not support generic buffers."));
+        }
+        if (initialData.size() != descriptor.byteSize) {
+            return Result<ResourceCreation<RenderBufferHandle>>::Failure(
+                MakeFrontendError(FrontendErrors::ResourceBufferUploadSizeMismatch,
+                                  "The initial-data byte count must equal the buffer descriptor size."));
+        }
+        if (!resourceUploadQueue_->CanEnqueue(initialData.size())) {
+            return Result<ResourceCreation<RenderBufferHandle>>::Failure(
+                MakeFrontendError(FrontendErrors::ResourceUploadCapacityExceeded,
+                                  "The bounded initial-upload byte queue has insufficient capacity."));
+        }
+
+        auto reserved = resourceRegistry_->Reserve(Detail::RenderResourceClass::Buffer);
+        if (reserved.HasError()) {
+            return Result<ResourceCreation<RenderBufferHandle>>::Failure(reserved.ErrorValue());
+        }
+        const Detail::ResourceReservation reservation = reserved.Value();
+        if (reservation.identity.slot >= buffers_.size()) {
+            buffers_.resize(static_cast<std::size_t>(reservation.identity.slot) + 1);
+        }
+        buffers_[reservation.identity.slot] = {.generation = reservation.identity.generation, .descriptor = descriptor};
+        resourceUploadQueue_->EnqueueBuffer(reservation.identity, descriptor, initialData);
+        return Result<ResourceCreation<RenderBufferHandle>>::Success(
+            {.handle = BufferHandle(reservation.identity), .operation = reservation.operation});
+    }
+
+    /** @copydoc RenderFrontend::CreateMesh */
+    Result<ResourceCreation<RenderMeshHandle>> RenderFrontend::CreateMesh(const RenderMeshDescriptor &descriptor) {
+        if (activeFrameScope_ != nullptr) {
+            return Result<ResourceCreation<RenderMeshHandle>>::Failure(
+                MakeFrontendError(FrontendErrors::ResourceChangeDuringFrame, "A mesh cannot be created during an active frame."));
+        }
+        if (!descriptor.IsValid()) {
+            return Result<ResourceCreation<RenderMeshHandle>>::Failure(
+                MakeFrontendError(FrontendErrors::InvalidMeshDescriptor, "The mesh descriptor is structurally invalid."));
+        }
+        if (!backend_->Capabilities().supportsMeshResources) {
+            return Result<ResourceCreation<RenderMeshHandle>>::Failure(
+                MakeFrontendError(FrontendErrors::ResourceUnsupported, "The active renderer backend does not support generic meshes."));
+        }
+
+        if (const Result<void> dependencies = ValidateMeshDependencies(descriptor); dependencies.HasError()) {
+            return Result<ResourceCreation<RenderMeshHandle>>::Failure(dependencies.ErrorValue());
+        }
+        if (!IsMeshBufferLayoutCompatible(descriptor)) {
+            return Result<ResourceCreation<RenderMeshHandle>>::Failure(
+                MakeFrontendError(FrontendErrors::InvalidMeshDescriptor,
+                                  "Mesh layout or counts are incompatible with the referenced buffers."));
+        }
+
+        const std::array dependencies{Identity(descriptor.vertexBuffer), Identity(descriptor.indexBuffer)};
+        auto reserved = resourceRegistry_->Reserve(Detail::RenderResourceClass::Mesh, dependencies);
+        if (reserved.HasError()) {
+            return Result<ResourceCreation<RenderMeshHandle>>::Failure(reserved.ErrorValue());
+        }
+        const Detail::ResourceReservation reservation = reserved.Value();
+        resourceUploadQueue_->EnqueueMesh(reservation.identity, descriptor, std::nullopt);
+        return Result<ResourceCreation<RenderMeshHandle>>::Success(
+            {.handle = MeshHandle(reservation.identity), .operation = reservation.operation});
+    }
+
+    /** @copydoc RenderFrontend::ReplaceMesh */
+    Result<ResourceCreation<RenderMeshHandle>> RenderFrontend::ReplaceMesh(const RenderMeshHandle current,
+                                                                           const RenderMeshDescriptor &descriptor) {
+        const auto state = ResourceState(current);
+        if (state.HasError()) {
+            return Result<ResourceCreation<RenderMeshHandle>>::Failure(state.ErrorValue());
+        }
+        if (state.Value() != RenderResourceState::Ready) {
+            return Result<ResourceCreation<RenderMeshHandle>>::Failure(
+                MakeFrontendError(FrontendErrors::ResourceNotReady, "Only a ready mesh generation can be replaced."));
+        }
+        auto replacement = CreateMesh(descriptor);
+        if (replacement.HasValue()) {
+            resourceUploadQueue_->MarkBackAsReplacement(Identity(current));
+        }
+        return replacement;
+    }
+
+    /** @copydoc RenderFrontend::ProcessResourceRequests */
+    Result<std::size_t> RenderFrontend::ProcessResourceRequests() {
+        if (activeFrameScope_ != nullptr) {
+            return Result<std::size_t>::Failure(MakeFrontendError(FrontendErrors::ResourceChangeDuringFrame,
+                                                                  "Resource requests can only be processed at a frame boundary."));
+        }
+
+        std::size_t completedRequests = 0;
+        std::size_t completedBytes = 0;
+        while (!resourceUploadQueue_->Empty() && !resourceUploadQueue_->DrainLimitReached(completedRequests, completedBytes)) {
+            Detail::RenderResourceUploadQueue::Request request = resourceUploadQueue_->Pop();
+            completedBytes += request.initialData.size();
+            const Result<std::uint64_t> created = RealizeResourceRequest(*backend_, *resourceRegistry_, request);
+            CompleteResourceRequest(*backend_, *resourceRegistry_, request, created);
+            ++completedRequests;
+        }
+        static_cast<void>(resourceRegistry_->DrainRetirements());
+        return Result<std::size_t>::Success(completedRequests);
+    }
+
+    /** @copydoc RenderFrontend::ResourceState(RenderBufferHandle) */
+    Result<RenderResourceState> RenderFrontend::ResourceState(const RenderBufferHandle buffer) const {
+        return resourceRegistry_->State(Detail::RenderResourceClass::Buffer, Identity(buffer));
+    }
+
+    /** @copydoc RenderFrontend::ResourceState(RenderMeshHandle) */
+    Result<RenderResourceState> RenderFrontend::ResourceState(const RenderMeshHandle mesh) const {
+        return resourceRegistry_->State(Detail::RenderResourceClass::Mesh, Identity(mesh));
+    }
+
+    /** @copydoc RenderFrontend::ResourceOperationResult */
+    Result<void> RenderFrontend::ResourceOperationResult(const ResourceOperationId operation) const {
+        return resourceRegistry_->OperationResult(operation);
+    }
+
+    /** @copydoc RenderFrontend::ReleaseBuffer */
+    Result<void> RenderFrontend::ReleaseBuffer(const RenderBufferHandle buffer) {
+        if (activeFrameScope_ != nullptr) {
+            return Result<void>::Failure(
+                MakeFrontendError(FrontendErrors::ResourceChangeDuringFrame, "A buffer cannot be released during an active frame."));
+        }
+        const Result<void> released = resourceRegistry_->Release(Detail::RenderResourceClass::Buffer, Identity(buffer));
+        if (released.HasValue()) {
+            static_cast<void>(resourceRegistry_->DrainRetirements());
+        }
+        return released;
+    }
+
+    /** @copydoc RenderFrontend::ReleaseMesh */
+    Result<void> RenderFrontend::ReleaseMesh(const RenderMeshHandle mesh) {
+        if (activeFrameScope_ != nullptr) {
+            return Result<void>::Failure(
+                MakeFrontendError(FrontendErrors::ResourceChangeDuringFrame, "A mesh cannot be released during an active frame."));
+        }
+        const Result<void> released = resourceRegistry_->Release(Detail::RenderResourceClass::Mesh, Identity(mesh));
+        if (released.HasValue()) {
+            static_cast<void>(resourceRegistry_->DrainRetirements());
+        }
+        return released;
+    }
+
+    Result<void> RenderFrontend::ValidateMeshDependencies(const RenderMeshDescriptor &descriptor) const {
+        const auto vertex = resourceRegistry_->State(Detail::RenderResourceClass::Buffer, Identity(descriptor.vertexBuffer));
+        if (vertex.HasError()) {
+            return Result<void>::Failure(vertex.ErrorValue());
+        }
+        const auto index = resourceRegistry_->State(Detail::RenderResourceClass::Buffer, Identity(descriptor.indexBuffer));
+        if (index.HasError()) {
+            return Result<void>::Failure(index.ErrorValue());
+        }
+        if (vertex.Value() != RenderResourceState::Ready || index.Value() != RenderResourceState::Ready) {
+            return Result<void>::Failure(
+                MakeFrontendError(FrontendErrors::ResourceDependencyNotReady, "Mesh creation requires ready vertex and index buffers."));
+        }
+        return Result<void>::Success();
+    }
+
+    bool RenderFrontend::IsMeshBufferLayoutCompatible(const RenderMeshDescriptor &descriptor) const noexcept {
+        if (descriptor.vertexBuffer.slot >= buffers_.size() || descriptor.indexBuffer.slot >= buffers_.size()) {
+            return false;
+        }
+        const BufferRecord &vertex = buffers_[descriptor.vertexBuffer.slot];
+        const BufferRecord &index = buffers_[descriptor.indexBuffer.slot];
+        const std::uint32_t indexSize = descriptor.indexFormat == RenderIndexFormat::UInt16 ? 2U : 4U;
+        const bool recordsMatch =
+            vertex.generation == descriptor.vertexBuffer.generation && index.generation == descriptor.indexBuffer.generation;
+        return recordsMatch && HasBufferUsage(vertex.descriptor.usage, RenderBufferUsage::Vertex) &&
+               HasBufferUsage(index.descriptor.usage, RenderBufferUsage::Index) &&
+               FitsBuffer(descriptor.vertexStride, descriptor.vertexCount, vertex.descriptor.byteSize) &&
+               FitsBuffer(indexSize, descriptor.indexCount, index.descriptor.byteSize);
+    }
+
     bool RenderFrontend::IsLiveTarget(const RenderTargetHandle target, const FramebufferExtent extent) const noexcept {
-        return target.index < targets_.size() && targets_[target.index].live && targets_[target.index].generation == target.generation &&
-               targets_[target.index].extent.width == extent.width && targets_[target.index].extent.height == extent.height;
+        const auto state =
+            resourceRegistry_->State(Detail::RenderResourceClass::RenderTarget, {target.owner, target.slot, target.generation});
+        return state.HasValue() && state.Value() == RenderResourceState::Ready && target.slot < targets_.size() &&
+               targets_[target.slot].extent.width == extent.width && targets_[target.slot].extent.height == extent.height;
     }
 }  // namespace Horo::Render

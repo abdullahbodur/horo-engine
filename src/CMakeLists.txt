@@ -251,6 +251,8 @@ target_link_libraries(HoroRenderBackendRegistry PUBLIC HoroEngine::RenderApi)
 add_library(HoroRenderFrontend STATIC
         runtime/renderer/frontend/RenderFrontend.cpp
         runtime/renderer/frontend/RenderFrontendErrors.cpp
+        runtime/renderer/frontend/RenderResourceOperations.cpp
+        runtime/renderer/frontend/RenderResourceRegistry.cpp
 )
 add_library(HoroEngine::RenderFrontend ALIAS HoroRenderFrontend)
 

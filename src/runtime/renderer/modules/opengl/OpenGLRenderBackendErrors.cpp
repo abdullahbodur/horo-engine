@@ -116,4 +116,13 @@ namespace Horo::Render::OpenGLBackendErrors {
                                                   .remediationHint = "Submit only pass kinds supported by OpenGL.",
                                                   .retryable = false,
                                                   .userActionable = false};
+
+    const ErrorCodeDescriptor UnsupportedResourceOperation{.domain = Domain,
+                                                           .code = ErrorCode{"render.opengl.unsupported_resource_operation"},
+                                                           .defaultSeverity = ErrorSeverity::Error,
+                                                           .summary = "OpenGL generic resource realization is not available.",
+                                                           .remediationHint =
+                                                               "Use a backend version that implements generic renderer resources.",
+                                                           .retryable = false,
+                                                           .userActionable = false};
 }  // namespace Horo::Render::OpenGLBackendErrors

@@ -6,6 +6,7 @@
  */
 
 #include "Horo/Runtime/Render/Mesh.h"
+#include "Horo/Runtime/Render/RenderResource.h"
 
 #include <algorithm>
 #include <cmath>
@@ -54,8 +55,8 @@ namespace Horo::Render {
         }
     };
 
-    /** @brief Generation-safe identity of one immutable mesh resource. */
-    struct RenderMeshHandle {
+    /** @brief Producer-owned identity of one synchronously borrowed CPU mesh source. */
+    struct RenderMeshSourceHandle {
         MeshResourceId id;
         std::uint32_t generation{0};
 
@@ -63,19 +64,7 @@ namespace Horo::Render {
             return id.IsValid() && generation != 0;
         }
 
-        [[nodiscard]] constexpr auto operator<=>(const RenderMeshHandle &) const noexcept = default;
-    };
-
-    /** @brief Generation-safe identity of one frontend-owned offscreen target. */
-    struct RenderTargetHandle {
-        std::uint32_t index{0};
-        std::uint32_t generation{0};
-
-        [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return index != 0 && generation != 0;
-        }
-
-        [[nodiscard]] constexpr auto operator<=>(const RenderTargetHandle &) const noexcept = default;
+        [[nodiscard]] constexpr auto operator<=>(const RenderMeshSourceHandle &) const noexcept = default;
     };
 
     /** @brief Supported backend-neutral camera projection families. */
@@ -119,7 +108,7 @@ namespace Horo::Render {
 
     /** @brief Non-owning immutable CPU resource pinned by the producer's owning snapshot. */
     struct RenderMeshResourceView {
-        RenderMeshHandle handle;
+        RenderMeshSourceHandle handle;
         std::span<const MeshVertex> vertices;
         std::span<const std::uint32_t> indices;
         Math::Aabb localBounds;
@@ -152,7 +141,7 @@ namespace Horo::Render {
 
     /** @brief One static-mesh draw instance with no authored-scene or editor identity. */
     struct RenderStaticMeshInstance {
-        RenderMeshHandle mesh;
+        RenderMeshSourceHandle mesh;
         Math::Mat4 localToWorld{Math::Mat4::Identity()};
         Math::Aabb localBounds{{-0.5F, -0.5F, -0.5F}, {0.5F, 0.5F, 0.5F}};
         MaterialBindingId material{CoreDefaultMaterial};

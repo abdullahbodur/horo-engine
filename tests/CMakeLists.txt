@@ -706,9 +706,13 @@ target_link_libraries(HoroRenderBackendRegistryTests
 )
 add_executable(HoroRenderFrontendTests
         unit/runtime/renderer/RenderFrontendTests.cpp
+        unit/runtime/renderer/RenderResourceRegistryTests.cpp
 )
 
 target_compile_features(HoroRenderFrontendTests PRIVATE cxx_std_20)
+target_include_directories(HoroRenderFrontendTests PRIVATE
+        ${PROJECT_SOURCE_DIR}/src/runtime/renderer/frontend
+)
 target_link_libraries(HoroRenderFrontendTests
         PRIVATE
         HoroEngine::RenderFrontend

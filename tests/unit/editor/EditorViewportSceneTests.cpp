@@ -37,7 +37,7 @@ namespace {
         REQUIRE(acquired.HasValue());
         Runtime::PrimitiveMeshLease lease = std::move(acquired).Value();
         const Render::MeshData &mesh = lease.Data();
-        const Render::RenderMeshHandle meshHandle{Render::MeshResourceId{1}, 1};
+        const Render::RenderMeshSourceHandle meshHandle{Render::MeshResourceId{1}, 1};
         const std::array resources{EditorViewportMeshResourceView{meshHandle, mesh.vertices, mesh.indices, mesh.localBounds}};
         const std::array instances{
             EditorViewportInstance{meshHandle,
@@ -120,7 +120,7 @@ namespace {
         REQUIRE((acquired.HasValue()));
         Runtime::PrimitiveMeshLease lease = std::move(acquired).Value();
         const Render::MeshData &mesh = lease.Data();
-        const Render::RenderMeshHandle meshHandle{lease.Id(), 1};
+        const Render::RenderMeshSourceHandle meshHandle{lease.Id(), 1};
         const std::array resources{EditorViewportMeshResourceView{meshHandle, mesh.vertices, mesh.indices, mesh.localBounds}};
         const std::array instances{
             EditorViewportInstance{meshHandle, Math::Mat4::Identity(), mesh.localBounds, Render::CoreDefaultMaterial, {}}};

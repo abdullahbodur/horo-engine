@@ -9,6 +9,7 @@
 #include "Horo/Runtime/Render/RenderScene.h"
 
 #include <cmath>
+#include <cstddef>
 #include <optional>
 #include <span>
 #include <string>
@@ -126,6 +127,8 @@ namespace Horo::Render {
         bool supportsCompute{false};
         bool supportsBindlessResources{false};
         bool supportsRayTracing{false};
+        bool supportsBufferResources{false};
+        bool supportsMeshResources{false};
     };
 
     /** @brief Describes one host frame before backend work begins. */
@@ -282,6 +285,31 @@ namespace Horo::Render {
 
         /** @brief Returns the immutable capability snapshot for this backend instance. */
         [[nodiscard]] virtual const RenderBackendCapabilities &Capabilities() const noexcept = 0;
+
+        /**
+         * @brief Realizes one validated immutable buffer and its initial upload.
+         * @param descriptor Backend-neutral buffer policy validated by the frontend.
+         * @param initialData Owned request bytes borrowed synchronously for this call.
+         * @return Non-zero backend-private instance identity, or a typed failure.
+         */
+        [[nodiscard]] virtual Result<std::uint64_t> CreateBuffer(const RenderBufferDescriptor &descriptor,
+                                                                 std::span<const std::byte> initialData) = 0;
+
+        /**
+         * @brief Realizes one validated mesh over exact ready buffer instances.
+         * @param descriptor Backend-neutral immutable mesh descriptor.
+         * @param vertexBuffer Backend-private instance for descriptor.vertexBuffer.
+         * @param indexBuffer Backend-private instance for descriptor.indexBuffer.
+         * @return Non-zero backend-private mesh identity, or a typed failure.
+         */
+        [[nodiscard]] virtual Result<std::uint64_t> CreateMesh(const RenderMeshDescriptor &descriptor, std::uint64_t vertexBuffer,
+                                                               std::uint64_t indexBuffer) = 0;
+
+        /** @brief Releases one buffer instance after frontend dependency and submission pins drain. */
+        virtual void DestroyBuffer(std::uint64_t backendInstance) noexcept = 0;
+
+        /** @brief Releases one mesh instance after frontend dependency and submission pins drain. */
+        virtual void DestroyMesh(std::uint64_t backendInstance) noexcept = 0;
 
         /** @brief Starts one frame and returns the token required by later frame operations. */
         [[nodiscard]] virtual Result<FrameToken> BeginFrame(const FrameDescriptor &descriptor) = 0;

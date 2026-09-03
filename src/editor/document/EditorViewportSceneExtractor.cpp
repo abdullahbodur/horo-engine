@@ -115,7 +115,7 @@ namespace Horo::Editor {
                 return Result<void>::Failure(std::move(error));
             }
             Runtime::PrimitiveMeshLease lease = std::move(acquired).Value();
-            const Render::RenderMeshHandle handle{lease.Id(), 1};
+            const Render::RenderMeshSourceHandle handle{lease.Id(), 1};
             if (std::ranges::find(extracted.meshResources, handle, &EditorViewportMeshResourceView::handle) ==
                 extracted.meshResources.end()) {
                 const Render::MeshData &mesh = lease.Data();
