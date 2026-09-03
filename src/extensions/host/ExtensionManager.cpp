@@ -263,27 +263,6 @@ namespace Horo::Extensions {
     ExtensionManager::ExtensionManager(ExtensionManager &&) noexcept = default;
     ExtensionManager &ExtensionManager::operator=(ExtensionManager &&) noexcept = default;
 
-    std::vector<std::string> ExtensionManager::DiscoverExtensions(const std::string &directoryPath) const {
-        std::vector<std::string> discovered;
-        std::error_code ec;
-
-        const fs::path dir{directoryPath};
-        if (!fs::exists(dir, ec) || !fs::is_directory(dir, ec)) {
-            LOG_WARN("extensions", "Discovery path does not exist or is not a directory: %s", directoryPath.c_str());
-            return discovered;
-        }
-
-        for (const auto &entry : fs::directory_iterator(dir, ec)) {
-            if (entry.is_directory()) {
-                const fs::path manifestPath = entry.path() / "extension.json";
-                if (fs::exists(manifestPath, ec))
-                    discovered.push_back(entry.path().string());
-            }
-        }
-        std::ranges::sort(discovered);
-        return discovered;
-    }
-
     Result<std::string> ExtensionManager::LoadExtension(const std::string &extensionDir) {
         auto manifestResult = ReadAndValidateManifest(fs::path{extensionDir}, m_loadedExtensions);
         if (manifestResult.HasError())

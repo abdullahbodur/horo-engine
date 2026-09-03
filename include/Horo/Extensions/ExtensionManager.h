@@ -24,7 +24,7 @@ namespace Horo::Extensions {
     };
 
     /**
-     * @brief Manages discovery, loading, and lifecycle of extensions.
+     * @brief Manages loading and lifecycle of extensions.
      */
     class ExtensionManager {
     public:
@@ -38,13 +38,6 @@ namespace Horo::Extensions {
         ExtensionManager &operator=(const ExtensionManager &) = delete;
         ExtensionManager(ExtensionManager &&) noexcept;
         ExtensionManager &operator=(ExtensionManager &&) noexcept;
-
-        /**
-         * @brief Discovers extensions in the specified directory.
-         * @param directoryPath Path to the extensions directory (e.g. ~/.horo/plugins).
-         * @return A list of discovered manifest paths.
-         */
-        [[nodiscard]] std::vector<std::string> DiscoverExtensions(const std::string &directoryPath) const;
 
         /**
          * @brief Loads an extension from the given directory path.

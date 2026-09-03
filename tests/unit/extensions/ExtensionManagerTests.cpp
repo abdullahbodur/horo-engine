@@ -1,5 +1,6 @@
 #include "Horo/Assets/AssetImportMetadata.h"
 #include "Horo/Assets/AssetReimport.h"
+#include "Horo/Extensions/ExtensionDiscovery.h"
 #include "Horo/Extensions/ExtensionErrors.h"
 #include "Horo/Extensions/ExtensionInventory.h"
 #include "Horo/Extensions/ExtensionManager.h"
@@ -88,31 +89,26 @@ namespace Horo::Extensions::Tests {
     };
 
     TEST_CASE_METHOD(ExtensionManagerTestFixture, "ExtensionManager Discovery", "[Extensions]") {
-        ExtensionManager manager;
+        const Discovery::RootRequest root{.id = "user",
+                                          .path = fs::absolute(tempDir),
+                                          .kind = Discovery::RootKind::User,
+                                          .approval = Discovery::RootApproval::Approved,
+                                          .configuration = Discovery::ConfigurationOrigin::UserLocal};
 
-        SECTION("Empty directory returns empty list") {
-            auto discovered = manager.DiscoverExtensions(tempDir.string());
-            REQUIRE(discovered.empty());
+        SECTION("No declared packages returns an empty list") {
+            const auto discovered = Discovery::DiscoverDeclaredPackages(std::span(&root, 1), {}, {});
+            REQUIRE(discovered.HasValue());
+            REQUIRE(discovered.Value().packages.empty());
         }
 
-        SECTION("Directory with valid manifest finds plugin") {
+        SECTION("An approved declared package resolves to a canonical directory") {
             fs::path pluginDir = tempDir / "com.example.test_plugin";
             fs::create_directories(pluginDir);
-
-            fs::path manifestPath = pluginDir / "extension.json";
-            std::ofstream manifestFile(manifestPath);
-            manifestFile << R"({
-                "package": {
-                    "id": "com.example.test_plugin",
-                    "version": "1.0.0"
-                }
-            })";
-            manifestFile.close();
-
-            auto discovered = manager.DiscoverExtensions(tempDir.string());
-
-            REQUIRE(discovered.size() == 1);
-            REQUIRE(discovered[0] == pluginDir.string());
+            const Discovery::PackageLocation location{"com.example.test-plugin", "user", "com.example.test_plugin"};
+            const auto discovered = Discovery::DiscoverDeclaredPackages(std::span(&root, 1), std::span(&location, 1), {});
+            REQUIRE(discovered.HasValue());
+            REQUIRE(discovered.Value().packages.size() == 1);
+            REQUIRE(discovered.Value().packages[0].canonicalPath == fs::canonical(pluginDir));
         }
     }
 
