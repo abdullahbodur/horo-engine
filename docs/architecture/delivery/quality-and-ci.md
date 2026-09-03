@@ -122,8 +122,9 @@ only styling values in GUI rendering code must resolve through design tokens.
 
 - **Target dependency rules:** CMake target linkage and project-owned
   architecture checks enforce allowed module and public-header dependencies.
-- **Source-level module boundaries:** clang-tidy rules enforce forbidden
-  includes, namespace dependencies, and typed boundary constraints.
+- **Source-level module boundaries:** project-owned architecture checks and
+  CMake target validation enforce forbidden includes, dependency direction,
+  and typed boundary constraints.
 - **Omnibus service injection:** A project-owned semantic check inspects
   constructor and factory signatures for tabs and modals. It rejects application
   service aggregates and requires the narrow capability interfaces declared by

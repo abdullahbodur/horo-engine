@@ -717,8 +717,6 @@ runners, and static checks.
 | `format --check` | Verify formatting without changing files |
 | `format --staged` | Format only staged files |
 | `check` | Run format, architecture, header, vendor, and tests-profile fast tests |
-| `tidy` | Run clang-tidy on changed or specified files |
-| `tidy --files src/scene/model/Scene.cpp` | Run clang-tidy on specific files |
 | `configure --fresh` | Reconfigure the platform-default preset from scratch |
 | `configure --fresh --preset <name>` | Reconfigure an explicit preset from scratch |
 | `clean` | Remove build artifacts for the active preset |
@@ -824,8 +822,9 @@ to catch ODR regressions early.
 
 ## Static Analysis
 
-CI runs `clang-tidy` on changed files. The configuration lives in
-`.clang-tidy`. Checks include:
+Sonar and Codacy provide the pull-request static-analysis gates. The repository
+also keeps an optional `.clang-tidy` configuration for focused local analysis.
+Its checks include:
 
 - `cppcoreguidelines-*`
 - `modernize-*`
@@ -833,10 +832,12 @@ CI runs `clang-tidy` on changed files. The configuration lives in
 - `readability-*`
 - `bugprone-*`
 
-Run clang-tidy locally through `scripts/dev.py tidy` or directly:
+Generate a compilation database and run clang-tidy directly when a focused
+local investigation benefits from it:
 
 ```bash
-python3 scripts/dev.py tidy --files src/scene/model/Scene.cpp
+cmake -S . -B build/tidy -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+clang-tidy -p build/tidy src/scene/model/Scene.cpp
 ```
 
 ## Architecture Dependency Check
