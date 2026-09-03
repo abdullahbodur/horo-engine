@@ -1,6 +1,7 @@
 #include "Horo/Gameplay/GameModuleHost.h"
 
 #include "Horo/Gameplay/BehaviorRegistry.h"
+#include "Horo/Gameplay/ComponentRegistry.h"
 #include "Horo/Gameplay/GameplayErrors.h"
 #include "Horo/Platform/DynamicLibrary.h"
 
@@ -31,6 +32,7 @@ namespace Horo::Gameplay {
     struct LoadedGameModule::Impl {
         std::unique_ptr<Platform::DynamicLibrary> library;
         std::unique_ptr<BehaviorRegistry> registry;
+        std::unique_ptr<ComponentRegistry> components;
         [[no_unique_address]] GameRuntimeContext runtimeContext;
         IGameModule *gameplayModule{};
 
@@ -102,6 +104,7 @@ namespace Horo::Gameplay {
             impl_->gameplayModule = nullptr;
         }
         impl_->registry.reset();
+        impl_->components.reset();
         impl_->library.reset();
         if (impl_->removeArtifactOnUnload) {
             std::error_code ignored;
@@ -133,6 +136,11 @@ namespace Horo::Gameplay {
     /** @copydoc LoadedGameModule::Registry */
     const BehaviorRegistry &LoadedGameModule::Registry() const noexcept {
         return *impl_->registry;
+    }
+
+    /** @copydoc LoadedGameModule::Components */
+    const ComponentRegistry &LoadedGameModule::Components() const noexcept {
+        return *impl_->components;
     }
 
     /** @copydoc GameModuleHost::Load */
@@ -167,6 +175,12 @@ namespace Horo::Gameplay {
         if (impl->gameplayModule == nullptr)
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(
                 MakeError(GameplayErrors::InvalidBehaviorComponent, "Gameplay module factory returned no module object."));
+        impl->components = std::make_unique<ComponentRegistry>();
+        GameRegistrationContext registrationContext{.moduleId = impl->moduleId, .components = *impl->components};
+        if (Result<void> registered = impl->gameplayModule->Register(registrationContext); registered.HasError())
+            return Result<std::unique_ptr<LoadedGameModule>>::Failure(registered.ErrorValue());
+        if (Result<void> frozen = impl->components->Freeze(); frozen.HasError())
+            return Result<std::unique_ptr<LoadedGameModule>>::Failure(frozen.ErrorValue());
         if (Result<void> started = impl->gameplayModule->Start(impl->runtimeContext); started.HasError()) {
             impl->gameplayModule->Stop(impl->runtimeContext);
             impl->destroy(impl->gameplayModule);

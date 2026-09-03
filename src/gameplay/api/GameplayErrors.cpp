@@ -5,76 +5,150 @@ namespace Horo::Gameplay::GameplayErrors {
         const ErrorDomainId GameplayDomain{"horo.gameplay"};
     }
 
-    const ErrorCodeDescriptor InvalidBehaviorTypeId{GameplayDomain,
-                                                    ErrorCode{"gameplay.behavior_type_id_invalid"},
-                                                    ErrorSeverity::Error,
-                                                    "The behavior type ID is invalid.",
-                                                    "Use a lowercase game.<module>.<behavior> identifier.",
-                                                    false,
-                                                    true};
-    const ErrorCodeDescriptor InvalidBehaviorInstanceId{GameplayDomain,
-                                                        ErrorCode{"gameplay.behavior_instance_id_invalid"},
-                                                        ErrorSeverity::Error,
-                                                        "The behavior instance ID is invalid.",
-                                                        "Assign a non-zero stable attachment identity.",
-                                                        false,
-                                                        true};
-    const ErrorCodeDescriptor InvalidBehaviorComponent{GameplayDomain,
-                                                       ErrorCode{"gameplay.behavior_component_invalid"},
-                                                       ErrorSeverity::Error,
-                                                       "The behavior component payload is invalid.",
-                                                       "Repair the behavior schema version or bounded authoring fields.",
-                                                       false,
-                                                       true};
-    const ErrorCodeDescriptor DuplicateBehaviorInstance{GameplayDomain,
-                                                        ErrorCode{"gameplay.behavior_instance_duplicate"},
-                                                        ErrorSeverity::Error,
-                                                        "A behavior instance ID is duplicated.",
-                                                        "Regenerate one of the attachment identities.",
-                                                        false,
-                                                        true};
-    const ErrorCodeDescriptor DuplicateBehaviorType{GameplayDomain,
-                                                    ErrorCode{"gameplay.behavior_type_duplicate"},
-                                                    ErrorSeverity::Error,
-                                                    "A behavior type ID is duplicated.",
-                                                    "Give each registered behavior a unique stable ID.",
-                                                    false,
-                                                    true};
-    const ErrorCodeDescriptor RegistryFrozen{GameplayDomain,
-                                             ErrorCode{"gameplay.registry_frozen"},
-                                             ErrorSeverity::Error,
-                                             "The behavior registry is frozen.",
-                                             "Register complete descriptors before activating a runtime scene.",
-                                             false,
-                                             false};
-    const ErrorCodeDescriptor BehaviorNotRegistered{GameplayDomain,
-                                                    ErrorCode{"gameplay.behavior_not_registered"},
-                                                    ErrorSeverity::Error,
-                                                    "The behavior type is not registered.",
-                                                    "Build or restore the behavior implementation before entering Play Mode.",
-                                                    false,
-                                                    true};
-    const ErrorCodeDescriptor BehaviorMultiplicityViolation{GameplayDomain,
-                                                            ErrorCode{"gameplay.behavior_multiplicity_violation"},
-                                                            ErrorSeverity::Error,
-                                                            "The object contains too many instances of this behavior type.",
-                                                            "Remove the duplicate attachment or enable allowMultiple.",
-                                                            false,
-                                                            true};
-    const ErrorCodeDescriptor EventQueueFull{GameplayDomain,
-                                             ErrorCode{"gameplay.event_queue_full"},
-                                             ErrorSeverity::Warning,
-                                             "The scene gameplay event queue is full.",
-                                             "Reduce event traffic or increase the explicit scene event budget.",
-                                             true,
-                                             true};
-    const ErrorCodeDescriptor InvalidEvent{GameplayDomain,
-                                           ErrorCode{"gameplay.event_invalid"},
-                                           ErrorSeverity::Error,
-                                           "The gameplay event is invalid.",
-                                           "Use a registered event type, valid target, and bounded schema payload.",
-                                           false,
-                                           true};
+    const ErrorCodeDescriptor InvalidComponentTypeId{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.component_type_id_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The gameplay component type ID is invalid.",
+        .remediationHint = "Use a lowercase game.<module>.<component> identifier.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor InvalidComponentDescriptor{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.component_descriptor_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The gameplay component descriptor is invalid.",
+        .remediationHint = "Provide a stable identity, current schema, and unique bounded property metadata.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor InvalidSerializedComponent{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.serialized_component_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The serialized gameplay component envelope is invalid.",
+        .remediationHint = "Repair its stable identity, schema version, or bounded opaque payload.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor InvalidComponentMigration{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.component_migration_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The gameplay component migration metadata is invalid or ambiguous.",
+        .remediationHint = "Declare unique forward-only migration edges ending at the current schema.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor DuplicateComponentType{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.component_type_duplicate"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A gameplay component type ID is duplicated.",
+        .remediationHint = "Give every project-owned component one unique stable ID.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor ComponentRegistryFrozen{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.component_registry_frozen"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The gameplay component registry is frozen.",
+        .remediationHint = "Register complete component metadata before module startup.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor InvalidBehaviorTypeId{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.behavior_type_id_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The behavior type ID is invalid.",
+        .remediationHint = "Use a lowercase game.<module>.<behavior> identifier.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor InvalidBehaviorInstanceId{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.behavior_instance_id_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The behavior instance ID is invalid.",
+        .remediationHint = "Assign a non-zero stable attachment identity.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor InvalidBehaviorComponent{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.behavior_component_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The behavior component payload is invalid.",
+        .remediationHint = "Repair the behavior schema version or bounded authoring fields.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor DuplicateBehaviorInstance{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.behavior_instance_duplicate"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A behavior instance ID is duplicated.",
+        .remediationHint = "Regenerate one of the attachment identities.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor DuplicateBehaviorType{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.behavior_type_duplicate"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A behavior type ID is duplicated.",
+        .remediationHint = "Give each registered behavior a unique stable ID.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor RegistryFrozen{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.registry_frozen"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The behavior registry is frozen.",
+        .remediationHint = "Register complete descriptors before activating a runtime scene.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor BehaviorNotRegistered{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.behavior_not_registered"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The behavior type is not registered.",
+        .remediationHint = "Build or restore the behavior implementation before entering Play Mode.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor BehaviorMultiplicityViolation{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.behavior_multiplicity_violation"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The object contains too many instances of this behavior type.",
+        .remediationHint = "Remove the duplicate attachment or enable allowMultiple.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor EventQueueFull{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.event_queue_full"},
+        .defaultSeverity = ErrorSeverity::Warning,
+        .summary = "The scene gameplay event queue is full.",
+        .remediationHint = "Reduce event traffic or increase the explicit scene event budget.",
+        .retryable = true,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor InvalidEvent{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.event_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The gameplay event is invalid.",
+        .remediationHint = "Use a registered event type, valid target, and bounded schema payload.",
+        .retryable = false,
+        .userActionable = true,
+    };
     const ErrorCodeDescriptor InvalidGameModuleDescriptor{
         .domain = GameplayDomain,
         .code = ErrorCode{"gameplay.module_descriptor_invalid"},

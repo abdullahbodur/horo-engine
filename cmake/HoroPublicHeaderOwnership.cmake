@@ -63,6 +63,8 @@ horo_configure_target_header_boundary(HoroRuntime PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroGameplayApi PUBLIC_HEADERS
     Horo/Gameplay/Behavior.h
     Horo/Gameplay/BehaviorTypes.h
+    Horo/Gameplay/Component.h
+    Horo/Gameplay/ComponentRegistry.h
     Horo/Gameplay/GameModule.h
     Horo/Gameplay/GameplayErrors.h
     Horo/Gameplay/NativeBehavior.h

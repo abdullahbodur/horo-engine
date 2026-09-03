@@ -1,5 +1,6 @@
 #include "GameplayModuleTestSupport.h"
 #include "Horo/Gameplay/BehaviorRuntime.h"
+#include "Horo/Gameplay/ComponentRegistry.h"
 #include "Horo/Gameplay/GameModuleHost.h"
 #include "Horo/Gameplay/GameplayErrors.h"
 
@@ -85,6 +86,9 @@ TEST_CASE("game module host validates fingerprint and keeps factories alive thro
     REQUIRE(loaded.HasValue());
     REQUIRE(loaded.Value()->ModuleId() == "game.tests");
     REQUIRE(loaded.Value()->Registry().IsFrozen());
+    REQUIRE(loaded.Value()->Components().IsFrozen());
+    REQUIRE(loaded.Value()->Components().Descriptors().size() == 1);
+    REQUIRE(loaded.Value()->Components().Descriptors().front().typeId.Value() == "game.tests.movement_settings");
 
     auto scene = RuntimeScene::Create(Definition(), SceneRuntimeId{7});
     REQUIRE(scene.HasValue());
