@@ -264,14 +264,14 @@ actually configured and run.
 
 ## Sonar Validation
 
-After modifying C/C++ source or header files, use the SonarQube MCP IDE bridge
-when available. Follow `.github/instructions/sonarqube_mcp.instructions.md`
+After modifying C/C++ source or header files, use the SonarQube Model Context Protocol
+(MCP) IDE bridge when available. Follow `.github/instructions/sonarqube_mcp.instructions.md`
 for tool lifecycle and project-key lookup. Setup and troubleshooting are documented
 in [Local C/C++ Analysis with SonarQube MCP](docs/guides/sonarqube-mcp-local-analysis.md).
 
 - Identify unstaged, staged, and untracked files with `git diff --name-only`,
   `git diff --cached --name-only`, and `git ls-files --others --exclude-standard`
-  (use NUL-delimited output when processing paths programmatically).
+  (use zero-byte delimiters when processing paths programmatically).
 - Analyze existing changed C/C++ files with `analyze_file_list`, passing absolute
   paths to the running SonarQube for IDE instance bound to the intended project.
   Exclude deleted files, generated output, and `deprecated/` unless explicitly

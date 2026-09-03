@@ -1,4 +1,4 @@
-# <Workflow> Guide
+# Workflow Guide
 
 <!-- Copy this file to docs/guides/<topic>.md and replace every placeholder.
 Keep examples generic: use <organization-key>, <project-key>, and
@@ -36,7 +36,7 @@ Separate partial success from complete validation.
 
 | Symptom | Check | Recovery |
 | --- | --- | --- |
-| <Observable failure> | <Evidence to inspect> | <Bounded next step> |
+| Observable failure | Evidence to inspect | Bounded next step |
 
 ## Limitations
 
