@@ -868,6 +868,16 @@ target_include_directories(HoroModularAssetImportIntegrationTests PRIVATE
         ${PROJECT_SOURCE_DIR}/src/runtime/assets/cooker/builtin
         ${PROJECT_SOURCE_DIR}/src/runtime/assets/importer
 )
+add_executable(HoroExtensionDiscoveryTests
+        unit/extensions/DiscoveryPathsTests.cpp
+        unit/extensions/DiscoveryPlanTests.cpp
+        unit/extensions/DiscoveryRootPolicyTests.cpp
+)
+target_compile_features(HoroExtensionDiscoveryTests PRIVATE cxx_std_20)
+target_include_directories(HoroExtensionDiscoveryTests PRIVATE ${PROJECT_SOURCE_DIR}/src/extensions/discovery)
+target_link_libraries(HoroExtensionDiscoveryTests PRIVATE HoroEngine::Extensions Catch2::Catch2WithMain)
+add_test(NAME HoroExtensionDiscoveryTests COMMAND HoroExtensionDiscoveryTests)
+
 add_executable(HoroExtensionManagerTests
         unit/extensions/ExtensionManagerTests.cpp
         unit/extensions/ExtensionManifestParserTests.cpp

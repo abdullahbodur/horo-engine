@@ -710,6 +710,9 @@ if (HORO_BUILD_EDITOR_GUI)
 endif ()
 
 add_library(HoroExtensions STATIC
+        extensions/discovery/DiscoveryPaths.cpp
+        extensions/discovery/DiscoveryPlan.cpp
+        extensions/discovery/DiscoveryRootPolicy.cpp
         extensions/host/ExtensionManager.cpp
         extensions/manifest/ExtensionManifestParser.cpp
         extensions/manifest/ExtensionManifestJson.cpp
