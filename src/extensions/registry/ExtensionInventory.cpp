@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <sstream>
@@ -24,6 +25,27 @@ namespace Horo::Extensions {
         constexpr ExtensionManifestLimits kManifestLimits{};
         constexpr std::size_t kMaximumPackageEntries = 4096;
         constexpr std::uintmax_t kMaximumPackageBytes = 1024ULL * 1024ULL * 1024ULL;
+
+        /** @brief Tracks bounded resource consumption while staging a package tree. */
+        struct PackageCopyBudget {
+            std::size_t entryCount{};
+            std::uintmax_t totalBytes{};
+        };
+
+        /** @brief Carries the validated relative path and filesystem type of one package entry. */
+        struct ValidatedPackageEntry {
+            fs::path relativePath;
+            fs::file_status status;
+        };
+
+        /** @brief Preserves process-local activation state across inventory refreshes. */
+        struct RuntimeState {
+            bool active{};
+            std::string loadError;
+            std::string compositionVersion;
+        };
+
+        using RuntimeStateMap = TransparentStringMap<RuntimeState>;
 
         [[nodiscard]] std::string EnvironmentValue(const char *name) {
 #if defined(_WIN32)
@@ -91,6 +113,56 @@ namespace Horo::Extensions {
             return ParseExtensionManifest(contents.str(), kManifestLimits);
         }
 
+        /** @brief Validates one source entry and accounts for the package entry limit. */
+        [[nodiscard]] Result<ValidatedPackageEntry> ValidatePackageEntry(const fs::directory_entry &entry, const fs::path &source,
+                                                                         PackageCopyBudget &budget) {
+            if (++budget.entryCount > kMaximumPackageEntries) {
+                return Result<ValidatedPackageEntry>::Failure(
+                    MakeError(ExtensionErrors::LoadFailed, "Extension package traversal failed or exceeded entry limits."));
+            }
+            std::error_code error;
+            const fs::file_status status = entry.symlink_status(error);
+            if (error || fs::is_symlink(status)) {
+                return Result<ValidatedPackageEntry>::Failure(
+                    MakeError(ExtensionErrors::LoadFailed, "Extension packages may not contain symlinks."));
+            }
+            const fs::path relative = fs::relative(entry.path(), source, error);
+            const bool escapesRoot = std::ranges::any_of(relative, [](const fs::path &component) {
+                return component == "..";
+            });
+            if (error || relative.empty() || relative.is_absolute() || escapesRoot) {
+                return Result<ValidatedPackageEntry>::Failure(
+                    MakeError(ExtensionErrors::LoadFailed, "Extension package path escaped its source root."));
+            }
+            return Result<ValidatedPackageEntry>::Success({.relativePath = relative, .status = status});
+        }
+
+        /** @brief Copies one validated package entry while enforcing the aggregate byte limit. */
+        [[nodiscard]] Result<void> CopyPackageEntry(const fs::directory_entry &entry, const fs::path &target, const fs::file_status &status,
+                                                    PackageCopyBudget &budget) {
+            std::error_code error;
+            if (fs::is_directory(status)) {
+                fs::create_directories(target, error);
+            } else if (fs::is_regular_file(status)) {
+                const std::uintmax_t size = fs::file_size(entry.path(), error);
+                if (error || size > kMaximumPackageBytes - budget.totalBytes) {
+                    return Result<void>::Failure(
+                        MakeError(ExtensionErrors::LoadFailed, "Extension package exceeds the bounded byte size."));
+                }
+                budget.totalBytes += size;
+                fs::create_directories(target.parent_path(), error);
+                if (!error)
+                    fs::copy_file(entry.path(), target, fs::copy_options::none, error);
+            } else {
+                return Result<void>::Failure(
+                    MakeError(ExtensionErrors::LoadFailed, "Extension packages may contain only regular files and directories."));
+            }
+            if (error)
+                return Result<void>::Failure(MakeError(ExtensionErrors::LoadFailed, "Unable to stage extension package contents."));
+            return Result<void>::Success();
+        }
+
+        /** @brief Copies a bounded, symlink-free package tree into a staging directory. */
         [[nodiscard]] Result<void> CopyPackageTree(const fs::path &source, const fs::path &destination) {
             std::error_code error;
             fs::create_directories(destination, error);
@@ -98,44 +170,141 @@ namespace Horo::Extensions {
                 return Result<void>::Failure(
                     MakeError(ExtensionErrors::LoadFailed, "Unable to create extension installation staging directory."));
 
-            std::size_t entryCount = 0;
-            std::uintmax_t totalBytes = 0;
+            PackageCopyBudget budget;
             fs::recursive_directory_iterator it{source, fs::directory_options::skip_permission_denied, error};
             const fs::recursive_directory_iterator end;
             while (!error && it != end) {
-                ++entryCount;
-                if (entryCount > kMaximumPackageEntries)
-                    return Result<void>::Failure(
-                        MakeError(ExtensionErrors::LoadFailed, "Extension package traversal failed or exceeded entry limits."));
-                const fs::file_status status = it->symlink_status(error);
-                if (error || fs::is_symlink(status))
-                    return Result<void>::Failure(MakeError(ExtensionErrors::LoadFailed, "Extension packages may not contain symlinks."));
-                const fs::path relative = fs::relative(it->path(), source, error);
-                if (error || relative.empty() || relative.is_absolute() || std::ranges::any_of(relative, [](const fs::path &component) {
-                    return component == "..";
-                })) {
-                    return Result<void>::Failure(MakeError(ExtensionErrors::LoadFailed, "Extension package path escaped its source root."));
-                }
-                const fs::path target = destination / relative;
-                if (fs::is_directory(status)) {
-                    fs::create_directories(target, error);
-                } else if (fs::is_regular_file(status)) {
-                    const std::uintmax_t size = fs::file_size(it->path(), error);
-                    if (error || size > kMaximumPackageBytes - totalBytes)
-                        return Result<void>::Failure(
-                            MakeError(ExtensionErrors::LoadFailed, "Extension package exceeds the bounded byte size."));
-                    totalBytes += size;
-                    fs::create_directories(target.parent_path(), error);
-                    if (!error)
-                        fs::copy_file(it->path(), target, fs::copy_options::none, error);
-                } else {
-                    return Result<void>::Failure(
-                        MakeError(ExtensionErrors::LoadFailed, "Extension packages may contain only regular files and directories."));
-                }
+                auto validated = ValidatePackageEntry(*it, source, budget);
+                if (validated.HasError())
+                    return Result<void>::Failure(validated.ErrorValue());
+                const ValidatedPackageEntry &packageEntry = validated.Value();
+                if (auto copied = CopyPackageEntry(*it, destination / packageEntry.relativePath, packageEntry.status, budget);
+                    copied.HasError())
+                    return copied;
                 it.increment(error);
             }
             if (error)
                 return Result<void>::Failure(MakeError(ExtensionErrors::LoadFailed, "Unable to stage extension package contents."));
+            return Result<void>::Success();
+        }
+
+        /** @brief Moves current runtime-only state out of inventory entries before rediscovery. */
+        [[nodiscard]] RuntimeStateMap CaptureRuntimeStates(std::vector<ExtensionInventoryEntry> &entries) {
+            RuntimeStateMap runtimeStates;
+            runtimeStates.reserve(entries.size());
+            for (auto &entry : entries) {
+                runtimeStates.try_emplace(entry.packageId, RuntimeState{.active = entry.runtimeActive,
+                                                                        .loadError = std::move(entry.loadError),
+                                                                        .compositionVersion = std::move(entry.runtimeCompositionVersion)});
+            }
+            return runtimeStates;
+        }
+
+        /** @brief Restores runtime-only state onto newly discovered entries with matching identities. */
+        void RestoreRuntimeStates(std::vector<ExtensionInventoryEntry> &entries, RuntimeStateMap &runtimeStates) {
+            for (auto &entry : entries) {
+                if (auto runtime = runtimeStates.find(entry.packageId); runtime != runtimeStates.end()) {
+                    entry.runtimeActive = runtime->second.active;
+                    entry.loadError = std::move(runtime->second.loadError);
+                    entry.runtimeCompositionVersion = std::move(runtime->second.compositionVersion);
+                }
+            }
+        }
+
+        /** @brief Reports whether a directory entry is eligible for manifest discovery. */
+        [[nodiscard]] bool IsDiscoverableDirectory(const fs::directory_entry &directory, std::error_code &error) {
+            const fs::file_status status = directory.symlink_status(error);
+            return !error && !fs::is_symlink(status) && fs::is_directory(status) &&
+                   !directory.path().filename().string().starts_with(".install-");
+        }
+
+        /** @brief Builds one installed-package projection, or skips an invalid or duplicate package. */
+        [[nodiscard]] std::optional<ExtensionInventoryEntry> ReadInstalledEntry(const fs::directory_entry &directory,
+                                                                                const std::vector<ExtensionInventoryEntry> &existing,
+                                                                                const TransparentStringSet &enabled,
+                                                                                const TransparentStringSet &trusted) {
+            auto parsed = ReadManifest(fs::absolute(directory.path() / "extension.json"));
+            if (parsed.HasError())
+                return std::nullopt;
+            ExtensionManifest manifest = std::move(parsed).Value();
+            const bool duplicate = std::ranges::any_of(existing, [&manifest](const ExtensionInventoryEntry &entry) {
+                return entry.packageId == manifest.id;
+            });
+            if (!IsSafePackageId(manifest.id) || directory.path().filename() != fs::path{manifest.id} || duplicate)
+                return std::nullopt;
+            const std::string compositionVersion = BuildCompositionVersion(manifest.version, manifest.modules);
+            return ExtensionInventoryEntry{
+                .packageId = manifest.id,
+                .displayName = manifest.displayName.empty() ? manifest.id : manifest.displayName,
+                .description = manifest.description,
+                .version = manifest.version,
+                .author = manifest.author,
+                .origin = ExtensionOrigin::UserInstalled,
+                .absoluteRootPath = fs::absolute(directory.path()).lexically_normal(),
+                .absoluteManifestPath = fs::absolute(directory.path() / "extension.json").lexically_normal(),
+                .modules = std::move(manifest.modules),
+                .contributions = std::move(manifest.contributions),
+                .enabled = enabled.contains(manifest.id),
+                .locallyTrusted = trusted.contains(manifest.id),
+                .compositionVersion = compositionVersion,
+            };
+        }
+
+        /** @brief Adds valid installed packages from the managed root to the inventory projection. */
+        [[nodiscard]] Result<void> DiscoverInstalledEntries(const fs::path &installRoot, std::vector<ExtensionInventoryEntry> &entries,
+                                                            const TransparentStringSet &enabled, const TransparentStringSet &trusted) {
+            std::error_code error;
+            fs::create_directories(installRoot, error);
+            if (error)
+                return Result<void>::Failure(MakeError(ExtensionErrors::LoadFailed, "Unable to create the user extension directory."));
+            for (const auto &directory : fs::directory_iterator(installRoot, error)) {
+                if (error)
+                    return Result<void>::Failure(MakeError(ExtensionErrors::LoadFailed, "Unable to enumerate installed extensions."));
+                if (!IsDiscoverableDirectory(directory, error))
+                    continue;
+                if (auto entry = ReadInstalledEntry(directory, entries, enabled, trusted); entry.has_value())
+                    entries.push_back(std::move(*entry));
+            }
+            return Result<void>::Success();
+        }
+
+        /** @brief Resolves and validates an installation source outside the managed root. */
+        [[nodiscard]] Result<fs::path> ValidateInstallSource(const fs::path &absoluteSourceDirectory, const fs::path &installRoot) {
+            if (!absoluteSourceDirectory.is_absolute())
+                return Result<fs::path>::Failure(
+                    MakeError(ExtensionErrors::InvalidManifest, "Extension source directory must be absolute."));
+            std::error_code error;
+            const fs::path source = fs::weakly_canonical(absoluteSourceDirectory, error);
+            if (error || !fs::is_directory(source, error) || fs::is_symlink(fs::symlink_status(source, error))) {
+                return Result<fs::path>::Failure(
+                    MakeError(ExtensionErrors::InvalidManifest, "Extension source must be a regular non-symlink directory."));
+            }
+            if (const fs::path canonicalInstallRoot = fs::weakly_canonical(installRoot, error);
+                !error && IsPathContainedBy(canonicalInstallRoot, source)) {
+                return Result<fs::path>::Failure(
+                    MakeError(ExtensionErrors::InvalidManifest, "Extension source must be outside the managed installation directory."));
+            }
+            return Result<fs::path>::Success(source);
+        }
+
+        /** @brief Removes an unpublished staging tree without masking the primary operation result. */
+        void RemoveStagingTree(const fs::path &staging) noexcept {
+            std::error_code ignored;
+            fs::remove_all(staging, ignored);
+        }
+
+        /** @brief Copies and atomically publishes a validated package directory. */
+        [[nodiscard]] Result<void> PublishPackage(const fs::path &source, const fs::path &staging, const fs::path &destination) {
+            if (auto copied = CopyPackageTree(source, staging); copied.HasError()) {
+                RemoveStagingTree(staging);
+                return copied;
+            }
+            std::error_code error;
+            fs::rename(staging, destination, error);
+            if (error) {
+                RemoveStagingTree(staging);
+                return Result<void>::Failure(MakeError(ExtensionErrors::LoadFailed, "Unable to publish the staged extension package."));
+            }
             return Result<void>::Success();
         }
     }  // namespace
@@ -163,69 +332,14 @@ namespace Horo::Extensions {
 
     /** @copydoc ExtensionInventory::Refresh */
     Result<void> ExtensionInventory::Refresh() {
-        struct RuntimeState {
-            bool active{};
-            std::string loadError;
-            std::string compositionVersion;
-        };
-
-        TransparentStringMap<RuntimeState> runtimeStates;
-        runtimeStates.reserve(entries_.size());
-        for (auto &entry : entries_) {
-            runtimeStates.try_emplace(entry.packageId, RuntimeState{.active = entry.runtimeActive,
-                                                                    .loadError = std::move(entry.loadError),
-                                                                    .compositionVersion = std::move(entry.runtimeCompositionVersion)});
-        }
-
+        RuntimeStateMap runtimeStates = CaptureRuntimeStates(entries_);
         entries_.clear();
         if (auto loaded = LoadState(); loaded.HasError())
             return loaded;
         AddBuiltInPackages();
-
-        std::error_code error;
-        fs::create_directories(installRoot_, error);
-        if (error)
-            return Result<void>::Failure(MakeError(ExtensionErrors::LoadFailed, "Unable to create the user extension directory."));
-        for (const auto &directory : fs::directory_iterator(installRoot_, error)) {
-            if (error)
-                return Result<void>::Failure(MakeError(ExtensionErrors::LoadFailed, "Unable to enumerate installed extensions."));
-            if (const fs::file_status status = directory.symlink_status(error);
-                error || fs::is_symlink(status) || !fs::is_directory(status) ||
-                directory.path().filename().string().starts_with(".install-"))
-                continue;
-            auto parsed = ReadManifest(fs::absolute(directory.path() / "extension.json"));
-            if (parsed.HasError())
-                continue;
-            ExtensionManifest manifest = std::move(parsed).Value();
-            if (!IsSafePackageId(manifest.id) || directory.path().filename() != fs::path{manifest.id} ||
-                std::ranges::any_of(entries_, [&manifest](const ExtensionInventoryEntry &entry) {
-                return entry.packageId == manifest.id;
-            }))
-                continue;
-            const std::string compositionVersion = BuildCompositionVersion(manifest.version, manifest.modules);
-            entries_.push_back(ExtensionInventoryEntry{
-                .packageId = manifest.id,
-                .displayName = manifest.displayName.empty() ? manifest.id : manifest.displayName,
-                .description = manifest.description,
-                .version = manifest.version,
-                .author = manifest.author,
-                .origin = ExtensionOrigin::UserInstalled,
-                .absoluteRootPath = fs::absolute(directory.path()).lexically_normal(),
-                .absoluteManifestPath = fs::absolute(directory.path() / "extension.json").lexically_normal(),
-                .modules = std::move(manifest.modules),
-                .contributions = std::move(manifest.contributions),
-                .enabled = enabled_.contains(manifest.id),
-                .locallyTrusted = trusted_.contains(manifest.id),
-                .compositionVersion = compositionVersion,
-            });
-        }
-        for (auto &entry : entries_) {
-            if (auto runtime = runtimeStates.find(entry.packageId); runtime != runtimeStates.end()) {
-                entry.runtimeActive = runtime->second.active;
-                entry.loadError = std::move(runtime->second.loadError);
-                entry.runtimeCompositionVersion = std::move(runtime->second.compositionVersion);
-            }
-        }
+        if (auto discovered = DiscoverInstalledEntries(installRoot_, entries_, enabled_, trusted_); discovered.HasError())
+            return discovered;
+        RestoreRuntimeStates(entries_, runtimeStates);
         std::ranges::sort(entries_, [](const ExtensionInventoryEntry &left, const ExtensionInventoryEntry &right) {
             if (left.origin != right.origin)
                 return left.origin == ExtensionOrigin::BuiltIn;
@@ -246,21 +360,10 @@ namespace Horo::Extensions {
 
     /** @copydoc ExtensionInventory::InstallFromDirectory */
     Result<std::string> ExtensionInventory::InstallFromDirectory(const fs::path &absoluteSourceDirectory) {
-        if (!absoluteSourceDirectory.is_absolute())
-            return Result<std::string>::Failure(
-                MakeError(ExtensionErrors::InvalidManifest, "Extension source directory must be absolute."));
-        std::error_code error;
-        const fs::path source = fs::weakly_canonical(absoluteSourceDirectory, error);
-        if (error || !fs::is_directory(source, error) || fs::is_symlink(fs::symlink_status(source, error))) {
-            return Result<std::string>::Failure(
-                MakeError(ExtensionErrors::InvalidManifest, "Extension source must be a regular non-symlink directory."));
-        }
-        if (const fs::path canonicalInstallRoot = fs::weakly_canonical(installRoot_, error);
-            !error && IsPathContainedBy(canonicalInstallRoot, source)) {
-            return Result<std::string>::Failure(
-                MakeError(ExtensionErrors::InvalidManifest, "Extension source must be outside the managed installation directory."));
-        }
-        error.clear();
+        auto validatedSource = ValidateInstallSource(absoluteSourceDirectory, installRoot_);
+        if (validatedSource.HasError())
+            return Result<std::string>::Failure(validatedSource.ErrorValue());
+        const fs::path source = std::move(validatedSource).Value();
         auto parsed = ReadManifest(source / "extension.json");
         if (parsed.HasError())
             return Result<std::string>::Failure(parsed.ErrorValue());
@@ -269,6 +372,7 @@ namespace Horo::Extensions {
             return Result<std::string>::Failure(
                 MakeError(ExtensionErrors::InvalidManifest, "Extension package ID is unsafe for installation."));
 
+        std::error_code error;
         fs::create_directories(installRoot_, error);
         const fs::path destination = installRoot_ / manifest.id;
         if (error || fs::exists(destination, error))
@@ -276,19 +380,8 @@ namespace Horo::Extensions {
                 MakeError(ExtensionErrors::LoadFailed, "An extension with this package ID is already installed."));
         const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
         const fs::path staging = installRoot_ / std::format(".install-{}-{}", manifest.id, nonce);
-        const auto cleanup = [&staging]() {
-            std::error_code ignored;
-            fs::remove_all(staging, ignored);
-        };
-        if (auto copied = CopyPackageTree(source, staging); copied.HasError()) {
-            cleanup();
-            return Result<std::string>::Failure(copied.ErrorValue());
-        }
-        fs::rename(staging, destination, error);
-        if (error) {
-            cleanup();
-            return Result<std::string>::Failure(MakeError(ExtensionErrors::LoadFailed, "Unable to publish the staged extension package."));
-        }
+        if (auto published = PublishPackage(source, staging, destination); published.HasError())
+            return Result<std::string>::Failure(published.ErrorValue());
         enabled_.erase(manifest.id);
         trusted_.erase(manifest.id);
         if (auto saved = SaveState(); saved.HasError()) {

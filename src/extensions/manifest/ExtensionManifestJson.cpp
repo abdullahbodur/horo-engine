@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <format>
 #include <optional>
-#include <unordered_set>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -51,8 +51,11 @@ namespace Horo::Extensions::ManifestParsing {
             for (const char character : content) {
                 if (ConsumeQuotedCharacter(character, inString, escaped))
                     continue;
-                if (IsOpeningContainer(character) && ++depth > limits.maximumNestingDepth) {
-                    return ManifestError("$", "extension.manifest.nesting_limit", "JSON nesting exceeds the configured limit.");
+                if (IsOpeningContainer(character)) {
+                    ++depth;
+                    if (depth > limits.maximumNestingDepth) {
+                        return ManifestError("$", "extension.manifest.nesting_limit", "JSON nesting exceeds the configured limit.");
+                    }
                 }
                 if (IsClosingContainer(character) && depth > 0)
                     --depth;
@@ -68,7 +71,7 @@ namespace Horo::Extensions::ManifestParsing {
         struct ParserFrame {
             ContainerKind kind{};
             std::string path;
-            std::unordered_set<std::string> keys;
+            std::set<std::string, std::less<>> keys;
             std::optional<std::string> pendingKey;
             std::size_t nextIndex = 0;
         };
@@ -82,7 +85,7 @@ namespace Horo::Extensions::ManifestParsing {
             explicit BoundedJsonParser(const ExtensionManifestLimits &limits) : limits_(limits) {}
 
             [[nodiscard]] Json Parse(const std::string_view content) {
-                const Json::parser_callback_t callback = [this](const int, const Json::parse_event_t event, Json &parsed) {
+                const Json::parser_callback_t callback = [this](const int, const Json::parse_event_t event, const Json &parsed) {
                     OnEvent(event, parsed);
                     return true;
                 };
@@ -152,21 +155,22 @@ namespace Horo::Extensions::ManifestParsing {
             }
 
             void OnEvent(const Json::parse_event_t event, const Json &parsed) {
+                using enum Json::parse_event_t;
                 switch (event) {
-                    case Json::parse_event_t::object_start:
+                    case object_start:
                         BeginContainer(ContainerKind::Object);
                         break;
-                    case Json::parse_event_t::array_start:
+                    case array_start:
                         BeginContainer(ContainerKind::Array);
                         break;
-                    case Json::parse_event_t::object_end:
-                    case Json::parse_event_t::array_end:
+                    case object_end:
+                    case array_end:
                         EndContainer();
                         break;
-                    case Json::parse_event_t::key:
+                    case key:
                         OnKey(parsed);
                         break;
-                    case Json::parse_event_t::value:
+                    case value:
                         OnValue(parsed);
                         break;
                 }
