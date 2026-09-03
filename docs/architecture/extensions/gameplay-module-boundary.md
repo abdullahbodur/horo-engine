@@ -94,8 +94,9 @@ Lifecycle order is:
 ```text
 LoadLibrary
   -> GetGameModuleDescriptor
+  -> GetGameplayDescriptorBundle
+  -> validate manifest identity, complete registrations, diagnostics, and lifecycle callbacks
   -> CreateGameModule
-  -> Register
   -> Start
   -> Stop
   -> DestroyGameModule
@@ -177,6 +178,8 @@ not through project-authored registration code:
 
 ```cpp
 struct GeneratedGameplayDescriptorBundle {
+    uint32_t schemaVersion;
+    uint32_t sdkBoundaryVersion;
     GameModuleId moduleId;
     BuildFingerprint buildFingerprint;
     DescriptorSetRevision descriptorRevision;
@@ -184,11 +187,15 @@ struct GeneratedGameplayDescriptorBundle {
     std::span<const BehaviorFactoryBinding> nativeFactoryBindings;
     std::span<const BehaviorFieldMigrationDescriptor> behaviorMigrations;
     std::span<const GeneratedDescriptorDiagnostic> diagnostics;
+    GameModuleLifecycleCallbacks lifecycle;
 };
 ```
 
-The host accepts the bundle only when it matches the loaded module fingerprint
-and SDK boundary. The bundle is a complete descriptor snapshot for that
+The host accepts the bundle only when its module ID, fingerprint, descriptor
+revision, schema, and SDK boundary match the validated artifact manifest and
+module descriptor. It validates those fields, bounded counts, factory/type-ID
+pairings, diagnostics, and lifecycle callbacks before invoking project code.
+The bundle is a complete descriptor snapshot for that
 fingerprint and descriptor revision; partial behavior bundles are not accepted.
 Incremental builds may regenerate only changed files internally, but the
 artifact handed to the host represents the full current generated behavior set.

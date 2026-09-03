@@ -33,6 +33,15 @@ namespace {
         REQUIRE(stream.good());
     }
 
+    std::uint64_t DescriptorRevision() {
+        std::ifstream stream{HORO_TEST_GAME_MODULE_REVISION_PATH};
+        std::uint64_t revision{};
+        stream >> revision;
+        REQUIRE((stream.good() || stream.eof()));
+        REQUIRE(revision != 0);
+        return revision;
+    }
+
     std::string Source(const int amount) {
         return "return horo.behavior { type_id='game.tests.watched', display_name='Watched', "
                "on_fixed_update=function(ctx, dt) local x,y,z=ctx.transform.position(); "
@@ -85,7 +94,7 @@ TEST_CASE("project gameplay registry merges a fingerprinted native module with L
     Write(source.string() + ".meta", R"({"schemaVersion":1,"runtime":"lua","behaviorTypeId":"game.tests.watched"})");
     const std::string manifest = "{\n  \"schemaVersion\": 1,\n  \"moduleId\": \"game.tests\",\n  \"buildFingerprint\": \"" +
                                  std::string{Gameplay::CurrentGameplayBuildFingerprint()} +
-                                 "\",\n  \"descriptorRevision\": 1,\n  \"artifactPath\": \"" +
+                                 "\",\n  \"descriptorRevision\": " + std::to_string(DescriptorRevision()) + ",\n  \"artifactPath\": \"" +
                                  std::filesystem::path{HORO_TEST_GAME_MODULE_PATH}.string() + "\"\n}\n";
     Write(project.root / ".horo" / "local" / "gameplay_module.json", manifest);
 

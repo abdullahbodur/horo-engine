@@ -23,13 +23,6 @@ namespace Horo::Gameplay {
             return func;
         }
 
-        [[nodiscard]] Result<void> ValidateText(const char *value, const std::string_view field) {
-            if (value == nullptr || *value == '\0' || std::string_view{value}.size() > 256)
-                return Result<void>::Failure(
-                    MakeError(GameplayErrors::InvalidBehaviorComponent, std::format("Gameplay module {} is invalid.", field)));
-            return Result<void>::Success();
-        }
-
         [[nodiscard]] Error ShadowCopyError(const std::string &message) {
             return MakeError(GameplayErrors::InvalidBehaviorComponent, "Gameplay module shadow copy failed: " + message);
         }
@@ -49,6 +42,50 @@ namespace Horo::Gameplay {
         bool removeArtifactOnUnload{};
         bool started{};
     };
+
+    namespace {
+        struct ValidatedModuleExports {
+            const GameModuleDescriptor *descriptor{};
+            const GeneratedGameplayDescriptorBundle *bundle{};
+        };
+
+        [[nodiscard]] Result<ValidatedModuleExports> ReadValidatedExports(const Platform::DynamicLibrary &library,
+                                                                          const GameModuleLoadExpectation &expectation) {
+            const auto getDescriptor = Resolve<GetGameModuleDescriptorFunction>(library, GetGameModuleDescriptorSymbol);
+            const auto getBundle = Resolve<GetGameplayDescriptorBundleFunction>(library, GetGameplayDescriptorBundleSymbol);
+            if (getDescriptor == nullptr || getBundle == nullptr)
+                return Result<ValidatedModuleExports>::Failure(
+                    MakeError(GameplayErrors::InvalidGameModuleDescriptor, "Gameplay module is missing required descriptor exports."));
+            const GameModuleDescriptor *descriptor = getDescriptor();
+            const GeneratedGameplayDescriptorBundle *bundle = getBundle();
+            if (descriptor == nullptr)
+                return Result<ValidatedModuleExports>::Failure(
+                    MakeError(GameplayErrors::InvalidGameModuleDescriptor, "Gameplay module descriptor export returned null."));
+            if (bundle == nullptr)
+                return Result<ValidatedModuleExports>::Failure(
+                    MakeError(GameplayErrors::InvalidGeneratedDescriptorBundle, "Generated gameplay descriptor export returned null."));
+            if (const Result<void> valid = ValidateGameModuleDescriptor(*descriptor, expectation); valid.HasError())
+                return Result<ValidatedModuleExports>::Failure(valid.ErrorValue());
+            if (const Result<void> valid = ValidateGeneratedGameplayDescriptorBundle(*bundle, expectation); valid.HasError())
+                return Result<ValidatedModuleExports>::Failure(valid.ErrorValue());
+            return Result<ValidatedModuleExports>::Success({descriptor, bundle});
+        }
+
+        [[nodiscard]] Result<std::unique_ptr<BehaviorRegistry>> BuildRegistry(const GeneratedGameplayDescriptorBundle &bundle) {
+            auto registry = std::make_unique<BehaviorRegistry>();
+            for (std::size_t index = 0; index < bundle.behaviorCount; ++index) {
+                BehaviorRegistration registration{
+                    .descriptor = bundle.behaviors[index],
+                    .factory = bundle.nativeFactoryBindings[index].factory,
+                };
+                if (Result<void> registered = registry->Register(std::move(registration)); registered.HasError())
+                    return Result<std::unique_ptr<BehaviorRegistry>>::Failure(registered.ErrorValue());
+            }
+            if (Result<void> frozen = registry->Freeze(); frozen.HasError())
+                return Result<std::unique_ptr<BehaviorRegistry>>::Failure(frozen.ErrorValue());
+            return Result<std::unique_ptr<BehaviorRegistry>>::Success(std::move(registry));
+        }
+    }  // namespace
 
     LoadedGameModule::LoadedGameModule(std::unique_ptr<Impl> impl) noexcept : impl_(std::move(impl)) {}
 
@@ -100,10 +137,10 @@ namespace Horo::Gameplay {
 
     /** @copydoc GameModuleHost::Load */
     Result<std::unique_ptr<LoadedGameModule>> GameModuleHost::Load(const std::filesystem::path &libraryPath,
-                                                                   const std::string_view expectedBuildFingerprint) const {
-        if (!libraryPath.is_absolute() || expectedBuildFingerprint.empty())
+                                                                   const GameModuleLoadExpectation &expectation) const {
+        if (!libraryPath.is_absolute())
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(
-                MakeError(GameplayErrors::InvalidBehaviorComponent, "Gameplay module path or expected fingerprint is invalid."));
+                MakeError(GameplayErrors::InvalidGameModuleDescriptor, "Gameplay module path must be absolute."));
 
         auto loaded = Platform::LoadDynamicLibrary(libraryPath.string());
         if (loaded.HasError())
@@ -112,41 +149,21 @@ namespace Horo::Gameplay {
         impl->library = std::move(loaded).Value();
         impl->loadedArtifactPath = libraryPath;
 
-        const auto getDescriptor = Resolve<GetGameModuleDescriptorFunction>(*impl->library, GetGameModuleDescriptorSymbol);
-        const auto getBundle = Resolve<GetGameplayDescriptorBundleFunction>(*impl->library, GetGameplayDescriptorBundleSymbol);
-        const auto create = Resolve<CreateGameModuleFunction>(*impl->library, CreateGameModuleSymbol);
-        impl->destroy = Resolve<DestroyGameModuleFunction>(*impl->library, DestroyGameModuleSymbol);
-        if (getDescriptor == nullptr || getBundle == nullptr || create == nullptr || impl->destroy == nullptr)
-            return Result<std::unique_ptr<LoadedGameModule>>::Failure(
-                MakeError(GameplayErrors::InvalidBehaviorComponent, "Gameplay module is missing required exported symbols."));
+        auto exports = ReadValidatedExports(*impl->library, expectation);
+        if (exports.HasError())
+            return Result<std::unique_ptr<LoadedGameModule>>::Failure(exports.ErrorValue());
+        const ValidatedModuleExports validated = exports.Value();
+        impl->moduleId = validated.descriptor->moduleId;
+        impl->buildFingerprint = validated.descriptor->buildFingerprint;
+        impl->descriptorRevision = validated.bundle->descriptorRevision;
+        impl->destroy = validated.bundle->lifecycle.destroy;
 
-        const GameModuleDescriptor *descriptor = getDescriptor();
-        if (descriptor == nullptr || descriptor->structSize != sizeof(GameModuleDescriptor) ||
-            descriptor->sdkBoundaryVersion != GameplaySdkBoundaryVersion || ValidateText(descriptor->moduleId, "moduleId").HasError() ||
-            ValidateText(descriptor->buildFingerprint, "buildFingerprint").HasError() ||
-            descriptor->buildFingerprint != expectedBuildFingerprint)
-            return Result<std::unique_ptr<LoadedGameModule>>::Failure(
-                MakeError(GameplayErrors::InvalidBehaviorComponent, "Gameplay module SDK boundary or build fingerprint is incompatible."));
-        impl->moduleId = descriptor->moduleId;
-        impl->buildFingerprint = descriptor->buildFingerprint;
+        auto registry = BuildRegistry(*validated.bundle);
+        if (registry.HasError())
+            return Result<std::unique_ptr<LoadedGameModule>>::Failure(registry.ErrorValue());
+        impl->registry = std::move(registry).Value();
 
-        const GeneratedGameplayDescriptorBundle *bundle = getBundle();
-        if (bundle == nullptr || bundle->structSize != sizeof(GeneratedGameplayDescriptorBundle) || bundle->descriptorRevision == 0 ||
-            bundle->moduleId == nullptr || bundle->buildFingerprint == nullptr || bundle->moduleId != impl->moduleId ||
-            bundle->buildFingerprint != impl->buildFingerprint || (bundle->behaviorCount != 0 && bundle->behaviors == nullptr))
-            return Result<std::unique_ptr<LoadedGameModule>>::Failure(
-                MakeError(GameplayErrors::InvalidBehaviorComponent, "Generated gameplay descriptor bundle is stale or incomplete."));
-        impl->descriptorRevision = bundle->descriptorRevision;
-
-        impl->registry = std::make_unique<BehaviorRegistry>();
-        for (std::size_t index = 0; index < bundle->behaviorCount; ++index) {
-            if (Result<void> registered = impl->registry->Register(bundle->behaviors[index]); registered.HasError())
-                return Result<std::unique_ptr<LoadedGameModule>>::Failure(registered.ErrorValue());
-        }
-        if (Result<void> frozen = impl->registry->Freeze(); frozen.HasError())
-            return Result<std::unique_ptr<LoadedGameModule>>::Failure(frozen.ErrorValue());
-
-        impl->gameplayModule = create();
+        impl->gameplayModule = validated.bundle->lifecycle.create();
         if (impl->gameplayModule == nullptr)
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(
                 MakeError(GameplayErrors::InvalidBehaviorComponent, "Gameplay module factory returned no module object."));
@@ -168,39 +185,61 @@ namespace Horo::Gameplay {
         });
     }
 
+    namespace {
+        [[nodiscard]] Result<std::filesystem::path> PrepareShadowRoot(const std::filesystem::path &shadowRoot) {
+            std::error_code error;
+            std::filesystem::create_directories(shadowRoot, error);  // NOSONAR
+            if (error)
+                return Result<std::filesystem::path>::Failure(ShadowCopyError(error.message()));
+            const std::filesystem::path canonicalRoot = std::filesystem::weakly_canonical(shadowRoot, error);
+            if (error || !IsSafeAbsolutePath(canonicalRoot))
+                return Result<std::filesystem::path>::Failure(ShadowCopyError("shadow root validation failed"));
+            return Result<std::filesystem::path>::Success(canonicalRoot);
+        }
+
+        [[nodiscard]] Result<std::filesystem::path> MakeShadowPath(const std::filesystem::path &libraryPath,
+                                                                   const std::filesystem::path &canonicalRoot) {
+            static std::atomic<std::uint64_t> sequence{1};
+            const auto timestamp = std::chrono::steady_clock::now().time_since_epoch().count();
+            const std::filesystem::path shadowPath =
+                canonicalRoot / std::format("{}.horo_reload_{}_{}{}", libraryPath.stem().string(), timestamp, sequence.fetch_add(1),
+                                            libraryPath.extension().string());
+            std::error_code error;
+            const std::filesystem::path canonicalShadow = std::filesystem::weakly_canonical(shadowPath, error);
+            const std::filesystem::path relativeShadow = canonicalShadow.lexically_relative(canonicalRoot);
+            if (error || relativeShadow.empty() || relativeShadow.is_absolute() || *relativeShadow.begin() == "..")
+                return Result<std::filesystem::path>::Failure(ShadowCopyError("shadow path validation failed"));
+            return Result<std::filesystem::path>::Success(canonicalShadow);
+        }
+
+        [[nodiscard]] Result<void> CopyShadowArtifact(const std::filesystem::path &source, const std::filesystem::path &destination) {
+            std::error_code error;
+            if (std::filesystem::copy_file(source, destination, std::filesystem::copy_options::none, error))  // NOSONAR
+                return Result<void>::Success();
+            return Result<void>::Failure(ShadowCopyError(error ? error.message() : "candidate could not be copied."));
+        }
+    }  // namespace
+
     Result<std::unique_ptr<LoadedGameModule>> GameModuleHost::LoadShadowCopy(const std::filesystem::path &libraryPath,
                                                                              const std::filesystem::path &shadowRoot,
-                                                                             const std::string_view expectedBuildFingerprint) const {
+                                                                             const GameModuleLoadExpectation &expectation) const {
         if (!IsSafeAbsolutePath(libraryPath) || !IsSafeAbsolutePath(shadowRoot))
             return Result<std::unique_ptr<LoadedGameModule>>::Failure(
                 ShadowCopyError("source and destination paths must be absolute and without traversal."));
 
-        std::error_code filesystemError;
-        std::filesystem::create_directories(shadowRoot, filesystemError);  // NOSONAR
-        if (filesystemError)
-            return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError(filesystemError.message()));
+        auto canonicalRoot = PrepareShadowRoot(shadowRoot);
+        if (canonicalRoot.HasError())
+            return Result<std::unique_ptr<LoadedGameModule>>::Failure(canonicalRoot.ErrorValue());
+        auto shadowPath = MakeShadowPath(libraryPath, canonicalRoot.Value());
+        if (shadowPath.HasError())
+            return Result<std::unique_ptr<LoadedGameModule>>::Failure(shadowPath.ErrorValue());
+        if (const Result<void> copied = CopyShadowArtifact(libraryPath, shadowPath.Value()); copied.HasError())
+            return Result<std::unique_ptr<LoadedGameModule>>::Failure(copied.ErrorValue());
 
-        const std::filesystem::path canonicalRoot = std::filesystem::weakly_canonical(shadowRoot, filesystemError);
-        if (filesystemError || !IsSafeAbsolutePath(canonicalRoot))
-            return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError("shadow root validation failed"));
-        static std::atomic<std::uint64_t> sequence{1};
-        const auto timestamp = std::chrono::steady_clock::now().time_since_epoch().count();
-        const std::filesystem::path shadowPath =
-            canonicalRoot / std::format("{}.horo_reload_{}_{}{}", libraryPath.stem().string(), timestamp, sequence.fetch_add(1),
-                                        libraryPath.extension().string());
-        const std::filesystem::path canonicalShadow = std::filesystem::weakly_canonical(shadowPath, filesystemError);
-        if (const std::filesystem::path relativeShadow = canonicalShadow.lexically_relative(canonicalRoot);
-            filesystemError || relativeShadow.empty() || relativeShadow.is_absolute() || *relativeShadow.begin() == "..")
-            return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError("shadow path validation failed"));
-        if (!std::filesystem::copy_file(libraryPath, shadowPath, std::filesystem::copy_options::none, filesystemError)) {  // NOSONAR
-            const std::string message = filesystemError ? filesystemError.message() : "candidate could not be copied.";
-            return Result<std::unique_ptr<LoadedGameModule>>::Failure(ShadowCopyError(message));
-        }
-
-        Result<std::unique_ptr<LoadedGameModule>> loaded = Load(shadowPath, expectedBuildFingerprint);
+        Result<std::unique_ptr<LoadedGameModule>> loaded = Load(shadowPath.Value(), expectation);
         if (loaded.HasError()) {
             std::error_code ignored;
-            std::filesystem::remove(shadowPath, ignored);  // NOSONAR
+            std::filesystem::remove(shadowPath.Value(), ignored);  // NOSONAR
             return loaded;
         }
         loaded.Value()->impl_->removeArtifactOnUnload = true;

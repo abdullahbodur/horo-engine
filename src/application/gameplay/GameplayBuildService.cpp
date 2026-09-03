@@ -524,15 +524,20 @@ namespace Horo::Application {
 
         [[nodiscard]] Result<std::filesystem::path> ValidateCandidateManifest(const nlohmann::json &manifest) {
             if (manifest.value("schemaVersion", 0) != 1 ||
-                manifest.value("buildFingerprint", "") != Gameplay::CurrentGameplayBuildFingerprint() ||
+                manifest.value("buildFingerprint", "") != Gameplay::CurrentGameplayBuildFingerprint() || !manifest.contains("moduleId") ||
+                !manifest["moduleId"].is_string() || manifest.value("descriptorRevision", std::uint64_t{0}) == 0 ||
                 !manifest.contains("artifactPath") || !manifest["artifactPath"].is_string())
                 return Result<std::filesystem::path>::Failure(MakeError(ValidationFailed, "Candidate manifest identity is incompatible."));
             return Result<std::filesystem::path>::Success(manifest["artifactPath"].get<std::string>());
         }
 
-        [[nodiscard]] Result<void> ValidateArtifactLoad(const std::filesystem::path &artifact, const std::filesystem::path &buildRoot) {
+        [[nodiscard]] Result<void> ValidateArtifactLoad(const std::filesystem::path &artifact, const std::filesystem::path &buildRoot,
+                                                        const nlohmann::json &manifest) {
             Gameplay::GameModuleHost host;
-            auto loaded = host.LoadShadowCopy(artifact, buildRoot / "validation-shadow", Gameplay::CurrentGameplayBuildFingerprint());
+            auto loaded = host.LoadShadowCopy(artifact, buildRoot / "validation-shadow",
+                                              {.moduleId = manifest.value("moduleId", ""),
+                                               .buildFingerprint = Gameplay::CurrentGameplayBuildFingerprint(),
+                                               .descriptorRevision = manifest.value("descriptorRevision", std::uint64_t{0})});
             if (loaded.HasError())
                 return Result<void>::Failure(loaded.ErrorValue());
             std::unique_ptr<Gameplay::LoadedGameModule> validatedModule = std::move(loaded).Value();
@@ -660,7 +665,7 @@ namespace Horo::Application {
             Result<std::filesystem::path> artifact = ValidateCandidateManifest(manifest.Value());
             if (artifact.HasError())
                 return Result<void>::Failure(artifact.ErrorValue());
-            if (Result<void> loaded = ValidateArtifactLoad(artifact.Value(), buildRoot); loaded.HasError())
+            if (Result<void> loaded = ValidateArtifactLoad(artifact.Value(), buildRoot, manifest.Value()); loaded.HasError())
                 return loaded;
 
             Result<std::string> postHash = ComputeInputHash(session->request);

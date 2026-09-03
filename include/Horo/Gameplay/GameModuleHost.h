@@ -44,16 +44,16 @@ namespace Horo::Gameplay {
         /**
          * @brief Loads and starts one gameplay candidate after complete compatibility validation.
          * @param libraryPath Absolute dynamic-library artifact path.
-         * @param expectedBuildFingerprint Fingerprint selected by the active engine/toolchain build.
+         * @param expectation Manifest identity selected by the active engine/toolchain build.
          * @return Owned active module or a typed failure with no remaining project callable.
          */
         [[nodiscard]] Result<std::unique_ptr<LoadedGameModule>> Load(const std::filesystem::path &libraryPath,
-                                                                     std::string_view expectedBuildFingerprint) const;
+                                                                     const GameModuleLoadExpectation &expectation) const;
         /**
          * @brief Copies a candidate to a unique artifact before validating and loading it.
          * @param libraryPath Absolute source artifact produced by the project build.
          * @param shadowRoot Absolute editor-owned directory for reload candidates.
-         * @param expectedBuildFingerprint Fingerprint selected by the active engine/toolchain build.
+         * @param expectation Manifest identity selected by the active engine/toolchain build.
          * @return Independently loaded candidate; its shadow artifact is removed after unload.
          *
          * The currently active module can remain loaded while this candidate is validated. The
@@ -62,6 +62,6 @@ namespace Horo::Gameplay {
          */
         [[nodiscard]] Result<std::unique_ptr<LoadedGameModule>> LoadShadowCopy(const std::filesystem::path &libraryPath,
                                                                                const std::filesystem::path &shadowRoot,
-                                                                               std::string_view expectedBuildFingerprint) const;
+                                                                               const GameModuleLoadExpectation &expectation) const;
     };
 }  // namespace Horo::Gameplay

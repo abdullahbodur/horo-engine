@@ -134,11 +134,15 @@ horo_add_gameplay_module(HoroTestGameModule
         NO_MANIFEST
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/gameplay_module/TestGameModule.cpp
 )
+get_property(HORO_TEST_GAME_MODULE_REVISION_FILE TARGET HoroTestGameModule PROPERTY HORO_GAMEPLAY_DESCRIPTOR_REVISION_FILE)
 add_executable(HoroGameModuleHostTests
         unit/gameplay/GameModuleHostTests.cpp
 )
 target_compile_features(HoroGameModuleHostTests PRIVATE cxx_std_20)
-target_compile_definitions(HoroGameModuleHostTests PRIVATE HORO_TEST_GAME_MODULE_PATH="$<TARGET_FILE:HoroTestGameModule>")
+target_compile_definitions(HoroGameModuleHostTests PRIVATE
+        HORO_TEST_GAME_MODULE_PATH="$<TARGET_FILE:HoroTestGameModule>"
+        HORO_TEST_GAME_MODULE_REVISION_PATH="${HORO_TEST_GAME_MODULE_REVISION_FILE}"
+)
 target_link_libraries(HoroGameModuleHostTests PRIVATE HoroEngine::GameplayModuleHost)
 add_dependencies(HoroGameModuleHostTests HoroTestGameModule)
 add_executable(HoroLuaBehaviorTests
@@ -155,7 +159,10 @@ add_executable(HoroProjectGameplayRegistryTests
         unit/editor/ProjectGameplayRegistryTests.cpp
 )
 target_compile_features(HoroProjectGameplayRegistryTests PRIVATE cxx_std_20)
-target_compile_definitions(HoroProjectGameplayRegistryTests PRIVATE HORO_TEST_GAME_MODULE_PATH="$<TARGET_FILE:HoroTestGameModule>")
+target_compile_definitions(HoroProjectGameplayRegistryTests PRIVATE
+        HORO_TEST_GAME_MODULE_PATH="$<TARGET_FILE:HoroTestGameModule>"
+        HORO_TEST_GAME_MODULE_REVISION_PATH="${HORO_TEST_GAME_MODULE_REVISION_FILE}"
+)
 target_link_libraries(HoroProjectGameplayRegistryTests PRIVATE HoroEngine::EditorServices)
 add_dependencies(HoroProjectGameplayRegistryTests HoroTestGameModule)
 add_executable(HoroSceneMathTests
