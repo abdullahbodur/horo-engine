@@ -836,7 +836,7 @@ Generate a compilation database and run clang-tidy directly when a focused
 local investigation benefits from it:
 
 ```bash
-cmake -S . -B build/tidy -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake -S . -B build/tidy -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 clang-tidy -p build/tidy src/scene/model/Scene.cpp
 ```
 
