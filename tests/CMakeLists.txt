@@ -135,6 +135,7 @@ target_link_libraries(HoroInputTests PRIVATE HoroEngine::Input)
 add_executable(HoroGameplayRuntimeTests
         unit/gameplay/BehaviorRuntimeTests.cpp
         unit/gameplay/ComponentRegistryTests.cpp
+        unit/gameplay/GameplayRegistrationTests.cpp
 )
 target_compile_features(HoroGameplayRuntimeTests PRIVATE cxx_std_20)
 target_link_libraries(HoroGameplayRuntimeTests PRIVATE HoroEngine::GameplayRuntime)

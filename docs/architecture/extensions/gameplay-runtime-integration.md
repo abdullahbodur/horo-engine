@@ -100,13 +100,15 @@ scene-owned buffers and direct runtime APIs.
 System scheduling is descriptor-driven:
 
 ```cpp
-struct SystemDescriptor {
-    ScheduleNodeId id;
-    SystemPhase phase;
-    ComponentAccessSet reads;
-    ComponentAccessSet writes;
-    std::vector<ScheduleNodeId> after;
-    std::vector<ScheduleNodeId> before;
+struct GameplaySystemDescriptor {
+    GameplaySystemId id;
+    GameplaySystemPhase phase;
+    GameplayThreadAffinity affinity;
+    GameplayComponentAccessSet access;
+    std::vector<GameplaySystemId> after;
+    std::vector<GameplaySystemId> before;
+    std::vector<GameplayServiceId> requiredServices;
+    std::vector<GameplayCapabilityId> requiredCapabilities;
 };
 ```
 
@@ -130,15 +132,13 @@ committed only at synchronization points owned by Scene Runtime.
 System registration binds a descriptor to module-owned logic:
 
 ```cpp
-struct SystemRegistration {
-    SystemDescriptor descriptor;
-    SystemFactory factory;
-    SystemLifetime lifetime = SystemLifetime::SceneScoped;
+struct GameplaySystemRegistration {
+    GameplaySystemDescriptor descriptor;
+    GameplaySystemFactoryBinding factory;
 };
 ```
 
-Runtime-created system instances are scene-scoped unless the registration
-explicitly declares a narrower or wider lifetime. The host owns the runtime
+Runtime-created system instances are scene-generation scoped. The host owns the runtime
 handle that schedules a system, but the module owns the code and any
 module-allocated state behind that system. All module-owned system instances,
 callbacks, queued continuations, and jobs are destroyed or invalidated before
@@ -165,7 +165,7 @@ which active scene, if any, remains valid during failure.
 
 Additive scenes are separate `SceneRuntime` instances with distinct
 `SceneRuntimeId` values, registries, behavior instances, and scene-scoped
-services. A `SystemLifetime::SceneScoped` system is scoped to one runtime scene.
+services. A registered gameplay system is scoped to one runtime scene generation.
 Cross-scene references use stable logical IDs or explicit runtime reference
 handles and must be resolved before use:
 

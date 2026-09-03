@@ -10,10 +10,13 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace Horo::Gameplay {
     class BehaviorRegistry;
     class ComponentRegistry;
+    class GameServiceRegistry;
+    class SystemRegistry;
 
     /** @brief Loaded module whose registry and callable objects are destroyed before its library unloads. */
     class LoadedGameModule final {
@@ -33,6 +36,16 @@ namespace Horo::Gameplay {
         [[nodiscard]] const BehaviorRegistry &Registry() const noexcept;
         /** @brief Returns the frozen project component metadata while the module is loaded. */
         [[nodiscard]] const ComponentRegistry &Components() const noexcept;
+        /** @brief Returns the frozen project service descriptors while the module is loaded. */
+        [[nodiscard]] const GameServiceRegistry &Services() const noexcept;
+        /** @brief Returns the frozen project system schedule while the module is loaded. */
+        [[nodiscard]] const SystemRegistry &Systems() const noexcept;
+        /** @brief Returns active project-scoped services in provider-first order. */
+        [[nodiscard]] std::span<const GameplayServiceId> ActiveServices() const noexcept;
+        /** @brief Returns capabilities active for module startup and future scene runtimes. */
+        [[nodiscard]] std::span<const GameplayCapabilityId> Capabilities() const noexcept;
+        /** @brief Returns the cancellation token revoked before module shutdown or replacement. */
+        [[nodiscard]] CancellationToken Cancellation() const noexcept;
 
     private:
         friend class GameModuleHost;
@@ -44,6 +57,11 @@ namespace Horo::Gameplay {
     /** @brief Loader used by editor play sessions and packaged runtime composition. */
     class GameModuleHost final {
     public:
+        /**
+         * @brief Creates a loader with an explicit immutable host capability set.
+         * @param hostCapabilities Capabilities composed by the owning headless or graphical host.
+         */
+        explicit GameModuleHost(std::vector<GameplayCapabilityId> hostCapabilities = {});
         /**
          * @brief Loads and starts one gameplay candidate after complete compatibility validation.
          * @param libraryPath Absolute dynamic-library artifact path.
@@ -66,5 +84,8 @@ namespace Horo::Gameplay {
         [[nodiscard]] Result<std::unique_ptr<LoadedGameModule>> LoadShadowCopy(const std::filesystem::path &libraryPath,
                                                                                const std::filesystem::path &shadowRoot,
                                                                                const GameModuleLoadExpectation &expectation) const;
+
+    private:
+        std::vector<GameplayCapabilityId> hostCapabilities_;
     };
 }  // namespace Horo::Gameplay

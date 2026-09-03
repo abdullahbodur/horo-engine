@@ -1,7 +1,7 @@
 # Current Gameplay Module Contract Audit
 
 - Audit status: Implementation snapshot
-- Date: 2026-09-02
+- Date: 2026-09-03
 - Issue: [[GAM-001.1]](https://github.com/abdullahbodur/horo-engine/issues/143)
 - Jira: [HORO-143](https://horo-engine.atlassian.net/browse/HORO-143)
 - Parent: [[GAM-001]](https://github.com/abdullahbodur/horo-engine/issues/61)
@@ -24,15 +24,16 @@ The implemented native boundary is one project-owned shared library intended to
 be built against the exact Horo gameplay SDK generation. Four C-linkage symbol
 names expose C++ objects and function pointers; this is an exact-generation C++
 ABI, not a stable C ABI. The current fingerprint does not prove the full intended
-identity. The only generated registrations are object-attached native behaviors.
+identity. Generated registrations remain object-attached native behaviors, while
+project code can declaratively register components, systems, and services.
 The editor builds and discovers the library, merges native and Lua behavior
 registrations into one frozen registry, and replaces native behavior instances at
 a fixed-tick safe point.
 
-The implementation does not yet provide the broader registration, capability,
-service, component, asset-type, package, packaged-player, multi-module, degraded
-mode, or transactional native hot-reload contracts described by the normative
-architecture. Those gaps remain owned by focused follow-up tickets listed below.
+The implementation now provides typed system/service registration, deterministic
+scheduling, capability validation, cancellation, and owned shutdown. Asset-type,
+package, packaged-player, multi-module, degraded-mode, and transactional native
+hot-reload contracts remain focused follow-up work listed below.
 
 ## Implemented End-to-End Flow
 
@@ -46,6 +47,8 @@ project CMake + source inputs
   -> GameplayBuildService validates a shadow-loaded candidate
   -> gameplay_module.json + gameplay_build_state.json
   -> ProjectGameplayRegistry shadow-loads the published artifact
+  -> register and freeze component, service, and system transactions
+  -> activate project services in provider-first order
   -> native registrations + discovered Lua registrations
   -> frozen BehaviorRegistry
   -> editor Play behavior instances
@@ -81,8 +84,8 @@ Status terms mean:
 | Platform dynamic loading | Partial | POSIX uses canonical paths with immediate, local `dlopen` resolution. Windows canonicalizes but uses `LoadLibraryA`; Unicode paths and dependency-search isolation are not covered. macOS uses the generic POSIX path without signing-specific policy. |
 | Module descriptor validation | Implemented | Host checks exact struct size, boundary version, bounded text fields, exact fingerprint, module identity, bundle revision, and descriptor/bundle agreement before factory creation. |
 | Behavior registration | Implemented | Native bundle records and Lua descriptors are validated into one registry; duplicates reject the candidate and the registry is sorted and frozen. |
-| Registration transaction | Partial | Native and Lua behavior contributions plus project component descriptors are accumulated before activation. `GameRegistrationContext` exposes the host-owned component transaction, which is sorted and frozen before `Start`; system, service, and asset registration remain absent. |
-| Module lifecycle | Partial | Load calls `Create`, `Register`, freezes copied component metadata, then calls `Start`; unload calls `Stop`, module-owned `Destroy`, registry release, library unload, and shadow deletion. `GameRuntimeContext` remains empty. |
+| Registration transaction | Partial | Native and Lua behavior contributions plus project component, system, and service descriptors are accumulated before activation. `GameRegistrationContext` exposes host-owned transactions that are validated, deterministically ordered, and frozen before `Start`; asset and remaining registry families are absent. |
+| Module lifecycle | Implemented | Load calls `Create`, `Register`, freezes component/service/system metadata, activates project services provider-first, then calls `Start` with cancellation, active-service, and capability views. Unload requests cancellation before module `Stop`, reverses service shutdown, destroys every module-owned callable, unloads the library, and deletes the shadow artifact. |
 | Behavior runtime lifecycle | Implemented | Runtime creates instances through module-owned factories and calls defined behavior lifecycle phases; instances are destroyed before their registry/module owner is released. |
 | Scene behavior persistence | Implemented | Scenes preserve instance ID, stable behavior type ID, schema version, enabled state, and tagged field values without requiring the module to be loaded. |
 | Schema evolution and unknown payloads | Partial | Project component envelopes retain bounded opaque bytes independently from native layout and expose current, missing, newer, unsupported-old, or deterministic migration-required inspection. Behavior field migration and lossless scene parsing of unsupported encodings remain absent. |
@@ -91,14 +94,15 @@ Status terms mean:
 | Native code reload | Partial | Candidate activation occurs at a fixed-tick boundary and runtime reconstruction can roll back. Candidate module `Start` occurs during discovery, old and new modules overlap, runtime-only behavior state is not snapshotted, and there is no job/callback quiesce proof. |
 | Packaged-player loading | Missing | No packaged-runtime composition, shipping manifest, signature policy enforcement, or packaged-player caller was found. |
 | Game components | Implemented | Project code registers stable component and property identities, schema versions, authoring metadata, payload encoding, and deterministic forward migration edges through `GameRegistrationContext`. The host copies, sorts, and freezes metadata before startup; inspection never mutates opaque persistent bytes. |
-| Game systems, services, assets | Missing | The remaining normative registration capabilities and runtime contexts do not exist in the public API. |
+| Game systems and services | Implemented | Typed identities, bounded descriptors, exact-generation factories, dependency and capability graphs, phase/access validation, deterministic schedules, affinity checks, cancellation, rollback, and reverse shutdown are public contracts with focused runtime evidence. |
+| Game-owned assets | Missing | Game-owned asset type registration, import, cook, editor representation, and missing-code fallback remain absent. |
 | Imported gameplay libraries | Missing | Project gameplay build does not consume reusable game libraries through the package graph. |
 | Multi-module or mod composition | Missing | One project-global primary-module path is assumed; load ordering, trust, isolation, and dependency policy do not exist. |
 | Dead production paths | None proven | `NO_MANIFEST` is test-only but actively used by the module-host fixture. Public host APIs have editor and test callers. The packaged-player promise is missing composition, not dead code. |
 
 ## Exact ABI Assumptions
 
-`GameModule.h` defines boundary version `3` and requires these symbols:
+`GameModule.h` defines boundary version `4` and requires these symbols:
 
 ```text
 GetGameModuleDescriptor
@@ -121,7 +125,7 @@ The boundary relies on all of the following assumptions:
 2. C linkage stabilizes only the four exported names. Struct layout, virtual
    dispatch, `Result<void>`, and factory signatures remain C++ ABI.
 3. Exact `sizeof` equality is required for descriptor and bundle structures.
-   Structure growth is not append-compatible within boundary version `3`.
+   Structure growth is not append-compatible within boundary version `4`.
 4. Descriptor strings, registration arrays, descriptors, and factory function
    pointers are borrowed from the loaded library. They are valid only while the
    library remains loaded.
@@ -204,16 +208,19 @@ canonical source artifact
   -> validated descriptor and bundle
   -> host-owned BehaviorRegistry containing module factory bindings
   -> module-owned IGameModule
-  -> Register(host-owned ComponentRegistry transaction)
-  -> freeze copied component metadata
-  -> Start(empty GameRuntimeContext)
+  -> Register(host-owned component, service, and system transactions)
+  -> freeze copied metadata and deterministic dependency schedules
+  -> create/start project services provider-first
+  -> Start(GameRuntimeContext with cancellation, services, and capabilities)
   -> module-created behavior instances
 
 unload:
   behavior instances destroyed by module factory
+  -> request module/service cancellation
   -> module Stop
+  -> stop/destroy project services in reverse dependency order
   -> module DestroyGameModule
-  -> registry release
+  -> registry releases
   -> DynamicLibrary unload
   -> shadow artifact deletion
 ```
@@ -243,8 +250,8 @@ quiesce/snapshot/unload/load/restore transaction. In particular:
 
 - Old and candidate module `Start` lifetimes overlap;
 - Module startup is not constrained to the runtime safe point;
-- Module-owned jobs, callbacks, services, and external resources cannot be
-  enumerated or drained by the empty context;
+- The cancellation token invalidates cooperative work, but module-owned jobs,
+  callbacks, and external resources still lack a complete quiescence proof;
 - Runtime-only instance state is lost; authored `BehaviorComponent` fields are
   used to recreate instances;
 - No explicit restart fallback is selected when unload safety cannot be proven.
@@ -305,6 +312,13 @@ Existing focused tests prove:
 - Project component registration rejects duplicate IDs and invalid migration
   graphs, while inspection distinguishes current, version-skewed, missing, and
   migratable opaque payloads without modifying their bytes.
+- Project service registration rejects invalid ownership, duplicate providers,
+  missing dependencies/capabilities, scope violations, and cycles; activation
+  proves provider-first startup, failure rollback, cancellation, and reverse shutdown.
+- Project system registration rejects missing requirements, invalid cross-phase
+  edges, cycles, ambiguous component access, and presentation writes; execution
+  proves deterministic phase order, affinity enforcement, cancellation, callback
+  exception containment, and reverse shutdown.
 
 The current focused suite does not directly prove:
 
@@ -317,7 +331,7 @@ The current focused suite does not directly prove:
 - Manifest/build-state artifact digest binding or artifact replacement races;
 - Windows Unicode paths and dependency search, macOS signing/rpath, or explicit
   cross-platform fixture parity;
-- Job/callback/service quiescence, runtime-state snapshot/restore, or native
+- Complete job/callback quiescence, runtime-state snapshot/restore, or native
   restart fallback;
 - Packaged-player loading and shipping replacement restrictions;
 - Schema migration and lossless opaque preservation of unsupported payloads.
