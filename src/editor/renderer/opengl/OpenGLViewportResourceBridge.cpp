@@ -3,12 +3,7 @@
 #include "runtime/renderer/frontend/RenderFrontendResourceAccess.h"
 #include "runtime/renderer/modules/opengl/OpenGLRenderBackendErrors.h"
 
-#if defined(__APPLE__)
-#include <OpenGL/gl3.h>
-#else
-#include <SDL3/SDL_opengl.h>
-#endif
-
+#include <glad/gl.h>
 #include <limits>
 
 namespace Horo::Editor {
