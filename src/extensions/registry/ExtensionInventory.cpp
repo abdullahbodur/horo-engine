@@ -127,10 +127,11 @@ namespace Horo::Extensions {
                     MakeError(ExtensionErrors::LoadFailed, "Extension packages may not contain symlinks."));
             }
             const fs::path relative = fs::relative(entry.path(), source, error);
-            const bool escapesRoot = std::ranges::any_of(relative, [](const fs::path &component) {
+            if (const bool escapesRoot = std::ranges::any_of(relative,
+                                                             [](const fs::path &component) {
                 return component == "..";
             });
-            if (error || relative.empty() || relative.is_absolute() || escapesRoot) {
+                error || relative.empty() || relative.is_absolute() || escapesRoot) {
                 return Result<ValidatedPackageEntry>::Failure(
                     MakeError(ExtensionErrors::LoadFailed, "Extension package path escaped its source root."));
             }
@@ -227,10 +228,11 @@ namespace Horo::Extensions {
             if (parsed.HasError())
                 return std::nullopt;
             ExtensionManifest manifest = std::move(parsed).Value();
-            const bool duplicate = std::ranges::any_of(existing, [&manifest](const ExtensionInventoryEntry &entry) {
+            if (const bool duplicate = std::ranges::any_of(existing,
+                                                           [&manifest](const ExtensionInventoryEntry &entry) {
                 return entry.packageId == manifest.id;
             });
-            if (!IsSafePackageId(manifest.id) || directory.path().filename() != fs::path{manifest.id} || duplicate)
+                !IsSafePackageId(manifest.id) || directory.path().filename() != fs::path{manifest.id} || duplicate)
                 return std::nullopt;
             const std::string compositionVersion = BuildCompositionVersion(manifest.version, manifest.modules);
             return ExtensionInventoryEntry{

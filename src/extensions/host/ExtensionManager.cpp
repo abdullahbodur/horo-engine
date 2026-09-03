@@ -148,7 +148,8 @@ namespace Horo::Extensions {
         }
 
         /** @brief Invokes an extension entry point while containing exceptions at the ABI boundary. */
-        [[nodiscard]] HoroExtensionStatus InvokeExtensionLoad(const HoroExtensionLoadFunc loadFunc, HoroExtensionHostApi &hostApi,
+        template <typename LoadFunction>
+        [[nodiscard]] HoroExtensionStatus InvokeExtensionLoad(const LoadFunction loadFunc, const HoroExtensionHostApi &hostApi,
                                                               HoroExtensionModuleApi &moduleApi, const std::string &extensionId) {
             try {
                 return loadFunc(&hostApi, &moduleApi);
@@ -207,8 +208,8 @@ namespace Horo::Extensions {
                 .registerAssetImporter = RegisterExternalAssetImporter,
             };
             HoroExtensionModuleApi moduleApi{.structSize = sizeof(HoroExtensionModuleApi)};
-            const HoroExtensionStatus status = InvokeExtensionLoad(loadFunc, hostApi, moduleApi, manifest.id);
-            if (status != HORO_EXTENSION_SUCCESS || registration.failed) {
+            if (const HoroExtensionStatus status = InvokeExtensionLoad(loadFunc, hostApi, moduleApi, manifest.id);
+                status != HORO_EXTENSION_SUCCESS || registration.failed) {
                 SafeUnload(lifetime->unload, moduleApi, "rollback");
                 if (registration.failed)
                     return Result<ActivatedModule>::Failure(std::move(registration.error));
