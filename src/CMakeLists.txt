@@ -673,6 +673,7 @@ endif ()
 add_library(HoroExtensions STATIC
         extensions/host/ExtensionManager.cpp
         extensions/manifest/ExtensionManifestParser.cpp
+        extensions/manifest/ExtensionManifestJson.cpp
         extensions/registry/ExtensionErrors.cpp
         extensions/registry/ExtensionInventory.cpp
         extensions/marketplace/ExtensionMarketplace.cpp

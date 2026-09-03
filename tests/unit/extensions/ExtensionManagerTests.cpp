@@ -13,6 +13,7 @@
 #include <fstream>
 #include <iterator>
 #include <ranges>
+#include <string>
 
 namespace Horo::Extensions::Tests {
     namespace fs = std::filesystem;
@@ -149,13 +150,13 @@ namespace Horo::Extensions::Tests {
             REQUIRE(manifest.modules[0].version == "2.0.0");
         }
 
-        SECTION("Module version defaults to package version") {
+        SECTION("Module version is explicit") {
             auto result = ParseExtensionManifest(R"({
                 "package": {"id": "com.example.defaulted", "version": "3.2.1"},
                 "modules": [{"id": "com.example.defaulted.importer", "kind": "asset_importer"}]
             })");
-            REQUIRE(result.HasValue());
-            REQUIRE(result.Value().modules[0].version == "3.2.1");
+            REQUIRE(result.HasError());
+            REQUIRE_THAT(result.ErrorValue().message, Catch::Matchers::ContainsSubstring("$.modules[0].version"));
         }
 
         SECTION("Canonical top-level package manifest is accepted") {
@@ -179,6 +180,7 @@ namespace Horo::Extensions::Tests {
                 "version": "1.0.0",
                 "modules": [{
                     "id": "com.example.contributions.native",
+                    "version": "1.0.0",
                     "kind": "asset_importer"
                 }],
                 "contributions": [{
@@ -230,6 +232,21 @@ namespace Horo::Extensions::Tests {
         REQUIRE(reloaded.Refresh().HasValue());
         REQUIRE_FALSE(reloaded.IsEnabled(builtIn.packageId));
         REQUIRE(reloaded.InstallRoot() == installRoot.lexically_normal());
+    }
+
+    TEST_CASE_METHOD(ExtensionManagerTestFixture, "Extension manifest files are bounded before decoding", "[Extensions][Inventory]") {
+        const fs::path source = fs::absolute(tempDir / "oversized");
+        fs::create_directories(source);
+        {
+            std::ofstream manifest{source / "extension.json", std::ios::binary};
+            manifest << std::string(ExtensionManifestLimits{}.maximumDocumentBytes + 1U, 'x');
+        }
+
+        ExtensionManager manager;
+        REQUIRE(manager.LoadExtension(source.string()).HasError());
+
+        ExtensionInventory inventory{fs::absolute(tempDir / "managed")};
+        REQUIRE(inventory.InstallFromDirectory(source).HasError());
     }
 
 #ifdef HORO_BASIC_EXTENSION_DIR
