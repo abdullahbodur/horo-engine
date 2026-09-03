@@ -15,6 +15,8 @@ namespace Horo::Render::MetalBackendErrors {
     extern const ErrorCodeDescriptor NoActiveFrame;
     extern const ErrorCodeDescriptor NotInitialized;
     extern const ErrorCodeDescriptor PresentationInUse;
+    extern const ErrorCodeDescriptor ResourceCreationFailed;
+    extern const ErrorCodeDescriptor ResourceIdentityInvalid;
     extern const ErrorCodeDescriptor UnsupportedFramesInFlight;
     extern const ErrorCodeDescriptor UnsupportedPassKind;
     extern const ErrorCodeDescriptor UnsupportedResourceOperation;

@@ -72,47 +72,66 @@ namespace Horo::Render {
             }
 
             /** @copydoc IRenderBackend::CreateBuffer */
-            Result<std::uint64_t> CreateBuffer(const RenderBufferDescriptor &, std::span<const std::byte>) override {
-                return Result<std::uint64_t>::Failure(MakeMetalError(MetalBackendErrors::UnsupportedResourceOperation,
-                                                                     "Metal generic buffer migration is owned by RND-001.5."));
+            Result<std::uint64_t> CreateBuffer(const RenderBufferDescriptor &descriptor,
+                                               const std::span<const std::byte> initialData) override {
+                if (!initialized_)
+                    return ResourceNotInitialized("Metal buffer creation requires an initialized backend.");
+                return runtime_->CreateBuffer(descriptor, initialData);
             }
 
             /** @copydoc IRenderBackend::CreateMesh */
-            Result<std::uint64_t> CreateMesh(const RenderMeshDescriptor &, std::uint64_t, std::uint64_t) override {
-                return Result<std::uint64_t>::Failure(MakeMetalError(MetalBackendErrors::UnsupportedResourceOperation,
-                                                                     "Metal generic mesh migration is owned by RND-001.5."));
+            Result<std::uint64_t> CreateMesh(const RenderMeshDescriptor &descriptor, const std::uint64_t vertexBuffer,
+                                             const std::uint64_t indexBuffer) override {
+                if (!initialized_)
+                    return ResourceNotInitialized("Metal mesh creation requires an initialized backend.");
+                return runtime_->CreateMesh(descriptor, vertexBuffer, indexBuffer);
             }
 
-            Result<std::uint64_t> CreateTexture(const RenderTextureDescriptor &) override {
-                return Result<std::uint64_t>::Failure(MakeMetalError(MetalBackendErrors::UnsupportedResourceOperation,
-                                                                     "Metal generic texture migration is owned by RND-001.5."));
+            Result<std::uint64_t> CreateTexture(const RenderTextureDescriptor &descriptor) override {
+                if (!initialized_)
+                    return ResourceNotInitialized("Metal texture creation requires an initialized backend.");
+                return runtime_->CreateTexture(descriptor);
             }
 
-            Result<std::uint64_t> CreateTextureView(const RenderTextureViewDescriptor &, std::uint64_t) override {
-                return Result<std::uint64_t>::Failure(MakeMetalError(MetalBackendErrors::UnsupportedResourceOperation,
-                                                                     "Metal generic texture-view migration is owned by RND-001.5."));
+            Result<std::uint64_t> CreateTextureView(const RenderTextureViewDescriptor &descriptor, const std::uint64_t texture) override {
+                if (!initialized_)
+                    return ResourceNotInitialized("Metal texture-view creation requires an initialized backend.");
+                return runtime_->CreateTextureView(descriptor, texture);
             }
 
-            Result<std::uint64_t> CreateRenderTarget(const RenderTargetDescriptor &, std::uint64_t, std::uint64_t) override {
-                return Result<std::uint64_t>::Failure(MakeMetalError(MetalBackendErrors::UnsupportedResourceOperation,
-                                                                     "Metal generic render-target migration is owned by RND-001.5."));
+            Result<std::uint64_t> CreateRenderTarget(const RenderTargetDescriptor &descriptor, const std::uint64_t colorAttachment,
+                                                     const std::uint64_t depthAttachment) override {
+                if (!initialized_)
+                    return ResourceNotInitialized("Metal render-target creation requires an initialized backend.");
+                return runtime_->CreateRenderTarget(descriptor, colorAttachment, depthAttachment);
             }
 
             /** @copydoc IRenderBackend::DestroyBuffer */
-            void DestroyBuffer(std::uint64_t) noexcept override {
-                // Generic Metal buffers cannot exist until the focused RND-001.5 migration.
+            void DestroyBuffer(const std::uint64_t backendInstance) noexcept override {
+                if (runtimeInitialized_)
+                    runtime_->DestroyBuffer(backendInstance);
             }
 
             /** @copydoc IRenderBackend::DestroyMesh */
-            void DestroyMesh(std::uint64_t) noexcept override {
-                // Generic Metal meshes cannot exist until the focused RND-001.5 migration.
+            void DestroyMesh(const std::uint64_t backendInstance) noexcept override {
+                if (runtimeInitialized_)
+                    runtime_->DestroyMesh(backendInstance);
             }
 
-            void DestroyTexture(std::uint64_t) noexcept override {}
+            void DestroyTexture(const std::uint64_t backendInstance) noexcept override {
+                if (runtimeInitialized_)
+                    runtime_->DestroyTexture(backendInstance);
+            }
 
-            void DestroyTextureView(std::uint64_t) noexcept override {}
+            void DestroyTextureView(const std::uint64_t backendInstance) noexcept override {
+                if (runtimeInitialized_)
+                    runtime_->DestroyTextureView(backendInstance);
+            }
 
-            void DestroyRenderTarget(std::uint64_t) noexcept override {}
+            void DestroyRenderTarget(const std::uint64_t backendInstance) noexcept override {
+                if (runtimeInitialized_)
+                    runtime_->DestroyRenderTarget(backendInstance);
+            }
 
             /** @copydoc IRenderBackend::BeginFrame */
             Result<FrameToken> BeginFrame(const FrameDescriptor &descriptor) override {
@@ -220,6 +239,10 @@ namespace Horo::Render {
             }
 
         private:
+            [[nodiscard]] static Result<std::uint64_t> ResourceNotInitialized(std::string message) {
+                return Result<std::uint64_t>::Failure(MakeMetalError(MetalBackendErrors::NotInitialized, std::move(message)));
+            }
+
             [[nodiscard]] Result<void> ValidateActiveFrame(const FrameToken frame) const {
                 if (!initialized_) {
                     return Result<void>::Failure(
@@ -285,11 +308,15 @@ namespace Horo::Render {
             RenderBackendCapabilities capabilities_{
                 .backend = RenderBackendId{"metal"},
                 .presentsToWindow = true,
-                .supportsOffscreenTargets = false,
+                .supportsOffscreenTargets = true,
                 .supportsTimestampQueries = false,
                 .supportsCompute = false,
                 .supportsBindlessResources = false,
                 .supportsRayTracing = false,
+                .supportsBufferResources = true,
+                .supportsMeshResources = true,
+                .supportsTextureResources = true,
+                .supportsRenderTargetResources = true,
             };
             FrameToken activeFrame_{};
             std::uint64_t nextFrameToken_{1};

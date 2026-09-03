@@ -5,6 +5,7 @@
 namespace Horo::Editor::RendererErrors {
     inline const ErrorDomainId GuiOpenGLDomain{"horo.editor.gui.opengl"};
     inline const ErrorDomainId ViewportOpenGLDomain{"horo.editor.viewport.opengl"};
+    inline const ErrorDomainId ViewportMetalDomain{"horo.editor.viewport.metal"};
     inline const ErrorDomainId SdlOpenGLDomain{"horo.editor.sdl.opengl"};
     inline const ErrorDomainId ViewportDomain{"horo.editor.viewport"};
 
@@ -44,14 +45,14 @@ namespace Horo::Editor::RendererErrors {
                                                               true,
                                                               false};
 
-    inline const ErrorCodeDescriptor ViewportShaderCompileFailed{ViewportOpenGLDomain,
+    inline const ErrorCodeDescriptor ViewportShaderCompileFailed{ViewportDomain,
                                                                  ErrorCode{"editor.viewport.shader_compile_failed"},
                                                                  ErrorSeverity::Error,
                                                                  "Viewport shader compilation failed.",
                                                                  {},
                                                                  false,
                                                                  false};
-    inline const ErrorCodeDescriptor ViewportAlreadyInitialized{ViewportOpenGLDomain,
+    inline const ErrorCodeDescriptor ViewportAlreadyInitialized{ViewportDomain,
                                                                 ErrorCode{"editor.viewport.already_initialized"},
                                                                 ErrorSeverity::Error,
                                                                 "Viewport renderer is already initialized.",
@@ -65,49 +66,49 @@ namespace Horo::Editor::RendererErrors {
                                                                   {},
                                                                   false,
                                                                   false};
-    inline const ErrorCodeDescriptor ViewportNotInitialized{ViewportOpenGLDomain,
+    inline const ErrorCodeDescriptor ViewportNotInitialized{ViewportDomain,
                                                             ErrorCode{"editor.viewport.not_initialized"},
                                                             ErrorSeverity::Error,
                                                             "Viewport renderer is not initialized.",
                                                             {},
                                                             false,
                                                             false};
-    inline const ErrorCodeDescriptor ViewportInvalidScene{ViewportOpenGLDomain,
+    inline const ErrorCodeDescriptor ViewportInvalidScene{ViewportDomain,
                                                           ErrorCode{"editor.viewport.invalid_scene"},
                                                           ErrorSeverity::Error,
                                                           "Viewport scene data is invalid.",
                                                           {},
                                                           false,
                                                           false};
-    inline const ErrorCodeDescriptor ViewportStaleTarget{ViewportOpenGLDomain,
+    inline const ErrorCodeDescriptor ViewportStaleTarget{ViewportDomain,
                                                          ErrorCode{"editor.viewport.stale_target"},
                                                          ErrorSeverity::Error,
                                                          "Viewport pass references a stale target.",
                                                          {},
                                                          false,
                                                          false};
-    inline const ErrorCodeDescriptor ViewportStaleMeshResource{ViewportOpenGLDomain,
+    inline const ErrorCodeDescriptor ViewportStaleMeshResource{ViewportDomain,
                                                                ErrorCode{"editor.viewport.stale_mesh_resource"},
                                                                ErrorSeverity::Error,
                                                                "Viewport instance references a stale mesh resource.",
                                                                {},
                                                                false,
                                                                false};
-    inline const ErrorCodeDescriptor ViewportShaderLinkFailed{ViewportOpenGLDomain,
+    inline const ErrorCodeDescriptor ViewportShaderLinkFailed{ViewportDomain,
                                                               ErrorCode{"editor.viewport.shader_link_failed"},
                                                               ErrorSeverity::Error,
                                                               "Viewport shader linking failed.",
                                                               {},
                                                               false,
                                                               false};
-    inline const ErrorCodeDescriptor ViewportShaderContractInvalid{ViewportOpenGLDomain,
+    inline const ErrorCodeDescriptor ViewportShaderContractInvalid{ViewportDomain,
                                                                    ErrorCode{"editor.viewport.shader_contract_invalid"},
                                                                    ErrorSeverity::Error,
                                                                    "Viewport shader contract is invalid.",
                                                                    {},
                                                                    false,
                                                                    false};
-    inline const ErrorCodeDescriptor ViewportGeometryCreationFailed{ViewportOpenGLDomain,
+    inline const ErrorCodeDescriptor ViewportGeometryCreationFailed{ViewportDomain,
                                                                     ErrorCode{"editor.viewport.geometry_creation_failed"},
                                                                     ErrorSeverity::Error,
                                                                     "Viewport geometry creation failed.",
@@ -121,6 +122,52 @@ namespace Horo::Editor::RendererErrors {
                                                                    {},
                                                                    true,
                                                                    false};
+
+    inline const ErrorCodeDescriptor ViewportMetalDeviceUnavailable{
+        .domain = ViewportMetalDomain,
+        .code = ErrorCode{"editor.viewport.metal_device_unavailable"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Metal presentation device is unavailable.",
+        .remediationHint = {},
+        .retryable = false,
+        .userActionable = false,
+    };
+    inline const ErrorCodeDescriptor ViewportMetalPipelineCreationFailed{
+        .domain = ViewportMetalDomain,
+        .code = ErrorCode{"editor.viewport.pipeline_creation_failed"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Metal viewport pipeline creation failed.",
+        .remediationHint = {},
+        .retryable = true,
+        .userActionable = false,
+    };
+    inline const ErrorCodeDescriptor ViewportMetalResourceCreationFailed{
+        .domain = ViewportMetalDomain,
+        .code = ErrorCode{"editor.viewport.resource_creation_failed"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Metal viewport helper resource creation failed.",
+        .remediationHint = {},
+        .retryable = true,
+        .userActionable = false,
+    };
+    inline const ErrorCodeDescriptor ViewportMetalNoActiveFrame{
+        .domain = ViewportMetalDomain,
+        .code = ErrorCode{"editor.viewport.no_active_frame"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Metal viewport rendering requires an active frame.",
+        .remediationHint = {},
+        .retryable = false,
+        .userActionable = false,
+    };
+    inline const ErrorCodeDescriptor ViewportMetalEncoderCreationFailed{
+        .domain = ViewportMetalDomain,
+        .code = ErrorCode{"editor.viewport.encoder_creation_failed"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Metal viewport encoder creation failed.",
+        .remediationHint = {},
+        .retryable = true,
+        .userActionable = false,
+    };
 
     inline const ErrorCodeDescriptor SdlContextExists{SdlOpenGLDomain,
                                                       ErrorCode{"render.sdl.context_exists"},

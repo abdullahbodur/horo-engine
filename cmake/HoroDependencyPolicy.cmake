@@ -35,6 +35,8 @@ horo_allow_target_dependencies(TARGET HoroRenderMetal)
 horo_allow_target_dependencies(TARGET HoroEditorModel
     DEPENDENCIES HoroFoundation HoroSceneModel HoroRuntimeScene)
 horo_allow_target_dependencies(TARGET HoroEditorViewportScene DEPENDENCIES HoroEditorModel)
+horo_allow_target_dependencies(TARGET HoroEditorViewportResources
+    DEPENDENCIES HoroEditorViewportScene HoroRenderFrontend)
 horo_allow_target_dependencies(TARGET HoroEditorRenderExtraction
     DEPENDENCIES HoroEditorModel HoroEditorViewportScene)
 horo_allow_target_dependencies(TARGET HoroEditorServices
@@ -49,9 +51,9 @@ horo_allow_target_dependencies(TARGET HoroEditorServices
         HoroProjectMigrations
         HoroAssets)
 horo_allow_target_dependencies(TARGET HoroEditorViewportOpenGL
-    DEPENDENCIES HoroEditorViewportScene HoroRenderOpenGL HoroRenderFrontend)
+    DEPENDENCIES HoroEditorViewportScene HoroEditorViewportResources HoroRenderOpenGL HoroRenderFrontend)
 horo_allow_target_dependencies(TARGET HoroEditorViewportMetal
-    DEPENDENCIES HoroEditorViewportScene HoroRenderMetal)
+    DEPENDENCIES HoroEditorViewportScene HoroEditorViewportResources HoroRenderMetal HoroRenderFrontend)
 horo_allow_target_dependencies(TARGET HoroGui
     DEPENDENCIES HoroEditorServices HoroFoundation HoroEditorRenderExtraction HoroExtensions)
 horo_allow_target_dependencies(TARGET HoroExtensions

@@ -101,6 +101,23 @@ namespace Horo::Render::MetalBackendErrors {
                                                 .retryable = true,
                                                 .userActionable = false};
 
+    const ErrorCodeDescriptor ResourceCreationFailed{.domain = Domain,
+                                                     .code = ErrorCode{"render.metal.resource_creation_failed"},
+                                                     .defaultSeverity = ErrorSeverity::Error,
+                                                     .summary = "Metal resource creation failed.",
+                                                     .remediationHint = "Reduce resource demand or inspect the Metal device diagnostics.",
+                                                     .retryable = true,
+                                                     .userActionable = false};
+
+    const ErrorCodeDescriptor ResourceIdentityInvalid{.domain = Domain,
+                                                      .code = ErrorCode{"render.metal.resource_identity_invalid"},
+                                                      .defaultSeverity = ErrorSeverity::Error,
+                                                      .summary = "Metal backend resource identity is invalid.",
+                                                      .remediationHint =
+                                                          "Use the exact ready resource generations supplied by the frontend.",
+                                                      .retryable = false,
+                                                      .userActionable = false};
+
     const ErrorCodeDescriptor UnsupportedFramesInFlight{.domain = Domain,
                                                         .code = ErrorCode{"render.metal.unsupported_frames_in_flight"},
                                                         .defaultSeverity = ErrorSeverity::Error,

@@ -1,8 +1,8 @@
 #pragma once
 
 #include "editor/renderer/EditorViewportRenderer.h"
+#include "editor/renderer/EditorViewportResources.h"
 #include "editor/renderer/opengl/OpenGLViewportResourceBridge.h"
-#include "editor/renderer/opengl/OpenGLViewportResources.h"
 
 #include <optional>
 
@@ -73,7 +73,7 @@ namespace Horo::Editor {
         std::uint32_t gridVertexArray_{0};
         std::uint32_t gridVertexBuffer_{0};
         Render::RenderFrontend *frontend_{nullptr};
-        OpenGLViewportResources resources_;
+        EditorViewportResources resources_;
         UniformLocations uniforms_{};
         EditorViewportExtent requestedExtent_{};
         EditorViewportGridOptions gridOptions_{};
