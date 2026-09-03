@@ -204,6 +204,13 @@ descriptors. Duplicate IDs, schema conflicts, invalid schedule dependencies,
 stale generated output, or descriptor diagnostics reject the bundle before
 runtime scene activation.
 
+The built-in annotation scanner treats malformed, duplicate, oversized, and
+otherwise invalid annotations as build failures, so it never publishes a bundle
+containing diagnostics. The diagnostics span remains part of the boundary for
+other generators that can produce an inspectable complete snapshot alongside
+non-fatal diagnostics; the host validates and rejects any populated span before
+activation.
+
 Generated behavior bundles are metadata snapshots plus module-owned factory
 bindings. Metadata such as type IDs, fields, dependencies, phase access,
 schedule nodes, and migrations is copied into host registries during validation.

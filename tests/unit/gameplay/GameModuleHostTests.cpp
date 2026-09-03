@@ -1,30 +1,21 @@
+#include "GameplayModuleTestSupport.h"
 #include "Horo/Gameplay/BehaviorRuntime.h"
 #include "Horo/Gameplay/GameModuleHost.h"
 #include "Horo/Gameplay/GameplayErrors.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
-#include <fstream>
 
 namespace {
     using namespace Horo;
     using namespace Horo::Gameplay;
     using namespace Horo::Runtime;
 
-    std::uint64_t DescriptorRevision() {
-        std::ifstream stream{HORO_TEST_GAME_MODULE_REVISION_PATH};
-        std::uint64_t revision{};
-        stream >> revision;
-        REQUIRE((stream.good() || stream.eof()));
-        REQUIRE(revision != 0);
-        return revision;
-    }
-
     GameModuleLoadExpectation Expectation() {
         return {
             .moduleId = "game.tests",
             .buildFingerprint = CurrentGameplayBuildFingerprint(),
-            .descriptorRevision = DescriptorRevision(),
+            .descriptorRevision = Tests::ReadDescriptorRevision(HORO_TEST_GAME_MODULE_REVISION_PATH),
         };
     }
 

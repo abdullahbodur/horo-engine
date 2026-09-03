@@ -24,20 +24,19 @@ namespace Horo::Gameplay {
             return std::string_view{value, length};
         }
 
-        [[nodiscard]] bool IsBoundedArray(const std::size_t count, const std::size_t maximum, const void *records) noexcept {
+        template <typename Record>
+        [[nodiscard]] bool IsBoundedArray(const std::size_t count, const std::size_t maximum, const Record *records) noexcept {
             return count <= maximum && (count == 0) == (records == nullptr);
         }
 
         [[nodiscard]] Result<void> ValidateBundleShape(const GeneratedGameplayDescriptorBundle &bundle) {
-            const bool behaviorsValid = IsBoundedArray(bundle.behaviorCount, MaximumGeneratedBehaviorDescriptors, bundle.behaviors);
-            const bool factoriesValid =
-                bundle.nativeFactoryBindingCount == bundle.behaviorCount &&
-                IsBoundedArray(bundle.nativeFactoryBindingCount, MaximumGeneratedBehaviorDescriptors, bundle.nativeFactoryBindings);
-            const bool diagnosticsValid = IsBoundedArray(bundle.diagnosticCount, MaximumGeneratedDescriptorDiagnostics, bundle.diagnostics);
             if (bundle.structSize != sizeof(GeneratedGameplayDescriptorBundle) ||
                 bundle.schemaVersion != GameplayDescriptorBundleSchemaVersion || bundle.sdkBoundaryVersion != GameplaySdkBoundaryVersion ||
-                !behaviorsValid || !factoriesValid || !diagnosticsValid || bundle.lifecycle.create == nullptr ||
-                bundle.lifecycle.destroy == nullptr)
+                !IsBoundedArray(bundle.behaviorCount, MaximumGeneratedBehaviorDescriptors, bundle.behaviors) ||
+                bundle.nativeFactoryBindingCount != bundle.behaviorCount ||
+                !IsBoundedArray(bundle.nativeFactoryBindingCount, MaximumGeneratedBehaviorDescriptors, bundle.nativeFactoryBindings) ||
+                !IsBoundedArray(bundle.diagnosticCount, MaximumGeneratedDescriptorDiagnostics, bundle.diagnostics) ||
+                bundle.lifecycle.create == nullptr || bundle.lifecycle.destroy == nullptr)
                 return Result<void>::Failure(MakeError(GameplayErrors::InvalidGeneratedDescriptorBundle));
             return Result<void>::Success();
         }

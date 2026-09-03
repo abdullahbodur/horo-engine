@@ -12,9 +12,12 @@ import sys
 
 
 MAXIMUM_SOURCE_FILES = 4096
+MAXIMUM_BEHAVIORS = 4096
 MAXIMUM_SOURCE_BYTES = 4 * 1024 * 1024
 MAXIMUM_TOTAL_SOURCE_BYTES = 32 * 1024 * 1024
+MAXIMUM_IDENTITY_BYTES = 256
 MODULE_ID = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+\Z")
+FINGERPRINT = re.compile(r"[A-Za-z0-9_.-]+\Z")
 TYPE_ID = re.compile(r"game\.[a-z0-9_]+(?:\.[a-z0-9_]+)+\Z")
 TOKEN = re.compile(
     r"(?P<space>\s+)|(?P<line_comment>//[^\n]*)|(?P<block_comment>/\*.*?\*/)|"
@@ -28,6 +31,7 @@ def parse() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True, type=pathlib.Path)
     parser.add_argument("--revision-output", required=True, type=pathlib.Path)
+    parser.add_argument("--output-root", required=True, type=pathlib.Path)
     parser.add_argument("--module-id", required=True)
     parser.add_argument("--fingerprint", required=True)
     parser.add_argument("sources", nargs="+", type=pathlib.Path)
@@ -77,6 +81,8 @@ def read_sources(sources: list[pathlib.Path]) -> list[tuple[pathlib.Path, str, s
 
 
 def validate_annotations(annotations: list[tuple[str, str, pathlib.Path]]) -> None:
+    if len(annotations) > MAXIMUM_BEHAVIORS:
+        raise ValueError("native behavior annotation count exceeds the supported limit")
     seen_symbols: set[str] = set()
     seen_ids: set[str] = set()
     for symbol, type_id, source in annotations:
@@ -96,6 +102,14 @@ def descriptor_revision(module_id: str, annotations: list[tuple[str, str, pathli
     identity.extend(sorted(source_hashes))
     revision = int.from_bytes(hashlib.sha256("\n".join(identity).encode("utf-8")).digest()[:8], "big")
     return revision or 1
+
+
+def confined_output(root: pathlib.Path, path: pathlib.Path) -> pathlib.Path:
+    canonical_root = root.resolve(strict=True)
+    canonical_path = path.resolve(strict=False)
+    if not canonical_path.is_relative_to(canonical_root):
+        raise ValueError(f"generated output must remain inside {canonical_root}")
+    return canonical_path
 
 
 def write_atomic(path: pathlib.Path, content: str) -> None:
@@ -172,6 +186,7 @@ extern "C" HORO_GAME_EXPORT const Horo::Gameplay::GeneratedGameplayDescriptorBun
         .behaviorCount = {count},
         .nativeFactoryBindings = {factory_pointer},
         .nativeFactoryBindingCount = {count},
+        // Blocking scanner diagnostics abort generation before a bundle is published.
         .diagnostics = nullptr,
         .diagnosticCount = 0,
         .lifecycle = {{.create = &CreateGameModule, .destroy = &DestroyGameModule}},
@@ -190,11 +205,30 @@ def generated_source(
     return generated_storage(annotations) + generated_exports(module_id, fingerprint, revision, len(annotations))
 
 
-def main() -> int:
-    args = parse()
-    if not MODULE_ID.fullmatch(args.module_id) or not args.fingerprint or len(args.fingerprint.encode("utf-8")) > 256:
+def validate_identity(module_id: str, fingerprint: str) -> None:
+    if (
+        not MODULE_ID.fullmatch(module_id)
+        or len(module_id.encode("utf-8")) > MAXIMUM_IDENTITY_BYTES
+        or not FINGERPRINT.fullmatch(fingerprint)
+        or len(fingerprint.encode("utf-8")) > MAXIMUM_IDENTITY_BYTES
+    ):
         raise ValueError("module identity or build fingerprint is invalid")
-    sources = read_sources(args.sources)
+
+
+def generate_bundle(
+    output: pathlib.Path,
+    revision_output: pathlib.Path,
+    output_root: pathlib.Path,
+    module_id: str,
+    fingerprint: str,
+    source_paths: list[pathlib.Path],
+) -> None:
+    validate_identity(module_id, fingerprint)
+    generated_output = confined_output(output_root, output)
+    generated_revision = confined_output(output_root, revision_output)
+    if generated_output == generated_revision:
+        raise ValueError("generated source and revision outputs must be distinct")
+    sources = read_sources(source_paths)
     annotations = [
         (symbol, type_id, source)
         for source, text, _ in sources
@@ -202,15 +236,27 @@ def main() -> int:
     ]
     annotations.sort(key=lambda annotation: (annotation[1], annotation[0]))
     validate_annotations(annotations)
-    revision = descriptor_revision(args.module_id, annotations, [record[2] for record in sources])
-    write_atomic(args.output, generated_source(args.module_id, args.fingerprint, revision, annotations))
-    write_atomic(args.revision_output, f"{revision}\n")
+    revision = descriptor_revision(module_id, annotations, [record[2] for record in sources])
+    write_atomic(generated_output, generated_source(module_id, fingerprint, revision, annotations))
+    write_atomic(generated_revision, f"{revision}\n")
+
+
+def main() -> int:
+    args = parse()
+    generate_bundle(
+        args.output,
+        args.revision_output,
+        args.output_root,
+        args.module_id,
+        args.fingerprint,
+        args.sources,
+    )
     return 0
 
 
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as error:
+    except (OSError, ValueError) as error:
         print(f"gameplay descriptor generation failed: {error}", file=sys.stderr)
         raise SystemExit(1)

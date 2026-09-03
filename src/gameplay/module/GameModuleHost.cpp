@@ -206,8 +206,8 @@ namespace Horo::Gameplay {
                                             libraryPath.extension().string());
             std::error_code error;
             const std::filesystem::path canonicalShadow = std::filesystem::weakly_canonical(shadowPath, error);
-            const std::filesystem::path relativeShadow = canonicalShadow.lexically_relative(canonicalRoot);
-            if (error || relativeShadow.empty() || relativeShadow.is_absolute() || *relativeShadow.begin() == "..")
+            if (const std::filesystem::path relativeShadow = canonicalShadow.lexically_relative(canonicalRoot);
+                error || relativeShadow.empty() || relativeShadow.is_absolute() || *relativeShadow.begin() == "..")
                 return Result<std::filesystem::path>::Failure(ShadowCopyError("shadow path validation failed"));
             return Result<std::filesystem::path>::Success(canonicalShadow);
         }

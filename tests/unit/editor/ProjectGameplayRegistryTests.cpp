@@ -1,3 +1,4 @@
+#include "GameplayModuleTestSupport.h"
 #include "Horo/Gameplay/BehaviorRuntime.h"
 #include "editor/gameplay/ProjectGameplayRegistry.h"
 
@@ -31,15 +32,6 @@ namespace {
         stream << value;
         stream.close();
         REQUIRE(stream.good());
-    }
-
-    std::uint64_t DescriptorRevision() {
-        std::ifstream stream{HORO_TEST_GAME_MODULE_REVISION_PATH};
-        std::uint64_t revision{};
-        stream >> revision;
-        REQUIRE((stream.good() || stream.eof()));
-        REQUIRE(revision != 0);
-        return revision;
     }
 
     std::string Source(const int amount) {
@@ -93,9 +85,9 @@ TEST_CASE("project gameplay registry merges a fingerprinted native module with L
     Write(source, Source(1));
     Write(source.string() + ".meta", R"({"schemaVersion":1,"runtime":"lua","behaviorTypeId":"game.tests.watched"})");
     const std::string manifest = "{\n  \"schemaVersion\": 1,\n  \"moduleId\": \"game.tests\",\n  \"buildFingerprint\": \"" +
-                                 std::string{Gameplay::CurrentGameplayBuildFingerprint()} +
-                                 "\",\n  \"descriptorRevision\": " + std::to_string(DescriptorRevision()) + ",\n  \"artifactPath\": \"" +
-                                 std::filesystem::path{HORO_TEST_GAME_MODULE_PATH}.string() + "\"\n}\n";
+                                 std::string{Gameplay::CurrentGameplayBuildFingerprint()} + "\",\n  \"descriptorRevision\": " +
+                                 std::to_string(Tests::ReadDescriptorRevision(HORO_TEST_GAME_MODULE_REVISION_PATH)) +
+                                 ",\n  \"artifactPath\": \"" + std::filesystem::path{HORO_TEST_GAME_MODULE_PATH}.string() + "\"\n}\n";
     Write(project.root / ".horo" / "local" / "gameplay_module.json", manifest);
 
     auto registry = Editor::ProjectGameplayRegistry::Discover(project.root);

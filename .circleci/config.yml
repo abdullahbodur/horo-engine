@@ -46,7 +46,8 @@ jobs:
               libxext-dev libxss-dev libxtst-dev libxxf86vm-dev \
               libgl1-mesa-dev libglu1-mesa-dev
             python3 -m venv /tmp/horo-gcovr
-            /tmp/horo-gcovr/bin/pip install --disable-pip-version-check --no-cache-dir gcovr==8.6
+            /tmp/horo-gcovr/bin/pip install --disable-pip-version-check --no-cache-dir \
+              coverage==7.6.10 gcovr==8.6 pytest==8.3.4
       - run:
           name: Configure and build
           command: |
@@ -63,6 +64,8 @@ jobs:
               -DHORO_ENABLE_OPENTELEMETRY=ON
             cmake --build build/sonar --parallel
             xvfb-run -a ctest --test-dir build/sonar --output-on-failure -LE 'gui|editor'
+            /tmp/horo-gcovr/bin/coverage run --source=scripts -m pytest tests/python --quiet
+            /tmp/horo-gcovr/bin/coverage xml -o build/sonar/python-coverage.xml
             /tmp/horo-gcovr/bin/gcovr --sonarqube build/sonar/coverage.xml \
               --sonarqube-metric line \
               --root "$CIRCLE_WORKING_DIRECTORY" \
@@ -95,6 +98,7 @@ jobs:
               -Dsonar.sourceEncoding=UTF-8 \
               -Dsonar.cfamily.compile-commands=build/sonar/compile_commands.json \
               -Dsonar.coverageReportPaths=build/sonar/coverage.xml \
+              -Dsonar.python.coverage.reportPaths=build/sonar/python-coverage.xml \
               -Dsonar.cfamily.analysisCache.mode=fs \
               -Dsonar.cfamily.analysisCache.path="$CIRCLE_WORKING_DIRECTORY/.sonar/cfamily-cache" \
               -Dsonar.qualitygate.wait=true \

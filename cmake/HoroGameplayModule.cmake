@@ -60,6 +60,7 @@ function(horo_add_gameplay_module target)
         COMMAND "${gameplay_python_executable}" "${gameplay_codegen_script}"
                 --output "${generated}"
                 --revision-output "${generated_revision}"
+                --output-root "${CMAKE_CURRENT_BINARY_DIR}"
                 --module-id "${ARG_MODULE_ID}"
                 --fingerprint "${ARG_BUILD_FINGERPRINT}"
                 ${gameplay_sources}
