@@ -2,6 +2,7 @@
 #include "Horo/Extensions/ExtensionErrors.h"
 
 #include <algorithm>
+#include <array>
 #include <format>
 #include <optional>
 #include <set>
@@ -13,9 +14,14 @@ namespace Horo::Extensions::ManifestParsing {
         constexpr std::string_view ManifestSource = "extension.json";
 
         [[nodiscard]] bool HasValidLimits(const ExtensionManifestLimits &limits) noexcept {
-            return limits.maximumDocumentBytes > 0 && limits.maximumNestingDepth > 0 && limits.maximumObjectMembers > 0 &&
-                   limits.maximumArrayElements > 0 && limits.maximumStringBytes > 0 && limits.maximumIdentifierBytes > 0 &&
-                   limits.maximumModules > 0 && limits.maximumContributions > 0 && limits.maximumPlatforms > 0;
+            const std::array values = {
+                limits.maximumDocumentBytes, limits.maximumNestingDepth,  limits.maximumObjectMembers,
+                limits.maximumArrayElements, limits.maximumStringBytes,   limits.maximumIdentifierBytes,
+                limits.maximumModules,       limits.maximumContributions, limits.maximumPlatforms,
+            };
+            return std::ranges::all_of(values, [](const std::size_t value) {
+                return value > 0;
+            });
         }
 
         [[nodiscard]] bool IsOpeningContainer(const char character) noexcept {

@@ -24,6 +24,10 @@ namespace Horo::Extensions {
             return character >= 'a' && character <= 'z';
         }
 
+        [[nodiscard]] bool IsCanonicalTokenCharacter(const unsigned char character) noexcept {
+            return IsAsciiLower(character) || IsAsciiDigit(character) || character == '_' || character == '-';
+        }
+
         [[nodiscard]] bool IsPrereleaseCharacter(const unsigned char character) noexcept {
             const bool upper = character >= 'A' && character <= 'Z';
             return IsAsciiLower(character) || upper || IsAsciiDigit(character) || character == '-';
@@ -84,7 +88,9 @@ namespace Horo::Extensions {
         }
 
         [[nodiscard]] bool IsCanonicalIdSegment(const std::string_view segment) {
-            if (segment.empty() || !IsAsciiLower(static_cast<unsigned char>(segment.front())) || segment.back() == '-')
+            if (segment.empty())
+                return false;
+            if (!IsAsciiLower(static_cast<unsigned char>(segment.front())) || segment.back() == '-')
                 return false;
             return std::ranges::all_of(segment, [](const unsigned char character) {
                 return IsAsciiLower(character) || IsAsciiDigit(character) || character == '-';
@@ -110,17 +116,19 @@ namespace Horo::Extensions {
         }
 
         [[nodiscard]] bool IsCanonicalToken(const std::string_view value, const std::size_t maximumBytes) {
-            if (value.empty() || value.size() > maximumBytes || value.front() == '_' || value.back() == '_')
+            if (value.empty() || value.size() > maximumBytes)
                 return false;
-            return std::ranges::all_of(value, [](const unsigned char character) {
-                return (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') || character == '_' ||
-                       character == '-';
-            });
+            if (value.front() == '_' || value.back() == '_')
+                return false;
+            return std::ranges::all_of(value, IsCanonicalTokenCharacter);
         }
 
         [[nodiscard]] bool HasSafeEntryPrefix(const std::string_view value) {
-            return !value.empty() && value.size() <= MaximumEntryBytes && value.front() != '/' && value.front() != '\\' &&
-                   value.find('\\') == std::string_view::npos && value.find(':') == std::string_view::npos;
+            if (value.empty() || value.size() > MaximumEntryBytes)
+                return false;
+            if (value.front() == '/' || value.front() == '\\')
+                return false;
+            return value.find('\\') == std::string_view::npos && value.find(':') == std::string_view::npos;
         }
 
         [[nodiscard]] bool IsSafeEntryComponent(const std::string_view value) {
@@ -152,21 +160,16 @@ namespace Horo::Extensions {
             [[nodiscard]] Result<ExtensionManifest> Validate(const Json &document) {
                 if (!document.is_object())
                     return Failure("$", "extension.manifest.invalid_type", "Manifest root must be an object.");
-                if (!ValidateRootFields(document))
-                    return CurrentFailure();
-
                 ExtensionManifest manifest;
-                if (!ValidateSchemaVersion(document, manifest.schemaVersion))
+                if (!ValidateRootFields(document) || !ValidateSchemaVersion(document, manifest.schemaVersion))
                     return CurrentFailure();
 
                 const Json *package = SelectPackage(document);
                 if (package == nullptr)
                     return CurrentFailure();
-                if (const std::string packagePath = document.contains("package") ? "$.package" : "$";
-                    !ParsePackage(*package, packagePath, manifest) || !ParseCompatibility(document, manifest) ||
-                    !ParseModules(document, manifest) || !ParseContributions(document, manifest)) {
+                const std::string packagePath = document.contains("package") ? "$.package" : "$";
+                if (!ParseManifestSections(document, *package, packagePath, manifest))
                     return CurrentFailure();
-                }
                 return Result<ExtensionManifest>::Success(std::move(manifest));
             }
 
@@ -257,21 +260,38 @@ namespace Horo::Extensions {
             }
 
             [[nodiscard]] bool ParsePackage(const Json &package, const std::string_view path, ExtensionManifest &manifest) {
-                if (!ReadId(package, "id", path, manifest.id) ||
-                    !ReadString(package, "version", path, manifest.version, MaximumSemanticVersionBytes, true)) {
+                if (!ReadPackageIdentity(package, path, manifest))
                     return false;
-                }
                 if (!IsCanonicalSemanticVersion(manifest.version))
                     return Reject(ChildPath(path, "version"), "extension.manifest.invalid_version",
                                   "Version must be canonical semantic version text.");
-                if (!ReadString(package, "kind", path, manifest.kind, limits_.maximumIdentifierBytes, false) ||
-                    !ReadString(package, "displayName", path, manifest.displayName, limits_.maximumStringBytes, false) ||
-                    !ReadString(package, "description", path, manifest.description, limits_.maximumStringBytes, false) ||
-                    !ReadString(package, "author", path, manifest.author, limits_.maximumStringBytes, false)) {
+                if (!ReadPackageMetadata(package, path, manifest))
                     return false;
-                }
                 return manifest.kind.empty() || IsCanonicalToken(manifest.kind, limits_.maximumIdentifierBytes) ||
                        Reject(ChildPath(path, "kind"), "extension.manifest.invalid_value", "Package kind is not canonical.");
+            }
+
+            [[nodiscard]] bool ReadPackageIdentity(const Json &package, const std::string_view path, ExtensionManifest &manifest) {
+                return ReadId(package, "id", path, manifest.id) &&
+                       ReadString(package, "version", path, manifest.version, MaximumSemanticVersionBytes, true);
+            }
+
+            [[nodiscard]] bool ReadPackageMetadata(const Json &package, const std::string_view path, ExtensionManifest &manifest) {
+                return ReadString(package, "kind", path, manifest.kind, limits_.maximumIdentifierBytes, false) &&
+                       ReadString(package, "displayName", path, manifest.displayName, limits_.maximumStringBytes, false) &&
+                       ReadString(package, "description", path, manifest.description, limits_.maximumStringBytes, false) &&
+                       ReadString(package, "author", path, manifest.author, limits_.maximumStringBytes, false);
+            }
+
+            [[nodiscard]] bool ParseManifestSections(const Json &document, const Json &package, const std::string_view packagePath,
+                                                     ExtensionManifest &manifest) {
+                if (!ParsePackage(package, packagePath, manifest))
+                    return false;
+                if (!ParseCompatibility(document, manifest))
+                    return false;
+                if (!ParseModules(document, manifest))
+                    return false;
+                return ParseContributions(document, manifest);
             }
 
             [[nodiscard]] bool ParseCompatibility(const Json &document, ExtensionManifest &manifest) {
@@ -318,17 +338,23 @@ namespace Horo::Extensions {
                 std::set<std::string, std::less<>> identities;
                 platforms.reserve(found->size());
                 for (std::size_t index = 0; index < found->size(); ++index) {
-                    const Json &value = (*found)[index];
                     const std::string path = ElementPath("$.compatibility.platforms", index);
-                    if (!value.is_string())
-                        return Reject(path, "extension.manifest.invalid_type", "Platform ID must be a string.");
-                    std::string platform = value.get<std::string>();
-                    if (!IsCanonicalToken(platform, limits_.maximumIdentifierBytes))
-                        return Reject(path, "extension.manifest.invalid_identifier", "Platform ID is not canonical.");
-                    if (!identities.insert(platform).second)
-                        return Reject(path, "extension.manifest.duplicate_identifier", "Platform ID must be unique.");
-                    platforms.push_back(std::move(platform));
+                    if (!AppendPlatform((*found)[index], path, identities, platforms))
+                        return false;
                 }
+                return true;
+            }
+
+            [[nodiscard]] bool AppendPlatform(const Json &value, const std::string_view path,
+                                              std::set<std::string, std::less<>> &identities, std::vector<std::string> &platforms) {
+                if (!value.is_string())
+                    return Reject(path, "extension.manifest.invalid_type", "Platform ID must be a string.");
+                std::string platform = value.get<std::string>();
+                if (!IsCanonicalToken(platform, limits_.maximumIdentifierBytes))
+                    return Reject(path, "extension.manifest.invalid_identifier", "Platform ID is not canonical.");
+                if (!identities.insert(platform).second)
+                    return Reject(path, "extension.manifest.duplicate_identifier", "Platform ID must be unique.");
+                platforms.push_back(std::move(platform));
                 return true;
             }
 
@@ -344,16 +370,22 @@ namespace Horo::Extensions {
                 std::set<std::string, std::less<>> identities;
                 manifest.modules.reserve(found->size());
                 for (std::size_t index = 0; index < found->size(); ++index) {
-                    const Json &value = (*found)[index];
                     const std::string path = ElementPath("$.modules", index);
-                    ExtensionModuleManifest moduleManifest;
-                    if (!ParseModule(value, path, moduleManifest))
+                    if (!AppendModule((*found)[index], path, identities, manifest.modules))
                         return false;
-                    if (!identities.insert(moduleManifest.id).second)
-                        return Reject(ChildPath(path, "id"), "extension.manifest.duplicate_identifier",
-                                      "Module ID must be unique within the package.");
-                    manifest.modules.push_back(std::move(moduleManifest));
                 }
+                return true;
+            }
+
+            [[nodiscard]] bool AppendModule(const Json &value, const std::string_view path, std::set<std::string, std::less<>> &identities,
+                                            std::vector<ExtensionModuleManifest> &modules) {
+                ExtensionModuleManifest moduleManifest;
+                if (!ParseModule(value, path, moduleManifest))
+                    return false;
+                if (!identities.insert(moduleManifest.id).second)
+                    return Reject(ChildPath(path, "id"), "extension.manifest.duplicate_identifier",
+                                  "Module ID must be unique within the package.");
+                modules.push_back(std::move(moduleManifest));
                 return true;
             }
 
@@ -397,19 +429,27 @@ namespace Horo::Extensions {
                 std::set<std::string, std::less<>> identities;
                 manifest.contributions.reserve(found->size());
                 for (std::size_t index = 0; index < found->size(); ++index) {
-                    const Json &value = (*found)[index];
                     const std::string path = ElementPath("$.contributions", index);
-                    ExtensionContributionManifest contribution;
-                    if (!ParseContribution(value, path, contribution))
+                    if (!AppendContribution((*found)[index], path, identities, manifest.modules, manifest.contributions))
                         return false;
-                    if (!identities.insert(contribution.id).second)
-                        return Reject(ChildPath(path, "id"), "extension.manifest.duplicate_identifier",
-                                      "Contribution ID must be unique within the package.");
-                    if (!HasOwningModule(manifest.modules, contribution.owningModule))
-                        return Reject(ChildPath(path, "module"), "extension.manifest.unresolved_reference",
-                                      "Contribution references an undeclared module.");
-                    manifest.contributions.push_back(std::move(contribution));
                 }
+                return true;
+            }
+
+            [[nodiscard]] bool AppendContribution(const Json &value, const std::string_view path,
+                                                  std::set<std::string, std::less<>> &identities,
+                                                  const std::vector<ExtensionModuleManifest> &modules,
+                                                  std::vector<ExtensionContributionManifest> &contributions) {
+                ExtensionContributionManifest contribution;
+                if (!ParseContribution(value, path, contribution))
+                    return false;
+                if (!identities.insert(contribution.id).second)
+                    return Reject(ChildPath(path, "id"), "extension.manifest.duplicate_identifier",
+                                  "Contribution ID must be unique within the package.");
+                if (!HasOwningModule(modules, contribution.owningModule))
+                    return Reject(ChildPath(path, "module"), "extension.manifest.unresolved_reference",
+                                  "Contribution references an undeclared module.");
+                contributions.push_back(std::move(contribution));
                 return true;
             }
 

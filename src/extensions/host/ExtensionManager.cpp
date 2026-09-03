@@ -94,45 +94,61 @@ namespace Horo::Extensions {
             return Result<fs::path>::Success(libraryPath);
         }
 
-        void SafeUnload(HoroExtensionUnloadFunc unload, HoroExtensionModuleApi &moduleApi,  // NOSONAR(cpp:S5205)
-                        const char *context) {
-            if (unload != nullptr && moduleApi.moduleContext != nullptr) {
-                try {
-                    unload(&moduleApi);
-                } catch (const std::runtime_error &exception) {  // NOSONAR(cpp:S1181)
-                    LOG_WARN("extensions", "Runtime error during %s unload: %s", context, exception.what());
-                } catch (const std::logic_error &exception) {  // NOSONAR(cpp:S1181)
-                    LOG_WARN("extensions", "Logic error during %s unload: %s", context, exception.what());
-                } catch (const std::bad_alloc &exception) {  // NOSONAR(cpp:S1181)
-                    LOG_WARN("extensions", "Bad alloc during %s unload: %s", context, exception.what());
-                } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) External code is an exception containment boundary.
-                    LOG_WARN("extensions", "Exception during %s unload: %s", context, exception.what());
-                } catch (...) {  // NOSONAR(cpp:S1181)
-                    LOG_WARN("extensions", "Unknown exception during %s unload.", context);
-                }
+        /** @brief Logs the active exception caught while unloading external code. */
+        void LogUnloadException(const char *context) noexcept {
+            try {
+                throw;
+            } catch (const std::runtime_error &exception) {  // NOSONAR(cpp:S1181)
+                LOG_WARN("extensions", "Runtime error during %s unload: %s", context, exception.what());
+            } catch (const std::logic_error &exception) {  // NOSONAR(cpp:S1181)
+                LOG_WARN("extensions", "Logic error during %s unload: %s", context, exception.what());
+            } catch (const std::bad_alloc &exception) {  // NOSONAR(cpp:S1181)
+                LOG_WARN("extensions", "Bad alloc during %s unload: %s", context, exception.what());
+            } catch (const std::exception &exception) {  // NOSONAR(cpp:S1181) External code is an exception containment boundary.
+                LOG_WARN("extensions", "Exception during %s unload: %s", context, exception.what());
+            } catch (...) {  // NOSONAR(cpp:S1181)
+                LOG_WARN("extensions", "Unknown exception during %s unload.", context);
             }
         }
 
-        template <typename LoadedMap>
-        [[nodiscard]] Result<ExtensionManifest> ReadAndValidateManifest(const fs::path &requestedRoot, const LoadedMap &loaded) {
+        void SafeUnload(HoroExtensionUnloadFunc unload, HoroExtensionModuleApi &moduleApi,  // NOSONAR(cpp:S5205)
+                        const char *context) {
+            if (unload == nullptr || moduleApi.moduleContext == nullptr)
+                return;
+            try {
+                unload(&moduleApi);
+            } catch (...) {  // NOSONAR(cpp:S1181) External code is an exception containment boundary.
+                LogUnloadException(context);
+            }
+        }
+
+        /** @brief Reads one bounded manifest file from an absolute package root. */
+        [[nodiscard]] Result<std::string> ReadManifestContent(const fs::path &requestedRoot) {
             if (!requestedRoot.is_absolute())
-                return Result<ExtensionManifest>::Failure(
+                return Result<std::string>::Failure(
                     MakeError(ExtensionErrors::InvalidManifest, "Extension package path must be absolute."));
 
             const fs::path manifestPath = requestedRoot / "extension.json";
             std::error_code fileError;
             if (const std::uintmax_t manifestBytes = fs::file_size(manifestPath, fileError);
                 fileError || manifestBytes > kManifestLimits.maximumDocumentBytes) {
-                return Result<ExtensionManifest>::Failure(
+                return Result<std::string>::Failure(
                     MakeError(ExtensionErrors::InvalidManifest, "Extension manifest is unavailable or exceeds the bounded size."));
             }
             std::ifstream fileStream(manifestPath, std::ios::binary);
             if (!fileStream.is_open())
-                return Result<ExtensionManifest>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Could not open extension.json"));
+                return Result<std::string>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Could not open extension.json"));
 
             std::stringstream buffer;
             buffer << fileStream.rdbuf();
-            auto parseResult = ParseExtensionManifest(buffer.str(), kManifestLimits);
+            return Result<std::string>::Success(std::move(buffer).str());
+        }
+
+        /** @brief Parses a manifest and checks constraints imposed by the native loader. */
+        template <typename LoadedMap>
+        [[nodiscard]] Result<ExtensionManifest> ValidateLoadableManifest(std::string content, const fs::path &requestedRoot,
+                                                                         const LoadedMap &loaded) {
+            auto parseResult = ParseExtensionManifest(content, kManifestLimits);
             if (parseResult.HasError())
                 return Result<ExtensionManifest>::Failure(parseResult.ErrorValue());
 
@@ -145,6 +161,14 @@ namespace Horo::Extensions {
                 return Result<ExtensionManifest>::Failure(
                     MakeError(ExtensionErrors::InvalidManifest, "The current native loader requires exactly one module per package."));
             return Result<ExtensionManifest>::Success(std::move(manifest));
+        }
+
+        template <typename LoadedMap>
+        [[nodiscard]] Result<ExtensionManifest> ReadAndValidateManifest(const fs::path &requestedRoot, const LoadedMap &loaded) {
+            auto content = ReadManifestContent(requestedRoot);
+            if (content.HasError())
+                return Result<ExtensionManifest>::Failure(content.ErrorValue());
+            return ValidateLoadableManifest(std::move(content).Value(), requestedRoot, loaded);
         }
 
         /** @brief Invokes an extension entry point while containing exceptions at the ABI boundary. */

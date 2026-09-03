@@ -79,6 +79,14 @@ namespace Horo::Extensions {
             return true;
         }
 
+        [[nodiscard]] bool IsSafeRelativePath(const fs::path &relative) {
+            if (relative.empty() || relative.is_absolute())
+                return false;
+            return std::ranges::none_of(relative, [](const fs::path &component) {
+                return component == "..";
+            });
+        }
+
         [[nodiscard]] std::string BuildCompositionVersion(const std::string_view packageVersion,
                                                           const std::vector<ExtensionModuleManifest> &modules) {
             std::string fingerprint{packageVersion};
@@ -127,11 +135,7 @@ namespace Horo::Extensions {
                     MakeError(ExtensionErrors::LoadFailed, "Extension packages may not contain symlinks."));
             }
             const fs::path relative = fs::relative(entry.path(), source, error);
-            if (const bool escapesRoot = std::ranges::any_of(relative,
-                                                             [](const fs::path &component) {
-                return component == "..";
-            });
-                error || relative.empty() || relative.is_absolute() || escapesRoot) {
+            if (error || !IsSafeRelativePath(relative)) {
                 return Result<ValidatedPackageEntry>::Failure(
                     MakeError(ExtensionErrors::LoadFailed, "Extension package path escaped its source root."));
             }
@@ -309,6 +313,38 @@ namespace Horo::Extensions {
             }
             return Result<void>::Success();
         }
+
+        /** @brief Reads and validates the identity needed to install a package. */
+        [[nodiscard]] Result<ExtensionManifest> ReadInstallManifest(const fs::path &source) {
+            auto parsed = ReadManifest(source / "extension.json");
+            if (parsed.HasError())
+                return Result<ExtensionManifest>::Failure(parsed.ErrorValue());
+            if (!IsSafePackageId(parsed.Value().id))
+                return Result<ExtensionManifest>::Failure(
+                    MakeError(ExtensionErrors::InvalidManifest, "Extension package ID is unsafe for installation."));
+            return parsed;
+        }
+
+        /** @brief Creates the managed root and resolves an unused package destination. */
+        [[nodiscard]] Result<fs::path> PrepareInstallDestination(const fs::path &installRoot, const std::string_view packageId) {
+            std::error_code error;
+            fs::create_directories(installRoot, error);
+            if (error)
+                return Result<fs::path>::Failure(MakeError(ExtensionErrors::LoadFailed, "Unable to create the user extension directory."));
+            const fs::path destination = installRoot / packageId;
+            if (fs::exists(destination, error) || error)
+                return Result<fs::path>::Failure(
+                    MakeError(ExtensionErrors::LoadFailed, "An extension with this package ID is already installed."));
+            return Result<fs::path>::Success(destination);
+        }
+
+        /** @brief Inserts string values from one persisted JSON array into a state set. */
+        void LoadStringSet(const Json &state, const std::string_view field, TransparentStringSet &values) {
+            for (const auto &id : state.value(field, Json::array())) {
+                if (id.is_string())
+                    values.insert(id.get<std::string>());
+            }
+        }
     }  // namespace
 
     /** @copydoc ExtensionInventory::ExtensionInventory */
@@ -366,20 +402,14 @@ namespace Horo::Extensions {
         if (validatedSource.HasError())
             return Result<std::string>::Failure(validatedSource.ErrorValue());
         const fs::path source = std::move(validatedSource).Value();
-        auto parsed = ReadManifest(source / "extension.json");
+        auto parsed = ReadInstallManifest(source);
         if (parsed.HasError())
             return Result<std::string>::Failure(parsed.ErrorValue());
         const ExtensionManifest &manifest = parsed.Value();
-        if (!IsSafePackageId(manifest.id))
-            return Result<std::string>::Failure(
-                MakeError(ExtensionErrors::InvalidManifest, "Extension package ID is unsafe for installation."));
-
-        std::error_code error;
-        fs::create_directories(installRoot_, error);
-        const fs::path destination = installRoot_ / manifest.id;
-        if (error || fs::exists(destination, error))
-            return Result<std::string>::Failure(
-                MakeError(ExtensionErrors::LoadFailed, "An extension with this package ID is already installed."));
+        auto preparedDestination = PrepareInstallDestination(installRoot_, manifest.id);
+        if (preparedDestination.HasError())
+            return Result<std::string>::Failure(preparedDestination.ErrorValue());
+        const fs::path destination = std::move(preparedDestination).Value();
         const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
         const fs::path staging = installRoot_ / std::format(".install-{}-{}", manifest.id, nonce);
         if (auto published = PublishPackage(source, staging, destination); published.HasError())
@@ -469,12 +499,8 @@ namespace Horo::Extensions {
         std::ifstream input(statePath_, std::ios::binary);
         try {
             const Json state = Json::parse(input);
-            for (const auto &id : state.value("enabled", Json::array()))
-                if (id.is_string())
-                    enabled_.insert(id.get<std::string>());
-            for (const auto &id : state.value("trusted", Json::array()))
-                if (id.is_string())
-                    trusted_.insert(id.get<std::string>());
+            LoadStringSet(state, "enabled", enabled_);
+            LoadStringSet(state, "trusted", trusted_);
         } catch (const Json::exception &) {
             return Result<void>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Extension activation state is malformed."));
         }
