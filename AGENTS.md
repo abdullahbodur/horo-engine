@@ -262,6 +262,32 @@ Additional gates by change type:
 hardware graphics context. Do not report those tests as passed unless they were
 actually configured and run.
 
+## Sonar Validation
+
+After modifying C/C++ source or header files, use the SonarQube Model Context Protocol
+(MCP) IDE bridge when available. Follow `.github/instructions/sonarqube_mcp.instructions.md`
+for tool lifecycle and project-key lookup. Setup and troubleshooting are documented
+in [Local C/C++ Analysis with SonarQube MCP](docs/guides/sonarqube-mcp-local-analysis.md).
+
+- Identify unstaged, staged, and untracked files with `git diff --name-only`,
+  `git diff --cached --name-only`, and `git ls-files --others --exclude-standard`
+  (use zero-byte delimiters when processing paths programmatically).
+- Analyze existing changed C/C++ files with `analyze_file_list`, passing absolute
+  paths to the running SonarQube for IDE instance bound to the intended project.
+  Exclude deleted files, generated output, and `deprecated/` unless explicitly
+  in scope.
+- Report findings by severity with the rule, location, and reason. Fix newly
+  introduced issues when safe and within scope. Request approval before a Sonar
+  fix changes existing behavior unless that behavior change is already authorized.
+- Re-analyze files changed by fixes with `analyze_file_list` and report remaining
+  findings. Server issue searches do not validate unuploaded local changes.
+- Do not run SonarScanner, upload an analysis report, or substitute remote
+  analysis for this local workflow unless explicitly requested. Do not use
+  `analyze_code_snippet` for C/C++.
+- If MCP or the IDE bridge is unavailable, explicitly report that Sonar validation
+  was not run and continue applicable build/test validation. Do not claim a clean
+  Sonar result or assume all server rules are supported by the local analyzer.
+
 ## Review Mindset
 
 Default review posture:
