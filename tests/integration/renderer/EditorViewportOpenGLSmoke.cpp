@@ -21,6 +21,39 @@ namespace {
         REQUIRE((condition));
     }
 
+    /** @brief Uses a real SDL OpenGL context while omitting display-server presentation pacing in headless CI. */
+    class HeadlessOpenGLPresentationPort final : public IOpenGLPresentationPort {
+    public:
+        explicit HeadlessOpenGLPresentationPort(SDL_Window &window) noexcept : port_(window) {}
+
+        Result<void> CreateContext(const OpenGLContextDescriptor &descriptor) override {
+            return port_.CreateContext(descriptor);
+        }
+
+        Result<void> MakeCurrent() override {
+            return port_.MakeCurrent();
+        }
+
+        Result<void> LoadCommandDispatch() override {
+            return port_.LoadCommandDispatch();
+        }
+
+        Result<void> SetPresentMode(PresentMode) override {
+            return Result<void>::Success();
+        }
+
+        Result<void> SwapBuffers() override {
+            return port_.SwapBuffers();
+        }
+
+        void DestroyContext() noexcept override {
+            port_.DestroyContext();
+        }
+
+    private:
+        SdlOpenGLPresentationPort port_;
+    };
+
     RenderTargetHandle PrepareViewportTarget(EditorViewportRendererOpenGL &viewport, RenderFrontend &frontend,
                                              const EditorViewportSceneView &scene) {
         for (std::size_t attempt = 0; attempt < 4; ++attempt) {
@@ -93,7 +126,7 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]") {
     SDL_Window *window = SDL_CreateWindow("Horo viewport smoke", 640, 480, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
     Check(window != nullptr);
 
-    SdlOpenGLPresentationPort presentationPort{*window};
+    HeadlessOpenGLPresentationPort presentationPort{*window};
     RenderBackendRegistry registry;
     Check(RegisterOpenGLRenderBackend(registry, presentationPort).HasValue());
     Check(registry.Seal().HasValue());

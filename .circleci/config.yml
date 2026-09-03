@@ -60,7 +60,7 @@ jobs:
               -DHORO_ENABLE_TELEMETRY=ON \
               -DHORO_ENABLE_OPENTELEMETRY=ON
             cmake --build build/sonar --parallel
-            xvfb-run -a ctest --test-dir build/sonar --output-on-failure -LE gui
+            xvfb-run -a ctest --test-dir build/sonar --output-on-failure -LE 'gui|editor'
             gcovr --sonarqube build/sonar/coverage.xml \
               --sonarqube-metric line \
               --root "$CIRCLE_WORKING_DIRECTORY" \
