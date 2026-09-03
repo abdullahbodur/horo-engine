@@ -844,6 +844,7 @@ target_include_directories(HoroModularAssetImportIntegrationTests PRIVATE
 )
 add_executable(HoroExtensionManagerTests
         unit/extensions/ExtensionManagerTests.cpp
+        unit/extensions/ExtensionManifestParserTests.cpp
 )
 target_compile_features(HoroExtensionManagerTests PRIVATE cxx_std_20)
 target_link_libraries(HoroExtensionManagerTests PRIVATE HoroEngine::Extensions Catch2::Catch2WithMain)

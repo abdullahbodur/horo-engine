@@ -1,4 +1,5 @@
 {
+  "schemaVersion": 1,
   "id": "com.horo.examples.asset-importer-basic",
   "displayName": "Basic Asset Importer Example",
   "description": "Minimal external importer and preview provider using Horo's versioned C ABI.",

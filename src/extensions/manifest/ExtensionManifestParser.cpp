@@ -1,15 +1,44 @@
-#include "Horo/Extensions/ExtensionErrors.h"
+#include "ExtensionManifestParsing.h"
 #include "Horo/Extensions/ExtensionManifest.h"
-#include "Horo/Foundation/Logging/Logger.h"
 
-#include <algorithm>
-#include <cctype>
-#include <nlohmann/json.hpp>
+#include <initializer_list>
+#include <optional>
+#include <ranges>
+#include <string>
+#include <unordered_set>
+#include <utility>
 
 namespace Horo::Extensions {
-    using Json = nlohmann::json;
-
     namespace {
+        using namespace ManifestParsing;
+
+        constexpr std::size_t MaximumSemanticVersionBytes = 64;
+        constexpr std::size_t MaximumEntryBytes = 512;
+
+        [[nodiscard]] bool IsAsciiDigit(const unsigned char character) noexcept {
+            return character >= '0' && character <= '9';
+        }
+
+        [[nodiscard]] bool IsAsciiLower(const unsigned char character) noexcept {
+            return character >= 'a' && character <= 'z';
+        }
+
+        [[nodiscard]] bool IsPrereleaseCharacter(const unsigned char character) noexcept {
+            const bool upper = character >= 'A' && character <= 'Z';
+            return IsAsciiLower(character) || upper || IsAsciiDigit(character) || character == '-';
+        }
+
+        [[nodiscard]] bool IsCanonicalNumericComponent(const std::string_view value) {
+            const bool leadingZero = value.size() > 1 && value.front() == '0';
+            return !value.empty() && !leadingZero && std::ranges::all_of(value, IsAsciiDigit);
+        }
+
+        [[nodiscard]] bool IsValidPrereleaseIdentifier(const std::string_view value) {
+            const bool numeric = std::ranges::all_of(value, IsAsciiDigit);
+            const bool leadingZero = numeric && value.size() > 1 && value.front() == '0';
+            return !value.empty() && !leadingZero && std::ranges::all_of(value, IsPrereleaseCharacter);
+        }
+
         [[nodiscard]] bool IsPrereleaseValid(const std::string_view prerelease) {
             if (prerelease.empty())
                 return false;
@@ -19,18 +48,8 @@ namespace Horo::Extensions {
                 const std::string_view identifier =
                     prerelease.substr(identifierStart,
                                       end == std::string_view::npos ? prerelease.size() - identifierStart : end - identifierStart);
-                if (identifier.empty() || !std::ranges::all_of(identifier, [](const unsigned char character) {
-                    return std::isalnum(character) != 0 || character == '-';
-                })) {
+                if (!IsValidPrereleaseIdentifier(identifier))
                     return false;
-                }
-                if (const bool numeric = std::ranges::all_of(identifier,
-                                                             [](const unsigned char character) {
-                    return std::isdigit(character) != 0;
-                });
-                    numeric && identifier.size() > 1 && identifier.front() == '0')
-                    return false;
-
                 if (end == std::string_view::npos)
                     return true;
                 identifierStart = end + 1;
@@ -38,194 +57,384 @@ namespace Horo::Extensions {
             return false;
         }
 
-        [[nodiscard]] bool IsCanonicalSemanticVersion(const std::string_view value) {
-            if (value.empty() || value.size() > 64 || value.find('+') != std::string_view::npos)
-                return false;
-            const std::size_t dash = value.find('-');
-            const std::string_view core = value.substr(0, dash);
+        [[nodiscard]] bool IsCanonicalCoreVersion(const std::string_view core) {
             std::size_t componentStart = 0;
             for (int component = 0; component < 3; ++component) {
                 const std::size_t end = component == 2 ? core.size() : core.find('.', componentStart);
                 if (end == std::string_view::npos || end == componentStart)
                     return false;
-                if (const std::string_view digits = core.substr(componentStart, end - componentStart);
-                    (digits.size() > 1 && digits.front() == '0') || !std::ranges::all_of(digits, [](const unsigned char character) {
-                    return std::isdigit(character) != 0;
-                })) {
+                const std::string_view digits = core.substr(componentStart, end - componentStart);
+                if (!IsCanonicalNumericComponent(digits))
                     return false;
-                }
                 componentStart = end + 1;
             }
-            if (componentStart != core.size() + 1)
+            return componentStart == core.size() + 1;
+        }
+
+        [[nodiscard]] bool IsCanonicalSemanticVersion(const std::string_view value) {
+            if (value.empty() || value.size() > MaximumSemanticVersionBytes || value.find('+') != std::string_view::npos)
                 return false;
-            if (dash == std::string_view::npos)
-                return true;
-            return IsPrereleaseValid(value.substr(dash + 1));
+            const std::size_t dash = value.find('-');
+            if (!IsCanonicalCoreVersion(value.substr(0, dash)))
+                return false;
+            return dash == std::string_view::npos || IsPrereleaseValid(value.substr(dash + 1));
         }
 
-        void AppendPlatforms(const Json &compatibility, std::vector<std::string> &platforms) {
-            if (!compatibility.contains("platforms") || !compatibility["platforms"].is_array())
-                return;
-            for (const auto &platform : compatibility["platforms"]) {
-                if (platform.is_string())
-                    platforms.push_back(platform.get<std::string>());
+        [[nodiscard]] bool IsCanonicalIdSegment(const std::string_view segment) {
+            if (segment.empty() || !IsAsciiLower(static_cast<unsigned char>(segment.front())) || segment.back() == '-')
+                return false;
+            return std::ranges::all_of(segment, [](const unsigned char character) {
+                return IsAsciiLower(character) || IsAsciiDigit(character) || character == '-';
+            });
+        }
+
+        [[nodiscard]] bool IsCanonicalId(const std::string_view value, const std::size_t maximumBytes) {
+            if (value.empty() || value.size() > maximumBytes)
+                return false;
+            std::size_t start = 0;
+            while (start <= value.size()) {
+                const std::size_t end = value.find('.', start);
+                const std::string_view segment = value.substr(start, end == std::string_view::npos ? value.size() - start : end - start);
+                if (!IsCanonicalIdSegment(segment))
+                    return false;
+                if (end == std::string_view::npos)
+                    return true;
+                start = end + 1;
             }
+            return false;
         }
 
-        Result<void> ParseCompatibility(const Json &json, ExtensionManifest &manifest) {
-            if (!json.contains("compatibility") || !json["compatibility"].is_object())
-                return Result<void>::Success();
-            const auto &compatibility = json["compatibility"];
-            if (compatibility.contains("engineMin") && compatibility["engineMin"].is_string())
-                manifest.engineMin = compatibility["engineMin"].get<std::string>();
-            if (compatibility.contains("engineMax") && compatibility["engineMax"].is_string())
-                manifest.engineMax = compatibility["engineMax"].get<std::string>();
-            if (compatibility.contains("sdkAbi") && compatibility["sdkAbi"].is_string())
-                manifest.sdkAbi = compatibility["sdkAbi"].get<std::string>();
-            AppendPlatforms(compatibility, manifest.platforms);
-            return Result<void>::Success();
+        [[nodiscard]] bool IsCanonicalToken(const std::string_view value, const std::size_t maximumBytes) {
+            if (value.empty() || value.size() > maximumBytes || value.front() == '_' || value.back() == '_')
+                return false;
+            return std::ranges::all_of(value, [](const unsigned char character) {
+                return (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') || character == '_' ||
+                       character == '-';
+            });
         }
 
-        [[nodiscard]] const Json *FindArrayProperty(const Json &json, const std::string_view key, Result<void> &error) {
-            if (const auto it = json.find(key); it != json.end()) {
-                if (!it->is_array()) {
-                    error = Result<void>::Failure(MakeError(ExtensionErrors::InvalidManifest, std::format("'{}' must be an array.", key)));
+        [[nodiscard]] bool HasSafeEntryPrefix(const std::string_view value) {
+            return !value.empty() && value.size() <= MaximumEntryBytes && value.front() != '/' && value.front() != '\\' &&
+                   value.find('\\') == std::string_view::npos && value.find(':') == std::string_view::npos;
+        }
+
+        [[nodiscard]] bool IsSafeEntryComponent(const std::string_view value) {
+            return !value.empty() && value != "." && value != "..";
+        }
+
+        [[nodiscard]] bool IsSafeEntry(const std::string_view value) {
+            if (!HasSafeEntryPrefix(value))
+                return false;
+            std::size_t start = 0;
+            while (start <= value.size()) {
+                const std::size_t end = value.find('/', start);
+                const std::string_view component = value.substr(start, end == std::string_view::npos ? value.size() - start : end - start);
+                if (!IsSafeEntryComponent(component))
+                    return false;
+                if (end == std::string_view::npos)
+                    return true;
+                start = end + 1;
+            }
+            return false;
+        }
+
+        class ManifestValidator final {
+        public:
+            explicit ManifestValidator(const ExtensionManifestLimits &limits) : limits_(limits) {}
+
+            [[nodiscard]] Result<ExtensionManifest> Validate(const Json &document) {
+                if (!document.is_object())
+                    return Failure("$", "extension.manifest.invalid_type", "Manifest root must be an object.");
+                if (!ValidateRootFields(document))
+                    return CurrentFailure();
+
+                ExtensionManifest manifest;
+                if (!ValidateSchemaVersion(document, manifest.schemaVersion))
+                    return CurrentFailure();
+
+                const Json *package = SelectPackage(document);
+                if (package == nullptr)
+                    return CurrentFailure();
+                const std::string packagePath = document.contains("package") ? "$.package" : "$";
+                if (!ParsePackage(*package, packagePath, manifest) || !ParseCompatibility(document, manifest) ||
+                    !ParseModules(document, manifest) || !ParseContributions(document, manifest)) {
+                    return CurrentFailure();
+                }
+                return Result<ExtensionManifest>::Success(std::move(manifest));
+            }
+
+        private:
+            [[nodiscard]] bool Reject(const std::string_view path, const std::string_view code, const std::string_view reason) {
+                failure_ = ManifestError(path, code, reason);
+                return false;
+            }
+
+            [[nodiscard]] Result<ExtensionManifest> Failure(const std::string_view path, const std::string_view code,
+                                                            const std::string_view reason) const {
+                return Result<ExtensionManifest>::Failure(ManifestError(path, code, reason));
+            }
+
+            [[nodiscard]] Result<ExtensionManifest> CurrentFailure() {
+                return Result<ExtensionManifest>::Failure(std::move(*failure_));
+            }
+
+            [[nodiscard]] bool AllowFields(const Json &object, const std::string_view path,
+                                           const std::initializer_list<std::string_view> allowed) {
+                for (const auto &[key, value] : object.items()) {
+                    static_cast<void>(value);
+                    if (std::ranges::find(allowed, std::string_view{key}) == allowed.end())
+                        return Reject(ChildPath(path, key), "extension.manifest.unknown_field", "Unknown field is not allowed.");
+                }
+                return true;
+            }
+
+            [[nodiscard]] bool ReadString(const Json &object, const std::string_view key, const std::string_view path, std::string &output,
+                                          const std::size_t maximumBytes, const bool required) {
+                const auto found = object.find(key);
+                if (found == object.end())
+                    return !required || Reject(ChildPath(path, key), "extension.manifest.missing_field", "Required field is missing.");
+                if (!found->is_string())
+                    return Reject(ChildPath(path, key), "extension.manifest.invalid_type", "Field must be a string.");
+                output = found->get<std::string>();
+                if ((required && output.empty()) || output.size() > maximumBytes)
+                    return Reject(ChildPath(path, key), "extension.manifest.invalid_value", "String value is empty or exceeds its limit.");
+                return true;
+            }
+
+            [[nodiscard]] bool ReadId(const Json &object, const std::string_view key, const std::string_view path, std::string &output) {
+                return ReadString(object, key, path, output, limits_.maximumIdentifierBytes, true) &&
+                       (IsCanonicalId(output, limits_.maximumIdentifierBytes) ||
+                        Reject(ChildPath(path, key), "extension.manifest.invalid_identifier",
+                               "Identity must use canonical lowercase dot-separated segments."));
+            }
+
+            [[nodiscard]] bool ValidateRootFields(const Json &document) {
+                return AllowFields(document, "$",
+                                   {"schemaVersion", "package", "id", "version", "kind", "displayName", "description", "author",
+                                    "compatibility", "modules", "contributions"});
+            }
+
+            [[nodiscard]] bool ValidateSchemaVersion(const Json &document, std::uint32_t &schemaVersion) {
+                const auto found = document.find("schemaVersion");
+                if (found == document.end()) {
+                    schemaVersion = 1;
+                    return true;
+                }
+                if (!found->is_number_unsigned() || found->get<std::uint64_t>() != 1)
+                    return Reject("$.schemaVersion", "extension.manifest.unsupported_schema", "Only integer schemaVersion 1 is supported.");
+                schemaVersion = 1;
+                return true;
+            }
+
+            [[nodiscard]] const Json *SelectPackage(const Json &document) {
+                const auto nested = document.find("package");
+                if (nested == document.end())
+                    return &document;
+                if (!nested->is_object()) {
+                    static_cast<void>(Reject("$.package", "extension.manifest.invalid_type", "Package field must be an object."));
                     return nullptr;
                 }
-                return std::to_address(it);
-            }
-            return nullptr;
-        }
-
-        Result<void> ParseModules(const Json &json, const std::string &defaultVersion, const std::string &defaultId,
-                                  const std::string &defaultKind, std::vector<ExtensionModuleManifest> &modules) {
-            Result<void> arrayError = Result<void>::Success();
-            if (const Json *modulesJson = FindArrayProperty(json, "modules", arrayError); modulesJson != nullptr) {
-                for (const auto &moduleJson : *modulesJson) {
-                    if (!moduleJson.is_object() || !moduleJson.contains("id") || !moduleJson["id"].is_string())
-                        return Result<void>::Failure(
-                            MakeError(ExtensionErrors::InvalidManifest, "Every extension module requires a stable 'id'."));
-                    ExtensionModuleManifest parsed{
-                        .id = moduleJson["id"].get<std::string>(),
-                        .version = moduleJson.value("version", defaultVersion),
-                        .kind = moduleJson.value("kind", std::string{}),
-                        .entry = moduleJson.value("entry", std::string{}),
-                    };
-                    if (parsed.id.empty() || !IsCanonicalSemanticVersion(parsed.version))
-                        return Result<void>::Failure(
-                            MakeError(ExtensionErrors::InvalidManifest, "Every extension module requires a canonical semantic version."));
-                    if (std::ranges::any_of(modules, [&parsed](const ExtensionModuleManifest &existing) {
-                        return existing.id == parsed.id;
-                    })) {
-                        return Result<void>::Failure(
-                            MakeError(ExtensionErrors::InvalidManifest, "Extension module identities must be unique within a package."));
+                constexpr std::string_view packageFields[] = {"id", "version", "kind", "displayName", "description", "author"};
+                for (const std::string_view field : packageFields) {
+                    if (document.contains(field)) {
+                        static_cast<void>(Reject(ChildPath("$", field), "extension.manifest.ambiguous_field",
+                                                 "Package fields cannot appear both at the root and in $.package."));
+                        return nullptr;
                     }
-                    modules.push_back(std::move(parsed));
                 }
-            } else if (arrayError.HasError()) {
-                return arrayError;
+                if (!AllowFields(*nested, "$.package", {"id", "version", "kind", "displayName", "description", "author"}))
+                    return nullptr;
+                return std::to_address(nested);
             }
-            if (modules.empty()) {
-                modules.push_back(ExtensionModuleManifest{
-                    .id = defaultId,
-                    .version = defaultVersion,
-                    .kind = defaultKind,
+
+            [[nodiscard]] bool ParsePackage(const Json &package, const std::string_view path, ExtensionManifest &manifest) {
+                if (!ReadId(package, "id", path, manifest.id) ||
+                    !ReadString(package, "version", path, manifest.version, MaximumSemanticVersionBytes, true)) {
+                    return false;
+                }
+                if (!IsCanonicalSemanticVersion(manifest.version))
+                    return Reject(ChildPath(path, "version"), "extension.manifest.invalid_version",
+                                  "Version must be canonical semantic version text.");
+                if (!ReadString(package, "kind", path, manifest.kind, limits_.maximumIdentifierBytes, false) ||
+                    !ReadString(package, "displayName", path, manifest.displayName, limits_.maximumStringBytes, false) ||
+                    !ReadString(package, "description", path, manifest.description, limits_.maximumStringBytes, false) ||
+                    !ReadString(package, "author", path, manifest.author, limits_.maximumStringBytes, false)) {
+                    return false;
+                }
+                return manifest.kind.empty() || IsCanonicalToken(manifest.kind, limits_.maximumIdentifierBytes) ||
+                       Reject(ChildPath(path, "kind"), "extension.manifest.invalid_value", "Package kind is not canonical.");
+            }
+
+            [[nodiscard]] bool ParseCompatibility(const Json &document, ExtensionManifest &manifest) {
+                const auto found = document.find("compatibility");
+                if (found == document.end())
+                    return true;
+                if (!found->is_object())
+                    return Reject("$.compatibility", "extension.manifest.invalid_type", "Compatibility field must be an object.");
+                if (!ReadCompatibilityFields(*found, manifest))
+                    return false;
+                if (!ValidateCompatibilityValues(manifest))
+                    return false;
+                return ParsePlatforms(*found, manifest.platforms);
+            }
+
+            [[nodiscard]] bool ReadCompatibilityFields(const Json &compatibility, ExtensionManifest &manifest) {
+                return AllowFields(compatibility, "$.compatibility", {"engineMin", "engineMax", "sdkAbi", "platforms"}) &&
+                       ReadString(compatibility, "engineMin", "$.compatibility", manifest.engineMin, MaximumSemanticVersionBytes, false) &&
+                       ReadString(compatibility, "engineMax", "$.compatibility", manifest.engineMax, MaximumSemanticVersionBytes, false) &&
+                       ReadString(compatibility, "sdkAbi", "$.compatibility", manifest.sdkAbi, limits_.maximumIdentifierBytes, false);
+            }
+
+            [[nodiscard]] bool ValidateCompatibilityValues(const ExtensionManifest &manifest) {
+                const bool invalidMinimum = !manifest.engineMin.empty() && !IsCanonicalSemanticVersion(manifest.engineMin);
+                const bool invalidMaximum = !manifest.engineMax.empty() && !IsCanonicalSemanticVersion(manifest.engineMax);
+                if (invalidMinimum || invalidMaximum) {
+                    return Reject("$.compatibility", "extension.manifest.invalid_version",
+                                  "Engine compatibility values must be canonical semantic versions.");
+                }
+                if (!manifest.sdkAbi.empty() && !IsCanonicalId(manifest.sdkAbi, limits_.maximumIdentifierBytes))
+                    return Reject("$.compatibility.sdkAbi", "extension.manifest.invalid_identifier", "SDK ABI ID is not canonical.");
+                return true;
+            }
+
+            [[nodiscard]] bool ParsePlatforms(const Json &compatibility, std::vector<std::string> &platforms) {
+                const auto found = compatibility.find("platforms");
+                if (found == compatibility.end())
+                    return true;
+                if (!found->is_array())
+                    return Reject("$.compatibility.platforms", "extension.manifest.invalid_type", "Platforms must be an array.");
+                if (found->size() > limits_.maximumPlatforms)
+                    return Reject("$.compatibility.platforms", "extension.manifest.collection_limit",
+                                  "Platform count exceeds the configured limit.");
+                std::unordered_set<std::string> identities;
+                platforms.reserve(found->size());
+                for (std::size_t index = 0; index < found->size(); ++index) {
+                    const Json &value = (*found)[index];
+                    const std::string path = ElementPath("$.compatibility.platforms", index);
+                    if (!value.is_string())
+                        return Reject(path, "extension.manifest.invalid_type", "Platform ID must be a string.");
+                    std::string platform = value.get<std::string>();
+                    if (!IsCanonicalToken(platform, limits_.maximumIdentifierBytes))
+                        return Reject(path, "extension.manifest.invalid_identifier", "Platform ID is not canonical.");
+                    if (!identities.insert(platform).second)
+                        return Reject(path, "extension.manifest.duplicate_identifier", "Platform ID must be unique.");
+                    platforms.push_back(std::move(platform));
+                }
+                return true;
+            }
+
+            [[nodiscard]] bool ParseModules(const Json &document, ExtensionManifest &manifest) {
+                const auto found = document.find("modules");
+                if (found == document.end())
+                    return Reject("$.modules", "extension.manifest.missing_field", "At least one explicit module is required.");
+                if (!found->is_array())
+                    return Reject("$.modules", "extension.manifest.invalid_type", "Modules must be an array.");
+                if (found->empty() || found->size() > limits_.maximumModules)
+                    return Reject("$.modules", "extension.manifest.collection_limit", "Module count must be within configured limits.");
+
+                std::unordered_set<std::string> identities;
+                manifest.modules.reserve(found->size());
+                for (std::size_t index = 0; index < found->size(); ++index) {
+                    const Json &value = (*found)[index];
+                    const std::string path = ElementPath("$.modules", index);
+                    ExtensionModuleManifest module;
+                    if (!ParseModule(value, path, module))
+                        return false;
+                    if (!identities.insert(module.id).second)
+                        return Reject(ChildPath(path, "id"), "extension.manifest.duplicate_identifier",
+                                      "Module ID must be unique within the package.");
+                    manifest.modules.push_back(std::move(module));
+                }
+                return true;
+            }
+
+            [[nodiscard]] bool ParseModule(const Json &value, const std::string_view path, ExtensionModuleManifest &module) {
+                if (!value.is_object())
+                    return Reject(path, "extension.manifest.invalid_type", "Module must be an object.");
+                if (!AllowFields(value, path, {"id", "version", "kind", "entry"}))
+                    return false;
+                return ReadModuleFields(value, path, module) && ValidateModuleValues(path, module);
+            }
+
+            [[nodiscard]] bool ReadModuleFields(const Json &value, const std::string_view path, ExtensionModuleManifest &module) {
+                return ReadId(value, "id", path, module.id) &&
+                       ReadString(value, "version", path, module.version, MaximumSemanticVersionBytes, true) &&
+                       ReadString(value, "kind", path, module.kind, limits_.maximumIdentifierBytes, true) &&
+                       ReadString(value, "entry", path, module.entry, MaximumEntryBytes, false);
+            }
+
+            [[nodiscard]] bool ValidateModuleValues(const std::string_view path, const ExtensionModuleManifest &module) {
+                if (!IsCanonicalSemanticVersion(module.version))
+                    return Reject(ChildPath(path, "version"), "extension.manifest.invalid_version",
+                                  "Module version must be canonical semantic version text.");
+                if (!IsCanonicalToken(module.kind, limits_.maximumIdentifierBytes))
+                    return Reject(ChildPath(path, "kind"), "extension.manifest.invalid_value", "Module kind is not canonical.");
+                if (!module.entry.empty() && !IsSafeEntry(module.entry))
+                    return Reject(ChildPath(path, "entry"), "extension.manifest.invalid_path",
+                                  "Module entry must be a safe package-relative path.");
+                return true;
+            }
+
+            [[nodiscard]] bool ParseContributions(const Json &document, ExtensionManifest &manifest) {
+                const auto found = document.find("contributions");
+                if (found == document.end())
+                    return true;
+                if (!found->is_array())
+                    return Reject("$.contributions", "extension.manifest.invalid_type", "Contributions must be an array.");
+                if (found->size() > limits_.maximumContributions)
+                    return Reject("$.contributions", "extension.manifest.collection_limit",
+                                  "Contribution count exceeds the configured limit.");
+
+                std::unordered_set<std::string> identities;
+                manifest.contributions.reserve(found->size());
+                for (std::size_t index = 0; index < found->size(); ++index) {
+                    const Json &value = (*found)[index];
+                    const std::string path = ElementPath("$.contributions", index);
+                    ExtensionContributionManifest contribution;
+                    if (!ParseContribution(value, path, contribution))
+                        return false;
+                    if (!identities.insert(contribution.id).second)
+                        return Reject(ChildPath(path, "id"), "extension.manifest.duplicate_identifier",
+                                      "Contribution ID must be unique within the package.");
+                    if (!HasOwningModule(manifest.modules, contribution.owningModule))
+                        return Reject(ChildPath(path, "module"), "extension.manifest.unresolved_reference",
+                                      "Contribution references an undeclared module.");
+                    manifest.contributions.push_back(std::move(contribution));
+                }
+                return true;
+            }
+
+            [[nodiscard]] bool ParseContribution(const Json &value, const std::string_view path,
+                                                 ExtensionContributionManifest &contribution) {
+                if (!value.is_object())
+                    return Reject(path, "extension.manifest.invalid_type", "Contribution must be an object.");
+                if (!AllowFields(value, path, {"type", "id", "module"}))
+                    return false;
+                if (!ReadString(value, "type", path, contribution.type, limits_.maximumIdentifierBytes, true) ||
+                    !ReadId(value, "id", path, contribution.id) || !ReadId(value, "module", path, contribution.owningModule)) {
+                    return false;
+                }
+                return IsCanonicalId(contribution.type, limits_.maximumIdentifierBytes) ||
+                       Reject(ChildPath(path, "type"), "extension.manifest.invalid_identifier", "Contribution type is not canonical.");
+            }
+
+            [[nodiscard]] static bool HasOwningModule(const std::vector<ExtensionModuleManifest> &modules,
+                                                      const std::string_view moduleId) {
+                return std::ranges::any_of(modules, [moduleId](const ExtensionModuleManifest &module) {
+                    return module.id == moduleId;
                 });
             }
-            return Result<void>::Success();
-        }
 
-        Result<void> ParseContributions(const Json &json, const std::vector<ExtensionModuleManifest> &modules,
-                                        std::vector<ExtensionContributionManifest> &contributions) {
-            Result<void> arrayError = Result<void>::Success();
-            if (const Json *contributionsJson = FindArrayProperty(json, "contributions", arrayError); contributionsJson != nullptr) {
-                for (const auto &contribution : *contributionsJson) {
-                    if (!contribution.is_object() || !contribution.contains("type") || !contribution["type"].is_string() ||
-                        !contribution.contains("id") || !contribution["id"].is_string() || !contribution.contains("module") ||
-                        !contribution["module"].is_string()) {
-                        return Result<void>::Failure(
-                            MakeError(ExtensionErrors::InvalidManifest, "Every contribution requires string type, id, and module fields."));
-                    }
-                    ExtensionContributionManifest parsed{
-                        .type = contribution["type"].get<std::string>(),
-                        .id = contribution["id"].get<std::string>(),
-                        .owningModule = contribution["module"].get<std::string>(),
-                    };
-                    if (parsed.type.empty() || parsed.id.empty() ||
-                        !std::ranges::any_of(modules,
-                                             [&parsed](const ExtensionModuleManifest &manifestModule) {
-                        return manifestModule.id == parsed.owningModule;
-                    }) ||
-                        std::ranges::any_of(contributions, [&parsed](const ExtensionContributionManifest &existing) {
-                        return existing.id == parsed.id;
-                    })) {
-                        return Result<void>::Failure(MakeError(ExtensionErrors::InvalidManifest,
-                                                               "Contributions must declare non-empty types, unique identities, "
-                                                               "and target valid declared package modules."));
-                    }
-                    contributions.push_back(std::move(parsed));
-                }
-            } else if (arrayError.HasError()) {
-                return arrayError;
-            }
-            return Result<void>::Success();
-        }
-
+            const ExtensionManifestLimits &limits_;
+            std::optional<Error> failure_;
+        };
     }  // namespace
 
-    Result<ExtensionManifest> ParseExtensionManifest(const std::string &jsonContent) {
-        try {
-            Json json = Json::parse(jsonContent);
-
-            ExtensionManifest manifest;
-
-            if (!json.is_object())
-                return Result<ExtensionManifest>::Failure(
-                    MakeError(ExtensionErrors::InvalidManifest, "Extension manifest must be an object."));
-            // Top-level package fields are canonical. The nested package object
-            // remains accepted while existing development extensions migrate.
-            const Json &package = json.contains("package") && json["package"].is_object() ? json["package"] : json;
-
-            if (package.contains("id") && package["id"].is_string())
-                manifest.id = package["id"].get<std::string>();
-            else
-                return Result<ExtensionManifest>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Missing extension package 'id'."));
-
-            if (package.contains("version") && package["version"].is_string())
-                manifest.version = package["version"].get<std::string>();
-            if (!IsCanonicalSemanticVersion(manifest.version))
-                return Result<ExtensionManifest>::Failure(
-                    MakeError(ExtensionErrors::InvalidManifest, "Package 'version' must be canonical semantic version text."));
-
-            if (package.contains("kind") && package["kind"].is_string())
-                manifest.kind = package["kind"].get<std::string>();
-
-            if (package.contains("displayName") && package["displayName"].is_string())
-                manifest.displayName = package["displayName"].get<std::string>();
-
-            if (package.contains("description") && package["description"].is_string())
-                manifest.description = package["description"].get<std::string>();
-
-            if (package.contains("author") && package["author"].is_string())
-                manifest.author = package["author"].get<std::string>();
-
-            if (auto compatRes = ParseCompatibility(json, manifest); compatRes.HasError())
-                return Result<ExtensionManifest>::Failure(compatRes.ErrorValue());
-
-            if (auto modRes = ParseModules(json, manifest.version, manifest.id, manifest.kind, manifest.modules); modRes.HasError())
-                return Result<ExtensionManifest>::Failure(modRes.ErrorValue());
-
-            if (auto contribRes = ParseContributions(json, manifest.modules, manifest.contributions); contribRes.HasError())
-                return Result<ExtensionManifest>::Failure(contribRes.ErrorValue());
-
-            return Result<ExtensionManifest>::Success(std::move(manifest));
-        } catch (const Json::parse_error &e) {
-            LOG_ERROR("ExtensionManifestParser", "JSON parse error: %s", e.what());
-            return Result<ExtensionManifest>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Malformed JSON syntax"));
-        } catch (const std::exception &e) {  // NOSONAR(cpp:S1181) JSON value access and schema error boundary.
-            LOG_ERROR("ExtensionManifestParser", "Failed to parse manifest: %s", e.what());
-
-            return Result<ExtensionManifest>::Failure(MakeError(ExtensionErrors::InvalidManifest, e.what()));
-        }
+    /** @copydoc ParseExtensionManifest */
+    Result<ExtensionManifest> ParseExtensionManifest(const std::string_view jsonContent, const ExtensionManifestLimits &limits) {
+        auto parsed = ManifestParsing::ParseBoundedJson(jsonContent, limits);
+        if (parsed.HasError())
+            return Result<ExtensionManifest>::Failure(parsed.ErrorValue());
+        return ManifestValidator{limits}.Validate(parsed.Value());
     }
 }  // namespace Horo::Extensions

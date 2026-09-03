@@ -19,6 +19,7 @@ namespace Horo::Extensions {
         namespace fs = std::filesystem;
 
         constexpr std::uint32_t kMaximumModuleIdentityBytes = 256;
+        constexpr ExtensionManifestLimits kManifestLimits{};
 
         [[nodiscard]] std::string_view View(const HoroExtensionStringView value) noexcept {
             return value.data != nullptr ? std::string_view{value.data, value.length} : std::string_view{};
@@ -119,13 +120,18 @@ namespace Horo::Extensions {
                     MakeError(ExtensionErrors::InvalidManifest, "Extension package path must be absolute."));
 
             const fs::path manifestPath = requestedRoot / "extension.json";
-            std::ifstream fileStream(manifestPath);
+            std::error_code fileError;
+            const std::uintmax_t manifestBytes = fs::file_size(manifestPath, fileError);
+            if (fileError || manifestBytes > kManifestLimits.maximumDocumentBytes)
+                return Result<ExtensionManifest>::Failure(
+                    MakeError(ExtensionErrors::InvalidManifest, "Extension manifest is unavailable or exceeds the bounded size."));
+            std::ifstream fileStream(manifestPath, std::ios::binary);
             if (!fileStream.is_open())
                 return Result<ExtensionManifest>::Failure(MakeError(ExtensionErrors::InvalidManifest, "Could not open extension.json"));
 
             std::stringstream buffer;
             buffer << fileStream.rdbuf();
-            auto parseResult = ParseExtensionManifest(buffer.str());
+            auto parseResult = ParseExtensionManifest(buffer.str(), kManifestLimits);
             if (parseResult.HasError())
                 return Result<ExtensionManifest>::Failure(parseResult.ErrorValue());
 

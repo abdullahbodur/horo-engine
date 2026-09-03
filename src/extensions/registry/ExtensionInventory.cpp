@@ -21,7 +21,7 @@ namespace Horo::Extensions {
         namespace fs = std::filesystem;
         using Json = nlohmann::json;
 
-        constexpr std::uintmax_t kMaximumManifestBytes = 1024U * 1024U;
+        constexpr ExtensionManifestLimits kManifestLimits{};
         constexpr std::size_t kMaximumPackageEntries = 4096;
         constexpr std::uintmax_t kMaximumPackageBytes = 1024ULL * 1024ULL * 1024ULL;
 
@@ -81,13 +81,14 @@ namespace Horo::Extensions {
                 return Result<ExtensionManifest>::Failure(
                     MakeError(ExtensionErrors::InvalidManifest, "Extension manifest must be a regular non-symlink file."));
             }
-            if (const std::uintmax_t size = fs::file_size(absoluteManifestPath, error); error || size > kMaximumManifestBytes)
+            if (const std::uintmax_t size = fs::file_size(absoluteManifestPath, error);
+                error || size > kManifestLimits.maximumDocumentBytes)
                 return Result<ExtensionManifest>::Failure(
                     MakeError(ExtensionErrors::InvalidManifest, "Extension manifest exceeds the bounded size."));
             std::ifstream input(absoluteManifestPath, std::ios::binary);
             std::ostringstream contents;
             contents << input.rdbuf();
-            return ParseExtensionManifest(contents.str());
+            return ParseExtensionManifest(contents.str(), kManifestLimits);
         }
 
         [[nodiscard]] Result<void> CopyPackageTree(const fs::path &source, const fs::path &destination) {
