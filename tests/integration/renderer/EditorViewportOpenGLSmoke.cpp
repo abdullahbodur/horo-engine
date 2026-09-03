@@ -35,6 +35,53 @@ namespace {
         return {};
     }
 
+    /** @brief Verifies that replacements keep the active viewport usable until publication. */
+    void CheckSeamlessResourceTransition(EditorViewportRendererOpenGL &viewport, RenderFrontend &frontend,
+                                         const EditorViewportSceneView &scene, const RenderTargetHandle activeTarget,
+                                         const EditorViewportTextureView activeTexture) {
+        constexpr EditorViewportExtent activeExtent{512, 384};
+        constexpr EditorViewportExtent resizedExtent{384, 256};
+        std::vector<EditorViewportMeshResourceView> replacementMeshes{scene.meshResources.begin(), scene.meshResources.end()};
+        replacementMeshes.front().handle.generation = 2;
+        std::vector<EditorViewportInstance> replacementInstances{scene.instances.begin(), scene.instances.end()};
+        replacementInstances.front().mesh.generation = 2;
+        const EditorViewportSceneView replacementScene{scene.camera, replacementMeshes, replacementInstances, scene.lights};
+        const RenderSceneView renderScene{ToRenderCamera(replacementScene.camera), replacementScene.meshResources,
+                                          replacementScene.instances, replacementScene.lights};
+
+        viewport.RequestExtent(resizedExtent);
+        auto pendingPreparation = viewport.PrepareResources(frontend, renderScene);
+        Check(pendingPreparation.HasValue() && pendingPreparation.Value() == activeTarget);
+        Check(viewport.IsReady());
+        Check(viewport.TextureView().textureId == activeTexture.textureId);
+        Check(viewport.RequestedExtent() == activeExtent);
+
+        auto begun = frontend.BeginFrame(FrameDescriptor{.frameNumber = 2, .outputExtent = {640, 480}});
+        Check(begun.HasValue());
+        RenderFrameScope frame = std::move(begun).Value();
+        const std::array passes{RenderPassDescriptor{
+            .id = RenderPassId{1},
+            .kind = RenderPassKind::Graphics,
+            .staticMesh =
+                StaticMeshPassDescriptor{.target = activeTarget, .extent = {activeExtent.width, activeExtent.height}, .scene = renderScene},
+        }};
+        Check(frame.Execute(passes).HasValue());
+        Check(frame.Present().HasValue());
+
+        RenderTargetHandle resizedTarget;
+        for (std::size_t attempt = 0; attempt < 4 && !resizedTarget.IsValid(); ++attempt) {
+            viewport.RequestExtent(resizedExtent);
+            auto prepared = viewport.PrepareResources(frontend, renderScene);
+            Check(prepared.HasValue());
+            Check(frontend.ProcessResourceRequests().HasValue());
+            if (prepared.Value().has_value() && *prepared.Value() != activeTarget)
+                resizedTarget = *prepared.Value();
+        }
+        Check(resizedTarget.IsValid());
+        Check(viewport.RequestedExtent() == resizedExtent);
+        Check(viewport.TextureView().textureId != activeTexture.textureId);
+    }
+
 }  // namespace
 
 TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]") {
@@ -209,6 +256,9 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]") {
     const std::size_t center = (static_cast<std::size_t>(height / 2) * width + width / 2) * 4;
     Check(pixels[center] < 150 && pixels[center + 1] > 130 && pixels[center + 2] > 150);
     Check(frame.Present().HasValue());
+
+    CheckSeamlessResourceTransition(viewport, *frontend, viewportScene, viewportTarget, firstTextureView);
+
     frontend->DetachStaticMeshPassExecutor(viewport);
     viewport.Shutdown();
     glBindBuffer(GL_ARRAY_BUFFER, 0);

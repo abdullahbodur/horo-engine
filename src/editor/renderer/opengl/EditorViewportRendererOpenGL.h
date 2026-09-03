@@ -61,6 +61,21 @@ namespace Horo::Editor {
             std::uint32_t sourceGeneration{0};
         };
 
+        struct ViewportTargetResources {
+            Render::RenderTextureHandle colorTexture;
+            Render::RenderTextureHandle depthTexture;
+            Render::RenderTextureViewHandle colorView;
+            Render::RenderTextureViewHandle depthView;
+            Render::RenderTargetHandle target;
+            Render::ResourceOperationId colorTextureOperation;
+            Render::ResourceOperationId depthTextureOperation;
+            Render::ResourceOperationId colorViewOperation;
+            Render::ResourceOperationId depthViewOperation;
+            Render::ResourceOperationId targetOperation;
+            EditorViewportExtent extent;
+            std::uintptr_t imageIdentity{0};
+        };
+
         struct UniformLocations {
             std::int32_t mvp{-1};
             std::int32_t model{-1};
@@ -81,17 +96,19 @@ namespace Horo::Editor {
 
         [[nodiscard]] Result<void> LoadUniformLocations();
         [[nodiscard]] Result<void> SynchronizeMeshes(std::span<const EditorViewportMeshResourceView> resources);
+        [[nodiscard]] Result<bool> SynchronizeMesh(const EditorViewportMeshResourceView &resource);
         [[nodiscard]] Result<bool> AdvanceResidentMesh(const EditorViewportMeshResourceView &resource, ResidentMesh &resident);
         [[nodiscard]] Result<void> CreateResidentMeshBuffers(const EditorViewportMeshResourceView &resource, ResidentMesh &resident);
+        [[nodiscard]] bool IsResidentMeshReady(const ResidentMesh &resident) const;
         void RetireMissingMeshes(std::span<const EditorViewportMeshResourceView> resources) noexcept;
         [[nodiscard]] Result<void> SynchronizeTarget(EditorViewportExtent extent);
-        [[nodiscard]] Result<bool> AdvanceViewportTarget(Render::FramebufferExtent extent);
-        [[nodiscard]] Result<bool> AdvanceViewportTextures(Render::FramebufferExtent extent);
-        [[nodiscard]] Result<bool> AdvanceViewportViews();
+        [[nodiscard]] Result<bool> AdvanceViewportTarget(ViewportTargetResources &resources);
+        [[nodiscard]] Result<bool> AdvanceViewportTextures(ViewportTargetResources &resources);
+        [[nodiscard]] Result<bool> AdvanceViewportViews(ViewportTargetResources &resources);
         void ReleaseMesh(ResidentMesh &mesh) noexcept;
         void ReleaseTarget() noexcept;
         void ReleaseShadowResources() noexcept;
-        void ReleaseViewportTarget() noexcept;
+        void ReleaseViewportTarget(ViewportTargetResources &resources) noexcept;
 
         std::uint32_t program_{0};
         std::uint32_t shadowProgram_{0};
@@ -104,24 +121,16 @@ namespace Horo::Editor {
         std::uint32_t gridVertexArray_{0};
         std::uint32_t gridVertexBuffer_{0};
         std::unordered_map<std::uint64_t, ResidentMesh> meshes_;
+        std::unordered_map<std::uint64_t, ResidentMesh> pendingMeshes_;
         Render::RenderFrontend *frontend_{nullptr};
         OpenGLViewportResourceBridge resourceBridge_;
-        Render::RenderTextureHandle colorTexture_;
-        Render::RenderTextureHandle depthTexture_;
-        Render::RenderTextureViewHandle colorTextureView_;
-        Render::RenderTextureViewHandle depthTextureView_;
-        Render::ResourceOperationId colorTextureOperation_;
-        Render::ResourceOperationId depthTextureOperation_;
-        Render::ResourceOperationId colorTextureViewOperation_;
-        Render::ResourceOperationId depthTextureViewOperation_;
-        Render::ResourceOperationId targetOperation_;
-        std::uintptr_t editorImageIdentity_{0};
+        ViewportTargetResources viewportTarget_;
+        ViewportTargetResources pendingViewportTarget_;
         UniformLocations uniforms_{};
         EditorViewportExtent requestedExtent_{};
         EditorViewportExtent allocatedExtent_{};
         EditorViewportGridOptions gridOptions_{};
         EditorViewportLightVisualizerOptions lightVisualizerOptions_{};
-        Render::RenderTargetHandle targetHandle_{};
         bool initialized_{false};
         bool meshesReady_{false};
     };
