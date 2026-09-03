@@ -131,6 +131,20 @@ add_library(HoroGameplayApi STATIC
         gameplay/api/ComponentValidation.h
         gameplay/api/ComponentValidation.cpp
         gameplay/api/GameplayIdentityValidation.h
+        gameplay/api/GameplayRegistration.cpp
+        gameplay/api/GameServiceRegistryDetail.h
+        gameplay/api/GameServiceValidation.cpp
+        gameplay/api/GameServiceGraph.cpp
+        gameplay/api/GameServiceSchedule.cpp
+        gameplay/api/GameServiceRegistry.cpp
+        gameplay/api/SystemRegistryDetail.h
+        gameplay/api/SystemValidation.cpp
+        gameplay/api/SystemGraph.cpp
+        gameplay/api/SystemAccessValidation.cpp
+        gameplay/api/SystemDescriptorValidation.cpp
+        gameplay/api/SystemReachability.cpp
+        gameplay/api/SystemSchedule.cpp
+        gameplay/api/SystemRegistry.cpp
         gameplay/api/GameModule.cpp
         gameplay/api/GameplayErrors.cpp
 )
@@ -155,6 +169,14 @@ target_link_libraries(HoroRuntimeScene PUBLIC HoroEngine::Foundation HoroEngine:
 add_library(HoroGameplayRuntime STATIC
         gameplay/runtime/BehaviorRegistry.cpp
         gameplay/runtime/BehaviorRuntime.cpp
+        gameplay/runtime/GameplayRegistrationRuntimeDetail.h
+        gameplay/runtime/GameplayRuntimeInvocation.h
+        gameplay/runtime/GameplayRuntimeInvocation.cpp
+        gameplay/runtime/GameplayRuntimeValidation.h
+        gameplay/runtime/GameplayRuntimeValidation.cpp
+        gameplay/runtime/GameplayServiceRuntime.cpp
+        gameplay/runtime/GameplaySystemRuntime.cpp
+        gameplay/runtime/GameplaySystemDispatch.cpp
 )
 add_library(HoroEngine::GameplayRuntime ALIAS HoroGameplayRuntime)
 target_compile_features(HoroGameplayRuntime PUBLIC cxx_std_20)
@@ -162,7 +184,11 @@ target_include_directories(HoroGameplayRuntime PUBLIC ${PROJECT_SOURCE_DIR}/incl
 target_link_libraries(HoroGameplayRuntime PUBLIC HoroEngine::GameplayApi HoroEngine::RuntimeScene)
 
 add_library(HoroGameplayModuleHost STATIC
+        gameplay/module/GameModuleHostDetail.h
+        gameplay/module/GameModuleHostAccess.cpp
+        gameplay/module/GameModuleHostLifecycle.cpp
         gameplay/module/GameModuleHost.cpp
+        gameplay/module/GameModuleHostShadowCopy.cpp
 )
 add_library(HoroEngine::GameplayModuleHost ALIAS HoroGameplayModuleHost)
 target_compile_features(HoroGameplayModuleHost PUBLIC cxx_std_20)

@@ -6,6 +6,7 @@
  */
 
 #include "Horo/Gameplay/Behavior.h"
+#include "Horo/Gameplay/GameplayRegistration.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -20,8 +21,10 @@
 
 namespace Horo::Gameplay {
     class ComponentRegistry;
+    class GameServiceRegistry;
+    class SystemRegistry;
 
-    inline constexpr std::uint32_t GameplaySdkBoundaryVersion = 3;
+    inline constexpr std::uint32_t GameplaySdkBoundaryVersion = 4;
     inline constexpr std::uint32_t GameplayDescriptorBundleSchemaVersion = 1;
     inline constexpr std::size_t MaximumGeneratedBehaviorDescriptors = 4096;
     inline constexpr std::size_t MaximumGeneratedDescriptorDiagnostics = 256;
@@ -43,13 +46,19 @@ namespace Horo::Gameplay {
         const char *buildFingerprint{};
     };
 
-    /** @brief Narrow startup context for project module-owned services. */
-    struct GameRuntimeContext {};
+    /** @brief Narrow generation-scoped runtime capabilities supplied after project services start. */
+    struct GameRuntimeContext {
+        CancellationToken cancellation;                     /**< Revoked before module shutdown or replacement. */
+        std::span<const GameplayServiceId> activeServices;  /**< Active project-scoped services in dependency order. */
+        std::span<const GameplayCapabilityId> capabilities; /**< Explicit host and project-service capability grants. */
+    };
 
     /** @brief Declarative registration capabilities exposed before gameplay startup. */
     struct GameRegistrationContext {
         std::string_view moduleId;
         ComponentRegistry &components;
+        SystemRegistry &systems;
+        GameServiceRegistry &services;
     };
 
     /** @brief Project-owned module lifecycle valid only for one exact compatible SDK generation. */
@@ -57,7 +66,7 @@ namespace Horo::Gameplay {
     public:
         virtual ~IGameModule() = default;
         /**
-         * @brief Registers project-owned component metadata without activating runtime behavior.
+         * @brief Registers project-owned component, system, and service metadata without activating runtime behavior.
          * @param context Host-owned open registration transaction.
          * @return Success or a typed validation error that prevents startup.
          */

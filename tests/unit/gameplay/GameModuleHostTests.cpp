@@ -3,6 +3,7 @@
 #include "Horo/Gameplay/ComponentRegistry.h"
 #include "Horo/Gameplay/GameModuleHost.h"
 #include "Horo/Gameplay/GameplayErrors.h"
+#include "Horo/Gameplay/GameplayRegistrationRuntime.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
@@ -89,6 +90,19 @@ TEST_CASE("game module host validates fingerprint and keeps factories alive thro
     REQUIRE(loaded.Value()->Components().IsFrozen());
     REQUIRE(loaded.Value()->Components().Descriptors().size() == 1);
     REQUIRE(loaded.Value()->Components().Descriptors().front().typeId.Value() == "game.tests.movement_settings");
+    REQUIRE(loaded.Value()->Services().IsFrozen());
+    REQUIRE(loaded.Value()->Services().Registrations().size() == 1);
+    REQUIRE(loaded.Value()->Systems().IsFrozen());
+    REQUIRE(loaded.Value()->Systems().Registrations().size() == 1);
+    REQUIRE(loaded.Value()->ActiveServices().size() == 1);
+    REQUIRE(loaded.Value()->Capabilities().size() == 1);
+    REQUIRE_FALSE(loaded.Value()->Cancellation().IsCancellationRequested());
+
+    auto systems = GameplaySystemRuntime::Create(loaded.Value()->Systems(), loaded.Value()->ActiveServices(),
+                                                 loaded.Value()->Capabilities(), loaded.Value()->Cancellation());
+    REQUIRE(systems.HasValue());
+    REQUIRE(systems.Value()->Execute(GameplaySystemPhase::Gameplay, GameplayThreadAffinity::RuntimeOwner, 1.0 / 60.0).HasValue());
+    systems.Value()->Shutdown();
 
     auto scene = RuntimeScene::Create(Definition(), SceneRuntimeId{7});
     REQUIRE(scene.HasValue());

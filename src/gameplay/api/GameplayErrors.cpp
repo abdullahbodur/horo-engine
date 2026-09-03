@@ -59,6 +59,177 @@ namespace Horo::Gameplay::GameplayErrors {
         .retryable = false,
         .userActionable = false,
     };
+    const ErrorCodeDescriptor InvalidSystemId{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.system_id_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The gameplay system ID is invalid.",
+        .remediationHint = "Use a lowercase game.<module>.<system> identifier.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor InvalidServiceId{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.service_id_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The gameplay service ID is invalid.",
+        .remediationHint = "Use a lowercase game.<module>.<service> identifier.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor InvalidCapabilityId{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.capability_id_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The gameplay capability ID is invalid.",
+        .remediationHint = "Use a lowercase identity with at least three namespace segments.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor InvalidSystemDescriptor{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.system_descriptor_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The gameplay system descriptor is incomplete or invalid.",
+        .remediationHint = "Declare bounded typed access, dependencies, affinity, and a complete factory binding.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor InvalidServiceDescriptor{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.service_descriptor_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The gameplay service descriptor is incomplete or invalid.",
+        .remediationHint = "Declare bounded dependencies, capabilities, lifecycle policy, and a complete factory binding.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor DuplicateSystem{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.system_duplicate"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A gameplay system ID is duplicated.",
+        .remediationHint = "Give every registered project system one unique stable ID.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor DuplicateService{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.service_duplicate"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A gameplay service ID is duplicated.",
+        .remediationHint = "Give every registered project service one unique stable ID.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor SystemDependencyMissing{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.system_dependency_missing"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A gameplay system scheduling or service dependency is unavailable.",
+        .remediationHint = "Register every required system and service before freezing the transaction.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor ServiceDependencyMissing{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.service_dependency_missing"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A gameplay service dependency is unavailable.",
+        .remediationHint = "Register every required service before freezing the transaction.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor CapabilityMissing{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.capability_missing"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A required gameplay capability has no active provider.",
+        .remediationHint = "Register or compose an explicit provider for every required capability.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor SystemScheduleCycle{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.system_schedule_cycle"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Gameplay system scheduling dependencies contain a cycle.",
+        .remediationHint = "Remove one after/before edge so the phase schedule is acyclic.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor ServiceDependencyCycle{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.service_dependency_cycle"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Gameplay service dependencies contain a cycle.",
+        .remediationHint = "Remove one dependency edge so providers can start before dependants.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor SystemAccessConflict{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.system_access_conflict"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Two unordered gameplay systems have conflicting component access.",
+        .remediationHint = "Declare an explicit dependency edge between same-phase systems that share writable state.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor ServiceScopeViolation{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.service_scope_violation"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A gameplay service depends on a shorter-lived service.",
+        .remediationHint = "Keep project services independent of scene-scoped service instances.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor RegistrationRegistryFrozen{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.registration_registry_frozen"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The gameplay registration registry is frozen.",
+        .remediationHint = "Register complete system and service metadata before module startup.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor GameplayFactoryFailed{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.factory_failed"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A gameplay system or service factory failed to create an instance.",
+        .remediationHint = "Fix the project factory and retry activation without changing the active generation.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor GameplayRuntimeInactive{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.runtime_inactive"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The gameplay registration runtime is not active.",
+        .remediationHint = "Create a new runtime generation before dispatching registered systems.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor GameplayCancelled{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.cancelled"},
+        .defaultSeverity = ErrorSeverity::Info,
+        .summary = "The gameplay runtime generation was cancelled.",
+        .remediationHint = "Do not publish late work into a stopped or replaced runtime generation.",
+        .retryable = false,
+        .userActionable = false,
+    };
+    const ErrorCodeDescriptor GameplayThreadAccessViolation{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.thread_access_violation"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "A gameplay callback was invoked from an undeclared execution domain.",
+        .remediationHint = "Dispatch the callback on its declared affinity or mark a genuinely thread-safe callback as Any.",
+        .retryable = false,
+        .userActionable = false,
+    };
     const ErrorCodeDescriptor InvalidBehaviorTypeId{
         .domain = GameplayDomain,
         .code = ErrorCode{"gameplay.behavior_type_id_invalid"},

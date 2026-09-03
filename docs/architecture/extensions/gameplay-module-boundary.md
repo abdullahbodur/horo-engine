@@ -97,8 +97,13 @@ LoadLibrary
   -> GetGameplayDescriptorBundle
   -> validate manifest identity, complete registrations, diagnostics, and lifecycle callbacks
   -> CreateGameModule
+  -> Register components, systems, and services
+  -> freeze every registration transaction
+  -> create project services in provider-first order
   -> Start
+  -> request cancellation
   -> Stop
+  -> stop and destroy project services in reverse order
   -> DestroyGameModule
   -> UnloadLibrary
 ```
@@ -366,8 +371,11 @@ owned factories. Every service declares:
 
 Services cannot hide lifetime in static initialization.
 Service descriptors and factories are registered during `Register()` through
-`GameRegistrationContext::services`. Service instances are created during
-`Start()` or scene activation according to their declared scope. Project-scoped
+`GameRegistrationContext::services`. The host creates project-scoped service
+instances before module `Start()` and creates scene-scoped instances during
+scene activation. Providers start before dependants, and shutdown first requests
+the runtime generation's cancellation token before stopping dependants in reverse
+order. Project-scoped
 services outlive scene-scoped systems and behaviors that depend on them;
 scene-scoped services are created before dependent scene instances and destroyed
 after dependent behaviors, systems, and jobs are drained.

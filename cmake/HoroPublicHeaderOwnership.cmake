@@ -65,9 +65,12 @@ horo_configure_target_header_boundary(HoroGameplayApi PUBLIC_HEADERS
     Horo/Gameplay/BehaviorTypes.h
     Horo/Gameplay/Component.h
     Horo/Gameplay/ComponentRegistry.h
+    Horo/Gameplay/GameServiceRegistry.h
     Horo/Gameplay/GameModule.h
     Horo/Gameplay/GameplayErrors.h
+    Horo/Gameplay/GameplayRegistration.h
     Horo/Gameplay/NativeBehavior.h
+    Horo/Gameplay/SystemRegistry.h
 )
 horo_configure_target_header_boundary(HoroRuntimeScene PUBLIC_HEADERS
     Horo/Runtime/Scene/RuntimeScene.h
@@ -76,6 +79,7 @@ horo_configure_target_header_boundary(HoroRuntimeScene PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroGameplayRuntime PUBLIC_HEADERS
     Horo/Gameplay/BehaviorRegistry.h
     Horo/Gameplay/BehaviorRuntime.h
+    Horo/Gameplay/GameplayRegistrationRuntime.h
 )
 horo_configure_target_header_boundary(HoroGameplayModuleHost PUBLIC_HEADERS
     Horo/Gameplay/GameModuleHost.h
