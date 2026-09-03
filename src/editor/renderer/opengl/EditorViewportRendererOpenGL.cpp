@@ -1,15 +1,16 @@
 #include "EditorViewportRendererOpenGL.h"
 
+#include "OpenGLViewportShaders.h"
 #include "editor/renderer/EditorRendererErrors.h"
 #include "editor/renderer/grid/EditorViewportGridGeometry.h"
 #include "editor/screens/workspace/panels/viewport/visualizers/light/LightVisualizerGeometry.h"
 
-#include <SDL3/SDL_video.h>
 #include <algorithm>
 #include <array>
 #include <bit>
 #include <cmath>
 #include <glad/gl.h>
+#include <limits>
 #include <string>
 #include <utility>
 
@@ -19,6 +20,63 @@ namespace Horo::Editor {
 
         [[nodiscard]] Error MakeViewportError(const ErrorCodeDescriptor &descriptor, std::string message) {
             return MakeError(descriptor, std::move(message));
+        }
+
+        template <typename Handle>
+        [[nodiscard]] Result<bool> ResourceReady(const Render::RenderFrontend &frontend, const Handle handle,
+                                                 const Render::ResourceOperationId operation) {
+            if (!handle.IsValid())
+                return Result<bool>::Success(false);
+            const auto state = frontend.ResourceState(handle);
+            if (state.HasValue())
+                return Result<bool>::Success(state.Value() == Render::RenderResourceState::Ready);
+            if (operation.IsValid()) {
+                const Result<void> completion = frontend.ResourceOperationResult(operation);
+                if (completion.HasError() && completion.ErrorValue().code.Value() != "render.frontend.resource.operation_pending")
+                    return Result<bool>::Failure(completion.ErrorValue());
+            }
+            return Result<bool>::Failure(state.ErrorValue());
+        }
+
+        [[nodiscard]] Result<bool> AdvanceTexture(Render::RenderFrontend &frontend, const Render::RenderTextureDescriptor &descriptor,
+                                                  Render::RenderTextureHandle &handle, Render::ResourceOperationId &operation) {
+            if (!handle.IsValid()) {
+                auto created = frontend.CreateTexture(descriptor);
+                if (created.HasError())
+                    return Result<bool>::Failure(created.ErrorValue());
+                handle = created.Value().handle;
+                operation = created.Value().operation;
+            }
+            return ResourceReady(frontend, handle, operation);
+        }
+
+        [[nodiscard]] Result<bool> AdvanceTextureView(Render::RenderFrontend &frontend,
+                                                      const Render::RenderTextureViewDescriptor &descriptor,
+                                                      Render::RenderTextureViewHandle &handle, Render::ResourceOperationId &operation) {
+            if (!handle.IsValid()) {
+                auto created = frontend.CreateTextureView(descriptor);
+                if (created.HasError())
+                    return Result<bool>::Failure(created.ErrorValue());
+                handle = created.Value().handle;
+                operation = created.Value().operation;
+            }
+            return ResourceReady(frontend, handle, operation);
+        }
+
+        [[nodiscard]] Result<bool> AdvanceRenderTarget(Render::RenderFrontend &frontend, const Render::RenderTargetDescriptor &descriptor,
+                                                       Render::RenderTargetHandle &handle, Render::ResourceOperationId &operation) {
+            if (!handle.IsValid()) {
+                auto created = frontend.CreateRenderTarget(descriptor);
+                if (created.HasError())
+                    return Result<bool>::Failure(created.ErrorValue());
+                handle = created.Value().handle;
+                operation = created.Value().operation;
+            }
+            return ResourceReady(frontend, handle, operation);
+        }
+
+        [[nodiscard]] bool ExtentChanged(const EditorViewportExtent allocated, const EditorViewportExtent requested) noexcept {
+            return allocated.IsValid() && allocated != requested;
         }
 
         [[nodiscard]] Result<std::uint32_t> CompileShader(const std::uint32_t type, const char *source) {
@@ -40,7 +98,85 @@ namespace Horo::Editor {
             return Result<std::uint32_t>::Failure(
                 MakeViewportError(RendererErrors::ViewportShaderCompileFailed, "Viewport shader compilation failed: " + log));
         }
+
+        void RestoreCapability(const GLenum capability, const GLboolean enabled) noexcept {
+            if (enabled == GL_TRUE)
+                glEnable(capability);
+            else
+                glDisable(capability);
+        }
+
+        /** @brief Restores host-owned OpenGL bindings and fixed-function state on every pass exit. */
+        class OpenGLStateSnapshot final {
+        public:
+            OpenGLStateSnapshot() noexcept {
+                depthTestEnabled_ = glIsEnabled(GL_DEPTH_TEST);
+                scissorTestEnabled_ = glIsEnabled(GL_SCISSOR_TEST);
+                blendEnabled_ = glIsEnabled(GL_BLEND);
+                cullFaceEnabled_ = glIsEnabled(GL_CULL_FACE);
+                glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFramebuffer_);
+                glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &readFramebuffer_);
+                glGetIntegerv(GL_CURRENT_PROGRAM, &program_);
+                glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &vertexArray_);
+                glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &arrayBuffer_);
+                glGetIntegerv(GL_DEPTH_FUNC, &depthFunction_);
+                glGetIntegerv(GL_CULL_FACE_MODE, &cullFaceMode_);
+                glGetIntegerv(GL_ACTIVE_TEXTURE, &activeTexture_);
+                glActiveTexture(GL_TEXTURE7);
+                glGetIntegerv(GL_TEXTURE_BINDING_2D, &shadowTexture_);
+                glGetIntegerv(GL_VIEWPORT, viewport_.data());
+                glGetFloatv(GL_COLOR_CLEAR_VALUE, clearColor_.data());
+                glGetBooleanv(GL_COLOR_WRITEMASK, colorMask_.data());
+                glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMask_);
+            }
+
+            ~OpenGLStateSnapshot() {
+                glBindVertexArray(static_cast<GLuint>(vertexArray_));
+                glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(arrayBuffer_));
+                glUseProgram(static_cast<GLuint>(program_));
+                glDepthFunc(static_cast<GLenum>(depthFunction_));
+                RestoreCapability(GL_DEPTH_TEST, depthTestEnabled_);
+                RestoreCapability(GL_SCISSOR_TEST, scissorTestEnabled_);
+                RestoreCapability(GL_BLEND, blendEnabled_);
+                RestoreCapability(GL_CULL_FACE, cullFaceEnabled_);
+                glCullFace(static_cast<GLenum>(cullFaceMode_));
+                glColorMask(colorMask_[0], colorMask_[1], colorMask_[2], colorMask_[3]);
+                glDepthMask(depthMask_);
+                glClearColor(clearColor_[0], clearColor_[1], clearColor_[2], clearColor_[3]);
+                glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(drawFramebuffer_));
+                glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(readFramebuffer_));
+                glViewport(viewport_[0], viewport_[1], viewport_[2], viewport_[3]);
+                glActiveTexture(GL_TEXTURE7);
+                glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(shadowTexture_));
+                glActiveTexture(static_cast<GLenum>(activeTexture_));
+            }
+
+            OpenGLStateSnapshot(const OpenGLStateSnapshot &) = delete;
+            OpenGLStateSnapshot &operator=(const OpenGLStateSnapshot &) = delete;
+
+        private:
+            GLint drawFramebuffer_{0};
+            GLint readFramebuffer_{0};
+            GLint program_{0};
+            GLint vertexArray_{0};
+            GLint arrayBuffer_{0};
+            GLint depthFunction_{0};
+            GLint cullFaceMode_{0};
+            GLint activeTexture_{0};
+            GLint shadowTexture_{0};
+            std::array<GLint, 4> viewport_{};
+            std::array<GLfloat, 4> clearColor_{};
+            std::array<GLboolean, 4> colorMask_{};
+            GLboolean depthMask_{GL_TRUE};
+            GLboolean depthTestEnabled_{GL_FALSE};
+            GLboolean scissorTestEnabled_{GL_FALSE};
+            GLboolean blendEnabled_{GL_FALSE};
+            GLboolean cullFaceEnabled_{GL_FALSE};
+        };
     }  // namespace
+
+    /** @copydoc EditorViewportRendererOpenGL::EditorViewportRendererOpenGL */
+    EditorViewportRendererOpenGL::EditorViewportRendererOpenGL(Render::RenderFrontend &frontend) noexcept : frontend_(&frontend) {}
 
     /** @copydoc EditorViewportRendererOpenGL::~EditorViewportRendererOpenGL */
     EditorViewportRendererOpenGL::~EditorViewportRendererOpenGL() {
@@ -49,19 +185,15 @@ namespace Horo::Editor {
 
     /** @copydoc EditorViewportRendererOpenGL::Initialize */
     Result<void> EditorViewportRendererOpenGL::Initialize() {
-        if (initialized_) {
+        if (initialized_ || frontend_ == nullptr) {
             return Result<void>::Failure(
                 MakeViewportError(RendererErrors::ViewportAlreadyInitialized, "Editor viewport renderer is already initialized."));
-        }
-        if (gladLoadGL(SDL_GL_GetProcAddress) == 0) {
-            return Result<void>::Failure(
-                MakeViewportError(RendererErrors::ViewportOpenGLDispatchFailed, "Failed to load OpenGL entry points."));
         }
         if (const Result<void> program = CreateProgram(); program.HasError()) {
             Shutdown();
             return program;
         }
-        if (const Result<void> shadowResources = CreateShadowResources(); shadowResources.HasError()) {
+        if (const Result<void> shadowResources = CreateShadowProgram(); shadowResources.HasError()) {
             Shutdown();
             return shadowResources;
         }
@@ -91,9 +223,9 @@ namespace Horo::Editor {
 
     /** @copydoc EditorViewportRendererOpenGL::Shutdown */
     void EditorViewportRendererOpenGL::Shutdown() noexcept {
-        DestroyTarget();
+        ReleaseTarget();
         for (auto &[id, mesh] : meshes_)
-            DestroyMesh(mesh);
+            ReleaseMesh(mesh);
         meshes_.clear();
         if (gridVertexBuffer_ != 0) {
             glDeleteBuffers(1, &gridVertexBuffer_);
@@ -111,19 +243,13 @@ namespace Horo::Editor {
             glDeleteProgram(shadowProgram_);
             shadowProgram_ = 0;
         }
-        if (shadowDepthTexture_ != 0) {
-            glDeleteTextures(1, &shadowDepthTexture_);
-            shadowDepthTexture_ = 0;
-        }
-        if (shadowFramebuffer_ != 0) {
-            glDeleteFramebuffers(1, &shadowFramebuffer_);
-            shadowFramebuffer_ = 0;
-        }
         uniforms_ = {};
         requestedExtent_ = {};
         gridOptions_ = {};
         lightVisualizerOptions_ = {};
         targetHandle_ = {};
+        editorImageIdentity_ = 0;
+        meshesReady_ = false;
         initialized_ = false;
     }
 
@@ -131,6 +257,29 @@ namespace Horo::Editor {
     void EditorViewportRendererOpenGL::RequestExtent(const EditorViewportExtent extent) noexcept {
         requestedExtent_.width = std::min(extent.width, maxViewportDimension);
         requestedExtent_.height = std::min(extent.height, maxViewportDimension);
+    }
+
+    /** @copydoc EditorViewportRendererOpenGL::PrepareResources */
+    Result<std::optional<Render::RenderTargetHandle>> EditorViewportRendererOpenGL::PrepareResources(Render::RenderFrontend &frontend,
+                                                                                                     const Render::RenderSceneView &scene) {
+        if (!initialized_ || frontend_ != &frontend) {
+            return Result<std::optional<Render::RenderTargetHandle>>::Failure(
+                MakeViewportError(RendererErrors::ViewportNotInitialized, "Viewport resource owner is not initialized."));
+        }
+        if (const Result<void> meshes = SynchronizeMeshes(scene.meshResources); meshes.HasError())
+            return Result<std::optional<Render::RenderTargetHandle>>::Failure(meshes.ErrorValue());
+        if (const Result<void> shadow = SynchronizeShadowResources(); shadow.HasError())
+            return Result<std::optional<Render::RenderTargetHandle>>::Failure(shadow.ErrorValue());
+        if (requestedExtent_.IsValid()) {
+            if (const Result<void> target = SynchronizeTarget(requestedExtent_); target.HasError())
+                return Result<std::optional<Render::RenderTargetHandle>>::Failure(target.ErrorValue());
+        }
+        if (targetHandle_.IsValid()) {
+            const auto ready = frontend_->ResourceState(targetHandle_);
+            if (ready.HasValue() && ready.Value() == Render::RenderResourceState::Ready)
+                return Result<std::optional<Render::RenderTargetHandle>>::Success(targetHandle_);
+        }
+        return Result<std::optional<Render::RenderTargetHandle>>::Success(std::nullopt);
     }
 
     /** @copydoc EditorViewportRendererOpenGL::RequestGrid */
@@ -156,8 +305,7 @@ namespace Horo::Editor {
     }
 
     /** @copydoc EditorViewportRendererOpenGL::ExecuteStaticMeshPass */
-    Result<void> EditorViewportRendererOpenGL::ExecuteStaticMeshPass(  // NOSONAR(cpp:S3776)
-        const Render::StaticMeshPassDescriptor &descriptor) {
+    Result<void> EditorViewportRendererOpenGL::ExecuteStaticMeshPass(const Render::StaticMeshPassDescriptor &descriptor) {
         if (!initialized_) {
             return Result<void>::Failure(
                 MakeViewportError(RendererErrors::ViewportNotInitialized, "Viewport renderer is not initialized."));
@@ -165,9 +313,21 @@ namespace Horo::Editor {
         // A panel must request an extent every UI frame. Consuming the request keeps
         // hidden/inactive viewport tabs from spending GPU time in the background.
         const EditorViewportExtent requestedExtent = std::exchange(requestedExtent_, {});
-        if (!requestedExtent.IsValid()) {
+        if (!requestedExtent.IsValid())
             return Result<void>::Success();
-        }
+        if (const Result<void> valid = ValidatePassRequest(descriptor, requestedExtent); valid.HasError())
+            return valid;
+        targetHandle_ = descriptor.target;
+        const auto shadow = BuildEditorViewportDirectionalShadowView(descriptor.scene, Math::ClipDepthRange::NegativeOneToOne);
+        if (shadow.HasError())
+            return Result<void>::Failure(shadow.ErrorValue());
+        const float aspect = static_cast<float>(allocatedExtent_.width) / static_cast<float>(allocatedExtent_.height);
+        const OpenGLStateSnapshot stateSnapshot;
+        return RenderViewportPass(descriptor, shadow.Value(), aspect);
+    }
+
+    Result<void> EditorViewportRendererOpenGL::ValidatePassRequest(const Render::StaticMeshPassDescriptor &descriptor,
+                                                                   const EditorViewportExtent requestedExtent) const {
         if (!descriptor.IsValid() || descriptor.extent.width != requestedExtent.width ||
             descriptor.extent.height != requestedExtent.height) {
             return Result<void>::Failure(MakeViewportError(RendererErrors::ViewportInvalidScene, "Editor viewport scene data is invalid."));
@@ -176,60 +336,21 @@ namespace Horo::Editor {
             return Result<void>::Failure(
                 MakeViewportError(RendererErrors::ViewportStaleTarget, "Viewport pass references a stale render target."));
         }
-        targetHandle_ = descriptor.target;
-        if (requestedExtent.width != allocatedExtent_.width || requestedExtent.height != allocatedExtent_.height) {
-            if (const Result<void> recreated = RecreateTarget(requestedExtent); recreated.HasError()) {
-                return recreated;
-            }
-        }
-        if (const Result<void> synchronized = SynchronizeMeshes(descriptor.scene.meshResources); synchronized.HasError())
-            return synchronized;
-        const Result<std::optional<EditorViewportDirectionalShadowView>> shadow =
-            BuildEditorViewportDirectionalShadowView(descriptor.scene, Math::ClipDepthRange::NegativeOneToOne);
-        if (shadow.HasError())
-            return Result<void>::Failure(shadow.ErrorValue());
+        if (requestedExtent.width != allocatedExtent_.width || requestedExtent.height != allocatedExtent_.height)
+            return Result<void>::Failure(MakeViewportError(RendererErrors::ViewportStaleTarget, "Viewport target extent is not ready."));
+        return Result<void>::Success();
+    }
 
-        const float aspect = static_cast<float>(allocatedExtent_.width) / static_cast<float>(allocatedExtent_.height);
-
-        GLint previousDrawFramebuffer = 0;
-        GLint previousReadFramebuffer = 0;
-        GLint previousProgram = 0;
-        GLint previousVertexArray = 0;
-        GLint previousArrayBuffer = 0;
-        GLint previousDepthFunction = 0;
-        GLint previousCullFaceMode = 0;
-        GLint previousActiveTexture = 0;
-        GLint previousShadowTexture = 0;
-        std::array<GLint, 4> previousViewport{};
-        std::array<GLfloat, 4> previousClearColor{};
-        const GLboolean depthTestWasEnabled = glIsEnabled(GL_DEPTH_TEST);
-        const GLboolean scissorTestWasEnabled = glIsEnabled(GL_SCISSOR_TEST);
-        const GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
-        const GLboolean cullFaceWasEnabled = glIsEnabled(GL_CULL_FACE);
-        std::array<GLboolean, 4> previousColorMask{};
-        GLboolean previousDepthMask = GL_TRUE;
-        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previousDrawFramebuffer);
-        glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFramebuffer);
-        glGetIntegerv(GL_CURRENT_PROGRAM, &previousProgram);
-        glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &previousVertexArray);
-        glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previousArrayBuffer);
-        glGetIntegerv(GL_DEPTH_FUNC, &previousDepthFunction);
-        glGetIntegerv(GL_CULL_FACE_MODE, &previousCullFaceMode);
-        glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
-        glActiveTexture(GL_TEXTURE7);
-        glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousShadowTexture);
-        glGetIntegerv(GL_VIEWPORT, previousViewport.data());
-        glGetFloatv(GL_COLOR_CLEAR_VALUE, previousClearColor.data());
-        glGetBooleanv(GL_COLOR_WRITEMASK, previousColorMask.data());
-        glGetBooleanv(GL_DEPTH_WRITEMASK, &previousDepthMask);
-
-        if (shadow.Value().has_value()) {
-            if (const Result<void> renderedShadow = DrawDirectionalShadowMap(descriptor.scene, *shadow.Value());
-                renderedShadow.HasError()) {
+    Result<void> EditorViewportRendererOpenGL::RenderViewportPass(const Render::StaticMeshPassDescriptor &descriptor,
+                                                                  const std::optional<EditorViewportDirectionalShadowView> &shadow,
+                                                                  const float aspect) {
+        if (shadow.has_value()) {
+            if (const Result<void> renderedShadow = DrawDirectionalShadowMap(descriptor.scene, *shadow); renderedShadow.HasError()) {
                 return renderedShadow;
             }
         }
-        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
+        if (const Result<void> bound = resourceBridge_.BindRenderTarget(*frontend_, targetHandle_); bound.HasError())
+            return bound;
         glViewport(0, 0, static_cast<GLsizei>(allocatedExtent_.width), static_cast<GLsizei>(allocatedExtent_.height));
         glDisable(GL_SCISSOR_TEST);
         glDisable(GL_BLEND);
@@ -241,66 +362,39 @@ namespace Horo::Editor {
         glClearColor(descriptor.clearColor.red, descriptor.clearColor.green, descriptor.clearColor.blue, descriptor.clearColor.alpha);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glUseProgram(program_);
-        glActiveTexture(GL_TEXTURE7);
-        glBindTexture(GL_TEXTURE_2D, shadowDepthTexture_);
-        UploadLighting(descriptor.scene, shadow.Value());
+        if (const Result<void> boundShadow = resourceBridge_.BindTexture(*frontend_, shadowDepthTextureView_, 7); boundShadow.HasError())
+            return boundShadow;
+        UploadLighting(descriptor.scene, shadow);
         if (const Result<void> grid = DrawGrid(descriptor.scene.camera, aspect, static_cast<float>(allocatedExtent_.height));
             grid.HasError()) {
             return grid;
         }
-        for (const Render::RenderStaticMeshInstance &instance : descriptor.scene.instances) {
+        if (const Result<void> meshes = DrawSceneMeshes(descriptor.scene, aspect); meshes.HasError())
+            return meshes;
+        if (const Result<void> visualizer = DrawLightVisualizer(descriptor.scene.camera, aspect); visualizer.HasError())
+            return visualizer;
+        return Result<void>::Success();
+    }
+
+    Result<void> EditorViewportRendererOpenGL::DrawSceneMeshes(const Render::RenderSceneView &scene, const float aspect) {
+        for (const Render::RenderStaticMeshInstance &instance : scene.instances) {
             const auto mesh = meshes_.find(instance.mesh.id.value);
-            if (mesh == meshes_.end())
+            if (mesh == meshes_.end()) {
                 return Result<void>::Failure(
                     MakeViewportError(RendererErrors::ViewportStaleMeshResource, "Viewport instance references a stale mesh resource."));
-            glBindVertexArray(mesh->second.vertexArray);
+            }
+            if (const Result<void> bound = resourceBridge_.BindMesh(*frontend_, mesh->second.mesh); bound.HasError())
+                return bound;
             const Result<Math::Mat4> mvp =
-                BuildRenderMvp(descriptor.scene.camera, instance.localToWorld, aspect, Math::ClipDepthRange::NegativeOneToOne);
+                BuildRenderMvp(scene.camera, instance.localToWorld, aspect, Math::ClipDepthRange::NegativeOneToOne);
             if (mvp.HasError())
                 return Result<void>::Failure(mvp.ErrorValue());
             glUniformMatrix4fv(uniforms_.mvp, 1, GL_FALSE, mvp.Value().values.data());
             glUniformMatrix4fv(uniforms_.model, 1, GL_FALSE, instance.localToWorld.values.data());
             glUniform3f(uniforms_.selectionColor, instance.presentation.tint.x, instance.presentation.tint.y, instance.presentation.tint.z);
             glUniform1f(uniforms_.selectionStrength, instance.presentation.tintStrength);
-
             glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh->second.indexCount), GL_UNSIGNED_INT, nullptr);
         }
-        if (const Result<void> visualizer = DrawLightVisualizer(descriptor.scene.camera, aspect); visualizer.HasError())
-            return visualizer;
-        glBindVertexArray(static_cast<GLuint>(previousVertexArray));
-        glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(previousArrayBuffer));
-        glUseProgram(static_cast<GLuint>(previousProgram));
-        glDepthFunc(static_cast<GLenum>(previousDepthFunction));
-        if (depthTestWasEnabled == GL_TRUE) {
-            glEnable(GL_DEPTH_TEST);
-        } else {
-            glDisable(GL_DEPTH_TEST);
-        }
-        if (scissorTestWasEnabled == GL_TRUE) {
-            glEnable(GL_SCISSOR_TEST);
-        } else {
-            glDisable(GL_SCISSOR_TEST);
-        }
-        if (blendWasEnabled == GL_TRUE) {
-            glEnable(GL_BLEND);
-        } else {
-            glDisable(GL_BLEND);
-        }
-        if (cullFaceWasEnabled == GL_TRUE) {
-            glEnable(GL_CULL_FACE);
-        } else {
-            glDisable(GL_CULL_FACE);
-        }
-        glCullFace(static_cast<GLenum>(previousCullFaceMode));
-        glColorMask(previousColorMask[0], previousColorMask[1], previousColorMask[2], previousColorMask[3]);
-        glDepthMask(previousDepthMask);
-        glClearColor(previousClearColor[0], previousClearColor[1], previousClearColor[2], previousClearColor[3]);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(previousDrawFramebuffer));
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(previousReadFramebuffer));
-        glViewport(previousViewport[0], previousViewport[1], previousViewport[2], previousViewport[3]);
-        glActiveTexture(GL_TEXTURE7);
-        glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousShadowTexture));
-        glActiveTexture(static_cast<GLenum>(previousActiveTexture));
         return Result<void>::Success();
     }
 
@@ -383,7 +477,7 @@ namespace Horo::Editor {
     /** @copydoc EditorViewportRendererOpenGL::TextureView */
     EditorViewportTextureView EditorViewportRendererOpenGL::TextureView() const noexcept {
         return EditorViewportTextureView{
-            .textureId = static_cast<std::uintptr_t>(colorTexture_),
+            .textureId = editorImageIdentity_,
             .u0 = 0.0F,
             .v0 = 1.0F,
             .u1 = 1.0F,
@@ -393,124 +487,15 @@ namespace Horo::Editor {
 
     /** @copydoc EditorViewportRendererOpenGL::IsReady */
     bool EditorViewportRendererOpenGL::IsReady() const noexcept {
-        return initialized_ && colorTexture_ != 0 && allocatedExtent_.IsValid();
+        return initialized_ && meshesReady_ && editorImageIdentity_ != 0 && targetHandle_.IsValid() && allocatedExtent_.IsValid();
     }
 
     Result<void> EditorViewportRendererOpenGL::CreateProgram() {
-        static constexpr const char *vertexSource = R"glsl(#version 150 core
-in vec3 aPosition;
-in vec3 aNormal;
-in vec2 aUv;
-out vec3 vWorldPosition;
-out vec3 vWorldNormal;
-out vec4 vShadowPosition;
-uniform mat4 uMvp;
-uniform mat4 uModel;
-uniform mat4 uShadowViewProjection;
-void main()
-{
-    vec4 worldPosition = uModel * vec4(aPosition, 1.0);
-    vWorldPosition = worldPosition.xyz;
-    mat3 modelBasis = mat3(uModel);
-    vec3 inverseRow0 = cross(modelBasis[1], modelBasis[2]);
-    vec3 inverseRow1 = cross(modelBasis[2], modelBasis[0]);
-    vec3 inverseRow2 = cross(modelBasis[0], modelBasis[1]);
-    float determinant = dot(modelBasis[0], inverseRow0);
-    float inverseDeterminant = abs(determinant) > 0.0000001 ? 1.0 / determinant : 1.0;
-    mat3 normalMatrix = mat3(inverseRow0 * inverseDeterminant,
-                             inverseRow1 * inverseDeterminant,
-                             inverseRow2 * inverseDeterminant);
-    vWorldNormal = normalize(normalMatrix * aNormal);
-    vShadowPosition = uShadowViewProjection * worldPosition;
-    gl_Position = uMvp * vec4(aPosition, 1.0);
-}
-)glsl";
-        static constexpr const char *fragmentSource = R"glsl(#version 150 core
-const int MaxLights = 16;
-in vec3 vWorldPosition;
-in vec3 vWorldNormal;
-in vec4 vShadowPosition;
-out vec4 outColor;
-uniform vec3 uCameraPosition;
-uniform int uLightCount;
-uniform vec4 uLightPositionKind[MaxLights];
-uniform vec4 uLightDirectionRange[MaxLights];
-uniform vec4 uLightColorIntensity[MaxLights];
-uniform vec2 uLightCone[MaxLights];
-uniform sampler2D uShadowMap;
-uniform int uShadowEnabled;
-uniform int uShadowLightIndex;
-uniform vec3 uSelectionColor;
-uniform float uSelectionStrength;
-float directionalShadow(vec3 normal, vec3 lightDirection)
-{
-    if (uShadowEnabled == 0)
-        return 1.0;
-    vec3 projected = vShadowPosition.xyz / vShadowPosition.w;
-    vec3 shadowCoordinate = projected * 0.5 + 0.5;
-    if (shadowCoordinate.x <= 0.0 || shadowCoordinate.x >= 1.0 ||
-        shadowCoordinate.y <= 0.0 || shadowCoordinate.y >= 1.0 ||
-        shadowCoordinate.z <= 0.0 || shadowCoordinate.z >= 1.0)
-        return 1.0;
-    vec2 texel = 1.0 / vec2(textureSize(uShadowMap, 0));
-    float bias = max(0.0025 * (1.0 - dot(normal, lightDirection)), 0.00045);
-    float visibility = 0.0;
-    for (int y = -1; y <= 1; ++y)
-        for (int x = -1; x <= 1; ++x)
-        {
-            float closestDepth = texture(uShadowMap, shadowCoordinate.xy + vec2(x, y) * texel).r;
-            visibility += shadowCoordinate.z - bias <= closestDepth ? 1.0 : 0.0;
-        }
-    return visibility / 9.0;
-}
-void main()
-{
-    vec3 normal = normalize(vWorldNormal);
-    vec3 viewDirection = normalize(uCameraPosition - vWorldPosition);
-    vec3 baseColor = vec3(0.68, 0.70, 0.74);
-    vec3 lighting = baseColor * 0.08;
-    for (int index = 0; index < uLightCount; ++index)
-    {
-        int kind = int(uLightPositionKind[index].w + 0.5);
-        vec3 lightDirection;
-        float attenuation = 1.0;
-        if (kind == 0)
-        {
-            lightDirection = normalize(-uLightDirectionRange[index].xyz);
-        }
-        else
-        {
-            vec3 toLight = uLightPositionKind[index].xyz - vWorldPosition;
-            float distanceToLight = length(toLight);
-            lightDirection = distanceToLight > 0.0001 ? toLight / distanceToLight : normal;
-            float range = max(uLightDirectionRange[index].w, 0.0001);
-            float normalizedDistance = distanceToLight / range;
-            float rangeFade = max(1.0 - normalizedDistance * normalizedDistance, 0.0);
-            attenuation = rangeFade * rangeFade;
-            if (kind == 2)
-            {
-                float coneCosine = dot(normalize(uLightDirectionRange[index].xyz), -lightDirection);
-                attenuation *= smoothstep(uLightCone[index].y, uLightCone[index].x, coneCosine);
-            }
-        }
-        float diffuse = max(dot(normal, lightDirection), 0.0);
-        vec3 halfDirection = normalize(lightDirection + viewDirection);
-        float specular = pow(max(dot(normal, halfDirection), 0.0), 48.0) * 0.18;
-        vec3 radiance = uLightColorIntensity[index].rgb * uLightColorIntensity[index].a * attenuation;
-        float visibility = index == uShadowLightIndex ? directionalShadow(normal, lightDirection) : 1.0;
-        lighting += radiance * (baseColor * diffuse + specular) * visibility;
-    }
-    vec3 mapped = lighting / (lighting + vec3(1.0));
-    vec3 displayColor = pow(max(mapped, vec3(0.0)), vec3(1.0 / 2.2));
-    outColor = vec4(mix(displayColor, uSelectionColor, uSelectionStrength), 1.0);
-}
-)glsl";
-
-        auto vertex = CompileShader(GL_VERTEX_SHADER, vertexSource);
+        auto vertex = CompileShader(GL_VERTEX_SHADER, Detail::ViewportVertexShader);
         if (vertex.HasError()) {
             return Result<void>::Failure(vertex.ErrorValue());
         }
-        auto fragment = CompileShader(GL_FRAGMENT_SHADER, fragmentSource);
+        auto fragment = CompileShader(GL_FRAGMENT_SHADER, Detail::ViewportFragmentShader);
         if (fragment.HasError()) {
             glDeleteShader(vertex.Value());
             return Result<void>::Failure(fragment.ErrorValue());
@@ -537,6 +522,10 @@ void main()
             return Result<void>::Failure(
                 MakeViewportError(RendererErrors::ViewportShaderLinkFailed, "Viewport shader linking failed: " + log));
         }
+        return LoadUniformLocations();
+    }
+
+    Result<void> EditorViewportRendererOpenGL::LoadUniformLocations() {
         uniforms_.mvp = glGetUniformLocation(program_, "uMvp");
         uniforms_.model = glGetUniformLocation(program_, "uModel");
         uniforms_.cameraPosition = glGetUniformLocation(program_, "uCameraPosition");
@@ -551,34 +540,36 @@ void main()
         uniforms_.shadowLightIndex = glGetUniformLocation(program_, "uShadowLightIndex");
         uniforms_.selectionColor = glGetUniformLocation(program_, "uSelectionColor");
         uniforms_.selectionStrength = glGetUniformLocation(program_, "uSelectionStrength");
-        if (uniforms_.mvp < 0 || uniforms_.model < 0 || uniforms_.cameraPosition < 0 || uniforms_.lightCount < 0 ||
-            uniforms_.lightPositionKind < 0 || uniforms_.lightDirectionRange < 0 || uniforms_.lightColorIntensity < 0 ||
-            uniforms_.lightCone < 0 || uniforms_.shadowViewProjection < 0 || uniforms_.shadowMap < 0 || uniforms_.shadowEnabled < 0 ||
-            uniforms_.shadowLightIndex < 0 || uniforms_.selectionColor < 0 || uniforms_.selectionStrength < 0) {
+        const std::array locations{
+            uniforms_.mvp,
+            uniforms_.model,
+            uniforms_.cameraPosition,
+            uniforms_.lightCount,
+            uniforms_.lightPositionKind,
+            uniforms_.lightDirectionRange,
+            uniforms_.lightColorIntensity,
+            uniforms_.lightCone,
+            uniforms_.shadowViewProjection,
+            uniforms_.shadowMap,
+            uniforms_.shadowEnabled,
+            uniforms_.shadowLightIndex,
+            uniforms_.selectionColor,
+            uniforms_.selectionStrength,
+        };
+        if (!std::ranges::all_of(locations, [](const std::int32_t location) {
+            return location >= 0;
+        })) {
             return Result<void>::Failure(
                 MakeViewportError(RendererErrors::ViewportShaderContractInvalid, "Viewport shader is missing a required frame uniform."));
         }
-
         return Result<void>::Success();
     }
 
-    Result<void> EditorViewportRendererOpenGL::CreateShadowResources() {
-        static constexpr const char *shadowVertexSource = R"glsl(#version 150 core
-in vec3 aPosition;
-uniform mat4 uShadowMvp;
-void main()
-{
-    gl_Position = uShadowMvp * vec4(aPosition, 1.0);
-}
-)glsl";
-        static constexpr const char *shadowFragmentSource = R"glsl(#version 150 core
-void main() {}
-)glsl";
-
-        auto vertex = CompileShader(GL_VERTEX_SHADER, shadowVertexSource);
+    Result<void> EditorViewportRendererOpenGL::CreateShadowProgram() {
+        auto vertex = CompileShader(GL_VERTEX_SHADER, Detail::ShadowVertexShader);
         if (vertex.HasError())
             return Result<void>::Failure(vertex.ErrorValue());
-        auto fragment = CompileShader(GL_FRAGMENT_SHADER, shadowFragmentSource);
+        auto fragment = CompileShader(GL_FRAGMENT_SHADER, Detail::ShadowFragmentShader);
         if (fragment.HasError()) {
             glDeleteShader(vertex.Value());
             return Result<void>::Failure(fragment.ErrorValue());
@@ -607,43 +598,14 @@ void main() {}
                 MakeViewportError(RendererErrors::ViewportShaderContractInvalid, "Viewport shadow shader is missing its matrix uniform."));
         }
 
-        constexpr auto shadowMapResolution = static_cast<GLsizei>(EditorViewportDirectionalShadowMapResolution);
-        GLint previousDrawFramebuffer = 0;
-        GLint previousReadFramebuffer = 0;
-        GLint previousTexture = 0;
-        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previousDrawFramebuffer);
-        glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFramebuffer);
-        glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
-        glGenFramebuffers(1, &shadowFramebuffer_);
-        glGenTextures(1, &shadowDepthTexture_);
-        glBindTexture(GL_TEXTURE_2D, shadowDepthTexture_);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, shadowMapResolution, shadowMapResolution, 0, GL_DEPTH_COMPONENT, GL_FLOAT,
-                     nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-        constexpr std::array<GLfloat, 4> borderColor{1.0F, 1.0F, 1.0F, 1.0F};
-        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor.data());
-        glBindFramebuffer(GL_FRAMEBUFFER, shadowFramebuffer_);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowDepthTexture_, 0);
-        glDrawBuffer(GL_NONE);
-        glReadBuffer(GL_NONE);
-        const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-        glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousTexture));
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(previousDrawFramebuffer));
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(previousReadFramebuffer));
-        if (shadowFramebuffer_ == 0 || shadowDepthTexture_ == 0 || status != GL_FRAMEBUFFER_COMPLETE) {
-            return Result<void>::Failure(
-                MakeViewportError(RendererErrors::ViewportFramebufferIncomplete, "OpenGL directional shadow framebuffer is incomplete."));
-        }
         return Result<void>::Success();
     }
 
     Result<void> EditorViewportRendererOpenGL::DrawDirectionalShadowMap(const Render::RenderSceneView &scene,
                                                                         const EditorViewportDirectionalShadowView &shadow) {
         constexpr auto shadowMapResolution = static_cast<GLsizei>(EditorViewportDirectionalShadowMapResolution);
-        glBindFramebuffer(GL_FRAMEBUFFER, shadowFramebuffer_);
+        if (const Result<void> bound = resourceBridge_.BindRenderTarget(*frontend_, shadowTarget_); bound.HasError())
+            return bound;
         glViewport(0, 0, shadowMapResolution, shadowMapResolution);
         glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
         glDepthMask(GL_TRUE);
@@ -661,7 +623,8 @@ void main() {}
             }
             const Math::Mat4 shadowMvp = Math::Multiply(shadow.viewProjection, instance.localToWorld);
             glUniformMatrix4fv(uniforms_.shadowMvp, 1, GL_FALSE, shadowMvp.values.data());
-            glBindVertexArray(mesh->second.vertexArray);
+            if (const Result<void> bound = resourceBridge_.BindMesh(*frontend_, mesh->second.mesh); bound.HasError())
+                return bound;
             glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh->second.indexCount), GL_UNSIGNED_INT, nullptr);
         }
         glCullFace(GL_BACK);
@@ -707,135 +670,249 @@ void main() {}
     }
 
     Result<void> EditorViewportRendererOpenGL::SynchronizeMeshes(const std::span<const EditorViewportMeshResourceView> resources) {
-        GLint previousVertexArray = 0;
-        GLint previousArrayBuffer = 0;
-        glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &previousVertexArray);
-        glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &previousArrayBuffer);
+        meshesReady_ = true;
 
         for (const EditorViewportMeshResourceView &resource : resources) {
-            if (auto existing = meshes_.find(resource.handle.id.value); existing != meshes_.end()) {
-                if (existing->second.generation == resource.handle.generation)
-                    continue;
-                DestroyMesh(existing->second);
-                meshes_.erase(existing);
-            }
-            GpuMesh mesh{.indexCount = static_cast<std::uint32_t>(resource.indices.size()), .generation = resource.handle.generation};
-            glGenVertexArrays(1, &mesh.vertexArray);
-            glBindVertexArray(mesh.vertexArray);
-            glGenBuffers(1, &mesh.vertexBuffer);
-            glBindBuffer(GL_ARRAY_BUFFER, mesh.vertexBuffer);
-            glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(resource.vertices.size_bytes()), resource.vertices.data(),
-                         GL_STATIC_DRAW);
-            glGenBuffers(1, &mesh.indexBuffer);
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.indexBuffer);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr>(resource.indices.size_bytes()), resource.indices.data(),
-                         GL_STATIC_DRAW);
-            glEnableVertexAttribArray(0);
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(sizeof(Render::MeshVertex)), nullptr);
-            glEnableVertexAttribArray(1);
-            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(sizeof(Render::MeshVertex)),
-                                  std::bit_cast<const void *>(static_cast<std::uintptr_t>(offsetof(Render::MeshVertex, normal))));
-            glEnableVertexAttribArray(2);
-            glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<GLsizei>(sizeof(Render::MeshVertex)),
-                                  std::bit_cast<const void *>(static_cast<std::uintptr_t>(offsetof(Render::MeshVertex, uv))));
-            if (mesh.vertexArray == 0 || mesh.vertexBuffer == 0 || mesh.indexBuffer == 0) {
-                DestroyMesh(mesh);
-                glBindVertexArray(static_cast<GLuint>(previousVertexArray));
-                glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(previousArrayBuffer));
-                return Result<void>::Failure(
-                    MakeViewportError(RendererErrors::ViewportGeometryCreationFailed, "Failed to upload a viewport mesh resource."));
-            }
-            meshes_.try_emplace(resource.handle.id.value, mesh);
+            auto [position, inserted] = meshes_.try_emplace(resource.handle.id.value);
+            ResidentMesh &resident = position->second;
+            if (!inserted && resident.sourceGeneration != resource.handle.generation)
+                ReleaseMesh(resident);
+            const auto ready = AdvanceResidentMesh(resource, resident);
+            if (ready.HasError())
+                return Result<void>::Failure(ready.ErrorValue());
+            meshesReady_ = meshesReady_ && ready.Value();
         }
-        for (auto mesh = meshes_.begin(); mesh != meshes_.end();) {
-            const bool present = std::ranges::any_of(resources, [&](const EditorViewportMeshResourceView &resource) {
-                return resource.handle.id.value == mesh->first && resource.handle.generation == mesh->second.generation;
-            });
-            if (!present) {
-                DestroyMesh(mesh->second);
-                mesh = meshes_.erase(mesh);
-            } else
-                ++mesh;
-        }
-        glBindVertexArray(static_cast<GLuint>(previousVertexArray));
-        glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(previousArrayBuffer));
+
+        RetireMissingMeshes(resources);
         return Result<void>::Success();
     }
 
-    void EditorViewportRendererOpenGL::DestroyMesh(GpuMesh &mesh) noexcept {
-        if (mesh.indexBuffer != 0)
-            glDeleteBuffers(1, &mesh.indexBuffer);
-        if (mesh.vertexBuffer != 0)
-            glDeleteBuffers(1, &mesh.vertexBuffer);
-        if (mesh.vertexArray != 0)
-            glDeleteVertexArrays(1, &mesh.vertexArray);
+    Result<bool> EditorViewportRendererOpenGL::AdvanceResidentMesh(const EditorViewportMeshResourceView &resource, ResidentMesh &resident) {
+        if (resident.sourceGeneration == 0) {
+            const Result<void> created = CreateResidentMeshBuffers(resource, resident);
+            if (created.HasError())
+                return Result<bool>::Failure(created.ErrorValue());
+        }
+        const auto vertexReady = ResourceReady(*frontend_, resident.vertexBuffer, resident.vertexOperation);
+        if (vertexReady.HasError())
+            return Result<bool>::Failure(vertexReady.ErrorValue());
+        const auto indexReady = ResourceReady(*frontend_, resident.indexBuffer, resident.indexOperation);
+        if (indexReady.HasError())
+            return Result<bool>::Failure(indexReady.ErrorValue());
+        if (!resident.mesh.IsValid() && vertexReady.Value() && indexReady.Value()) {
+            auto mesh = frontend_->CreateMesh({.vertexBuffer = resident.vertexBuffer,
+                                               .indexBuffer = resident.indexBuffer,
+                                               .vertexStride = sizeof(Render::MeshVertex),
+                                               .vertexCount = static_cast<std::uint32_t>(resource.vertices.size()),
+                                               .indexFormat = Render::RenderIndexFormat::UInt32,
+                                               .indexCount = resident.indexCount,
+                                               .topology = Render::RenderPrimitiveTopology::Triangles,
+                                               .localBounds = resource.localBounds});
+            if (mesh.HasError())
+                return Result<bool>::Failure(mesh.ErrorValue());
+            resident.mesh = mesh.Value().handle;
+            resident.meshOperation = mesh.Value().operation;
+        }
+        return ResourceReady(*frontend_, resident.mesh, resident.meshOperation);
+    }
+
+    Result<void> EditorViewportRendererOpenGL::CreateResidentMeshBuffers(const EditorViewportMeshResourceView &resource,
+                                                                         ResidentMesh &resident) {
+        if (resource.vertices.size() > std::numeric_limits<std::uint32_t>::max() ||
+            resource.indices.size() > std::numeric_limits<std::uint32_t>::max()) {
+            return Result<void>::Failure(
+                MakeViewportError(RendererErrors::ViewportGeometryCreationFailed, "Viewport mesh exceeds generic resource count limits."));
+        }
+        auto vertex = frontend_->CreateBuffer({.byteSize = resource.vertices.size_bytes(),
+                                               .usage = Render::RenderBufferUsage::Vertex,
+                                               .access = Render::RenderBufferAccess::DeviceLocal},
+                                              std::as_bytes(resource.vertices));
+        if (vertex.HasError())
+            return Result<void>::Failure(vertex.ErrorValue());
+        resident.vertexBuffer = vertex.Value().handle;
+        resident.vertexOperation = vertex.Value().operation;
+        auto index = frontend_->CreateBuffer({.byteSize = resource.indices.size_bytes(),
+                                              .usage = Render::RenderBufferUsage::Index,
+                                              .access = Render::RenderBufferAccess::DeviceLocal},
+                                             std::as_bytes(resource.indices));
+        if (index.HasError()) {
+            ReleaseMesh(resident);
+            return Result<void>::Failure(index.ErrorValue());
+        }
+        resident.indexBuffer = index.Value().handle;
+        resident.indexOperation = index.Value().operation;
+        resident.indexCount = static_cast<std::uint32_t>(resource.indices.size());
+        resident.sourceGeneration = resource.handle.generation;
+        return Result<void>::Success();
+    }
+
+    void EditorViewportRendererOpenGL::RetireMissingMeshes(const std::span<const EditorViewportMeshResourceView> resources) noexcept {
+        for (auto mesh = meshes_.begin(); mesh != meshes_.end();) {
+            const bool present = std::ranges::any_of(resources, [&](const EditorViewportMeshResourceView &resource) {
+                return resource.handle.id.value == mesh->first && resource.handle.generation == mesh->second.sourceGeneration;
+            });
+            if (!present) {
+                ReleaseMesh(mesh->second);
+                mesh = meshes_.erase(mesh);
+            } else {
+                ++mesh;
+            }
+        }
+    }
+
+    Result<void> EditorViewportRendererOpenGL::SynchronizeTarget(const EditorViewportExtent extent) {
+        if (ExtentChanged(allocatedExtent_, extent))
+            ReleaseViewportTarget();
+        allocatedExtent_ = extent;
+        const Render::FramebufferExtent framebufferExtent{extent.width, extent.height};
+        const auto targetReady = AdvanceViewportTarget(framebufferExtent);
+        if (targetReady.HasError())
+            return Result<void>::Failure(targetReady.ErrorValue());
+        if (!targetReady.Value())
+            return Result<void>::Success();
+        auto image = resourceBridge_.EditorImageIdentity(*frontend_, colorTextureView_);
+        if (image.HasError())
+            return Result<void>::Failure(image.ErrorValue());
+        editorImageIdentity_ = image.Value();
+        return Result<void>::Success();
+    }
+
+    Result<bool> EditorViewportRendererOpenGL::AdvanceViewportTarget(const Render::FramebufferExtent extent) {
+        const auto texturesReady = AdvanceViewportTextures(extent);
+        if (texturesReady.HasError() || !texturesReady.Value())
+            return texturesReady;
+        const auto viewsReady = AdvanceViewportViews();
+        if (viewsReady.HasError() || !viewsReady.Value())
+            return viewsReady;
+        return AdvanceRenderTarget(*frontend_,
+                                   {.colorAttachment = colorTextureView_, .depthAttachment = depthTextureView_, .extent = extent},
+                                   targetHandle_, targetOperation_);
+    }
+
+    Result<bool> EditorViewportRendererOpenGL::AdvanceViewportTextures(const Render::FramebufferExtent extent) {
+        const auto color = AdvanceTexture(*frontend_,
+                                          {.extent = extent,
+                                           .format = Render::RenderTextureFormat::Rgba8Unorm,
+                                           .usage = Render::RenderTextureUsage::Sampled | Render::RenderTextureUsage::RenderAttachment},
+                                          colorTexture_, colorTextureOperation_);
+        if (color.HasError())
+            return Result<bool>::Failure(color.ErrorValue());
+        const auto depth = AdvanceTexture(*frontend_,
+                                          {.extent = extent,
+                                           .format = Render::RenderTextureFormat::Depth24Stencil8,
+                                           .usage = Render::RenderTextureUsage::RenderAttachment},
+                                          depthTexture_, depthTextureOperation_);
+        if (depth.HasError())
+            return Result<bool>::Failure(depth.ErrorValue());
+        return Result<bool>::Success(color.Value() && depth.Value());
+    }
+
+    Result<bool> EditorViewportRendererOpenGL::AdvanceViewportViews() {
+        const auto color = AdvanceTextureView(*frontend_,
+                                              {.texture = colorTexture_,
+                                               .format = Render::RenderTextureFormat::Rgba8Unorm,
+                                               .aspect = Render::RenderTextureAspect::Color},
+                                              colorTextureView_, colorTextureViewOperation_);
+        if (color.HasError())
+            return Result<bool>::Failure(color.ErrorValue());
+        const auto depth = AdvanceTextureView(*frontend_,
+                                              {.texture = depthTexture_,
+                                               .format = Render::RenderTextureFormat::Depth24Stencil8,
+                                               .aspect = Render::RenderTextureAspect::DepthStencil},
+                                              depthTextureView_, depthTextureViewOperation_);
+        if (depth.HasError())
+            return Result<bool>::Failure(depth.ErrorValue());
+        return Result<bool>::Success(color.Value() && depth.Value());
+    }
+
+    Result<void> EditorViewportRendererOpenGL::SynchronizeShadowResources() {
+        const auto targetReady = AdvanceShadowTarget();
+        if (targetReady.HasError())
+            return Result<void>::Failure(targetReady.ErrorValue());
+        meshesReady_ = meshesReady_ && targetReady.Value();
+        return Result<void>::Success();
+    }
+
+    Result<bool> EditorViewportRendererOpenGL::AdvanceShadowTarget() {
+        constexpr Render::FramebufferExtent shadowExtent{EditorViewportDirectionalShadowMapResolution,
+                                                         EditorViewportDirectionalShadowMapResolution};
+        const auto textureReady =
+            AdvanceTexture(*frontend_,
+                           {.extent = shadowExtent,
+                            .format = Render::RenderTextureFormat::Depth32Float,
+                            .usage = Render::RenderTextureUsage::Sampled | Render::RenderTextureUsage::RenderAttachment},
+                           shadowDepthTexture_, shadowDepthTextureOperation_);
+        if (textureReady.HasError() || !textureReady.Value())
+            return textureReady;
+        const auto viewReady = AdvanceTextureView(*frontend_,
+                                                  {.texture = shadowDepthTexture_,
+                                                   .format = Render::RenderTextureFormat::Depth32Float,
+                                                   .aspect = Render::RenderTextureAspect::Depth},
+                                                  shadowDepthTextureView_, shadowDepthTextureViewOperation_);
+        if (viewReady.HasError() || !viewReady.Value())
+            return viewReady;
+        return AdvanceRenderTarget(*frontend_, {.depthAttachment = shadowDepthTextureView_, .extent = shadowExtent}, shadowTarget_,
+                                   shadowTargetOperation_);
+    }
+
+    void EditorViewportRendererOpenGL::ReleaseMesh(ResidentMesh &mesh) noexcept {
+        if (frontend_ != nullptr) {
+            if (mesh.mesh.IsValid())
+                static_cast<void>(frontend_->ReleaseMesh(mesh.mesh));
+            if (mesh.indexBuffer.IsValid())
+                static_cast<void>(frontend_->ReleaseBuffer(mesh.indexBuffer));
+            if (mesh.vertexBuffer.IsValid())
+                static_cast<void>(frontend_->ReleaseBuffer(mesh.vertexBuffer));
+        }
         mesh = {};
     }
 
-    Result<void> EditorViewportRendererOpenGL::RecreateTarget(const EditorViewportExtent extent) {
-        GLint previousDrawFramebuffer = 0;
-        GLint previousReadFramebuffer = 0;
-        GLint previousTexture = 0;
-        GLint previousRenderbuffer = 0;
-        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previousDrawFramebuffer);
-        glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFramebuffer);
-        glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
-        glGetIntegerv(GL_RENDERBUFFER_BINDING, &previousRenderbuffer);
-
-        if (framebuffer_ == 0) {
-            glGenFramebuffers(1, &framebuffer_);
-        }
-        if (colorTexture_ == 0) {
-            glGenTextures(1, &colorTexture_);
-        }
-        if (depthBuffer_ == 0) {
-            glGenRenderbuffers(1, &depthBuffer_);
-        }
-
-        // Keep object identities stable across resize. ImGui records the texture ID
-        // before the viewport render pass executes later in the same frame.
-        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_);
-        glBindTexture(GL_TEXTURE_2D, colorTexture_);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, static_cast<GLsizei>(extent.width), static_cast<GLsizei>(extent.height), 0, GL_RGBA,
-                     GL_UNSIGNED_BYTE, nullptr);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture_, 0);
-
-        glBindRenderbuffer(GL_RENDERBUFFER, depthBuffer_);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, static_cast<GLsizei>(extent.width),
-                              static_cast<GLsizei>(extent.height));
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthBuffer_);
-
-        const GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-        glBindRenderbuffer(GL_RENDERBUFFER, static_cast<GLuint>(previousRenderbuffer));
-        glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousTexture));
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(previousDrawFramebuffer));
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(previousReadFramebuffer));
-        if (status != GL_FRAMEBUFFER_COMPLETE) {
-            DestroyTarget();
-            return Result<void>::Failure(
-                MakeViewportError(RendererErrors::ViewportFramebufferIncomplete, "OpenGL viewport framebuffer is incomplete."));
-        }
-        allocatedExtent_ = extent;
-        return Result<void>::Success();
+    void EditorViewportRendererOpenGL::ReleaseTarget() noexcept {
+        ReleaseShadowResources();
+        ReleaseViewportTarget();
     }
 
-    void EditorViewportRendererOpenGL::DestroyTarget() noexcept {
-        if (depthBuffer_ != 0) {
-            glDeleteRenderbuffers(1, &depthBuffer_);
-            depthBuffer_ = 0;
+    void EditorViewportRendererOpenGL::ReleaseShadowResources() noexcept {
+        if (frontend_ != nullptr) {
+            if (shadowTarget_.IsValid())
+                static_cast<void>(frontend_->ReleaseRenderTarget(shadowTarget_));
+            if (shadowDepthTextureView_.IsValid())
+                static_cast<void>(frontend_->ReleaseTextureView(shadowDepthTextureView_));
+            if (shadowDepthTexture_.IsValid())
+                static_cast<void>(frontend_->ReleaseTexture(shadowDepthTexture_));
         }
-        if (colorTexture_ != 0) {
-            glDeleteTextures(1, &colorTexture_);
-            colorTexture_ = 0;
+        shadowDepthTexture_ = {};
+        shadowDepthTextureView_ = {};
+        shadowTarget_ = {};
+        shadowDepthTextureOperation_ = {};
+        shadowDepthTextureViewOperation_ = {};
+        shadowTargetOperation_ = {};
+    }
+
+    void EditorViewportRendererOpenGL::ReleaseViewportTarget() noexcept {
+        if (frontend_ != nullptr) {
+            if (targetHandle_.IsValid())
+                static_cast<void>(frontend_->ReleaseRenderTarget(targetHandle_));
+            if (depthTextureView_.IsValid())
+                static_cast<void>(frontend_->ReleaseTextureView(depthTextureView_));
+            if (colorTextureView_.IsValid())
+                static_cast<void>(frontend_->ReleaseTextureView(colorTextureView_));
+            if (depthTexture_.IsValid())
+                static_cast<void>(frontend_->ReleaseTexture(depthTexture_));
+            if (colorTexture_.IsValid())
+                static_cast<void>(frontend_->ReleaseTexture(colorTexture_));
         }
-        if (framebuffer_ != 0) {
-            glDeleteFramebuffers(1, &framebuffer_);
-            framebuffer_ = 0;
-        }
+        colorTexture_ = {};
+        depthTexture_ = {};
+        colorTextureView_ = {};
+        depthTextureView_ = {};
+        colorTextureOperation_ = {};
+        depthTextureOperation_ = {};
+        colorTextureViewOperation_ = {};
+        depthTextureViewOperation_ = {};
+        targetOperation_ = {};
+        targetHandle_ = {};
+        editorImageIdentity_ = 0;
         allocatedExtent_ = {};
     }
 }  // namespace Horo::Editor

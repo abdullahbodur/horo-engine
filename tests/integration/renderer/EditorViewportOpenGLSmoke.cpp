@@ -21,6 +21,20 @@ namespace {
         REQUIRE((condition));
     }
 
+    RenderTargetHandle PrepareViewportTarget(EditorViewportRendererOpenGL &viewport, RenderFrontend &frontend,
+                                             const EditorViewportSceneView &scene) {
+        for (std::size_t attempt = 0; attempt < 4; ++attempt) {
+            auto prepared = viewport.PrepareResources(frontend, RenderSceneView{ToRenderCamera(scene.camera), scene.meshResources,
+                                                                                scene.instances, scene.lights});
+            Check(prepared.HasValue());
+            Check(frontend.ProcessResourceRequests().HasValue());
+            if (prepared.Value().has_value())
+                return *prepared.Value();
+        }
+        Check(false);
+        return {};
+    }
+
 }  // namespace
 
 TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]") {
@@ -56,7 +70,7 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]") {
     glBindVertexArray(callerVertexArray);
     glBindBuffer(GL_ARRAY_BUFFER, callerArrayBuffer);
 
-    EditorViewportRendererOpenGL viewport;
+    EditorViewportRendererOpenGL viewport{*frontend};
     Check(viewport.Initialize().HasValue());
     Runtime::PrimitiveMeshCache meshCache;
     constexpr std::array primitiveTypes{Runtime::PrimitiveMeshType::Box,     Runtime::PrimitiveMeshType::Sphere,
@@ -105,31 +119,22 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]") {
     Check(initializedArrayBuffer == static_cast<GLint>(callerArrayBuffer));
     viewport.RequestExtent(EditorViewportExtent{width, height});
     Check(frontend->AttachStaticMeshPassExecutor(viewport).HasValue());
-    auto viewportTargetResult = frontend->CreateOffscreenTarget({width, height});
-    Check(viewportTargetResult.HasValue());
-    const RenderTargetHandle viewportTarget = viewportTargetResult.Value();
+    const RenderTargetHandle viewportTarget = PrepareViewportTarget(viewport, *frontend, viewportScene);
 
     auto begun = frontend->BeginFrame(FrameDescriptor{.frameNumber = 1, .outputExtent = {640, 480}});
     Check(begun.HasValue());
     RenderFrameScope frame = std::move(begun).Value();
-    const std::array passes{
-        RenderPassDescriptor{
-            .id = RenderPassId{1},
-            .kind = RenderPassKind::Graphics,
-            .staticMesh =
-                StaticMeshPassDescriptor{
-                    .target = viewportTarget,
-                    .extent = {width, height},
-                    .scene = RenderSceneView{ToRenderCamera(viewportScene.camera), viewportScene.meshResources, viewportScene.instances,
-                                             viewportScene.lights},
-                },
-        },
-        RenderPassDescriptor{
-            .id = RenderPassId{2},
-            .kind = RenderPassKind::Graphics,
-            .primaryOutput = PrimaryOutputAttachment{},
-        },
-    };
+    const std::array passes{RenderPassDescriptor{
+        .id = RenderPassId{1},
+        .kind = RenderPassKind::Graphics,
+        .staticMesh =
+            StaticMeshPassDescriptor{
+                .target = viewportTarget,
+                .extent = {width, height},
+                .scene = RenderSceneView{ToRenderCamera(viewportScene.camera), viewportScene.meshResources, viewportScene.instances,
+                                         viewportScene.lights},
+            },
+    }};
 
     glViewport(7, 9, 111, 113);
     glClearColor(0.2F, 0.3F, 0.4F, 0.5F);
@@ -144,6 +149,7 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]") {
     glDepthMask(GL_FALSE);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, callerDrawFramebuffer);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, callerReadFramebuffer);
+    Check(frame.Execute(passes).HasValue());
 
     GLint restoredDrawFramebuffer = 0;
     GLint restoredReadFramebuffer = 0;
@@ -184,9 +190,6 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]") {
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 
-    // The primary pass executes after external viewport GL work and re-establishes
-    // the swapchain output state before GUI rendering/presentation.
-    Check(frame.Execute(passes).HasValue());
     Check(viewport.IsReady());
     const EditorViewportTextureView firstTextureView = viewport.TextureView();
     Check(firstTextureView.IsValid());
@@ -207,7 +210,6 @@ TEST_CASE("Editor Viewport Open GL Smoke", "[integration][renderer][gpu]") {
     Check(pixels[center] < 150 && pixels[center + 1] > 130 && pixels[center + 2] > 150);
     Check(frame.Present().HasValue());
     frontend->DetachStaticMeshPassExecutor(viewport);
-    Check(frontend->ReleaseOffscreenTarget(viewportTarget).HasValue());
     viewport.Shutdown();
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);

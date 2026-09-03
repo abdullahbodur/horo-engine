@@ -79,6 +79,28 @@ namespace Horo::Render {
                 return NextResourceInstance();
             }
 
+            Result<std::uint64_t> CreateTexture(const RenderTextureDescriptor &descriptor) override {
+                if (!initialized_ || !descriptor.IsValid())
+                    return Result<std::uint64_t>::Failure(
+                        MakeBackendError(NullBackendErrors::InvalidConfig, "Null texture realization request is invalid."));
+                return NextResourceInstance();
+            }
+
+            Result<std::uint64_t> CreateTextureView(const RenderTextureViewDescriptor &descriptor, const std::uint64_t texture) override {
+                if (!initialized_ || !descriptor.IsValid() || texture == 0)
+                    return Result<std::uint64_t>::Failure(
+                        MakeBackendError(NullBackendErrors::InvalidConfig, "Null texture-view realization request is invalid."));
+                return NextResourceInstance();
+            }
+
+            Result<std::uint64_t> CreateRenderTarget(const RenderTargetDescriptor &descriptor, const std::uint64_t colorAttachment,
+                                                     const std::uint64_t depthAttachment) override {
+                if (!initialized_ || !descriptor.IsValid() || (colorAttachment == 0 && depthAttachment == 0))
+                    return Result<std::uint64_t>::Failure(
+                        MakeBackendError(NullBackendErrors::InvalidConfig, "Null render-target realization request is invalid."));
+                return NextResourceInstance();
+            }
+
             /** @copydoc IRenderBackend::DestroyBuffer */
             void DestroyBuffer(std::uint64_t) noexcept override {
                 // Null resources are opaque monotonic identities with no native allocation to release.
@@ -88,6 +110,12 @@ namespace Horo::Render {
             void DestroyMesh(std::uint64_t) noexcept override {
                 // Null resources are opaque monotonic identities with no native allocation to release.
             }
+
+            void DestroyTexture(std::uint64_t) noexcept override {}
+
+            void DestroyTextureView(std::uint64_t) noexcept override {}
+
+            void DestroyRenderTarget(std::uint64_t) noexcept override {}
 
             /** @copydoc IRenderBackend::BeginFrame */
             Result<FrameToken> BeginFrame(const FrameDescriptor &descriptor) override {
@@ -243,6 +271,8 @@ namespace Horo::Render {
                 .backend = RenderBackendId{"null"},
                 .supportsBufferResources = true,
                 .supportsMeshResources = true,
+                .supportsTextureResources = true,
+                .supportsRenderTargetResources = true,
             };
             RenderBackendConfig config_{};
             FramebufferExtent extent_{};

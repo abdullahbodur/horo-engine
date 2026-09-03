@@ -65,6 +65,7 @@ namespace Horo::Render::Detail {
                                            std::uint64_t backendInstance);
         [[nodiscard]] Result<void> Fail(RenderResourceClass resourceClass, RenderResourceIdentity identity, Error error);
         [[nodiscard]] Result<void> Release(RenderResourceClass resourceClass, RenderResourceIdentity identity);
+        [[nodiscard]] Result<void> CancelPending(RenderResourceClass resourceClass, RenderResourceIdentity identity);
         [[nodiscard]] Result<RenderResourceState> State(RenderResourceClass resourceClass, RenderResourceIdentity identity) const;
         [[nodiscard]] Result<void> OperationResult(ResourceOperationId operation) const;
         [[nodiscard]] Result<std::uint64_t> BackendInstance(RenderResourceClass resourceClass, RenderResourceIdentity identity) const;

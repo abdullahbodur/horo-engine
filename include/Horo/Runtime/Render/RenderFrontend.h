@@ -12,9 +12,12 @@
 #include <vector>
 
 namespace Horo::Render {
+    class RenderFrontend;
+
     namespace Detail {
         class RenderResourceRegistry;
         class RenderResourceUploadQueue;
+        class RenderFrontendResourceAccess;
     }  // namespace Detail
 
     /** @brief Finite frontend admission and per-drain limits for initial resource uploads. */
@@ -29,8 +32,6 @@ namespace Horo::Render {
                    maximumRequestsPerDrain > 0;
         }
     };
-
-    class RenderFrontend;
 
     /**
      * @brief Move-only owner of one begun backend frame until presentation or abort.
@@ -187,6 +188,27 @@ namespace Horo::Render {
         [[nodiscard]] Result<ResourceCreation<RenderMeshHandle>> CreateMesh(const RenderMeshDescriptor &descriptor);
 
         /**
+         * @brief Queues one immutable texture allocation without initial pixel data.
+         * @param descriptor Valid backend-neutral texture descriptor.
+         * @return Pending typed handle and completion operation, or a validation/admission failure.
+         */
+        [[nodiscard]] Result<ResourceCreation<RenderTextureHandle>> CreateTexture(const RenderTextureDescriptor &descriptor);
+
+        /**
+         * @brief Queues one immutable view over an exact ready texture generation.
+         * @param descriptor Valid view descriptor whose texture belongs to this frontend.
+         * @return Pending typed handle and completion operation, or a validation/admission failure.
+         */
+        [[nodiscard]] Result<ResourceCreation<RenderTextureViewHandle>> CreateTextureView(const RenderTextureViewDescriptor &descriptor);
+
+        /**
+         * @brief Queues one immutable render target over exact ready attachment views.
+         * @param descriptor Valid target descriptor whose views belong to this frontend.
+         * @return Pending typed handle and completion operation, or a validation/admission failure.
+         */
+        [[nodiscard]] Result<ResourceCreation<RenderTargetHandle>> CreateRenderTarget(const RenderTargetDescriptor &descriptor);
+
+        /**
          * @brief Queues a new mesh generation and retires the old generation only after publication.
          * @param current Ready mesh generation to replace without retargeting its dependents.
          * @param descriptor Descriptor for the independent replacement generation.
@@ -207,6 +229,15 @@ namespace Horo::Render {
         /** @brief Returns the current state of one mesh generation. */
         [[nodiscard]] Result<RenderResourceState> ResourceState(RenderMeshHandle mesh) const;
 
+        /** @brief Returns the current state of one texture generation. */
+        [[nodiscard]] Result<RenderResourceState> ResourceState(RenderTextureHandle texture) const;
+
+        /** @brief Returns the current state of one texture-view generation. */
+        [[nodiscard]] Result<RenderResourceState> ResourceState(RenderTextureViewHandle view) const;
+
+        /** @brief Returns the current state of one generic render-target generation. */
+        [[nodiscard]] Result<RenderResourceState> ResourceState(RenderTargetHandle target) const;
+
         /** @brief Returns success, pending, or the stored typed result for one resource operation. */
         [[nodiscard]] Result<void> ResourceOperationResult(ResourceOperationId operation) const;
 
@@ -216,8 +247,18 @@ namespace Horo::Render {
         /** @brief Logically releases one mesh generation and drains newly eligible dependencies. */
         [[nodiscard]] Result<void> ReleaseMesh(RenderMeshHandle mesh);
 
+        /** @brief Logically releases one texture generation after its dependent views retire. */
+        [[nodiscard]] Result<void> ReleaseTexture(RenderTextureHandle texture);
+
+        /** @brief Logically releases one texture-view generation after dependent targets retire. */
+        [[nodiscard]] Result<void> ReleaseTextureView(RenderTextureViewHandle view);
+
+        /** @brief Logically releases one generic render-target generation. */
+        [[nodiscard]] Result<void> ReleaseRenderTarget(RenderTargetHandle target);
+
     private:
         friend class RenderFrameScope;
+        friend class Detail::RenderFrontendResourceAccess;
 
         class ConstructionKey {
             ConstructionKey() = default;
@@ -230,8 +271,15 @@ namespace Horo::Render {
 
     private:
         [[nodiscard]] bool IsLiveTarget(RenderTargetHandle target, FramebufferExtent extent) const noexcept;
+        [[nodiscard]] Result<std::uint64_t> BackendInstance(RenderMeshHandle mesh) const;
+        [[nodiscard]] Result<std::uint64_t> BackendInstance(RenderTextureViewHandle view) const;
+        [[nodiscard]] Result<std::uint64_t> BackendInstance(RenderTargetHandle target) const;
         [[nodiscard]] Result<void> ValidateMeshDependencies(const RenderMeshDescriptor &descriptor) const;
         [[nodiscard]] bool IsMeshBufferLayoutCompatible(const RenderMeshDescriptor &descriptor) const noexcept;
+        [[nodiscard]] Result<void> ValidateTextureViewDependency(const RenderTextureViewDescriptor &descriptor) const;
+        [[nodiscard]] Result<void> ValidateRenderTargetDependencies(const RenderTargetDescriptor &descriptor) const;
+        [[nodiscard]] Result<void> ValidateRenderTargetAttachment(RenderTextureViewHandle handle, RenderTextureAspect requiredAspect,
+                                                                  FramebufferExtent extent, std::uint32_t sampleCount) const;
 
         struct TargetRecord {
             FramebufferExtent extent{};
@@ -242,6 +290,16 @@ namespace Horo::Render {
             RenderBufferDescriptor descriptor;
         };
 
+        struct TextureRecord {
+            std::uint32_t generation{0};
+            RenderTextureDescriptor descriptor;
+        };
+
+        struct TextureViewRecord {
+            std::uint32_t generation{0};
+            RenderTextureViewDescriptor descriptor;
+        };
+
         std::unique_ptr<IRenderBackend> backend_;
         std::unique_ptr<Detail::RenderResourceRegistry> resourceRegistry_;
         std::unique_ptr<Detail::RenderResourceUploadQueue> resourceUploadQueue_;
@@ -249,5 +307,8 @@ namespace Horo::Render {
         IStaticMeshPassExecutor *staticMeshPassExecutor_{nullptr};
         std::vector<TargetRecord> targets_{{}};
         std::vector<BufferRecord> buffers_{{}};
+        std::vector<TextureRecord> textures_{{}};
+        std::vector<TextureViewRecord> textureViews_{{}};
     };
+
 }  // namespace Horo::Render

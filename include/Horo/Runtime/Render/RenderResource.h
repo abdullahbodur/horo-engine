@@ -9,6 +9,19 @@
 #include <cstdint>
 
 namespace Horo::Render {
+    /** @brief Pixel extent of a render surface or offscreen target. */
+    struct FramebufferExtent {
+        std::uint32_t width{0};
+        std::uint32_t height{0};
+
+        /** @brief Reports whether both dimensions can back a render target. */
+        [[nodiscard]] constexpr bool IsValid() const noexcept {
+            return width > 0 && height > 0;
+        }
+
+        [[nodiscard]] constexpr auto operator<=>(const FramebufferExtent &) const noexcept = default;
+    };
+
     /** @brief Process-local identity of one frontend resource-registry lifetime. */
     struct RenderResourceOwnerId {
         std::uint64_t value{0};

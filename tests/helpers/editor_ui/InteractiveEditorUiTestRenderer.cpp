@@ -36,6 +36,16 @@ namespace Horo::Tests {
         if (!outputExtent.IsValid())
             throw std::invalid_argument("Interactive UI-test renderer requires a valid drawable extent.");
 
+        auto prepared =
+            viewportRenderer_->PrepareResources(*frontend_, Render::RenderSceneView{.camera = ToRenderCamera(previousScene_.camera),
+                                                                                    .meshResources = previousScene_.meshResources,
+                                                                                    .instances = previousScene_.instances,
+                                                                                    .lights = previousScene_.lights});
+        if (prepared.HasError())
+            ThrowRendererError(prepared.ErrorValue());
+        if (prepared.Value().has_value())
+            viewportTarget_ = *prepared.Value();
+
         if (outputExtent.width != outputExtent_.width || outputExtent.height != outputExtent_.height) {
             const Result<void> resized = frontend_->Resize(outputExtent);
             if (resized.HasError())
@@ -58,7 +68,8 @@ namespace Horo::Tests {
     }
 
     void InteractiveEditorUiTestRenderer::RenderViewport(const Editor::EditorViewportSceneView scene) {
-        ExecutePasses(scene, viewportRenderer_->RequestedExtent().IsValid());
+        previousScene_ = scene;
+        ExecutePasses(scene, viewportRenderer_->RequestedExtent().IsValid() && viewportTarget_.IsValid() && viewportRenderer_->IsReady());
     }
 
     void InteractiveEditorUiTestRenderer::Present() {
@@ -94,7 +105,8 @@ namespace Horo::Tests {
             executorAttached_ = false;
         }
         if (frontend_ != nullptr && viewportTarget_.IsValid()) {
-            static_cast<void>(frontend_->ReleaseOffscreenTarget(viewportTarget_));
+            if (!frontend_->Capabilities().supportsRenderTargetResources)
+                static_cast<void>(frontend_->ReleaseOffscreenTarget(viewportTarget_));
             viewportTarget_ = {};
         }
         viewportRenderer_.reset();
@@ -124,10 +136,12 @@ namespace Horo::Tests {
             ThrowRendererError(attached.ErrorValue());
         executorAttached_ = true;
 
-        auto target = frontend_->CreateOffscreenTarget({1, 1});
-        if (target.HasError())
-            ThrowRendererError(target.ErrorValue());
-        viewportTarget_ = target.Value();
+        if (!frontend_->Capabilities().supportsRenderTargetResources) {
+            auto target = frontend_->CreateOffscreenTarget({1, 1});
+            if (target.HasError())
+                ThrowRendererError(target.ErrorValue());
+            viewportTarget_ = target.Value();
+        }
     }
 
     void InteractiveEditorUiTestRenderer::ExecutePasses(const Editor::EditorViewportSceneView scene, const bool includeViewport) {

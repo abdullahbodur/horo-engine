@@ -195,6 +195,22 @@ namespace Horo::Render::Detail {
         return Result<void>::Success();
     }
 
+    Result<void> RenderResourceRegistry::CancelPending(const RenderResourceClass resourceClass, const RenderResourceIdentity identity) {
+        auto validated = Validate(resourceClass, identity);
+        if (validated.HasError())
+            return Result<void>::Failure(validated.ErrorValue());
+        Entry &entry = entries_[validated.Value()];
+        if (entry.state != RenderResourceState::Pending)
+            return Result<void>::Failure(
+                RegistryError(FrontendErrors::ResourceNotPending, "Only a pending resource operation can be cancelled."));
+        --pendingRequests_;
+        CompleteOperation(entry.operation, RegistryError(FrontendErrors::ResourceOperationCancelled,
+                                                         "The pending resource operation was cancelled before realization."));
+        entry.state = RenderResourceState::Retiring;
+        QueueRetirementIfEligible(identity.slot);
+        return Result<void>::Success();
+    }
+
     Result<RenderResourceState> RenderResourceRegistry::State(const RenderResourceClass resourceClass,
                                                               const RenderResourceIdentity identity) const {
         auto validated = Validate(resourceClass, identity);

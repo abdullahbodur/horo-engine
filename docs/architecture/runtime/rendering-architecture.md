@@ -992,16 +992,26 @@ remains host-owned. The editor composition root registers the module, selects it
 through `RenderFrontend`, and performs primary-output clear and presentation only
 through the staged frame scope.
 
-The current editor viewport uses frontend-owned logical target identities with
-editor-private OpenGL and Metal texture bridges.
+The OpenGL editor viewport owns generation-safe texture, texture-view, render-target,
+buffer, and mesh handles through `RenderFrontend`. Creation is queued and published
+only at the frontend resource safe point; replacement keeps the previous generation
+usable until the new generation is ready, and release follows dependency order. An
+editor-private OpenGL bridge resolves ready generic handles to backend instances for
+frame-local command encoding. OpenGL names, framebuffer objects, and vertex-array
+objects remain private to the OpenGL module and its matching editor integration.
+The Metal editor viewport still uses its transitional frontend-owned logical target
+identity and editor-private texture bridge until its corresponding resource-migration
+ticket is complete.
 Render extraction resolves versioned primitive descriptors through
 `PrimitiveMeshCache`, emits a deduplicated table of immutable generic mesh
 resource views, and emits instances containing only mesh resource identity,
-transform, bounds, material, and presentation state. Each executor owns its native
-vertex/index buffer registry and an offscreen color/depth target, and exposes
-only a GUI-bridge texture identity to `ViewportPanel`. The GUI identity remains
-app-private and is not a public render texture handle. Render extraction and
-static-mesh submission are backend-neutral. OpenGL and Metal editor integrations must
+transform, bounds, material, and presentation state. The OpenGL executor resolves
+frontend-owned resident meshes and targets at a frame boundary; the transitional
+Metal executor continues to own its native vertex/index buffer registry and
+offscreen color/depth target. Both expose only a GUI-bridge texture identity to
+`ViewportPanel`. The GUI identity remains app-private and is not a public render
+texture handle. Render extraction and static-mesh submission are backend-neutral.
+OpenGL and Metal editor integrations must
 satisfy the same lifecycle and viewport parity suite defined by
 [Render Backend Parity Contract](render-backend-parity-contract.md).
 Selected editor instances carry backend-neutral tint and strength values; both

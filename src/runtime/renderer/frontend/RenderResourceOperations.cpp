@@ -12,7 +12,19 @@ namespace Horo::Render {
         using UploadRequestKind = Detail::RenderResourceUploadQueue::RequestKind;
 
         [[nodiscard]] Detail::RenderResourceClass ResourceClassFor(const UploadRequestKind kind) noexcept {
-            return kind == UploadRequestKind::Buffer ? Detail::RenderResourceClass::Buffer : Detail::RenderResourceClass::Mesh;
+            switch (kind) {
+                case UploadRequestKind::Buffer:
+                    return Detail::RenderResourceClass::Buffer;
+                case UploadRequestKind::Mesh:
+                    return Detail::RenderResourceClass::Mesh;
+                case UploadRequestKind::Texture:
+                    return Detail::RenderResourceClass::Texture;
+                case UploadRequestKind::TextureView:
+                    return Detail::RenderResourceClass::TextureView;
+                case UploadRequestKind::RenderTarget:
+                    return Detail::RenderResourceClass::RenderTarget;
+            }
+            return Detail::RenderResourceClass::Buffer;
         }
 
         [[nodiscard]] Result<std::uint64_t> RealizeMeshRequest(IRenderBackend &backend, const Detail::RenderResourceRegistry &registry,
@@ -28,13 +40,54 @@ namespace Horo::Render {
             return backend.CreateMesh(descriptor, vertex.Value(), index.Value());
         }
 
+        [[nodiscard]] Result<std::uint64_t> RealizeTextureViewRequest(IRenderBackend &backend,
+                                                                      const Detail::RenderResourceRegistry &registry,
+                                                                      const RenderTextureViewDescriptor &descriptor) {
+            const auto texture = registry.BackendInstance(Detail::RenderResourceClass::Texture, Identity(descriptor.texture));
+            if (texture.HasError())
+                return Result<std::uint64_t>::Failure(texture.ErrorValue());
+            return backend.CreateTextureView(descriptor, texture.Value());
+        }
+
+        [[nodiscard]] Result<std::uint64_t> RealizeRenderTargetRequest(IRenderBackend &backend,
+                                                                       const Detail::RenderResourceRegistry &registry,
+                                                                       const RenderTargetDescriptor &descriptor) {
+            std::uint64_t colorInstance = 0;
+            if (descriptor.colorAttachment.IsValid()) {
+                const auto color = registry.BackendInstance(Detail::RenderResourceClass::TextureView, Identity(descriptor.colorAttachment));
+                if (color.HasError())
+                    return Result<std::uint64_t>::Failure(color.ErrorValue());
+                colorInstance = color.Value();
+            }
+            std::uint64_t depthInstance = 0;
+            if (descriptor.depthAttachment.IsValid()) {
+                const auto depth = registry.BackendInstance(Detail::RenderResourceClass::TextureView, Identity(descriptor.depthAttachment));
+                if (depth.HasError())
+                    return Result<std::uint64_t>::Failure(depth.ErrorValue());
+                depthInstance = depth.Value();
+            }
+            return backend.CreateRenderTarget(descriptor, colorInstance, depthInstance);
+        }
+
         void DestroyResourceInstance(IRenderBackend &backend, const Detail::RenderResourceClass resourceClass,
                                      const std::uint64_t backendInstance) noexcept {
             if (resourceClass == Detail::RenderResourceClass::Buffer) {
                 backend.DestroyBuffer(backendInstance);
                 return;
             }
-            backend.DestroyMesh(backendInstance);
+            if (resourceClass == Detail::RenderResourceClass::Mesh) {
+                backend.DestroyMesh(backendInstance);
+                return;
+            }
+            if (resourceClass == Detail::RenderResourceClass::Texture) {
+                backend.DestroyTexture(backendInstance);
+                return;
+            }
+            if (resourceClass == Detail::RenderResourceClass::TextureView) {
+                backend.DestroyTextureView(backendInstance);
+                return;
+            }
+            backend.DestroyRenderTarget(backendInstance);
         }
     }  // namespace
 
@@ -46,11 +99,35 @@ namespace Horo::Render {
         return {handle.owner, handle.slot, handle.generation};
     }
 
+    Detail::RenderResourceIdentity Identity(const RenderTextureHandle handle) noexcept {
+        return {handle.owner, handle.slot, handle.generation};
+    }
+
+    Detail::RenderResourceIdentity Identity(const RenderTextureViewHandle handle) noexcept {
+        return {handle.owner, handle.slot, handle.generation};
+    }
+
+    Detail::RenderResourceIdentity Identity(const RenderTargetHandle handle) noexcept {
+        return {handle.owner, handle.slot, handle.generation};
+    }
+
     RenderBufferHandle BufferHandle(const Detail::RenderResourceIdentity identity) noexcept {
         return {identity.owner, identity.slot, identity.generation};
     }
 
     RenderMeshHandle MeshHandle(const Detail::RenderResourceIdentity identity) noexcept {
+        return {identity.owner, identity.slot, identity.generation};
+    }
+
+    RenderTextureHandle TextureHandle(const Detail::RenderResourceIdentity identity) noexcept {
+        return {identity.owner, identity.slot, identity.generation};
+    }
+
+    RenderTextureViewHandle TextureViewHandle(const Detail::RenderResourceIdentity identity) noexcept {
+        return {identity.owner, identity.slot, identity.generation};
+    }
+
+    RenderTargetHandle TargetHandle(const Detail::RenderResourceIdentity identity) noexcept {
         return {identity.owner, identity.slot, identity.generation};
     }
 
@@ -62,10 +139,20 @@ namespace Horo::Render {
     Result<std::uint64_t> RealizeResourceRequest(IRenderBackend &backend, const Detail::RenderResourceRegistry &registry,
                                                  const UploadRequest &request) {
         try {
-            if (request.kind == UploadRequestKind::Buffer) {
-                return backend.CreateBuffer(request.buffer, request.initialData);
+            switch (request.kind) {
+                case UploadRequestKind::Buffer:
+                    return backend.CreateBuffer(request.buffer, request.initialData);
+                case UploadRequestKind::Mesh:
+                    return RealizeMeshRequest(backend, registry, request.mesh);
+                case UploadRequestKind::Texture:
+                    return backend.CreateTexture(request.texture);
+                case UploadRequestKind::TextureView:
+                    return RealizeTextureViewRequest(backend, registry, request.textureView);
+                case UploadRequestKind::RenderTarget:
+                    return RealizeRenderTargetRequest(backend, registry, request.renderTarget);
             }
-            return RealizeMeshRequest(backend, registry, request.mesh);
+            return Result<std::uint64_t>::Failure(
+                MakeError(FrontendErrors::ResourceBackendException, "Renderer resource request kind is invalid."));
         } catch (...) {  // NOSONAR(cpp:S2738)
             return Result<std::uint64_t>::Failure(
                 MakeError(FrontendErrors::ResourceBackendException, "Renderer backend resource realization threw an exception."));

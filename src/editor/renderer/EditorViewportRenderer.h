@@ -11,6 +11,10 @@
 
 #include <optional>
 
+namespace Horo::Render {
+    class RenderFrontend;
+}
+
 namespace Horo::Editor {
     /** @brief Pixel extent requested by the editor viewport panel. */
     struct EditorViewportExtent {
@@ -21,6 +25,8 @@ namespace Horo::Editor {
         [[nodiscard]] constexpr bool IsValid() const noexcept {
             return width > 0 && height > 0;
         }
+
+        [[nodiscard]] constexpr bool operator==(const EditorViewportExtent &) const noexcept = default;
     };
 
     /** @brief Backend-supplied GUI texture identity and normalized presentation coordinates. */
@@ -59,6 +65,19 @@ namespace Horo::Editor {
     class IEditorViewportRenderer : public Render::IStaticMeshPassExecutor {
     public:
         virtual ~IEditorViewportRenderer() = default;
+
+        /**
+         * @brief Synchronizes backend-neutral viewport resources at a frame boundary.
+         * @param frontend Selected frontend that owns resident resource identity.
+         * @param scene Synchronously borrowed CPU source snapshot.
+         * @return Newly ready viewport target when this integration owns one, otherwise no replacement.
+         */
+        [[nodiscard]] virtual Result<std::optional<Render::RenderTargetHandle>> PrepareResources(Render::RenderFrontend &frontend,
+                                                                                                 const Render::RenderSceneView &scene) {
+            static_cast<void>(frontend);
+            static_cast<void>(scene);
+            return Result<std::optional<Render::RenderTargetHandle>>::Success(std::nullopt);
+        }
 
         /** @brief Records the panel's desired render-target extent for the current frame. */
         virtual void RequestExtent(EditorViewportExtent extent) noexcept = 0;
