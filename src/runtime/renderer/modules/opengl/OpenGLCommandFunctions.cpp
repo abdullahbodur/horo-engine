@@ -1,5 +1,6 @@
 #include "OpenGLBackendInternal.h"
 
+#include <bit>
 #include <glad/gl.h>
 
 namespace Horo::Render::Detail {
@@ -28,8 +29,8 @@ namespace Horo::Render::Detail {
             glBindBuffer(target, object);
         }
 
-        void ProductionBufferData(const std::uint32_t target, const std::ptrdiff_t size, const void *data, const std::uint32_t usage) {
-            glBufferData(target, size, data, usage);
+        void ProductionBufferData(const std::uint32_t target, const std::span<const std::byte> data, const std::uint32_t usage) {
+            glBufferData(target, static_cast<GLsizeiptr>(data.size()), data.data(), usage);
         }
 
         void ProductionGenerateVertexArrays(const std::int32_t count, std::uint32_t *objects) {
@@ -45,8 +46,9 @@ namespace Horo::Render::Detail {
         }
 
         void ProductionVertexAttributePointer(const std::uint32_t index, const std::int32_t size, const std::uint32_t type,
-                                              const std::uint8_t normalized, const std::int32_t stride, const void *offset) {
-            glVertexAttribPointer(index, size, type, normalized, stride, offset);
+                                              const std::uint8_t normalized, const std::int32_t stride, const std::uintptr_t offset) {
+            glVertexAttribPointer(index, size, type, normalized, stride,
+                                  std::bit_cast<const void *>(offset));  // NOSONAR: OpenGL models byte offsets as pointers.
         }
 
         void ProductionEnableVertexAttribute(const std::uint32_t index) {
@@ -71,7 +73,7 @@ namespace Horo::Render::Detail {
 
         void ProductionTextureImage(const OpenGLTextureImageDescriptor &descriptor) {
             glTexImage2D(descriptor.target, descriptor.level, descriptor.internalFormat, descriptor.width, descriptor.height,
-                         descriptor.border, descriptor.format, descriptor.type, descriptor.pixels);
+                         descriptor.border, descriptor.format, descriptor.type, nullptr);
         }
 
         void ProductionGenerateFramebuffers(const std::int32_t count, std::uint32_t *objects) {
@@ -109,27 +111,27 @@ namespace Horo::Render::Detail {
             .viewport = &ProductionViewport,
             .clearColor = &ProductionClearColor,
             .clear = &ProductionClear,
-            .generateBuffers = &ProductionGenerateBuffers,
-            .deleteBuffers = &ProductionDeleteBuffers,
-            .bindBuffer = &ProductionBindBuffer,
-            .bufferData = &ProductionBufferData,
-            .generateVertexArrays = &ProductionGenerateVertexArrays,
-            .deleteVertexArrays = &ProductionDeleteVertexArrays,
-            .bindVertexArray = &ProductionBindVertexArray,
-            .vertexAttributePointer = &ProductionVertexAttributePointer,
-            .enableVertexAttribute = &ProductionEnableVertexAttribute,
-            .generateTextures = &ProductionGenerateTextures,
-            .deleteTextures = &ProductionDeleteTextures,
-            .bindTexture = &ProductionBindTexture,
-            .textureParameter = &ProductionTextureParameter,
-            .textureImage = &ProductionTextureImage,
-            .generateFramebuffers = &ProductionGenerateFramebuffers,
-            .deleteFramebuffers = &ProductionDeleteFramebuffers,
-            .bindFramebuffer = &ProductionBindFramebuffer,
-            .framebufferTexture = &ProductionFramebufferTexture,
-            .checkFramebuffer = &ProductionCheckFramebuffer,
-            .drawBuffer = &ProductionDrawBuffer,
-            .readBuffer = &ProductionReadBuffer,
+            .buffers = {.generateBuffers = &ProductionGenerateBuffers,
+                        .deleteBuffers = &ProductionDeleteBuffers,
+                        .bindBuffer = &ProductionBindBuffer,
+                        .bufferData = &ProductionBufferData},
+            .vertexArrays = {.generateVertexArrays = &ProductionGenerateVertexArrays,
+                             .deleteVertexArrays = &ProductionDeleteVertexArrays,
+                             .bindVertexArray = &ProductionBindVertexArray,
+                             .vertexAttributePointer = &ProductionVertexAttributePointer,
+                             .enableVertexAttribute = &ProductionEnableVertexAttribute},
+            .textures = {.generateTextures = &ProductionGenerateTextures,
+                         .deleteTextures = &ProductionDeleteTextures,
+                         .bindTexture = &ProductionBindTexture,
+                         .textureParameter = &ProductionTextureParameter,
+                         .textureImage = &ProductionTextureImage},
+            .framebuffers = {.generateFramebuffers = &ProductionGenerateFramebuffers,
+                             .deleteFramebuffers = &ProductionDeleteFramebuffers,
+                             .bindFramebuffer = &ProductionBindFramebuffer,
+                             .framebufferTexture = &ProductionFramebufferTexture,
+                             .checkFramebuffer = &ProductionCheckFramebuffer,
+                             .drawBuffer = &ProductionDrawBuffer,
+                             .readBuffer = &ProductionReadBuffer},
         };
     }
 }  // namespace Horo::Render::Detail

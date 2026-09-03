@@ -510,7 +510,9 @@ if (HORO_BUILD_EDITOR_GUI AND HORO_BUILD_RENDER_OPENGL)
     add_library(HoroEditorViewportOpenGL STATIC
             editor/renderer/opengl/EditorGuiRendererOpenGL.cpp
             editor/renderer/opengl/OpenGLViewportResourceBridge.cpp
+            editor/renderer/opengl/OpenGLStateSnapshot.cpp
             editor/renderer/opengl/EditorViewportRendererOpenGL.cpp
+            editor/renderer/opengl/OpenGLViewportResources.cpp
             editor/renderer/opengl/SdlOpenGLPresentationPort.cpp
     )
     add_library(HoroEngine::EditorViewportOpenGL ALIAS HoroEditorViewportOpenGL)

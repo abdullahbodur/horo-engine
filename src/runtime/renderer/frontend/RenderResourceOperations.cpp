@@ -71,19 +71,20 @@ namespace Horo::Render {
 
         void DestroyResourceInstance(IRenderBackend &backend, const Detail::RenderResourceClass resourceClass,
                                      const std::uint64_t backendInstance) noexcept {
-            if (resourceClass == Detail::RenderResourceClass::Buffer) {
+            using enum Detail::RenderResourceClass;
+            if (resourceClass == Buffer) {
                 backend.DestroyBuffer(backendInstance);
                 return;
             }
-            if (resourceClass == Detail::RenderResourceClass::Mesh) {
+            if (resourceClass == Mesh) {
                 backend.DestroyMesh(backendInstance);
                 return;
             }
-            if (resourceClass == Detail::RenderResourceClass::Texture) {
+            if (resourceClass == Texture) {
                 backend.DestroyTexture(backendInstance);
                 return;
             }
-            if (resourceClass == Detail::RenderResourceClass::TextureView) {
+            if (resourceClass == TextureView) {
                 backend.DestroyTextureView(backendInstance);
                 return;
             }
@@ -139,16 +140,17 @@ namespace Horo::Render {
     Result<std::uint64_t> RealizeResourceRequest(IRenderBackend &backend, const Detail::RenderResourceRegistry &registry,
                                                  const UploadRequest &request) {
         try {
+            using enum UploadRequestKind;
             switch (request.kind) {
-                case UploadRequestKind::Buffer:
+                case Buffer:
                     return backend.CreateBuffer(request.buffer, request.initialData);
-                case UploadRequestKind::Mesh:
+                case Mesh:
                     return RealizeMeshRequest(backend, registry, request.mesh);
-                case UploadRequestKind::Texture:
+                case Texture:
                     return backend.CreateTexture(request.texture);
-                case UploadRequestKind::TextureView:
+                case TextureView:
                     return RealizeTextureViewRequest(backend, registry, request.textureView);
-                case UploadRequestKind::RenderTarget:
+                case RenderTarget:
                     return RealizeRenderTargetRequest(backend, registry, request.renderTarget);
             }
             return Result<std::uint64_t>::Failure(

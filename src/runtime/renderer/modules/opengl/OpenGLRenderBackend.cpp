@@ -32,12 +32,13 @@ namespace Horo::Render {
         };
 
         [[nodiscard]] OpenGLTextureFormat TextureFormat(const RenderTextureFormat format) noexcept {
+            using enum RenderTextureFormat;
             switch (format) {
-                case RenderTextureFormat::Rgba8Unorm:
+                case Rgba8Unorm:
                     return {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE};
-                case RenderTextureFormat::Depth24Stencil8:
+                case Depth24Stencil8:
                     return {GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8};
-                case RenderTextureFormat::Depth32Float:
+                case Depth32Float:
                     return {GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT};
             }
             return {};
@@ -59,7 +60,7 @@ namespace Horo::Render {
         class OpenGLRenderBackend final : public IRenderBackend {
         public:
             OpenGLRenderBackend(IOpenGLPresentationPort &presentationPort, const OpenGLBackendOptions options,
-                                const Detail::OpenGLCommandFunctions functions, std::shared_ptr<OpenGLContextLease> contextLease) noexcept
+                                const Detail::OpenGLCommandFunctions &functions, std::shared_ptr<OpenGLContextLease> contextLease) noexcept
                 : presentationPort_(&presentationPort), options_(options), functions_(functions), contextLease_(std::move(contextLease)) {
                 const bool resourcesAvailable = functions_.HasResourceFunctions();
                 capabilities_.supportsOffscreenTargets = resourcesAvailable;
@@ -143,13 +144,13 @@ namespace Horo::Render {
                     return Result<std::uint64_t>::Failure(
                         MakeOpenGLError(OpenGLBackendErrors::InvalidConfig, "OpenGL buffer creation request is invalid."));
                 std::uint32_t buffer = 0;
-                functions_.generateBuffers(1, &buffer);
+                functions_.buffers.generateBuffers(1, &buffer);
                 if (buffer == 0)
                     return ResourceUnavailable("OpenGL failed to allocate a buffer object.");
                 constexpr std::uint32_t target = GL_ARRAY_BUFFER;
-                functions_.bindBuffer(target, buffer);
-                functions_.bufferData(target, static_cast<std::ptrdiff_t>(initialData.size()), initialData.data(), GL_STATIC_DRAW);
-                functions_.bindBuffer(target, 0);
+                functions_.buffers.bindBuffer(target, buffer);
+                functions_.buffers.bufferData(target, initialData, GL_STATIC_DRAW);
+                functions_.buffers.bindBuffer(target, 0);
                 buffers_.insert(buffer);
                 return Result<std::uint64_t>::Success(buffer);
             }
@@ -164,23 +165,23 @@ namespace Horo::Render {
                     return Result<std::uint64_t>::Failure(
                         MakeOpenGLError(OpenGLBackendErrors::InvalidConfig, "OpenGL mesh creation request is invalid."));
                 std::uint32_t vertexArray = 0;
-                functions_.generateVertexArrays(1, &vertexArray);
+                functions_.vertexArrays.generateVertexArrays(1, &vertexArray);
                 if (vertexArray == 0)
                     return ResourceUnavailable("OpenGL failed to allocate a mesh vertex array.");
-                functions_.bindVertexArray(0, vertexArray);
-                functions_.bindBuffer(GL_ARRAY_BUFFER, static_cast<std::uint32_t>(vertexBuffer));
-                functions_.bindBuffer(GL_ELEMENT_ARRAY_BUFFER, static_cast<std::uint32_t>(indexBuffer));
-                functions_.vertexAttributePointer(0, 3, GL_FLOAT, GL_FALSE, static_cast<std::int32_t>(descriptor.vertexStride),
-                                                  reinterpret_cast<const void *>(offsetof(MeshVertex, position)));
-                functions_.enableVertexAttribute(0);
-                functions_.vertexAttributePointer(1, 3, GL_FLOAT, GL_FALSE, static_cast<std::int32_t>(descriptor.vertexStride),
-                                                  reinterpret_cast<const void *>(offsetof(MeshVertex, normal)));
-                functions_.enableVertexAttribute(1);
-                functions_.vertexAttributePointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<std::int32_t>(descriptor.vertexStride),
-                                                  reinterpret_cast<const void *>(offsetof(MeshVertex, uv)));
-                functions_.enableVertexAttribute(2);
-                functions_.bindVertexArray(0, 0);
-                functions_.bindBuffer(GL_ARRAY_BUFFER, 0);
+                functions_.vertexArrays.bindVertexArray(0, vertexArray);
+                functions_.buffers.bindBuffer(GL_ARRAY_BUFFER, static_cast<std::uint32_t>(vertexBuffer));
+                functions_.buffers.bindBuffer(GL_ELEMENT_ARRAY_BUFFER, static_cast<std::uint32_t>(indexBuffer));
+                functions_.vertexArrays.vertexAttributePointer(0, 3, GL_FLOAT, GL_FALSE, static_cast<std::int32_t>(descriptor.vertexStride),
+                                                               offsetof(MeshVertex, position));
+                functions_.vertexArrays.enableVertexAttribute(0);
+                functions_.vertexArrays.vertexAttributePointer(1, 3, GL_FLOAT, GL_FALSE, static_cast<std::int32_t>(descriptor.vertexStride),
+                                                               offsetof(MeshVertex, normal));
+                functions_.vertexArrays.enableVertexAttribute(1);
+                functions_.vertexArrays.vertexAttributePointer(2, 2, GL_FLOAT, GL_FALSE, static_cast<std::int32_t>(descriptor.vertexStride),
+                                                               offsetof(MeshVertex, uv));
+                functions_.vertexArrays.enableVertexAttribute(2);
+                functions_.vertexArrays.bindVertexArray(0, 0);
+                functions_.buffers.bindBuffer(GL_ARRAY_BUFFER, 0);
                 meshes_.insert(vertexArray);
                 return Result<std::uint64_t>::Success(vertexArray);
             }
@@ -188,21 +189,21 @@ namespace Horo::Render {
             Result<std::uint64_t> CreateTexture(const RenderTextureDescriptor &descriptor) override {
                 if (!initialized_ || !functions_.HasResourceFunctions())
                     return ResourceUnavailable("OpenGL texture creation is unavailable in the current backend state.");
-                constexpr auto maximumExtent = static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max());
-                if (!descriptor.IsValid() || descriptor.extent.width > maximumExtent || descriptor.extent.height > maximumExtent)
+                if (constexpr auto maximumExtent = static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max());
+                    !descriptor.IsValid() || descriptor.extent.width > maximumExtent || descriptor.extent.height > maximumExtent)
                     return Result<std::uint64_t>::Failure(
                         MakeOpenGLError(OpenGLBackendErrors::InvalidConfig, "OpenGL texture creation request is invalid."));
                 std::uint32_t texture = 0;
-                functions_.generateTextures(1, &texture);
+                functions_.textures.generateTextures(1, &texture);
                 if (texture == 0)
                     return ResourceUnavailable("OpenGL failed to allocate a texture object.");
-                functions_.bindTexture(GL_TEXTURE_2D, texture);
-                functions_.textureParameter(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                functions_.textureParameter(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                functions_.textureParameter(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                functions_.textureParameter(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                functions_.textures.bindTexture(GL_TEXTURE_2D, texture);
+                functions_.textures.textureParameter(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+                functions_.textures.textureParameter(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+                functions_.textures.textureParameter(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                functions_.textures.textureParameter(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
                 const auto format = TextureFormat(descriptor.format);
-                functions_.textureImage({
+                functions_.textures.textureImage({
                     .target = GL_TEXTURE_2D,
                     .internalFormat = format.internal,
                     .width = static_cast<std::int32_t>(descriptor.extent.width),
@@ -210,7 +211,7 @@ namespace Horo::Render {
                     .format = format.external,
                     .type = format.type,
                 });
-                functions_.bindTexture(GL_TEXTURE_2D, 0);
+                functions_.textures.bindTexture(GL_TEXTURE_2D, 0);
                 textureFormats_.insert_or_assign(texture, descriptor.format);
                 textures_.insert(texture);
                 return Result<std::uint64_t>::Success(texture);
@@ -222,8 +223,8 @@ namespace Horo::Render {
                 if (!descriptor.IsValid() || texture == 0 || texture > std::numeric_limits<std::uint32_t>::max())
                     return Result<std::uint64_t>::Failure(
                         MakeOpenGLError(OpenGLBackendErrors::InvalidConfig, "OpenGL texture-view creation request is invalid."));
-                const auto source = textureFormats_.find(static_cast<std::uint32_t>(texture));
-                if (source == textureFormats_.end() || source->second != descriptor.format)
+                if (const auto source = textureFormats_.find(static_cast<std::uint32_t>(texture));
+                    source == textureFormats_.end() || source->second != descriptor.format)
                     return Result<std::uint64_t>::Failure(
                         MakeOpenGLError(OpenGLBackendErrors::InvalidConfig, "OpenGL texture-view format does not match its texture."));
                 textureViewFormats_.insert_or_assign(static_cast<std::uint32_t>(texture), descriptor.format);
@@ -238,25 +239,26 @@ namespace Horo::Render {
                     return Result<std::uint64_t>::Failure(
                         MakeOpenGLError(OpenGLBackendErrors::InvalidConfig, "OpenGL render-target creation request is invalid."));
                 std::uint32_t framebuffer = 0;
-                functions_.generateFramebuffers(1, &framebuffer);
+                functions_.framebuffers.generateFramebuffers(1, &framebuffer);
                 if (framebuffer == 0)
                     return ResourceUnavailable("OpenGL failed to allocate a framebuffer object.");
-                functions_.bindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+                functions_.framebuffers.bindFramebuffer(GL_FRAMEBUFFER, framebuffer);
                 if (colorAttachment != 0)
-                    functions_.framebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, static_cast<std::uint32_t>(colorAttachment), 0);
+                    functions_.framebuffers.framebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                                               static_cast<std::uint32_t>(colorAttachment), 0);
                 else {
-                    functions_.drawBuffer(GL_NONE);
-                    functions_.readBuffer(GL_NONE);
+                    functions_.framebuffers.drawBuffer(GL_NONE);
+                    functions_.framebuffers.readBuffer(GL_NONE);
                 }
                 if (const Result<void> depth = AttachDepthView(depthAttachment); depth.HasError()) {
-                    functions_.bindFramebuffer(GL_FRAMEBUFFER, 0);
-                    functions_.deleteFramebuffers(1, &framebuffer);
+                    functions_.framebuffers.bindFramebuffer(GL_FRAMEBUFFER, 0);
+                    functions_.framebuffers.deleteFramebuffers(1, &framebuffer);
                     return Result<std::uint64_t>::Failure(depth.ErrorValue());
                 }
-                const bool complete = functions_.checkFramebuffer(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
-                functions_.bindFramebuffer(GL_FRAMEBUFFER, 0);
+                const bool complete = functions_.framebuffers.checkFramebuffer(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+                functions_.framebuffers.bindFramebuffer(GL_FRAMEBUFFER, 0);
                 if (!complete) {
-                    functions_.deleteFramebuffers(1, &framebuffer);
+                    functions_.framebuffers.deleteFramebuffers(1, &framebuffer);
                     return ResourceUnavailable("OpenGL framebuffer attachments are incomplete.");
                 }
                 renderTargets_.insert(framebuffer);
@@ -272,23 +274,23 @@ namespace Horo::Render {
                         MakeOpenGLError(OpenGLBackendErrors::InvalidConfig, "OpenGL render-target depth view metadata is unavailable."));
                 const std::uint32_t attachment =
                     format->second == RenderTextureFormat::Depth24Stencil8 ? GL_DEPTH_STENCIL_ATTACHMENT : GL_DEPTH_ATTACHMENT;
-                functions_.framebufferTexture(GL_FRAMEBUFFER, attachment, static_cast<std::uint32_t>(depthAttachment), 0);
+                functions_.framebuffers.framebufferTexture(GL_FRAMEBUFFER, attachment, static_cast<std::uint32_t>(depthAttachment), 0);
                 return Result<void>::Success();
             }
 
             /** @copydoc IRenderBackend::DestroyBuffer */
             void DestroyBuffer(const std::uint64_t backendInstance) noexcept override {
-                DeleteTrackedObject(functions_.deleteBuffers, buffers_, backendInstance);
+                DeleteTrackedObject(functions_.buffers.deleteBuffers, buffers_, backendInstance);
             }
 
             /** @copydoc IRenderBackend::DestroyMesh */
             void DestroyMesh(const std::uint64_t backendInstance) noexcept override {
-                DeleteTrackedObject(functions_.deleteVertexArrays, meshes_, backendInstance);
+                DeleteTrackedObject(functions_.vertexArrays.deleteVertexArrays, meshes_, backendInstance);
             }
 
             void DestroyTexture(const std::uint64_t backendInstance) noexcept override {
                 textureFormats_.erase(static_cast<std::uint32_t>(backendInstance));
-                DeleteTrackedObject(functions_.deleteTextures, textures_, backendInstance);
+                DeleteTrackedObject(functions_.textures.deleteTextures, textures_, backendInstance);
             }
 
             void DestroyTextureView(const std::uint64_t backendInstance) noexcept override {
@@ -296,7 +298,7 @@ namespace Horo::Render {
             }
 
             void DestroyRenderTarget(const std::uint64_t backendInstance) noexcept override {
-                DeleteTrackedObject(functions_.deleteFramebuffers, renderTargets_, backendInstance);
+                DeleteTrackedObject(functions_.framebuffers.deleteFramebuffers, renderTargets_, backendInstance);
             }
 
             /** @copydoc IRenderBackend::BeginFrame */
@@ -411,14 +413,15 @@ namespace Horo::Render {
                     MakeOpenGLError(OpenGLBackendErrors::UnsupportedResourceOperation, std::move(message)));
             }
 
-            static void DeleteObject(const Detail::OpenGLDeleteObjectsFunction destroy, const std::uint64_t backendInstance) noexcept {
+            template <typename Destroy> static void DeleteObject(const Destroy destroy, const std::uint64_t backendInstance) noexcept {
                 if (destroy != nullptr && backendInstance != 0 && backendInstance <= std::numeric_limits<std::uint32_t>::max()) {
-                    const std::uint32_t object = static_cast<std::uint32_t>(backendInstance);
+                    const auto object = static_cast<std::uint32_t>(backendInstance);
                     destroy(1, &object);
                 }
             }
 
-            static void DeleteTrackedObject(const Detail::OpenGLDeleteObjectsFunction destroy, std::unordered_set<std::uint32_t> &objects,
+            template <typename Destroy>
+            static void DeleteTrackedObject(const Destroy destroy, std::unordered_set<std::uint32_t> &objects,
                                             const std::uint64_t backendInstance) noexcept {
                 if (backendInstance <= std::numeric_limits<std::uint32_t>::max() &&
                     objects.erase(static_cast<std::uint32_t>(backendInstance)) > 0)
@@ -426,16 +429,16 @@ namespace Horo::Render {
             }
 
             void DestroyRemainingResources() noexcept {
-                const auto destroyAll = [](const Detail::OpenGLDeleteObjectsFunction destroy, std::unordered_set<std::uint32_t> &objects) {
+                const auto destroyAll = [](const auto destroy, std::unordered_set<std::uint32_t> &objects) {
                     for (const std::uint32_t object : objects)
                         destroy(1, &object);
                     objects.clear();
                 };
                 if (functions_.HasResourceFunctions()) {
-                    destroyAll(functions_.deleteFramebuffers, renderTargets_);
-                    destroyAll(functions_.deleteVertexArrays, meshes_);
-                    destroyAll(functions_.deleteTextures, textures_);
-                    destroyAll(functions_.deleteBuffers, buffers_);
+                    destroyAll(functions_.framebuffers.deleteFramebuffers, renderTargets_);
+                    destroyAll(functions_.vertexArrays.deleteVertexArrays, meshes_);
+                    destroyAll(functions_.textures.deleteTextures, textures_);
+                    destroyAll(functions_.buffers.deleteBuffers, buffers_);
                 }
                 textureViewFormats_.clear();
                 textureFormats_.clear();
@@ -535,7 +538,7 @@ namespace Horo::Render {
         class OpenGLBackendProvider final : public IRenderBackendProvider {
         public:
             OpenGLBackendProvider(IOpenGLPresentationPort &presentationPort, const OpenGLBackendOptions options,
-                                  const Detail::OpenGLCommandFunctions functions)
+                                  const Detail::OpenGLCommandFunctions &functions)
                 : presentationPort_(&presentationPort), options_(options), functions_(functions) {}
 
             /** @copydoc IRenderBackendProvider::Create */
@@ -554,7 +557,7 @@ namespace Horo::Render {
 
     namespace Detail {
         Result<void> RegisterOpenGLRenderBackendWithFunctions(RenderBackendRegistry &registry, IOpenGLPresentationPort &presentationPort,
-                                                              const OpenGLBackendOptions options, const OpenGLCommandFunctions functions) {
+                                                              const OpenGLBackendOptions options, const OpenGLCommandFunctions &functions) {
             if (!functions.IsValid() || options.majorVersion == 0) {
                 return Result<void>::Failure(
                     MakeOpenGLError(OpenGLBackendErrors::InvalidRegistration, "OpenGL backend registration options are invalid."));

@@ -1,5 +1,6 @@
 #include "EditorViewportRendererOpenGL.h"
 
+#include "OpenGLStateSnapshot.h"
 #include "OpenGLViewportShaders.h"
 #include "editor/renderer/EditorRendererErrors.h"
 #include "editor/renderer/grid/EditorViewportGridGeometry.h"
@@ -10,7 +11,6 @@
 #include <bit>
 #include <cmath>
 #include <glad/gl.h>
-#include <limits>
 #include <string>
 #include <utility>
 
@@ -20,59 +20,6 @@ namespace Horo::Editor {
 
         [[nodiscard]] Error MakeViewportError(const ErrorCodeDescriptor &descriptor, std::string message) {
             return MakeError(descriptor, std::move(message));
-        }
-
-        template <typename Handle>
-        [[nodiscard]] Result<bool> ResourceReady(const Render::RenderFrontend &frontend, const Handle handle,
-                                                 const Render::ResourceOperationId operation) {
-            if (!handle.IsValid())
-                return Result<bool>::Success(false);
-            const auto state = frontend.ResourceState(handle);
-            if (state.HasValue())
-                return Result<bool>::Success(state.Value() == Render::RenderResourceState::Ready);
-            if (operation.IsValid()) {
-                const Result<void> completion = frontend.ResourceOperationResult(operation);
-                if (completion.HasError() && completion.ErrorValue().code.Value() != "render.frontend.resource.operation_pending")
-                    return Result<bool>::Failure(completion.ErrorValue());
-            }
-            return Result<bool>::Failure(state.ErrorValue());
-        }
-
-        [[nodiscard]] Result<bool> AdvanceTexture(Render::RenderFrontend &frontend, const Render::RenderTextureDescriptor &descriptor,
-                                                  Render::RenderTextureHandle &handle, Render::ResourceOperationId &operation) {
-            if (!handle.IsValid()) {
-                auto created = frontend.CreateTexture(descriptor);
-                if (created.HasError())
-                    return Result<bool>::Failure(created.ErrorValue());
-                handle = created.Value().handle;
-                operation = created.Value().operation;
-            }
-            return ResourceReady(frontend, handle, operation);
-        }
-
-        [[nodiscard]] Result<bool> AdvanceTextureView(Render::RenderFrontend &frontend,
-                                                      const Render::RenderTextureViewDescriptor &descriptor,
-                                                      Render::RenderTextureViewHandle &handle, Render::ResourceOperationId &operation) {
-            if (!handle.IsValid()) {
-                auto created = frontend.CreateTextureView(descriptor);
-                if (created.HasError())
-                    return Result<bool>::Failure(created.ErrorValue());
-                handle = created.Value().handle;
-                operation = created.Value().operation;
-            }
-            return ResourceReady(frontend, handle, operation);
-        }
-
-        [[nodiscard]] Result<bool> AdvanceRenderTarget(Render::RenderFrontend &frontend, const Render::RenderTargetDescriptor &descriptor,
-                                                       Render::RenderTargetHandle &handle, Render::ResourceOperationId &operation) {
-            if (!handle.IsValid()) {
-                auto created = frontend.CreateRenderTarget(descriptor);
-                if (created.HasError())
-                    return Result<bool>::Failure(created.ErrorValue());
-                handle = created.Value().handle;
-                operation = created.Value().operation;
-            }
-            return ResourceReady(frontend, handle, operation);
         }
 
         [[nodiscard]] Result<std::uint32_t> CompileShader(const std::uint32_t type, const char *source) {
@@ -95,84 +42,11 @@ namespace Horo::Editor {
                 MakeViewportError(RendererErrors::ViewportShaderCompileFailed, "Viewport shader compilation failed: " + log));
         }
 
-        void RestoreCapability(const GLenum capability, const GLboolean enabled) noexcept {
-            if (enabled == GL_TRUE)
-                glEnable(capability);
-            else
-                glDisable(capability);
-        }
-
-        /** @brief Restores host-owned OpenGL bindings and fixed-function state on every pass exit. */
-        class OpenGLStateSnapshot final {
-        public:
-            OpenGLStateSnapshot() noexcept {
-                depthTestEnabled_ = glIsEnabled(GL_DEPTH_TEST);
-                scissorTestEnabled_ = glIsEnabled(GL_SCISSOR_TEST);
-                blendEnabled_ = glIsEnabled(GL_BLEND);
-                cullFaceEnabled_ = glIsEnabled(GL_CULL_FACE);
-                glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFramebuffer_);
-                glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &readFramebuffer_);
-                glGetIntegerv(GL_CURRENT_PROGRAM, &program_);
-                glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &vertexArray_);
-                glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &arrayBuffer_);
-                glGetIntegerv(GL_DEPTH_FUNC, &depthFunction_);
-                glGetIntegerv(GL_CULL_FACE_MODE, &cullFaceMode_);
-                glGetIntegerv(GL_ACTIVE_TEXTURE, &activeTexture_);
-                glActiveTexture(GL_TEXTURE7);
-                glGetIntegerv(GL_TEXTURE_BINDING_2D, &shadowTexture_);
-                glGetIntegerv(GL_VIEWPORT, viewport_.data());
-                glGetFloatv(GL_COLOR_CLEAR_VALUE, clearColor_.data());
-                glGetBooleanv(GL_COLOR_WRITEMASK, colorMask_.data());
-                glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMask_);
-            }
-
-            ~OpenGLStateSnapshot() {
-                glBindVertexArray(static_cast<GLuint>(vertexArray_));
-                glBindBuffer(GL_ARRAY_BUFFER, static_cast<GLuint>(arrayBuffer_));
-                glUseProgram(static_cast<GLuint>(program_));
-                glDepthFunc(static_cast<GLenum>(depthFunction_));
-                RestoreCapability(GL_DEPTH_TEST, depthTestEnabled_);
-                RestoreCapability(GL_SCISSOR_TEST, scissorTestEnabled_);
-                RestoreCapability(GL_BLEND, blendEnabled_);
-                RestoreCapability(GL_CULL_FACE, cullFaceEnabled_);
-                glCullFace(static_cast<GLenum>(cullFaceMode_));
-                glColorMask(colorMask_[0], colorMask_[1], colorMask_[2], colorMask_[3]);
-                glDepthMask(depthMask_);
-                glClearColor(clearColor_[0], clearColor_[1], clearColor_[2], clearColor_[3]);
-                glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(drawFramebuffer_));
-                glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(readFramebuffer_));
-                glViewport(viewport_[0], viewport_[1], viewport_[2], viewport_[3]);
-                glActiveTexture(GL_TEXTURE7);
-                glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(shadowTexture_));
-                glActiveTexture(static_cast<GLenum>(activeTexture_));
-            }
-
-            OpenGLStateSnapshot(const OpenGLStateSnapshot &) = delete;
-            OpenGLStateSnapshot &operator=(const OpenGLStateSnapshot &) = delete;
-
-        private:
-            GLint drawFramebuffer_{0};
-            GLint readFramebuffer_{0};
-            GLint program_{0};
-            GLint vertexArray_{0};
-            GLint arrayBuffer_{0};
-            GLint depthFunction_{0};
-            GLint cullFaceMode_{0};
-            GLint activeTexture_{0};
-            GLint shadowTexture_{0};
-            std::array<GLint, 4> viewport_{};
-            std::array<GLfloat, 4> clearColor_{};
-            std::array<GLboolean, 4> colorMask_{};
-            GLboolean depthMask_{GL_TRUE};
-            GLboolean depthTestEnabled_{GL_FALSE};
-            GLboolean scissorTestEnabled_{GL_FALSE};
-            GLboolean blendEnabled_{GL_FALSE};
-            GLboolean cullFaceEnabled_{GL_FALSE};
-        };
     }  // namespace
 
     /** @copydoc EditorViewportRendererOpenGL::EditorViewportRendererOpenGL */
-    EditorViewportRendererOpenGL::EditorViewportRendererOpenGL(Render::RenderFrontend &frontend) noexcept : frontend_(&frontend) {}
+    EditorViewportRendererOpenGL::EditorViewportRendererOpenGL(Render::RenderFrontend &frontend) noexcept
+        : frontend_(&frontend), resources_(frontend) {}
 
     /** @copydoc EditorViewportRendererOpenGL::~EditorViewportRendererOpenGL */
     EditorViewportRendererOpenGL::~EditorViewportRendererOpenGL() {
@@ -219,13 +93,7 @@ namespace Horo::Editor {
 
     /** @copydoc EditorViewportRendererOpenGL::Shutdown */
     void EditorViewportRendererOpenGL::Shutdown() noexcept {
-        ReleaseTarget();
-        for (auto &[id, mesh] : meshes_)
-            ReleaseMesh(mesh);
-        for (auto &[id, mesh] : pendingMeshes_)
-            ReleaseMesh(mesh);
-        meshes_.clear();
-        pendingMeshes_.clear();
+        resources_.Shutdown();
         if (gridVertexBuffer_ != 0) {
             glDeleteBuffers(1, &gridVertexBuffer_);
             gridVertexBuffer_ = 0;
@@ -246,7 +114,6 @@ namespace Horo::Editor {
         requestedExtent_ = {};
         gridOptions_ = {};
         lightVisualizerOptions_ = {};
-        meshesReady_ = false;
         initialized_ = false;
     }
 
@@ -263,20 +130,7 @@ namespace Horo::Editor {
             return Result<std::optional<Render::RenderTargetHandle>>::Failure(
                 MakeViewportError(RendererErrors::ViewportNotInitialized, "Viewport resource owner is not initialized."));
         }
-        if (const Result<void> meshes = SynchronizeMeshes(scene.meshResources); meshes.HasError())
-            return Result<std::optional<Render::RenderTargetHandle>>::Failure(meshes.ErrorValue());
-        if (const Result<void> shadow = SynchronizeShadowResources(); shadow.HasError())
-            return Result<std::optional<Render::RenderTargetHandle>>::Failure(shadow.ErrorValue());
-        if (requestedExtent_.IsValid()) {
-            if (const Result<void> target = SynchronizeTarget(requestedExtent_); target.HasError())
-                return Result<std::optional<Render::RenderTargetHandle>>::Failure(target.ErrorValue());
-        }
-        if (viewportTarget_.target.IsValid()) {
-            const auto ready = frontend_->ResourceState(viewportTarget_.target);
-            if (ready.HasValue() && ready.Value() == Render::RenderResourceState::Ready)
-                return Result<std::optional<Render::RenderTargetHandle>>::Success(viewportTarget_.target);
-        }
-        return Result<std::optional<Render::RenderTargetHandle>>::Success(std::nullopt);
+        return resources_.Prepare(scene, requestedExtent_);
     }
 
     /** @copydoc EditorViewportRendererOpenGL::RequestGrid */
@@ -293,7 +147,8 @@ namespace Horo::Editor {
 
     /** @copydoc EditorViewportRendererOpenGL::RequestedExtent */
     EditorViewportExtent EditorViewportRendererOpenGL::RequestedExtent() const noexcept {
-        return requestedExtent_.IsValid() && allocatedExtent_.IsValid() ? allocatedExtent_ : requestedExtent_;
+        const EditorViewportExtent allocatedExtent = resources_.AllocatedExtent();
+        return requestedExtent_.IsValid() && allocatedExtent.IsValid() ? allocatedExtent : requestedExtent_;
     }
 
     /** @copydoc EditorViewportRendererOpenGL::ClipDepthRange */
@@ -312,14 +167,14 @@ namespace Horo::Editor {
         const EditorViewportExtent extentRequest = std::exchange(requestedExtent_, {});
         if (!extentRequest.IsValid())
             return Result<void>::Success();
-        const EditorViewportExtent renderExtent = allocatedExtent_.IsValid() ? allocatedExtent_ : extentRequest;
+        const EditorViewportExtent allocatedExtent = resources_.AllocatedExtent();
+        const EditorViewportExtent renderExtent = allocatedExtent.IsValid() ? allocatedExtent : extentRequest;
         if (const Result<void> valid = ValidatePassRequest(descriptor, renderExtent); valid.HasError())
             return valid;
-        viewportTarget_.target = descriptor.target;
         const auto shadow = BuildEditorViewportDirectionalShadowView(descriptor.scene, Math::ClipDepthRange::NegativeOneToOne);
         if (shadow.HasError())
             return Result<void>::Failure(shadow.ErrorValue());
-        const float aspect = static_cast<float>(allocatedExtent_.width) / static_cast<float>(allocatedExtent_.height);
+        const float aspect = static_cast<float>(allocatedExtent.width) / static_cast<float>(allocatedExtent.height);
         const OpenGLStateSnapshot stateSnapshot;
         return RenderViewportPass(descriptor, shadow.Value(), aspect);
     }
@@ -330,11 +185,12 @@ namespace Horo::Editor {
             descriptor.extent.height != requestedExtent.height) {
             return Result<void>::Failure(MakeViewportError(RendererErrors::ViewportInvalidScene, "Editor viewport scene data is invalid."));
         }
-        if (viewportTarget_.target.IsValid() && viewportTarget_.target != descriptor.target) {
+        if (resources_.Target().IsValid() && resources_.Target() != descriptor.target) {
             return Result<void>::Failure(
                 MakeViewportError(RendererErrors::ViewportStaleTarget, "Viewport pass references a stale render target."));
         }
-        if (requestedExtent.width != allocatedExtent_.width || requestedExtent.height != allocatedExtent_.height)
+        const EditorViewportExtent allocatedExtent = resources_.AllocatedExtent();
+        if (requestedExtent.width != allocatedExtent.width || requestedExtent.height != allocatedExtent.height)
             return Result<void>::Failure(MakeViewportError(RendererErrors::ViewportStaleTarget, "Viewport target extent is not ready."));
         return Result<void>::Success();
     }
@@ -347,9 +203,10 @@ namespace Horo::Editor {
                 return renderedShadow;
             }
         }
-        if (const Result<void> bound = resourceBridge_.BindRenderTarget(*frontend_, viewportTarget_.target); bound.HasError())
+        if (const Result<void> bound = OpenGLViewportResourceBridge::BindRenderTarget(*frontend_, resources_.Target()); bound.HasError())
             return bound;
-        glViewport(0, 0, static_cast<GLsizei>(allocatedExtent_.width), static_cast<GLsizei>(allocatedExtent_.height));
+        const EditorViewportExtent allocatedExtent = resources_.AllocatedExtent();
+        glViewport(0, 0, static_cast<GLsizei>(allocatedExtent.width), static_cast<GLsizei>(allocatedExtent.height));
         glDisable(GL_SCISSOR_TEST);
         glDisable(GL_BLEND);
         glDisable(GL_CULL_FACE);
@@ -360,10 +217,11 @@ namespace Horo::Editor {
         glClearColor(descriptor.clearColor.red, descriptor.clearColor.green, descriptor.clearColor.blue, descriptor.clearColor.alpha);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glUseProgram(program_);
-        if (const Result<void> boundShadow = resourceBridge_.BindTexture(*frontend_, shadowDepthTextureView_, 7); boundShadow.HasError())
+        if (const Result<void> boundShadow = OpenGLViewportResourceBridge::BindTexture(*frontend_, resources_.ShadowTextureView(), 7);
+            boundShadow.HasError())
             return boundShadow;
         UploadLighting(descriptor.scene, shadow);
-        if (const Result<void> grid = DrawGrid(descriptor.scene.camera, aspect, static_cast<float>(allocatedExtent_.height));
+        if (const Result<void> grid = DrawGrid(descriptor.scene.camera, aspect, static_cast<float>(allocatedExtent.height));
             grid.HasError()) {
             return grid;
         }
@@ -376,12 +234,12 @@ namespace Horo::Editor {
 
     Result<void> EditorViewportRendererOpenGL::DrawSceneMeshes(const Render::RenderSceneView &scene, const float aspect) {
         for (const Render::RenderStaticMeshInstance &instance : scene.instances) {
-            const auto mesh = meshes_.find(instance.mesh.id.value);
-            if (mesh == meshes_.end()) {
+            const auto mesh = resources_.FindMesh(instance.mesh.id.value);
+            if (!mesh.has_value()) {
                 return Result<void>::Failure(
                     MakeViewportError(RendererErrors::ViewportStaleMeshResource, "Viewport instance references a stale mesh resource."));
             }
-            if (const Result<void> bound = resourceBridge_.BindMesh(*frontend_, mesh->second.mesh); bound.HasError())
+            if (const Result<void> bound = OpenGLViewportResourceBridge::BindMesh(*frontend_, mesh->mesh); bound.HasError())
                 return bound;
             const Result<Math::Mat4> mvp =
                 BuildRenderMvp(scene.camera, instance.localToWorld, aspect, Math::ClipDepthRange::NegativeOneToOne);
@@ -391,7 +249,7 @@ namespace Horo::Editor {
             glUniformMatrix4fv(uniforms_.model, 1, GL_FALSE, instance.localToWorld.values.data());
             glUniform3f(uniforms_.selectionColor, instance.presentation.tint.x, instance.presentation.tint.y, instance.presentation.tint.z);
             glUniform1f(uniforms_.selectionStrength, instance.presentation.tintStrength);
-            glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh->second.indexCount), GL_UNSIGNED_INT, nullptr);
+            glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh->indexCount), GL_UNSIGNED_INT, nullptr);
         }
         return Result<void>::Success();
     }
@@ -475,7 +333,7 @@ namespace Horo::Editor {
     /** @copydoc EditorViewportRendererOpenGL::TextureView */
     EditorViewportTextureView EditorViewportRendererOpenGL::TextureView() const noexcept {
         return EditorViewportTextureView{
-            .textureId = viewportTarget_.imageIdentity,
+            .textureId = resources_.ImageIdentity(),
             .u0 = 0.0F,
             .v0 = 1.0F,
             .u1 = 1.0F,
@@ -485,8 +343,7 @@ namespace Horo::Editor {
 
     /** @copydoc EditorViewportRendererOpenGL::IsReady */
     bool EditorViewportRendererOpenGL::IsReady() const noexcept {
-        return initialized_ && meshesReady_ && viewportTarget_.imageIdentity != 0 && viewportTarget_.target.IsValid() &&
-               allocatedExtent_.IsValid();
+        return initialized_ && resources_.IsReady();
     }
 
     Result<void> EditorViewportRendererOpenGL::CreateProgram() {
@@ -539,23 +396,23 @@ namespace Horo::Editor {
         uniforms_.shadowLightIndex = glGetUniformLocation(program_, "uShadowLightIndex");
         uniforms_.selectionColor = glGetUniformLocation(program_, "uSelectionColor");
         uniforms_.selectionStrength = glGetUniformLocation(program_, "uSelectionStrength");
-        const std::array locations{
-            uniforms_.mvp,
-            uniforms_.model,
-            uniforms_.cameraPosition,
-            uniforms_.lightCount,
-            uniforms_.lightPositionKind,
-            uniforms_.lightDirectionRange,
-            uniforms_.lightColorIntensity,
-            uniforms_.lightCone,
-            uniforms_.shadowViewProjection,
-            uniforms_.shadowMap,
-            uniforms_.shadowEnabled,
-            uniforms_.shadowLightIndex,
-            uniforms_.selectionColor,
-            uniforms_.selectionStrength,
-        };
-        if (!std::ranges::all_of(locations, [](const std::int32_t location) {
+        if (const std::array locations{
+                uniforms_.mvp,
+                uniforms_.model,
+                uniforms_.cameraPosition,
+                uniforms_.lightCount,
+                uniforms_.lightPositionKind,
+                uniforms_.lightDirectionRange,
+                uniforms_.lightColorIntensity,
+                uniforms_.lightCone,
+                uniforms_.shadowViewProjection,
+                uniforms_.shadowMap,
+                uniforms_.shadowEnabled,
+                uniforms_.shadowLightIndex,
+                uniforms_.selectionColor,
+                uniforms_.selectionStrength,
+            };
+            !std::ranges::all_of(locations, [](const std::int32_t location) {
             return location >= 0;
         })) {
             return Result<void>::Failure(
@@ -603,7 +460,8 @@ namespace Horo::Editor {
     Result<void> EditorViewportRendererOpenGL::DrawDirectionalShadowMap(const Render::RenderSceneView &scene,
                                                                         const EditorViewportDirectionalShadowView &shadow) {
         constexpr auto shadowMapResolution = static_cast<GLsizei>(EditorViewportDirectionalShadowMapResolution);
-        if (const Result<void> bound = resourceBridge_.BindRenderTarget(*frontend_, shadowTarget_); bound.HasError())
+        if (const Result<void> bound = OpenGLViewportResourceBridge::BindRenderTarget(*frontend_, resources_.ShadowTarget());
+            bound.HasError())
             return bound;
         glViewport(0, 0, shadowMapResolution, shadowMapResolution);
         glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
@@ -615,16 +473,16 @@ namespace Horo::Editor {
         glClear(GL_DEPTH_BUFFER_BIT);
         glUseProgram(shadowProgram_);
         for (const Render::RenderStaticMeshInstance &instance : scene.instances) {
-            const auto mesh = meshes_.find(instance.mesh.id.value);
-            if (mesh == meshes_.end()) {
+            const auto mesh = resources_.FindMesh(instance.mesh.id.value);
+            if (!mesh.has_value()) {
                 return Result<void>::Failure(
                     MakeViewportError(RendererErrors::ViewportStaleMeshResource, "Shadow pass instance references a stale mesh resource."));
             }
             const Math::Mat4 shadowMvp = Math::Multiply(shadow.viewProjection, instance.localToWorld);
             glUniformMatrix4fv(uniforms_.shadowMvp, 1, GL_FALSE, shadowMvp.values.data());
-            if (const Result<void> bound = resourceBridge_.BindMesh(*frontend_, mesh->second.mesh); bound.HasError())
+            if (const Result<void> bound = OpenGLViewportResourceBridge::BindMesh(*frontend_, mesh->mesh); bound.HasError())
                 return bound;
-            glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh->second.indexCount), GL_UNSIGNED_INT, nullptr);
+            glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh->indexCount), GL_UNSIGNED_INT, nullptr);
         }
         glCullFace(GL_BACK);
         return Result<void>::Success();
@@ -668,290 +526,4 @@ namespace Horo::Editor {
         }
     }
 
-    Result<void> EditorViewportRendererOpenGL::SynchronizeMeshes(const std::span<const EditorViewportMeshResourceView> resources) {
-        meshesReady_ = true;
-
-        for (const EditorViewportMeshResourceView &resource : resources) {
-            const auto ready = SynchronizeMesh(resource);
-            if (ready.HasError())
-                return Result<void>::Failure(ready.ErrorValue());
-            meshesReady_ = meshesReady_ && ready.Value();
-        }
-
-        RetireMissingMeshes(resources);
-        return Result<void>::Success();
-    }
-
-    Result<bool> EditorViewportRendererOpenGL::SynchronizeMesh(const EditorViewportMeshResourceView &resource) {
-        const std::uint64_t id = resource.handle.id.value;
-        auto [activePosition, inserted] = meshes_.try_emplace(id);
-        ResidentMesh &active = activePosition->second;
-        if (inserted)
-            return AdvanceResidentMesh(resource, active);
-        if (active.sourceGeneration == resource.handle.generation) {
-            if (auto pending = pendingMeshes_.find(id); pending != pendingMeshes_.end()) {
-                ReleaseMesh(pending->second);
-                pendingMeshes_.erase(pending);
-            }
-            return AdvanceResidentMesh(resource, active);
-        }
-
-        if (!IsResidentMeshReady(active)) {
-            ReleaseMesh(active);
-            return AdvanceResidentMesh(resource, active);
-        }
-
-        ResidentMesh &pending = pendingMeshes_[id];
-        if (pending.sourceGeneration != 0 && pending.sourceGeneration != resource.handle.generation)
-            ReleaseMesh(pending);
-        const auto ready = AdvanceResidentMesh(resource, pending);
-        if (ready.HasError())
-            return Result<bool>::Failure(ready.ErrorValue());
-        if (ready.Value()) {
-            ReleaseMesh(active);
-            active = std::exchange(pending, {});
-            pendingMeshes_.erase(id);
-        }
-        return Result<bool>::Success(true);
-    }
-
-    Result<bool> EditorViewportRendererOpenGL::AdvanceResidentMesh(const EditorViewportMeshResourceView &resource, ResidentMesh &resident) {
-        if (resident.sourceGeneration == 0) {
-            const Result<void> created = CreateResidentMeshBuffers(resource, resident);
-            if (created.HasError())
-                return Result<bool>::Failure(created.ErrorValue());
-        }
-        const auto vertexReady = ResourceReady(*frontend_, resident.vertexBuffer, resident.vertexOperation);
-        if (vertexReady.HasError())
-            return Result<bool>::Failure(vertexReady.ErrorValue());
-        const auto indexReady = ResourceReady(*frontend_, resident.indexBuffer, resident.indexOperation);
-        if (indexReady.HasError())
-            return Result<bool>::Failure(indexReady.ErrorValue());
-        if (!resident.mesh.IsValid() && vertexReady.Value() && indexReady.Value()) {
-            auto mesh = frontend_->CreateMesh({.vertexBuffer = resident.vertexBuffer,
-                                               .indexBuffer = resident.indexBuffer,
-                                               .vertexStride = sizeof(Render::MeshVertex),
-                                               .vertexCount = static_cast<std::uint32_t>(resource.vertices.size()),
-                                               .indexFormat = Render::RenderIndexFormat::UInt32,
-                                               .indexCount = resident.indexCount,
-                                               .topology = Render::RenderPrimitiveTopology::Triangles,
-                                               .localBounds = resource.localBounds});
-            if (mesh.HasError())
-                return Result<bool>::Failure(mesh.ErrorValue());
-            resident.mesh = mesh.Value().handle;
-            resident.meshOperation = mesh.Value().operation;
-        }
-        return ResourceReady(*frontend_, resident.mesh, resident.meshOperation);
-    }
-
-    Result<void> EditorViewportRendererOpenGL::CreateResidentMeshBuffers(const EditorViewportMeshResourceView &resource,
-                                                                         ResidentMesh &resident) {
-        if (resource.vertices.size() > std::numeric_limits<std::uint32_t>::max() ||
-            resource.indices.size() > std::numeric_limits<std::uint32_t>::max()) {
-            return Result<void>::Failure(
-                MakeViewportError(RendererErrors::ViewportGeometryCreationFailed, "Viewport mesh exceeds generic resource count limits."));
-        }
-        auto vertex = frontend_->CreateBuffer({.byteSize = resource.vertices.size_bytes(),
-                                               .usage = Render::RenderBufferUsage::Vertex,
-                                               .access = Render::RenderBufferAccess::DeviceLocal},
-                                              std::as_bytes(resource.vertices));
-        if (vertex.HasError())
-            return Result<void>::Failure(vertex.ErrorValue());
-        resident.vertexBuffer = vertex.Value().handle;
-        resident.vertexOperation = vertex.Value().operation;
-        auto index = frontend_->CreateBuffer({.byteSize = resource.indices.size_bytes(),
-                                              .usage = Render::RenderBufferUsage::Index,
-                                              .access = Render::RenderBufferAccess::DeviceLocal},
-                                             std::as_bytes(resource.indices));
-        if (index.HasError()) {
-            ReleaseMesh(resident);
-            return Result<void>::Failure(index.ErrorValue());
-        }
-        resident.indexBuffer = index.Value().handle;
-        resident.indexOperation = index.Value().operation;
-        resident.indexCount = static_cast<std::uint32_t>(resource.indices.size());
-        resident.sourceGeneration = resource.handle.generation;
-        return Result<void>::Success();
-    }
-
-    bool EditorViewportRendererOpenGL::IsResidentMeshReady(const ResidentMesh &resident) const {
-        if (!resident.mesh.IsValid())
-            return false;
-        const auto state = frontend_->ResourceState(resident.mesh);
-        return state.HasValue() && state.Value() == Render::RenderResourceState::Ready;
-    }
-
-    void EditorViewportRendererOpenGL::RetireMissingMeshes(const std::span<const EditorViewportMeshResourceView> resources) noexcept {
-        for (auto mesh = meshes_.begin(); mesh != meshes_.end();) {
-            const bool present = std::ranges::any_of(resources, [&](const EditorViewportMeshResourceView &resource) {
-                return resource.handle.id.value == mesh->first;
-            });
-            if (!present) {
-                ReleaseMesh(mesh->second);
-                if (auto pending = pendingMeshes_.find(mesh->first); pending != pendingMeshes_.end()) {
-                    ReleaseMesh(pending->second);
-                    pendingMeshes_.erase(pending);
-                }
-                mesh = meshes_.erase(mesh);
-            } else {
-                ++mesh;
-            }
-        }
-    }
-
-    Result<void> EditorViewportRendererOpenGL::SynchronizeTarget(const EditorViewportExtent extent) {
-        if (allocatedExtent_ == extent) {
-            if (pendingViewportTarget_.extent.IsValid())
-                ReleaseViewportTarget(pendingViewportTarget_);
-            return Result<void>::Success();
-        }
-        if (pendingViewportTarget_.extent.IsValid() && pendingViewportTarget_.extent != extent)
-            ReleaseViewportTarget(pendingViewportTarget_);
-        pendingViewportTarget_.extent = extent;
-        const auto targetReady = AdvanceViewportTarget(pendingViewportTarget_);
-        if (targetReady.HasError())
-            return Result<void>::Failure(targetReady.ErrorValue());
-        if (!targetReady.Value())
-            return Result<void>::Success();
-        auto image = resourceBridge_.EditorImageIdentity(*frontend_, pendingViewportTarget_.colorView);
-        if (image.HasError())
-            return Result<void>::Failure(image.ErrorValue());
-        pendingViewportTarget_.imageIdentity = image.Value();
-        ReleaseViewportTarget(viewportTarget_);
-        viewportTarget_ = std::exchange(pendingViewportTarget_, {});
-        allocatedExtent_ = extent;
-        return Result<void>::Success();
-    }
-
-    Result<bool> EditorViewportRendererOpenGL::AdvanceViewportTarget(ViewportTargetResources &resources) {
-        const auto texturesReady = AdvanceViewportTextures(resources);
-        if (texturesReady.HasError() || !texturesReady.Value())
-            return texturesReady;
-        const auto viewsReady = AdvanceViewportViews(resources);
-        if (viewsReady.HasError() || !viewsReady.Value())
-            return viewsReady;
-        const Render::FramebufferExtent extent{resources.extent.width, resources.extent.height};
-        return AdvanceRenderTarget(*frontend_,
-                                   {.colorAttachment = resources.colorView, .depthAttachment = resources.depthView, .extent = extent},
-                                   resources.target, resources.targetOperation);
-    }
-
-    Result<bool> EditorViewportRendererOpenGL::AdvanceViewportTextures(ViewportTargetResources &resources) {
-        const Render::FramebufferExtent extent{resources.extent.width, resources.extent.height};
-        const auto color = AdvanceTexture(*frontend_,
-                                          {.extent = extent,
-                                           .format = Render::RenderTextureFormat::Rgba8Unorm,
-                                           .usage = Render::RenderTextureUsage::Sampled | Render::RenderTextureUsage::RenderAttachment},
-                                          resources.colorTexture, resources.colorTextureOperation);
-        if (color.HasError())
-            return Result<bool>::Failure(color.ErrorValue());
-        const auto depth = AdvanceTexture(*frontend_,
-                                          {.extent = extent,
-                                           .format = Render::RenderTextureFormat::Depth24Stencil8,
-                                           .usage = Render::RenderTextureUsage::RenderAttachment},
-                                          resources.depthTexture, resources.depthTextureOperation);
-        if (depth.HasError())
-            return Result<bool>::Failure(depth.ErrorValue());
-        return Result<bool>::Success(color.Value() && depth.Value());
-    }
-
-    Result<bool> EditorViewportRendererOpenGL::AdvanceViewportViews(ViewportTargetResources &resources) {
-        const auto color = AdvanceTextureView(*frontend_,
-                                              {.texture = resources.colorTexture,
-                                               .format = Render::RenderTextureFormat::Rgba8Unorm,
-                                               .aspect = Render::RenderTextureAspect::Color},
-                                              resources.colorView, resources.colorViewOperation);
-        if (color.HasError())
-            return Result<bool>::Failure(color.ErrorValue());
-        const auto depth = AdvanceTextureView(*frontend_,
-                                              {.texture = resources.depthTexture,
-                                               .format = Render::RenderTextureFormat::Depth24Stencil8,
-                                               .aspect = Render::RenderTextureAspect::DepthStencil},
-                                              resources.depthView, resources.depthViewOperation);
-        if (depth.HasError())
-            return Result<bool>::Failure(depth.ErrorValue());
-        return Result<bool>::Success(color.Value() && depth.Value());
-    }
-
-    Result<void> EditorViewportRendererOpenGL::SynchronizeShadowResources() {
-        const auto targetReady = AdvanceShadowTarget();
-        if (targetReady.HasError())
-            return Result<void>::Failure(targetReady.ErrorValue());
-        meshesReady_ = meshesReady_ && targetReady.Value();
-        return Result<void>::Success();
-    }
-
-    Result<bool> EditorViewportRendererOpenGL::AdvanceShadowTarget() {
-        constexpr Render::FramebufferExtent shadowExtent{EditorViewportDirectionalShadowMapResolution,
-                                                         EditorViewportDirectionalShadowMapResolution};
-        const auto textureReady =
-            AdvanceTexture(*frontend_,
-                           {.extent = shadowExtent,
-                            .format = Render::RenderTextureFormat::Depth32Float,
-                            .usage = Render::RenderTextureUsage::Sampled | Render::RenderTextureUsage::RenderAttachment},
-                           shadowDepthTexture_, shadowDepthTextureOperation_);
-        if (textureReady.HasError() || !textureReady.Value())
-            return textureReady;
-        const auto viewReady = AdvanceTextureView(*frontend_,
-                                                  {.texture = shadowDepthTexture_,
-                                                   .format = Render::RenderTextureFormat::Depth32Float,
-                                                   .aspect = Render::RenderTextureAspect::Depth},
-                                                  shadowDepthTextureView_, shadowDepthTextureViewOperation_);
-        if (viewReady.HasError() || !viewReady.Value())
-            return viewReady;
-        return AdvanceRenderTarget(*frontend_, {.depthAttachment = shadowDepthTextureView_, .extent = shadowExtent}, shadowTarget_,
-                                   shadowTargetOperation_);
-    }
-
-    void EditorViewportRendererOpenGL::ReleaseMesh(ResidentMesh &mesh) noexcept {
-        if (frontend_ != nullptr) {
-            if (mesh.mesh.IsValid())
-                static_cast<void>(frontend_->ReleaseMesh(mesh.mesh));
-            if (mesh.indexBuffer.IsValid())
-                static_cast<void>(frontend_->ReleaseBuffer(mesh.indexBuffer));
-            if (mesh.vertexBuffer.IsValid())
-                static_cast<void>(frontend_->ReleaseBuffer(mesh.vertexBuffer));
-        }
-        mesh = {};
-    }
-
-    void EditorViewportRendererOpenGL::ReleaseTarget() noexcept {
-        ReleaseShadowResources();
-        ReleaseViewportTarget(pendingViewportTarget_);
-        ReleaseViewportTarget(viewportTarget_);
-        allocatedExtent_ = {};
-    }
-
-    void EditorViewportRendererOpenGL::ReleaseShadowResources() noexcept {
-        if (frontend_ != nullptr) {
-            if (shadowTarget_.IsValid())
-                static_cast<void>(frontend_->ReleaseRenderTarget(shadowTarget_));
-            if (shadowDepthTextureView_.IsValid())
-                static_cast<void>(frontend_->ReleaseTextureView(shadowDepthTextureView_));
-            if (shadowDepthTexture_.IsValid())
-                static_cast<void>(frontend_->ReleaseTexture(shadowDepthTexture_));
-        }
-        shadowDepthTexture_ = {};
-        shadowDepthTextureView_ = {};
-        shadowTarget_ = {};
-        shadowDepthTextureOperation_ = {};
-        shadowDepthTextureViewOperation_ = {};
-        shadowTargetOperation_ = {};
-    }
-
-    void EditorViewportRendererOpenGL::ReleaseViewportTarget(ViewportTargetResources &resources) noexcept {
-        if (frontend_ != nullptr) {
-            if (resources.target.IsValid())
-                static_cast<void>(frontend_->ReleaseRenderTarget(resources.target));
-            if (resources.depthView.IsValid())
-                static_cast<void>(frontend_->ReleaseTextureView(resources.depthView));
-            if (resources.colorView.IsValid())
-                static_cast<void>(frontend_->ReleaseTextureView(resources.colorView));
-            if (resources.depthTexture.IsValid())
-                static_cast<void>(frontend_->ReleaseTexture(resources.depthTexture));
-            if (resources.colorTexture.IsValid())
-                static_cast<void>(frontend_->ReleaseTexture(resources.colorTexture));
-        }
-        resources = {};
-    }
 }  // namespace Horo::Editor

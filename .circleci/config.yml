@@ -40,7 +40,7 @@ jobs:
               sudo apt-get update
             fi
             sudo apt-get install -y --no-install-recommends \
-              ninja-build ccache unzip gcovr \
+              ninja-build ccache unzip gcovr xvfb xauth \
               libwayland-dev wayland-protocols libxkbcommon-dev \
               libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
               libxext-dev libxss-dev libxtst-dev libxxf86vm-dev \
@@ -56,11 +56,13 @@ jobs:
               -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
               -DHORO_ENABLE_EDITOR=ON \
+              -DHORO_ENABLE_GPU_SMOKE_TESTS=ON \
               -DHORO_ENABLE_TELEMETRY=ON \
               -DHORO_ENABLE_OPENTELEMETRY=ON
             cmake --build build/sonar --parallel
-            ctest --test-dir build/sonar --output-on-failure -LE gui
+            xvfb-run -a ctest --test-dir build/sonar --output-on-failure -LE gui
             gcovr --sonarqube build/sonar/coverage.xml \
+              --sonarqube-metric line \
               --root "$CIRCLE_WORKING_DIRECTORY" \
               --filter "$CIRCLE_WORKING_DIRECTORY/include" \
               --filter "$CIRCLE_WORKING_DIRECTORY/src" \

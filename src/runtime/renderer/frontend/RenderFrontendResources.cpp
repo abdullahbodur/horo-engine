@@ -364,10 +364,8 @@ namespace Horo::Render {
                 MakeFrontendError(FrontendErrors::ResourceChangeDuringFrame, "A render target cannot be released during an active frame."));
         const Result<void> released =
             ReleaseOrCancelResource(*resourceRegistry_, Detail::RenderResourceClass::RenderTarget, Identity(target));
-        if (released.HasValue()) {
-            if (target.slot < targets_.size())
-                targets_[target.slot] = {};
-        }
+        if (released.HasValue() && target.slot < targets_.size())
+            targets_[target.slot] = {};
         return released;
     }
 
@@ -418,16 +416,16 @@ namespace Horo::Render {
         const bool colorFormat = texture.descriptor.format == RenderTextureFormat::Rgba8Unorm;
         const bool aspectCompatible =
             colorFormat ? descriptor.aspect == RenderTextureAspect::Color : descriptor.aspect != RenderTextureAspect::Color;
-        const std::array compatible{
-            texture.generation == descriptor.texture.generation,
-            descriptor.format == texture.descriptor.format,
-            descriptor.baseMip == 0,
-            descriptor.mipCount == texture.descriptor.mipCount,
-            descriptor.baseLayer == 0,
-            descriptor.layerCount == texture.descriptor.layerCount,
-            aspectCompatible,
-        };
-        if (!std::ranges::all_of(compatible, std::identity{})) {
+        if (const std::array compatible{
+                texture.generation == descriptor.texture.generation,
+                descriptor.format == texture.descriptor.format,
+                descriptor.baseMip == 0,
+                descriptor.mipCount == texture.descriptor.mipCount,
+                descriptor.baseLayer == 0,
+                descriptor.layerCount == texture.descriptor.layerCount,
+                aspectCompatible,
+            };
+            !std::ranges::all_of(compatible, std::identity{})) {
             return Result<void>::Failure(MakeFrontendError(FrontendErrors::InvalidTextureViewDescriptor,
                                                            "Texture-view format, range, or aspect is incompatible with its texture."));
         }
@@ -461,18 +459,19 @@ namespace Horo::Render {
             return Result<void>::Failure(
                 MakeFrontendError(FrontendErrors::InvalidRenderTargetDescriptor, "Render-target attachment metadata is unavailable."));
         const TextureViewRecord &view = textureViews_[handle.slot];
-        const bool aspectCompatible = requiredAspect == RenderTextureAspect::Color ? view.descriptor.aspect == RenderTextureAspect::Color
-                                                                                   : view.descriptor.aspect != RenderTextureAspect::Color;
-        if (view.generation != handle.generation || !aspectCompatible || view.descriptor.texture.slot >= textures_.size())
+        if (const bool aspectCompatible = requiredAspect == RenderTextureAspect::Color
+                                              ? view.descriptor.aspect == RenderTextureAspect::Color
+                                              : view.descriptor.aspect != RenderTextureAspect::Color;
+            view.generation != handle.generation || !aspectCompatible || view.descriptor.texture.slot >= textures_.size())
             return Result<void>::Failure(
                 MakeFrontendError(FrontendErrors::InvalidRenderTargetDescriptor, "Render-target attachment aspect is incompatible."));
         const TextureRecord &texture = textures_[view.descriptor.texture.slot];
-        const std::array compatible{
-            texture.descriptor.extent == extent,
-            texture.descriptor.sampleCount == sampleCount,
-            HasTextureUsage(texture.descriptor.usage, RenderTextureUsage::RenderAttachment),
-        };
-        if (!std::ranges::all_of(compatible, std::identity{}))
+        if (const std::array compatible{
+                texture.descriptor.extent == extent,
+                texture.descriptor.sampleCount == sampleCount,
+                HasTextureUsage(texture.descriptor.usage, RenderTextureUsage::RenderAttachment),
+            };
+            !std::ranges::all_of(compatible, std::identity{}))
             return Result<void>::Failure(MakeFrontendError(FrontendErrors::InvalidRenderTargetDescriptor,
                                                            "Render-target attachment extent, samples, or usage is incompatible."));
         return Result<void>::Success();

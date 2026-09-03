@@ -103,11 +103,11 @@ namespace {
 
     void ProbeBindObject(std::uint32_t, std::uint32_t) {}
 
-    void ProbeBufferData(std::uint32_t, std::ptrdiff_t, const void *, std::uint32_t) {
+    void ProbeBufferData(std::uint32_t, std::span<const std::byte>, std::uint32_t) {
         ++resourceCommandState.uploads;
     }
 
-    void ProbeVertexAttributePointer(std::uint32_t, std::int32_t, std::uint32_t, std::uint8_t, std::int32_t, const void *) {}
+    void ProbeVertexAttributePointer(std::uint32_t, std::int32_t, std::uint32_t, std::uint8_t, std::int32_t, std::uintptr_t) {}
 
     void ProbeEnableVertexAttribute(std::uint32_t) {}
 
@@ -128,27 +128,27 @@ namespace {
             .viewport = &ProbeViewport,
             .clearColor = &ProbeClearColor,
             .clear = &ProbeNoOp,
-            .generateBuffers = &ProbeGenerateBuffers,
-            .deleteBuffers = &ProbeDeleteBuffers,
-            .bindBuffer = &ProbeBindObject,
-            .bufferData = &ProbeBufferData,
-            .generateVertexArrays = &ProbeGenerateVertexArrays,
-            .deleteVertexArrays = &ProbeDeleteVertexArrays,
-            .bindVertexArray = &ProbeBindObject,
-            .vertexAttributePointer = &ProbeVertexAttributePointer,
-            .enableVertexAttribute = &ProbeEnableVertexAttribute,
-            .generateTextures = &ProbeGenerateTextures,
-            .deleteTextures = &ProbeDeleteTextures,
-            .bindTexture = &ProbeBindObject,
-            .textureParameter = &ProbeTextureParameter,
-            .textureImage = &ProbeTextureImage,
-            .generateFramebuffers = &ProbeGenerateFramebuffers,
-            .deleteFramebuffers = &ProbeDeleteFramebuffers,
-            .bindFramebuffer = &ProbeBindObject,
-            .framebufferTexture = &ProbeFramebufferTexture,
-            .checkFramebuffer = &ProbeCheckFramebuffer,
-            .drawBuffer = &ProbeNoOp,
-            .readBuffer = &ProbeNoOp,
+            .buffers = {.generateBuffers = &ProbeGenerateBuffers,
+                        .deleteBuffers = &ProbeDeleteBuffers,
+                        .bindBuffer = &ProbeBindObject,
+                        .bufferData = &ProbeBufferData},
+            .vertexArrays = {.generateVertexArrays = &ProbeGenerateVertexArrays,
+                             .deleteVertexArrays = &ProbeDeleteVertexArrays,
+                             .bindVertexArray = &ProbeBindObject,
+                             .vertexAttributePointer = &ProbeVertexAttributePointer,
+                             .enableVertexAttribute = &ProbeEnableVertexAttribute},
+            .textures = {.generateTextures = &ProbeGenerateTextures,
+                         .deleteTextures = &ProbeDeleteTextures,
+                         .bindTexture = &ProbeBindObject,
+                         .textureParameter = &ProbeTextureParameter,
+                         .textureImage = &ProbeTextureImage},
+            .framebuffers = {.generateFramebuffers = &ProbeGenerateFramebuffers,
+                             .deleteFramebuffers = &ProbeDeleteFramebuffers,
+                             .bindFramebuffer = &ProbeBindObject,
+                             .framebufferTexture = &ProbeFramebufferTexture,
+                             .checkFramebuffer = &ProbeCheckFramebuffer,
+                             .drawBuffer = &ProbeNoOp,
+                             .readBuffer = &ProbeNoOp},
         };
     }
 

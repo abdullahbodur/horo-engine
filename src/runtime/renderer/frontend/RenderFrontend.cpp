@@ -189,22 +189,22 @@ namespace Horo::Render {
     RenderFrontend::RenderFrontend(std::unique_ptr<IRenderBackend> backend, const RenderResourceOwnerId resourceOwner,
                                    const RenderResourceUploadLimits uploadLimits, ConstructionKey)
         : backend_(std::move(backend)),
-          resourceRegistry_(
-              std::make_unique<Detail::RenderResourceRegistry>(resourceOwner, Detail::RenderResourceRegistryLimits{},
-                                                               [this](const Detail::RenderResourceClass resourceClass,
-                                                                      const std::uint64_t backendInstance) {
-                                                                   if (resourceClass == Detail::RenderResourceClass::Buffer) {
-                                                                       backend_->DestroyBuffer(backendInstance);
-                                                                   } else if (resourceClass == Detail::RenderResourceClass::Mesh) {
-                                                                       backend_->DestroyMesh(backendInstance);
-                                                                   } else if (resourceClass == Detail::RenderResourceClass::Texture) {
-                                                                       backend_->DestroyTexture(backendInstance);
-                                                                   } else if (resourceClass == Detail::RenderResourceClass::TextureView) {
-                                                                       backend_->DestroyTextureView(backendInstance);
-                                                                   } else if (resourceClass == Detail::RenderResourceClass::RenderTarget) {
-                                                                       backend_->DestroyRenderTarget(backendInstance);
-                                                                   }
-                                                               })),
+          resourceRegistry_(std::make_unique<Detail::RenderResourceRegistry>(resourceOwner, Detail::RenderResourceRegistryLimits{},
+                                                                             [this](const Detail::RenderResourceClass resourceClass,
+                                                                                    const std::uint64_t backendInstance) {
+                                                                                 using enum Detail::RenderResourceClass;
+                                                                                 if (resourceClass == Buffer) {
+                                                                                     backend_->DestroyBuffer(backendInstance);
+                                                                                 } else if (resourceClass == Mesh) {
+                                                                                     backend_->DestroyMesh(backendInstance);
+                                                                                 } else if (resourceClass == Texture) {
+                                                                                     backend_->DestroyTexture(backendInstance);
+                                                                                 } else if (resourceClass == TextureView) {
+                                                                                     backend_->DestroyTextureView(backendInstance);
+                                                                                 } else if (resourceClass == RenderTarget) {
+                                                                                     backend_->DestroyRenderTarget(backendInstance);
+                                                                                 }
+                                                                             })),
           resourceUploadQueue_(std::make_unique<Detail::RenderResourceUploadQueue>(uploadLimits)) {}
 
     /** @copydoc RenderFrontend::~RenderFrontend */

@@ -25,7 +25,7 @@ namespace Horo::Editor {
     }  // namespace
 
     /** @copydoc OpenGLViewportResourceBridge::BindMesh */
-    Result<void> OpenGLViewportResourceBridge::BindMesh(const Render::RenderFrontend &frontend, const Render::RenderMeshHandle mesh) const {
+    Result<void> OpenGLViewportResourceBridge::BindMesh(const Render::RenderFrontend &frontend, const Render::RenderMeshHandle mesh) {
         const auto object = ResolveOpenGLObject(frontend, Render::Detail::RenderFrontendResourceAccess::BackendInstance(frontend, mesh));
         if (object.HasError())
             return Result<void>::Failure(object.ErrorValue());
@@ -35,7 +35,7 @@ namespace Horo::Editor {
 
     /** @copydoc OpenGLViewportResourceBridge::BindRenderTarget */
     Result<void> OpenGLViewportResourceBridge::BindRenderTarget(const Render::RenderFrontend &frontend,
-                                                                const Render::RenderTargetHandle target) const {
+                                                                const Render::RenderTargetHandle target) {
         const auto object = ResolveOpenGLObject(frontend, Render::Detail::RenderFrontendResourceAccess::BackendInstance(frontend, target));
         if (object.HasError())
             return Result<void>::Failure(object.ErrorValue());
@@ -45,7 +45,7 @@ namespace Horo::Editor {
 
     /** @copydoc OpenGLViewportResourceBridge::BindTexture */
     Result<void> OpenGLViewportResourceBridge::BindTexture(const Render::RenderFrontend &frontend,
-                                                           const Render::RenderTextureViewHandle view, const std::uint32_t unit) const {
+                                                           const Render::RenderTextureViewHandle view, const std::uint32_t unit) {
         if (unit >= 32)
             return Result<void>::Failure(MakeError(Render::OpenGLBackendErrors::UnsupportedResourceOperation,
                                                    "OpenGL editor texture unit is outside the supported bridge range."));
@@ -59,7 +59,7 @@ namespace Horo::Editor {
 
     /** @copydoc OpenGLViewportResourceBridge::EditorImageIdentity */
     Result<std::uintptr_t> OpenGLViewportResourceBridge::EditorImageIdentity(const Render::RenderFrontend &frontend,
-                                                                             const Render::RenderTextureViewHandle view) const {
+                                                                             const Render::RenderTextureViewHandle view) {
         const auto object = ResolveOpenGLObject(frontend, Render::Detail::RenderFrontendResourceAccess::BackendInstance(frontend, view));
         if (object.HasError())
             return Result<std::uintptr_t>::Failure(object.ErrorValue());

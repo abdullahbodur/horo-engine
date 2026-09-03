@@ -111,11 +111,17 @@ namespace Horo::Render {
                 // Null resources are opaque monotonic identities with no native allocation to release.
             }
 
-            void DestroyTexture(std::uint64_t) noexcept override {}
+            void DestroyTexture(std::uint64_t) noexcept override {
+                // Null resources are opaque monotonic identities with no native allocation to release.
+            }
 
-            void DestroyTextureView(std::uint64_t) noexcept override {}
+            void DestroyTextureView(std::uint64_t) noexcept override {
+                // Null resources are opaque monotonic identities with no native allocation to release.
+            }
 
-            void DestroyRenderTarget(std::uint64_t) noexcept override {}
+            void DestroyRenderTarget(std::uint64_t) noexcept override {
+                // Null resources are opaque monotonic identities with no native allocation to release.
+            }
 
             /** @copydoc IRenderBackend::BeginFrame */
             Result<FrameToken> BeginFrame(const FrameDescriptor &descriptor) override {
