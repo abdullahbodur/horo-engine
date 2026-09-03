@@ -189,8 +189,8 @@ namespace Horo::Editor {
             return Result<void>::Failure(
                 MakeViewportError(RendererErrors::ViewportStaleTarget, "Viewport pass references a stale render target."));
         }
-        const EditorViewportExtent allocatedExtent = resources_.AllocatedExtent();
-        if (requestedExtent.width != allocatedExtent.width || requestedExtent.height != allocatedExtent.height)
+        if (const EditorViewportExtent allocatedExtent = resources_.AllocatedExtent();
+            requestedExtent.width != allocatedExtent.width || requestedExtent.height != allocatedExtent.height)
             return Result<void>::Failure(MakeViewportError(RendererErrors::ViewportStaleTarget, "Viewport target extent is not ready."));
         return Result<void>::Success();
     }
@@ -232,7 +232,7 @@ namespace Horo::Editor {
         return Result<void>::Success();
     }
 
-    Result<void> EditorViewportRendererOpenGL::DrawSceneMeshes(const Render::RenderSceneView &scene, const float aspect) {
+    Result<void> EditorViewportRendererOpenGL::DrawSceneMeshes(const Render::RenderSceneView &scene, const float aspect) const {
         for (const Render::RenderStaticMeshInstance &instance : scene.instances) {
             const auto mesh = resources_.FindMesh(instance.mesh.id.value);
             if (!mesh.has_value()) {
@@ -458,7 +458,7 @@ namespace Horo::Editor {
     }
 
     Result<void> EditorViewportRendererOpenGL::DrawDirectionalShadowMap(const Render::RenderSceneView &scene,
-                                                                        const EditorViewportDirectionalShadowView &shadow) {
+                                                                        const EditorViewportDirectionalShadowView &shadow) const {
         constexpr auto shadowMapResolution = static_cast<GLsizei>(EditorViewportDirectionalShadowMapResolution);
         if (const Result<void> bound = OpenGLViewportResourceBridge::BindRenderTarget(*frontend_, resources_.ShadowTarget());
             bound.HasError())

@@ -2,6 +2,7 @@
 
 #include "OpenGLViewportResourceBridge.h"
 #include "editor/renderer/EditorRendererErrors.h"
+#include "runtime/renderer/frontend/RenderFrontendErrors.h"
 
 #include <limits>
 #include <ranges>
@@ -24,7 +25,8 @@ namespace Horo::Editor {
                 return Result<bool>::Success(state.Value() == Render::RenderResourceState::Ready);
             if (operation.IsValid()) {
                 if (const Result<void> completion = frontend.ResourceOperationResult(operation);
-                    completion.HasError() && completion.ErrorValue().code.Value() != "render.frontend.resource.operation_pending")
+                    completion.HasError() &&
+                    completion.ErrorValue().code.Value() != Render::FrontendErrors::ResourceOperationPending.code.Value())
                     return Result<bool>::Failure(completion.ErrorValue());
             }
             return Result<bool>::Failure(state.ErrorValue());
@@ -76,8 +78,8 @@ namespace Horo::Editor {
             return Result<std::optional<Render::RenderTargetHandle>>::Failure(meshes.ErrorValue());
         if (const Result<void> shadow = SynchronizeShadowResources(); shadow.HasError())
             return Result<std::optional<Render::RenderTargetHandle>>::Failure(shadow.ErrorValue());
-        const Result<void> target = requestedExtent.IsValid() ? SynchronizeTarget(requestedExtent) : Result<void>::Success();
-        if (target.HasError())
+        if (const Result<void> target = requestedExtent.IsValid() ? SynchronizeTarget(requestedExtent) : Result<void>::Success();
+            target.HasError())
             return Result<std::optional<Render::RenderTargetHandle>>::Failure(target.ErrorValue());
         if (viewportTarget_.target.IsValid()) {
             if (const auto ready = frontend_->ResourceState(viewportTarget_.target);
@@ -91,10 +93,10 @@ namespace Horo::Editor {
         ReleaseShadowResources();
         ReleaseViewportTarget(pendingViewportTarget_);
         ReleaseViewportTarget(viewportTarget_);
-        for (auto &entry : meshes_)
-            ReleaseMesh(entry.second);
-        for (auto &entry : pendingMeshes_)
-            ReleaseMesh(entry.second);
+        for (auto &mesh : meshes_ | std::views::values)
+            ReleaseMesh(mesh);
+        for (auto &mesh : pendingMeshes_ | std::views::values)
+            ReleaseMesh(mesh);
         meshes_.clear();
         pendingMeshes_.clear();
         allocatedExtent_ = {};
