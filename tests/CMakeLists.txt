@@ -8,6 +8,14 @@ add_test(NAME HoroDependencyDirectionNegativeConfigureTest
 set_tests_properties(HoroDependencyDirectionNegativeConfigureTest PROPERTIES
     LABELS "architecture;cmake")
 
+add_test(NAME HoroGameplayManifestRevisionValidationTest
+    COMMAND "${CMAKE_COMMAND}"
+        "-DHORO_ENGINE_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+        "-DHORO_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/gameplay-manifest-validation"
+        -P "${PROJECT_SOURCE_DIR}/tests/cmake/RunGameplayManifestRevisionValidationTest.cmake")
+set_tests_properties(HoroGameplayManifestRevisionValidationTest PROPERTIES
+    LABELS "gameplay;cmake")
+
 # One translation unit per registered public header verifies that consumers can
 # compile the contract using only its owning target's usage requirements.
 horo_add_public_header_consumer_targets()
@@ -134,11 +142,16 @@ horo_add_gameplay_module(HoroTestGameModule
         NO_MANIFEST
         SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/gameplay_module/TestGameModule.cpp
 )
+get_property(HORO_TEST_GAME_MODULE_REVISION_FILE TARGET HoroTestGameModule PROPERTY HORO_GAMEPLAY_DESCRIPTOR_REVISION_FILE)
 add_executable(HoroGameModuleHostTests
         unit/gameplay/GameModuleHostTests.cpp
 )
+target_include_directories(HoroGameModuleHostTests PRIVATE "${PROJECT_SOURCE_DIR}/tests/helpers")
 target_compile_features(HoroGameModuleHostTests PRIVATE cxx_std_20)
-target_compile_definitions(HoroGameModuleHostTests PRIVATE HORO_TEST_GAME_MODULE_PATH="$<TARGET_FILE:HoroTestGameModule>")
+target_compile_definitions(HoroGameModuleHostTests PRIVATE
+        HORO_TEST_GAME_MODULE_PATH="$<TARGET_FILE:HoroTestGameModule>"
+        HORO_TEST_GAME_MODULE_REVISION_PATH="${HORO_TEST_GAME_MODULE_REVISION_FILE}"
+)
 target_link_libraries(HoroGameModuleHostTests PRIVATE HoroEngine::GameplayModuleHost)
 add_dependencies(HoroGameModuleHostTests HoroTestGameModule)
 add_executable(HoroLuaBehaviorTests
@@ -154,8 +167,12 @@ target_link_libraries(HoroEditorPlaySessionControllerTests PRIVATE HoroEngine::E
 add_executable(HoroProjectGameplayRegistryTests
         unit/editor/ProjectGameplayRegistryTests.cpp
 )
+target_include_directories(HoroProjectGameplayRegistryTests PRIVATE "${PROJECT_SOURCE_DIR}/tests/helpers")
 target_compile_features(HoroProjectGameplayRegistryTests PRIVATE cxx_std_20)
-target_compile_definitions(HoroProjectGameplayRegistryTests PRIVATE HORO_TEST_GAME_MODULE_PATH="$<TARGET_FILE:HoroTestGameModule>")
+target_compile_definitions(HoroProjectGameplayRegistryTests PRIVATE
+        HORO_TEST_GAME_MODULE_PATH="$<TARGET_FILE:HoroTestGameModule>"
+        HORO_TEST_GAME_MODULE_REVISION_PATH="${HORO_TEST_GAME_MODULE_REVISION_FILE}"
+)
 target_link_libraries(HoroProjectGameplayRegistryTests PRIVATE HoroEngine::EditorServices)
 add_dependencies(HoroProjectGameplayRegistryTests HoroTestGameModule)
 add_executable(HoroSceneMathTests

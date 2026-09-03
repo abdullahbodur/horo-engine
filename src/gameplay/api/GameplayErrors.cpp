@@ -75,4 +75,40 @@ namespace Horo::Gameplay::GameplayErrors {
                                            "Use a registered event type, valid target, and bounded schema payload.",
                                            false,
                                            true};
+    const ErrorCodeDescriptor InvalidGameModuleDescriptor{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.module_descriptor_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The gameplay module descriptor is malformed.",
+        .remediationHint = "Rebuild the project gameplay module from valid generated inputs.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor IncompatibleGameModule{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.module_incompatible"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The gameplay module does not match the requested build identity.",
+        .remediationHint = "Rebuild the gameplay module with the active Horo SDK and project manifest.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor InvalidGeneratedDescriptorBundle{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.generated_descriptor_bundle_invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The generated gameplay descriptor bundle is malformed or incomplete.",
+        .remediationHint = "Regenerate the complete descriptor bundle and rebuild the gameplay module.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor GeneratedDescriptorDiagnosticsPresent{
+        .domain = GameplayDomain,
+        .code = ErrorCode{"gameplay.generated_descriptor_diagnostics_present"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The generated gameplay descriptor bundle contains blocking diagnostics.",
+        .remediationHint = "Resolve every generated descriptor diagnostic before activating gameplay code.",
+        .retryable = false,
+        .userActionable = true,
+    };
 }  // namespace Horo::Gameplay::GameplayErrors

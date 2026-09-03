@@ -7,6 +7,7 @@
 
 #include "Horo/Gameplay/Behavior.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <span>
 #include <string_view>
@@ -18,7 +19,12 @@
 #endif
 
 namespace Horo::Gameplay {
-    inline constexpr std::uint32_t GameplaySdkBoundaryVersion = 1;
+    inline constexpr std::uint32_t GameplaySdkBoundaryVersion = 2;
+    inline constexpr std::uint32_t GameplayDescriptorBundleSchemaVersion = 1;
+    inline constexpr std::size_t MaximumGeneratedBehaviorDescriptors = 4096;
+    inline constexpr std::size_t MaximumGeneratedDescriptorDiagnostics = 256;
+    inline constexpr std::size_t MaximumGeneratedDiagnosticCodeBytes = 160;
+    inline constexpr std::size_t MaximumGeneratedDiagnosticMessageBytes = 1024;
     inline constexpr std::string_view GetGameModuleDescriptorSymbol = "GetGameModuleDescriptor";
     inline constexpr std::string_view GetGameplayDescriptorBundleSymbol = "GetGameplayDescriptorBundle";
     inline constexpr std::string_view CreateGameModuleSymbol = "CreateGameModule";
@@ -35,16 +41,6 @@ namespace Horo::Gameplay {
         const char *buildFingerprint{};
     };
 
-    /** @brief Complete generated behavior snapshot tied to one module build fingerprint. */
-    struct GeneratedGameplayDescriptorBundle {
-        std::uint32_t structSize{sizeof(GeneratedGameplayDescriptorBundle)};
-        const char *moduleId{};
-        const char *buildFingerprint{};
-        std::uint64_t descriptorRevision{};
-        const BehaviorRegistration *behaviors{};
-        std::size_t behaviorCount{};
-    };
-
     /** @brief Narrow startup context for project module-owned services. */
     struct GameRuntimeContext {};
 
@@ -57,7 +53,68 @@ namespace Horo::Gameplay {
     };
 
     using GetGameModuleDescriptorFunction = const GameModuleDescriptor *(*)() noexcept;
-    using GetGameplayDescriptorBundleFunction = const GeneratedGameplayDescriptorBundle *(*)() noexcept;
     using CreateGameModuleFunction = IGameModule *(*)() noexcept;
     using DestroyGameModuleFunction = void (*)(IGameModule *) noexcept;
+
+    /** @brief Module-owned implementation binding paired with one generated behavior identity. */
+    struct GeneratedBehaviorFactoryBinding {
+        BehaviorTypeId typeId;
+        BehaviorFactoryBinding factory;
+    };
+
+    /** @brief Bounded code and context emitted when descriptor generation cannot produce an activatable snapshot. */
+    struct GeneratedDescriptorDiagnostic {
+        const char *code{};
+        const char *message{};
+    };
+
+    /** @brief Module-owned lifecycle callbacks validated before project code activation. */
+    struct GameModuleLifecycleCallbacks {
+        CreateGameModuleFunction create{};
+        DestroyGameModuleFunction destroy{};
+    };
+
+    /** @brief Complete generated behavior snapshot tied to one module build fingerprint. */
+    struct GeneratedGameplayDescriptorBundle {
+        std::uint32_t structSize{sizeof(GeneratedGameplayDescriptorBundle)};
+        std::uint32_t schemaVersion{GameplayDescriptorBundleSchemaVersion};
+        std::uint32_t sdkBoundaryVersion{GameplaySdkBoundaryVersion};
+        const char *moduleId{};
+        const char *buildFingerprint{};
+        std::uint64_t descriptorRevision{};
+        const BehaviorDescriptor *behaviors{};
+        std::size_t behaviorCount{};
+        const GeneratedBehaviorFactoryBinding *nativeFactoryBindings{};
+        std::size_t nativeFactoryBindingCount{};
+        const GeneratedDescriptorDiagnostic *diagnostics{};
+        std::size_t diagnosticCount{};
+        GameModuleLifecycleCallbacks lifecycle;
+    };
+
+    using GetGameplayDescriptorBundleFunction = const GeneratedGameplayDescriptorBundle *(*)() noexcept;
+
+    /** @brief Exact manifest identity that a candidate must satisfy before its lifecycle starts. */
+    struct GameModuleLoadExpectation {
+        std::string_view moduleId;
+        std::string_view buildFingerprint;
+        std::uint64_t descriptorRevision{};
+    };
+
+    /**
+     * @brief Validates static module compatibility metadata before generated records are read.
+     * @param descriptor Candidate module descriptor.
+     * @param expectation Identity selected by the validated artifact manifest.
+     * @return Success or a stable module-descriptor compatibility error.
+     */
+    [[nodiscard]] Result<void> ValidateGameModuleDescriptor(const GameModuleDescriptor &descriptor,
+                                                            const GameModuleLoadExpectation &expectation);
+
+    /**
+     * @brief Validates a complete generated snapshot and all module-owned bindings before activation.
+     * @param bundle Candidate generated descriptor bundle.
+     * @param expectation Identity selected by the validated artifact manifest.
+     * @return Success or a stable bundle validation error.
+     */
+    [[nodiscard]] Result<void> ValidateGeneratedGameplayDescriptorBundle(const GeneratedGameplayDescriptorBundle &bundle,
+                                                                         const GameModuleLoadExpectation &expectation);
 }  // namespace Horo::Gameplay

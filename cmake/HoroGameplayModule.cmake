@@ -54,10 +54,13 @@ function(horo_add_gameplay_module target)
     endforeach()
 
     set(generated "${CMAKE_CURRENT_BINARY_DIR}/${target}_generated_behavior_bundle.cpp")
+    set(generated_revision "${CMAKE_CURRENT_BINARY_DIR}/${target}_generated_behavior_bundle.revision")
     add_custom_command(
-        OUTPUT "${generated}"
+        OUTPUT "${generated}" "${generated_revision}"
         COMMAND "${gameplay_python_executable}" "${gameplay_codegen_script}"
                 --output "${generated}"
+                --revision-output "${generated_revision}"
+                --output-root "${CMAKE_CURRENT_BINARY_DIR}"
                 --module-id "${ARG_MODULE_ID}"
                 --fingerprint "${ARG_BUILD_FINGERPRINT}"
                 ${gameplay_sources}
@@ -99,10 +102,11 @@ function(horo_add_gameplay_module target)
                     "-DMODULE_ID=${ARG_MODULE_ID}"
                     "-DBUILD_FINGERPRINT=${ARG_BUILD_FINGERPRINT}"
                     "-DMODULE_PATH=$<TARGET_FILE:${target}>"
-                    -DDESCRIPTOR_REVISION=1
+                    "-DDESCRIPTOR_REVISION_FILE=${generated_revision}"
                     -P "${gameplay_module_cmake_dir}/WriteGameplayModuleManifest.cmake"
             VERBATIM
             COMMENT "Publishing gameplay module artifact manifest for ${target}"
         )
     endif()
+    set_property(TARGET ${target} PROPERTY HORO_GAMEPLAY_DESCRIPTOR_REVISION_FILE "${generated_revision}")
 endfunction()

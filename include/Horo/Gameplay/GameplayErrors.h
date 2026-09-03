@@ -18,4 +18,8 @@ namespace Horo::Gameplay::GameplayErrors {
     extern const ErrorCodeDescriptor BehaviorMultiplicityViolation;
     extern const ErrorCodeDescriptor EventQueueFull;
     extern const ErrorCodeDescriptor InvalidEvent;
+    extern const ErrorCodeDescriptor InvalidGameModuleDescriptor;
+    extern const ErrorCodeDescriptor IncompatibleGameModule;
+    extern const ErrorCodeDescriptor InvalidGeneratedDescriptorBundle;
+    extern const ErrorCodeDescriptor GeneratedDescriptorDiagnosticsPresent;
 }  // namespace Horo::Gameplay::GameplayErrors

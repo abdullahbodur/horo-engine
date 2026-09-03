@@ -1,3 +1,4 @@
+#include "GameplayModuleTestSupport.h"
 #include "Horo/Gameplay/BehaviorRuntime.h"
 #include "editor/gameplay/ProjectGameplayRegistry.h"
 
@@ -84,9 +85,9 @@ TEST_CASE("project gameplay registry merges a fingerprinted native module with L
     Write(source, Source(1));
     Write(source.string() + ".meta", R"({"schemaVersion":1,"runtime":"lua","behaviorTypeId":"game.tests.watched"})");
     const std::string manifest = "{\n  \"schemaVersion\": 1,\n  \"moduleId\": \"game.tests\",\n  \"buildFingerprint\": \"" +
-                                 std::string{Gameplay::CurrentGameplayBuildFingerprint()} +
-                                 "\",\n  \"descriptorRevision\": 1,\n  \"artifactPath\": \"" +
-                                 std::filesystem::path{HORO_TEST_GAME_MODULE_PATH}.string() + "\"\n}\n";
+                                 std::string{Gameplay::CurrentGameplayBuildFingerprint()} + "\",\n  \"descriptorRevision\": " +
+                                 std::to_string(Tests::ReadDescriptorRevision(HORO_TEST_GAME_MODULE_REVISION_PATH)) +
+                                 ",\n  \"artifactPath\": \"" + std::filesystem::path{HORO_TEST_GAME_MODULE_PATH}.string() + "\"\n}\n";
     Write(project.root / ".horo" / "local" / "gameplay_module.json", manifest);
 
     auto registry = Editor::ProjectGameplayRegistry::Discover(project.root);

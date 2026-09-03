@@ -39,7 +39,7 @@ architecture. Those gaps remain owned by focused follow-up tickets listed below.
 ```text
 project CMake + source inputs
   -> horo_add_gameplay_module(HoroGameGameplay)
-  -> regex annotation scanner
+  -> bounded token-aware annotation scanner
   -> generated behavior bundle translation unit
   -> exact-SDK shared library
   -> candidate_gameplay_module.json
@@ -74,7 +74,7 @@ Status terms mean:
 | Exported gameplay SDK package | Implemented | `HoroEngineGameplay` exports `HoroEngine::GameplayApi`, CMake helpers, the generator, and exact compiler/platform fingerprint checks. |
 | Primary native gameplay library | Implemented | `horo_add_gameplay_module` builds one conventional `HoroGameGameplay` target; build input and published manifest paths are project-global, so multiple primary modules are not composed. |
 | C-linkage entry-point names | Implemented | Descriptor, generated bundle, create, and destroy symbols are mandatory. Their signatures cross C++ types and virtual interfaces. |
-| Generated native behavior bundle | Partial | A complete array is emitted for scanner matches, but scanning is regex-based, descriptor revision is fixed at `1`, and migrations or generated diagnostics are absent. |
+| Generated native behavior bundle | Partial | A deterministic complete snapshot carries schema/SDK identity, separate metadata and native factory bindings, a content-derived non-zero revision, bounded diagnostics, and lifecycle callbacks. Behavior field migrations remain absent. |
 | Module artifact manifest | Partial | Schema `1` records module ID, fingerprint, descriptor revision, and absolute artifact path. It has no artifact digest, size, architecture, configuration, or toolchain identity. |
 | Asynchronous project build | Implemented | Requests are coalesced; input hashing, project lock, cancellation, timeouts, configure/build, candidate load validation, and last-success preservation exist. |
 | Build publication integrity | Partial | State records artifact hash and toolchain evidence, but the published manifest does not bind the artifact digest and discovery does not compare it with build state. `IsUpToDate` checks inputs and manifest existence, not artifact identity. |
@@ -97,7 +97,7 @@ Status terms mean:
 
 ## Exact ABI Assumptions
 
-`GameModule.h` defines boundary version `1` and requires these symbols:
+`GameModule.h` defines boundary version `2` and requires these symbols:
 
 ```text
 GetGameModuleDescriptor
@@ -120,7 +120,7 @@ The boundary relies on all of the following assumptions:
 2. C linkage stabilizes only the four exported names. Struct layout, virtual
    dispatch, `Result<void>`, and factory signatures remain C++ ABI.
 3. Exact `sizeof` equality is required for descriptor and bundle structures.
-   Structure growth is not append-compatible within boundary version `1`.
+   Structure growth is not append-compatible within boundary version `2`.
 4. Descriptor strings, registration arrays, descriptors, and factory function
    pointers are borrowed from the loaded library. They are valid only while the
    library remains loaded.
@@ -137,28 +137,28 @@ The boundary relies on all of the following assumptions:
 8. The module ID and fingerprint are non-empty, at most 256 bytes, and exactly
    equal between descriptor, generated bundle, expected host fingerprint, and
    manifest validation.
-9. The generated bundle revision is non-zero, but the current generator always
-   emits revision `1`; no revision migration or compatibility range exists.
+9. The generated bundle revision is a deterministic, non-zero SHA-256-derived
+   identity over the module ID, sorted annotations, and declared source content.
+   No revision migration or compatibility range exists.
 10. `GameRuntimeContext` is currently empty. Module `Start` therefore receives no
     scene, assets, jobs, diagnostics, configuration, or mediated platform
     capabilities.
 
 ## Generated Descriptor And Build Contract
 
-The annotation scanner reads the declared source files and recognizes
-`HORO_BEHAVIOR(SimpleIdentifier, "game.*")`. It rejects duplicate generated
-symbols and type IDs, then emits descriptor and factory records into one static
-array. This creates a complete snapshot only for matches the regex can see.
+The annotation scanner reads a bounded set of declared source files and recognizes
+`HORO_BEHAVIOR(SimpleIdentifier, "game.*")` from significant C++ tokens. It
+ignores comments and string contents, rejects duplicate generated symbols and
+type IDs, sorts inputs and registrations, and atomically emits separate descriptor
+and factory arrays plus a deterministic revision sidecar.
 
 Current scanner limitations are contract-relevant:
 
-- It is not compiler- or AST-aware and may observe text in comments or strings;
+- It is token-aware but not compiler- or AST-aware;
 - The annotated C++ type must be a simple identifier, not a qualified name;
 - Preprocessor expansion and semantic C++ validity are left to compilation;
-- Input size and file count are not explicitly bounded by the generator;
-- Output replacement is not an explicit durable temp-file transaction;
-- Only behavior registrations exist; field migrations and bundle diagnostics do
-  not.
+- Preprocessor conditionals are not evaluated by the scanner;
+- Only behavior registrations exist; field migrations do not.
 
 The helper and build service exchange these machine-local artifacts:
 
@@ -178,12 +178,11 @@ and state and restores the previous manifest if state publication fails. A faile
 build leaves the previous successful pair available.
 
 Candidate parsing does not apply a file-size bound before JSON decoding. The build
-service validates manifest schema, fingerprint, and artifact-path type, then relies
-on the module host for the artifact's ABI; it does not compare manifest module ID
-or descriptor revision with the loaded module. The generated absolute artifact
-path is not required to remain within the project or build root. Editor discovery
-later applies a 64 KiB manifest bound and compares the manifest module ID and
-descriptor revision with the loaded module.
+service validates manifest schema, module ID, fingerprint, non-zero descriptor
+revision, and artifact-path type, then passes the complete identity to the module
+host for pre-activation validation. The generated absolute artifact path is not
+required to remain within the project or build root. Editor discovery later
+applies a 64 KiB manifest bound and repeats the same identity validation.
 
 The remaining integrity gap is between publication and later activation. Build
 state contains the artifact SHA-256, size, and modification time, but the manifest
