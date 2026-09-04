@@ -264,10 +264,41 @@ declared bytes to 256 MiB and entry count to 4096. Addition is checked against t
 remaining byte budget before mutation. Inventories cannot list themselves:
 `files.manifest.json` is bound by its separate digest, avoiding circular hashes.
 
-The inventory is inert metadata, not verified file content. Actual archive
-preflight, complete membership matching, CRC/SHA-256 checks and immutable archive
-ownership are the next dependent implementation stage. TOML semantics, trust,
+The inventory is inert metadata, not verified file content. TOML semantics, trust,
 contribution/artifact references and installation remain separate responsibilities.
+
+### Archive verification implementation
+
+`ValidatedPackageArchive::Verify` copies the archive and performs a complete
+metadata preflight before decompressing its file inventory. Defaults bound
+compressed input to 64 MiB, the inventory to 4 MiB, a file to 64 MiB, expanded
+content to 256 MiB and entry count to 4096. Aggregate arithmetic is checked before
+addition; each decompression output buffer is sized from preflight-bounded data.
+CRC and SHA-256 are checked against actual content, not just ZIP header claims.
+Callers may provide stricter or larger explicit host-owned limits.
+
+Every regular file, including `horo-package.toml`, must match exactly one inventory
+entry by canonical spelling, size, executable mode and digest. The sole inventory
+exception is `files.manifest.json` itself: self-hashing is not possible, so its
+digest is bound separately alongside the complete archive digest. Inventories
+cannot list themselves. Explicit directories do not carry content or installation
+authority; their paths still participate in collision validation. Installers must
+create directories from validated file paths rather than replay archive metadata.
+
+The private miniz adapter accepts regular files/directories, rejects special files,
+links, privilege bits, reparse metadata and encryption, and compares local-header
+names with complete central-directory names (including empty entries and names
+longer than miniz's diagnostic buffer). Only ZIP64, timestamp and UID/GID extra
+fields are admitted; link and alternate-path extra fields reject the archive.
+Timestamp/UID/GID metadata does not grant permission to restore host ownership.
+
+Verification does not write/extract to the filesystem, install, grant trust or
+load code. Failure destroys only local temporary memory, leaving any prior install
+untouched. Success owns an immutable byte snapshot so changing the caller's input
+cannot change the verified archive. This result is **not** `VerifiedPackageBundle`:
+TOML semantics, contribution/artifact references, source compatibility, signature
+evidence and installation remain separate stages. The transitional extension ZIP
+marketplace is not silently reinterpreted as a `.horopkg` package consumer.
 
 ## Contribution Descriptors
 
