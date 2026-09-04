@@ -91,3 +91,17 @@ TEST_CASE("Package path limits include exact boundary values", "[packages][path]
     CHECK(PackagePath::Parse(path).HasValue());
     CHECK(PackagePath::Parse(path + "e").HasError());
 }
+
+TEST_CASE("Package normalization preserves four-byte UTF-8 and expands compatibility ligatures", "[packages][path]") {
+    const auto supplementary = PackagePath::Parse("assets/😀.bin");
+    REQUIRE(supplementary.HasValue());
+    CHECK(supplementary.Value().Value() == "assets/😀.bin");
+    CHECK(supplementary.Value().CollisionKey() == "assets/😀.bin");
+    const auto ligature = PackagePath::Parse("assets/ﬃ.bin");
+    REQUIRE(ligature.HasValue());
+    CHECK(ligature.Value().Value() == "assets/ﬃ.bin");
+    CHECK(ligature.Value().CollisionKey() == "assets/ffi.bin");
+    const auto composed = PackagePath::Parse("assets/각.bin");
+    REQUIRE(composed.HasValue());
+    CHECK(composed.Value().CollisionKey() == "assets/각.bin");
+}

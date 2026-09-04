@@ -32,26 +32,26 @@ namespace Horo::Packages::Detail {
 
     /** @copydoc PathInventory::Add */
     bool PathInventory::Add(const PackagePath &path, const bool directory) {
-        const auto &value = path.Value();
+        const std::string_view value = path.Value();
         std::size_t offset = 0;
         do {
             const auto separator = value.find('/', offset);
-            const bool final = separator == std::string::npos;
+            const bool lastComponent = separator == std::string_view::npos;
             const auto prefix = PackagePath::Parse(value.substr(0, separator));
             if (prefix.HasError()) {
                 return false;
             }
-            const bool isDirectory = !final || directory;
+            const bool isDirectory = !lastComponent || directory;
             const auto [node, inserted] =
-                m_nodes.try_emplace(prefix.Value().CollisionKey(), Node{prefix.Value().Value(), isDirectory, final});
+                m_nodes.try_emplace(prefix.Value().CollisionKey(), prefix.Value().Value(), isDirectory, lastComponent);
             if (!inserted) {
                 if (node->second.spelling != prefix.Value().Value() || node->second.directory != isDirectory ||
-                    (final && node->second.explicitEntry)) {
+                    (lastComponent && node->second.explicitEntry)) {
                     return false;
                 }
-                node->second.explicitEntry |= final;
+                node->second.explicitEntry |= lastComponent;
             }
-            if (final) {
+            if (lastComponent) {
                 return true;
             }
             offset = separator + 1;

@@ -14,10 +14,10 @@ namespace Horo::Packages {
 
         /** @brief Refuses duplicate JSON object keys and excessive nesting before building their DOM values. */
         struct DecodeGuard {
-            std::array<std::set<std::string>, 9> keys;
+            std::array<std::set<std::string, std::less<>>, 9> keys;
             bool valid = true;
 
-            bool operator()(const int depth, const Json::parse_event_t event, Json &value) {
+            bool operator()(const int depth, const Json::parse_event_t event, const Json &value) {
                 if (depth >= 8) {
                     valid = false;
                     return false;
@@ -111,7 +111,7 @@ namespace Horo::Packages {
     }
 
     /** @copydoc ValidatedPackageFileManifestV1::ValidatedPackageFileManifestV1 */
-    ValidatedPackageFileManifestV1::ValidatedPackageFileManifestV1(std::vector<PackageFileEntry> entries, Sha256Digest digest)
+    ValidatedPackageFileManifestV1::ValidatedPackageFileManifestV1(std::vector<PackageFileEntry> entries, const Sha256Digest &digest)
         : m_entries(std::move(entries)), m_digest(digest) {}
 
     /** @copydoc ValidatedPackageFileManifestV1::Entries */

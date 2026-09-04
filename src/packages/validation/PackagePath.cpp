@@ -2,11 +2,12 @@
 
 #include <algorithm>
 #include <array>
-#include <cstdlib>
-#include <memory>
+#include <cstddef>
 #include <optional>
+#include <span>
 #include <utf8proc.h>
 #include <utility>
+#include <vector>
 
 namespace Horo::Packages {
     namespace {
@@ -18,16 +19,29 @@ namespace Horo::Packages {
             .remediationHint = "Use a bounded relative NFC UTF-8 path without reserved names, traversal or ambiguous components.",
         };
 
-        /** @brief Normalizes bounded UTF-8 without leaking the allocator-owned library buffer. */
+        /** @brief Normalizes bounded UTF-8 in caller-owned storage, including room for the native terminator. */
         [[nodiscard]] std::optional<std::string> Normalize(const std::string_view text, const utf8proc_option_t options) {
-            utf8proc_uint8_t *buffer = nullptr;
-            const auto count = utf8proc_map(reinterpret_cast<const utf8proc_uint8_t *>(text.data()),
-                                            static_cast<utf8proc_ssize_t>(text.size()), &buffer, options);
-            const std::unique_ptr<utf8proc_uint8_t, decltype(&std::free)> owner{buffer, &std::free};
+            const auto *input = reinterpret_cast<const utf8proc_uint8_t *>(text.data());
+            const auto length = static_cast<utf8proc_ssize_t>(text.size());
+            const auto count = utf8proc_decompose(input, length, nullptr, 0, options);
             if (count < 0) {
                 return std::nullopt;
             }
-            return std::string{reinterpret_cast<const char *>(owner.get()), static_cast<std::size_t>(count)};
+            std::vector<utf8proc_int32_t> buffer(static_cast<std::size_t>(count) + 1);
+            const auto decoded = utf8proc_decompose(input, length, buffer.data(), count, options);
+            if (decoded < 0 || decoded > count) {
+                return std::nullopt;
+            }
+            const auto encoded = utf8proc_reencode(buffer.data(), decoded, options);
+            if (encoded < 0) {
+                return std::nullopt;
+            }
+            const auto bytes = std::as_bytes(std::span{buffer}).first(static_cast<std::size_t>(encoded));
+            std::string result(bytes.size(), '\0');
+            std::ranges::transform(bytes, result.begin(), [](const std::byte value) {
+                return std::to_integer<char>(value);
+            });
+            return result;
         }
 
         /** @brief Rejects non-visible Unicode controls and format characters in a validated UTF-8 sequence. */
@@ -40,8 +54,8 @@ namespace Horo::Packages {
                     return false;
                 }
                 const auto category = utf8proc_category(codepoint);
-                constexpr std::array forbidden{UTF8PROC_CATEGORY_CC, UTF8PROC_CATEGORY_CF, UTF8PROC_CATEGORY_ZL, UTF8PROC_CATEGORY_ZP};
-                if (std::ranges::find(forbidden, category) != forbidden.end()) {
+                if (constexpr std::array forbidden{UTF8PROC_CATEGORY_CC, UTF8PROC_CATEGORY_CF, UTF8PROC_CATEGORY_ZL, UTF8PROC_CATEGORY_ZP};
+                    std::ranges::find(forbidden, category) != forbidden.end()) {
                     return false;
                 }
                 text.remove_prefix(static_cast<std::size_t>(count));
@@ -64,9 +78,10 @@ namespace Horo::Packages {
             std::size_t depth = 0;
             while (!text.empty()) {
                 const auto separator = text.find('/');
-                const auto component = text.substr(0, separator);
-                if (component.empty() || component.size() > 255 || component.back() == '.' || component.back() == ' ' || ++depth > 24 ||
-                    IsDeviceName(component)) {
+                ++depth;
+                if (const auto component = text.substr(0, separator); component.empty() || component.size() > 255 ||
+                                                                      component.back() == '.' || component.back() == ' ' || depth > 24 ||
+                                                                      IsDeviceName(component)) {
                     return false;
                 }
                 if (separator == std::string_view::npos) {
@@ -79,7 +94,7 @@ namespace Horo::Packages {
 
         /** @brief Checks portable punctuation and path components for both spelling and collision key. */
         [[nodiscard]] bool IsPortable(const std::string_view text) {
-            return text.find_first_of("\\:*?\"<>|") == std::string_view::npos && HasPortableComponents(text);
+            return text.find_first_of(R"(\:*?"<>|)") == std::string_view::npos && HasPortableComponents(text);
         }
     }  // namespace
 
@@ -89,8 +104,8 @@ namespace Horo::Packages {
             return Result<PackagePath>::Failure(MakeError(InvalidPath));
         }
         constexpr auto canonicalOptions = static_cast<utf8proc_option_t>(UTF8PROC_STABLE | UTF8PROC_COMPOSE | UTF8PROC_REJECTNA);
-        const auto canonical = Normalize(text, canonicalOptions);
-        if (!canonical || *canonical != text || !HasVisibleCharacters(text) || !IsPortable(text)) {
+        if (const auto canonical = Normalize(text, canonicalOptions);
+            !canonical || *canonical != text || !HasVisibleCharacters(text) || !IsPortable(text)) {
             return Result<PackagePath>::Failure(MakeError(InvalidPath));
         }
         constexpr auto keyOptions = static_cast<utf8proc_option_t>(canonicalOptions | UTF8PROC_COMPAT | UTF8PROC_CASEFOLD);

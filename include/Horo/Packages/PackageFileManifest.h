@@ -57,7 +57,7 @@ namespace Horo::Packages {
 
     private:
         /** @brief Constructs only after complete inventory validation. */
-        ValidatedPackageFileManifestV1(std::vector<PackageFileEntry> entries, Sha256Digest digest);
+        ValidatedPackageFileManifestV1(std::vector<PackageFileEntry> entries, const Sha256Digest &digest);
 
         std::vector<PackageFileEntry> m_entries;
         Sha256Digest m_digest;
