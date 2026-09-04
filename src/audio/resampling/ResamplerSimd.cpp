@@ -54,7 +54,7 @@ namespace Horo::Audio::Detail {
     /** @copydoc NativeResamplerEvaluator */
     ResamplerEvaluator NativeResamplerEvaluator() noexcept {
 #if (defined(__aarch64__) && defined(__ARM_NEON)) || defined(__SSE2__) || defined(_M_X64)
-        return EvaluateNative;
+        return &EvaluateNative;
 #else
         return nullptr;
 #endif

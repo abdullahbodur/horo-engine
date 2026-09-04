@@ -3,24 +3,32 @@
 #include "ResamplerKernel.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <functional>
 #include <limits>
+#include <ranges>
 #include <utility>
 
 namespace Horo::Audio {
     namespace {
         /** @brief Check the declared readable/writable prefix without accessing its samples. */
         template <typename Sample> bool ValidPlanes(const std::span<const std::span<Sample>> planes, const std::uint32_t frames) {
-            return std::ranges::all_of(planes, [frames](const auto plane) {
-                return plane.size() >= frames &&
-                       (frames == 0 || (plane.data() != nullptr && reinterpret_cast<std::uintptr_t>(plane.data()) % 64 == 0));
+            return std::ranges::all_of(planes, [frames](const std::span<Sample> plane) {
+                const auto address = reinterpret_cast<std::uintptr_t>(plane.data());
+                const std::array requirements{
+                    plane.size() >= frames,
+                    frames == 0 || plane.data() != nullptr,
+                    frames == 0 || address % 64 == 0,
+                };
+                return std::ranges::all_of(requirements, std::identity{});
             });
         }
 
         /** @brief Detect intersecting bounded sample prefixes using a total address representation. */
         bool Overlap(const std::span<const float> left, const std::uint32_t leftFrames, const std::span<const float> right,
                      const std::uint32_t rightFrames) {
-            if (leftFrames == 0 || rightFrames == 0) {
+            if (const std::array hasFrames{leftFrames != 0, rightFrames != 0}; !std::ranges::all_of(hasFrames, std::identity{})) {
                 return false;
             }
             const auto a = reinterpret_cast<std::uintptr_t>(left.data());
@@ -31,24 +39,22 @@ namespace Horo::Audio {
 
         /** @brief Reject aliasing that could overwrite later input or another output channel. */
         bool SeparatePlanes(const AudioResamplerInput input, const AudioResamplerOutput output) {
-            for (std::size_t channel = 0; channel < output.planes.size(); ++channel) {
-                for (const auto source : input.planes) {
-                    if (Overlap(source, input.frames, output.planes[channel], output.capacity)) {
-                        return false;
-                    }
-                }
-                for (std::size_t earlier = 0; earlier < channel; ++earlier) {
-                    if (Overlap(output.planes[earlier], output.capacity, output.planes[channel], output.capacity)) {
-                        return false;
-                    }
-                }
-            }
-            return true;
+            return std::ranges::none_of(std::views::iota(std::size_t{0}, output.planes.size()), [&](const std::size_t channel) {
+                const bool aliasesInput = std::ranges::any_of(input.planes, [&](const auto source) {
+                    return Overlap(source, input.frames, output.planes[channel], output.capacity);
+                });
+                const bool aliasesOutput = std::ranges::any_of(std::views::iota(std::size_t{0}, channel), [&](const std::size_t earlier) {
+                    return Overlap(output.planes[earlier], output.capacity, output.planes[channel], output.capacity);
+                });
+                const std::array aliases{aliasesInput, aliasesOutput};
+                return std::ranges::any_of(aliases, std::identity{});
+            });
         }
 
         /** @brief Apply finite/subnormal safety without clipping ordinary internal headroom. */
         float SafeSample(const double value, std::uint32_t &faults) {
-            if (!std::isfinite(value) || std::abs(value) > std::numeric_limits<float>::max()) {
+            if (const std::array invalid{!std::isfinite(value), std::abs(value) > std::numeric_limits<float>::max()};
+                std::ranges::any_of(invalid, std::identity{})) {
                 ++faults;
                 return 0.0F;
             }
@@ -69,7 +75,7 @@ namespace Horo::Audio {
         bool seenInput{};
 
         /** @brief Prepare retained history outside the callback. */
-        State(AudioResamplerPlan value, Detail::ResamplerKernel prepared)
+        State(const AudioResamplerPlan &value, Detail::ResamplerKernel prepared)
             : plan(value), kernel(std::move(prepared)), history(static_cast<std::size_t>(plan.Descriptor().channels) * plan.Taps()) {
             Reset();
         }
@@ -88,20 +94,28 @@ namespace Horo::Audio {
         /** @brief Validate the entire call's shape before any state or output mutation. */
         bool ValidCall(const AudioResamplerInput input, const AudioResamplerOutput output) const {
             const auto &descriptor = plan.Descriptor();
-            return input.planes.size() == descriptor.channels && output.planes.size() == descriptor.channels &&
-                   input.frames <= descriptor.maximumOutputFrames * 64U + plan.Taps() &&
-                   output.capacity <= descriptor.maximumOutputFrames && ValidPlanes(input.planes, input.frames) &&
-                   ValidPlanes(output.planes, output.capacity) && SeparatePlanes(input, output);
+            const std::array requirements{
+                input.planes.size() == descriptor.channels,
+                output.planes.size() == descriptor.channels,
+                input.frames <= descriptor.maximumOutputFrames * 64U + plan.Taps(),
+                output.capacity <= descriptor.maximumOutputFrames,
+                ValidPlanes(input.planes, input.frames),
+                ValidPlanes(output.planes, output.capacity),
+                SeparatePlanes(input, output),
+            };
+            return std::ranges::all_of(requirements, std::identity{});
         }
 
         /** @brief Consume one real or padded frame into every channel's ring at the same phase. */
         void Push(const AudioResamplerInput input, AudioResamplerProgress &progress) {
             const bool real = progress.consumed < input.frames;
-            for (std::size_t channel = 0; channel < input.planes.size(); ++channel) {
+            std::ranges::for_each(std::views::iota(std::size_t{0}, input.planes.size()), [&](const std::size_t channel) {
                 const float sample = real ? input.planes[channel][progress.consumed] : 0.0F;
                 history[channel * plan.Taps() + oldest] = SafeSample(sample, progress.sanitizedSamples);
+            });
+            if (++oldest == plan.Taps()) {
+                oldest = 0;
             }
-            oldest = (oldest + 1) % plan.Taps();
             --needed;
             if (real) {
                 ++progress.consumed;
@@ -113,7 +127,8 @@ namespace Horo::Audio {
 
         /** @brief Adopt the end marker only after its entire supplied input has been consumed. */
         void ObserveEnd(const AudioResamplerInput input, const AudioResamplerProgress &progress) {
-            if (input.endOfStream && progress.consumed == input.frames) {
+            if (const std::array reachedEnd{input.endOfStream, progress.consumed == input.frames};
+                std::ranges::all_of(reachedEnd, std::identity{})) {
                 draining = true;
                 if (!seenInput) {
                     padding = 0;
@@ -123,29 +138,33 @@ namespace Horo::Audio {
 
         /** @brief Report the latched terminal state after all bounded tail padding has been consumed. */
         [[nodiscard]] bool Complete() const noexcept {
-            return draining && padding == 0;
+            const std::array complete{draining, padding == 0};
+            return std::ranges::all_of(complete, std::identity{});
         }
 
         /** @brief Fill only the history needed for one output; starvation preserves all fractional state. */
         bool Fill(const AudioResamplerInput input, AudioResamplerProgress &progress) {
             ObserveEnd(input, progress);
             while (needed != 0) {
-                if (progress.consumed == input.frames && (!draining || padding == 0)) {
+                const std::array drainUnavailable{!draining, padding == 0};
+                if (const std::array cannotPush{progress.consumed == input.frames, std::ranges::any_of(drainUnavailable, std::identity{})};
+                    std::ranges::all_of(cannotPush, std::identity{})) {
                     return false;
                 }
                 Push(input, progress);
                 ObserveEnd(input, progress);
             }
-            return !draining || padding != 0;
+            const std::array canContinue{!draining, padding != 0};
+            return std::ranges::any_of(canContinue, std::identity{});
         }
 
         /** @brief Produce one shared-phase output frame and advance only the bounded relative input position. */
         void Emit(const AudioResamplerOutput output, AudioResamplerProgress &progress) {
-            for (std::size_t channel = 0; channel < output.planes.size(); ++channel) {
+            std::ranges::for_each(std::views::iota(std::size_t{0}, output.planes.size()), [&](const std::size_t channel) {
                 const auto samples = std::span<const float>{history}.subspan(channel * plan.Taps(), plan.Taps());
                 output.planes[channel][progress.produced] =
                     SafeSample(kernel.Evaluate(samples, oldest, fraction), progress.sanitizedSamples);
-            }
+            });
             ++progress.produced;
             const double advanced = fraction + plan.InputStep();
             needed = static_cast<std::uint32_t>(advanced);
@@ -187,19 +206,23 @@ namespace Horo::Audio {
 
     /** @copydoc AudioResampler::Process */
     AudioResamplerProgress AudioResampler::Process(const AudioResamplerInput input, const AudioResamplerOutput output) noexcept {
-        if (!state_ || (state_->draining && input.frames != 0)) {
-            return {};
+        using enum AudioResamplerStatus;
+        if (!state_) {
+            return {.status = InvalidState};
+        }
+        if (const std::array validState{!state_->draining, input.frames == 0}; !std::ranges::any_of(validState, std::identity{})) {
+            return {.status = InvalidState};
         }
         if (!state_->ValidCall(input, output)) {
-            return {.status = AudioResamplerStatus::InvalidBuffer};
+            return {.status = InvalidBuffer};
         }
         if (state_->Complete()) {
-            return {.status = AudioResamplerStatus::Complete};
+            return {.status = Complete};
         }
-        AudioResamplerProgress progress{.status = AudioResamplerStatus::OutputFull};
+        AudioResamplerProgress progress{.status = OutputFull};
         while (progress.produced < output.capacity) {
             if (!state_->Fill(input, progress)) {
-                progress.status = state_->Complete() ? AudioResamplerStatus::Complete : AudioResamplerStatus::InputNeeded;
+                progress.status = state_->Complete() ? Complete : InputNeeded;
                 break;
             }
             state_->Emit(output, progress);

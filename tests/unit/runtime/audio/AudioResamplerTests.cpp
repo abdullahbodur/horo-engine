@@ -5,10 +5,13 @@
 #include <atomic>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <cmath>
 #include <cstdlib>
+#include <iterator>
 #include <limits>
 #include <new>
+#include <ranges>
 #include <vector>
 
 namespace {
@@ -82,9 +85,8 @@ namespace Horo::Audio {
             std::size_t offset = 0;
             for (unsigned attempt = 0; attempt < 100'000; ++attempt) {
                 const auto frames = static_cast<std::uint32_t>(std::min<std::size_t>(inputChunk, signal[0].size() - offset));
-                for (std::size_t channel = 0; channel < 2; ++channel) {
-                    std::copy_n(signal[channel].begin() + static_cast<std::ptrdiff_t>(offset), frames, input[channel].values.begin());
-                }
+                std::copy_n(signal[0].begin() + static_cast<std::ptrdiff_t>(offset), frames, input[0].values.begin());
+                std::copy_n(signal[1].begin() + static_cast<std::ptrdiff_t>(offset), frames, input[1].values.begin());
                 const auto before = allocations.load(std::memory_order_relaxed);
                 const auto result = processor.Process({sources, frames, offset + frames == signal[0].size()}, {destinations, outputChunk});
                 const auto after = allocations.load(std::memory_order_relaxed);
@@ -93,10 +95,8 @@ namespace Horo::Audio {
                 REQUIRE(result.status != AudioResamplerStatus::InvalidState);
                 REQUIRE(result.sanitizedSamples == 0);
                 offset += result.consumed;
-                for (std::size_t channel = 0; channel < 2; ++channel) {
-                    rendered[channel].insert(rendered[channel].end(), output[channel].values.begin(),
-                                             output[channel].values.begin() + result.produced);
-                }
+                rendered[0].insert(rendered[0].end(), output[0].values.begin(), output[0].values.begin() + result.produced);
+                rendered[1].insert(rendered[1].end(), output[1].values.begin(), output[1].values.begin() + result.produced);
                 if (result.status == AudioResamplerStatus::Complete) {
                     REQUIRE(offset == signal[0].size());
                     return rendered;
@@ -108,10 +108,12 @@ namespace Horo::Audio {
 
         Signal Source() {
             Signal signal;
-            for (unsigned frame = 0; frame < 257; ++frame) {
-                signal[0].push_back(static_cast<float>(std::sin(frame * 0.1)));
-                signal[1].push_back(static_cast<float>(std::cos(frame * 0.07)) * 2.0F);
-            }
+            std::ranges::transform(std::views::iota(0U, 257U), std::back_inserter(signal[0]), [](const unsigned frame) {
+                return static_cast<float>(std::sin(frame * 0.1));
+            });
+            std::ranges::transform(std::views::iota(0U, 257U), std::back_inserter(signal[1]), [](const unsigned frame) {
+                return static_cast<float>(std::cos(frame * 0.07)) * 2.0F;
+            });
             return signal;
         }
 
@@ -125,18 +127,16 @@ namespace Horo::Audio {
 
         TEST_CASE("Streaming phases tails and output are invariant to block partitioning", "[unit][audio][resampler]") {
             const auto source = Source();
-            for (const auto quality : {AudioResamplerQuality::Linear, AudioResamplerQuality::Sinc32, AudioResamplerQuality::Sinc64}) {
-                for (const double pitch : {0.125, 0.91875, 1.0, 2.0, 8.0}) {
-                    auto processor = Create(Plan(quality, pitch));
-                    const auto reference = Render(processor, source, 128, 128);
-                    processor.Reset();
-                    REQUIRE(Render(processor, source, 1, 1) == reference);
-                    processor.Reset();
-                    REQUIRE(Render(processor, source, 37, 7) == reference);
-                    REQUIRE(reference[0].size() == reference[1].size());
-                    REQUIRE(reference[0].size() <= (source[0].size() + 512) * 8);
-                }
-            }
+            const auto quality = GENERATE(AudioResamplerQuality::Linear, AudioResamplerQuality::Sinc32, AudioResamplerQuality::Sinc64);
+            const double pitch = GENERATE(0.125, 0.91875, 1.0, 2.0, 8.0);
+            auto processor = Create(Plan(quality, pitch));
+            const auto reference = Render(processor, source, 128, 128);
+            processor.Reset();
+            REQUIRE(Render(processor, source, 1, 1) == reference);
+            processor.Reset();
+            REQUIRE(Render(processor, source, 37, 7) == reference);
+            REQUIRE(reference[0].size() == reference[1].size());
+            REQUIRE(reference[0].size() <= (source[0].size() + 512) * 8);
         }
 
         TEST_CASE("SIMD streaming matches scalar output and keeps partition invariant state", "[unit][audio][resampler]") {
@@ -145,22 +145,21 @@ namespace Horo::Audio {
                 return;
             }
             const auto source = Source();
-            for (const auto quality : {AudioResamplerQuality::Linear, AudioResamplerQuality::Sinc32, AudioResamplerQuality::Sinc64}) {
-                for (const double pitch : {0.125, 0.91875, 1.0, 2.0, 8.0}) {
-                    auto scalar = Create(Plan(quality, pitch));
-                    auto native = Create(Plan(quality, pitch), AudioResamplerExecution::Simd);
-                    const auto reference = Render(scalar, source, 128, 128);
-                    const auto actual = Render(native, source, 37, 7);
-                    native.Reset();
-                    REQUIRE(Render(native, source, 1, 1) == actual);
-                    for (std::size_t channel = 0; channel < 2; ++channel) {
-                        REQUIRE(actual[channel].size() == reference[channel].size());
-                        for (std::size_t frame = 0; frame < actual[channel].size(); ++frame) {
-                            REQUIRE(actual[channel][frame] == Catch::Approx(reference[channel][frame]).margin(3e-6));
-                        }
-                    }
-                }
-            }
+            const auto quality = GENERATE(AudioResamplerQuality::Linear, AudioResamplerQuality::Sinc32, AudioResamplerQuality::Sinc64);
+            const double pitch = GENERATE(0.125, 0.91875, 1.0, 2.0, 8.0);
+            auto scalar = Create(Plan(quality, pitch));
+            auto native = Create(Plan(quality, pitch), AudioResamplerExecution::Simd);
+            const auto reference = Render(scalar, source, 128, 128);
+            const auto actual = Render(native, source, 37, 7);
+            native.Reset();
+            REQUIRE(Render(native, source, 1, 1) == actual);
+            REQUIRE(actual[0].size() == reference[0].size());
+            REQUIRE(actual[1].size() == reference[1].size());
+            const auto close = [](const float value, const float expected) {
+                return value == Catch::Approx(expected).margin(3e-6);
+            };
+            REQUIRE(std::ranges::equal(actual[0], reference[0], close));
+            REQUIRE(std::ranges::equal(actual[1], reference[1], close));
         }
 
         TEST_CASE("Empty stream finishes without samples and reset and move preserve ownership", "[unit][audio][resampler]") {
@@ -226,6 +225,9 @@ namespace Horo::Audio {
             REQUIRE(result.produced == 2);
             REQUIRE(result.sanitizedSamples == 2);
             REQUIRE(rejected.status == AudioResamplerStatus::InvalidState);
+            REQUIRE(rejected.consumed == 0);
+            REQUIRE(rejected.produced == 0);
+            REQUIRE(rejected.sanitizedSamples == 0);
             REQUIRE(output[0].values[0] == 0.0F);
             REQUIRE_FALSE(std::signbit(output[1].values[0]));
             REQUIRE_FALSE(std::signbit(output[1].values[1]));

@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <iostream>
 #include <numeric>
+#include <ranges>
 #include <stdexcept>
 #include <vector>
 
@@ -56,31 +57,33 @@ namespace {
         std::array<Plane, 8> outputs;
         std::array<std::span<const float>, 8> sources;
         std::array<std::span<float>, 8> destinations;
-        for (std::size_t channel = 0; channel < channels; ++channel) {
-            for (std::size_t frame = 0; frame < inputs[channel].samples.size(); ++frame) {
-                inputs[channel].samples[frame] = static_cast<float>(std::sin(static_cast<double>(frame) * 0.013 + channel));
-            }
+        std::ranges::for_each(std::views::iota(std::size_t{0}, static_cast<std::size_t>(channels)), [&](const std::size_t channel) {
+            std::ranges::transform(std::views::iota(std::size_t{0}, inputs[channel].samples.size()), inputs[channel].samples.begin(),
+                                   [channel](const std::size_t frame) {
+                return static_cast<float>(std::sin(static_cast<double>(frame) * 0.013 + channel));
+            });
             sources[channel] = inputs[channel].samples;
             destinations[channel] = outputs[channel].samples;
-        }
+        });
         const auto offered = Frames * static_cast<std::uint32_t>(std::ceil(plan.Value().InputStep())) + plan.Value().Taps();
         const AudioResamplerInput input{std::span{sources}.first(channels), offered, false};
         const AudioResamplerOutput output{std::span{destinations}.first(channels), Frames};
-        for (unsigned warmup = 0; warmup < 100; ++warmup) {
+        std::ranges::for_each(std::views::iota(0U, 100U), [&](const unsigned) {
             static_cast<void>(processor.Process(input, output));
-        }
+        });
         std::vector<double> elapsed(Iterations);
         double checksum = 0.0;
-        for (auto &duration : elapsed) {
+        std::ranges::for_each(elapsed, [&](double &duration) {
             const auto start = std::chrono::steady_clock::now();
             const auto result = processor.Process(input, output);
             const auto finish = std::chrono::steady_clock::now();
-            if (result.produced != Frames || result.sanitizedSamples != 0) {
+            const std::array resultIsValid{result.produced == Frames, result.sanitizedSamples == 0};
+            if (!std::ranges::all_of(resultIsValid, std::identity{})) {
                 throw std::runtime_error("Benchmark processing failed");
             }
             duration = std::chrono::duration<double, std::micro>(finish - start).count();
             checksum += outputs[0].samples[0];
-        }
+        });
         Report(plan.Value(), execution, elapsed, checksum);
     }
 }  // namespace
@@ -92,14 +95,16 @@ int main() {
 #else
     std::cout << "quality,execution,channels,input_hz,taps,mean_us,p99_us,max_us,p99_deadline_percent,checksum\n"
               << std::fixed << std::setprecision(3);
-    for (const auto quality : {AudioResamplerQuality::Linear, AudioResamplerQuality::Sinc32, AudioResamplerQuality::Sinc64}) {
-        for (const auto execution : {AudioResamplerExecution::Scalar, AudioResamplerExecution::Simd}) {
+    const std::array qualities{AudioResamplerQuality::Linear, AudioResamplerQuality::Sinc32, AudioResamplerQuality::Sinc64};
+    const std::array executions{AudioResamplerExecution::Scalar, AudioResamplerExecution::Simd};
+    std::ranges::for_each(qualities, [&](const AudioResamplerQuality quality) {
+        std::ranges::for_each(executions, [&](const AudioResamplerExecution execution) {
             if (execution == AudioResamplerExecution::Simd && !AudioResampler::SupportsSimd()) {
-                continue;
+                return;
             }
             Measure(quality, execution, 2, 44'100);
             Measure(quality, execution, 8, 96'000);
-        }
-    }
+        });
+    });
 #endif
 }
