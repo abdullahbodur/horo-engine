@@ -96,3 +96,15 @@ modal header.
 copying untyped integers or depending on a concrete device backend. There are no
 existing audio API callers to migrate. The handle registry remains target-private;
 only stable IDs and generation-safe client handles cross the public boundary.
+
+## Physics Identity Boundary
+
+`HoroEngine::Physics` owns `Horo/Physics/PhysicsIdentity.h` and
+`Horo/Physics/PhysicsErrors.h`, with a Foundation-only public dependency.
+World-scoped Physics handles wrap Foundation's zero-based slot identity rather
+than exposing solver IDs. Owner preflight checks representation and world only;
+the owning registry must still establish occupancy, generation and lifetime.
+There are no existing production Physics callers to migrate. Scene activation
+retains its own scene-to-world binding rather than introducing a reverse
+Physics dependency on RuntimeScene. The initial target implements only these
+contracts; native composition and runtime operations remain separate work.

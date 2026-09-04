@@ -139,6 +139,12 @@ target_include_directories(HoroAudioApiTests PRIVATE ${PROJECT_SOURCE_DIR}/src/a
 target_compile_features(HoroAudioApiTests PRIVATE cxx_std_20)
 target_link_libraries(HoroAudioApiTests PRIVATE HoroEngine::AudioApi)
 horo_register_catch_test(HoroAudioApiTests LABELS "unit;audio;headless")
+add_executable(HoroPhysicsTests
+        unit/runtime/physics/PhysicsIdentityTests.cpp
+)
+target_compile_features(HoroPhysicsTests PRIVATE cxx_std_20)
+target_link_libraries(HoroPhysicsTests PRIVATE HoroEngine::Physics)
+horo_register_catch_test(HoroPhysicsTests LABELS "unit;physics;headless")
 add_executable(HoroGameplayRuntimeTests
         unit/gameplay/BehaviorRuntimeTests.cpp
         unit/gameplay/ComponentRegistryTests.cpp
