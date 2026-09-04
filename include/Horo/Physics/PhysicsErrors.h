@@ -23,4 +23,12 @@ namespace Horo::Physics::PhysicsErrors {
     extern const ErrorCodeDescriptor OperationUnsupported;
     /** @brief The world lifecycle phase cannot admit the requested operation. */
     extern const ErrorCodeDescriptor InvalidState;
+    /** @brief Malformed or unsupported-version descriptor metadata. */
+    extern const ErrorCodeDescriptor DescriptorInvalid;
+    /** @brief Unknown or unsupported numerical/solver profile. */
+    extern const ErrorCodeDescriptor ProfileUnsupported;
+    /** @brief Requested capacity exceeds the bounded profile or lacks its required budget. */
+    extern const ErrorCodeDescriptor CapacityExceeded;
+    /** @brief Admission evidence changed after the caller captured its capability revision. */
+    extern const ErrorCodeDescriptor CapabilityStale;
 }  // namespace Horo::Physics::PhysicsErrors

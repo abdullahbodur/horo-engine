@@ -119,3 +119,11 @@ There are no existing production Physics callers to migrate. Scene activation
 retains its own scene-to-world binding rather than introducing a reverse
 Physics dependency on RuntimeScene. The initial target implements only these
 contracts; native composition and runtime operations remain separate work.
+
+`PhysicsWorldDescriptor.h` and `PhysicsCapabilities.h` extend the same target with
+inert world policy, bounded plan capacity and owner-published capability evidence.
+Their validation does not construct a world or establish native/determinism
+qualification. Requested fixed delta remains a double value after validation;
+profile/solver integration must separately qualify its rate and conversion.
+Public consumers continue to depend only on Foundation, with no new native or
+SceneRuntime include paths.
