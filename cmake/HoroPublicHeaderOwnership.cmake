@@ -53,6 +53,10 @@ horo_configure_target_header_boundary(HoroApplication PUBLIC_HEADERS
     Horo/Application/ProjectMigrationCatalog.h
     Horo/Application/ProjectVersion.h
 )
+horo_configure_target_header_boundary(HoroPackages PUBLIC_HEADERS
+    Horo/Packages/PackagePath.h
+    Horo/Packages/PackageFileManifest.h
+)
 horo_configure_target_header_boundary(HoroProjectMigrations)
 horo_configure_target_header_boundary(HoroRuntime PUBLIC_HEADERS
     Horo/Runtime/FrameScheduler.h

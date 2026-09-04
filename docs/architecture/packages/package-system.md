@@ -227,6 +227,48 @@ signature evidence. Every module/artifact/content/contribution reference resolve
 to exact `PackageFileId` values before publication; author-declared publisher keys
 never become trust roots by themselves.
 
+### Portable file identity implementation
+
+`HoroEngine::Packages` owns `Horo/Packages/PackagePath.h`; its only public
+dependency is Foundation. Unicode normalization stays private through utf8proc
+2.11.0, pinned by commit in `cmake/Dependencies.cmake`. Public-header consumer
+compilation verifies that neither Unicode nor archive implementation headers
+escape that boundary. No existing extension-loader API is changed by this target.
+
+`PackagePath::Parse` accepts relative NFC UTF-8 file identities with `/` separators,
+at most 1024 bytes, 24 components and 255 bytes per component. It rejects empty
+components, traversal, absolute/drive/UNC paths, stream syntax, control/format
+characters, Windows reserved names and trailing dots/spaces. It rejects rather
+than silently normalizes noncanonical archive spelling. A separate Unicode
+NFKC/case-folded key detects portable case and normalization aliases; it is never
+used as an extraction path. This intentionally conservative collision policy
+also applies to directory prefixes when validating the complete file inventory.
+
+Path validation is inert metadata validation, not evidence that an archive,
+manifest, signature, contribution graph or installation has been verified.
+
+### File inventory implementation
+
+`ValidatedPackageFileManifestV1::Parse` accepts an exact JSON object with
+`schemaVersion: 1` and a `files` array. Each entry has exactly `path`, `size`
+(unsigned integer), `sha256` (canonical `sha256:` digest), `executable` (boolean)
+and `contributionRoot` (canonical directory path without a trailing slash, or
+explicit `null` for package-level metadata). A non-null root must contain the
+file. Unknown fields, duplicate JSON keys, excessive nesting, duplicate paths,
+file/directory conflicts and differently spelled directory aliases reject the
+entire inventory. The immutable model owns all strings and records the digest of
+the exact input bytes.
+
+Default inventory policy bounds JSON to 4 MiB, a file to 64 MiB, aggregate
+declared bytes to 256 MiB and entry count to 4096. Addition is checked against the
+remaining byte budget before mutation. Inventories cannot list themselves:
+`files.manifest.json` is bound by its separate digest, avoiding circular hashes.
+
+The inventory is inert metadata, not verified file content. Actual archive
+preflight, complete membership matching, CRC/SHA-256 checks and immutable archive
+ownership are the next dependent implementation stage. TOML semantics, trust,
+contribution/artifact references and installation remain separate responsibilities.
+
 ## Contribution Descriptors
 
 Folder-based contribution declarations are authoring shorthand only. Before
