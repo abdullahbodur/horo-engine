@@ -61,6 +61,12 @@ function(horo_register_catch_test target)
     )
 endfunction()
 
+add_executable(HoroPackageValidationTests
+    unit/packages/PackagePathTests.cpp
+    unit/packages/PackageFileManifestTests.cpp)
+target_link_libraries(HoroPackageValidationTests PRIVATE HoroEngine::Packages nlohmann_json::nlohmann_json)
+horo_register_catch_test(HoroPackageValidationTests LABELS "packages;headless")
+
 if (HORO_ENABLE_IMGUI_UI_TESTS)
     if (NOT TARGET HoroThirdPartyImGui)
         message(FATAL_ERROR "HoroEditorUiAutomationTests requires instrumented HoroThirdPartyImGui")

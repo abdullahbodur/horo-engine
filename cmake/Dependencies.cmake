@@ -88,6 +88,18 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(miniz)
 
+# Portable package paths need Unicode normalization and full case folding.
+set(HORO_UTF8PROC_REVISION "d7bf128df773c2a1a7242eb80e51e91a769fc985")
+set(UTF8PROC_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+set(UTF8PROC_INSTALL OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    utf8proc
+    GIT_REPOSITORY https://github.com/JuliaStrings/utf8proc.git
+    GIT_TAG "${HORO_UTF8PROC_REVISION}"
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(utf8proc)
+
 # The extension marketplace is part of every editor distribution. Build its
 # HTTPS stack from pinned sources so users do not need a separately installed
 # libcurl SDK. Prefer the native Windows trust store through Schannel; use the
