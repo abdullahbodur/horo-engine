@@ -267,7 +267,7 @@ actually configured and run.
 After modifying C/C++ source or header files, use the SonarQube Model Context Protocol
 (MCP) IDE bridge when available. Follow `.github/instructions/sonarqube_mcp.instructions.md`
 for tool lifecycle and project-key lookup. Setup and troubleshooting are documented
-in [Local C/C++ Analysis with SonarQube MCP](docs/guides/sonarqube-mcp-local-analysis.md).
+in [Local C/C++ Analysis with SonarQube MCP and VS Code](docs/guides/sonarqube-mcp-local-analysis.md).
 
 - Identify unstaged, staged, and untracked files with `git diff --name-only`,
   `git diff --cached --name-only`, and `git ls-files --others --exclude-standard`
