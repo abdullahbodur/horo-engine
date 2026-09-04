@@ -140,6 +140,7 @@ target_compile_features(HoroAudioApiTests PRIVATE cxx_std_20)
 target_link_libraries(HoroAudioApiTests PRIVATE HoroEngine::AudioApi)
 horo_register_catch_test(HoroAudioApiTests LABELS "unit;audio;headless")
 add_executable(HoroPhysicsTests
+        unit/runtime/physics/CanonicalSolverTests.cpp
         unit/runtime/physics/PhysicsBodyDescriptorTests.cpp
         unit/runtime/physics/PhysicsConstraintDescriptorTests.cpp
         unit/runtime/physics/PhysicsCookedShapeDescriptorTests.cpp
@@ -149,8 +150,35 @@ add_executable(HoroPhysicsTests
         unit/runtime/physics/PhysicsWorldDescriptorTests.cpp
 )
 target_compile_features(HoroPhysicsTests PRIVATE cxx_std_20)
+target_include_directories(HoroPhysicsTests PRIVATE ${PROJECT_SOURCE_DIR}/src/physics)
+target_compile_definitions(HoroPhysicsTests PRIVATE HORO_TEST_PHYSICS_NATIVE=$<BOOL:${HORO_BUILD_PHYSICS_NATIVE}>)
 target_link_libraries(HoroPhysicsTests PRIVATE HoroEngine::Physics)
 horo_register_catch_test(HoroPhysicsTests LABELS "unit;physics;headless")
+foreach(horo_physics_probe IN ITEMS iOS Linux Darwin)
+    set(horo_physics_expected "Canonical Physics is not qualified for this target")
+    if(horo_physics_probe STREQUAL "Linux")
+        set(horo_physics_expected "Canonical Physics supports Linux/Windows x86_64 only")
+    elseif(horo_physics_probe STREQUAL "Darwin")
+        set(horo_physics_expected "Canonical Physics requires macOS 14 or newer")
+    endif()
+    add_test(NAME HoroPhysicsRejectsUnsupported${horo_physics_probe} COMMAND ${CMAKE_COMMAND}
+        -DHORO_SOURCE_DIR=${PROJECT_SOURCE_DIR}
+        -DHORO_SYSTEM=${horo_physics_probe} -DHORO_PROCESSOR=arm64 -DHORO_DEPLOYMENT=13
+        "-DHORO_EXPECTED_ERROR=${horo_physics_expected}"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyPhysicsUnsupportedTarget.cmake)
+endforeach()
+if(HORO_BUILD_PHYSICS_NATIVE)
+    add_executable(HoroPhysicsNativeBoundaryTests unit/runtime/physics/CanonicalNativeBoundaryTests.cpp)
+    target_compile_features(HoroPhysicsNativeBoundaryTests PRIVATE cxx_std_20)
+    target_include_directories(HoroPhysicsNativeBoundaryTests PRIVATE ${PROJECT_SOURCE_DIR}/src/physics)
+    target_link_libraries(HoroPhysicsNativeBoundaryTests PRIVATE HoroEngine::Physics Jolt)
+    horo_register_catch_test(HoroPhysicsNativeBoundaryTests LABELS "unit;physics;headless")
+    add_test(NAME HoroPhysicsNotices COMMAND ${CMAKE_COMMAND}
+        -DHORO_BINARY_DIR=${CMAKE_BINARY_DIR}
+        -DHORO_DATA_DIR=${CMAKE_INSTALL_DATADIR}
+        -DHORO_CONFIG=$<CONFIG>
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyPhysicsNotices.cmake)
+endif()
 add_executable(HoroGameplayRuntimeTests
         unit/gameplay/BehaviorRuntimeTests.cpp
         unit/gameplay/ComponentRegistryTests.cpp
