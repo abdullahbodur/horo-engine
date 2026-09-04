@@ -1107,7 +1107,7 @@ The additive `HoroEngine::AudioCommands` contract owns `Audio/AudioCommands.h`
 and depends on AudioMemory for generation-scoped prepared storage identities.
 Its current typed value surface represents next-buffer-boundary create/start/stop,
 parameter, graph-publication, logical-release, scene-unload and reset intents.
-It does not implement clock mapping or scheduled batches, MPSC ingress, voice
+It does not implement clock mapping or scheduled batches, voice
 execution or lifecycle commits. Those implementations must consume this contract
 rather than inventing string opcodes or callback-side asset/ECS lookups.
 
@@ -1164,8 +1164,58 @@ AudioCommands explicitly; public-header consumer tests check both narrow headers
 SPSC tests cover reserved critical FIFO barriers, exact sequence/epoch rejection,
 all preparation allocation failures, moves, close/drain, zero general heap allocation
 and free on hot methods, and 50,000 ordered two-thread records with repeated slot reuse.
-Full frontend saturation acceptance remains incomplete until bounded MPSC ingress,
-normalization/staging and end-to-end concurrent/critical-barrier regressions are delivered.
+`Audio/AudioCommandStaging.h` completes the bounded MPSC-to-SPSC path for these
+buffer-boundary intents. Its separately identified CommandStorage pool and fixed
+scene-gate array are allocated before publication. The ingress budget includes
+record/pool metadata and scene gates; the callback reservation is independently
+bounded. Fixed owner/mutex overhead is excluded. One mutex protects ingress FIFO,
+scene admission, accepted sequence and close/reset facts. Producer and control
+entry points only try-lock: `Busy` accepts nothing and leaves work caller-owned.
+They do not wait for the lock, and the callback never touches it. This is not a
+lock-free or starvation-free producer claim; the host owns bounded retry scheduling
+and required-work reconciliation outside the callback.
+
+Under that mutex, submissions receive non-wrapping uint64 sequences and reserve
+ordinary or critical capacity. Only adjacent unpublished parameter snapshots may
+replace an earlier snapshot; the result exposes both accepted and replaced
+sequences. The control pump publishes at most its explicit record budget and
+stops on the first blocked SPSC publication. It retains that record and its
+successors rather than letting a later critical command leap over an earlier
+accepted operation. Saturation is pressure, not implicit acceptance or disposal.
+The producer/control caller retains `Busy`, `OrdinaryFull` and `CriticalRetry`
+inputs for retry or explicit lifecycle reconciliation. After the host stages all
+required critical work, `Close` rejects new ingress and the pump closes SPSC only
+after every accepted ingress record is published.
+
+Control explicitly registers each admitted scene or host-owned context slot and
+generation. A queued or not-yet-acknowledged context cannot be replaced. Producers
+cannot submit reset/unload payloads through ordinary ingress. `StageSceneUnload`
+closes ordinary scene admission before attempting the reserved barrier; a full
+critical queue leaves that admission closed, with the barrier still a required
+control retry. Stop/release may finish entering before the barrier is queued,
+but no further old-context work enters after it. Exact epoch/context/sequence
+acknowledgement and control's independent execution/resource-lifetime proof are
+required before that slot admits a strictly newer generation. Checking that the
+barrier was published prevents premature acknowledgement, but is not itself proof
+that the callback executed it.
+
+`StageReset` similarly closes ordinary epoch admission during a critical retry.
+Once the final reset barrier is queued, all ingress closes, so old work cannot
+cross it into a new epoch. Existing accepted work drains before that barrier.
+The host reconciles any unaccepted work and constructs a new epoch owner only
+after quiescence; this transport neither changes device state nor commits reset.
+All producers must be joined and the callback detached/joined before moving or
+destroying staging. Destruction additionally requires accepted work to have been
+drained or explicitly reconciled by the control runtime.
+
+End-to-end tests saturate both queues with stop/release/unload/reset work, check
+late producer rejection and acknowledged generation reuse, verify adjacent-only
+coalescing and retained output backpressure, inject every preparation allocation
+failure, and move/close/drain owners. Four concurrent producers, one control pump
+and one callback consumer transfer 12,000 records in accepted sequence order.
+Allocation/free probes cover admission, pump and callback operations. These tests
+exercise the staging contract; actual voice/clip/graph liveness, execution outcomes,
+device lifecycle and clock-mapped scheduling remain with their owning subsystems.
 
 Scheduled commands carry an audio timeline timestamp or buffer-boundary target.
 Commands in the same `ScheduledCommandBatch` with the same timestamp are applied

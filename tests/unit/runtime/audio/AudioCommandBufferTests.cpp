@@ -1,3 +1,4 @@
+#include "AudioCommandTestProbe.h"
 #include "Horo/Audio/AudioCommandBuffer.h"
 
 #include <algorithm>
@@ -13,10 +14,16 @@
 #include <malloc.h>
 #endif
 
-namespace {
+namespace Horo::Audio::Test {
     thread_local std::size_t allocationCount{};
     thread_local std::size_t deallocationCount{};
     thread_local std::size_t failCountdown{};
+}  // namespace Horo::Audio::Test
+
+namespace {
+    using Horo::Audio::Test::allocationCount;
+    using Horo::Audio::Test::deallocationCount;
+    using Horo::Audio::Test::failCountdown;
 
     struct JoinOnExit {
         std::thread &thread;

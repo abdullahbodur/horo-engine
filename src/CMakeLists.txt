@@ -286,7 +286,11 @@ add_library(HoroEngine::AudioMemory ALIAS HoroAudioMemory)
 target_compile_features(HoroAudioMemory PUBLIC cxx_std_20)
 target_link_libraries(HoroAudioMemory PUBLIC HoroEngine::AudioApi)
 
-add_library(HoroAudioCommands STATIC audio/commands/AudioCommands.cpp audio/commands/AudioCommandBuffer.cpp)
+add_library(HoroAudioCommands STATIC
+        audio/commands/AudioCommands.cpp
+        audio/commands/AudioCommandBuffer.cpp
+        audio/commands/AudioCommandStaging.cpp
+)
 add_library(HoroEngine::AudioCommands ALIAS HoroAudioCommands)
 target_compile_features(HoroAudioCommands PUBLIC cxx_std_20)
 target_link_libraries(HoroAudioCommands PUBLIC HoroEngine::AudioMemory)
