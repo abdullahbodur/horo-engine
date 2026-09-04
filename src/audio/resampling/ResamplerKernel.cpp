@@ -10,6 +10,21 @@ namespace Horo::Audio::Detail {
     namespace {
         constexpr std::uint32_t PhaseIntervals = 1024;
 
+        /** @brief Scalar reference with chronological accumulation independent of physical ring rotation. */
+        double EvaluateScalar(const std::span<const float> history, std::uint32_t oldest, const float *lower, const float *upper,
+                              const double blend) noexcept {
+            double value = 0.0;
+            for (std::size_t tap = 0; tap < history.size(); ++tap) {
+                const double weight = std::lerp(static_cast<double>(lower[tap]), static_cast<double>(upper[tap]), blend);
+                value += history[oldest] * weight;
+                ++oldest;
+                if (oldest == history.size()) {
+                    oldest = 0;
+                }
+            }
+            return value;
+        }
+
         /** @brief Sample a finite Hann-windowed low-pass sinc; all transcendental work is control-thread-only. */
         double WindowedSinc(const double distance, const double radius, const double cutoff) {
             if (std::abs(distance) >= radius) {
@@ -36,7 +51,20 @@ namespace Horo::Audio::Detail {
     }  // namespace
 
     /** @copydoc ResamplerKernel::Prepare */
-    Result<ResamplerKernel> ResamplerKernel::Prepare(const AudioResamplerPlan &plan, const std::uint64_t maximumBytes) {
+    Result<ResamplerKernel> ResamplerKernel::Prepare(const AudioResamplerPlan &plan, const std::uint64_t maximumBytes,
+                                                     const AudioResamplerExecution execution) {
+        ResamplerEvaluator evaluator = nullptr;
+        switch (execution) {
+            case AudioResamplerExecution::Scalar:
+                evaluator = EvaluateScalar;
+                break;
+            case AudioResamplerExecution::Simd:
+                evaluator = NativeResamplerEvaluator();
+                break;
+        }
+        if (evaluator == nullptr) {
+            return Result<ResamplerKernel>::Failure(MakeError(AudioErrors::OperationUnsupported));
+        }
         const auto count = static_cast<std::uint64_t>(PhaseIntervals + 1) * plan.Taps();
         if (count * sizeof(float) > maximumBytes) {
             return Result<ResamplerKernel>::Failure(MakeError(AudioErrors::ResamplerBudgetExceeded));
@@ -53,7 +81,7 @@ namespace Horo::Audio::Detail {
                 PreparePhase(row, fraction, cutoff);
             }
         }
-        return Result<ResamplerKernel>::Success(ResamplerKernel{std::move(coefficients), plan.Taps()});
+        return Result<ResamplerKernel>::Success(ResamplerKernel{std::move(coefficients), plan.Taps(), evaluator});
     }
 
     /** @copydoc ResamplerKernel::Evaluate */
@@ -62,17 +90,7 @@ namespace Horo::Audio::Detail {
         const auto phase = static_cast<std::uint32_t>(position);
         const double blend = position - phase;
         const auto offset = static_cast<std::size_t>(phase) * taps_;
-        double value = 0.0;
-        for (std::uint32_t tap = 0; tap < taps_; ++tap) {
-            const double weight = std::lerp(static_cast<double>(coefficients_[offset + tap]),
-                                            static_cast<double>(coefficients_[offset + taps_ + tap]), blend);
-            value += history[oldest] * weight;
-            ++oldest;
-            if (oldest == taps_) {
-                oldest = 0;
-            }
-        }
-        return value;
+        return evaluator_(history, oldest, coefficients_.data() + offset, coefficients_.data() + offset + taps_, blend);
     }
 
     /** @copydoc ResamplerKernel::StorageBytes */
@@ -81,6 +99,6 @@ namespace Horo::Audio::Detail {
     }
 
     /** @copydoc ResamplerKernel::ResamplerKernel */
-    ResamplerKernel::ResamplerKernel(std::vector<float> coefficients, const std::uint32_t taps)
-        : coefficients_(std::move(coefficients)), taps_(taps) {}
+    ResamplerKernel::ResamplerKernel(std::vector<float> coefficients, const std::uint32_t taps, const ResamplerEvaluator evaluator)
+        : coefficients_(std::move(coefficients)), taps_(taps), evaluator_(evaluator) {}
 }  // namespace Horo::Audio::Detail

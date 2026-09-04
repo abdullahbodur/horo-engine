@@ -1,6 +1,7 @@
 #pragma once
 
-#include "Horo/Audio/AudioResamplerPlan.h"
+#include "Horo/Audio/AudioResampler.h"
+#include "ResamplerSimd.h"
 
 #include <span>
 #include <vector>
@@ -13,9 +14,11 @@ namespace Horo::Audio::Detail {
          * @brief Allocate and prepare all coefficients outside the callback.
          * @param plan Previously admitted conversion and kernel-width metadata.
          * @param maximumBytes Separately reserved coefficient storage, excluding history and I/O.
+         * @param execution Explicit implementation selected before publication.
          * @return Prepared kernel or the stable resampler budget failure.
          */
-        [[nodiscard]] static Result<ResamplerKernel> Prepare(const AudioResamplerPlan &plan, std::uint64_t maximumBytes);
+        [[nodiscard]] static Result<ResamplerKernel> Prepare(const AudioResamplerPlan &plan, std::uint64_t maximumBytes,
+                                                             AudioResamplerExecution execution = AudioResamplerExecution::Scalar);
 
         /**
          * @brief Evaluate one channel's circular history without allocation or transcendental functions.
@@ -32,8 +35,9 @@ namespace Horo::Audio::Detail {
 
     private:
         /** @brief Take exclusive ownership of a complete bank, never an incomplete preparation. */
-        explicit ResamplerKernel(std::vector<float> coefficients, std::uint32_t taps);
+        explicit ResamplerKernel(std::vector<float> coefficients, std::uint32_t taps, ResamplerEvaluator evaluator);
         std::vector<float> coefficients_;
         std::uint32_t taps_;
+        ResamplerEvaluator evaluator_;
     };
 }  // namespace Horo::Audio::Detail
