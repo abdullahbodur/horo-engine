@@ -392,6 +392,23 @@ floating-point environment, non-finite samples enter bounded fault policy, and
 no per-sample logging occurs. ADR-063 owns the complete conversion, silence,
 tail, denormal, clipping, and validation rules.
 
+`AudioApi` now owns the additive `AudioFormat.h` value boundary: owning and borrowed
+channel layouts, exact speaker presets, canonical ACN/SN3D metadata, checked
+processing-format admission and backend-neutral native PCM representation facts.
+The processing profile admits 8–384 kHz and at most 64 channels, matching the
+resampler baseline. `AudioChannelRole` is a typed speaker/discrete/ACN variant;
+equal numeric indices across families do not share meaning. Speaker adapters may
+report explicit unique native role order, while canonical presets retain ADR-063
+order. Layout conversion and resampling remain separate operations.
+
+Layout views borrow retained immutable owners and reject direct temporary-owner
+construction; callers still own epoch lifetime enforcement. Native PCM metadata
+describes coding, packing, byte order, significant bits and low padding without
+native pointers or enums. This does not implement sample conversion, planar block
+storage, callback lifetime tracking or a device negotiation engine. Existing
+callers need no migration; the public-header consumer and headless format tests
+cover this additive boundary.
+
 ## Audio Assets
 
 [AUD-002](https://github.com/abdullahbodur/horo-engine/issues/536) delivers this
