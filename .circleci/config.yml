@@ -1,5 +1,11 @@
 version: 2.1
 
+# Temporary opt-in fallback while GitHub Actions owns SonarCloud analysis.
+parameters:
+  run-circleci-sonar:
+    type: boolean
+    default: false
+
 jobs:
   sonar:
     machine:
@@ -110,6 +116,7 @@ jobs:
 
 workflows:
   sonar:
+    when: << pipeline.parameters.run-circleci-sonar >>
     jobs:
       - sonar:
           context: horo-ci-quality
