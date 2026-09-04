@@ -10,6 +10,9 @@
 namespace Horo::Audio::AudioErrors {
     extern const ErrorCodeDescriptor ResamplerInvalid;
     extern const ErrorCodeDescriptor ResamplerBudgetExceeded;
+    extern const ErrorCodeDescriptor MemoryInvalid;
+    extern const ErrorCodeDescriptor MemoryBudgetExceeded;
+    extern const ErrorCodeDescriptor MemoryAllocationFailed;
     extern const ErrorCodeDescriptor IdentityInvalid;
     extern const ErrorCodeDescriptor HandleMalformed;
     extern const ErrorCodeDescriptor HandleOwnerMismatch;

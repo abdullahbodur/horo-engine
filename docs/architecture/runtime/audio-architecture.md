@@ -1280,6 +1280,56 @@ processing. The middleware's own real-time thread is governed by its own
 contract, which the integration must document and must not violate Horo's
 ownership or observability invariants.
 
+### Bounded Memory Ownership
+
+`HoroEngine::AudioMemory` owns `Horo/Audio/AudioMemory.h` and depends only on
+`AudioApi`. Its scratch arena and fixed block pools are preparation-time owners,
+not a device, mixer, voice allocator policy, graph executor or queue protocol.
+Hosts link this target explicitly; existing `AudioApi` consumers do not gain an
+implicit memory implementation dependency. This is an additive public contract;
+there are no existing callers to migrate or compatibility implementations to keep.
+
+Pools reserve aligned payload and all slot metadata before publication, within an
+explicit byte budget. Typed purposes separate voice, graph, command and event
+storage reservations; each has a unique host-assigned pool identity within its
+runtime generation. They expose raw bytes, not implicit object constructors or
+destructors. General diagnostics and allocation failure reporting occur during
+preparation, never during callback admission. Exhaustion returns a fixed-size
+status with no heap fallback. Acquiring a block zeroes its aligned stride and is
+bounded by the admitted block size; it is not a constant-time claim independent
+of that size. Hosts must budget this clearing work for their callback envelope.
+
+Runtime, pool, one-based slot and non-wrapping generation identify a block.
+Retiring it stops new handle resolution but preserves existing borrows. Only the
+control owner may reclaim retired storage after proving completion through its
+last-use epoch and ending object lifetimes. Reclamation scans at most the explicit
+visit budget in round-robin order; it neither destroys heap storage nor acts as a
+barrier. Generation exhaustion permanently removes a slot from reuse. A completion
+watermark is monotonic and cannot authorize a stale retirement. Exhausting the
+epoch space requires a new runtime generation, not wraparound.
+
+All operations require exclusive ownership. Runtime integration must establish a
+quiescent handoff before control accesses callback-owned pools and hand ownership
+back before callback processing resumes. These primitives add no atomics, locks,
+ambient registration or implicit cross-thread access. Failure to prove quiescence
+retains the owner and its storage under ADR-062; a failed shutdown never justifies
+freeing callback-visible memory. Destruction and move assignment remain off-callback.
+
+Scratch borrows are valid only within one strictly increasing runtime-owned epoch.
+Reset requires all old borrows and child work to have ended; allocation zeroes the
+requested rounded stride and cannot grow the reservation. Both primitives expose
+reserved/occupied/peak bytes and saturating failed-allocation counts. Pool reservation
+includes slot metadata; occupied and peak counts include payload padding and retired
+blocks until reclamation. Scratch reservation is payload storage. Fixed owner-object
+overhead is excluded, and reserved storage is eagerly allocated rather than a
+separate virtual-memory reservation. No metric reset erases lifetime pressure evidence.
+
+Dedicated headless tests instrument ordinary and aligned C++ allocations, validate
+exhaustion, failed preparation rollback, wrong identities, stale epochs/handles,
+bounded deferred reuse, zeroing, moves and alignment. Actual voice/graph and command/
+event queue composition must consume these owners without introducing callback
+allocation; those subsystem behaviors are not implemented by raw storage pools.
+
 ## Null Backend
 
 The [AUD-001.10](https://github.com/abdullahbodur/horo-engine/issues/534) Null

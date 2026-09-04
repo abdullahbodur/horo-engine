@@ -23,6 +23,33 @@ namespace Horo::Audio::AudioErrors {
         .retryable = false,
         .userActionable = true,
     };
+    const ErrorCodeDescriptor MemoryInvalid{
+        .domain = AudioDomain,
+        .code = ErrorCode{"audio.memory.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The audio memory reservation is invalid.",
+        .remediationHint = "Supply a valid runtime owner and bounded aligned memory dimensions.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor MemoryBudgetExceeded{
+        .domain = AudioDomain,
+        .code = ErrorCode{"audio.memory.budget_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The audio memory reservation exceeds its admitted budget.",
+        .remediationHint = "Reduce requested capacity or explicitly admit a supported memory profile before publication.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor MemoryAllocationFailed{
+        .domain = AudioDomain,
+        .code = ErrorCode{"audio.memory.allocation_failed"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Audio memory preparation could not allocate its backing storage.",
+        .remediationHint = "Release quiescent resources before retrying preparation outside the callback.",
+        .retryable = true,
+        .userActionable = true,
+    };
     const ErrorCodeDescriptor IdentityInvalid{
         .domain = AudioDomain,
         .code = ErrorCode{"audio.identity.invalid"},
