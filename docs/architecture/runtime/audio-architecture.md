@@ -1103,6 +1103,38 @@ capacity or a separate safe path. The frontend may merge redundant parameter
 changes before they enter the real-time buffer, but it must not reorder commands
 across documented lifecycle boundaries such as scene unload or device reset.
 
+The additive `HoroEngine::AudioCommands` contract owns `Audio/AudioCommands.h`
+and depends on AudioMemory for generation-scoped prepared storage identities.
+Its current typed value surface represents next-buffer-boundary create/start/stop,
+parameter, graph-publication, logical-release, scene-unload and reset intents.
+It does not implement clock mapping or scheduled batches, queue transport, voice
+execution or lifecycle commits. Those implementations must consume this contract
+rather than inventing string opcodes or callback-side asset/ECS lookups.
+
+All scene-bound intents carry exact runtime/epoch/context identities. Global
+audio uses an explicitly host-owned context; a reset instead has an entirely
+empty scene handle and targets the current runtime epoch. Only control stages
+lifecycle barriers. Structurally valid handles are not proof of actual liveness:
+control validates registry generations, closed admission, prepared resources and
+leases before publication. Copying an intent retains values, not resource lifetime.
+The control owner retains referenced graph/clip/voice storage through consumption
+and the appropriate acknowledgement; release intents never free it on the callback.
+
+Normalization rejects malformed identities and nonfinite parameter values without
+partially changing its output. It canonicalizes signed zero and subnormal parameters
+to positive zero but preserves finite model units without a hidden gain/range clamp.
+Only adjacent unpublished parameter snapshots with the same complete scope, voice
+and parameter may coalesce. These snapshots are last-value-wins state, not individually
+completed playback operations. No start/stop/release or barrier is coalescible, and
+the critical reservation class never grants priority reordering. Queue implementations
+must preserve accepted FIFO order and keep required work caller-owned after explicit
+rejection/retry; classification alone does not provide a saturation guarantee.
+
+This introduces no existing-caller migration or compatibility layer. Hosts opt into
+AudioCommands explicitly; the public-header consumer test checks its narrow dependency
+surface. Transport and saturation acceptance remain incomplete until the bounded
+MPSC-to-SPSC implementation and concurrent/critical-barrier regressions are delivered.
+
 Scheduled commands carry an audio timeline timestamp or buffer-boundary target.
 Commands in the same `ScheduledCommandBatch` with the same timestamp are applied
 atomically at the same buffer boundary. Timeline systems and animation-event

@@ -163,6 +163,10 @@ add_executable(HoroAudioMemoryTests unit/runtime/audio/AudioMemoryTests.cpp)
 target_compile_features(HoroAudioMemoryTests PRIVATE cxx_std_20)
 target_link_libraries(HoroAudioMemoryTests PRIVATE HoroEngine::AudioMemory)
 horo_register_catch_test(HoroAudioMemoryTests LABELS "unit;audio;headless")
+add_executable(HoroAudioCommandTests unit/runtime/audio/AudioCommandTests.cpp)
+target_compile_features(HoroAudioCommandTests PRIVATE cxx_std_20)
+target_link_libraries(HoroAudioCommandTests PRIVATE HoroEngine::AudioCommands)
+horo_register_catch_test(HoroAudioCommandTests LABELS "unit;audio;headless")
 add_executable(HoroGameplayRuntimeTests
         unit/gameplay/BehaviorRuntimeTests.cpp
         unit/gameplay/ComponentRegistryTests.cpp
