@@ -267,6 +267,9 @@ target_compile_features(HoroAudioApi PUBLIC cxx_std_20)
 target_link_libraries(HoroAudioApi PUBLIC HoroEngine::Foundation HoroEngine::Assets)
 
 add_library(HoroAudioDsp STATIC
+        audio/resampling/AudioResampler.cpp
+        audio/resampling/ResamplerSimd.cpp
+        audio/resampling/ResamplerSimd.h
         audio/resampling/ResamplerKernel.cpp
         audio/resampling/ResamplerKernel.h
 )

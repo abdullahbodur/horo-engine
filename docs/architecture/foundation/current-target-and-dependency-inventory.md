@@ -55,9 +55,12 @@ in `HoroPublicHeaderOwnership.cmake` and exercised by
 The subsequent `HoroAudioDsp` (`HoroEngine::AudioDsp`) target owns private
 resampler coefficient preparation and scalar evaluation under
 `src/audio/resampling/`. Its only direct first-party dependency is AudioApi.
-There is no published DSP header yet; tests receive the exact private directory,
-and no repository-wide include root is exported. This is a DSP primitive, not an
-audio runtime, device backend or completed streaming resampler.
+Its public `Audio/AudioResampler.h` owns single-thread streaming processing;
+coefficient and native SIMD internals stay private. Tests receive the exact private directory,
+and no repository-wide include root is exported. The additive public boundary is
+covered by `HoroAudioDspPublicHeaderConsumer`; existing AudioApi consumers need no
+migration or DSP dependency. This is a DSP primitive, not an audio runtime or
+device backend.
 
 | Real target (alias) | Availability | Owner and public/private boundary | Direct first-party dependencies |
 |---|---|---|---|

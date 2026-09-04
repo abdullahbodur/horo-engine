@@ -270,11 +270,11 @@ in 64 bits after bounds checking. These are deterministic admission costs, not
 wall-clock timing or a whole-runtime CPU/memory budget. Caller input/output planes
 and any prepared coefficient storage require separate ownership/reservations.
 
-The first delivery implements admission only. Processing, fractional-state and
-reset/drain semantics, scalar numerical reference, SIMD qualification and measured
-CPU budgets remain required in the following delivery before the resampler ticket
-is complete. No device or voice path may advertise these kernels as operational
-based solely on successful plan creation. A SIMD implementation must use the same
+Plan creation implements admission only. The DSP target below supplies scalar/SIMD
+streaming processing, reference validation and an opt-in CPU qualification harness.
+Each target host/profile still requires its own deadline admission. No device or voice
+path may advertise a configured runtime based solely on successful plan creation.
+A SIMD implementation must use the same
 plan, limits and channel/phase order and pass the scalar reference suite before
 explicit non-callback dispatch selection; no callback feature probing is allowed.
 
@@ -295,9 +295,95 @@ with Horo-owned window, cutoff, table resolution and budget choices. Reference
 tests exercise individual impulses against direct double-precision coefficients,
 unity DC, exact linear ramps, circular ordering, and a 96-to-48 kHz fixture that
 passes a 1 kHz tone and attenuates a 30 kHz tone. Those fixtures do not certify a
-universal passband/stopband specification or real-time CPU deadline. Streaming
-state/reset/drain, allocation instrumentation and SIMD/CPU qualification remain
-required before full ticket completion.
+universal passband/stopband specification or real-time CPU deadline.
+
+`AudioResampler` is the additive public processing owner in `HoroAudioDsp`; it
+does not make AudioApi depend on DSP. Control creates its coefficient bank and
+plan-reserved history, then transfers exclusive ownership to one processing
+thread. Moves/replacement/destruction require quiescence; replacing storage is
+off-callback work. The object never retains input/output spans and never queries
+a device, layout service or ambient runtime. Callers preserve one semantic layout
+in plan channel order. Buffer prefixes require ADR-063's 64-byte plane alignment,
+sufficient storage and nonoverlapping output/input and output/output regions.
+Malformed calls return fixed-size status without consuming input, writing output,
+or changing phase. General error formatting belongs outside the callback.
+
+Input is consumed only to satisfy the next output's look-ahead. The caller retains
+and re-submits unconsumed frames. A zero-capacity output call is a no-op and does
+not adopt an end marker. Fractional input position is shared by all channels and
+remains in [0,1); only bounded relative integer advances are retained, eliminating
+ever-growing counters and callback-boundary phase resets. Input starvation does
+not insert silence or advance the timeline. An explicit end marker is adopted
+only after all input on that call has been consumed. Subsequent empty-input calls
+drain at most `taps` virtual zero input frames and retain the finite filter tail;
+Complete is terminal until Reset. Empty streams produce no output. Reset clears
+history, fraction, look-ahead and end state without reallocating and deliberately
+discards the previous tail; it does not reconfigure rate/pitch/quality.
+
+Process bounds output by the admitted maximum and offered input by
+`maximumOutputFrames * 64 + taps`. Actual input consumption is demand-driven;
+sample sanitization touches only consumed input and produced output. Buffer
+alias validation is at most quadratic in the admitted 64-channel limit. Reset
+clears at most `channels * taps` samples. These additional bounded costs must be
+included in measured callback admission, not confused with the kernel's
+sample-product reservation alone. Non-finite input and overflowing/non-finite
+output become silence with a bounded per-call count; subnormal and signed-zero
+samples become positive zero without erasing normal low-level audio or ordinary
+over-range internal headroom. Unproduced output storage is untouched.
+
+Regression coverage includes partition-invariant output across qualities/pitches,
+channel isolation, headroom, reset/move, starvation, zero-length blocks, empty and
+terminal streams, overlap/alignment/size rejection, fault/silence policy and zero
+ordinary C++ heap allocations in Process/Reset.
+
+`AudioResamplerExecution` selects Scalar or Simd explicitly at Create. Unsupported
+or unknown execution requests return `audio.operation.unsupported`; the default is
+the scalar reference, not automatic backend selection. Preparation stores one
+immutable evaluator pointer. `SupportsSimd` reports the compiled baseline: ARM64
+NEON where enabled and SSE2 on supported x86 builds; no callback CPU probing or
+dispatch mutation occurs. Native types/intrinsics stay private to AudioDsp. The
+implementations follow the [Arm intrinsic reference](https://arm-software.github.io/acle/neon_intrinsics/)
+and [MSVC x64 ISA baseline](https://learn.microsoft.com/en-us/cpp/build/reference/arch-x64).
+Each ring half is processed with bounded two-lane loads and a scalar odd tail,
+never by loading across its end. Scalar/SIMD summation order differs; qualification
+allows 2e-12 absolute error for normalized kernel fixtures and 3e-6 absolute error
+for normalized streaming fixtures, while each mode is independently bitwise
+partition-invariant. Scalar and SIMD are not promised bit-identical across CPUs.
+
+### Local CPU qualification
+
+`HoroAudioResamplerBenchmark` is an explicit `EXCLUDE_FROM_ALL` target, not a noisy
+default CI timing test. Run it in a headless Release build without coverage or
+sanitizers. It preallocates and warms the state for 100 calls, then measures 1,000
+complete Process calls per mode/quality/profile with a steady clock. Input is
+synthetic repeated finite blocks; preparation and reporting are outside timing.
+Each call produces 256 frames at 48 kHz (5,333.33 microseconds). The harness rejects
+a fixture whose measured P99 exceeds 10% of that period per instance. This envelope
+does not reserve the remaining callback for an arbitrary number of voices: the
+host must admit the aggregate cost of voices, mixing, validation and other DSP.
+Rates, channels, pitch ratios, block sizes and machines outside these fixtures
+require separate qualification and appropriately bounded plan reservations.
+
+Recorded on 2026-09-04: Apple M3, macOS 15.5, AppleClang 17.0.0, CMake Release
+(`-O3 -DNDEBUG`), headless, no coverage/sanitizers, scalar versus ARM64 NEON.
+All Linear/Sinc32/Sinc64 fixtures passed the 10% P99 envelope. Sinc64 results:
+
+| Profile | Scalar mean / P99 (µs) | SIMD mean / P99 (µs) | SIMD P99 / callback |
+|---|---:|---:|---:|
+| Stereo, 44.1→48 kHz, 64 taps | 46.728 / 54.417 | 14.733 / 17.583 | 0.330% |
+| 8 channels, 96→48 kHz, 128 taps | 316.168 / 336.583 | 94.731 / 105.625 | 1.980% |
+
+These are local wall-time observations, not worst-case execution-time guarantees
+or x86 performance claims. Core scalar/SIMD regression tests run in ordinary CI;
+platform deadline qualification remains an explicit host/release activity.
+
+```bash
+cmake -S . -B build/audio-resampler-release -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_TESTING=ON -DHORO_BUILD_EDITOR_GUI=OFF -DHORO_BUILD_RENDER_OPENGL=OFF \
+  -DHORO_BUILD_RENDER_METAL=OFF -DHORO_BUILD_EXAMPLES=OFF
+cmake --build build/audio-resampler-release --target HoroAudioResamplerBenchmark --parallel 8
+build/audio-resampler-release/tests/HoroAudioResamplerBenchmark
+```
 
 Internal buses may exceed nominal `[-1, +1]` full scale. Declared DSP/limiter
 nodes own intentional saturation; one finite safety clamp occurs immediately

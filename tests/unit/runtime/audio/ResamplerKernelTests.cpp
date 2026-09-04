@@ -39,6 +39,36 @@ namespace Horo::Audio::Detail {
             REQUIRE(shortBudget.ErrorValue().code.Value() == AudioErrors::ResamplerBudgetExceeded.code.Value());
         }
 
+        TEST_CASE("SIMD kernels match the scalar reference at ring and phase boundaries", "[unit][audio][resampler]") {
+            const auto unsupported =
+                ResamplerKernel::Prepare(Plan(AudioResamplerQuality::Linear), 32ULL << 20, static_cast<AudioResamplerExecution>(255));
+            REQUIRE(unsupported.HasError());
+            REQUIRE(unsupported.ErrorValue().code.Value() == AudioErrors::OperationUnsupported.code.Value());
+            if (!AudioResampler::SupportsSimd()) {
+                REQUIRE(
+                    ResamplerKernel::Prepare(Plan(AudioResamplerQuality::Linear), 32ULL << 20, AudioResamplerExecution::Simd).HasError());
+                return;
+            }
+            for (const auto quality : {AudioResamplerQuality::Linear, AudioResamplerQuality::Sinc32, AudioResamplerQuality::Sinc64}) {
+                for (const auto inputRate : {44'100U, 96'000U, 384'000U}) {
+                    const auto plan = Plan(quality, inputRate);
+                    const auto scalar = Kernel(plan);
+                    const auto native = ResamplerKernel::Prepare(plan, 32ULL << 20, AudioResamplerExecution::Simd);
+                    REQUIRE(native.HasValue());
+                    std::vector<float> samples(plan.Taps());
+                    for (std::size_t index = 0; index < samples.size(); ++index) {
+                        samples[index] = static_cast<float>(std::sin(static_cast<double>(index) * 0.271));
+                    }
+                    for (const auto oldest : {0U, 1U, plan.Taps() / 2, plan.Taps() - 1}) {
+                        for (const double phase : {0.0, 0.123456789, 0.5, std::nextafter(1.0, 0.0)}) {
+                            REQUIRE(native.Value().Evaluate(samples, oldest, phase) ==
+                                    Catch::Approx(scalar.Evaluate(samples, oldest, phase)).margin(2e-12));
+                        }
+                    }
+                }
+            }
+        }
+
         TEST_CASE("Linear kernel preserves endpoints ramps phase interpolation and circular order", "[unit][audio][resampler]") {
             const auto kernel = Kernel(Plan(AudioResamplerQuality::Linear));
             const std::array<float, 2> samples{2.0F, 6.0F};
