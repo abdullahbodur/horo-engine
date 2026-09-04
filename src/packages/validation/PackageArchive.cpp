@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <functional>
 #include <limits>
 #include <map>
 #include <miniz.h>
@@ -72,13 +73,13 @@ namespace Horo::Packages {
                 return false;
             }
             const auto local = bytes.subspan(static_cast<std::size_t>(stat.m_local_header_ofs));
-            constexpr std::array signature{std::byte{0x50}, std::byte{0x4b}, std::byte{0x03}, std::byte{0x04}};
-            if (local.size() < 30 || !std::ranges::equal(local.first(4), signature) || Read16(local, 6) != stat.m_bit_flag ||
+            if (constexpr std::array signature{std::byte{0x50}, std::byte{0x4b}, std::byte{0x03}, std::byte{0x04}};
+                local.size() < 30 || !std::ranges::equal(local.first(4), signature) || Read16(local, 6) != stat.m_bit_flag ||
                 Read16(local, 8) != stat.m_method || Read16(local, 26) != name.size()) {
                 return false;
             }
-            const std::size_t dataOffset = 30 + name.size() + Read16(local, 28);
-            if (dataOffset > local.size() || stat.m_comp_size > local.size() - dataOffset) {
+            if (const std::size_t dataOffset = 30 + name.size() + Read16(local, 28);
+                dataOffset > local.size() || stat.m_comp_size > local.size() - dataOffset) {
                 return false;
             }
             return std::ranges::equal(local.subspan(30, name.size()), std::as_bytes(std::span{name})) &&
@@ -91,24 +92,32 @@ namespace Horo::Packages {
             const unsigned mode = stat.m_external_attr >> 16;
             const unsigned type = mode & 0170000;
             const unsigned expected = stat.m_is_directory ? 0040000 : 0100000;
-            return stat.m_is_supported && !stat.m_is_encrypted && (type == 0 || type == expected) && (mode & 07000) == 0 &&
-                   (stat.m_external_attr & FileAttributeReparsePoint) == 0;
+            const std::array attributesAreSafe{
+                stat.m_is_supported != 0,
+                stat.m_is_encrypted == 0,
+                type == 0 || type == expected,
+                (mode & 07000) == 0,
+                (stat.m_external_attr & FileAttributeReparsePoint) == 0,
+            };
+            return std::ranges::all_of(attributesAreSafe, std::identity{});
         }
 
         /** @brief Reads the complete filename instead of miniz's potentially truncated stat buffer. */
         [[nodiscard]] Result<PackagePath> EntryPath(mz_zip_archive &zip, const mz_zip_archive_file_stat &stat,
                                                     const std::span<const std::byte> bytes) {
             const auto length = mz_zip_reader_get_filename(&zip, stat.m_file_index, nullptr, 0);
-            if (length < 2 || length > 1026) {
+            if (const std::array lengthIsValid{length >= 2, length <= 1026}; !std::ranges::all_of(lengthIsValid, std::identity{})) {
                 return Result<PackagePath>::Failure(MakeError(Detail::InvalidArchive));
             }
             std::string name(length, '\0');
             mz_zip_reader_get_filename(&zip, stat.m_file_index, name.data(), length);
             name.pop_back();
-            if (!MatchesLocalHeader(bytes, stat, name) || !HasSafeCentralExtras(zip, stat, bytes)) {
+            if (const std::array metadataIsValid{MatchesLocalHeader(bytes, stat, name), HasSafeCentralExtras(zip, stat, bytes)};
+                !std::ranges::all_of(metadataIsValid, std::identity{})) {
                 return Result<PackagePath>::Failure(MakeError(Detail::InvalidArchive));
             }
-            if (stat.m_is_directory && name.ends_with('/')) {
+            if (const std::array isMarkedDirectory{stat.m_is_directory != 0, name.ends_with('/')};
+                std::ranges::all_of(isMarkedDirectory, std::identity{})) {
                 name.pop_back();
             }
             return PackagePath::Parse(name);
@@ -125,9 +134,9 @@ namespace Horo::Packages {
                 if (!mz_zip_reader_file_stat(&zip, index, &stat) || !IsRegularEntry(stat)) {
                     return Result<FileIndex>::Failure(MakeError(Detail::InvalidArchive));
                 }
-                const auto available =
-                    std::min<std::uint64_t>({limits.fileBytes, limits.expandedBytes - total, std::numeric_limits<std::size_t>::max()});
-                if (stat.m_uncomp_size > available) {
+                if (const auto available =
+                        std::min<std::uint64_t>({limits.fileBytes, limits.expandedBytes - total, std::numeric_limits<std::size_t>::max()});
+                    stat.m_uncomp_size > available) {
                     return Result<FileIndex>::Failure(MakeError(Detail::ResourceLimit));
                 }
                 total += stat.m_uncomp_size;
@@ -139,7 +148,7 @@ namespace Horo::Packages {
                     return Result<FileIndex>::Failure(MakeError(Detail::InvalidArchive));
                 }
                 if (!stat.m_is_directory) {
-                    files.emplace(path.Value().Value(), stat);
+                    files.try_emplace(path.Value().Value(), stat);
                 } else if (stat.m_uncomp_size != 0) {
                     return Result<FileIndex>::Failure(MakeError(Detail::InvalidArchive));
                 }
@@ -151,8 +160,8 @@ namespace Horo::Packages {
         [[nodiscard]] Result<std::vector<std::byte>> ReadFile(mz_zip_archive &zip, const mz_zip_archive_file_stat &file) {
             std::vector<std::byte> output(static_cast<std::size_t>(file.m_uncomp_size));
             std::byte empty{};
-            void *destination = output.empty() ? &empty : output.data();
-            if (!mz_zip_reader_extract_to_mem(&zip, file.m_file_index, destination, output.size(), 0)) {
+            if (void *destination = output.empty() ? &empty : output.data();
+                !mz_zip_reader_extract_to_mem(&zip, file.m_file_index, destination, output.size(), 0)) {
                 return Result<std::vector<std::byte>>::Failure(MakeError(Detail::InvalidArchive));
             }
             return Result<std::vector<std::byte>>::Success(std::move(output));
@@ -161,7 +170,8 @@ namespace Horo::Packages {
         /** @brief Checks declared size and mode before allocating content and comparing the actual digest. */
         [[nodiscard]] Result<void> MatchFile(mz_zip_archive &zip, const mz_zip_archive_file_stat &stat, const PackageFileEntry &entry) {
             const bool executable = ((stat.m_external_attr >> 16) & 0111) != 0;
-            if (stat.m_uncomp_size != entry.size || executable != entry.executable) {
+            if (const std::array metadataMatches{stat.m_uncomp_size == entry.size, executable == entry.executable};
+                !std::ranges::all_of(metadataMatches, std::identity{})) {
                 return Result<void>::Failure(MakeError(Detail::InventoryMismatch));
             }
             auto content = ReadFile(zip, stat);
@@ -189,8 +199,11 @@ namespace Horo::Packages {
                 return Result<ValidatedPackageFileManifestV1>::Failure(content.ErrorValue());
             }
             const auto &data = content.Value();
-            auto manifest =
-                ValidatedPackageFileManifestV1::Parse(std::string_view{reinterpret_cast<const char *>(data.data()), data.size()}, limits);
+            std::string manifestJson(data.size(), '\0');
+            std::ranges::transform(data, manifestJson.begin(), [](const std::byte value) {
+                return static_cast<char>(std::to_integer<unsigned char>(value));
+            });
+            auto manifest = ValidatedPackageFileManifestV1::Parse(manifestJson, limits);
             if (manifest.HasError()) {
                 return manifest;
             }
@@ -239,7 +252,7 @@ namespace Horo::Packages {
 
     /** @copydoc ValidatedPackageArchive::ValidatedPackageArchive */
     ValidatedPackageArchive::ValidatedPackageArchive(std::vector<std::byte> bytes, ValidatedPackageFileManifestV1 manifest,
-                                                     Sha256Digest digest)
+                                                     const Sha256Digest &digest)
         : m_bytes(std::move(bytes)), m_manifest(std::move(manifest)), m_digest(digest) {}
 
     /** @copydoc ValidatedPackageArchive::Manifest */
