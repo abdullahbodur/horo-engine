@@ -74,6 +74,7 @@ device backend.
 | `HoroAssets` (`HoroEngine::Assets`) | Always | Owns all current `Assets/**` headers. The target currently combines registry, provider, import, preview, reimport, cook, cache, and output responsibilities. | Foundation (public) |
 | `HoroInput` (`HoroEngine::Input`) | Always | Owns the backend-neutral `Runtime/Input.h` contract and runtime implementation. | Foundation (public) |
 | `HoroAudioMemory` (`HoroEngine::AudioMemory`) | Always | Owns `Audio/AudioMemory.h`, bounded scratch storage and generation-safe fixed pools with explicit deferred reuse. Aligned allocation details remain target-private. | AudioApi (public) |
+| `HoroAudioCommands` (`HoroEngine::AudioCommands`) | Always | Owns `Audio/AudioCommands.h`, typed next-boundary intents, structural normalization and coalescing/reservation policy. Queue transport remains separate work. | AudioMemory (public) |
 | `HoroInputSdl` (`HoroEngine::InputSdl`) | Editor GUI only | Owns the SDL input adapter. It has no dedicated public Horo header; its implementation path is nevertheless exported as a public include directory. | Input (public) |
 
 ### Gameplay And Extensions
@@ -202,6 +203,7 @@ conflicts are recorded rather than treated as additional implementations.
 | `HoroEngine::AudioApi` | Partial | Target owns typed audio identities, generation-safe handles and stable errors; runtime commands and processing contracts remain planned. |
 | `HoroEngine::AudioRuntime` | Planned | Architecture exists; no production target. |
 | `HoroEngine::AudioMemory` | Implemented | Bounded aligned scratch arenas and typed-purpose fixed pools; production voice/graph/queue composition remains separate. |
+| `HoroEngine::AudioCommands` | Partial | Typed command values and normalization; bounded MPSC/SPSC transport and saturation regressions remain in progress. |
 | `HoroEngine::AudioPlatform` | Absent | No target or implementation path. |
 | `HoroEngine::AudioNull` | Absent | No target or implementation path. |
 | `HoroEngine::NetworkApi` | Planned | Architecture exists; no production target. |
