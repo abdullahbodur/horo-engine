@@ -46,6 +46,11 @@ cmake -S . -B build/skeleton -DBUILD_TESTING=ON
 cmake --build build/skeleton --parallel
 ```
 
+`HORO_BUILD_PHYSICS_NATIVE` defaults to `ON` for the pinned private CPU solver.
+Set it to `OFF` for a Physics-omitted composition; the typed descriptor API still
+builds, but the native compatibility check reports unavailable. Linking Physics
+does not register native types, initialize a world or activate simulation.
+
 ## Tests
 
 Install the repository-owned Python test dependency before configuring a test

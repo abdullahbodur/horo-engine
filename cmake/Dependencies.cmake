@@ -2,6 +2,11 @@ include(FetchContent)
 
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON CACHE BOOL "" FORCE)
 
+if(HORO_BUILD_PHYSICS_NATIVE)
+    include(HoroPhysicsDependency)
+    horo_add_canonical_physics_dependency()
+endif()
+
 set(HORO_NLOHMANN_JSON_REVISION "9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03")
 set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
 set(JSON_Install OFF CACHE BOOL "" FORCE)
