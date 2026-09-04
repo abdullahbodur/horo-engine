@@ -46,6 +46,7 @@ option(HORO_ENABLE_IMGUI_UI_TESTS "Build headless Dear ImGui UI automation tests
 option(HORO_ENABLE_TELEMETRY "Compile Horo telemetry producer instrumentation" ON)
 option(HORO_ENABLE_OPENTELEMETRY "Build the optional OpenTelemetry OTLP export sink" OFF)
 option(HORO_BUILD_EXAMPLES "Build SDK and extension examples" ${BUILD_TESTING})
+option(HORO_BUILD_PHYSICS_NATIVE "Build the private CanonicalV1 Physics solver" ON)
 
 if(HORO_ENABLE_IMGUI_UI_TESTS AND NOT BUILD_TESTING)
     message(FATAL_ERROR "HORO_ENABLE_IMGUI_UI_TESTS requires BUILD_TESTING=ON")
