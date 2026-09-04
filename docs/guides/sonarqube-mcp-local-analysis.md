@@ -1,14 +1,14 @@
-# Local C/C++ Analysis with SonarQube MCP
+# Local C/C++ Analysis with SonarQube MCP and VS Code
 
 ## Purpose
 
 Use an AI coding agent to analyze changed C/C++ files through SonarQube MCP and
-an open SonarQube for IDE instance. Connected mode applies the project's supported
+an open VS Code workspace with SonarQube for IDE installed. Connected mode applies the project's supported
 Quality Profile rules locally. This workflow does not run SonarScanner or upload
 an analysis report; it does not replace CI analysis or a server Quality Gate.
 
 ```text
-AI coding agent -> SonarQube MCP -> SonarQube for IDE -> local source files
+AI coding agent -> SonarQube MCP -> VS Code + SonarQube for IDE -> local source files
                                          |
                                          +-> connected project rules/settings
 ```
@@ -16,8 +16,9 @@ AI coding agent -> SonarQube MCP -> SonarQube for IDE -> local source files
 ## Prerequisites
 
 - A running Docker daemon and an MCP-capable coding agent.
-- CLion with SonarQube for IDE installed and the repository open.
-- A loaded CMake profile with supported compiler information for the target files.
+- VS Code with SonarQube for IDE installed and the repository folder open.
+- A current compilation database for the intended CMake build configuration, with
+  supported compiler information for the target translation units.
 - A SonarQube Cloud (SonarCloud) or Server connection, a user token with access to
   the project, and IDE connected-mode binding to that exact project.
 - The IDE bridge port, normally in the 64120–64130 range. Use the port reported by
@@ -31,27 +32,54 @@ credentials, personal account identifiers, or machine-specific paths to the repo
 
 ### 1. Prepare the IDE
 
-Configure the connection and project binding in **SonarQube for IDE** settings.
-Keep the IDE open, let CMake loading/indexing complete, and manually analyze one
-file that belongs to the selected build configuration. This establishes an IDE
-baseline before introducing MCP.
+Configure the SonarCloud or Server connection in the VS Code SonarQube extension,
+then bind the workspace to the exact project. Open the repository folder, including
+its source tree; a loose editor file is not a replacement for an open workspace.
 
-Enable compilation database export in the intended CMake profile with
-`-DCMAKE_EXPORT_COMPILE_COMMANDS=ON`, then reload CMake. With a supported generator
-such as Ninja or Makefiles, this produces `compile_commands.json` in that profile's
-build directory. Confirm it contains the target translation units and local paths.
+C/C++ analysis requires a compilation database **and** the VS Code SonarQube
+setting that selects it. Configuring Microsoft C/C++ IntelliSense or CMake Tools
+alone does not establish this SonarQube setting. [VS Code requirements](https://docs.sonarsource.com/sonarqube-for-vs-code/getting-started/requirements)
 
-If the analyzer reports that `sonar.cfamily.compile-commands` is missing, add it
-under **SonarQube for IDE > Analysis Properties**:
+Enable `CMAKE_EXPORT_COMPILE_COMMANDS` in the intended build configuration and
+reconfigure it using a supported generator such as Ninja or Makefiles. For example,
+from the repository root, a separate analysis build directory can be configured as:
 
-```properties
-sonar.cfamily.compile-commands=/absolute/path/to/project/<active-build-directory>/compile_commands.json
+```sh
+rtk proxy cmake -S . -B build/sonar-ide -G Ninja -DBUILD_TESTING=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 ```
 
-Use the actual build directory and keep it aligned with the active IDE profile.
-Check the next analysis log for the expanded path in `extraProperties` and
-`CFamily analysis configuration mode: Compile-Commands`. A saved setting alone
-is insufficient evidence. This setting does not repair missing IDE index entries.
+Use the project's required configure options/toolchain as appropriate. An existing
+build directory is preferable when it already represents the intended configuration;
+keep its generator and toolchain unchanged. Confirm `compile_commands.json` exists
+and contains the target translation units with usable paths and compiler arguments.
+
+In VS Code, open **Preferences: Open Workspace Settings (JSON)** and merge these
+settings with existing values. Replace the connection/project placeholders and
+choose the database from the build configuration you actually use:
+
+```json
+{
+  "sonarlint.connectedMode.project": {
+    "connectionId": "<connection-id>",
+    "projectKey": "<project-key>"
+  },
+  "sonarlint.pathToCompileCommands": "${workspaceFolder}/build/sonar-ide/compile_commands.json"
+}
+```
+
+The connection identifier must match an existing SonarQube connection in VS Code.
+Keep account-specific bindings local. Never copy a personal connection or token
+into a shared guide. `sonarlint.pathToCompileCommands` is the VS Code setting;
+`sonar.cfamily.compile-commands` is the analyzer property visible in the logs.
+The latter belongs to analysis configuration and is not a substitute VS Code
+workspace setting.
+
+Wait for the workspace and settings changes to load. Open a source file and
+manually analyze it as a baseline before introducing MCP. In **View > Output**,
+select **SonarQube for IDE** and inspect the matching run. Enable verbose logs in
+the extension settings if configuration details are missing. Verify the expanded
+compilation database path and an actual compilation-unit count, not just a findings
+count. A saved setting alone is insufficient evidence.
 
 ### 2. Configure the MCP client
 
@@ -89,9 +117,15 @@ tool_timeout_sec = 180
 [mcp_servers.sonarqube.env]
 SONARQUBE_ORG = "<organization-key>"
 SONARQUBE_URL = "https://sonarcloud.io"
-SONARQUBE_IDE_PORT = "64120"
+SONARQUBE_IDE_PORT = "64121"
 SONARQUBE_TOOLSETS = "ide,issues,rules,quality-gates"
 ```
+
+The port above is an example, not a VS Code default. Read the port from the running
+VS Code SonarQube bridge/configuration. When CLion and VS Code are both open, they
+can occupy different ports; pointing MCP at the CLion port still sends analysis
+to CLion. Confirm the request appears in the VS Code Output log. Restart the MCP
+server after changing its port.
 
 This is a SonarCloud EU example. For SonarCloud US, use
 `https://sonarqube.us`. For SonarQube Server, remove `SONARQUBE_ORG` from both
@@ -141,7 +175,44 @@ Check the tool's error flag, returned findings, and the corresponding IDE log.
 Some sensors can fail while other sensors still return findings. An empty result
 is not proof that a file was indexed or that every server rule ran.
 
-### 4. Analyze changed files and review findings
+### 4. Verify newly created files
+
+A newly created source can initially be absent from the IDE's scope/index. Open
+it in the correct VS Code workspace before calling `analyze_file_list`. For real
+project code, add the translation unit to its owning CMake target, reconfigure the
+selected build, and check for its exact path in the selected compilation database.
+Do not hand-edit a generated project database as a permanent fix.
+
+The analyzer can fall back to another compilation entry when the new file lacks
+one. The log may say `using compilation database random entry`. That can borrow
+C flags for a C++ file or select unrelated include paths and definitions. A returned
+finding in that mode does not establish correct C++ configuration. Inspect the
+chosen entry and language, then re-run using the file's own build configuration.
+
+For a disposable smoke test, create a new `.cpp` file under the open workspace
+with an intentional diagnostic, for example:
+
+```cpp
+int SonarMcpProbe()
+{
+    int denominator = 0;
+    return 42 / denominator;
+}
+```
+
+Do not build or execute this intentional error. A test-only compilation database
+can describe the standalone source with the local C++ compiler and `-std=c++20`.
+Select that database temporarily with `sonarlint.pathToCompileCommands`, keeping a
+copy of the original workspace setting. This isolates the smoke test from engine
+target changes and does not validate the engine's own build configuration.
+
+Analyze the file, verify `cpp:S3518` and an actual C++ compilation-unit count, change
+the denominator to `2`, and analyze again. The division-by-zero finding should
+clear. Other rules depend on the connected Quality Profile. Restore the original
+workspace settings and automatic-analysis state; remove the test source and its
+temporary database. Keep these artifacts out of commits.
+
+### 5. Analyze changed files and review findings
 
 Use the repository's [Sonar validation contract](../../AGENTS.md#sonar-validation)
 and [MCP instructions](../../.github/instructions/sonarqube_mcp.instructions.md).
@@ -187,8 +258,9 @@ upload reports, or change existing behavior without authorization.
 | Authentication fails | Token availability in the MCP process and Cloud region/Server URL | Use a user token and correct organization/endpoint; never log the token. |
 | IDE tools are unavailable | IDE running, bridge port, Docker `-e SONARQUBE_IDE_PORT` | Correct forwarding/port and restart the MCP server. |
 | Analysis request returns HTTP 500 | Matching IDE log timestamp | Read the underlying IDE exception; this alone does not imply a network failure. |
-| No files belong to a configured scope, or file not found | Absolute path, open project, compiler configuration, exclusions, and index | Re-analyze a known indexed file; reload the relevant CMake profile and inspect IDE indexing. A file can exist on disk but be absent from Sonar's index. |
-| Compile-commands option missing | Analysis Properties and the next log's `extraProperties` | Supply the existing database from the intended build profile; verify it reaches the analyzer. |
+| No files belong to a configured scope, or file not found | Absolute path, open project, compiler configuration, exclusions, and index | Re-analyze a known indexed file; open the file in VS Code, regenerate the relevant compilation database, and inspect indexing. A file can exist on disk but be absent from Sonar's index. |
+| Compile-commands option missing | VS Code `sonarlint.pathToCompileCommands` and the next log's `extraProperties` | Select the existing database for the intended build configuration; verify it reaches the analyzer. |
+| A new C++ file borrows another compilation entry | Exact file path in the database and `random entry` log messages | Add the real source to its owning target, reconfigure, and re-analyze with its own C++ command. |
 | C/C++ taint analysis disabled | Informational unsupported-feature message versus exception | Record the local limitation; do not disable C/C++ suffixes to hide it. |
 | Findings returned alongside sensor errors | Full log for that exact run | Report partial validation and investigate the failing sensor separately. |
 
@@ -209,25 +281,33 @@ the absence of an uploaded analysis report, not an offline guarantee.
 
 ## Validation Record
 
-Verified on 2026-09-03 with macOS, Docker Desktop, CLion 2026.1, SonarQube for IDE
-12.8.0, and SonarQube MCP Server 1.26.0:
+Verified on 2026-09-04 with macOS, Docker Desktop, SonarQube for VS Code
+5.9.1, and SonarQube MCP Server 1.26.0:
 
-- MCP initialization and connected-project lookup succeeded.
-- `analyze_file_list` returned two findings for an indexed editor C++ file.
-- After adding the compilation database property, IDE logs confirmed
-  Compile-Commands mode and completed ordinary C++ analysis.
-- C/C++ taint analysis was skipped with an explicit unsupported-feature message.
-- Other existing source files remained absent from the IDE index. Complete
-  repository coverage was not established; compilation database configuration
-  alone did not resolve this separate failure.
-- No source changes or report uploads were required for connection verification.
+- The VS Code bridge used a separate port from a concurrently running CLion instance.
+- Three existing translation units completed C++ analysis with zero findings;
+  this included two source files previously missing from the CLion Sonar index.
+- A new temporary source initially failed scope/index lookup. After opening it in
+  the workspace and selecting a test database containing its C++ command, analysis
+  reported `cpp:S3518` (CRITICAL) for intentional division by zero.
+- With that source still open but the original database restored, the analyzer
+  borrowed an unrelated C entry and reported `c:S3518`. This demonstrated why the
+  compilation entry and language must be checked even when findings are returned.
+- With the explicit C++ test entry selected again, changing the denominator to `2`
+  produced zero findings and one analyzed compilation unit.
+- Temporary source/database files were removed, workspace settings restored
+  byte-for-byte, and automatic analysis re-enabled. No report was uploaded.
+- C/C++ taint analysis remained disabled with an explicit unsupported-feature log.
 
-Linux, Windows, alternate clients, and SonarQube Server were not exercised in this
-validation. Their setup variations should be checked against current vendor docs.
+Earlier CLion validation on 2026-09-03 established ordinary C++ analysis but left
+some existing files unindexed. This guide now uses the verified VS Code workflow.
+It does not claim that every new file is immediately indexed or that every server
+rule is supported locally. Linux, Windows, other clients, and SonarQube Server
+were not exercised in this validation.
 
 ## References
 
 - [SonarQube MCP Server configuration and tools](https://github.com/SonarSource/sonarqube-mcp-server)
 - [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)
-- [SonarQube for IntelliJ analysis](https://docs.sonarsource.com/sonarqube-for-intellij/using/scan-my-project)
+- [SonarQube for VS Code analysis](https://docs.sonarsource.com/sonarqube-for-vs-code/getting-started/running-an-analysis)
 - [SonarQube Cloud connected mode](https://docs.sonarsource.com/sonarqube-cloud/analyzing-source-code/connected-mode)
