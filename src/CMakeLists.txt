@@ -309,6 +309,14 @@ add_library(HoroEngine::AudioCommands ALIAS HoroAudioCommands)
 target_compile_features(HoroAudioCommands PUBLIC cxx_std_20)
 target_link_libraries(HoroAudioCommands PUBLIC HoroEngine::AudioMemory)
 
+add_library(HoroPhysics STATIC
+        physics/PhysicsErrors.cpp
+        physics/PhysicsIdentity.cpp
+)
+add_library(HoroEngine::Physics ALIAS HoroPhysics)
+target_compile_features(HoroPhysics PUBLIC cxx_std_20)
+target_link_libraries(HoroPhysics PUBLIC HoroEngine::Foundation)
+
 add_library(HoroInput STATIC
         runtime/input/Input.cpp
         runtime/input/InputErrors.cpp

@@ -15,6 +15,7 @@ horo_allow_target_dependencies(TARGET HoroAudioDsp DEPENDENCIES HoroAudioApi)
 horo_allow_target_dependencies(TARGET HoroAudioMemory DEPENDENCIES HoroAudioApi)
 horo_allow_target_dependencies(TARGET HoroAudioCommands DEPENDENCIES HoroAudioMemory)
 horo_allow_target_dependencies(TARGET HoroAudioBackendContract DEPENDENCIES HoroAudioApi)
+horo_allow_target_dependencies(TARGET HoroPhysics DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroInput DEPENDENCIES HoroFoundation)
 horo_allow_target_dependencies(TARGET HoroInputSdl DEPENDENCIES HoroInput)
 

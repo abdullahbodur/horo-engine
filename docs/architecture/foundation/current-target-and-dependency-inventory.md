@@ -199,7 +199,7 @@ conflicts are recorded rather than treated as additional implementations.
 | `HoroEngine::Assets` | Partial | Target exists, but registry, import, cook, cache, and preview are combined beyond the narrower ownership described by System Design. |
 | `HoroEngine::SceneModel` | Partial | Target exists but publicly depends on RenderApi, contrary to the documented Foundation-only level. |
 | `HoroEngine::RuntimeScene` | Implemented | `HoroRuntimeScene`; Build System still calls this `HoroEngine::SceneRuntime`. |
-| `HoroEngine::Physics` | Planned | Architecture and placeholder paths exist; no production target. |
+| `HoroEngine::Physics` | Partial | Foundation-only target owns world-scoped body/shape/constraint identities, owner preflight and stable errors. Descriptors, capabilities, registries and native/runtime execution remain planned; linking this target does not claim a working solver. |
 | `HoroEngine::AudioApi` | Partial | Target owns typed identities, generation-safe handles, stable errors, device discovery/default selection, format/layout metadata, negotiation admission, capability probes, epoch-scoped timing/callback facts and borrowed planar-block validation; runtime commands and processing execution remain planned. |
 | `HoroAudioBackendContract` | Contract only | Narrow non-installed internal interface for asynchronous backend operations, retained completions, render ports and device events. No native adapter, callback transport or control lifecycle implementation is implied. |
 | `HoroEngine::AudioRuntime` | Planned | Architecture exists; no production target. |

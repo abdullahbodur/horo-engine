@@ -184,6 +184,13 @@ add_executable(HoroAudioCommandTests
 target_compile_features(HoroAudioCommandTests PRIVATE cxx_std_20)
 target_link_libraries(HoroAudioCommandTests PRIVATE HoroEngine::AudioCommands)
 horo_register_catch_test(HoroAudioCommandTests LABELS "unit;audio;headless")
+
+add_executable(HoroPhysicsTests
+        unit/runtime/physics/PhysicsIdentityTests.cpp
+)
+target_compile_features(HoroPhysicsTests PRIVATE cxx_std_20)
+target_link_libraries(HoroPhysicsTests PRIVATE HoroEngine::Physics)
+horo_register_catch_test(HoroPhysicsTests LABELS "unit;physics;headless")
 add_executable(HoroGameplayRuntimeTests
         unit/gameplay/BehaviorRuntimeTests.cpp
         unit/gameplay/ComponentRegistryTests.cpp

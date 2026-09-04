@@ -138,6 +138,10 @@ horo_configure_target_header_boundary(HoroAudioCommands PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroInput PUBLIC_HEADERS
     Horo/Runtime/Input.h
 )
+horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
+    Horo/Physics/PhysicsErrors.h
+    Horo/Physics/PhysicsIdentity.h
+)
 
 horo_configure_target_header_boundary(HoroRenderApi PUBLIC_HEADERS
     Horo/Runtime/Render/Mesh.h
