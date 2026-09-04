@@ -52,6 +52,13 @@ it does not activate a device or implement a mixer. Header ownership is register
 in `HoroPublicHeaderOwnership.cmake` and exercised by
 `HoroAudioApiPublicHeaderConsumer`. Existing consumers need no migration.
 
+The subsequent `HoroAudioDsp` (`HoroEngine::AudioDsp`) target owns private
+resampler coefficient preparation and scalar evaluation under
+`src/audio/resampling/`. Its only direct first-party dependency is AudioApi.
+There is no published DSP header yet; tests receive the exact private directory,
+and no repository-wide include root is exported. This is a DSP primitive, not an
+audio runtime, device backend or completed streaming resampler.
+
 | Real target (alias) | Availability | Owner and public/private boundary | Direct first-party dependencies |
 |---|---|---|---|
 | `HoroFoundation` (`HoroEngine::Foundation`) | Always | Owns Foundation primitives, diagnostics, logging, telemetry facade, jobs, configuration, paths, hashing, strings, and `Math/SceneMath.h`. Implementation is under `src/foundation/`. | None |

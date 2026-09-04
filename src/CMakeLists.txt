@@ -266,6 +266,14 @@ add_library(HoroEngine::AudioApi ALIAS HoroAudioApi)
 target_compile_features(HoroAudioApi PUBLIC cxx_std_20)
 target_link_libraries(HoroAudioApi PUBLIC HoroEngine::Foundation HoroEngine::Assets)
 
+add_library(HoroAudioDsp STATIC
+        audio/resampling/ResamplerKernel.cpp
+        audio/resampling/ResamplerKernel.h
+)
+add_library(HoroEngine::AudioDsp ALIAS HoroAudioDsp)
+target_compile_features(HoroAudioDsp PUBLIC cxx_std_20)
+target_link_libraries(HoroAudioDsp PUBLIC HoroEngine::AudioApi)
+
 add_library(HoroInput STATIC
         runtime/input/Input.cpp
         runtime/input/InputErrors.cpp

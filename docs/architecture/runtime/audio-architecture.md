@@ -278,6 +278,27 @@ based solely on successful plan creation. A SIMD implementation must use the sam
 plan, limits and channel/phase order and pass the scalar reference suite before
 explicit non-callback dispatch selection; no callback feature probing is allowed.
 
+The following numerical primitive in private `HoroAudioDsp` prepares 1,025 phase
+rows (1,024 intervals) outside the callback. Its bank costs
+`1025 * taps * sizeof(float)` separately reserved bytes, independent of channel
+count. Sinc rows use a Hann window with cutoff `0.9 / max(1, inputStep)` relative
+to input Nyquist and per-phase DC normalization. Linear rows contain only
+`1-phase, phase`. Processing interpolates adjacent rows and accumulates a channel's
+circular history in double precision without allocation, locks or transcendental
+calls. The owner must validate history width, finite samples, ring index and phase
+before this private primitive; it must also perform the ADR-063 output safety
+policy. The bank never clips intermediate headroom.
+
+This is the finite windowed-sinc/table-interpolation approach described in
+[Julius O. Smith's Windowed Sinc Interpolation](https://www.dsprelated.com/freebooks/pasp/Windowed_Sinc_Interpolation.html),
+with Horo-owned window, cutoff, table resolution and budget choices. Reference
+tests exercise individual impulses against direct double-precision coefficients,
+unity DC, exact linear ramps, circular ordering, and a 96-to-48 kHz fixture that
+passes a 1 kHz tone and attenuates a 30 kHz tone. Those fixtures do not certify a
+universal passband/stopband specification or real-time CPU deadline. Streaming
+state/reset/drain, allocation instrumentation and SIMD/CPU qualification remain
+required before full ticket completion.
+
 Internal buses may exceed nominal `[-1, +1]` full scale. Declared DSP/limiter
 nodes own intentional saturation; one finite safety clamp occurs immediately
 before native output conversion. Denormals normalize under the approved callback
