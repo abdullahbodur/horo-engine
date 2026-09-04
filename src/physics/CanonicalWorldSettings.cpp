@@ -33,16 +33,31 @@ namespace Horo::Physics::Detail {
         }
     }  // namespace
 
+    /** @copydoc TranslateDefaultMotionQuality */
+    Result<JPH::EMotionQuality> TranslateDefaultMotionQuality(const PhysicsDefaultMotionQuality quality) {
+        switch (quality) {
+            case PhysicsDefaultMotionQuality::Discrete:
+                return Result<JPH::EMotionQuality>::Success(JPH::EMotionQuality::Discrete);
+            case PhysicsDefaultMotionQuality::LinearCast:
+                return Result<JPH::EMotionQuality>::Success(JPH::EMotionQuality::LinearCast);
+        }
+        return Result<JPH::EMotionQuality>::Failure(
+            MakeError(PhysicsErrors::OperationUnsupported, "Unknown default motion-quality policy."));
+    }
+
     /** @copydoc TranslateCanonicalWorldSettings */
     Result<CanonicalWorldSettings> TranslateCanonicalWorldSettings(const PhysicsWorldSettings &settings) {
         if (!IsCanonicalSolverBuildCompatible())
             return Result<CanonicalWorldSettings>::Failure(
                 MakeError(PhysicsErrors::ProfileUnsupported, "Canonical solver ABI is incompatible."));
         const auto &v = settings.Values();
+        const auto motionQuality = TranslateDefaultMotionQuality(v.step.defaultMotionQuality);
+        if (motionQuality.HasError())
+            return Result<CanonicalWorldSettings>::Failure(motionQuality.ErrorValue());
         return Result<CanonicalWorldSettings>::Success({settings,
                                                         SolverSettings(v),
                                                         {v.world.gravity.x, v.world.gravity.y, v.world.gravity.z},
-                                                        JPH::EMotionQuality::Discrete,
+                                                        motionQuality.Value(),
                                                         static_cast<float>(v.world.fixedDeltaSeconds),
                                                         static_cast<int>(v.step.substepsPerTick),
                                                         v.world.capacity.maximumBodies,

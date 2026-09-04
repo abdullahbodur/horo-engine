@@ -33,6 +33,12 @@ namespace Horo::Physics::Detail {
         std::uint64_t scratchBytes;
     };
 
+    /** @brief Maps a known Horo motion-quality value without admitting it into a world profile.
+     * @param quality Typed requested representation; complete snapshot validation owns profile admission.
+     * @return Native representation or OperationUnsupported for an unknown value.
+     */
+    [[nodiscard]] Result<JPH::EMotionQuality> TranslateDefaultMotionQuality(PhysicsDefaultMotionQuality quality);
+
     /**
      * @brief Translates supported settings explicitly after linked-binary compatibility validation.
      * @param settings Validated immutable snapshot; construction cannot bypass capture validation.

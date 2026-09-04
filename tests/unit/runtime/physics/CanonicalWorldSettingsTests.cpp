@@ -1,9 +1,22 @@
 #include "CanonicalWorldSettings.h"
+#include "Horo/Physics/PhysicsErrors.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <limits>
 
 namespace Horo::Physics {
+    TEST_CASE("Native motion-quality translation maps known representations and rejects unknown values", "[physics][settings][native]") {
+        const auto discrete = Detail::TranslateDefaultMotionQuality(PhysicsDefaultMotionQuality::Discrete);
+        REQUIRE(discrete.HasValue());
+        REQUIRE(discrete.Value() == JPH::EMotionQuality::Discrete);
+        const auto linear = Detail::TranslateDefaultMotionQuality(PhysicsDefaultMotionQuality::LinearCast);
+        REQUIRE(linear.HasValue());
+        REQUIRE(linear.Value() == JPH::EMotionQuality::LinearCast);
+        const auto unknown = Detail::TranslateDefaultMotionQuality(static_cast<PhysicsDefaultMotionQuality>(255));
+        REQUIRE(unknown.HasError());
+        REQUIRE(unknown.ErrorValue().code.Value() == PhysicsErrors::OperationUnsupported.code.Value());
+    }
+
     TEST_CASE("Canonical settings translation preserves captured native values and owner policy", "[physics][settings][native]") {
         PhysicsWorldSettingsDescriptor descriptor;
         descriptor.world.gravity = {1, -5, 2};
