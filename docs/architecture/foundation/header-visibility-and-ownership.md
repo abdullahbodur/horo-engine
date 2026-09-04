@@ -116,3 +116,26 @@ qualification. Requested fixed delta remains a double value after validation;
 profile/solver integration must separately qualify its rate and conversion.
 Public consumers continue to depend only on Foundation, with no new native or
 SceneRuntime include paths.
+
+`PhysicsPose.h`, `PhysicsShapeDescriptor.h`, `PhysicsBodyDescriptor.h` and
+`PhysicsConstraintDescriptor.h` add owned, inert runtime values on the same
+Foundation-only boundary. They reuse Scene Math, with no native math, scale
+multiplier, renderer handle or RuntimeScene dependency. Their registered public
+headers are compiled by the standalone Physics consumer. No existing caller needs
+migration; future scene authoring keeps stable IDs and candidate plan indexes
+separate from these published-world handle requests.
+
+The initial geometry vocabulary is analytic box/sphere/capsule/static plane;
+constraint parameters are fixed/distance only. Cooked hull/mesh/height-field/
+compound artifact requests and other joint policies remain separate work, never
+primitive or fixed-joint fallbacks. Descriptor validation checks representation,
+owner identity and common numeric policy, not native availability, handle
+liveness, shape/motion compatibility, filter/material admission or publication.
+The enclosing operation must retain leases and bind/revalidate origin/schema
+generations at its structural safe point. These descriptors are not self-contained
+queued commands or complete native creation operations.
+
+Body speed preflight follows the normative Physics architecture's `500 m/s`
+limit rather than proposed ADR-084's conflicting `50 m/s` text. Geometry-dependent
+size, dynamic-contact radius, local-cluster bounds and native qualification are
+not established by common descriptor validation.
