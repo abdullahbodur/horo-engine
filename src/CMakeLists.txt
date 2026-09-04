@@ -310,9 +310,13 @@ target_compile_features(HoroAudioCommands PUBLIC cxx_std_20)
 target_link_libraries(HoroAudioCommands PUBLIC HoroEngine::AudioMemory)
 
 add_library(HoroPhysics STATIC
+        physics/PhysicsBodyDescriptor.cpp
         physics/PhysicsCapabilities.cpp
+        physics/PhysicsConstraintDescriptor.cpp
         physics/PhysicsErrors.cpp
         physics/PhysicsIdentity.cpp
+        physics/PhysicsPose.cpp
+        physics/PhysicsShapeDescriptor.cpp
         physics/PhysicsWorldDescriptor.cpp
 )
 add_library(HoroEngine::Physics ALIAS HoroPhysics)
