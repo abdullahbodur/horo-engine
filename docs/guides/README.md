@@ -10,7 +10,7 @@ workflows.
 - [Extension Module Development](./extension-module-development.md): build an
   add-on package that contributes editor tabs, Settings pages, MCP tools,
   commands, and data-bus observers through the extension ABI/API.
-- [Local C/C++ Analysis with SonarQube MCP](./sonarqube-mcp-local-analysis.md):
+- [Local C/C++ Analysis with SonarQube MCP and VS Code](./sonarqube-mcp-local-analysis.md):
   configure the IDE bridge, analyze local changes, and diagnose partial results.
 
 ## Writing a Guide
