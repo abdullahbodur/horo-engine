@@ -125,6 +125,7 @@ horo_configure_target_header_boundary(HoroAudioMemory PUBLIC_HEADERS
 )
 horo_configure_target_header_boundary(HoroAudioCommands PUBLIC_HEADERS
     Horo/Audio/AudioCommands.h
+    Horo/Audio/AudioCommandBuffer.h
 )
 horo_configure_target_header_boundary(HoroInput PUBLIC_HEADERS
     Horo/Runtime/Input.h
