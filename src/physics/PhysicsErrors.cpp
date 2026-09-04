@@ -78,4 +78,40 @@ namespace Horo::Physics::PhysicsErrors {
         .retryable = false,
         .userActionable = false,
     };
+    const ErrorCodeDescriptor DescriptorInvalid{
+        .domain = PhysicsDomain,
+        .code = ErrorCode{"physics.descriptor.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The physics descriptor metadata is invalid.",
+        .remediationHint = "Provide the supported schema, known typed values and finite data before native preparation.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor ProfileUnsupported{
+        .domain = PhysicsDomain,
+        .code = ErrorCode{"physics.profile.unsupported"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The requested physics profile is unsupported.",
+        .remediationHint = "Select an explicitly supported profile; do not silently change solver or numeric policy.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor CapacityExceeded{
+        .domain = PhysicsDomain,
+        .code = ErrorCode{"physics.capacity.exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The requested physics capacity exceeds its profile or has no plan budget.",
+        .remediationHint = "Lower requested limits or admit a separately qualified profile and reserve sufficient plan memory.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor CapabilityStale{
+        .domain = PhysicsDomain,
+        .code = ErrorCode{"physics.capability.stale"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Physics capability evidence changed during admission.",
+        .remediationHint = "Capture the current owner-published snapshot and revalidate the complete preparation request.",
+        .retryable = true,
+        .userActionable = false,
+    };
 }  // namespace Horo::Physics::PhysicsErrors

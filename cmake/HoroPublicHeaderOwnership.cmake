@@ -115,8 +115,10 @@ horo_configure_target_header_boundary(HoroInput PUBLIC_HEADERS
     Horo/Runtime/Input.h
 )
 horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
+    Horo/Physics/PhysicsCapabilities.h
     Horo/Physics/PhysicsErrors.h
     Horo/Physics/PhysicsIdentity.h
+    Horo/Physics/PhysicsWorldDescriptor.h
 )
 
 horo_configure_target_header_boundary(HoroRenderApi PUBLIC_HEADERS
