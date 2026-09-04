@@ -87,11 +87,12 @@ namespace Horo::Packages {
 
         /** @brief Rejects links, special files, privilege bits and unsupported ZIP encodings. */
         [[nodiscard]] bool IsRegularEntry(const mz_zip_archive_file_stat &stat) {
+            constexpr unsigned FileAttributeReparsePoint = 0x400;
             const unsigned mode = stat.m_external_attr >> 16;
             const unsigned type = mode & 0170000;
             const unsigned expected = stat.m_is_directory ? 0040000 : 0100000;
             return stat.m_is_supported && !stat.m_is_encrypted && (type == 0 || type == expected) && (mode & 07000) == 0 &&
-                   (stat.m_external_attr & 0x400) == 0;
+                   (stat.m_external_attr & FileAttributeReparsePoint) == 0;
         }
 
         /** @brief Reads the complete filename instead of miniz's potentially truncated stat buffer. */
