@@ -118,6 +118,7 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
     Horo/Physics/PhysicsBodyDescriptor.h
     Horo/Physics/PhysicsCapabilities.h
     Horo/Physics/PhysicsConstraintDescriptor.h
+    Horo/Physics/PhysicsCookedShapeDescriptor.h
     Horo/Physics/PhysicsErrors.h
     Horo/Physics/PhysicsIdentity.h
     Horo/Physics/PhysicsPose.h

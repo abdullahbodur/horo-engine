@@ -142,6 +142,7 @@ horo_register_catch_test(HoroAudioApiTests LABELS "unit;audio;headless")
 add_executable(HoroPhysicsTests
         unit/runtime/physics/PhysicsBodyDescriptorTests.cpp
         unit/runtime/physics/PhysicsConstraintDescriptorTests.cpp
+        unit/runtime/physics/PhysicsCookedShapeDescriptorTests.cpp
         unit/runtime/physics/PhysicsIdentityTests.cpp
         unit/runtime/physics/PhysicsPoseTests.cpp
         unit/runtime/physics/PhysicsShapeDescriptorTests.cpp
