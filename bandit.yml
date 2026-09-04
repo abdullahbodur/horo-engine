@@ -1,0 +1,6 @@
+# Pytest assertions verify test outcomes; keep B101 enabled for production code.
+# This skips only assert_used, not the other security checks in these files.
+assert_used:
+  skips:
+    - "tests/python/test_*.py"
+    - "*/tests/python/test_*.py"
