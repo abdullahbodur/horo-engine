@@ -151,6 +151,7 @@ add_executable(HoroPhysicsTests
         unit/runtime/physics/PhysicsWorldBudgetsTests.cpp
         unit/runtime/physics/PhysicsWorldDescriptorTests.cpp
         unit/runtime/physics/PhysicsWorldSettingsTests.cpp
+        unit/runtime/physics/PhysicsWorldTests.cpp
 )
 target_compile_features(HoroPhysicsTests PRIVATE cxx_std_20)
 target_include_directories(HoroPhysicsTests PRIVATE ${PROJECT_SOURCE_DIR}/src/physics)
@@ -173,6 +174,7 @@ endforeach()
 if(HORO_BUILD_PHYSICS_NATIVE)
     add_executable(HoroPhysicsNativeBoundaryTests
         unit/runtime/physics/CanonicalNativeBoundaryTests.cpp
+        unit/runtime/physics/CanonicalPhysicsRuntimeTests.cpp
         unit/runtime/physics/CanonicalWorldSettingsTests.cpp)
     target_compile_features(HoroPhysicsNativeBoundaryTests PRIVATE cxx_std_20)
     target_include_directories(HoroPhysicsNativeBoundaryTests PRIVATE ${PROJECT_SOURCE_DIR}/src/physics)

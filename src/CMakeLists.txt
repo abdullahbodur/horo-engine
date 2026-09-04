@@ -265,6 +265,7 @@ add_library(HoroPhysics STATIC
         physics/PhysicsPose.cpp
         physics/PhysicsShapeDescriptor.cpp
         physics/PhysicsStepPolicy.cpp
+        physics/PhysicsWorld.cpp
         physics/PhysicsWorldBudgets.cpp
         physics/PhysicsWorldDescriptor.cpp
         physics/PhysicsWorldSettings.cpp
@@ -273,12 +274,19 @@ add_library(HoroEngine::Physics ALIAS HoroPhysics)
 target_compile_features(HoroPhysics PUBLIC cxx_std_20)
 target_link_libraries(HoroPhysics PUBLIC HoroEngine::Foundation HoroEngine::Assets)
 if(HORO_BUILD_PHYSICS_NATIVE)
-    target_sources(HoroPhysics PRIVATE physics/CanonicalSolver.cpp physics/CanonicalWorldSettings.cpp)
+    target_sources(HoroPhysics PRIVATE
+        physics/CanonicalPhysicsRuntime.cpp
+        physics/CanonicalSolver.cpp
+        physics/CanonicalWorldSettings.cpp)
     target_link_libraries(HoroPhysics PRIVATE Jolt)
-    set_source_files_properties(physics/CanonicalSolver.cpp physics/CanonicalWorldSettings.cpp PROPERTIES
+    set_source_files_properties(
+        physics/CanonicalPhysicsRuntime.cpp
+        physics/CanonicalSolver.cpp
+        physics/CanonicalWorldSettings.cpp
+        PROPERTIES
         COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:MSVC>:/GR-;/EHs-c->;$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-fno-rtti;-fno-exceptions>")
 else()
-    target_sources(HoroPhysics PRIVATE physics/CanonicalSolverOmitted.cpp)
+    target_sources(HoroPhysics PRIVATE physics/CanonicalPhysicsRuntimeOmitted.cpp physics/CanonicalSolverOmitted.cpp)
 endif()
 
 add_library(HoroInput STATIC
