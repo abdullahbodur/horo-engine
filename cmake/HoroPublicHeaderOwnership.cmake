@@ -123,7 +123,10 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
     Horo/Physics/PhysicsIdentity.h
     Horo/Physics/PhysicsPose.h
     Horo/Physics/PhysicsShapeDescriptor.h
+    Horo/Physics/PhysicsStepPolicy.h
+    Horo/Physics/PhysicsWorldBudgets.h
     Horo/Physics/PhysicsWorldDescriptor.h
+    Horo/Physics/PhysicsWorldSettings.h
 )
 
 horo_configure_target_header_boundary(HoroRenderApi PUBLIC_HEADERS
