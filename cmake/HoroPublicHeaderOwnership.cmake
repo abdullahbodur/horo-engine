@@ -124,6 +124,7 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
     Horo/Physics/PhysicsPose.h
     Horo/Physics/PhysicsShapeDescriptor.h
     Horo/Physics/PhysicsStepPolicy.h
+    Horo/Physics/PhysicsWorld.h
     Horo/Physics/PhysicsWorldBudgets.h
     Horo/Physics/PhysicsWorldDescriptor.h
     Horo/Physics/PhysicsWorldSettings.h

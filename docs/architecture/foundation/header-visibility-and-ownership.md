@@ -99,6 +99,14 @@ only stable IDs and generation-safe client handles cross the public boundary.
 
 ## Physics Identity Boundary
 
+`PhysicsWorld.h` adds explicit process and detached-world lifecycle ownership to the
+same target. Its opaque implementation keeps all Jolt types, allocator hooks, serial
+jobs and filter objects private. Public consumers require only the existing
+Foundation/Assets boundary; no RuntimeScene or graphics dependency is introduced.
+`PhysicsWorldSettings.h` owns validated immutable policy and content identity.
+There are no production Physics lifecycle callers to migrate; later scene activation
+must prepare privately and bind/publish only at its aggregate commit boundary.
+
 `HoroEngine::Physics` owns `Horo/Physics/PhysicsIdentity.h` and
 `Horo/Physics/PhysicsErrors.h`, with a Foundation-only public dependency.
 World-scoped Physics handles wrap Foundation's zero-based slot identity rather

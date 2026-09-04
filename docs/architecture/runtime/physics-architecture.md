@@ -97,6 +97,40 @@ SceneRuntime
 The physics world owns bodies, shapes, constraints, broadphase proxies, and
 solver state. ECS components hold generation-checked handles.
 
+`PhysicsRuntime` is an explicit process-composition owner. `Canonical` is used by
+both graphical and headless hosts that require simulation; `Null` explicitly
+reports omitted Physics and unsupported features. It is never an automatic fallback.
+The initial lifecycle implementation advertises only canonical world creation;
+body, shape, constraint, query and stepping behavior is not advertised merely because
+a native empty system exists. Its private filters remain closed until validated
+collision-profile and body admission are implemented.
+
+`PrepareWorld` builds an isolated unpublished candidate from one captured settings
+snapshot. It owns scratch storage, serial job dispatch, filters and native system
+in dependency order. `Activate` binds a valid host-issued world generation without
+native startup or successful-path allocation, rejects duplicate active identities,
+and transitions a prepared world exactly once. The host remains responsible for
+never reusing historical world generations and for publishing the complete scene
+bundle atomically; preparing a candidate does not publish identity or events.
+
+Runtime creation, preparation, activation and teardown are serialized on the Physics
+owner thread. Shutdown closes new admission immediately. Internal world leases keep
+the process-owned Jolt registration alive until all world resources have retired,
+even if a host releases its runtime wrapper too early. Normal composition still
+destroys scene worlds before the process runtime. Repeated world/runtime shutdown
+is idempotent, and no process-global static initializer starts the native lifecycle.
+
+Expected stage failures return `physics.initialization.failed` after reverse-order
+rollback. Horo ownership-allocation failure is contained before returning a typed
+capacity error. Native Jolt allocation cannot unwind through its no-exception frames:
+the explicitly installed allocation hooks terminate on heap exhaustion rather than
+returning a null pointer into native code. This is not a recoverable world-creation
+OOM guarantee or a replacement for process-wide memory admission. Body quarantine
+is rejected at native preparation until its safe-point retirement path is implemented.
+Zero body capacity remains a valid descriptor for omitted compositions, but canonical
+preparation rejects it with `OperationUnsupported` before allocation: the pinned
+native broad phase requires storage for its root nodes even in an empty world.
+
 Scene unload disables physics updates, drains scene-scoped queries/jobs, removes
 bindings, and destroys the world before component storage disappears.
 
