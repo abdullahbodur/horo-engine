@@ -41,4 +41,5 @@ Codacy already uses configuration-file mode for Bandit. The `bandit.yml` change
 takes effect in cloud analysis when the analyzed branch includes it. Merge this
 configuration through the normal delivery process to apply it to the default branch.
 
-See `configure-codacy-summary.json` for measured results and verification limits.
+Keep generated analysis summaries and raw output outside the source tree. Record
+validation results and limitations in the pull request description.
