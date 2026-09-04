@@ -44,6 +44,14 @@ include directories do not enforce those ownership boundaries, as documented in
 
 ### Foundation, Platform, Application, And Runtime
 
+Audio API follow-up (2026-09-04): `HoroAudioApi` (`HoroEngine::AudioApi`) is an
+always-available headless target with public Foundation and Assets dependencies.
+It owns `Audio/AudioIdentity.h`, `Audio/AudioErrors.h` and the additive
+`Audio/AudioResamplerPlan.h`. Resampler preparation is control-thread validation;
+it does not activate a device or implement a mixer. Header ownership is registered
+in `HoroPublicHeaderOwnership.cmake` and exercised by
+`HoroAudioApiPublicHeaderConsumer`. Existing consumers need no migration.
+
 | Real target (alias) | Availability | Owner and public/private boundary | Direct first-party dependencies |
 |---|---|---|---|
 | `HoroFoundation` (`HoroEngine::Foundation`) | Always | Owns Foundation primitives, diagnostics, logging, telemetry facade, jobs, configuration, paths, hashing, strings, and `Math/SceneMath.h`. Implementation is under `src/foundation/`. | None |

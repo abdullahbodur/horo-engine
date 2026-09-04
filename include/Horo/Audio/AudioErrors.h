@@ -8,6 +8,8 @@
 #include "Horo/Foundation/ErrorCode.h"
 
 namespace Horo::Audio::AudioErrors {
+    extern const ErrorCodeDescriptor ResamplerInvalid;
+    extern const ErrorCodeDescriptor ResamplerBudgetExceeded;
     extern const ErrorCodeDescriptor IdentityInvalid;
     extern const ErrorCodeDescriptor HandleMalformed;
     extern const ErrorCodeDescriptor HandleOwnerMismatch;
