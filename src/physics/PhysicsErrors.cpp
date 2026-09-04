@@ -114,4 +114,13 @@ namespace Horo::Physics::PhysicsErrors {
         .retryable = true,
         .userActionable = false,
     };
+    const ErrorCodeDescriptor InitializationFailed{
+        .domain = PhysicsDomain,
+        .code = ErrorCode{"physics.initialization.failed"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "Physics initialization failed before publication.",
+        .remediationHint = "Inspect the failed preparation stage and its resource policy before retrying; the prior world is unchanged.",
+        .retryable = false,
+        .userActionable = true,
+    };
 }  // namespace Horo::Physics::PhysicsErrors
