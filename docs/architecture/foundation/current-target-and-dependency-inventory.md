@@ -178,7 +178,7 @@ conflicts are recorded rather than treated as additional implementations.
 | `HoroEngine::Assets` | Partial | Target exists, but registry, import, cook, cache, and preview are combined beyond the narrower ownership described by System Design. |
 | `HoroEngine::SceneModel` | Partial | Target exists but publicly depends on RenderApi, contrary to the documented Foundation-only level. |
 | `HoroEngine::RuntimeScene` | Implemented | `HoroRuntimeScene`; Build System still calls this `HoroEngine::SceneRuntime`. |
-| `HoroEngine::Physics` | Partial | Foundation-only target owns world-scoped body/shape/constraint identities, stable errors, bounded world descriptors and revision-scoped capability preflight. Body/shape/constraint descriptors, registries and native/runtime execution remain planned; linking this target does not claim a working solver. |
+| `HoroEngine::Physics` | Partial | Foundation-only target owns world-scoped identities, stable errors, world/capability preflight, scale-free poses, analytic shapes, common body policy and fixed/distance constraint descriptors. Cooked-artifact descriptors, additional joint policies, registries and native/runtime execution remain planned; structural validation does not claim a working solver or complete creation admission. |
 | `HoroEngine::AudioApi` | Partial | Target owns typed audio identities, generation-safe handles and stable errors; runtime commands and processing contracts remain planned. |
 | `HoroEngine::AudioRuntime` | Planned | Architecture exists; no production target. |
 | `HoroEngine::AudioPlatform` | Absent | No target or implementation path. |

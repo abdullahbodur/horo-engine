@@ -140,7 +140,11 @@ target_compile_features(HoroAudioApiTests PRIVATE cxx_std_20)
 target_link_libraries(HoroAudioApiTests PRIVATE HoroEngine::AudioApi)
 horo_register_catch_test(HoroAudioApiTests LABELS "unit;audio;headless")
 add_executable(HoroPhysicsTests
+        unit/runtime/physics/PhysicsBodyDescriptorTests.cpp
+        unit/runtime/physics/PhysicsConstraintDescriptorTests.cpp
         unit/runtime/physics/PhysicsIdentityTests.cpp
+        unit/runtime/physics/PhysicsPoseTests.cpp
+        unit/runtime/physics/PhysicsShapeDescriptorTests.cpp
         unit/runtime/physics/PhysicsWorldDescriptorTests.cpp
 )
 target_compile_features(HoroPhysicsTests PRIVATE cxx_std_20)
