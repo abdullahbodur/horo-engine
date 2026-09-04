@@ -38,13 +38,6 @@ Measure a cold main run, a warm main run, and a small same-repository PR. Compar
 installation, configure/build, tests/coverage, scan, and cache transfer durations
 in the Actions job steps; inspect `ccache --show-stats` and scanner cache logs.
 Record commit, runner, cache state and Quality Gate wait time for each comparison.
-On GitHub Actions run `33857895098` (Ubuntu 24.04, GCC Debug with coverage),
-the same revision took 32m42s cold and 4m57s warm (84.9% less wall time).
-Configure/build decreased from 9m00s to 1m07s and scan from 19m58s to 43s.
-Both runs completed 695 native tests and uploaded the analysis, then failed the
-Quality Gate on the scanner download HTTPS redirect rule (fixed in this change).
-The warm run served all 244 CFamily units and all 968 cacheable compilations from
-cache. This measures same-revision reuse, not changed-code or CircleCI parity.
 
 References: [GitHub runner specifications](https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job),
 [Sonar CFamily cache](https://docs.sonarsource.com/sonarqube-cloud/advanced-setup/languages/c-family/customizing-the-analysis),
