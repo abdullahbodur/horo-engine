@@ -158,6 +158,11 @@ horo_register_catch_test(HoroAudioDspTests LABELS "unit;audio;headless")
 add_executable(HoroAudioResamplerBenchmark EXCLUDE_FROM_ALL benchmarks/audio/ResamplerBenchmark.cpp)
 target_compile_features(HoroAudioResamplerBenchmark PRIVATE cxx_std_20)
 target_link_libraries(HoroAudioResamplerBenchmark PRIVATE HoroEngine::AudioDsp)
+
+add_executable(HoroAudioMemoryTests unit/runtime/audio/AudioMemoryTests.cpp)
+target_compile_features(HoroAudioMemoryTests PRIVATE cxx_std_20)
+target_link_libraries(HoroAudioMemoryTests PRIVATE HoroEngine::AudioMemory)
+horo_register_catch_test(HoroAudioMemoryTests LABELS "unit;audio;headless")
 add_executable(HoroGameplayRuntimeTests
         unit/gameplay/BehaviorRuntimeTests.cpp
         unit/gameplay/ComponentRegistryTests.cpp

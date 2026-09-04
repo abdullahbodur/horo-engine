@@ -277,6 +277,15 @@ add_library(HoroEngine::AudioDsp ALIAS HoroAudioDsp)
 target_compile_features(HoroAudioDsp PUBLIC cxx_std_20)
 target_link_libraries(HoroAudioDsp PUBLIC HoroEngine::AudioApi)
 
+add_library(HoroAudioMemory STATIC
+        audio/memory/AudioMemoryPool.cpp
+        audio/memory/AudioScratchArena.cpp
+        audio/memory/AlignedAudioStorage.h
+)
+add_library(HoroEngine::AudioMemory ALIAS HoroAudioMemory)
+target_compile_features(HoroAudioMemory PUBLIC cxx_std_20)
+target_link_libraries(HoroAudioMemory PUBLIC HoroEngine::AudioApi)
+
 add_library(HoroInput STATIC
         runtime/input/Input.cpp
         runtime/input/InputErrors.cpp

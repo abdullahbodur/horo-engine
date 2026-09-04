@@ -120,6 +120,9 @@ horo_configure_target_header_boundary(HoroAudioApi PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroAudioDsp PUBLIC_HEADERS
     Horo/Audio/AudioResampler.h
 )
+horo_configure_target_header_boundary(HoroAudioMemory PUBLIC_HEADERS
+    Horo/Audio/AudioMemory.h
+)
 horo_configure_target_header_boundary(HoroInput PUBLIC_HEADERS
     Horo/Runtime/Input.h
 )
