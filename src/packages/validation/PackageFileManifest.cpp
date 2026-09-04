@@ -34,12 +34,14 @@ namespace Horo::Packages {
 
         /** @brief Decodes a single exact-shape entry and verifies optional contribution-root containment. */
         [[nodiscard]] Result<PackageFileEntry> DecodeEntry(const Json &value) {
-            if (!value.is_object() || value.size() != 5 || !value.at("size").is_number_unsigned() || !value.at("executable").is_boolean()) {
+            if (const std::array validShape{value.is_object(), value.size() == 5, value.at("size").is_number_unsigned(),
+                                            value.at("executable").is_boolean()};
+                !std::ranges::all_of(validShape, std::identity{})) {
                 return Result<PackageFileEntry>::Failure(MakeError(Detail::InvalidManifest));
             }
             auto path = PackagePath::Parse(value.at("path").get<std::string>());
             auto digest = ParseSha256(value.at("sha256").get<std::string>());
-            if (path.HasError() || digest.HasError()) {
+            if (!std::ranges::all_of(std::array{path.HasValue(), digest.HasValue()}, std::identity{})) {
                 return Result<PackageFileEntry>::Failure(MakeError(Detail::InvalidManifest));
             }
             std::optional<PackagePath> root;
@@ -59,8 +61,13 @@ namespace Horo::Packages {
 
         /** @brief Checks the exact root schema before iterating a bounded file array. */
         [[nodiscard]] bool HasSchema(const Json &root, const PackageValidationLimits &limits) {
-            return root.is_object() && root.size() == 2 && root.at("schemaVersion").is_number_unsigned() && root.at("schemaVersion") == 1 &&
-                   root.at("files").is_array() && root.at("files").size() <= limits.entries;
+            const std::array checks{root.is_object(),
+                                    root.size() == 2,
+                                    root.at("schemaVersion").is_number_unsigned(),
+                                    root.at("schemaVersion") == 1,
+                                    root.at("files").is_array(),
+                                    root.at("files").size() <= limits.entries};
+            return std::ranges::all_of(checks, std::identity{});
         }
 
         /** @brief Converts all entries atomically; no partial inventory escapes on error. */
