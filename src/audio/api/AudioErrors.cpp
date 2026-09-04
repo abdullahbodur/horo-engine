@@ -23,6 +23,15 @@ namespace Horo::Audio::AudioErrors {
         .retryable = false,
         .userActionable = true,
     };
+    const ErrorCodeDescriptor CommandBufferInvalid{
+        .domain = AudioDomain,
+        .code = ErrorCode{"audio.command_buffer.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The audio command buffer reservation is invalid.",
+        .remediationHint = "Choose a nonzero epoch, bounded power-of-two capacity and a positive smaller critical reserve.",
+        .retryable = false,
+        .userActionable = true,
+    };
     const ErrorCodeDescriptor MemoryInvalid{
         .domain = AudioDomain,
         .code = ErrorCode{"audio.memory.invalid"},

@@ -1107,7 +1107,7 @@ The additive `HoroEngine::AudioCommands` contract owns `Audio/AudioCommands.h`
 and depends on AudioMemory for generation-scoped prepared storage identities.
 Its current typed value surface represents next-buffer-boundary create/start/stop,
 parameter, graph-publication, logical-release, scene-unload and reset intents.
-It does not implement clock mapping or scheduled batches, queue transport, voice
+It does not implement clock mapping or scheduled batches, MPSC ingress, voice
 execution or lifecycle commits. Those implementations must consume this contract
 rather than inventing string opcodes or callback-side asset/ECS lookups.
 
@@ -1130,10 +1130,42 @@ the critical reservation class never grants priority reordering. Queue implement
 must preserve accepted FIFO order and keep required work caller-owned after explicit
 rejection/retry; classification alone does not provide a saturation guarantee.
 
+`Audio/AudioCommandBuffer.h`, owned by the same AudioCommands target, implements
+the final SPSC publication boundary. Its one-slot CommandStorage pool reserves and
+initializes the complete fixed record array off-callback. Capacity is a power of two
+from 2 to 65,536 and includes a positive critical reserve smaller than the total.
+Ordinary publication stops at total-minus-reserve occupancy; critical publication
+may use the full ring. This is one FIFO, not a separate priority lane. Full critical
+publication returns `CriticalRetry` without accepting or forgetting the record.
+Control retains that record and does not bypass it with later work. Sequence values
+are nonzero, strictly increasing and never wrap; failed publication consumes no
+sequence. The buffer is bound to one runtime epoch and cannot activate a new one.
+
+Exactly one control producer owns its write cursor and last sequence; exactly one
+callback consumer owns the read cursor. Publishing the record precedes release of
+the write cursor, paired with the consumer's acquire. Copying the record precedes
+release of the read cursor, paired with the producer's acquire before slot reuse.
+The uint32 cursors intentionally wrap: outstanding distance never exceeds 65,536,
+and power-of-two capacity divides the cursor range, preserving mask indexing across
+rollover. Only always-lock-free cursor/bool atomics are supported. Immutable dimensions
+and record spans are published before either participant starts. No callback method
+allocates, frees, locks, normalizes, visits external state, or invokes caller code.
+
+Control closes publication after its final accepted record. The consumer can then
+drain all accepted records in order; closed-and-empty is observable but does not prove
+backend detachment, completed command execution, or external-resource quiescence.
+The host must join producers and detach/join the callback before moving or destroying
+the owner. Ring-slot reuse does not authorize releasing a graph/clip/voice referenced
+by the copied record. Registry admission and lifecycle acknowledgement stay under
+the control runtime, not this transport primitive.
+
 This introduces no existing-caller migration or compatibility layer. Hosts opt into
-AudioCommands explicitly; the public-header consumer test checks its narrow dependency
-surface. Transport and saturation acceptance remain incomplete until the bounded
-MPSC-to-SPSC implementation and concurrent/critical-barrier regressions are delivered.
+AudioCommands explicitly; public-header consumer tests check both narrow headers.
+SPSC tests cover reserved critical FIFO barriers, exact sequence/epoch rejection,
+all preparation allocation failures, moves, close/drain, zero general heap allocation
+and free on hot methods, and 50,000 ordered two-thread records with repeated slot reuse.
+Full frontend saturation acceptance remains incomplete until bounded MPSC ingress,
+normalization/staging and end-to-end concurrent/critical-barrier regressions are delivered.
 
 Scheduled commands carry an audio timeline timestamp or buffer-boundary target.
 Commands in the same `ScheduledCommandBatch` with the same timestamp are applied
