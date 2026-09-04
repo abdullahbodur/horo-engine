@@ -242,6 +242,42 @@ Layout conversion never changes rate, and resampling never reinterprets channel
 roles. Rate conversion is prepared outside the callback and executes only through
 a bounded admitted resampler plan.
 
+### Resampler admission and implementation boundary
+
+`HoroAudioApi` owns `AudioResamplerPlan`: immutable control-thread metadata, not a
+device, callback, state allocator or working audio renderer. `Prepare` owns a copy
+of the request and reserves per-instance sample-product, history-byte and
+look-ahead limits before a future processing state can be published. Failure does
+not mutate a live plan. Existing identity/error consumers require no migration;
+the new header is additive and owned only by `HoroAudioApi`.
+
+The baseline accepts explicit input/output rates from 8,000 through 384,000 Hz,
+1–64 unchanged semantic channels, and 1–16,384 output frames per call. Clip pitch
+is a finite multiplier in [0.125, 8]; the resulting input-frame step
+`inputRate / outputRate * pitch` must be in [1/64, 64]. No implicit device rate,
+channel remapping, clamping, fallback quality or silent budget reduction is allowed.
+Mix-to-device conversion accepts only unity pitch. Pitch changes playback duration;
+independent pitch-preserving playback speed remains unavailable and non-unity
+requests return `audio.operation.unsupported`, including invalid/non-finite speeds.
+
+The explicit quality choices are two-tap unfiltered Linear and windowed-sinc
+Sinc32/Sinc64. Linear is not an anti-aliasing quality guarantee. Sinc support expands
+by `ceil(max(1, inputStep))` during downsampling, up to 4,096 taps, to retain its
+input-domain low-pass support. Look-ahead is half the effective tap count in input
+frames; history storage is `channels * taps * sizeof(float)`. The processing
+reservation is `channels * maximumOutputFrames * taps` sample products, computed
+in 64 bits after bounds checking. These are deterministic admission costs, not
+wall-clock timing or a whole-runtime CPU/memory budget. Caller input/output planes
+and any prepared coefficient storage require separate ownership/reservations.
+
+The first delivery implements admission only. Processing, fractional-state and
+reset/drain semantics, scalar numerical reference, SIMD qualification and measured
+CPU budgets remain required in the following delivery before the resampler ticket
+is complete. No device or voice path may advertise these kernels as operational
+based solely on successful plan creation. A SIMD implementation must use the same
+plan, limits and channel/phase order and pass the scalar reference suite before
+explicit non-callback dispatch selection; no callback feature probing is allowed.
+
 Internal buses may exceed nominal `[-1, +1]` full scale. Declared DSP/limiter
 nodes own intentional saturation; one finite safety clamp occurs immediately
 before native output conversion. Denormals normalize under the approved callback

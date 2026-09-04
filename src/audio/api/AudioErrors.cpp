@@ -5,6 +5,24 @@ namespace Horo::Audio::AudioErrors {
         const ErrorDomainId AudioDomain{"horo.audio"};
     }
 
+    const ErrorCodeDescriptor ResamplerInvalid{
+        .domain = AudioDomain,
+        .code = ErrorCode{"audio.resampler.invalid"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The audio resampler request is invalid or outside supported bounds.",
+        .remediationHint = "Provide supported rates, pitch, quality, channel and output-frame limits.",
+        .retryable = false,
+        .userActionable = true,
+    };
+    const ErrorCodeDescriptor ResamplerBudgetExceeded{
+        .domain = AudioDomain,
+        .code = ErrorCode{"audio.resampler.budget_exceeded"},
+        .defaultSeverity = ErrorSeverity::Error,
+        .summary = "The audio resampler exceeds its admitted processing budget.",
+        .remediationHint = "Reserve sufficient work, history and latency capacity before publication.",
+        .retryable = false,
+        .userActionable = true,
+    };
     const ErrorCodeDescriptor IdentityInvalid{
         .domain = AudioDomain,
         .code = ErrorCode{"audio.identity.invalid"},
