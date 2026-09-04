@@ -61,8 +61,8 @@ namespace Horo::Audio {
     }
 
     /** @copydoc AudioResamplerPlan::AudioResamplerPlan */
-    AudioResamplerPlan::AudioResamplerPlan(AudioResamplerDescriptor descriptor, const double step, const std::uint32_t taps,
-                                           AudioResamplerBudget requirements)
+    AudioResamplerPlan::AudioResamplerPlan(const AudioResamplerDescriptor &descriptor, const double step, const std::uint32_t taps,
+                                           const AudioResamplerBudget &requirements)
         : descriptor_(descriptor), step_(step), taps_(taps), requirements_(requirements) {}
 
     /** @copydoc AudioResamplerPlan::Descriptor */

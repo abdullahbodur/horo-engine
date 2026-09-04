@@ -63,7 +63,8 @@ namespace Horo::Audio {
 
     private:
         /** @brief Construct only after admission has validated all fields and costs. */
-        AudioResamplerPlan(AudioResamplerDescriptor descriptor, double step, std::uint32_t taps, AudioResamplerBudget requirements);
+        AudioResamplerPlan(const AudioResamplerDescriptor &descriptor, double step, std::uint32_t taps,
+                           const AudioResamplerBudget &requirements);
         AudioResamplerDescriptor descriptor_;
         double step_;
         std::uint32_t taps_;
