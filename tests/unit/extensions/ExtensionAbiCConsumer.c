@@ -1,0 +1,16 @@
+#include "Horo/Extensions/ExtensionAbi.h"
+
+#include <stddef.h>
+
+_Static_assert(offsetof(HoroExtensionHostApi, structSize) == 0, "Host table starts with its size");
+_Static_assert(sizeof(HoroExtensionStatus) == sizeof(uint32_t), "Status values have fixed width");
+_Static_assert(sizeof(HoroAssetImportSettingKind) == sizeof(uint32_t), "Setting tags have fixed width");
+_Static_assert(offsetof(HoroExtensionModuleApi, structSize) == 0, "Module table starts with its size");
+_Static_assert(sizeof(((HoroExtensionHostApi *)0)->abiVersion) == sizeof(uint32_t), "ABI version is fixed-width");
+
+/** @brief Compile the public ABI as C, independently of C++ language extensions. */
+int main(void) {
+    const HoroExtensionHostApi host = {.structSize = sizeof(HoroExtensionHostApi), .abiVersion = HORO_EXTENSION_ABI_VERSION};
+    const HoroExtensionModuleApi module = {.structSize = sizeof(HoroExtensionModuleApi)};
+    return host.structSize == sizeof(host) && module.structSize == sizeof(module) ? 0 : 1;
+}

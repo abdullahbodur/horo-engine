@@ -4,6 +4,7 @@
 #include "Horo/Foundation/Logging/Logger.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <limits>
 #include <new>
@@ -27,7 +28,7 @@ namespace Horo::Extensions {
         }
 
         [[nodiscard]] bool IsLowerExtension(const std::string &value) {
-            return !value.empty() && value.front() != '.' && std::ranges::all_of(value, [](const unsigned char character) {
+            return !value.empty() && std::ranges::all_of(value, [](const unsigned char character) {
                 return std::isdigit(character) != 0 || std::islower(character) != 0 || character == '_' || character == '-';
             });
         }
@@ -63,25 +64,15 @@ namespace Horo::Extensions {
 
         [[nodiscard]] bool ConvertKind(const HoroAssetImportSettingKind source, Assets::ImportSettingKind &destination) {
             using enum Assets::ImportSettingKind;
-            switch (source) {
-                case HORO_ASSET_IMPORT_SETTING_BOOLEAN:
-                    destination = Boolean;
-                    return true;
-                case HORO_ASSET_IMPORT_SETTING_INTEGER:
-                    destination = Integer;
-                    return true;
-                case HORO_ASSET_IMPORT_SETTING_FLOAT:
-                    destination = Float;
-                    return true;
-                case HORO_ASSET_IMPORT_SETTING_TEXT:
-                    destination = Text;
-                    return true;
-                case HORO_ASSET_IMPORT_SETTING_CHOICE:
-                    destination = Choice;
-                    return true;
-                default:
-                    return false;
-            }
+            constexpr std::array kinds{std::pair{HORO_ASSET_IMPORT_SETTING_BOOLEAN, Boolean},
+                                       std::pair{HORO_ASSET_IMPORT_SETTING_INTEGER, Integer},
+                                       std::pair{HORO_ASSET_IMPORT_SETTING_FLOAT, Float}, std::pair{HORO_ASSET_IMPORT_SETTING_TEXT, Text},
+                                       std::pair{HORO_ASSET_IMPORT_SETTING_CHOICE, Choice}};
+            const auto found = std::ranges::find(kinds, source, &decltype(kinds)::value_type::first);
+            if (found == kinds.end())
+                return false;
+            destination = found->second;
+            return true;
         }
 
         [[nodiscard]] HoroAssetImportSettingValue ToAbiValue(const Assets::ImportSettingValue &value) {
@@ -89,7 +80,7 @@ namespace Horo::Extensions {
             std::visit([&result]<typename T>(const T &typed) {
                 if constexpr (std::is_same_v<T, bool>) {
                     result.kind = HORO_ASSET_IMPORT_SETTING_BOOLEAN;
-                    result.booleanValue = typed ? 1U : 0U;
+                    result.booleanValue = static_cast<std::uint8_t>(typed);
                 } else if constexpr (std::is_same_v<T, std::int64_t>) {
                     result.kind = HORO_ASSET_IMPORT_SETTING_INTEGER;
                     result.integerValue = typed;
@@ -112,7 +103,7 @@ namespace Horo::Extensions {
             if (context == nullptr) {
                 return 0U;
             }
-            return static_cast<const CancellationToken *>(context)->IsCancellationRequested() ? 1U : 0U;
+            return static_cast<std::uint8_t>(static_cast<const CancellationToken *>(context)->IsCancellationRequested());
         }
 
         [[nodiscard]] HoroExtensionStatus ResizeVector(void *context, const std::uint64_t byteCount,  // NOSONAR(cpp:S5008) C ABI callback
@@ -308,15 +299,81 @@ namespace Horo::Extensions {
         }
     }
 
+    namespace {
+        /** @brief Bound each declared span before dereferencing any element. */
+        bool HasValidImporterLists(const HoroAssetImporterDescriptor &descriptor) {
+            return descriptor.fileExtensionCount > 0 && descriptor.fileExtensionCount <= kMaxListEntries && descriptor.assetTypeCount > 0 &&
+                   descriptor.assetTypeCount <= kMaxListEntries && descriptor.settingCount <= kMaxListEntries &&
+                   descriptor.fileExtensions != nullptr && descriptor.assetTypes != nullptr &&
+                   (descriptor.settings != nullptr || descriptor.settingCount == 0);
+        }
+
+        /** @brief Reject incomplete tables and contexts without a matching owner-provided destructor. */
+        bool IsValidImporterDescriptor(const HoroAssetImporterDescriptor *descriptor) {
+            return descriptor != nullptr && descriptor->structSize >= sizeof(HoroAssetImporterDescriptor) &&
+                   descriptor->abiVersion == HORO_ASSET_IMPORTER_ABI_VERSION && descriptor->importAsset != nullptr &&
+                   (descriptor->importerContext == nullptr || descriptor->destroyImporter != nullptr) && HasValidImporterLists(*descriptor);
+        }
+
+        /** @brief Copy identity and verify the declared owning module before accepting metadata. */
+        void CopyContributionMetadata(const AssetImporterRegistrationSession &session, const HoroAssetImporterDescriptor &descriptor,
+                                      Assets::AssetImporterContribution &contribution) {
+            if (!CopyText(descriptor.contributionId, contribution.contributionId) ||
+                !CopyText(descriptor.contributionVersion, contribution.version) ||
+                !CopyText(descriptor.subfolderCategory, contribution.subfolderCategory, true) ||
+                !CopyText(descriptor.targetExtension, contribution.targetExtension))
+                throw std::invalid_argument{"invalid text"};
+
+            if (const bool declared = std::ranges::any_of(session.manifest->contributions,
+                                                          [&contribution, &session](const ExtensionContributionManifest &candidate) {
+                return candidate.type == "asset.importer" && candidate.id == contribution.contributionId &&
+                       candidate.owningModule == session.extensionModule->id;
+            });
+                !declared) {
+                throw std::invalid_argument{"undeclared contribution"};
+            }
+
+            contribution.packageId = session.manifest->id;
+            contribution.moduleId = session.extensionModule->id;
+            contribution.moduleVersion = session.extensionModule->version;
+            contribution.supportsMetaSidecar = descriptor.supportsMetaSidecar != 0;
+            if (descriptor.previewFallback > static_cast<std::uint8_t>(Assets::AssetPreviewFallback::Generic))
+                throw std::invalid_argument{"invalid fallback"};
+            contribution.previewFallback = static_cast<Assets::AssetPreviewFallback>(descriptor.previewFallback);
+        }
+
+        /** @brief Copy validated list content into host-owned contribution storage. */
+        void CopyContributionLists(const HoroAssetImporterDescriptor &descriptor, Assets::AssetImporterContribution &contribution) {
+            contribution.fileExtensions.reserve(descriptor.fileExtensionCount);
+            for (std::uint32_t index = 0; index < descriptor.fileExtensionCount; ++index) {
+                std::string extension;
+                if (!CopyText(descriptor.fileExtensions[index], extension) || !IsLowerExtension(extension))
+                    throw std::invalid_argument{"invalid file extension"};
+                contribution.fileExtensions.push_back(std::move(extension));
+            }
+
+            contribution.assetTypes.reserve(descriptor.assetTypeCount);
+            for (std::uint32_t index = 0; index < descriptor.assetTypeCount; ++index) {
+                std::string assetType;
+                if (!CopyText(descriptor.assetTypes[index], assetType))
+                    throw std::invalid_argument{"invalid asset type"};
+                auto parsed = Assets::AssetTypeId::Parse(assetType);
+                if (parsed.HasError())
+                    throw std::invalid_argument{"invalid type"};
+                contribution.assetTypes.push_back(std::move(parsed).Value());
+            }
+            contribution.settings.resize(descriptor.settingCount);
+            for (std::uint32_t index = 0; index < descriptor.settingCount; ++index) {
+                if (!ConvertSetting(descriptor.settings[index], contribution.settings[index]))
+                    throw std::invalid_argument{"invalid setting"};
+            }
+        }
+    }  // namespace
+
     HoroExtensionStatus RegisterExternalAssetImporter(void *hostContext,  // NOSONAR(cpp:S5008)
                                                       const HoroAssetImporterDescriptor *descriptor) noexcept {
         auto *session = static_cast<AssetImporterRegistrationSession *>(hostContext);
-        if (session == nullptr || descriptor == nullptr || session->failed ||
-            descriptor->structSize < sizeof(HoroAssetImporterDescriptor) || descriptor->abiVersion != HORO_ASSET_IMPORTER_ABI_VERSION ||
-            descriptor->importAsset == nullptr || descriptor->fileExtensionCount == 0 || descriptor->fileExtensionCount > kMaxListEntries ||
-            descriptor->assetTypeCount == 0 || descriptor->assetTypeCount > kMaxListEntries || descriptor->settingCount > kMaxListEntries ||
-            descriptor->fileExtensions == nullptr || descriptor->assetTypes == nullptr ||
-            (descriptor->settings == nullptr && descriptor->settingCount != 0)) {
+        if (session == nullptr || session->failed || !IsValidImporterDescriptor(descriptor)) {
             if (session != nullptr) {
                 session->failed = true;
                 session->error =
@@ -327,63 +384,20 @@ namespace Horo::Extensions {
 
         try {
             Assets::AssetImporterContribution contribution;
-            if (!CopyText(descriptor->contributionId, contribution.contributionId) ||
-                !CopyText(descriptor->contributionVersion, contribution.version) ||
-                !CopyText(descriptor->subfolderCategory, contribution.subfolderCategory, true) ||
-                !CopyText(descriptor->targetExtension, contribution.targetExtension))
-                throw std::invalid_argument{"invalid text"};
-
-            if (const bool declared = std::ranges::any_of(session->manifest->contributions,
-                                                          [&contribution, session](const ExtensionContributionManifest &candidate) {
-                return candidate.type == "asset.importer" && candidate.id == contribution.contributionId &&
-                       candidate.owningModule == session->extensionModule->id;
-            });
-                !declared) {
-                throw std::invalid_argument{"undeclared contribution"};
-            }
-
-            contribution.packageId = session->manifest->id;
-            contribution.moduleId = session->extensionModule->id;
-            contribution.moduleVersion = session->extensionModule->version;
-            contribution.supportsMetaSidecar = descriptor->supportsMetaSidecar != 0;
-            if (descriptor->previewFallback > static_cast<std::uint8_t>(Assets::AssetPreviewFallback::Generic))
-                throw std::invalid_argument{"invalid fallback"};
-            contribution.previewFallback = static_cast<Assets::AssetPreviewFallback>(descriptor->previewFallback);
-
-            contribution.fileExtensions.reserve(descriptor->fileExtensionCount);
-            for (std::uint32_t index = 0; index < descriptor->fileExtensionCount; ++index) {
-                std::string extension;
-                if (!CopyText(descriptor->fileExtensions[index], extension) || !IsLowerExtension(extension))
-                    throw std::invalid_argument{"invalid file extension"};
-                contribution.fileExtensions.push_back(std::move(extension));
-            }
-
-            contribution.assetTypes.reserve(descriptor->assetTypeCount);
-            for (std::uint32_t index = 0; index < descriptor->assetTypeCount; ++index) {
-                std::string assetType;
-                if (!CopyText(descriptor->assetTypes[index], assetType))
-                    throw std::invalid_argument{"invalid asset type"};
-                auto parsed = Assets::AssetTypeId::Parse(assetType);
-                if (parsed.HasError())
-                    throw std::invalid_argument{"invalid type"};
-                contribution.assetTypes.push_back(std::move(parsed).Value());
-            }
-            contribution.settings.resize(descriptor->settingCount);
-            for (std::uint32_t index = 0; index < descriptor->settingCount; ++index) {
-                if (!ConvertSetting(descriptor->settings[index], contribution.settings[index]))
-                    throw std::invalid_argument{"invalid setting"};
-            }
+            CopyContributionMetadata(*session, *descriptor, contribution);
+            CopyContributionLists(*descriptor, contribution);
 
             auto instance = std::make_shared<ExternalImporterInstance>();
             instance->lifetime = session->lifetime;
             instance->context = descriptor->importerContext;
-            instance->destroy = descriptor->destroyImporter;
             instance->importFn = descriptor->importAsset;
             instance->preview = descriptor->generatePreview;
             contribution.strategy = std::make_shared<ExternalAssetImporter>(instance);
             if (instance->preview != nullptr)
                 contribution.previewProvider = std::make_shared<ExternalAssetPreviewProvider>(instance);
             session->contributions.push_back(std::move(contribution));
+            // Only a successful registration transfers the caller-owned context.
+            instance->destroy = descriptor->destroyImporter;
             return HORO_EXTENSION_SUCCESS;
         } catch (...) {
             session->failed = true;

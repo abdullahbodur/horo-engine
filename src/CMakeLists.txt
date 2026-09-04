@@ -714,6 +714,7 @@ add_library(HoroExtensions STATIC
         extensions/discovery/DiscoveryPlan.cpp
         extensions/discovery/DiscoveryRootPolicy.cpp
         extensions/host/ExtensionManager.cpp
+        extensions/host/ExtensionAbiValidation.cpp
         extensions/manifest/ExtensionManifestParser.cpp
         extensions/manifest/ExtensionManifestJson.cpp
         extensions/registry/ExtensionErrors.cpp

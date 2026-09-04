@@ -1,6 +1,7 @@
 #include "Horo/Extensions/ExtensionManager.h"
 
 #include "../capabilities/asset_pipeline_points/ExternalAssetImporter.h"
+#include "ExtensionAbiValidation.h"
 #include "Horo/Assets/AssetImporter.h"
 #include "Horo/Extensions/ExtensionAbi.h"
 #include "Horo/Extensions/ExtensionErrors.h"
@@ -215,7 +216,13 @@ namespace Horo::Extensions {
                 .engineVersion = {engineVersion.data(), static_cast<std::uint32_t>(engineVersion.size())},
                 .hostContext = &registration,
                 .registerAssetImporter = RegisterExternalAssetImporter,
+                .abiMinorVersion = HORO_EXTENSION_ABI_MINOR_VERSION,
             };
+            if (const auto query =
+                    reinterpret_cast<HoroExtensionQueryFunc>(library->GetSymbol("horo_extension_query"));  // NOSONAR(cpp:S3630)
+                NegotiateModuleAbi(query, hostApi) != HORO_EXTENSION_SUCCESS)
+                return Result<ActivatedModule>::Failure(
+                    MakeError(ExtensionErrors::LoadFailed, "Native module ABI requirements are incompatible with the host."));
             HoroExtensionModuleApi moduleApi{.structSize = sizeof(HoroExtensionModuleApi)};
             if (const HoroExtensionStatus status = InvokeExtensionLoad(loadFunc, hostApi, moduleApi, manifest.id);
                 status != HORO_EXTENSION_SUCCESS || registration.failed) {
@@ -225,10 +232,10 @@ namespace Horo::Extensions {
                 return Result<ActivatedModule>::Failure(
                     MakeError(ExtensionErrors::LoadFailed, "Extension load function returned an error."));
             }
-            if (!MatchesDeclaredModule(moduleApi, manifestModule.id, manifestModule.version)) {
+            if (!NormalizeModuleApi(moduleApi) || !MatchesDeclaredModule(moduleApi, manifestModule.id, manifestModule.version)) {
                 SafeUnload(lifetime->unload, moduleApi, "validation failure");
                 return Result<ActivatedModule>::Failure(
-                    MakeError(ExtensionErrors::InvalidManifest, "Loaded module identity/version does not match extension.json."));
+                    MakeError(ExtensionErrors::InvalidManifest, "Loaded module table or identity/version is invalid."));
             }
             lifetime->moduleApi = moduleApi;
             lifetime->loaded = true;

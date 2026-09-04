@@ -878,10 +878,32 @@ target_include_directories(HoroExtensionDiscoveryTests PRIVATE ${PROJECT_SOURCE_
 target_link_libraries(HoroExtensionDiscoveryTests PRIVATE HoroEngine::Extensions Catch2::Catch2WithMain)
 add_test(NAME HoroExtensionDiscoveryTests COMMAND HoroExtensionDiscoveryTests)
 
+add_executable(HoroExtensionAbiCConsumer unit/extensions/ExtensionAbiCConsumer.c)
+target_compile_features(HoroExtensionAbiCConsumer PRIVATE c_std_11)
+set_target_properties(HoroExtensionAbiCConsumer PROPERTIES C_EXTENSIONS OFF)
+target_link_libraries(HoroExtensionAbiCConsumer PRIVATE HoroEngine::Extensions)
+add_test(NAME HoroExtensionAbiCConsumer COMMAND HoroExtensionAbiCConsumer)
+
 add_executable(HoroExtensionManagerTests
         unit/extensions/ExtensionManagerTests.cpp
         unit/extensions/ExtensionManifestParserTests.cpp
+        unit/extensions/ExtensionAbiValidationTests.cpp
+        unit/extensions/ExtensionAbiIntegrationTests.cpp
+        unit/extensions/ExternalImporterRegistrationTests.cpp
 )
+foreach(abi_fixture_mode RANGE 0 3)
+    set(abi_fixture_target HoroExtensionAbiFixture${abi_fixture_mode})
+    add_library(${abi_fixture_target} MODULE fixtures/extensions/AbiModule.c)
+    target_compile_features(${abi_fixture_target} PRIVATE c_std_11)
+    set_target_properties(${abi_fixture_target} PROPERTIES C_EXTENSIONS OFF)
+    target_link_libraries(${abi_fixture_target} PRIVATE HoroEngine::Extensions)
+    target_compile_definitions(${abi_fixture_target} PRIVATE HORO_ABI_FIXTURE_MODE=${abi_fixture_mode})
+    add_dependencies(HoroExtensionManagerTests ${abi_fixture_target})
+    target_compile_definitions(HoroExtensionManagerTests PRIVATE
+            HORO_ABI_FIXTURE_${abi_fixture_mode}="$<TARGET_FILE:${abi_fixture_target}>")
+endforeach()
+target_include_directories(HoroExtensionManagerTests PRIVATE ${PROJECT_SOURCE_DIR}/src/extensions/host)
+target_include_directories(HoroExtensionManagerTests PRIVATE ${PROJECT_SOURCE_DIR}/src/extensions/capabilities/asset_pipeline_points)
 target_compile_features(HoroExtensionManagerTests PRIVATE cxx_std_20)
 target_link_libraries(HoroExtensionManagerTests PRIVATE HoroEngine::Extensions Catch2::Catch2WithMain)
 if(TARGET HoroAssetImporterBasicExample)
