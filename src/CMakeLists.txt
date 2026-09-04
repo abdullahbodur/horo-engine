@@ -82,12 +82,13 @@ target_link_libraries(HoroPlatform PUBLIC HoroEngine::Foundation)
 
 add_library(HoroPackages STATIC
         packages/validation/PackagePath.cpp
+        packages/validation/PackageArchive.cpp
         packages/validation/PackageFileManifest.cpp
         packages/validation/PackageValidationDetail.cpp
 )
 add_library(HoroEngine::Packages ALIAS HoroPackages)
 target_compile_features(HoroPackages PUBLIC cxx_std_20)
-target_link_libraries(HoroPackages PUBLIC HoroEngine::Foundation PRIVATE utf8proc nlohmann_json::nlohmann_json)
+target_link_libraries(HoroPackages PUBLIC HoroEngine::Foundation PRIVATE utf8proc nlohmann_json::nlohmann_json miniz)
 
 add_library(HoroApplication STATIC
         application/observability/HostObservability.cpp
