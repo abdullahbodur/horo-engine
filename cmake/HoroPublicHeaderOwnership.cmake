@@ -117,6 +117,7 @@ horo_configure_target_header_boundary(HoroAudioApi PUBLIC_HEADERS
     Horo/Audio/AudioIdentity.h
     Horo/Audio/AudioResamplerPlan.h
 )
+horo_configure_target_header_boundary(HoroAudioDsp)
 horo_configure_target_header_boundary(HoroInput PUBLIC_HEADERS
     Horo/Runtime/Input.h
 )
