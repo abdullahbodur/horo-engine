@@ -58,6 +58,23 @@ other architectures and consoles remain unqualified/unsupported for shipped Horo
 Physics until their explicit matrix exists. Upstream build support alone is not a
 Horo support claim.
 
+Each world captures one immutable `PhysicsWorldSettings` before native allocation.
+The snapshot owns its descriptor values, so editing project defaults affects only a
+subsequently rebuilt world. CanonicalV1 admits a `60 Hz` fixed step, one substep,
+`10/2` velocity/position iterations, sleeping after `0.5 s` below `0.03 m/s`, and
+discrete motion quality by default. Other well-formed solver schedules are rejected
+until a qualified profile names them; native defaults never silently widen this set.
+The snapshot also owns gravity, all world/resource limits, the `8192 m` local hard
+half-extent, the `4096 m` dynamic-contact radius, and the selected non-finite policy.
+
+Settings identity is SHA-256 over schema 1's fixed ordered field words encoded as
+little-endian 64-bit values; float bit patterns are widened and signed zero is
+canonicalized. It never hashes structure padding or native state. Diagnostics and
+reference fixtures retain this identity, but checkpoint compatibility additionally
+requires the exact solver build, determinism tier, world/origin/scene generations,
+and relevant structure identities. Equal settings identity alone is not a replay or
+checkpoint compatibility receipt.
+
 Jolt is distributed under MIT with pinned license/notice/SBOM inputs. Solver
 upgrades are dedicated compatibility changes reviewing release/API/default drift,
 compile definitions, derived-cache invalidation, platform qualification,
@@ -415,6 +432,44 @@ Debug draw data is extracted into a bounded render snapshot. The renderer does
 not access live physics storage.
 
 ## Error Handling
+
+### Initial world resource profile
+
+`PhysicsWorldBudgets` captures limits, not allocations or performance guarantees.
+The initial profile uses the following independent reservations. Counts are
+positive; reducing a limit never silently changes another field.
+
+| Reservation | Default | Supported maximum |
+|---|---:|---:|
+| Resident shape identities | 65,536 | 1,048,576 |
+| Contact body pairs | 65,536 | 1,048,576 |
+| Contact constraints (not authored joints) | 10,240 | 1,048,576 |
+| In-flight contact pairs | 16,384 | Contact-pair capacity |
+| Command entries | 4,096 | 65,536 |
+| Event entries | 8,192 | 65,536 |
+| Query entries | 1,024 | 65,536 |
+| Commands admitted per tick | 4,096 | Command capacity |
+| Queries admitted per tick | 1,024 | Query capacity |
+| Dedicated temporary solver storage | 64 MiB | 256 MiB |
+| Resident immutable shape storage charged to a world | 256 MiB | 1 GiB |
+
+Byte limits are positive. Body, collider-slot, authored-constraint and scene-plan
+limits remain in `PhysicsWorldCapacity`; shape lease storage is not scene-plan
+storage. These initial resource ceilings bound admission but do not establish
+total native allocation size, a wall-clock tick deadline or qualified throughput.
+World creation still accounts for all native overhead and process-wide budgets.
+
+Shape, command and query admission rejects before exceeding capacity. Required
+contact/event tick-output overflow suppresses tick publication rather than
+dropping records or publishing a partial result. The pinned native temporary
+allocator cannot recover from overflow: `PhysicsScratchExhaustionPolicy::FatalProcess`
+is its explicit supported policy and the initial default. `FailTick` is rejected
+before native allocation until a qualified recoverable allocator/solver path
+exists. It is not implemented by returning a null pointer to native solver code,
+throwing through no-exception native frames or using an unbounded malloc fallback.
+This scratch policy is separate from non-finite body/world containment.
+
+### Runtime diagnostics
 
 Invalid user or scene data returns diagnostics. Internal solver invariant
 violations use assertions in development and preserve safety checks in release.
