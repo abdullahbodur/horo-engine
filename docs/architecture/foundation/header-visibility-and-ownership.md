@@ -150,3 +150,18 @@ Body speed preflight follows the normative Physics architecture's `500 m/s`
 limit rather than proposed ADR-084's conflicting `50 m/s` text. Geometry-dependent
 size, dynamic-contact radius, local-cluster bounds and native qualification are
 not established by common descriptor validation.
+
+`PhysicsCookedShapeDescriptor.h` extends this boundary with exact asset-local
+subresource, cook cache key, payload and Physics target digest references. This
+adds the deliberate one-way public `Physics -> Assets` dependency for the existing
+`AssetId`; it does not duplicate Assets identity in Foundation or import a native
+solver/renderer dependency. The ownership registry and dependency policy encode
+the same boundary, and the standalone Physics consumer compiles the new header.
+No existing caller is migrated. The earlier Foundation-only statements above
+describe the initial identity/analytic slice, not this additional reference surface.
+
+Reference validation does not read an artifact, recompute a target key or establish
+geometry readiness. Full target encoding and envelope verification remain the
+owning cook/runtime work; opaque digest equality alone cannot prove a correct
+canonical preimage or admit native bytes. Optional digest fields distinguish
+missing evidence from an explicitly supplied all-zero digest representation.

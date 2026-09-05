@@ -313,6 +313,7 @@ add_library(HoroPhysics STATIC
         physics/PhysicsBodyDescriptor.cpp
         physics/PhysicsCapabilities.cpp
         physics/PhysicsConstraintDescriptor.cpp
+        physics/PhysicsCookedShapeDescriptor.cpp
         physics/PhysicsErrors.cpp
         physics/PhysicsIdentity.cpp
         physics/PhysicsPose.cpp
@@ -321,7 +322,7 @@ add_library(HoroPhysics STATIC
 )
 add_library(HoroEngine::Physics ALIAS HoroPhysics)
 target_compile_features(HoroPhysics PUBLIC cxx_std_20)
-target_link_libraries(HoroPhysics PUBLIC HoroEngine::Foundation)
+target_link_libraries(HoroPhysics PUBLIC HoroEngine::Foundation HoroEngine::Assets)
 
 add_library(HoroInput STATIC
         runtime/input/Input.cpp
