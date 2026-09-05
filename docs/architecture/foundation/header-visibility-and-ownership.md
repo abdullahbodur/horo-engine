@@ -107,3 +107,15 @@ implemented; it is not a public dependency of AudioApi or an SDK extension ABI.
 Its current explicit consumer is `HoroAudioBackendContractTests`. AudioApi tests
 also assert that this internal header cannot be found through public usage
 requirements. No existing production adapter needs a migration yet.
+
+## Physics Identity Boundary
+
+`HoroEngine::Physics` owns `Horo/Physics/PhysicsIdentity.h` and
+`Horo/Physics/PhysicsErrors.h`, with a Foundation-only public dependency.
+World-scoped Physics handles wrap Foundation's zero-based slot identity rather
+than exposing solver IDs. Owner preflight checks representation and world only;
+the owning registry must still establish occupancy, generation and lifetime.
+There are no existing production Physics callers to migrate. Scene activation
+retains its own scene-to-world binding rather than introducing a reverse
+Physics dependency on RuntimeScene. The initial target implements only these
+contracts; native composition and runtime operations remain separate work.
