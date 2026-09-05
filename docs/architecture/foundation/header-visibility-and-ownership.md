@@ -165,3 +165,12 @@ geometry readiness. Full target encoding and envelope verification remain the
 owning cook/runtime work; opaque digest equality alone cannot prove a correct
 canonical preimage or admit native bytes. Optional digest fields distinguish
 missing evidence from an explicitly supplied all-zero digest representation.
+
+`HORO_BUILD_PHYSICS_NATIVE` selects the private pinned Jolt library or an omitted
+implementation of the target-private build compatibility check. `Physics` links
+the native target privately; no native include paths, types or compile definitions
+are public usage requirements. The ordinary Physics test consumer rejects native
+SDK visibility at compile time. A separate native-boundary test deliberately
+links Jolt to verify binary ABI mismatch rejection and unchanged factory/allocator
+state. The check itself never registers types or initializes a world; explicit
+activation and world teardown remain the scene lifecycle owner's responsibility.
