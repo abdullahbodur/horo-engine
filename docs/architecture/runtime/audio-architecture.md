@@ -1323,6 +1323,23 @@ recreate device-owned resources and resume voices according to explicit policy.
 Sample-rate, channel-layout, and buffer-size changes are committed at a safe
 boundary.
 
+The implemented `AudioApi` discovery slice exposes `AudioDeviceSnapshot` and
+`ResolveAudioDevice`. A complete bounded snapshot owns its endpoint labels and
+independent console, multimedia and communications defaults. IDs retain the
+existing runtime/slot/generation contract; the adapter privately maps native
+identities and must preserve IDs across unchanged enumerations. Snapshot revisions
+increase on endpoint/default changes, and resolution returns the exact revision
+for control to revalidate before an asynchronous open commits. Explicit stale or
+missing selections never fall back to a default or the first enumerated endpoint.
+Null endpoints are explicitly headless and make no physical-hardware claim.
+
+This is an additive public contract with no existing callers to migrate. The
+generated `AudioApi` public-header consumer and headless discovery tests cover the
+new boundary. Enumeration execution, requested/effective format and latency
+negotiation, optional capability reports, callback events and asynchronous device
+operations remain subsequent device-contract slices; discovery validation alone
+does not prove availability, activation or hardware qualification.
+
 ## Input Capture And Speech Boundary
 
 [AUD-012](https://github.com/abdullahbodur/horo-engine/issues/644) delivery is
