@@ -104,7 +104,7 @@ namespace Horo::Physics {
         }
 
         TEST_CASE("Physics errors have unique definitive identities and actionable diagnostics", "[physics][errors]") {
-            const std::array<std::pair<const ErrorCodeDescriptor *, std::string_view>, 8> cases{{
+            const std::array<std::pair<const ErrorCodeDescriptor *, std::string_view>, 12> cases{{
                 {&PhysicsErrors::WorldInvalid, "physics.world.invalid"},
                 {&PhysicsErrors::HandleMalformed, "physics.handle.malformed"},
                 {&PhysicsErrors::HandleWorldMismatch, "physics.handle.world_mismatch"},
@@ -113,6 +113,10 @@ namespace Horo::Physics {
                 {&PhysicsErrors::CapabilityUnavailable, "physics.capability.unavailable"},
                 {&PhysicsErrors::OperationUnsupported, "physics.operation.unsupported"},
                 {&PhysicsErrors::InvalidState, "physics.state.invalid"},
+                {&PhysicsErrors::DescriptorInvalid, "physics.descriptor.invalid"},
+                {&PhysicsErrors::ProfileUnsupported, "physics.profile.unsupported"},
+                {&PhysicsErrors::CapacityExceeded, "physics.capacity.exceeded"},
+                {&PhysicsErrors::CapabilityStale, "physics.capability.stale"},
             }};
             std::set<std::string_view> unique;
             for (const auto &[descriptor, code] : cases) {
@@ -121,7 +125,7 @@ namespace Horo::Physics {
                 REQUIRE(unique.insert(descriptor->code.Value()).second);
                 REQUIRE_FALSE(descriptor->summary.empty());
                 REQUIRE_FALSE(descriptor->remediationHint.empty());
-                REQUIRE_FALSE(descriptor->retryable);
+                REQUIRE(descriptor->retryable == (descriptor == &PhysicsErrors::CapabilityStale));
                 const auto error = MakeError(*descriptor);
                 REQUIRE(error.code.Value() == code);
                 REQUIRE(error.severity == descriptor->defaultSeverity);
