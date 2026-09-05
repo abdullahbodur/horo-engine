@@ -22,6 +22,8 @@ namespace Horo::Audio {
     inline constexpr std::uint32_t MaximumAudioSampleRate = 384'000;
     /** @brief Maximum semantic channels admitted by the current processing profile. */
     inline constexpr std::uint32_t MaximumAudioChannels = 64;
+    /** @brief Maximum frames in one admitted Horo callback processing block. */
+    inline constexpr std::uint32_t MaximumAudioCallbackFrames = 16'384;
 
     /** @brief Semantic layout families, never inferred from channel count. */
     enum class AudioLayoutKind : std::uint8_t {

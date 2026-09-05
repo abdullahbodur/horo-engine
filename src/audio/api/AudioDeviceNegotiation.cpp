@@ -9,8 +9,8 @@ namespace Horo::Audio {
 
         /** @brief Ensures a bounded nonempty processing interval and an in-range preference. */
         bool ValidPeriodRequest(const AudioDevicePeriodRequest &period) noexcept {
-            return period.minimumFrames > 0 && period.maximumFrames <= 16'384 && period.minimumFrames <= period.preferredFrames &&
-                   period.preferredFrames <= period.maximumFrames;
+            return period.minimumFrames > 0 && period.maximumFrames <= MaximumAudioCallbackFrames &&
+                   period.minimumFrames <= period.preferredFrames && period.preferredFrames <= period.maximumFrames;
         }
 
         /** @brief A changed preference requires a known explanation; unchanged facts cannot claim a deviation. */

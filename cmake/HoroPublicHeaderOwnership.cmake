@@ -119,6 +119,7 @@ horo_configure_target_header_boundary(HoroAudioApi PUBLIC_HEADERS
     Horo/Audio/AudioDeviceNegotiation.h
     Horo/Audio/AudioDeviceTiming.h
     Horo/Audio/AudioFormat.h
+    Horo/Audio/AudioPlanarBlock.h
     Horo/Audio/AudioErrors.h
     Horo/Audio/AudioIdentity.h
     Horo/Audio/AudioResamplerPlan.h

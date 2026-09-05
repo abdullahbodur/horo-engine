@@ -264,6 +264,7 @@ add_library(HoroAudioApi STATIC
         audio/api/AudioDeviceNegotiation.cpp
         audio/api/AudioDeviceTiming.cpp
         audio/api/AudioFormat.cpp
+        audio/api/AudioPlanarBlock.cpp
         audio/api/AudioErrors.cpp
         audio/api/AudioResamplerPlan.cpp
         audio/api/AudioHandleRegistry.h
@@ -271,6 +272,13 @@ add_library(HoroAudioApi STATIC
 add_library(HoroEngine::AudioApi ALIAS HoroAudioApi)
 target_compile_features(HoroAudioApi PUBLIC cxx_std_20)
 target_link_libraries(HoroAudioApi PUBLIC HoroEngine::Foundation HoroEngine::Assets)
+
+# Build-tree-only contract shared privately by Audio control and concrete backend adapters.
+add_library(HoroAudioBackendContract INTERFACE)
+target_compile_features(HoroAudioBackendContract INTERFACE cxx_std_20)
+target_include_directories(HoroAudioBackendContract INTERFACE
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/audio/backend/include>")
+target_link_libraries(HoroAudioBackendContract INTERFACE HoroEngine::AudioApi)
 
 add_library(HoroAudioDsp STATIC
         audio/resampling/AudioResampler.cpp
