@@ -1368,10 +1368,30 @@ probe activates audio. Null reports native/physical features Unsupported rather
 than claiming hardware support. No available feature is published from an
 unavailable or unprobed backend.
 
-Enumeration execution, latency provenance, callback events and asynchronous device
-operations remain subsequent device-contract slices. These value validators do
-not prove availability, activation, actual sample conversion or hardware
-qualification, and do not replace host-owned preflight or lifecycle commits.
+`AudioDeviceEpoch` carries runtime/device identity, format revision and callback
+epoch together. Timing reports and callback facts reject stale tuples and foreign
+monotonic clock domains. `AudioDurationObservation` preserves Unknown,
+Unsupported, Unavailable, Estimated, Reported and Measured separately; missing
+knowledge carries no numeric zero. Numeric evidence includes a source and named
+monotonic timestamp, while measured means additionally require a positive sample
+count/window. A report cannot contain observations from after its capture time.
+Physical hardware/end-to-end measurements require loopback provenance; callback
+measurements use callback or deterministic clocks. Null reports physical latency
+Unsupported. Latency components are not implicitly additive.
+
+`AudioCallbackEvent` is a trivially copyable bounded record with epoch, sample
+cursor, monotonic timestamp and a typed Ready, Quiesced, Underrun or Fault payload.
+Ready/Quiesced/first-Fault delivery must be retained under saturation; underrun
+telemetry is separately classified. Fact validation does not commit runtime state
+or prove native callback detachment. The transport must implement that retention
+obligation before using the event contract in a real callback.
+
+Enumeration execution, callback buffer execution/transport and asynchronous device
+operations remain subsequent device-contract work. These value validators do not
+prove availability, activation, actual sample conversion or hardware qualification,
+and do not replace host-owned preflight or lifecycle commits. The additive headers
+are owned by AudioApi and covered by standalone consumers and headless tests;
+there are no existing callers to migrate.
 
 ## Input Capture And Speech Boundary
 

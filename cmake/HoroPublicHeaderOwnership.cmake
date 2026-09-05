@@ -114,8 +114,10 @@ horo_configure_target_header_boundary(HoroAssets PUBLIC_HEADERS
 )
 horo_configure_target_header_boundary(HoroAudioApi PUBLIC_HEADERS
     Horo/Audio/AudioBackendCapabilities.h
+    Horo/Audio/AudioCallbackEvents.h
     Horo/Audio/AudioDeviceDiscovery.h
     Horo/Audio/AudioDeviceNegotiation.h
+    Horo/Audio/AudioDeviceTiming.h
     Horo/Audio/AudioFormat.h
     Horo/Audio/AudioErrors.h
     Horo/Audio/AudioIdentity.h

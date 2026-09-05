@@ -259,8 +259,10 @@ target_link_libraries(HoroRuntimeScene PUBLIC HoroEngine::Assets)
 
 add_library(HoroAudioApi STATIC
         audio/api/AudioBackendCapabilities.cpp
+        audio/api/AudioCallbackEvents.cpp
         audio/api/AudioDeviceDiscovery.cpp
         audio/api/AudioDeviceNegotiation.cpp
+        audio/api/AudioDeviceTiming.cpp
         audio/api/AudioFormat.cpp
         audio/api/AudioErrors.cpp
         audio/api/AudioResamplerPlan.cpp
