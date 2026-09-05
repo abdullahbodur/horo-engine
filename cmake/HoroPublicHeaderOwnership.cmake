@@ -113,6 +113,7 @@ horo_configure_target_header_boundary(HoroAssets PUBLIC_HEADERS
     Horo/Assets/MeshEditorPayload.h
 )
 horo_configure_target_header_boundary(HoroAudioApi PUBLIC_HEADERS
+    Horo/Audio/AudioDeviceDiscovery.h
     Horo/Audio/AudioErrors.h
     Horo/Audio/AudioIdentity.h
     Horo/Audio/AudioResamplerPlan.h
