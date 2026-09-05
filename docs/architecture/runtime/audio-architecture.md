@@ -1352,10 +1352,26 @@ Null endpoints are explicitly headless and make no physical-hardware claim.
 
 This is an additive public contract with no existing callers to migrate. The
 generated `AudioApi` public-header consumer and headless discovery tests cover the
-new boundary. Enumeration execution, requested/effective format and latency
-negotiation, optional capability reports, callback events and asynchronous device
-operations remain subsequent device-contract slices; discovery validation alone
-does not prove availability, activation or hardware qualification.
+new boundary. `AudioDeviceFormatRequest` preserves the preferred complete
+rate/layout tuple, at most eight explicit alternatives and a bounded callback
+period interval. `AudioNegotiatedDeviceFormat` reports effective planar and native
+signal/PCM values separately. Admission rejects stale discovery/device identity,
+unlisted tuple combinations, undeclared preference deviations, unapproved native
+rate conversion and incomplete or semantically incorrect channel permutations.
+Accepted structural data still requires prepared adapter resources, fresh format
+revision, optional-mode admission and the matching callback-ready handshake.
+
+`AudioBackendProbe` separately reports build presence, host support, current API/
+service availability and typed optional-feature evidence. Unknown, Unsupported,
+Unavailable and Available remain distinct; neither linking a backend nor a valid
+probe activates audio. Null reports native/physical features Unsupported rather
+than claiming hardware support. No available feature is published from an
+unavailable or unprobed backend.
+
+Enumeration execution, latency provenance, callback events and asynchronous device
+operations remain subsequent device-contract slices. These value validators do
+not prove availability, activation, actual sample conversion or hardware
+qualification, and do not replace host-owned preflight or lifecycle commits.
 
 ## Input Capture And Speech Boundary
 

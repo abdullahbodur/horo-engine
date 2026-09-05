@@ -140,7 +140,9 @@ add_executable(HoroInputTests
 target_compile_features(HoroInputTests PRIVATE cxx_std_20)
 target_link_libraries(HoroInputTests PRIVATE HoroEngine::Input)
 add_executable(HoroAudioApiTests
+        unit/runtime/audio/AudioBackendCapabilitiesTests.cpp
         unit/runtime/audio/AudioDeviceDiscoveryTests.cpp
+        unit/runtime/audio/AudioDeviceNegotiationTests.cpp
         unit/runtime/audio/AudioFormatTests.cpp
         unit/runtime/audio/AudioIdentityTests.cpp
         unit/runtime/audio/AudioResamplerPlanTests.cpp
