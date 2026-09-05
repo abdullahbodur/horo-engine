@@ -96,3 +96,14 @@ modal header.
 copying untyped integers or depending on a concrete device backend. There are no
 existing audio API callers to migrate. The handle registry remains target-private;
 only stable IDs and generation-safe client handles cross the public boundary.
+
+## Audio Backend Contract Boundary
+
+`HoroEngine::AudioApi` owns the public discovery, format, capability, timing and
+borrowed planar-block values. `HoroAudioBackendContract` is a separate,
+non-installed interface exposing only `src/audio/backend/include`, not `src/`.
+Audio control and concrete adapter targets must link it privately when they are
+implemented; it is not a public dependency of AudioApi or an SDK extension ABI.
+Its current explicit consumer is `HoroAudioBackendContractTests`. AudioApi tests
+also assert that this internal header cannot be found through public usage
+requirements. No existing production adapter needs a migration yet.

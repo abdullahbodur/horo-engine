@@ -200,7 +200,8 @@ conflicts are recorded rather than treated as additional implementations.
 | `HoroEngine::SceneModel` | Partial | Target exists but publicly depends on RenderApi, contrary to the documented Foundation-only level. |
 | `HoroEngine::RuntimeScene` | Implemented | `HoroRuntimeScene`; Build System still calls this `HoroEngine::SceneRuntime`. |
 | `HoroEngine::Physics` | Planned | Architecture and placeholder paths exist; no production target. |
-| `HoroEngine::AudioApi` | Partial | Target owns typed identities, generation-safe handles, stable errors, device discovery/default selection, format/layout metadata, negotiation admission, capability probes, epoch-scoped timing and callback facts; runtime commands and processing execution remain planned. |
+| `HoroEngine::AudioApi` | Partial | Target owns typed identities, generation-safe handles, stable errors, device discovery/default selection, format/layout metadata, negotiation admission, capability probes, epoch-scoped timing/callback facts and borrowed planar-block validation; runtime commands and processing execution remain planned. |
+| `HoroAudioBackendContract` | Contract only | Narrow non-installed internal interface for asynchronous backend operations, retained completions, render ports and device events. No native adapter, callback transport or control lifecycle implementation is implied. |
 | `HoroEngine::AudioRuntime` | Planned | Architecture exists; no production target. |
 | `HoroEngine::AudioMemory` | Implemented | Bounded aligned scratch arenas and typed-purpose fixed pools; production voice/graph/queue composition remains separate. |
 | `HoroEngine::AudioCommands` | Implemented | Buffer-boundary typed commands and bounded MPSC/control/SPSC staging with critical reserves and barriers; clock-mapped scheduling and runtime execution remain separate. |
