@@ -1339,21 +1339,13 @@ struct RenderPassDescriptor {
 };
 ```
 
-`RenderGraphBuilder` is the frontend-owned, backend-neutral authoring boundary.
-It reuses canonical `RenderPassId`/`RenderPassKind` values and owns finite ordered
-pass, graph-local resource, semantic use, dependency, and queue-role records.
-Builder-scoped references carry a process-local owner identity so records from
-different graphs cannot be mixed. Creation reserves the admitted capacities;
-authoring and finalization remain on the creating thread. Cancellation and
-shutdown release only CPU authoring state and never submit hidden backend work.
-
-Finalization transfers all records into one immutable owning `RenderGraph`.
-Unknown pass/resource/use/queue values, incompatible queue or use semantics,
-foreign references, exhausted capacities, and invalid lifecycle calls return
-typed `render.graph.*` errors without selecting another semantic or queue.
-Resource import/export classes, full use declarations, dependency DAG validation,
-lifetime compilation, barrier synthesis, and backend translation remain their
-dedicated render-graph stages rather than side effects of the authoring builder.
+The render API defines backend-neutral authoring records for graph-local pass and
+resource references, semantic resource uses, explicit dependencies, queue roles,
+and finite graph limits. Pass references reuse canonical `RenderPassId` and
+`RenderPassKind` values rather than creating a competing pass identity model.
+Builder ownership, validation, finalization, resource import/export classes,
+dependency DAG validation, lifetime compilation, barrier synthesis, and backend
+translation remain separate render-graph delivery stages.
 
 The graph:
 
