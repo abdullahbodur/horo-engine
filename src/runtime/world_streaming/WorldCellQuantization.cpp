@@ -28,13 +28,13 @@ namespace Horo::WorldStreaming {
     }  // namespace
 
     /** @copydoc WorldCellQuantizationPolicy::Create */
-    Result<WorldCellQuantizationPolicy> WorldCellQuantizationPolicy::Create(const Math::WorldCoordinate64 origin,
+    Result<WorldCellQuantizationPolicy> WorldCellQuantizationPolicy::Create(const Math::WorldCoordinate64 &origin,
                                                                             const std::int64_t baseCellSizeMillimeters,
                                                                             const WorldCellBounds bounds, const std::uint8_t lodLevels) {
         constexpr std::uint8_t MaximumLodLevels = 32;
-        const bool boundsOrdered =
-            bounds.minimumX <= bounds.maximumX && bounds.minimumY <= bounds.maximumY && bounds.minimumZ <= bounds.maximumZ;
-        if (baseCellSizeMillimeters <= 0 || !boundsOrdered || lodLevels == 0 || lodLevels > MaximumLodLevels ||
+        if (const bool boundsOrdered =
+                bounds.minimumX <= bounds.maximumX && bounds.minimumY <= bounds.maximumY && bounds.minimumZ <= bounds.maximumZ;
+            baseCellSizeMillimeters <= 0 || !boundsOrdered || lodLevels == 0 || lodLevels > MaximumLodLevels ||
             baseCellSizeMillimeters > (std::numeric_limits<std::int64_t>::max() >> (lodLevels - 1U)))
             return Result<WorldCellQuantizationPolicy>::Failure(MakeError(WorldStreamingErrors::QuantizationPolicyInvalid));
         return Result<WorldCellQuantizationPolicy>::Success(
@@ -59,9 +59,9 @@ namespace Horo::WorldStreaming {
 
         const std::int64_t cellSize = policy.BaseCellSizeMillimeters() << lod;
         const std::array cells{FloorDivide(relative[0], cellSize), FloorDivide(relative[1], cellSize), FloorDivide(relative[2], cellSize)};
-        const WorldCellBounds bounds = policy.Bounds();
-        if (!InBounds(cells[0], bounds.minimumX, bounds.maximumX) || !InBounds(cells[1], bounds.minimumY, bounds.maximumY) ||
-            !InBounds(cells[2], bounds.minimumZ, bounds.maximumZ))
+        if (const WorldCellBounds bounds = policy.Bounds(); !InBounds(cells[0], bounds.minimumX, bounds.maximumX) ||
+                                                            !InBounds(cells[1], bounds.minimumY, bounds.maximumY) ||
+                                                            !InBounds(cells[2], bounds.minimumZ, bounds.maximumZ))
             return Result<StreamingCellId>::Failure(MakeError(WorldStreamingErrors::CellOutOfBounds));
 
         return Result<StreamingCellId>::Success({

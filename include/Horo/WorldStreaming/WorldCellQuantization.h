@@ -34,7 +34,7 @@ namespace Horo::WorldStreaming {
          * @param lodLevels Number of supported LOD levels in [1, 32].
          * @return Immutable policy or WorldStreamingErrors::QuantizationPolicyInvalid.
          */
-        [[nodiscard]] static Result<WorldCellQuantizationPolicy> Create(Math::WorldCoordinate64 origin,
+        [[nodiscard]] static Result<WorldCellQuantizationPolicy> Create(const Math::WorldCoordinate64 &origin,
                                                                         std::int64_t baseCellSizeMillimeters, WorldCellBounds bounds,
                                                                         std::uint8_t lodLevels);
 
