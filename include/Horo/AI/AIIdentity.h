@@ -8,6 +8,7 @@
 #include "Horo/AI/AIErrors.h"
 #include "Horo/Foundation/Handles.h"
 #include "Horo/Foundation/Result.h"
+#include "Horo/Foundation/StrongId.h"
 
 #include <array>
 #include <compare>
@@ -20,42 +21,7 @@ namespace Horo::AI {
     using SerializedAiIdentity = std::array<std::uint8_t, sizeof(std::uint64_t)>;
 
     /** @brief Strong persistent non-zero gameplay-AI identity in one tag-defined domain. */
-    template <typename Tag> class AiStableIdentity final {
-    public:
-        /** @brief Compile-time identity-domain tag used by canonical decoding. */
-        using IdentityTag = Tag;
-
-        /** @brief Constructs the reserved invalid identity. */
-        AiStableIdentity() = default;
-
-        /**
-         * @brief Validates an owner-issued persistent identity.
-         * @param value Non-zero identity value.
-         * @return Exact strong identity or AIErrors::IdentityInvalid; values are never normalized.
-         */
-        [[nodiscard]] static Result<AiStableIdentity> Create(const std::uint64_t value) {
-            if (value == 0)
-                return Result<AiStableIdentity>::Failure(MakeError(AIErrors::IdentityInvalid));
-            return Result<AiStableIdentity>::Success(AiStableIdentity{value});
-        }
-
-        /** @brief Returns the exact owner-issued value. @return Zero only for the invalid identity. */
-        [[nodiscard]] constexpr std::uint64_t Value() const noexcept {
-            return value_;
-        }
-
-        /** @brief Checks representation, not descriptor residency. @return Whether the value is non-zero. */
-        [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return value_ != 0;
-        }
-
-        constexpr auto operator<=>(const AiStableIdentity &) const noexcept = default;
-
-    private:
-        explicit constexpr AiStableIdentity(const std::uint64_t value) noexcept : value_(value) {}
-
-        std::uint64_t value_{};
-    };
+    template <typename Tag> using AiStableIdentity = Foundation::Detail::NonZeroId64<Tag, AIErrors::IdentityInvalid>;
 
     struct AgentIdentityTag;
     struct ControllerTypeIdentityTag;

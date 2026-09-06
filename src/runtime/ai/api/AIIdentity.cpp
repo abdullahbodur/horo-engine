@@ -6,9 +6,9 @@
 
 namespace Horo::AI {
     namespace {
-        template <typename Identity> [[nodiscard]] Result<void> ValidateDomain(const std::span<const Identity> identities) {
-            std::vector<std::uint64_t> orderedValues;
-            orderedValues.reserve(identities.size());
+        template <typename Identity>
+        [[nodiscard]] Result<void> ValidateDomain(const std::span<const Identity> identities, std::vector<std::uint64_t> &orderedValues) {
+            orderedValues.clear();
             for (const Identity identity : identities) {
                 if (!identity.IsValid())
                     return Result<void>::Failure(MakeError(AIErrors::IdentityInvalid));
@@ -37,15 +37,19 @@ namespace Horo::AI {
     Result<void> ValidateAiIdentityDescriptorSet(const AiIdentityDescriptorSet &descriptors) {
         if (ExceedsDescriptorLimit(descriptors))
             return Result<void>::Failure(MakeError(AIErrors::DescriptorLimitExceeded));
-        if (const Result<void> agents = ValidateDomain(descriptors.agents); agents.HasError())
+        const std::array domainSizes{descriptors.agents.size(), descriptors.controllerTypes.size(), descriptors.tasks.size(),
+                                     descriptors.blackboardSchemas.size(), descriptors.blackboardKeys.size()};
+        std::vector<std::uint64_t> orderedValues;
+        orderedValues.reserve(std::ranges::max(domainSizes));
+        if (const Result<void> agents = ValidateDomain(descriptors.agents, orderedValues); agents.HasError())
             return agents;
-        if (const Result<void> controllers = ValidateDomain(descriptors.controllerTypes); controllers.HasError())
+        if (const Result<void> controllers = ValidateDomain(descriptors.controllerTypes, orderedValues); controllers.HasError())
             return controllers;
-        if (const Result<void> tasks = ValidateDomain(descriptors.tasks); tasks.HasError())
+        if (const Result<void> tasks = ValidateDomain(descriptors.tasks, orderedValues); tasks.HasError())
             return tasks;
-        if (const Result<void> schemas = ValidateDomain(descriptors.blackboardSchemas); schemas.HasError())
+        if (const Result<void> schemas = ValidateDomain(descriptors.blackboardSchemas, orderedValues); schemas.HasError())
             return schemas;
-        return ValidateDomain(descriptors.blackboardKeys);
+        return ValidateDomain(descriptors.blackboardKeys, orderedValues);
     }
 
     /** @copydoc AiRuntimeIncarnation::Create */
