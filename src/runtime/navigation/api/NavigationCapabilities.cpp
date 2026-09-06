@@ -89,6 +89,22 @@ namespace Horo::Navigation {
         }
     }  // namespace
 
+    /** @copydoc MakeAvailablePathQueryCapabilities */
+    NavigationProviderCapabilities MakeAvailablePathQueryCapabilities(const std::uint64_t revision, const NavigationQueryLimits &limits,
+                                                                      const std::uint32_t maximumConcurrentQueries) noexcept {
+        NavigationProviderCapabilities capabilities;
+        capabilities.revision = revision;
+        capabilities.availability = NavigationProviderAvailability::Available;
+        capabilities.capabilities.fill(NavigationSupport::Unsupported);
+        capabilities.capabilities[static_cast<std::size_t>(NavigationCapability::GroundedQueries)] = NavigationSupport::Available;
+        for (auto &query : capabilities.querySupport)
+            query.fill(NavigationSupport::Unsupported);
+        capabilities.querySupport[static_cast<std::size_t>(NavigationQueryKind::Path)].fill(NavigationSupport::Available);
+        capabilities.queryLimits[static_cast<std::size_t>(NavigationQueryKind::Path)].fill(limits);
+        capabilities.maximumConcurrentQueries = maximumConcurrentQueries;
+        return capabilities;
+    }
+
     /** @copydoc ValidateNavigationProviderCapabilities */
     bool ValidateNavigationProviderCapabilities(const NavigationProviderCapabilities &capabilities) noexcept {
         if (capabilities.contractVersion != 1 || capabilities.revision == 0 ||

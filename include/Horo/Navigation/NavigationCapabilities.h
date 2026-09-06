@@ -97,6 +97,17 @@ namespace Horo::Navigation {
     };
 
     /**
+     * @brief Builds available grounded path-query evidence while leaving every other capability explicitly unsupported.
+     * @param revision Non-zero revision for the immutable capability snapshot.
+     * @param limits Positive finite limits advertised for every path-query quality level.
+     * @param maximumConcurrentQueries Positive provider concurrency ceiling.
+     * @return Provider-neutral capability evidence suitable for validation and publication.
+     */
+    [[nodiscard]] NavigationProviderCapabilities MakeAvailablePathQueryCapabilities(std::uint64_t revision,
+                                                                                    const NavigationQueryLimits &limits,
+                                                                                    std::uint32_t maximumConcurrentQueries) noexcept;
+
+    /**
      * @brief Validates every field, support state, query-quality limit, and cross-field invariant.
      * @param capabilities Complete immutable provider evidence.
      * @return True only for coherent version-one evidence; not proof of provider qualification or an active world.

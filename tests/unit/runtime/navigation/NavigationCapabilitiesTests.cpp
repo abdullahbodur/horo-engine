@@ -108,6 +108,22 @@ namespace Horo::Navigation {
             static_assert(std::is_trivially_copyable_v<NavigationProviderCapabilities>);
         }
 
+        TEST_CASE("Available path capability construction centralizes provider evidence", "[navigation][capability]") {
+            const auto capabilities = MakeAvailablePathQueryCapabilities(5, SupportedLimits, 3);
+
+            REQUIRE(ValidateNavigationProviderCapabilities(capabilities));
+            REQUIRE(capabilities.revision == 5);
+            REQUIRE(capabilities.maximumConcurrentQueries == 3);
+            REQUIRE(QueryNavigationCapability(capabilities, NavigationCapability::GroundedQueries) == NavigationSupport::Available);
+            for (std::size_t quality = 0; quality < static_cast<std::size_t>(NavigationQualityLevel::Count); ++quality) {
+                REQUIRE(QueryNavigationSupport(capabilities, NavigationQueryKind::Path, static_cast<NavigationQualityLevel>(quality)) ==
+                        NavigationSupport::Available);
+                REQUIRE(capabilities.queryLimits[static_cast<std::size_t>(NavigationQueryKind::Path)][quality] == SupportedLimits);
+            }
+            REQUIRE(QueryNavigationSupport(capabilities, NavigationQueryKind::NearestPoint, NavigationQualityLevel::Balanced) ==
+                    NavigationSupport::Unsupported);
+        }
+
         TEST_CASE("Navigation capabilities keep omitted unavailable and available compositions distinct", "[navigation][capability]") {
             NavigationProviderCapabilities omitted{
                 .revision = 1,

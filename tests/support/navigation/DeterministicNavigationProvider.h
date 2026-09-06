@@ -2,6 +2,7 @@
 
 #include "Horo/Navigation/NavigationBackend.h"
 
+#include <atomic>
 #include <span>
 #include <vector>
 
@@ -34,6 +35,6 @@ namespace Horo::Navigation::TestSupport {
 
     private:
         std::vector<NavigationPathFixture> fixtures_;
-        NavigationFixtureFault fault_{NavigationFixtureFault::None};
+        std::atomic<NavigationFixtureFault> fault_{NavigationFixtureFault::None};
     };
 }  // namespace Horo::Navigation::TestSupport

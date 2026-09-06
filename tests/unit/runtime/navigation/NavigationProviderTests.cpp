@@ -3,9 +3,11 @@
 #include "navigation/DeterministicNavigationProvider.h"
 
 #include <array>
+#include <atomic>
 #include <bit>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <thread>
 
 namespace Horo::Navigation {
     namespace {
@@ -86,5 +88,32 @@ namespace Horo::Navigation {
         CancellationSource cancellation;
         cancellation.RequestCancellation();
         RequireError(provider.FindPath(Request(), cancellation.Token()), NavigationErrors::QueryCancelled);
+    }
+
+    TEST_CASE("Deterministic navigation fault injection is safe during concurrent queries", "[unit][navigation][headless]") {
+        using TestSupport::NavigationFixtureFault;
+        TestSupport::DeterministicNavigationQueryBackend provider{std::span<const TestSupport::NavigationPathFixture>{}};
+        std::atomic<bool> observedUnexpectedError{false};
+
+        std::thread writer{[&provider] {
+            for (std::size_t iteration = 0; iteration < 1'000; ++iteration) {
+                provider.SetFault(NavigationFixtureFault::Cancellation);
+                provider.SetFault(NavigationFixtureFault::None);
+            }
+        }};
+        std::thread reader{[&provider, &observedUnexpectedError] {
+            for (std::size_t iteration = 0; iteration < 1'000; ++iteration) {
+                const auto result = provider.FindPath(Request(), {});
+                if (!result.HasError() || (result.ErrorValue().code.Value() != NavigationErrors::NoNavigationData.code.Value() &&
+                                           result.ErrorValue().code.Value() != NavigationErrors::QueryCancelled.code.Value())) {
+                    observedUnexpectedError.store(true, std::memory_order_relaxed);
+                    return;
+                }
+            }
+        }};
+
+        writer.join();
+        reader.join();
+        REQUIRE_FALSE(observedUnexpectedError.load(std::memory_order_relaxed));
     }
 }  // namespace Horo::Navigation

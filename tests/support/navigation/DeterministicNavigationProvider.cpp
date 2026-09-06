@@ -7,19 +7,12 @@
 namespace Horo::Navigation::TestSupport {
     namespace {
         [[nodiscard]] NavigationProviderCapabilities FixtureCapabilities() noexcept {
-            NavigationProviderCapabilities capabilities;
-            capabilities.revision = 1;
-            capabilities.availability = NavigationProviderAvailability::Available;
-            capabilities.capabilities.fill(NavigationSupport::Unsupported);
-            capabilities.capabilities[static_cast<std::size_t>(NavigationCapability::GroundedQueries)] = NavigationSupport::Available;
-            capabilities.querySupport[static_cast<std::size_t>(NavigationQueryKind::Path)].fill(NavigationSupport::Available);
-            capabilities.queryLimits[static_cast<std::size_t>(NavigationQueryKind::Path)].fill({
+            constexpr NavigationQueryLimits limits{
                 .maximumNodeExpansions = std::numeric_limits<std::uint32_t>::max(),
                 .maximumResultPoints = std::numeric_limits<std::uint32_t>::max(),
                 .maximumSearchDistanceMeters = std::numeric_limits<float>::max(),
-            });
-            capabilities.maximumConcurrentQueries = 1;
-            return capabilities;
+            };
+            return MakeAvailablePathQueryCapabilities(1, limits, 1);
         }
     }  // namespace
 
@@ -27,7 +20,7 @@ namespace Horo::Navigation::TestSupport {
         : fixtures_(fixtures.begin(), fixtures.end()) {}
 
     void DeterministicNavigationQueryBackend::SetFault(const NavigationFixtureFault fault) noexcept {
-        fault_ = fault;
+        fault_.store(fault, std::memory_order_relaxed);
     }
 
     NavigationProviderCapabilities DeterministicNavigationQueryBackend::Capabilities() const noexcept {
@@ -36,11 +29,12 @@ namespace Horo::Navigation::TestSupport {
 
     Result<NavigationPath> DeterministicNavigationQueryBackend::FindPath(const NavigationPathRequest &request,
                                                                          const CancellationToken &cancellation) const {
-        if (fault_ == NavigationFixtureFault::Cancellation || cancellation.IsCancellationRequested())
+        const NavigationFixtureFault fault = fault_.load(std::memory_order_relaxed);
+        if (fault == NavigationFixtureFault::Cancellation || cancellation.IsCancellationRequested())
             return Result<NavigationPath>::Failure(MakeError(NavigationErrors::QueryCancelled));
-        if (fault_ == NavigationFixtureFault::Allocation)
+        if (fault == NavigationFixtureFault::Allocation)
             return Result<NavigationPath>::Failure(MakeError(NavigationErrors::CapacityExceeded));
-        if (fault_ == NavigationFixtureFault::StaleTopology)
+        if (fault == NavigationFixtureFault::StaleTopology)
             return Result<NavigationPath>::Failure(MakeError(NavigationErrors::StaleSnapshot));
 
         for (const NavigationPathFixture &fixture : fixtures_) {
