@@ -154,6 +154,13 @@ Full registries distinguish temporarily occupied capacity from terminal generati
 exhaustion with stable typed diagnostics. Native solver IDs, pointers and leases
 remain values of the target-private mapping and never become public handle fields.
 
+Portable rigid-body intent stores motion, mass policy and initial velocities but no
+runtime handle, world pose or native state. Scene conversion combines validated
+intent with an admitted shape and world-frame pose into a runtime creation
+descriptor. After publication, query snapshots expose current pose, velocities and
+awake/sleeping evidence separately; they are not persistence input, creation policy,
+mutation authority or a lifetime-extending body lease.
+
 ## Shape Authoring, Cook And Runtime Boundary
 
 [ADR-085](../../adr/085-physics-shape-authoring-cook-and-runtime-boundary.md)
