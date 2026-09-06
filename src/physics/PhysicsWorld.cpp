@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <cmath>
 #include <functional>
 #include <new>
 #include <thread>
@@ -41,7 +43,7 @@ namespace Horo::Physics {
     /** @brief Owns one candidate's settings/native state and unregisters its identity before releasing the runtime lease. */
     struct PhysicsWorld::Impl final {
         Impl(std::shared_ptr<PhysicsRuntime::Impl> runtimeOwner, const PhysicsWorldSettings &worldSettings)
-            : runtime(std::move(runtimeOwner)), settings(worldSettings) {
+            : runtime(std::move(runtimeOwner)), settings(worldSettings), commands(worldSettings.Values().budgets.maximumCommands) {
             runtime->identities.push_back(&identity);
         }
 
@@ -62,12 +64,119 @@ namespace Horo::Physics {
             runtime->ReleaseNativeWhenIdle();
         }
 
+        [[nodiscard]] const PhysicsStructuralCommand &CommandAt(const std::uint32_t offset) const noexcept {
+            return commands[(commandHead + offset) % commands.size()];
+        }
+
+        void DiscardCommands(const std::uint32_t discarded) noexcept {
+            if (discarded == 0)
+                return;
+            commandHead = (commandHead + discarded) % commands.size();
+            commandCount -= discarded;
+            statistics.pendingCommands = commandCount;
+        }
+
         std::shared_ptr<PhysicsRuntime::Impl> runtime;
         PhysicsWorldSettings settings;
         PhysicsWorldState state{PhysicsWorldState::Preparing};
         PhysicsWorldId identity;
         Detail::CanonicalWorldHandle native;
+        std::vector<PhysicsStructuralCommand> commands;
+        std::uint32_t commandHead{};
+        std::uint32_t commandCount{};
+        std::uint64_t lastAdmittedCommandSequence{};
+        bool stepping{};
+        // The owner thread alone writes publication state; any live-world thread may take a coherent snapshot.
+        // The flag protects only the bounded copy below and owns no worker or shutdown lifetime.
+        mutable std::atomic_flag publicationLock = ATOMIC_FLAG_INIT;
+        PhysicsPublishedTick published;
+        PhysicsTickStatistics statistics;
     };
+
+    namespace {
+        /** @brief Provides non-throwing mutual exclusion for the bounded publication snapshot copy. */
+        class PublicationGuard final {
+        public:
+            explicit PublicationGuard(std::atomic_flag &lock) noexcept : lock_(lock) {
+                while (lock_.test_and_set())
+                    std::this_thread::yield();
+            }
+
+            PublicationGuard(const PublicationGuard &) = delete;
+            PublicationGuard &operator=(const PublicationGuard &) = delete;
+
+            ~PublicationGuard() {
+                lock_.clear();
+            }
+
+        private:
+            std::atomic_flag &lock_;
+        };
+
+        /** @brief Restores one owner-thread boolean state when a guarded scope exits. */
+        class BooleanResetGuard final {
+        public:
+            explicit BooleanResetGuard(bool &state) noexcept : state_(state) {}
+
+            BooleanResetGuard(const BooleanResetGuard &) = delete;
+            BooleanResetGuard &operator=(const BooleanResetGuard &) = delete;
+
+            ~BooleanResetGuard() {
+                state_ = false;
+            }
+
+        private:
+            bool &state_;
+        };
+
+        /** @brief Records bounded-buffer rejection metrics and preserves explicit destruction retry ownership. */
+        [[nodiscard]] PhysicsCommandAdmission RejectFullCommand(auto &impl, const bool destruction) noexcept {
+            ++impl.statistics.rejectedCommands;
+            if (!destruction)
+                return {PhysicsCommandAdmissionStatus::RejectedFull, impl.commandCount};
+            ++impl.statistics.destructionRetryCount;
+            return {PhysicsCommandAdmissionStatus::DestructionRetryRequired, impl.commandCount};
+        }
+
+        /** @brief Replaces every externally visible publication domain under one synchronization boundary. */
+        void CommitPublishedTick(auto &impl, const std::uint64_t tick, const std::uint32_t appliedCommands) noexcept {
+            PublicationGuard publicationGuard{impl.publicationLock};
+            const std::uint64_t revision = impl.published.publicationRevision + 1;
+            impl.published = {.completedTick = tick,
+                              .publicationRevision = revision,
+                              .transformTick = tick,
+                              .queryTick = tick,
+                              .eventTick = tick,
+                              .appliedCommands = appliedCommands};
+        }
+
+        /** @brief Validates the opaque structural envelope before it enters retained world storage. */
+        [[nodiscard]] bool IsValidCommand(const PhysicsStructuralCommand &command) noexcept {
+            return command.sequence != 0 && command.sceneGeneration != 0 && command.subject != 0 &&
+                   command.kind <= PhysicsStructuralCommandKind::Destroy;
+        }
+
+        /** @brief Emits one optional synchronous phase observation on the owner thread. */
+        void ObservePhase(const PhysicsFixedTickInput &input, const PhysicsTickPhase phase) noexcept {
+            if (input.observer.phase)
+                input.observer.phase(input.observer.context, phase, input.simulationTick);
+        }
+
+        /** @brief Emits eligible commands selected for one semantic safe point without mutating the queue. */
+        void ObserveCommands(const auto &impl, const PhysicsFixedTickInput &input, const std::uint32_t eligible,
+                             const PhysicsStructuralCommandKind selectedKind, const PhysicsCommandSafePoint safePoint,
+                             std::uint32_t &applied) noexcept {
+            using enum PhysicsStructuralCommandKind;
+            for (std::uint32_t offset = 0; offset < eligible; ++offset) {
+                const PhysicsStructuralCommand &command = impl.CommandAt(offset);
+                if (const bool selected = selectedKind == Destroy ? command.kind == Destroy : command.kind != Destroy; !selected)
+                    continue;
+                if (input.observer.command)
+                    input.observer.command(input.observer.context, command, safePoint, input.simulationTick);
+                ++applied;
+            }
+        }
+    }  // namespace
 
     /** @copydoc PhysicsRuntime::Create */
     Result<std::unique_ptr<PhysicsRuntime>> PhysicsRuntime::Create(const PhysicsRuntimeMode mode) {
@@ -208,5 +317,90 @@ namespace Horo::Physics {
     /** @copydoc PhysicsWorld::Settings */
     const PhysicsWorldSettings &PhysicsWorld::Settings() const noexcept {
         return impl_->settings;
+    }
+
+    /** @copydoc PhysicsWorld::QueueStructuralCommand */
+    Result<PhysicsCommandAdmission> PhysicsWorld::QueueStructuralCommand(const PhysicsStructuralCommand &command) {
+        if (impl_->state == PhysicsWorldState::ActiveNull)
+            return Result<PhysicsCommandAdmission>::Failure(MakeError(PhysicsErrors::CapabilityUnavailable));
+        if (impl_->state != PhysicsWorldState::ActiveSolver || impl_->runtime->ownerThread != std::this_thread::get_id())
+            return Result<PhysicsCommandAdmission>::Failure(MakeError(PhysicsErrors::InvalidState));
+        if (!IsValidCommand(command) || command.sequence <= impl_->lastAdmittedCommandSequence)
+            return Result<PhysicsCommandAdmission>::Failure(
+                MakeError(PhysicsErrors::DescriptorInvalid,
+                          "Physics structural commands require non-zero identities, a known kind and increasing sequence order."));
+
+        const auto capacity = static_cast<std::uint32_t>(impl_->commands.size());
+        if (capacity == 0)
+            return Result<PhysicsCommandAdmission>::Failure(
+                MakeError(PhysicsErrors::InvalidState, "Validated Physics command storage is unexpectedly unavailable."));
+        const bool destruction = command.kind == PhysicsStructuralCommandKind::Destroy;
+        if (const auto ordinaryLimit = capacity - 1; impl_->commandCount >= (destruction ? capacity : ordinaryLimit))
+            return Result<PhysicsCommandAdmission>::Success(RejectFullCommand(*impl_, destruction));
+
+        const auto tail = (impl_->commandHead + impl_->commandCount) % capacity;
+        impl_->commands[tail] = command;
+        ++impl_->commandCount;
+        impl_->lastAdmittedCommandSequence = command.sequence;
+        ++impl_->statistics.admittedCommands;
+        impl_->statistics.pendingCommands = impl_->commandCount;
+        impl_->statistics.maximumCommandDepth = std::max(impl_->statistics.maximumCommandDepth, impl_->commandCount);
+        return Result<PhysicsCommandAdmission>::Success({PhysicsCommandAdmissionStatus::Deferred, impl_->commandCount});
+    }
+
+    /** @copydoc PhysicsWorld::AdvanceFixedTick */
+    Result<void> PhysicsWorld::AdvanceFixedTick(const PhysicsFixedTickInput &input) {
+        using enum PhysicsTickPhase;
+        if (impl_->state == PhysicsWorldState::ActiveNull)
+            return Result<void>::Failure(MakeError(PhysicsErrors::CapabilityUnavailable));
+        if (impl_->state != PhysicsWorldState::ActiveSolver || impl_->runtime->ownerThread != std::this_thread::get_id() || impl_->stepping)
+            return Result<void>::Failure(MakeError(PhysicsErrors::InvalidState));
+        if (const auto configuredNanoseconds =
+                static_cast<std::int64_t>(std::llround(impl_->settings.Values().world.fixedDeltaSeconds * 1'000'000'000.0));
+            input.simulationTick == 0 || input.simulationTick != impl_->published.completedTick + 1 ||
+            input.fixedDelta.ToNanoseconds() != configuredNanoseconds)
+            return Result<void>::Failure(
+                MakeError(PhysicsErrors::DescriptorInvalid, "Physics requires the next one-based tick and the world's exact fixed delta."));
+
+        impl_->stepping = true;
+        const BooleanResetGuard stepGuard{impl_->stepping};
+
+        const std::uint32_t eligible = std::min(impl_->commandCount, impl_->settings.Values().budgets.maximumCommandsPerTick);
+        std::uint32_t applied{};
+        ObservePhase(input, ApplyDeferredPreStep);
+        ObserveCommands(*impl_, input, eligible, PhysicsStructuralCommandKind::Create, PhysicsCommandSafePoint::PreStep, applied);
+        ObservePhase(input, CopyKinematicTargets);
+        ObservePhase(input, ApplyDynamicInputs);
+        ObservePhase(input, BroadPhase);
+        ObservePhase(input, ContactGeneration);
+        ObservePhase(input, ConstraintSolve);
+
+        if (const auto stepped =
+                Detail::StepCanonicalWorld(impl_->native, static_cast<float>(impl_->settings.Values().world.fixedDeltaSeconds));
+            stepped.HasError())
+            return stepped;
+
+        ObservePhase(input, IntegrateBodies);
+        ObservePhase(input, WriteRuntimeTransforms);
+        ObservePhase(input, ProduceEvents);
+        ObservePhase(input, ApplyDeferredPostStep);
+        ObserveCommands(*impl_, input, eligible, PhysicsStructuralCommandKind::Destroy, PhysicsCommandSafePoint::PostStep, applied);
+
+        impl_->DiscardCommands(eligible);
+        CommitPublishedTick(*impl_, input.simulationTick, applied);
+        impl_->statistics.completedTicks = input.simulationTick;
+        ObservePhase(input, PublishCompletedTick);
+        return Result<void>::Success();
+    }
+
+    /** @copydoc PhysicsWorld::PublishedTick */
+    PhysicsPublishedTick PhysicsWorld::PublishedTick() const noexcept {
+        PublicationGuard publicationGuard{impl_->publicationLock};
+        return impl_->published;
+    }
+
+    /** @copydoc PhysicsWorld::TickStatistics */
+    PhysicsTickStatistics PhysicsWorld::TickStatistics() const noexcept {
+        return impl_->statistics;
     }
 }  // namespace Horo::Physics

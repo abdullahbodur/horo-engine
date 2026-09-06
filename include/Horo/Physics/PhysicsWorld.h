@@ -7,6 +7,7 @@
 #include "Horo/Foundation/Result.h"
 #include "Horo/Physics/PhysicsCapabilities.h"
 #include "Horo/Physics/PhysicsIdentity.h"
+#include "Horo/Physics/PhysicsTickPipeline.h"
 #include "Horo/Physics/PhysicsWorldSettings.h"
 
 #include <cstdint>
@@ -119,6 +120,26 @@ namespace Horo::Physics {
         [[nodiscard]] PhysicsWorldId Identity() const noexcept;
         /** @brief Reads immutable world policy. @return Borrowed snapshot valid for this object's lifetime, including after shutdown. */
         [[nodiscard]] const PhysicsWorldSettings &Settings() const noexcept;
+        /** @brief Defers one structural intent to its semantic fixed-tick safe point.
+         * @param command Owned command envelope copied into bounded world storage.
+         * @return Admission status, or a typed malformed/state/affinity error. Rejected work remains caller-owned.
+         * Destruction may consume the reserved final slot; if completely full it returns DestructionRetryRequired
+         * and is never silently dropped. Commands admitted during a tick become eligible on the next tick.
+         */
+        [[nodiscard]] Result<PhysicsCommandAdmission> QueueStructuralCommand(const PhysicsStructuralCommand &command);
+        /** @brief Executes one exact host-issued fixed tick and publishes its results atomically.
+         * @param input One-based next tick, exact immutable world delta and optional synchronous observer.
+         * @return Success or typed lifecycle/sequence/delta/native-capacity error without partial publication.
+         * @pre Active canonical world on its owner thread; reentrant stepping is rejected.
+         */
+        [[nodiscard]] Result<void> AdvanceFixedTick(const PhysicsFixedTickInput &input);
+        /** @brief Reads one coherent copy of the last atomically completed tick marker from any thread.
+         * @return Zero revision before the first completed tick.
+         * @pre The caller keeps this PhysicsWorld alive for the complete call; the snapshot lock does not extend object lifetime.
+         */
+        [[nodiscard]] PhysicsPublishedTick PublishedTick() const noexcept;
+        /** @brief Reads allocation-free cumulative pipeline metrics. @return Owner-thread value snapshot. */
+        [[nodiscard]] PhysicsTickStatistics TickStatistics() const noexcept;
 
     private:
         friend class PhysicsRuntime;

@@ -21,6 +21,12 @@ namespace Horo::Physics::Detail {
     /** @copydoc DestroyCanonicalWorld */
     void DestroyCanonicalWorld(const CanonicalWorldHandle) noexcept {}
 
+    /** @copydoc StepCanonicalWorld */
+    Result<void> StepCanonicalWorld(const CanonicalWorldHandle, const float) {
+        return Result<void>::Failure(
+            MakeError(PhysicsErrors::CapabilityUnavailable, "Canonical Physics was omitted from this product composition."));
+    }
+
     /** @copydoc InspectCanonicalResources */
     CanonicalResourceCounts InspectCanonicalResources(const CanonicalRuntimeHandle) noexcept {
         return {};
