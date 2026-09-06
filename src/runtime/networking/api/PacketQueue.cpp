@@ -20,6 +20,9 @@ namespace Horo::Network {
         constexpr auto DroppedOldestAdmission = DroppedOldest;
         constexpr auto ReplacedOldestAdmission = ReplacedOldest;
         constexpr auto ConnectionMustCloseAdmission = ConnectionMustClose;
+        constexpr auto RejectIncomingPolicy = PacketQueueOverflowPolicy::RejectIncoming;
+        constexpr auto CloseConnectionPolicy = PacketQueueOverflowPolicy::CloseConnection;
+        constexpr auto ReplaceOldestForConnectionPolicy = PacketQueueOverflowPolicy::ReplaceOldestForConnection;
     }  // namespace
 
     PacketQueue::PacketQueue(const PacketQueueDescriptor &descriptor, std::unique_ptr<std::optional<QueuedPacket>[]> records) noexcept
@@ -177,13 +180,12 @@ namespace Horo::Network {
     }
 
     Result<PacketQueueAdmission> PacketQueue::HandleOverflow(QueuedPacket packet) noexcept {
-        using enum PacketQueueOverflowPolicy;
-        if (descriptor_.overflow == RejectIncoming)
+        if (descriptor_.overflow == RejectIncomingPolicy)
             return Fail<PacketQueueAdmission>(NetworkErrors::PacketQueueFull);
-        if (descriptor_.overflow == CloseConnection)
+        if (descriptor_.overflow == CloseConnectionPolicy)
             return Result<PacketQueueAdmission>::Success(ConnectionMustCloseAdmission);
         const auto sameConnection = OldestFor(packet.connection);
-        if (descriptor_.overflow == ReplaceOldestForConnection) {
+        if (descriptor_.overflow == ReplaceOldestForConnectionPolicy) {
             if (!sameConnection.has_value() || !FitsAfterRemoving(packet, *sameConnection))
                 return Fail<PacketQueueAdmission>(NetworkErrors::PacketQueueFull);
             Erase(*sameConnection);
