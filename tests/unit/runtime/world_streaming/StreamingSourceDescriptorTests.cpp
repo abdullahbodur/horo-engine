@@ -1,16 +1,13 @@
 #include "Horo/WorldStreaming/StreamingSourceDescriptor.h"
 #include "Horo/WorldStreaming/WorldStreamingErrors.h"
+#include "WorldStreamingTestUtils.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <limits>
 
 namespace Horo::WorldStreaming {
     namespace {
-        template <typename Identity> Identity IdentityFrom(const std::uint64_t value) {
-            const auto result = Identity::Create(value);
-            REQUIRE(result.HasValue());
-            return result.Value();
-        }
+        using TestSupport::IdentityFrom;
 
         WorldPartitionId World(const std::uint8_t discriminator = 1) {
             SerializedWorldPartitionId bytes{};
@@ -71,6 +68,14 @@ namespace Horo::WorldStreaming {
 
             auto malformedContext = Context();
             malformedContext.activeSourceCount = malformedContext.sourceCapacity + 1;
+            RequireError(ValidateStreamingSourceAdmission(Descriptor(), malformedContext), WorldStreamingErrors::SourceDescriptorInvalid);
+
+            malformedContext = Context();
+            malformedContext.expectedOwner = {};
+            RequireError(ValidateStreamingSourceAdmission(Descriptor(), malformedContext), WorldStreamingErrors::SourceDescriptorInvalid);
+
+            malformedContext = Context();
+            malformedContext.currentRevision = StreamingSourceRevision{};
             RequireError(ValidateStreamingSourceAdmission(Descriptor(), malformedContext), WorldStreamingErrors::SourceDescriptorInvalid);
 
             malformedContext = Context();

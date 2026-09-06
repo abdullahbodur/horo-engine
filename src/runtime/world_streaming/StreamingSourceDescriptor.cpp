@@ -12,10 +12,18 @@ namespace Horo::WorldStreaming {
             return intent >= StreamingSourceIntent::Camera && intent <= StreamingSourceIntent::Preload;
         }
 
+        [[nodiscard]] constexpr bool IsKnownOwnerState(const StreamingSourceOwnerState state) noexcept {
+            return state >= StreamingSourceOwnerState::Active && state <= StreamingSourceOwnerState::Closed;
+        }
+
         [[nodiscard]] Result<void> ValidateAdmissionContext(const StreamingSourceAdmissionContext &context) {
-            if (!context.expectedOwner.IsValid() || context.ownerState > StreamingSourceOwnerState::Closed ||
-                (context.currentRevision.has_value() && !context.currentRevision->IsValid()) ||
-                context.activeSourceCount > context.sourceCapacity)
+            if (!context.expectedOwner.IsValid())
+                return Failure<void>(WorldStreamingErrors::SourceDescriptorInvalid);
+            if (!IsKnownOwnerState(context.ownerState))
+                return Failure<void>(WorldStreamingErrors::SourceDescriptorInvalid);
+            if (context.currentRevision.has_value() && !context.currentRevision->IsValid())
+                return Failure<void>(WorldStreamingErrors::SourceDescriptorInvalid);
+            if (context.activeSourceCount > context.sourceCapacity)
                 return Failure<void>(WorldStreamingErrors::SourceDescriptorInvalid);
             return Result<void>::Success();
         }

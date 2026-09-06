@@ -1,4 +1,5 @@
 #include "Horo/WorldStreaming/WorldStreamingIdentity.h"
+#include "WorldStreamingTestUtils.h"
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
@@ -11,11 +12,7 @@
 
 namespace Horo::WorldStreaming {
     namespace {
-        template <typename Identity> Identity IdentityFrom(const std::uint64_t value) {
-            const auto result = Identity::Create(value);
-            REQUIRE(result.HasValue());
-            return result.Value();
-        }
+        using TestSupport::IdentityFrom;
 
         WorldPartitionId World() {
             const auto result =
