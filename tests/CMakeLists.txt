@@ -140,6 +140,7 @@ add_executable(HoroInputTests
 target_compile_features(HoroInputTests PRIVATE cxx_std_20)
 target_link_libraries(HoroInputTests PRIVATE HoroEngine::Input)
 add_executable(HoroNetworkApiTests
+        unit/runtime/networking/MessageEnvelopeTests.cpp
         unit/runtime/networking/ProtocolIdentityTests.cpp
         unit/runtime/networking/ReplicationDescriptorTests.cpp
         unit/runtime/networking/ReplicationDescriptorRegistryTests.cpp
@@ -239,6 +240,7 @@ horo_register_catch_test(HoroNavigationApiTests LABELS "unit;navigation;headless
 
 add_executable(HoroWorldStreamingTests
         unit/runtime/world_streaming/StreamingSourceDescriptorTests.cpp
+        unit/runtime/world_streaming/StreamingSourceRangeTests.cpp
         unit/runtime/world_streaming/WorldCellQuantizationTests.cpp
         unit/runtime/world_streaming/WorldStreamingIdentityTests.cpp
 )

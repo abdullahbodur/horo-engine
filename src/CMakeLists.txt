@@ -142,6 +142,7 @@ target_include_directories(HoroRuntime PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(HoroRuntime PUBLIC HoroEngine::Foundation PRIVATE nlohmann_json::nlohmann_json)
 
 add_library(HoroNetworkApi STATIC
+        runtime/networking/api/MessageCodecRegistry.cpp
         runtime/networking/api/NetworkErrors.cpp
         runtime/networking/api/ProtocolIdentityRegistry.cpp
         runtime/networking/api/ReplicationDescriptor.cpp
@@ -402,6 +403,7 @@ target_link_libraries(HoroNavigationNull PUBLIC HoroEngine::NavigationApi)
 
 add_library(HoroWorldStreaming STATIC
         runtime/world_streaming/StreamingSourceDescriptor.cpp
+        runtime/world_streaming/StreamingSourceRange.cpp
         runtime/world_streaming/WorldCellQuantization.cpp
         runtime/world_streaming/WorldStreamingErrors.cpp
         runtime/world_streaming/WorldStreamingIdentity.cpp

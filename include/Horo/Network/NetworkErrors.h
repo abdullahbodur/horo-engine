@@ -44,4 +44,24 @@ namespace Horo::Network::NetworkErrors {
     extern const ErrorCodeDescriptor ProtocolVersionIncompatible;
     /** @brief Protocol identity registry construction exceeded an explicit finite bound. */
     extern const ErrorCodeDescriptor ProtocolIdentityCapacityExceeded;
+    /** @brief Message framing or codec metadata is malformed or non-canonical. */
+    extern const ErrorCodeDescriptor MessageEnvelopeInvalid;
+    /** @brief Declared message framing exceeds an explicit finite bound. */
+    extern const ErrorCodeDescriptor MessageEnvelopeCapacityExceeded;
+    /** @brief Message codec or field metadata conflicts with another stable identity. */
+    extern const ErrorCodeDescriptor MessageCodecConflict;
+    /** @brief No exact inert codec metadata exists for the requested message. */
+    extern const ErrorCodeDescriptor MessageCodecUnknown;
+    /** @brief The payload schema identity or version is incompatible with codec metadata. */
+    extern const ErrorCodeDescriptor MessageSchemaIncompatible;
+    /** @brief A required envelope extension is not understood by the local registry. */
+    extern const ErrorCodeDescriptor MessageEnvelopeUnknownRequiredField;
+    /** @brief A 32-bit message sequence or acknowledgement counter cannot advance without wrapping. */
+    extern const ErrorCodeDescriptor MessageCounterExhausted;
+    /** @brief Caller-owned cancellation state rejected message codec admission. */
+    extern const ErrorCodeDescriptor MessageEnvelopeCancelled;
+    /** @brief Caller-owned timeout state rejected message codec admission. */
+    extern const ErrorCodeDescriptor MessageEnvelopeTimedOut;
+    /** @brief Caller-owned shutdown state rejected message codec admission. */
+    extern const ErrorCodeDescriptor MessageEnvelopeShuttingDown;
 }  // namespace Horo::Network::NetworkErrors
