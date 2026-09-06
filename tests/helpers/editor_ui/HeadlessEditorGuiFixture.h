@@ -4,8 +4,10 @@
 #include "Horo/Editor/EditorGuiContext.h"
 #include "Horo/Editor/EditorSettingsService.h"
 #include "Horo/Editor/EditorTheme.h"
-#include "Horo/Editor/Localization/ILocalizationService.h"
+#include "Horo/Editor/Localization/LocalizationService.h"
 #include "Horo/Foundation/DataBus.h"
+#include "Horo/Foundation/JobSystem.h"
+#include "Horo/Runtime/Input.h"
 
 #include <imgui.h>
 #include <string>
@@ -66,5 +68,39 @@ namespace Horo::Editor::Tests {
 
     private:
         Theme::Fonts fonts_{};
+    };
+
+    class EditorGuiContextFixture {
+    public:
+        explicit EditorGuiContextFixture(const ImVec2 displaySize = {1280.0F, 800.0F})
+            : imgui{displaySize}, theme{imgui.Fonts()}, context{engineEvents, editorEvents, localization, theme, settings} {}
+
+        HeadlessEditorGuiFixture imgui;
+        EngineDataBus engineEvents;
+        EditorDataBus editorEvents;
+        LocalizationService localization{LocaleTag{"en-US"}};
+        ThemeContext theme;
+        EditorSettingsSnapshot settings{};
+        EditorGuiContext context;
+        Input::InputRouter input;
+    };
+
+    class ScopedJobSystem {
+    public:
+        ScopedJobSystem() : jobs_{JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 8}} {}
+
+        ~ScopedJobSystem() {
+            jobs_.Shutdown(ShutdownPolicy::Cancel);
+        }
+
+        ScopedJobSystem(const ScopedJobSystem &) = delete;
+        ScopedJobSystem &operator=(const ScopedJobSystem &) = delete;
+
+        [[nodiscard]] JobSystem &Get() noexcept {
+            return jobs_;
+        }
+
+    private:
+        JobSystem jobs_;
     };
 }  // namespace Horo::Editor::Tests

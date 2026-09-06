@@ -12,14 +12,7 @@ TEST_CASE("Project creation presentation renders every wizard step and template-
     using namespace Horo;
     using namespace Horo::Editor;
 
-    Tests::HeadlessEditorGuiFixture imgui;
-    EngineDataBus engineEvents;
-    EditorDataBus editorEvents;
-    Tests::KeyLocalization localization;
-    const ThemeContext theme{imgui.Fonts()};
-    const EditorSettingsSnapshot settings{};
-    const EditorGuiContext context{engineEvents, editorEvents, localization, theme, settings};
-    Input::InputRouter input;
+    Tests::EditorGuiContextFixture fixture;
     const RendererAvailabilitySnapshot renderers{{RendererBackendAvailability{"opengl", "OpenGL", RendererAvailabilityState::Active, {}},
                                                   RendererBackendAvailability{"metal", "Metal", RendererAvailabilityState::Available, {}},
                                                   RendererBackendAvailability{"vulkan", "Vulkan", RendererAvailabilityState::NotInstalled,
@@ -33,9 +26,10 @@ TEST_CASE("Project creation presentation renders every wizard step and template-
     ProjectCreationViewState state;
     for (int step = 1; step <= 4; ++step) {
         state.step = step;
-        imgui.BeginFrame();
-        const ProjectCreationViewCommand command = DrawProjectCreationView(controller, state, context, input, renderers, content);
-        imgui.EndFrame();
+        fixture.imgui.BeginFrame();
+        const ProjectCreationViewCommand command =
+            DrawProjectCreationView(controller, state, fixture.context, fixture.input, renderers, content);
+        fixture.imgui.EndFrame();
         REQUIRE(command == ProjectCreationViewCommand::None);
         REQUIRE(state.step == step);
     }
@@ -44,9 +38,10 @@ TEST_CASE("Project creation presentation renders every wizard step and template-
     for (const char *templateId : templates) {
         controller.SetTemplateId(templateId);
         state.step = 4;
-        imgui.BeginFrame();
-        const ProjectCreationViewCommand command = DrawProjectCreationView(controller, state, context, input, renderers, content);
-        imgui.EndFrame();
+        fixture.imgui.BeginFrame();
+        const ProjectCreationViewCommand command =
+            DrawProjectCreationView(controller, state, fixture.context, fixture.input, renderers, content);
+        fixture.imgui.EndFrame();
         REQUIRE(command == ProjectCreationViewCommand::None);
         REQUIRE(controller.Draft().templateId == templateId);
     }
@@ -56,23 +51,17 @@ TEST_CASE("Project creation presentation normalizes an out-of-range step", "[uni
     using namespace Horo;
     using namespace Horo::Editor;
 
-    Tests::HeadlessEditorGuiFixture imgui{{640.0F, 480.0F}};
-    EngineDataBus engineEvents;
-    EditorDataBus editorEvents;
-    Tests::KeyLocalization localization;
-    const ThemeContext theme{imgui.Fonts()};
-    const EditorSettingsSnapshot settings{};
-    const EditorGuiContext context{engineEvents, editorEvents, localization, theme, settings};
-    Input::InputRouter input;
+    Tests::EditorGuiContextFixture fixture{{640.0F, 480.0F}};
     const RendererAvailabilitySnapshot renderers{{RendererBackendAvailability{"opengl", "OpenGL", RendererAvailabilityState::Active, {}}},
                                                  "opengl"};
     ProjectCreationController controller{renderers};
     ProjectCreationViewState state;
     state.step = 99;
 
-    imgui.BeginFrame();
-    static_cast<void>(DrawProjectCreationView(controller, state, context, input, renderers, GuiContentRegion{0.0F, 0.0F, 640.0F, 480.0F}));
-    imgui.EndFrame();
+    fixture.imgui.BeginFrame();
+    static_cast<void>(DrawProjectCreationView(controller, state, fixture.context, fixture.input, renderers,
+                                              GuiContentRegion{0.0F, 0.0F, 640.0F, 480.0F}));
+    fixture.imgui.EndFrame();
 
     REQUIRE(state.step == 1);
 }

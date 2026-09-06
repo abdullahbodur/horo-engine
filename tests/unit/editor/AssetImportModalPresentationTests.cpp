@@ -6,6 +6,8 @@
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
+#include <cstdint>
+#include <imgui_internal.h>
 #include <memory>
 
 namespace {
@@ -88,9 +90,21 @@ namespace {
         imgui.EndFrame();
     }
 
-    void ClickTab(Horo::Editor::Tests::HeadlessEditorGuiFixture &imgui, Horo::Editor::AssetImportModal &modal, const float x) {
+    void ClickTab(Horo::Editor::Tests::HeadlessEditorGuiFixture &imgui, Horo::Editor::AssetImportModal &modal, const std::size_t tabIndex) {
+        static constexpr std::array labels{"Overview", "Diagnostics", "Importer Settings", "Destination"};
+        REQUIRE(tabIndex < labels.size());
+        const ImGuiWindow *const window = ImGui::FindWindowByName("Asset Import");
+        REQUIRE(window != nullptr);
+
+        constexpr float horizontalPadding = 16.0F;
+        constexpr float tabGap = 2.0F;
+        float tabOffset = 22.0F;
+        for (std::size_t index = 0; index < tabIndex; ++index)
+            tabOffset += horizontalPadding * 2.0F + ImGui::CalcTextSize(labels[index]).x + tabGap;
+        const float tabWidth = horizontalPadding * 2.0F + ImGui::CalcTextSize(labels[tabIndex]).x;
+
         ImGuiIO &io = ImGui::GetIO();
-        io.AddMousePosEvent(x, 165.0F);
+        io.AddMousePosEvent(window->Pos.x + tabOffset + tabWidth * 0.5F, window->Pos.y + 44.0F + 64.0F + 24.0F);
         io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
         DrawFrame(imgui, modal);
         io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
@@ -105,17 +119,17 @@ TEST_CASE("Asset import presentation renders queue diagnostics settings destinat
     using namespace Horo::Editor;
 
     Tests::HeadlessEditorGuiFixture imgui;
-    JobSystem jobs{JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 8}};
-    AssetImportModal modal{imgui.Fonts(), jobs, MakeCatalog()};
+    Tests::ScopedJobSystem jobs;
+    AssetImportModal modal{imgui.Fonts(), jobs.Get(), MakeCatalog()};
     auto &snapshot = modal.MutableSnapshot();
     snapshot.items = {MakeItem()};
     snapshot.phase = AssetImportPhase::Selecting;
     snapshot.canCancel = true;
 
     DrawFrame(imgui, modal);
-    ClickTab(imgui, modal, 315.0F);
-    ClickTab(imgui, modal, 445.0F);
-    ClickTab(imgui, modal, 590.0F);
+    ClickTab(imgui, modal, 1);
+    ClickTab(imgui, modal, 2);
+    ClickTab(imgui, modal, 3);
 
     snapshot.items.front().result = PreparedAssetImport{.type = AssetTypeId::Parse("core.mesh").Value(), .editorPayload = {1, 2, 3}};
     snapshot.items.front().diagnostics.clear();
@@ -129,7 +143,6 @@ TEST_CASE("Asset import presentation renders queue diagnostics settings destinat
     REQUIRE(snapshot.items.size() == 1);
     REQUIRE(snapshot.items.front().displayName == "scene");
     REQUIRE(snapshot.items.front().result.has_value());
-    jobs.Shutdown(ShutdownPolicy::Cancel);
 }
 
 TEST_CASE("Asset import presentation handles empty and unresolved importer selections", "[unit][editor][gui][asset-import]") {
@@ -138,8 +151,8 @@ TEST_CASE("Asset import presentation handles empty and unresolved importer selec
     using namespace Horo::Editor;
 
     Tests::HeadlessEditorGuiFixture imgui;
-    JobSystem jobs{JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 8}};
-    AssetImportModal modal{imgui.Fonts(), jobs, MakeCatalog()};
+    Tests::ScopedJobSystem jobs;
+    AssetImportModal modal{imgui.Fonts(), jobs.Get(), MakeCatalog()};
     DrawFrame(imgui, modal);
 
     auto unresolved = MakeItem();
@@ -148,8 +161,7 @@ TEST_CASE("Asset import presentation handles empty and unresolved importer selec
     unresolved.importerContributionId.clear();
     modal.MutableSnapshot().items = {std::move(unresolved)};
     modal.MutableSnapshot().selectedItemIndex = 0;
-    ClickTab(imgui, modal, 445.0F);
+    ClickTab(imgui, modal, 2);
 
     REQUIRE(modal.Snapshot().items.front().importerContributionId.empty());
-    jobs.Shutdown(ShutdownPolicy::Cancel);
 }
