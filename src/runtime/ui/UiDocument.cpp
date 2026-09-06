@@ -181,9 +181,10 @@ namespace Horo::Runtime::Ui {
 
     /** @copydoc UiRuntimeInstance::BeginRetirement */
     Result<void> UiRuntimeInstance::BeginRetirement() {
-        if (state_ != UiRuntimeInstanceState::Prepared && state_ != UiRuntimeInstanceState::Active)
+        using enum UiRuntimeInstanceState;
+        if (state_ != Prepared && state_ != Active)
             return Failure(UiErrors::InstanceStateInvalid);
-        state_ = UiRuntimeInstanceState::Retiring;
+        state_ = Retiring;
         return Result<void>::Success();
     }
 
