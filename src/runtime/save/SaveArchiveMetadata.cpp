@@ -297,11 +297,25 @@ namespace Horo::Runtime {
             return true;
         }
 
+        /** @brief Safely sums actual manifest chunks without deriving allocation from a caller-supplied limit. */
+        [[nodiscard]] Result<std::size_t> CountManifestChunks(const SaveGameManifest &manifest, const SaveArchiveMetadataLimits &limits) {
+            std::size_t count = 0;
+            for (const SaveManifestParticipant &entry : manifest.participants) {
+                if (entry.chunks.size() > limits.maximumTotalChunks - count)
+                    return Result<std::size_t>::Failure(MakeError(SaveErrors::ArchiveMetadataLimitExceeded));
+                count += entry.chunks.size();
+            }
+            return Result<std::size_t>::Success(count);
+        }
+
         /** @brief Validates canonical participant sequencing and archive-wide chunk ownership. */
         [[nodiscard]] Result<void> ValidateManifestParticipants(const SaveGameManifest &manifest, const SaveArchiveMetadataLimits &limits) {
+            const auto chunkCount = CountManifestChunks(manifest, limits);
+            if (chunkCount.HasError())
+                return Result<void>::Failure(chunkCount.ErrorValue());
             std::size_t totalChunks = 0;
             std::unordered_set<SaveRecordId, PersistentSaveIdentityHash<SaveRecordIdentityTag>> uniqueChunks;
-            uniqueChunks.reserve(limits.maximumTotalChunks);
+            uniqueChunks.reserve(chunkCount.Value());
             const SaveParticipantId *previousParticipant = nullptr;
             for (const SaveManifestParticipant &entry : manifest.participants) {
                 if (!HasValidManifestEntryIdentity(entry))

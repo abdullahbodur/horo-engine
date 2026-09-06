@@ -2,6 +2,7 @@
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
+#include <limits>
 #include <string>
 
 namespace {
@@ -168,6 +169,10 @@ namespace {
         bounded.maximumTotalChunks = 2;
         bounded.maximumChunksPerParticipant = 2;
         CHECK(DecodeSaveGameManifest(valid, bounded).HasError());
+
+        bounded = Limits();
+        bounded.maximumTotalChunks = std::numeric_limits<std::size_t>::max();
+        CHECK(ValidateSaveGameManifest(Manifest(), bounded).HasValue());
     }
 
     TEST_CASE("Compatibility preflight distinguishes direct migration and rejection", "[runtime][save][compatibility]") {
