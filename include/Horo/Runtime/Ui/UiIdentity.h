@@ -74,6 +74,9 @@ namespace Horo::Runtime::Ui {
          */
         [[nodiscard]] static Result<UiOwnershipGeneration> Create(std::uint64_t value);
 
+        /** @brief Compares process-local ownership generations. @return Structural ordering and equality. */
+        [[nodiscard]] constexpr auto operator<=>(const UiOwnershipGeneration &) const noexcept = default;
+
         /** @brief Returns the owner-issued value. @return Zero only for the invalid identity. */
         [[nodiscard]] constexpr std::uint64_t Value() const noexcept {
             return value_;
@@ -81,10 +84,8 @@ namespace Horo::Runtime::Ui {
 
         /** @brief Checks representation, not owner liveness. @return Whether the value is non-zero. */
         [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return value_ != 0;
+            return value_ != std::uint64_t{};
         }
-
-        [[nodiscard]] constexpr auto operator<=>(const UiOwnershipGeneration &) const noexcept = default;
 
     private:
         explicit constexpr UiOwnershipGeneration(const std::uint64_t value) noexcept : value_(value) {}
@@ -169,10 +170,14 @@ namespace Horo::Runtime::Ui {
          * @return Typed revision or UiErrors::RevisionInvalid.
          */
         [[nodiscard]] static Result<UiRevision> Create(const std::uint64_t value) {
-            if (value == 0)
+            if (value == std::uint64_t{})
                 return Result<UiRevision>::Failure(MakeError(UiErrors::RevisionInvalid));
-            return Result<UiRevision>::Success(UiRevision{value});
+            const UiRevision revision{value};
+            return Result<UiRevision>::Success(revision);
         }
+
+        /** @brief Compares typed revision representations. @return Structural ordering and equality. */
+        [[nodiscard]] constexpr auto operator<=>(const UiRevision &) const noexcept = default;
 
         /** @brief Returns the owner-published value. @return Zero only for the invalid revision. */
         [[nodiscard]] constexpr std::uint64_t Value() const noexcept {
@@ -181,7 +186,7 @@ namespace Horo::Runtime::Ui {
 
         /** @brief Checks representation, not whether the revision remains current. @return Whether the value is non-zero. */
         [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return value_ != 0;
+            return value_ != std::uint64_t{};
         }
 
         /** @brief Compares this revision with one from the same domain. @param baseline Revision to compare against.
@@ -204,8 +209,6 @@ namespace Horo::Runtime::Ui {
                 return Result<UiRevision>::Failure(MakeError(UiErrors::GenerationExhausted));
             return Result<UiRevision>::Success(UiRevision{value_ + 1});
         }
-
-        [[nodiscard]] constexpr auto operator<=>(const UiRevision &) const noexcept = default;
 
     private:
         explicit constexpr UiRevision(const std::uint64_t value) noexcept : value_(value) {}
