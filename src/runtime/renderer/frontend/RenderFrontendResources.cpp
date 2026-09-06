@@ -148,8 +148,7 @@ namespace Horo::Render {
             return Result<ResourceCreation<RenderBufferHandle>>::Failure(
                 MakeFrontendError(FrontendErrors::ResourceUnsupported, "The active renderer backend does not support generic buffers."));
         }
-        if (ValidateRenderBufferInitialData(descriptor, RenderBufferInitialDataView{initialData}).HasError() ||
-            initialData.size() != descriptor.byteSize) {
+        if (ValidateRenderBufferInitialData(descriptor, RenderBufferInitialDataView{initialData}).HasError()) {
             return Result<ResourceCreation<RenderBufferHandle>>::Failure(
                 MakeFrontendError(FrontendErrors::ResourceBufferUploadSizeMismatch,
                                   "The initial-data byte count must equal the buffer descriptor size."));

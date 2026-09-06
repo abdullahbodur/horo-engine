@@ -3,33 +3,11 @@
 #include "Horo/Runtime/Render/RenderResourceDescriptorErrors.h"
 
 #include <algorithm>
-#include <cmath>
 #include <limits>
 
 namespace Horo::Render {
     namespace {
         constexpr std::size_t MaximumInitialTextureSubresources = 1'024;
-
-        [[nodiscard]] constexpr bool IsKnown(const RenderSamplerFilter value) noexcept {
-            using enum RenderSamplerFilter;
-            return value == Nearest || value == Linear;
-        }
-
-        [[nodiscard]] constexpr bool IsKnown(const RenderSamplerMipmapMode value) noexcept {
-            using enum RenderSamplerMipmapMode;
-            return value == Nearest || value == Linear;
-        }
-
-        [[nodiscard]] constexpr bool IsKnown(const RenderSamplerAddressMode value) noexcept {
-            using enum RenderSamplerAddressMode;
-            return value == Repeat || value == MirroredRepeat || value == ClampToEdge || value == ClampToBorder;
-        }
-
-        [[nodiscard]] constexpr bool IsKnown(const RenderCompareFunction value) noexcept {
-            using enum RenderCompareFunction;
-            return value == Never || value == Less || value == LessEqual || value == Equal || value == GreaterEqual || value == Greater ||
-                   value == NotEqual || value == Always;
-        }
 
         [[nodiscard]] constexpr std::size_t BytesPerTexel(const RenderTextureFormat format) noexcept {
             using enum RenderTextureFormat;
@@ -99,24 +77,41 @@ namespace Horo::Render {
                 return view.layerCount == 1;
             if (view.dimension == RenderTextureViewDimension::TwoDArray)
                 return true;
+            const bool squareSource = texture.extent.width == texture.extent.height;
+            const bool cubeLayerLayout = texture.layerCount % 6 == 0 && view.baseLayer % 6 == 0;
             if (view.dimension == RenderTextureViewDimension::Cube)
-                return view.baseLayer % 6 == 0 && view.layerCount == 6;
+                return squareSource && cubeLayerLayout && view.layerCount == 6;
             if (view.dimension == RenderTextureViewDimension::CubeArray)
-                return view.baseLayer % 6 == 0 && view.layerCount % 6 == 0;
+                return squareSource && cubeLayerLayout && view.layerCount % 6 == 0;
             return false;
+        }
+
+        struct TextureSubresourceLayout final {
+            std::size_t minimumRowPitch{};
+            std::size_t minimumSlicePitch{};
+            std::size_t requiredBytes{};
+        };
+
+        [[nodiscard]] bool TryCalculateSubresourceLayout(const RenderTextureDescriptor &descriptor,
+                                                         const RenderTextureSubresourceInitialDataView &subresource,
+                                                         const std::uint32_t mipLevel, TextureSubresourceLayout &layout) noexcept {
+            const auto mipExtent = [mipLevel](const std::uint32_t extent) -> std::size_t {
+                if (mipLevel >= std::numeric_limits<std::uint32_t>::digits)
+                    return 1;
+                return std::max<std::size_t>(1, extent >> mipLevel);
+            };
+            const std::size_t width = mipExtent(descriptor.extent.width);
+            const std::size_t height = mipExtent(descriptor.extent.height);
+            const std::size_t depth = mipExtent(descriptor.depth);
+            return CheckedMultiply(width, BytesPerTexel(descriptor.format), layout.minimumRowPitch) &&
+                   CheckedMultiply(subresource.rowPitchBytes, height, layout.minimumSlicePitch) &&
+                   CheckedMultiply(subresource.slicePitchBytes, depth, layout.requiredBytes);
         }
 
         [[nodiscard]] Result<void> InitialDataFailure() {
             return Result<void>::Failure(MakeError(RenderResourceDescriptorErrors::TextureInitialDataInvalid));
         }
     }  // namespace
-
-    /** @copydoc RenderSamplerDescriptor::IsValid */
-    bool RenderSamplerDescriptor::IsValid() const noexcept {
-        return IsKnown(minFilter) && IsKnown(magFilter) && IsKnown(mipmapMode) && IsKnown(addressU) && IsKnown(addressV) &&
-               IsKnown(addressW) && std::isfinite(minimumLod) && std::isfinite(maximumLod) && minimumLod >= 0.0F &&
-               maximumLod >= minimumLod && std::isfinite(maximumAnisotropy) && maximumAnisotropy >= 1.0F && IsKnown(compare);
-    }
 
     /** @copydoc ValidateRenderBufferDescriptor */
     Result<void> ValidateRenderBufferDescriptor(const RenderBufferDescriptor &descriptor) {
@@ -167,7 +162,6 @@ namespace Horo::Render {
             subresourceCount > MaximumInitialTextureSubresources || initialData.subresources.size() != subresourceCount)
             return InitialDataFailure();
 
-        const std::size_t bytesPerTexel = BytesPerTexel(descriptor.format);
         for (std::size_t index = 0; index < initialData.subresources.size(); ++index) {
             const auto &subresource = initialData.subresources[index];
             const std::uint32_t expectedLayer = static_cast<std::uint32_t>(index / descriptor.mipCount);
@@ -175,21 +169,10 @@ namespace Horo::Render {
             if (subresource.arrayLayer != expectedLayer || subresource.mipLevel != expectedMip)
                 return InitialDataFailure();
 
-            const auto mipExtent = [expectedMip](const std::uint32_t extent) -> std::size_t {
-                if (expectedMip >= std::numeric_limits<std::uint32_t>::digits)
-                    return 1;
-                return std::max<std::size_t>(1, extent >> expectedMip);
-            };
-            const std::size_t width = mipExtent(descriptor.extent.width);
-            const std::size_t height = mipExtent(descriptor.extent.height);
-            const std::size_t depth = mipExtent(descriptor.depth);
-            std::size_t minimumRowPitch{};
-            std::size_t minimumSlicePitch{};
-            std::size_t requiredBytes{};
-            if (!CheckedMultiply(width, bytesPerTexel, minimumRowPitch) ||
-                !CheckedMultiply(subresource.rowPitchBytes, height, minimumSlicePitch) ||
-                !CheckedMultiply(subresource.slicePitchBytes, depth, requiredBytes) || subresource.rowPitchBytes < minimumRowPitch ||
-                subresource.slicePitchBytes < minimumSlicePitch || subresource.bytes.size() != requiredBytes)
+            TextureSubresourceLayout layout;
+            if (!TryCalculateSubresourceLayout(descriptor, subresource, expectedMip, layout) ||
+                subresource.rowPitchBytes < layout.minimumRowPitch || subresource.slicePitchBytes < layout.minimumSlicePitch ||
+                subresource.bytes.size() != layout.requiredBytes)
                 return InitialDataFailure();
         }
         return Result<void>::Success();

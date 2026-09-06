@@ -10,6 +10,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <span>
 
 namespace Horo::Render {
@@ -121,24 +122,39 @@ namespace Horo::Render {
 
         /** @brief Reports whether the complete backend-neutral texture structure is valid. @return True for valid structure. */
         [[nodiscard]] constexpr bool IsValid() const noexcept {
+            return HasValidStorageShape() && HasValidFormatAndUsage() && HasValidSamplingPolicy() && HasValidSubresourceRange();
+        }
+
+    private:
+        [[nodiscard]] constexpr bool HasValidStorageShape() const noexcept {
+            if (!extent.IsValid())
+                return false;
+            using enum RenderTextureDimension;
+            if (dimension == OneD)
+                return extent.height == 1 && depth == 1;
+            if (dimension == TwoD)
+                return depth == 1;
+            return dimension == ThreeD && depth > 0 && layerCount == 1;
+        }
+
+        [[nodiscard]] constexpr bool HasValidFormatAndUsage() const noexcept {
             constexpr std::uint8_t validUsageBits =
                 static_cast<std::uint8_t>(RenderTextureUsage::Sampled) | static_cast<std::uint8_t>(RenderTextureUsage::RenderAttachment) |
                 static_cast<std::uint8_t>(RenderTextureUsage::CopySource) | static_cast<std::uint8_t>(RenderTextureUsage::CopyDestination) |
                 static_cast<std::uint8_t>(RenderTextureUsage::Storage);
             const std::uint8_t usageBits = static_cast<std::uint8_t>(usage);
-            const auto formatValue = static_cast<std::uint8_t>(format);
-            const bool formatValid = formatValue <= static_cast<std::uint8_t>(RenderTextureFormat::Depth32FloatStencil8);
-            const bool dimensionValid = dimension == RenderTextureDimension::OneD || dimension == RenderTextureDimension::TwoD ||
-                                        dimension == RenderTextureDimension::ThreeD;
-            const bool extentMatchesDimension = dimension == RenderTextureDimension::OneD   ? extent.height == 1 && depth == 1
-                                                : dimension == RenderTextureDimension::TwoD ? depth == 1
-                                                                                            : depth > 0 && layerCount == 1;
-            const bool sampleCountValid = sampleCount != 0 && sampleCount <= 64 && (sampleCount & (sampleCount - 1U)) == 0 &&
-                                          (sampleCount == 1 || (dimension == RenderTextureDimension::TwoD && mipCount == 1));
-            if (!dimensionValid || !extent.IsValid() || !extentMatchesDimension || !formatValid || mipCount == 0 || layerCount == 0 ||
-                !sampleCountValid || usageBits == 0 || (usageBits & static_cast<std::uint8_t>(~validUsageBits)) != 0)
-                return false;
+            return static_cast<std::uint8_t>(format) <= static_cast<std::uint8_t>(RenderTextureFormat::Depth32FloatStencil8) &&
+                   usageBits != 0 && (usageBits & static_cast<std::uint8_t>(~validUsageBits)) == 0;
+        }
 
+        [[nodiscard]] constexpr bool HasValidSamplingPolicy() const noexcept {
+            return sampleCount != 0 && sampleCount <= 64 && (sampleCount & (sampleCount - 1U)) == 0 &&
+                   (sampleCount == 1 || (dimension == RenderTextureDimension::TwoD && mipCount == 1));
+        }
+
+        [[nodiscard]] constexpr bool HasValidSubresourceRange() const noexcept {
+            if (mipCount == 0 || layerCount == 0)
+                return false;
             std::uint32_t largestExtent = extent.width > extent.height ? extent.width : extent.height;
             if (depth > largestExtent)
                 largestExtent = depth;
@@ -148,8 +164,7 @@ namespace Horo::Render {
                 largestExtent >>= 1U;
             }
             constexpr std::uint64_t maximumSubresourceCount = 1'048'576;
-            const std::uint64_t subresourceCount = static_cast<std::uint64_t>(mipCount) * layerCount;
-            return mipCount <= maximumMipCount && subresourceCount <= maximumSubresourceCount;
+            return mipCount <= maximumMipCount && static_cast<std::uint64_t>(mipCount) * layerCount <= maximumSubresourceCount;
         }
     };
 
@@ -243,7 +258,21 @@ namespace Horo::Render {
         RenderCompareFunction compare{RenderCompareFunction::Always};             /**< Known comparison, ignored when disabled. */
 
         /** @brief Reports whether enum values and numeric policy are structurally valid. @return True for valid structure. */
-        [[nodiscard]] bool IsValid() const noexcept;
+        [[nodiscard]] constexpr bool IsValid() const noexcept {
+            const auto finite = [](const float value) constexpr noexcept {
+                constexpr float maximum = std::numeric_limits<float>::max();
+                return value == value && value >= -maximum && value <= maximum;
+            };
+            return static_cast<std::uint8_t>(minFilter) <= static_cast<std::uint8_t>(RenderSamplerFilter::Linear) &&
+                   static_cast<std::uint8_t>(magFilter) <= static_cast<std::uint8_t>(RenderSamplerFilter::Linear) &&
+                   static_cast<std::uint8_t>(mipmapMode) <= static_cast<std::uint8_t>(RenderSamplerMipmapMode::Linear) &&
+                   static_cast<std::uint8_t>(addressU) <= static_cast<std::uint8_t>(RenderSamplerAddressMode::ClampToBorder) &&
+                   static_cast<std::uint8_t>(addressV) <= static_cast<std::uint8_t>(RenderSamplerAddressMode::ClampToBorder) &&
+                   static_cast<std::uint8_t>(addressW) <= static_cast<std::uint8_t>(RenderSamplerAddressMode::ClampToBorder) &&
+                   finite(minimumLod) && finite(maximumLod) && minimumLod >= 0.0F && maximumLod >= minimumLod &&
+                   finite(maximumAnisotropy) && maximumAnisotropy >= 1.0F &&
+                   static_cast<std::uint8_t>(compare) <= static_cast<std::uint8_t>(RenderCompareFunction::Always);
+        }
     };
 
     /**

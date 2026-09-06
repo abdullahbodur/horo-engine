@@ -134,18 +134,19 @@ TEST_CASE("Texture descriptors accept core policy and reject malformed structure
 }
 
 TEST_CASE("Sampler descriptors validate every enum and finite numeric boundary", "[runtime][renderer][resource-descriptor]") {
-    const RenderSamplerDescriptor valid{.minFilter = RenderSamplerFilter::Linear,
-                                        .magFilter = RenderSamplerFilter::Linear,
-                                        .mipmapMode = RenderSamplerMipmapMode::Linear,
-                                        .addressU = RenderSamplerAddressMode::Repeat,
-                                        .addressV = RenderSamplerAddressMode::MirroredRepeat,
-                                        .addressW = RenderSamplerAddressMode::ClampToBorder,
-                                        .minimumLod = 1.0F,
-                                        .maximumLod = 4.0F,
-                                        .maximumAnisotropy = 8.0F,
-                                        .compareEnabled = true,
-                                        .compare = RenderCompareFunction::LessEqual};
+    constexpr RenderSamplerDescriptor valid{.minFilter = RenderSamplerFilter::Linear,
+                                            .magFilter = RenderSamplerFilter::Linear,
+                                            .mipmapMode = RenderSamplerMipmapMode::Linear,
+                                            .addressU = RenderSamplerAddressMode::Repeat,
+                                            .addressV = RenderSamplerAddressMode::MirroredRepeat,
+                                            .addressW = RenderSamplerAddressMode::ClampToBorder,
+                                            .minimumLod = 1.0F,
+                                            .maximumLod = 4.0F,
+                                            .maximumAnisotropy = 8.0F,
+                                            .compareEnabled = true,
+                                            .compare = RenderCompareFunction::LessEqual};
     CHECK(ValidateRenderSamplerDescriptor(valid).HasValue());
+    STATIC_CHECK(valid.IsValid());
 
     auto invalid = valid;
     invalid.minFilter = static_cast<RenderSamplerFilter>(0xFFU);
@@ -194,8 +195,30 @@ TEST_CASE("Texture views validate structure separately from source compatibility
     cubeArrayView.layerCount = 12;
     cubeArrayView.dimension = RenderTextureViewDimension::CubeArray;
     CHECK(ValidateRenderTextureViewCompatibility(arrayTexture, cubeArrayView).HasValue());
+    auto cubeView = cubeArrayView;
+    cubeView.dimension = RenderTextureViewDimension::Cube;
+    cubeView.layerCount = 6;
+    cubeView.baseLayer = 6;
+    CHECK(ValidateRenderTextureViewCompatibility(arrayTexture, cubeView).HasValue());
     cubeArrayView.baseLayer = 1;
     CheckError(ValidateRenderTextureViewCompatibility(arrayTexture, cubeArrayView),
+               RenderResourceDescriptorErrors::TextureViewIncompatible);
+    cubeArrayView.baseLayer = 0;
+    cubeArrayView.layerCount = 5;
+    CheckError(ValidateRenderTextureViewCompatibility(arrayTexture, cubeArrayView),
+               RenderResourceDescriptorErrors::TextureViewIncompatible);
+
+    auto nonSquareArray = arrayTexture;
+    nonSquareArray.extent.height = 8;
+    cubeArrayView.layerCount = 12;
+    CheckError(ValidateRenderTextureViewCompatibility(nonSquareArray, cubeArrayView),
+               RenderResourceDescriptorErrors::TextureViewIncompatible);
+    cubeView.baseLayer = 0;
+    CheckError(ValidateRenderTextureViewCompatibility(nonSquareArray, cubeView), RenderResourceDescriptorErrors::TextureViewIncompatible);
+
+    auto incompleteCubeArray = arrayTexture;
+    incompleteCubeArray.layerCount = 13;
+    CheckError(ValidateRenderTextureViewCompatibility(incompleteCubeArray, cubeView),
                RenderResourceDescriptorErrors::TextureViewIncompatible);
 
     auto invalid = colorView;

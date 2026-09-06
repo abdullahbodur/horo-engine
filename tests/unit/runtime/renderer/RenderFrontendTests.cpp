@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace {
     class TrackingStaticMeshExecutor final : public Horo::Render::IStaticMeshPassExecutor {
@@ -52,6 +53,7 @@ namespace {
         int destroyTextureCount{0};
         int destroyTextureViewCount{0};
         int destroyRenderTargetCount{0};
+        std::vector<std::byte> lastBufferInitialData;
         bool failPresentation{false};
         bool throwDuringInitialize{false};
         bool throwDuringResize{false};
@@ -94,8 +96,9 @@ namespace {
             return capabilities_;
         }
 
-        Result<std::uint64_t> CreateBuffer(const RenderBufferDescriptor &, std::span<const std::byte>) override {
+        Result<std::uint64_t> CreateBuffer(const RenderBufferDescriptor &, const std::span<const std::byte> initialData) override {
             ++lifecycleState.createBufferCount;
+            lifecycleState.lastBufferInitialData.assign(initialData.begin(), initialData.end());
             if (lifecycleState.throwDuringResourceCreation) {
                 throw std::runtime_error{"Injected resource creation exception."};
             }
@@ -352,6 +355,32 @@ namespace {
         Check(frontend->ReleaseMesh(mesh.Value().handle).HasValue());
         Check(lifecycleState.destroyMeshCount == 1);
         Check(lifecycleState.destroyBufferCount == 2);
+    }
+
+    TEST_CASE("Frontend Accepts Absent Buffer Initial Data And Copies Present Bytes", "[unit][runtime][renderer][resource]") {
+        lifecycleState = {};
+        std::unique_ptr<RenderFrontend> frontend = CreateTrackingFrontend();
+        const RenderBufferDescriptor descriptor{
+            .byteSize = 4,
+            .usage = RenderBufferUsage::Vertex,
+            .access = RenderBufferAccess::DeviceLocal,
+        };
+
+        const auto withoutInitialData = frontend->CreateBuffer(descriptor, {});
+        Check(withoutInitialData.HasValue());
+        Check(frontend->ProcessResourceRequests().Value() == 1);
+        Check(lifecycleState.lastBufferInitialData.empty());
+
+        std::array<std::byte, 4> bytes{std::byte{0x12}, std::byte{0x34}, std::byte{0x56}, std::byte{0x78}};
+        const auto withInitialData = frontend->CreateBuffer(descriptor, bytes);
+        Check(withInitialData.HasValue());
+        bytes[0] = std::byte{0xFF};
+        Check(frontend->ProcessResourceRequests().Value() == 1);
+        Check(lifecycleState.lastBufferInitialData.front() == std::byte{0x12});
+
+        const auto wrongSize = frontend->CreateBuffer(descriptor, std::span{bytes}.first<3>());
+        Check(wrongSize.HasError());
+        Check(wrongSize.ErrorValue().code.Value() == "render.frontend.resource.buffer_upload_size_mismatch");
     }
 
     TEST_CASE("Frontend Publishes Texture Views And Targets With Dependency-Pinned Retirement", "[unit][runtime][renderer][resource]") {
