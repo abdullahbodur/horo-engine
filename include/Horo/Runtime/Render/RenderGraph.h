@@ -5,12 +5,14 @@
  * @brief Backend-neutral bounded render-graph authoring contracts.
  */
 
+#include "Horo/Foundation/Result.h"
 #include "Horo/Runtime/Render/RenderBackend.h"
 
 #include <compare>
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <thread>
 #include <vector>
 
 namespace Horo::Render {
@@ -202,6 +204,121 @@ namespace Horo::Render {
 
         RenderGraphOwnerId owner_;
         RenderGraphLimits limits_;
+        std::vector<RenderGraphPass> passes_;
+        std::vector<RenderGraphResource> resources_;
+        std::vector<RenderGraphResourceUsage> usages_;
+        std::vector<RenderGraphDependency> dependencies_;
+    };
+
+    /** @brief Observable lifecycle state of a bounded render-graph builder. */
+    enum class RenderGraphBuilderState : std::uint8_t {
+        Open,
+        Finalized,
+        Cancelled,
+        Shutdown,
+        MovedFrom,
+    };
+
+    /**
+     * @brief Owner-thread-only bounded authoring surface for one backend-neutral render graph.
+     *
+     * The builder owns every admitted record and allocates its declared capacities during
+     * creation. Authoring and finalization must occur on the creating thread. Cancellation
+     * and shutdown never submit backend work; shutdown is idempotent and may run during
+     * partial initialization or destruction.
+     */
+    class RenderGraphBuilder final {
+    public:
+        RenderGraphBuilder(const RenderGraphBuilder &) = delete;
+        RenderGraphBuilder &operator=(const RenderGraphBuilder &) = delete;
+        RenderGraphBuilder(RenderGraphBuilder &&other) noexcept;
+        RenderGraphBuilder &operator=(RenderGraphBuilder &&) = delete;
+        ~RenderGraphBuilder();
+
+        /**
+         * @brief Creates an open builder and reserves every declared finite capacity.
+         * @param limits Requested capacities constrained by the engine hard bounds.
+         * @return Open builder or a typed invalid-limit, identity, or allocation failure.
+         */
+        [[nodiscard]] static Result<RenderGraphBuilder> Create(const RenderGraphLimits &limits = {});
+
+        /**
+         * @brief Returns the process-local identity that scopes issued references.
+         * @return Builder owner identity, or an invalid identity after move.
+         */
+        [[nodiscard]] RenderGraphOwnerId Owner() const noexcept;
+
+        /**
+         * @brief Returns the explicit lifecycle state.
+         * @return Current builder state.
+         */
+        [[nodiscard]] RenderGraphBuilderState State() const noexcept;
+
+        /**
+         * @brief Adds one pass and assigns the next canonical render-pass identity.
+         * @param kind Backend-neutral pass category.
+         * @param queue Explicit queue role; incompatible or unknown roles fail without fallback.
+         * @return Builder-scoped reference or a typed affinity, lifecycle, capacity, or support failure.
+         */
+        [[nodiscard]] Result<RenderGraphPassRef> AddPass(RenderPassKind kind, RenderQueueRole queue);
+
+        /**
+         * @brief Adds one graph-local logical resource.
+         * @param kind Backend-neutral resource category.
+         * @return Owner-scoped identity or a typed affinity, lifecycle, capacity, or support failure.
+         */
+        [[nodiscard]] Result<RenderGraphResourceId> AddResource(RenderGraphResourceKind kind);
+
+        /**
+         * @brief Records one pass-resource use after validating ownership and semantic compatibility.
+         * @param usage Complete use declaration referencing records from this builder.
+         * @return Success or a typed affinity, ownership, reference, capacity, or support failure.
+         */
+        [[nodiscard]] Result<void> AddUsage(const RenderGraphResourceUsage &usage);
+
+        /**
+         * @brief Records one directed dependency between two distinct passes from this builder.
+         * @param dependency Complete dependency declaration.
+         * @return Success or a typed affinity, ownership, reference, capacity, or support failure.
+         */
+        [[nodiscard]] Result<void> AddDependency(const RenderGraphDependency &dependency);
+
+        /**
+         * @brief Finalizes the builder and transfers all owned records into an immutable graph.
+         * @return Owning graph or a typed affinity, lifecycle, or empty-graph failure.
+         */
+        [[nodiscard]] Result<RenderGraph> Finalize();
+
+        /**
+         * @brief Cancels open authoring and releases all authored records on the owner thread.
+         * @return Success, including repeated cancellation, or a typed affinity/lifecycle failure.
+         */
+        [[nodiscard]] Result<void> Cancel();
+
+        /**
+         * @brief Releases retained authoring storage without backend or GPU work.
+         *
+         * Repeated calls are safe. The caller must quiesce owner-thread authoring
+         * before shutdown; teardown may then continue on another thread.
+         */
+        void Shutdown() noexcept;
+
+    private:
+        RenderGraphBuilder(RenderGraphOwnerId owner, const RenderGraphLimits &limits) noexcept;
+
+        [[nodiscard]] Result<void> Reserve();
+        [[nodiscard]] Result<void> ValidateOpenOnOwnerThread() const;
+        [[nodiscard]] Result<void> ValidateUsageReferences(const RenderGraphResourceUsage &usage) const;
+        [[nodiscard]] Result<void> ValidateUsageSemantics(const RenderGraphResourceUsage &usage) const;
+        [[nodiscard]] Result<void> ValidateDependencyReferences(const RenderGraphDependency &dependency) const;
+        void ReleaseStorage() noexcept;
+        [[nodiscard]] const RenderGraphPass *FindPass(RenderGraphPassRef reference) const noexcept;
+        [[nodiscard]] const RenderGraphResource *FindResource(RenderGraphResourceId id) const noexcept;
+
+        RenderGraphOwnerId owner_;
+        RenderGraphLimits limits_;
+        std::thread::id ownerThread_;
+        RenderGraphBuilderState state_{RenderGraphBuilderState::MovedFrom};
         std::vector<RenderGraphPass> passes_;
         std::vector<RenderGraphResource> resources_;
         std::vector<RenderGraphResourceUsage> usages_;
