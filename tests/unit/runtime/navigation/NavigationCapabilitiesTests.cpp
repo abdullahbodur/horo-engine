@@ -14,62 +14,6 @@ namespace Horo::Navigation {
             .maximumSearchDistanceMeters = 2'000.0F,
         };
 
-        using CapabilityMutation = void (*)(NavigationProviderCapabilities &);
-        const std::array<CapabilityMutation, 9> MalformedCapabilityMutations{
-            [](auto &value) {
-            value.contractVersion = 2;
-        },
-            [](auto &value) {
-            value.revision = 0;
-        },
-            [](auto &value) {
-            value.availability = NavigationProviderAvailability::Count;
-        },
-            [](auto &value) {
-            value.capabilities.back() = NavigationSupport::Count;
-        },
-            [](auto &value) {
-            value.querySupport.back().back() = NavigationSupport::Count;
-        },
-            [](auto &value) {
-            value.availability = NavigationProviderAvailability::Unavailable;
-        },
-            [](auto &value) {
-            value.queryLimits.front().front() = SupportedLimits;
-        },
-            [](auto &value) {
-            value.capabilities[static_cast<std::size_t>(NavigationCapability::GroundedQueries)] = NavigationSupport::Unsupported;
-        },
-            [](auto &value) {
-            value.maximumConcurrentQueries = 0;
-        },
-        };
-
-        using LimitMutation = void (*)(NavigationQueryLimits &);
-        const std::array<LimitMutation, 7> MalformedLimitMutations{
-            [](auto &value) {
-            value.maximumNodeExpansions = 0;
-        },
-            [](auto &value) {
-            value.maximumResultPoints = 0;
-        },
-            [](auto &value) {
-            value.maximumSearchDistanceMeters = 0.0F;
-        },
-            [](auto &value) {
-            value.maximumSearchDistanceMeters = -1.0F;
-        },
-            [](auto &value) {
-            value.maximumSearchDistanceMeters = std::numeric_limits<float>::infinity();
-        },
-            [](auto &value) {
-            value.maximumSearchDistanceMeters = -std::numeric_limits<float>::infinity();
-        },
-            [](auto &value) {
-            value.maximumSearchDistanceMeters = std::numeric_limits<float>::quiet_NaN();
-        },
-        };
-
         NavigationProviderCapabilities AvailableCapabilities(const NavigationQueryKind query = NavigationQueryKind::Path,
                                                              const NavigationQualityLevel quality = NavigationQualityLevel::Balanced) {
             NavigationProviderCapabilities result{
@@ -171,7 +115,34 @@ namespace Horo::Navigation {
         }
 
         TEST_CASE("Navigation capability validation rejects malformed typed evidence", "[navigation][capability]") {
-            for (const auto mutate : MalformedCapabilityMutations) {
+            using Mutation = void (*)(NavigationProviderCapabilities &);
+            const std::array<Mutation, 8> mutations{
+                [](auto &value) {
+                value.contractVersion = 2;
+            },
+                [](auto &value) {
+                value.revision = 0;
+            },
+                [](auto &value) {
+                value.availability = NavigationProviderAvailability::Count;
+            },
+                [](auto &value) {
+                value.capabilities.back() = NavigationSupport::Count;
+            },
+                [](auto &value) {
+                value.querySupport.back().back() = NavigationSupport::Count;
+            },
+                [](auto &value) {
+                value.availability = NavigationProviderAvailability::Unavailable;
+            },
+                [](auto &value) {
+                value.capabilities[static_cast<std::size_t>(NavigationCapability::GroundedQueries)] = NavigationSupport::Unsupported;
+            },
+                [](auto &value) {
+                value.maximumConcurrentQueries = 0;
+            },
+            };
+            for (const auto mutate : mutations) {
                 auto capabilities = AvailableCapabilities();
                 mutate(capabilities);
                 REQUIRE_FALSE(ValidateNavigationProviderCapabilities(capabilities));
@@ -206,7 +177,31 @@ namespace Horo::Navigation {
             maximum.maximumConcurrentQueries = std::numeric_limits<std::uint32_t>::max();
             REQUIRE(ValidateNavigationProviderCapabilities(maximum));
 
-            for (const auto mutate : MalformedLimitMutations) {
+            using Mutation = void (*)(NavigationQueryLimits &);
+            const std::array<Mutation, 7> mutations{
+                [](auto &value) {
+                value.maximumNodeExpansions = 0;
+            },
+                [](auto &value) {
+                value.maximumResultPoints = 0;
+            },
+                [](auto &value) {
+                value.maximumSearchDistanceMeters = 0.0F;
+            },
+                [](auto &value) {
+                value.maximumSearchDistanceMeters = -1.0F;
+            },
+                [](auto &value) {
+                value.maximumSearchDistanceMeters = std::numeric_limits<float>::infinity();
+            },
+                [](auto &value) {
+                value.maximumSearchDistanceMeters = std::numeric_limits<float>::quiet_NaN();
+            },
+                [](auto &value) {
+                value.maximumSearchDistanceMeters = -std::numeric_limits<float>::infinity();
+            },
+            };
+            for (const auto mutate : mutations) {
                 auto capabilities = AvailableCapabilities();
                 auto &candidate = capabilities.queryLimits[static_cast<std::size_t>(NavigationQueryKind::Path)]
                                                           [static_cast<std::size_t>(NavigationQualityLevel::Balanced)];
@@ -269,7 +264,31 @@ namespace Horo::Navigation {
                 ExpectError(AdmitNavigationQuery(available, 7, malformed), NavigationErrors::CapabilityDescriptorInvalid);
             }
 
-            for (const auto mutate : MalformedLimitMutations) {
+            using Mutation = void (*)(NavigationQueryLimits &);
+            const std::array<Mutation, 7> mutations{
+                [](auto &value) {
+                value.maximumNodeExpansions = 0;
+            },
+                [](auto &value) {
+                value.maximumResultPoints = 0;
+            },
+                [](auto &value) {
+                value.maximumSearchDistanceMeters = 0.0F;
+            },
+                [](auto &value) {
+                value.maximumSearchDistanceMeters = -1.0F;
+            },
+                [](auto &value) {
+                value.maximumSearchDistanceMeters = std::numeric_limits<float>::infinity();
+            },
+                [](auto &value) {
+                value.maximumSearchDistanceMeters = -std::numeric_limits<float>::infinity();
+            },
+                [](auto &value) {
+                value.maximumSearchDistanceMeters = std::numeric_limits<float>::quiet_NaN();
+            },
+            };
+            for (const auto mutate : mutations) {
                 auto malformed = Requirement();
                 mutate(malformed.limits);
                 ExpectError(AdmitNavigationQuery(available, 7, malformed), NavigationErrors::CapabilityDescriptorInvalid);
@@ -277,7 +296,34 @@ namespace Horo::Navigation {
         }
 
         TEST_CASE("Navigation query admission rejects every malformed capability snapshot", "[navigation][admission][capability]") {
-            for (const auto mutate : MalformedCapabilityMutations) {
+            using Mutation = void (*)(NavigationProviderCapabilities &);
+            const std::array<Mutation, 8> mutations{
+                [](auto &value) {
+                value.contractVersion = 2;
+            },
+                [](auto &value) {
+                value.revision = 0;
+            },
+                [](auto &value) {
+                value.availability = NavigationProviderAvailability::Count;
+            },
+                [](auto &value) {
+                value.capabilities.back() = NavigationSupport::Count;
+            },
+                [](auto &value) {
+                value.querySupport.back().back() = NavigationSupport::Count;
+            },
+                [](auto &value) {
+                value.queryLimits.front().front() = SupportedLimits;
+            },
+                [](auto &value) {
+                value.capabilities[static_cast<std::size_t>(NavigationCapability::GroundedQueries)] = NavigationSupport::Unsupported;
+            },
+                [](auto &value) {
+                value.maximumConcurrentQueries = 0;
+            },
+            };
+            for (const auto mutate : mutations) {
                 auto malformed = AvailableCapabilities();
                 mutate(malformed);
                 ExpectError(AdmitNavigationQuery(malformed, 7, Requirement()), NavigationErrors::CapabilityDescriptorInvalid);
@@ -294,23 +340,29 @@ namespace Horo::Navigation {
             ExpectError(AdmitNavigationQuery(unknown, 7, Requirement()), NavigationErrors::CapabilityUnavailable);
         }
 
-        TEST_CASE("Unsupported navigation work is rejected before caller queue mutation", "[navigation][admission][dispatch]") {
+        TEST_CASE("Unsupported navigation work is rejected before caller dispatch", "[navigation][admission][dispatch]") {
             const auto capabilities = AvailableCapabilities();
-            std::uint32_t queuedCount = 0;
-            const auto submit = [&capabilities, &queuedCount](const NavigationQueryRequirement &requirement) {
-                const auto admission = AdmitNavigationQuery(capabilities, 7, requirement);
-                if (admission.HasError())
-                    return admission;
-                ++queuedCount;
+            std::uint32_t dispatchCount = 0;
+            const auto dispatch = [&dispatchCount] {
+                ++dispatchCount;
                 return Result<void>::Success();
             };
 
-            const auto unsupported = submit(Requirement(NavigationQueryKind::Raycast));
+            const auto unsupported =
+                DispatchNavigationQueryIfSupported(capabilities, 7, Requirement(NavigationQueryKind::Raycast), dispatch);
             ExpectError(unsupported, NavigationErrors::OperationUnsupported);
-            REQUIRE(queuedCount == 0);
+            REQUIRE(dispatchCount == 0);
 
-            REQUIRE(submit(Requirement()).HasValue());
-            REQUIRE(queuedCount == 1);
+            REQUIRE(DispatchNavigationQueryIfSupported(capabilities, 7, Requirement(), dispatch).HasValue());
+            REQUIRE(dispatchCount == 1);
+
+            const auto dispatchFailure = [&dispatchCount] {
+                ++dispatchCount;
+                return Result<void>::Failure(MakeError(NavigationErrors::ProviderFailed));
+            };
+            ExpectError(DispatchNavigationQueryIfSupported(capabilities, 7, Requirement(), dispatchFailure),
+                        NavigationErrors::ProviderFailed);
+            REQUIRE(dispatchCount == 2);
         }
     }  // namespace
 }  // namespace Horo::Navigation

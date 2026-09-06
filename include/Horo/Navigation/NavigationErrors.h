@@ -24,8 +24,6 @@ namespace Horo::Navigation::NavigationErrors {
     extern const ErrorCodeDescriptor CapabilityUnavailable;
     /** @brief Requested finite work or output bounds exceed the provider declaration. */
     extern const ErrorCodeDescriptor QueryLimitExceeded;
-    /** @brief Queue, request-record, or admission capacity rejected work before a handle or job existed. */
-    extern const ErrorCodeDescriptor AdmissionRejected;
     /** @brief An admitted navigation query was cancelled before owner-thread publication. */
     extern const ErrorCodeDescriptor QueryCancelled;
     /** @brief An admitted query result belongs to an old navigation topology generation. */
@@ -34,10 +32,4 @@ namespace Horo::Navigation::NavigationErrors {
     extern const ErrorCodeDescriptor NoNavigationData;
     /** @brief Provider execution failed after admission; normalized Horo diagnostics carry actionable detail. */
     extern const ErrorCodeDescriptor ProviderFailed;
-    /** @brief A terminal outcome or its bounded provenance/coverage evidence is malformed. */
-    extern const ErrorCodeDescriptor OutcomeDescriptorInvalid;
-    /** @brief An accepted request belongs to a revoked or replacement navigation-world incarnation. */
-    extern const ErrorCodeDescriptor InvalidWorld;
-    /** @brief An accepted operation exhausted a declared execution, scratch, result, or retry bound. */
-    extern const ErrorCodeDescriptor CapacityExceeded;
 }  // namespace Horo::Navigation::NavigationErrors
