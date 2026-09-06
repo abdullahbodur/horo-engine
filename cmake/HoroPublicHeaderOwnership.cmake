@@ -29,6 +29,7 @@ horo_configure_target_header_boundary(HoroFoundation PUBLIC_HEADERS
     Horo/Foundation/Progress.h
     Horo/Foundation/Result.h
     Horo/Foundation/Sha256.h
+    Horo/Foundation/StrongId.h
     Horo/Foundation/String.h
     Horo/Foundation/Telemetry/Operation.h
     Horo/Foundation/Telemetry/Telemetry.h
@@ -181,6 +182,11 @@ horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
     Horo/WorldStreaming/WorldCellQuantization.h
     Horo/WorldStreaming/WorldStreamingErrors.h
     Horo/WorldStreaming/WorldStreamingIdentity.h
+)
+
+horo_configure_target_header_boundary(HoroPrefab PUBLIC_HEADERS
+    Horo/Prefab/PrefabErrors.h
+    Horo/Prefab/PrefabIdentity.h
 )
 
 horo_configure_target_header_boundary(HoroRenderApi PUBLIC_HEADERS
