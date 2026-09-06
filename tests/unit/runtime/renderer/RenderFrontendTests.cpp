@@ -581,8 +581,7 @@ namespace {
         frame.Cancel();
     }
 
-    TEST_CASE("Frontend Separates Structural Validation From Current Resource Admission",
-              "[unit][runtime][renderer][resource][descriptor]") {
+    TEST_CASE("Frontend Separates Buffer Structure From Current Resource Admission", "[unit][runtime][renderer][resource][descriptor]") {
         lifecycleState = {};
         std::unique_ptr<RenderFrontend> frontend = CreateTrackingFrontend();
         const std::array<std::byte, 16> bytes{};
@@ -607,6 +606,13 @@ namespace {
         Check(baselineBuffer.HasValue());
         Check(baselineBuffer.Value().handle.slot == 1);
         Check(baselineBuffer.Value().operation.value == 1);
+        Check(frontend->ProcessResourceRequests().Value() == 1);
+        Check(lifecycleState.createBufferCount == 1);
+    }
+
+    TEST_CASE("Frontend Separates Texture Structure From Current Resource Admission", "[unit][runtime][renderer][resource][descriptor]") {
+        lifecycleState = {};
+        std::unique_ptr<RenderFrontend> frontend = CreateTrackingFrontend();
 
         const RenderTextureDescriptor volume{.dimension = RenderTextureDimension::ThreeD,
                                              .extent = {8, 8},
@@ -629,8 +635,8 @@ namespace {
         const auto baselineTexture =
             frontend->CreateTexture({.extent = {8, 8}, .format = RenderTextureFormat::Rgba8Unorm, .usage = RenderTextureUsage::Sampled});
         Check(baselineTexture.HasValue());
-        Check(frontend->ProcessResourceRequests().Value() == 2);
-        Check(lifecycleState.createBufferCount == 1);
+        Check(frontend->ProcessResourceRequests().Value() == 1);
+        Check(lifecycleState.createBufferCount == 0);
         Check(lifecycleState.createTextureCount == 1);
 
         const RenderTextureViewDescriptor arrayView{.texture = baselineTexture.Value().handle,
@@ -646,8 +652,8 @@ namespace {
         const auto baselineView = frontend->CreateTextureView(
             {.texture = baselineTexture.Value().handle, .format = RenderTextureFormat::Rgba8Unorm, .aspect = RenderTextureAspect::Color});
         Check(baselineView.HasValue());
-        Check(baselineView.Value().handle.slot == 3);
-        Check(baselineView.Value().operation.value == 3);
+        Check(baselineView.Value().handle.slot == 2);
+        Check(baselineView.Value().operation.value == 2);
         Check(frontend->ProcessResourceRequests().Value() == 1);
         Check(lifecycleState.createTextureViewCount == 1);
     }
