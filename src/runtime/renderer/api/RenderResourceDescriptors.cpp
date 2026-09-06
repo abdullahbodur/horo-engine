@@ -157,15 +157,15 @@ namespace Horo::Render {
             return valid;
         if (initialData.subresources.empty())
             return Result<void>::Success();
-        std::size_t subresourceCount{};
-        if (!CheckedMultiply(descriptor.mipCount, descriptor.layerCount, subresourceCount) ||
-            subresourceCount > MaximumInitialTextureSubresources || initialData.subresources.size() != subresourceCount)
+        if (std::size_t subresourceCount{}; !CheckedMultiply(descriptor.mipCount, descriptor.layerCount, subresourceCount) ||
+                                            subresourceCount > MaximumInitialTextureSubresources ||
+                                            initialData.subresources.size() != subresourceCount)
             return InitialDataFailure();
 
         for (std::size_t index = 0; index < initialData.subresources.size(); ++index) {
             const auto &subresource = initialData.subresources[index];
-            const std::uint32_t expectedLayer = static_cast<std::uint32_t>(index / descriptor.mipCount);
-            const std::uint32_t expectedMip = static_cast<std::uint32_t>(index % descriptor.mipCount);
+            const auto expectedLayer = static_cast<std::uint32_t>(index / descriptor.mipCount);
+            const auto expectedMip = static_cast<std::uint32_t>(index % descriptor.mipCount);
             if (subresource.arrayLayer != expectedLayer || subresource.mipLevel != expectedMip)
                 return InitialDataFailure();
 
@@ -185,8 +185,8 @@ namespace Horo::Render {
         if (const Result<void> validView = ValidateRenderTextureViewDescriptor(view); validView.HasError())
             return validView;
         const bool mipRangeValid = view.baseMip < texture.mipCount && view.mipCount <= texture.mipCount - view.baseMip;
-        const bool layerRangeValid = view.baseLayer < texture.layerCount && view.layerCount <= texture.layerCount - view.baseLayer;
-        if (!AreViewFormatsCompatible(texture.format, view.format) || !IsAspectCompatible(texture.format, view.aspect) ||
+        if (const bool layerRangeValid = view.baseLayer < texture.layerCount && view.layerCount <= texture.layerCount - view.baseLayer;
+            !AreViewFormatsCompatible(texture.format, view.format) || !IsAspectCompatible(texture.format, view.aspect) ||
             !IsViewDimensionCompatible(texture, view) || !mipRangeValid || !layerRangeValid)
             return Result<void>::Failure(MakeError(RenderResourceDescriptorErrors::TextureViewIncompatible));
         return Result<void>::Success();

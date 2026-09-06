@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -21,29 +22,31 @@ namespace Horo::Render {
 
         [[nodiscard]] constexpr ResourceDescriptorAdmission AdmitCurrentBufferDescriptor(
             const RenderBufferDescriptor &descriptor) noexcept {
-            constexpr std::uint8_t supportedUsageBits =
-                static_cast<std::uint8_t>(RenderBufferUsage::Vertex) | static_cast<std::uint8_t>(RenderBufferUsage::Index) |
-                static_cast<std::uint8_t>(RenderBufferUsage::CopySource) | static_cast<std::uint8_t>(RenderBufferUsage::CopyDestination);
-            const std::uint8_t requested = static_cast<std::uint8_t>(descriptor.usage);
-            return (requested & static_cast<std::uint8_t>(~supportedUsageBits)) == 0 ? ResourceDescriptorAdmission::Supported
-                                                                                     : ResourceDescriptorAdmission::Unsupported;
+            using enum RenderBufferUsage;
+            using enum ResourceDescriptorAdmission;
+            constexpr std::byte supportedUsageBits =
+                std::byte{static_cast<std::uint8_t>(Vertex)} | std::byte{static_cast<std::uint8_t>(Index)} |
+                std::byte{static_cast<std::uint8_t>(CopySource)} | std::byte{static_cast<std::uint8_t>(CopyDestination)};
+            const auto requested = static_cast<std::byte>(descriptor.usage);
+            return (requested & ~supportedUsageBits) == std::byte{} ? Supported : Unsupported;
         }
 
         [[nodiscard]] constexpr bool IsCurrentTextureFormatSupported(const RenderTextureFormat format) noexcept {
-            return format == RenderTextureFormat::Rgba8Unorm || format == RenderTextureFormat::Depth24Stencil8 ||
-                   format == RenderTextureFormat::Depth32Float;
+            using enum RenderTextureFormat;
+            return format == Rgba8Unorm || format == Depth24Stencil8 || format == Depth32Float;
         }
 
         [[nodiscard]] constexpr ResourceDescriptorAdmission AdmitCurrentTextureDescriptor(
             const RenderTextureDescriptor &descriptor) noexcept {
-            constexpr std::uint8_t supportedUsageBits =
-                static_cast<std::uint8_t>(RenderTextureUsage::Sampled) | static_cast<std::uint8_t>(RenderTextureUsage::RenderAttachment);
-            const std::uint8_t requested = static_cast<std::uint8_t>(descriptor.usage);
+            using enum RenderTextureUsage;
+            using enum ResourceDescriptorAdmission;
+            constexpr std::byte supportedUsageBits =
+                std::byte{static_cast<std::uint8_t>(Sampled)} | std::byte{static_cast<std::uint8_t>(RenderAttachment)};
+            const auto requested = static_cast<std::byte>(descriptor.usage);
             const bool supported = descriptor.dimension == RenderTextureDimension::TwoD && descriptor.depth == 1 &&
                                    descriptor.mipCount == 1 && descriptor.layerCount == 1 && descriptor.sampleCount == 1 &&
-                                   IsCurrentTextureFormatSupported(descriptor.format) &&
-                                   (requested & static_cast<std::uint8_t>(~supportedUsageBits)) == 0;
-            return supported ? ResourceDescriptorAdmission::Supported : ResourceDescriptorAdmission::Unsupported;
+                                   IsCurrentTextureFormatSupported(descriptor.format) && (requested & ~supportedUsageBits) == std::byte{};
+            return supported ? Supported : Unsupported;
         }
 
         [[nodiscard]] constexpr ResourceDescriptorAdmission AdmitCurrentTextureViewDescriptor(
@@ -467,8 +470,8 @@ namespace Horo::Render {
             return Result<void>::Failure(
                 MakeFrontendError(FrontendErrors::InvalidTextureViewDescriptor, "Texture-view source metadata is unavailable."));
         }
-        const TextureRecord &texture = textures_[descriptor.texture.slot];
-        if (texture.generation != descriptor.texture.generation ||
+        if (const TextureRecord &texture = textures_[descriptor.texture.slot];
+            texture.generation != descriptor.texture.generation ||
             ValidateRenderTextureViewCompatibility(texture.descriptor, descriptor).HasError()) {
             return Result<void>::Failure(MakeFrontendError(FrontendErrors::InvalidTextureViewDescriptor,
                                                            "Texture-view format, range, or aspect is incompatible with its texture."));
