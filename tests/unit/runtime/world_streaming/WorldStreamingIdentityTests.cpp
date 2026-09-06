@@ -114,8 +114,7 @@ namespace Horo::WorldStreaming {
             REQUIRE(WorldPartitionIdHash{}(World()) == static_cast<std::size_t>(0x52a39b8a741b3ef5ULL));
             REQUIRE(StreamingCellIdHash{}(cell) == static_cast<std::size_t>(0x863b8d1d71539660ULL));
             REQUIRE(StreamingLayerIdHash{}(layer) == static_cast<std::size_t>(0x0835ee07b4ee5316ULL));
-            REQUIRE(StreamingSourceIdHash{}(IdentityFrom<StreamingSourceId>(7)) ==
-                    static_cast<std::size_t>(0x4bd7a317074c5b62ULL));
+            REQUIRE(StreamingSourceIdHash{}(IdentityFrom<StreamingSourceId>(7)) == static_cast<std::size_t>(0x4bd7a317074c5b62ULL));
         }
 
         TEST_CASE("Streaming fence binds world incarnation cell and attempt", "[unit][world_streaming][identity]") {
