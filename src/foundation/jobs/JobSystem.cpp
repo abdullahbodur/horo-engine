@@ -155,13 +155,21 @@ namespace Horo {
             if (IsOnExecutionStack(record))
                 return Result<void>::Failure(
                     MakeJobError(JobErrors::WaitCapacityDeadlock, "A synchronous wait would close a re-entrant job execution cycle."));
-            if (policy == WaitPolicy::WorkerOnly && activeSchedulerIdentity != record.schedulerIdentity)
-                return Result<void>::Failure(
-                    MakeJobError(JobErrors::WaitForbidden, "WorkerOnly requires a worker executing on the owning job system."));
-            if (policy == WaitPolicy::ForbiddenOnOwnerThread && record.submittingThread == std::this_thread::get_id())
-                return Result<void>::Failure(
-                    MakeJobError(JobErrors::WaitForbidden, "The submitting owner thread is forbidden from waiting for this job."));
-            return Result<void>::Success();
+            switch (policy) {
+                case WaitPolicy::MainThreadPumpAllowed:
+                    return Result<void>::Success();
+                case WaitPolicy::WorkerOnly:
+                    if (activeSchedulerIdentity == record.schedulerIdentity)
+                        return Result<void>::Success();
+                    return Result<void>::Failure(
+                        MakeJobError(JobErrors::WaitForbidden, "WorkerOnly requires a worker executing on the owning job system."));
+                case WaitPolicy::ForbiddenOnOwnerThread:
+                    if (record.submittingThread != std::this_thread::get_id())
+                        return Result<void>::Success();
+                    return Result<void>::Failure(
+                        MakeJobError(JobErrors::WaitForbidden, "The submitting owner thread is forbidden from waiting for this job."));
+            }
+            return Result<void>::Failure(MakeJobError(JobErrors::WaitForbidden, "The bounded wait policy is not recognized."));
         }
 
         [[nodiscard]] Result<void> TerminalResult(const JobRecord &record) {
@@ -226,12 +234,8 @@ namespace Horo {
                 state->queue.pop_front();
             }
 
-            {
-                std::lock_guard lock(record->Mutex());
-                if (record->state != JobState::Queued)
-                    continue;
-                record->state = JobState::Running;
-            }
+            if (!TryClaimJobRecord(record))
+                continue;
 
             ExecuteJobRecord(record);
         }
@@ -261,6 +265,11 @@ namespace Horo {
         std::lock_guard lock(m_state->mutex);
         if (!m_state->accepting)
             return Result<JobHandle>::Failure(MakeJobError(JobErrors::Shutdown, "Job system is no longer accepting work."));
+        if (m_state->queue.size() >= m_state->config.maxQueuedJobs)
+            std::erase_if(m_state->queue, [](const std::shared_ptr<JobRecord> &record) {
+                std::lock_guard recordLock(record->Mutex());
+                return record->state != JobState::Queued;
+            });
         if (m_state->queue.size() >= m_state->config.maxQueuedJobs)
             return Result<JobHandle>::Failure(MakeJobError(JobErrors::QueueFull, "Job queue is at capacity."));
 

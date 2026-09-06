@@ -132,6 +132,10 @@ namespace {
             completed.Value().Wait({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(10)});
         REQUIRE((nonWorker.HasError()));
         REQUIRE((nonWorker.ErrorValue().code.Value() == "job.wait_forbidden"));
+        const auto invalidPolicy =
+            completed.Value().Wait({.waitPolicy = static_cast<Horo::WaitPolicy>(255), .timeout = Horo::Duration::FromMilliseconds(10)});
+        REQUIRE((invalidPolicy.HasError()));
+        REQUIRE((invalidPolicy.ErrorValue().code.Value() == "job.wait_forbidden"));
         REQUIRE((completed.Value()
                      .Wait({.waitPolicy = Horo::WaitPolicy::MainThreadPumpAllowed, .timeout = Horo::Duration::FromMilliseconds(10)})
                      .HasValue()));
@@ -181,7 +185,12 @@ namespace {
         REQUIRE_FALSE((unrelatedExecuted.load()));
         REQUIRE((jobs.Query(unrelated.Value().Id()).state == Horo::JobState::Queued));
 
+        auto replacement = jobs.Submit({}, [](const Horo::CancellationToken &) {
+        });
+        REQUIRE((replacement.HasValue()));
+
         REQUIRE((jobs.RequestCancel(unrelated.Value().Id()).HasValue()));
+        REQUIRE((jobs.RequestCancel(replacement.Value().Id()).HasValue()));
         jobs.Shutdown(Horo::ShutdownPolicy::Cancel);
     }
 
