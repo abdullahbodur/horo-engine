@@ -155,6 +155,9 @@ namespace {
         manifest.participants[0].chunks.push_back(manifest.participants[0].chunks.front());
         CHECK(ValidateSaveGameManifest(manifest, Limits()).HasError());
         manifest = Manifest();
+        manifest.participants[1].chunks = {manifest.participants[0].chunks.front()};
+        CHECK(ValidateSaveGameManifest(manifest, Limits()).HasError());
+        manifest = Manifest();
         manifest.participants[0].chunks.clear();
         CHECK(ValidateSaveGameManifest(manifest, Limits()).HasError());
 
@@ -199,5 +202,53 @@ namespace {
         policy.participants.erase(policy.participants.begin());
         CHECK(EvaluateSaveCompatibility(archiveV1, Header(), manifest, policy).reason ==
               SaveCompatibilityReason::UnknownRequiredParticipant);
+
+        manifest = Manifest();
+        manifest.participants[1].required = false;
+        policy = Policy();
+        policy.participants.erase(policy.participants.begin() + 1);
+        CHECK(EvaluateSaveCompatibility(archiveV1, Header(), manifest, policy).disposition == SaveCompatibilityDisposition::DirectRead);
+    }
+
+    TEST_CASE("Compatibility preflight covers independent root and participant axes", "[runtime][save][compatibility]") {
+        const auto archiveV1 = V<ArchiveFormatVersion>(1);
+        const auto checkReason = [&](const ArchiveFormatVersion archive, const SaveArchiveHeader &header, const SaveGameManifest &manifest,
+                                     const SaveCompatibilityPolicy &policy, const SaveCompatibilityReason reason) {
+            const auto decision = EvaluateSaveCompatibility(archive, header, manifest, policy);
+            CHECK(decision.disposition == SaveCompatibilityDisposition::Rejected);
+            CHECK(decision.reason == reason);
+        };
+
+        checkReason(V<ArchiveFormatVersion>(9), Header(), Manifest(), Policy(), SaveCompatibilityReason::UnsupportedArchiveVersion);
+        auto manifest = Manifest();
+        manifest.saveSchemaVersion = V<SaveSchemaVersion>(9);
+        checkReason(archiveV1, Header(), manifest, Policy(), SaveCompatibilityReason::UnsupportedSaveSchema);
+        auto header = Header();
+        header.productCompatibility = V<ProductSaveCompatibilityVersion>(9);
+        checkReason(archiveV1, header, Manifest(), Policy(), SaveCompatibilityReason::UnsupportedProductVersion);
+        header = Header();
+        header.featureFlags = 0x4U;
+        checkReason(archiveV1, header, Manifest(), Policy(), SaveCompatibilityReason::UnsupportedFeature);
+
+        manifest = Manifest();
+        manifest.participants[1].schemaVersion = V<ParticipantSchemaVersion>(4);
+        CHECK(EvaluateSaveCompatibility(archiveV1, Header(), manifest, Policy()).disposition ==
+              SaveCompatibilityDisposition::MigrationRequired);
+    }
+
+    TEST_CASE("Compatibility preflight rejects malformed release policies", "[runtime][save][compatibility]") {
+        const auto archiveV1 = V<ArchiveFormatVersion>(1);
+        auto policy = Policy();
+        std::swap(policy.participants[0], policy.participants[1]);
+        CHECK(EvaluateSaveCompatibility(archiveV1, Header(), Manifest(), policy).reason == SaveCompatibilityReason::InvalidMetadata);
+
+        policy = Policy();
+        policy.participants.push_back(policy.participants.back());
+        CHECK(EvaluateSaveCompatibility(archiveV1, Header(), Manifest(), policy).reason == SaveCompatibilityReason::InvalidMetadata);
+
+        policy = Policy();
+        policy.archiveVersions.direct.minimum = V<ArchiveFormatVersion>(2);
+        policy.archiveVersions.direct.maximum = V<ArchiveFormatVersion>(1);
+        CHECK(EvaluateSaveCompatibility(archiveV1, Header(), Manifest(), policy).reason == SaveCompatibilityReason::InvalidMetadata);
     }
 }  // namespace

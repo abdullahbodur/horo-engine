@@ -10,6 +10,7 @@
 #include <nlohmann/json.hpp>
 #include <set>
 #include <string>
+#include <unordered_set>
 #include <utility>
 
 namespace Horo::Runtime {
@@ -65,12 +66,12 @@ namespace Horo::Runtime {
         }
 
         /** @brief Parses one required nonzero save version from an unsigned JSON integer. */
-        template <typename Version> [[nodiscard]] Result<Version> ParseVersion(const Json &value) {
+        template <typename Version> [[nodiscard]] Result<Version> ParseVersion(const Json &value, const ErrorCodeDescriptor &invalidError) {
             if (!value.is_number_unsigned() || value.get<std::uint64_t>() > std::numeric_limits<std::uint32_t>::max())
-                return Result<Version>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
+                return Result<Version>::Failure(MakeError(invalidError));
             auto parsed = Version::Create(static_cast<std::uint32_t>(value.get<std::uint64_t>()));
             if (parsed.HasError())
-                return Result<Version>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
+                return Result<Version>::Failure(MakeError(invalidError));
             return parsed;
         }
 
@@ -109,7 +110,7 @@ namespace Horo::Runtime {
                 return Result<SaveManifestParticipant>::Failure(MakeError(SaveErrors::ArchiveMetadataLimitExceeded));
 
             auto participant = SaveParticipantId::Parse(value.at("participant").get_ref<const std::string &>());
-            auto schema = ParseVersion<ParticipantSchemaVersion>(value.at("schemaVersion"));
+            auto schema = ParseVersion<ParticipantSchemaVersion>(value.at("schemaVersion"), SaveErrors::ArchiveManifestInvalid);
             if (participant.HasError() || schema.HasError())
                 return Result<SaveManifestParticipant>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
 
@@ -157,22 +158,160 @@ namespace Horo::Runtime {
                                                        std::optional<SaveParticipantId> participant = std::nullopt) {
             return {.disposition = SaveCompatibilityDisposition::Rejected, .reason = reason, .participant = std::move(participant)};
         }
+
+        /** @brief Reports whether every persistent identity in a header is valid. */
+        [[nodiscard]] bool HasValidHeaderIdentities(const SaveArchiveHeader &header) noexcept {
+            return header.slot.IsValid() && header.slotGeneration.IsValid() && header.product.IsValid() && header.environment.IsValid() &&
+                   header.user.IsValid() && header.profile.IsValid() && header.project.IsValid() && header.world.IsValid() &&
+                   header.baseScene.IsValid();
+        }
+
+        /** @brief Reports whether header provenance strings fit the configured bounds. */
+        [[nodiscard]] bool HasValidHeaderText(const SaveArchiveHeader &header, const SaveArchiveMetadataLimits &limits) noexcept {
+            return !header.engineVersion.empty() && !header.projectBuildId.empty() &&
+                   header.engineVersion.size() <= limits.maximumTextBytes && header.projectBuildId.size() <= limits.maximumTextBytes;
+        }
+
+        /** @brief Reports whether parent generation, versions, timestamps, and feature bits are coherent. */
+        [[nodiscard]] bool HasValidHeaderPublication(const SaveArchiveHeader &header, const SaveArchiveMetadataLimits &limits) noexcept {
+            const bool parentValid =
+                !header.parentGeneration || (header.parentGeneration->IsValid() && *header.parentGeneration != header.slotGeneration);
+            return parentValid && header.productCompatibility.IsValid() && header.capturedAtUnixMilliseconds != 0 &&
+                   (header.featureFlags & ~limits.supportedFeatureFlagsMask) == 0;
+        }
+
+        struct HeaderIdentities final {
+            SaveGameSlotId slot;
+            SlotGenerationId generation;
+            ProductStorageId product;
+            EnvironmentStorageId environment;
+            LocalUserStorageId user;
+            GameProfileId profile;
+            SaveProjectId project;
+            SaveWorldId world;
+            SaveBaseSceneId baseScene;
+        };
+
+        /** @brief Decodes the identity group from an exact-shape header object. */
+        [[nodiscard]] Result<HeaderIdentities> DecodeHeaderIdentities(const Json &root) {
+            auto slot = ParseIdentity<SaveGameSlotId>(root.at("slot"));
+            auto generation = ParseIdentity<SlotGenerationId>(root.at("slotGeneration"));
+            auto product = ParseIdentity<ProductStorageId>(root.at("product"));
+            auto environment = ParseIdentity<EnvironmentStorageId>(root.at("environment"));
+            auto user = ParseIdentity<LocalUserStorageId>(root.at("user"));
+            auto profile = ParseIdentity<GameProfileId>(root.at("profile"));
+            auto project = ParseIdentity<SaveProjectId>(root.at("project"));
+            auto world = ParseIdentity<SaveWorldId>(root.at("world"));
+            auto baseScene = ParseIdentity<SaveBaseSceneId>(root.at("baseScene"));
+            if (slot.HasError() || generation.HasError() || product.HasError() || environment.HasError() || user.HasError() ||
+                profile.HasError() || project.HasError() || world.HasError() || baseScene.HasError())
+                return Result<HeaderIdentities>::Failure(MakeError(SaveErrors::ArchiveHeaderInvalid));
+            return Result<HeaderIdentities>::Success({.slot = std::move(slot).Value(),
+                                                      .generation = std::move(generation).Value(),
+                                                      .product = std::move(product).Value(),
+                                                      .environment = std::move(environment).Value(),
+                                                      .user = std::move(user).Value(),
+                                                      .profile = std::move(profile).Value(),
+                                                      .project = std::move(project).Value(),
+                                                      .world = std::move(world).Value(),
+                                                      .baseScene = std::move(baseScene).Value()});
+        }
+
+        struct HeaderProvenance final {
+            ProductSaveCompatibilityVersion compatibility;
+            std::optional<SlotGenerationId> parent;
+            std::string engineVersion;
+            std::string projectBuildId;
+        };
+
+        /** @brief Decodes bounded version, parent, and diagnostic fields from a header object. */
+        [[nodiscard]] Result<HeaderProvenance> DecodeHeaderProvenance(const Json &root, const SaveArchiveMetadataLimits &limits) {
+            auto compatibility =
+                ParseVersion<ProductSaveCompatibilityVersion>(root.at("productCompatibilityVersion"), SaveErrors::ArchiveHeaderInvalid);
+            auto engineVersion = ParseText(root.at("engineVersion"), limits);
+            auto projectBuildId = ParseText(root.at("projectBuildId"), limits);
+            if (compatibility.HasError())
+                return Result<HeaderProvenance>::Failure(compatibility.ErrorValue());
+            if (engineVersion.HasError())
+                return Result<HeaderProvenance>::Failure(engineVersion.ErrorValue());
+            if (projectBuildId.HasError())
+                return Result<HeaderProvenance>::Failure(projectBuildId.ErrorValue());
+            std::optional<SlotGenerationId> parent;
+            if (!root.at("parentGeneration").is_null()) {
+                auto parsedParent = ParseIdentity<SlotGenerationId>(root.at("parentGeneration"));
+                if (parsedParent.HasError())
+                    return Result<HeaderProvenance>::Failure(parsedParent.ErrorValue());
+                parent = std::move(parsedParent).Value();
+            }
+            return Result<HeaderProvenance>::Success({.compatibility = std::move(compatibility).Value(),
+                                                      .parent = std::move(parent),
+                                                      .engineVersion = std::move(engineVersion).Value(),
+                                                      .projectBuildId = std::move(projectBuildId).Value()});
+        }
+
+        /** @brief Applies one root compatibility axis and records whether migration is required. */
+        [[nodiscard]] std::optional<SaveCompatibilityDecision> EvaluateRootVersion(const VersionAdmission admission,
+                                                                                   const SaveCompatibilityReason reason,
+                                                                                   bool &migrationRequired) {
+            if (admission == VersionAdmission::Rejected)
+                return Reject(reason);
+            migrationRequired |= admission == VersionAdmission::Migration;
+            return std::nullopt;
+        }
+
+        /** @brief Validates stable participant policy order and independent version ranges. */
+        [[nodiscard]] bool HasValidParticipantPolicy(const SaveCompatibilityPolicy &policy) noexcept {
+            if (!std::ranges::is_sorted(policy.participants, {}, &SaveParticipantCompatibility::participant))
+                return false;
+            for (std::size_t index = 0; index < policy.participants.size(); ++index) {
+                const auto &support = policy.participants[index];
+                if (!support.participant.IsValid() || !IsValidSupport(support.versions) ||
+                    (index != 0 && policy.participants[index - 1].participant == support.participant))
+                    return false;
+            }
+            return true;
+        }
+
+        /** @brief Evaluates declared participant support and required current composition. */
+        [[nodiscard]] std::optional<SaveCompatibilityDecision> EvaluateDeclaredParticipants(const SaveGameManifest &manifest,
+                                                                                            const SaveCompatibilityPolicy &policy,
+                                                                                            bool &migrationRequired) {
+            for (const auto &support : policy.participants) {
+                const auto found =
+                    std::ranges::lower_bound(manifest.participants, support.participant, {}, &SaveManifestParticipant::participant);
+                if (found == manifest.participants.end() || found->participant != support.participant) {
+                    if (support.required)
+                        return Reject(SaveCompatibilityReason::MissingRequiredParticipant, support.participant);
+                    continue;
+                }
+                const VersionAdmission admission = ClassifyVersion(found->schemaVersion, support.versions);
+                if (admission == VersionAdmission::Rejected)
+                    return Reject(SaveCompatibilityReason::UnsupportedParticipantSchema, support.participant);
+                migrationRequired |= admission == VersionAdmission::Migration;
+            }
+            return std::nullopt;
+        }
+
+        /** @brief Rejects required manifest participants absent from the sealed policy. */
+        [[nodiscard]] std::optional<SaveCompatibilityDecision> FindUnknownRequiredParticipant(const SaveGameManifest &manifest,
+                                                                                              const SaveCompatibilityPolicy &policy) {
+            for (const SaveManifestParticipant &entry : manifest.participants) {
+                const auto found =
+                    std::ranges::lower_bound(policy.participants, entry.participant, {}, &SaveParticipantCompatibility::participant);
+                if (entry.required && (found == policy.participants.end() || found->participant != entry.participant))
+                    return Reject(SaveCompatibilityReason::UnknownRequiredParticipant, entry.participant);
+            }
+            return std::nullopt;
+        }
     }  // namespace
 
     /** @copydoc ValidateSaveArchiveHeader */
     Result<void> ValidateSaveArchiveHeader(const SaveArchiveHeader &header, const SaveArchiveMetadataLimits &limits) {
         if (!HasValidLimits(limits))
             return Result<void>::Failure(MakeError(SaveErrors::ArchiveMetadataLimitExceeded));
-        const bool identitiesValid = header.slot.IsValid() && header.slotGeneration.IsValid() && header.productCompatibility.IsValid() &&
-                                     header.product.IsValid() && header.environment.IsValid() && header.user.IsValid() &&
-                                     header.profile.IsValid() && header.project.IsValid() && header.world.IsValid() &&
-                                     header.baseScene.IsValid();
-        if (!identitiesValid || (header.parentGeneration && !header.parentGeneration->IsValid()) ||
-            (header.parentGeneration && *header.parentGeneration == header.slotGeneration) || header.capturedAtUnixMilliseconds == 0 ||
-            (header.featureFlags & ~limits.supportedFeatureFlagsMask) != 0)
+        if (!HasValidHeaderIdentities(header) || !HasValidHeaderPublication(header, limits))
             return Result<void>::Failure(MakeError(SaveErrors::ArchiveHeaderInvalid));
-        if (header.engineVersion.empty() || header.projectBuildId.empty() || header.engineVersion.size() > limits.maximumTextBytes ||
-            header.projectBuildId.size() > limits.maximumTextBytes)
+        if (!HasValidHeaderText(header, limits))
             return Result<void>::Failure(MakeError(SaveErrors::ArchiveMetadataLimitExceeded));
         return Result<void>::Success();
     }
@@ -184,16 +323,23 @@ namespace Horo::Runtime {
         if (!manifest.saveSchemaVersion.IsValid() || manifest.participants.empty())
             return Result<void>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
         std::size_t totalChunks = 0;
+        std::unordered_set<SaveRecordId, PersistentSaveIdentityHash<SaveRecordIdentityTag>> uniqueChunks;
+        uniqueChunks.reserve(std::min(limits.maximumTotalChunks, manifest.participants.size() * 2U));
         const SaveParticipantId *previousParticipant = nullptr;
         for (const SaveManifestParticipant &entry : manifest.participants) {
-            if (!entry.participant.IsValid() || !entry.schemaVersion.IsValid() || entry.chunks.empty() ||
-                entry.chunks.size() > limits.maximumChunksPerParticipant || entry.chunks.size() > limits.maximumTotalChunks - totalChunks)
+            if (!entry.participant.IsValid() || !entry.schemaVersion.IsValid() || entry.chunks.empty())
                 return Result<void>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
+            if (entry.chunks.size() > limits.maximumChunksPerParticipant || entry.chunks.size() > limits.maximumTotalChunks - totalChunks)
+                return Result<void>::Failure(MakeError(SaveErrors::ArchiveMetadataLimitExceeded));
             if (previousParticipant != nullptr && *previousParticipant >= entry.participant)
                 return Result<void>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
             if (const auto unique = ValidateUniqueSaveIdentities<SaveRecordIdentityTag>(entry.chunks);
                 unique.HasError() || !std::ranges::is_sorted(entry.chunks))
                 return Result<void>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
+            for (const SaveRecordId &chunk : entry.chunks) {
+                if (!uniqueChunks.insert(chunk).second)
+                    return Result<void>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
+            }
             totalChunks += entry.chunks.size();
             previousParticipant = &entry.participant;
         }
@@ -245,45 +391,27 @@ namespace Horo::Runtime {
             !root.at("featureFlags").is_number_unsigned())
             return Result<SaveArchiveHeader>::Failure(MakeError(SaveErrors::ArchiveHeaderInvalid));
 
-        auto slot = ParseIdentity<SaveGameSlotId>(root.at("slot"));
-        auto generation = ParseIdentity<SlotGenerationId>(root.at("slotGeneration"));
-        auto compatibility = ParseVersion<ProductSaveCompatibilityVersion>(root.at("productCompatibilityVersion"));
-        auto product = ParseIdentity<ProductStorageId>(root.at("product"));
-        auto environment = ParseIdentity<EnvironmentStorageId>(root.at("environment"));
-        auto user = ParseIdentity<LocalUserStorageId>(root.at("user"));
-        auto profile = ParseIdentity<GameProfileId>(root.at("profile"));
-        auto project = ParseIdentity<SaveProjectId>(root.at("project"));
-        auto world = ParseIdentity<SaveWorldId>(root.at("world"));
-        auto baseScene = ParseIdentity<SaveBaseSceneId>(root.at("baseScene"));
-        auto engineVersion = ParseText(root.at("engineVersion"), limits);
-        auto projectBuildId = ParseText(root.at("projectBuildId"), limits);
-        if (slot.HasError() || generation.HasError() || compatibility.HasError() || product.HasError() || environment.HasError() ||
-            user.HasError() || profile.HasError() || project.HasError() || world.HasError() || baseScene.HasError() ||
-            engineVersion.HasError() || projectBuildId.HasError())
-            return Result<SaveArchiveHeader>::Failure(MakeError(SaveErrors::ArchiveHeaderInvalid));
-
-        std::optional<SlotGenerationId> parent;
-        if (!root.at("parentGeneration").is_null()) {
-            auto parsedParent = ParseIdentity<SlotGenerationId>(root.at("parentGeneration"));
-            if (parsedParent.HasError())
-                return Result<SaveArchiveHeader>::Failure(MakeError(SaveErrors::ArchiveHeaderInvalid));
-            parent = std::move(parsedParent).Value();
-        }
-        SaveArchiveHeader header{.slot = std::move(slot).Value(),
-                                 .slotGeneration = std::move(generation).Value(),
-                                 .parentGeneration = std::move(parent),
-                                 .productCompatibility = std::move(compatibility).Value(),
-                                 .product = std::move(product).Value(),
-                                 .environment = std::move(environment).Value(),
-                                 .user = std::move(user).Value(),
-                                 .profile = std::move(profile).Value(),
-                                 .project = std::move(project).Value(),
-                                 .world = std::move(world).Value(),
-                                 .baseScene = std::move(baseScene).Value(),
+        auto identities = DecodeHeaderIdentities(root);
+        auto provenance = DecodeHeaderProvenance(root, limits);
+        if (identities.HasError() || provenance.HasError())
+            return Result<SaveArchiveHeader>::Failure(identities.HasError() ? identities.ErrorValue() : provenance.ErrorValue());
+        HeaderIdentities identityValues = std::move(identities).Value();
+        HeaderProvenance provenanceValues = std::move(provenance).Value();
+        SaveArchiveHeader header{.slot = std::move(identityValues.slot),
+                                 .slotGeneration = std::move(identityValues.generation),
+                                 .parentGeneration = std::move(provenanceValues.parent),
+                                 .productCompatibility = std::move(provenanceValues.compatibility),
+                                 .product = std::move(identityValues.product),
+                                 .environment = std::move(identityValues.environment),
+                                 .user = std::move(identityValues.user),
+                                 .profile = std::move(identityValues.profile),
+                                 .project = std::move(identityValues.project),
+                                 .world = std::move(identityValues.world),
+                                 .baseScene = std::move(identityValues.baseScene),
                                  .capturedAtUnixMilliseconds = root.at("capturedAtUnixMilliseconds").get<std::uint64_t>(),
                                  .playTimeNanoseconds = root.at("playTimeNanoseconds").get<std::uint64_t>(),
-                                 .engineVersion = std::move(engineVersion).Value(),
-                                 .projectBuildId = std::move(projectBuildId).Value(),
+                                 .engineVersion = std::move(provenanceValues.engineVersion),
+                                 .projectBuildId = std::move(provenanceValues.projectBuildId),
                                  .featureFlags = root.at("featureFlags").get<std::uint64_t>()};
         if (const auto valid = ValidateSaveArchiveHeader(header, limits); valid.HasError())
             return Result<SaveArchiveHeader>::Failure(valid.ErrorValue());
@@ -329,7 +457,7 @@ namespace Horo::Runtime {
             root.at("participants").size() > limits.maximumParticipants)
             return Result<SaveGameManifest>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
 
-        auto schema = ParseVersion<SaveSchemaVersion>(root.at("saveSchemaVersion"));
+        auto schema = ParseVersion<SaveSchemaVersion>(root.at("saveSchemaVersion"), SaveErrors::ArchiveManifestInvalid);
         auto digest = ParseSha256(root.at("canonicalStateHash").get_ref<const std::string &>());
         if (schema.HasError() || digest.HasError())
             return Result<SaveGameManifest>::Failure(MakeError(SaveErrors::ArchiveManifestInvalid));
@@ -354,57 +482,32 @@ namespace Horo::Runtime {
     SaveCompatibilityDecision EvaluateSaveCompatibility(const ArchiveFormatVersion archiveVersion, const SaveArchiveHeader &header,
                                                         const SaveGameManifest &manifest, const SaveCompatibilityPolicy &policy) {
         SaveArchiveMetadataLimits limits;
-        limits.supportedFeatureFlagsMask = policy.supportedFeatureFlagsMask;
+        limits.supportedFeatureFlagsMask = std::numeric_limits<std::uint64_t>::max();
         if (ValidateSaveArchiveHeader(header, limits).HasError() || ValidateSaveGameManifest(manifest, limits).HasError() ||
             !IsValidSupport(policy.archiveVersions) || !IsValidSupport(policy.saveSchemaVersions) ||
             !IsValidSupport(policy.productVersions))
             return Reject(SaveCompatibilityReason::InvalidMetadata);
 
+        if (!HasValidParticipantPolicy(policy))
+            return Reject(SaveCompatibilityReason::InvalidMetadata);
+
         bool migrationRequired = false;
-        const auto classifyRoot = [&migrationRequired](const VersionAdmission admission,
-                                                       const SaveCompatibilityReason reason) -> std::optional<SaveCompatibilityDecision> {
-            if (admission == VersionAdmission::Rejected)
-                return Reject(reason);
-            migrationRequired |= admission == VersionAdmission::Migration;
-            return std::nullopt;
-        };
-        if (auto rejected =
-                classifyRoot(ClassifyVersion(archiveVersion, policy.archiveVersions), SaveCompatibilityReason::UnsupportedArchiveVersion))
+        if (auto rejected = EvaluateRootVersion(ClassifyVersion(archiveVersion, policy.archiveVersions),
+                                                SaveCompatibilityReason::UnsupportedArchiveVersion, migrationRequired))
             return *rejected;
-        if (auto rejected = classifyRoot(ClassifyVersion(manifest.saveSchemaVersion, policy.saveSchemaVersions),
-                                         SaveCompatibilityReason::UnsupportedSaveSchema))
+        if (auto rejected = EvaluateRootVersion(ClassifyVersion(manifest.saveSchemaVersion, policy.saveSchemaVersions),
+                                                SaveCompatibilityReason::UnsupportedSaveSchema, migrationRequired))
             return *rejected;
-        if (auto rejected = classifyRoot(ClassifyVersion(header.productCompatibility, policy.productVersions),
-                                         SaveCompatibilityReason::UnsupportedProductVersion))
+        if (auto rejected = EvaluateRootVersion(ClassifyVersion(header.productCompatibility, policy.productVersions),
+                                                SaveCompatibilityReason::UnsupportedProductVersion, migrationRequired))
             return *rejected;
         if ((header.featureFlags & ~policy.supportedFeatureFlagsMask) != 0)
             return Reject(SaveCompatibilityReason::UnsupportedFeature);
 
-        if (!std::ranges::is_sorted(policy.participants, {}, &SaveParticipantCompatibility::participant))
-            return Reject(SaveCompatibilityReason::InvalidMetadata);
-        for (std::size_t index = 0; index < policy.participants.size(); ++index) {
-            const auto &support = policy.participants[index];
-            if (!support.participant.IsValid() || !IsValidSupport(support.versions) ||
-                (index != 0 && policy.participants[index - 1].participant == support.participant))
-                return Reject(SaveCompatibilityReason::InvalidMetadata);
-            const auto found =
-                std::ranges::lower_bound(manifest.participants, support.participant, {}, &SaveManifestParticipant::participant);
-            if (found == manifest.participants.end() || found->participant != support.participant) {
-                if (support.required)
-                    return Reject(SaveCompatibilityReason::MissingRequiredParticipant, support.participant);
-                continue;
-            }
-            const VersionAdmission admission = ClassifyVersion(found->schemaVersion, support.versions);
-            if (admission == VersionAdmission::Rejected)
-                return Reject(SaveCompatibilityReason::UnsupportedParticipantSchema, support.participant);
-            migrationRequired |= admission == VersionAdmission::Migration;
-        }
-        for (const SaveManifestParticipant &entry : manifest.participants) {
-            const auto found =
-                std::ranges::lower_bound(policy.participants, entry.participant, {}, &SaveParticipantCompatibility::participant);
-            if (entry.required && (found == policy.participants.end() || found->participant != entry.participant))
-                return Reject(SaveCompatibilityReason::UnknownRequiredParticipant, entry.participant);
-        }
+        if (auto rejected = EvaluateDeclaredParticipants(manifest, policy, migrationRequired))
+            return *rejected;
+        if (auto rejected = FindUnknownRequiredParticipant(manifest, policy))
+            return *rejected;
         return {.disposition =
                     migrationRequired ? SaveCompatibilityDisposition::MigrationRequired : SaveCompatibilityDisposition::DirectRead,
                 .reason = SaveCompatibilityReason::None,
