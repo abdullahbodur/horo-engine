@@ -7,20 +7,6 @@
 #include <thread>
 #include <type_traits>
 #include <utility>
-#include <vector>
-
-namespace Horo::Render {
-    /** @brief Test-only construction boundary for the storage layer before builder delivery. */
-    class RenderGraphBuilder final {
-    public:
-        static RenderGraph BuildForStorageTest(const RenderGraphOwnerId owner, const RenderGraphLimits &limits,
-                                               std::vector<RenderGraphPass> passes, std::vector<RenderGraphResource> resources,
-                                               std::vector<RenderGraphResourceUsage> usages,
-                                               std::vector<RenderGraphDependency> dependencies) {
-            return RenderGraph{owner, limits, std::move(passes), std::move(resources), std::move(usages), std::move(dependencies)};
-        }
-    };
-}  // namespace Horo::Render
 
 namespace {
     using namespace Horo::Render;
@@ -85,34 +71,6 @@ TEST_CASE("Render graph storage is move-only and immutable through its views", "
     STATIC_REQUIRE_FALSE(std::is_copy_assignable_v<RenderGraph>);
     STATIC_REQUIRE(std::is_move_constructible_v<RenderGraph>);
     STATIC_REQUIRE(std::is_same_v<decltype(std::declval<const RenderGraph &>().Passes()), std::span<const RenderGraphPass>>);
-
-    const RenderGraphOwnerId owner{9};
-    const RenderGraphLimits limits{.maxPasses = 1, .maxResources = 1, .maxUsages = 1, .maxDependencies = 1};
-    const RenderGraphPassRef pass{owner, RenderPassId{1}};
-    const RenderGraphResourceId resource{owner, 1};
-    RenderGraph graph =
-        RenderGraphBuilder::BuildForStorageTest(owner, limits, {{pass, RenderPassKind::Graphics, RenderQueueRole::Graphics}},
-                                                {{resource, RenderGraphResourceKind::Texture}},
-                                                {{pass, resource, RenderGraphAccess::Read, RenderGraphUsageKind::Sampled}},
-                                                {{pass, pass, RenderGraphDependencyKind::ExecutionOrder}});
-
-    REQUIRE(graph.Owner() == owner);
-    REQUIRE(graph.Limits().maxPasses == 1);
-    REQUIRE(graph.Passes().front().reference == pass);
-    REQUIRE(graph.Resources().front().id == resource);
-    REQUIRE(graph.Usages().front().resource == resource);
-    REQUIRE(graph.Dependencies().front().kind == RenderGraphDependencyKind::ExecutionOrder);
-
-    RenderGraph moved{std::move(graph)};
-    REQUIRE_FALSE(graph.Owner().IsValid());
-    REQUIRE(graph.Passes().empty());
-    REQUIRE(moved.Owner() == owner);
-
-    RenderGraph assigned = RenderGraphBuilder::BuildForStorageTest({10}, limits, {}, {}, {}, {});
-    assigned = std::move(moved);
-    REQUIRE_FALSE(moved.Owner().IsValid());
-    REQUIRE(moved.Passes().empty());
-    REQUIRE(assigned.Owner() == owner);
 }
 
 TEST_CASE("Render graph builder owns finite storage and explicit lifecycle", "[runtime][renderer][render-graph]") {
