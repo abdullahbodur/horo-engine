@@ -30,5 +30,29 @@ namespace Horo::Navigation {
             }
             return true;
         }
+
+        /** @brief Validates bounded exact coverage inputs shared by complete and partial factories. */
+        bool ValidateExactCoverage(const std::span<const NavigationCoverageDependency> covered,
+                                   const std::span<const NavigationCoverageDependency> missing) noexcept {
+            if (covered.size() > MaximumNavigationOutcomeCoverageDependencies ||
+                missing.size() > MaximumNavigationOutcomeCoverageDependencies - covered.size())
+                return false;
+            if (!std::ranges::all_of(covered, IsValidDependency) || !std::ranges::all_of(missing, IsValidDependency))
+                return false;
+            return HasUniqueRegions(covered, missing);
+        }
+
+        /** @brief Copies a bounded dependency view into fixed outcome-owned storage. */
+        void CopyDependencies(const std::span<const NavigationCoverageDependency> source,
+                              std::array<NavigationCoverageDependency, MaximumNavigationOutcomeCoverageDependencies> &destination) {
+            std::ranges::copy(source, destination.begin());
+        }
     }  // namespace
+
+    /** @copydoc ValidateNavigationOutcomeProvenance */
+    bool ValidateNavigationOutcomeProvenance(const NavigationOutcomeProvenance &provenance) noexcept {
+        return provenance.snapshot.IsValid() && provenance.world.IsValid() && provenance.topology.IsValid() &&
+               provenance.obstacleRevision != 0 && provenance.filterRevision != 0 && provenance.profileRevision != 0 &&
+               provenance.originRevision != 0;
+    }
 }  // namespace Horo::Navigation
