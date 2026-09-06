@@ -50,50 +50,68 @@ namespace Horo::Runtime {
             return std::make_shared<TestAdapter>(destructionCount);
         }
 
+        /** @brief Verifies that registry admission rejects one invalid descriptor. */
+        void RequireInvalidDescriptor(CanonicalStateParticipantRegistry &registry, CanonicalStateParticipantDescriptor descriptor,
+                                      const std::shared_ptr<int> &destructionCount) {
+            REQUIRE(registry.Register(std::move(descriptor), Adapter(destructionCount)).ErrorValue().code.Value() ==
+                    SaveErrors::ParticipantDescriptorInvalid.code.Value());
+        }
+
         TEST_CASE("Participant descriptors reject invalid metadata before snapshot publication", "[unit][save][registry]") {
             auto destructionCount = std::make_shared<int>();
             CanonicalStateParticipantRegistry registry;
-            const auto requireInvalid = [&](CanonicalStateParticipantDescriptor descriptor) {
-                REQUIRE(registry.Register(std::move(descriptor), Adapter(destructionCount)).ErrorValue().code.Value() ==
-                        SaveErrors::ParticipantDescriptorInvalid.code.Value());
-            };
 
             auto invalid = Descriptor("horo.test.invalid");
             invalid.schemaVersion = {};
-            requireInvalid(std::move(invalid));
+            RequireInvalidDescriptor(registry, std::move(invalid), destructionCount);
             REQUIRE(registry.Register(Descriptor("horo.test.missing_adapter"), nullptr).ErrorValue().code.Value() ==
                     SaveErrors::ParticipantAdapterMissing.code.Value());
 
             invalid = Descriptor("horo.test.no_roles");
             invalid.roles = SaveParticipantRole::None;
-            requireInvalid(std::move(invalid));
+            RequireInvalidDescriptor(registry, std::move(invalid), destructionCount);
             invalid = Descriptor("horo.test.unbounded");
             invalid.limits.maximumPayloadBytes = 0;
-            requireInvalid(std::move(invalid));
+            RequireInvalidDescriptor(registry, std::move(invalid), destructionCount);
             invalid = Descriptor("horo.test.no_record_capacity");
             invalid.limits.maximumRecordCount = 0;
-            requireInvalid(std::move(invalid));
+            RequireInvalidDescriptor(registry, std::move(invalid), destructionCount);
+            invalid = Descriptor("horo.test.insufficient_record_capacity");
+            invalid.ownedRecords.push_back(Record("10112233-4455-6677-8899-aabbccddeeff"));
+            invalid.limits.maximumRecordCount = 1;
+            RequireInvalidDescriptor(registry, std::move(invalid), destructionCount);
             invalid = Descriptor("horo.test.no_nesting");
             invalid.limits.maximumNestingDepth = 0;
-            requireInvalid(std::move(invalid));
+            RequireInvalidDescriptor(registry, std::move(invalid), destructionCount);
             invalid = Descriptor("horo.test.no_participant");
             invalid.participant = {};
-            requireInvalid(std::move(invalid));
+            RequireInvalidDescriptor(registry, std::move(invalid), destructionCount);
             invalid = Descriptor("horo.test.no_records");
             invalid.ownedRecords.clear();
-            requireInvalid(std::move(invalid));
+            RequireInvalidDescriptor(registry, std::move(invalid), destructionCount);
             invalid = Descriptor("horo.test.duplicate_record");
             invalid.ownedRecords.push_back(invalid.ownedRecords.front());
-            requireInvalid(std::move(invalid));
+            RequireInvalidDescriptor(registry, std::move(invalid), destructionCount);
+        }
+
+        TEST_CASE("Participant descriptors reject unsupported scope role and dependency metadata", "[unit][save][registry]") {
+            auto destructionCount = std::make_shared<int>();
+            CanonicalStateParticipantRegistry registry;
+            auto invalid = Descriptor("horo.test.unknown_role");
+            invalid.roles = static_cast<SaveParticipantRole>(0x80U);
+            RequireInvalidDescriptor(registry, std::move(invalid), destructionCount);
+            invalid = Descriptor("horo.test.unknown_scope");
+            invalid.scope = static_cast<SaveParticipantScope>(0xffU);
+            RequireInvalidDescriptor(registry, std::move(invalid), destructionCount);
             invalid = Descriptor("horo.test.invalid_dependency");
             invalid.dependencies = {SaveParticipantId{}};
-            requireInvalid(std::move(invalid));
+            RequireInvalidDescriptor(registry, std::move(invalid), destructionCount);
             invalid = Descriptor("horo.test.self_dependency");
             invalid.dependencies = {invalid.participant};
-            requireInvalid(std::move(invalid));
+            RequireInvalidDescriptor(registry, std::move(invalid), destructionCount);
             invalid = Descriptor("horo.test.duplicate_dependency");
             invalid.dependencies = {Participant("horo.test.provider"), Participant("horo.test.provider")};
-            requireInvalid(std::move(invalid));
+            RequireInvalidDescriptor(registry, std::move(invalid), destructionCount);
         }
 
         TEST_CASE("Participant registration is unique bounded and generation checked", "[unit][save][registry]") {

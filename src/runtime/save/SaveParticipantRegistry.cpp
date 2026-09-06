@@ -17,12 +17,35 @@ namespace Horo::Runtime {
             Visited
         };
 
+        /** @brief Reports whether the descriptor declares one supported semantic scope. */
+        [[nodiscard]] bool IsValidScope(const SaveParticipantScope scope) noexcept {
+            switch (scope) {
+                case SaveParticipantScope::RuntimeScene:
+                case SaveParticipantScope::SlotPlayer:
+                case SaveParticipantScope::PersistentWorld:
+                    return true;
+            }
+            return false;
+        }
+
+        /** @brief Reports whether role flags are non-empty and contain only supported bits. */
+        [[nodiscard]] bool HasValidRoles(const SaveParticipantRole roles) noexcept {
+            constexpr std::uint8_t kSupportedRoles =
+                static_cast<std::uint8_t>(SaveParticipantRole::Capture) | static_cast<std::uint8_t>(SaveParticipantRole::Restore);
+            const std::uint8_t encodedRoles = static_cast<std::uint8_t>(roles);
+            return encodedRoles != 0 && (encodedRoles & ~kSupportedRoles) == 0;
+        }
+
+        /** @brief Reports whether all local limits are finite and cover declared record ownership. */
+        [[nodiscard]] bool HasValidLimits(const CanonicalStateParticipantDescriptor &descriptor) noexcept {
+            return descriptor.limits.maximumPayloadBytes != 0 && descriptor.limits.maximumRecordCount != 0 &&
+                   descriptor.limits.maximumNestingDepth != 0 && descriptor.ownedRecords.size() <= descriptor.limits.maximumRecordCount;
+        }
+
         /** @brief Validates required scalar and owned-record descriptor fields. */
         [[nodiscard]] bool HasValidRequiredFields(const CanonicalStateParticipantDescriptor &descriptor) {
-            return descriptor.participant.IsValid() && descriptor.schemaVersion.IsValid() &&
-                   descriptor.roles != SaveParticipantRole::None && descriptor.limits.maximumPayloadBytes != 0 &&
-                   descriptor.limits.maximumRecordCount != 0 && descriptor.limits.maximumNestingDepth != 0 &&
-                   !descriptor.ownedRecords.empty();
+            return descriptor.participant.IsValid() && descriptor.schemaVersion.IsValid() && IsValidScope(descriptor.scope) &&
+                   HasValidRoles(descriptor.roles) && HasValidLimits(descriptor) && !descriptor.ownedRecords.empty();
         }
 
         /** @brief Validates dependency identity, self-reference, and uniqueness rules. */
