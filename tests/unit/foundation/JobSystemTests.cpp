@@ -132,6 +132,10 @@ namespace {
             completed.Value().Wait({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(10)});
         REQUIRE((nonWorker.HasError()));
         REQUIRE((nonWorker.ErrorValue().code.Value() == "job.wait_forbidden"));
+        const auto invalidPolicy =
+            completed.Value().Wait({.waitPolicy = static_cast<Horo::WaitPolicy>(255), .timeout = Horo::Duration::FromMilliseconds(10)});
+        REQUIRE((invalidPolicy.HasError()));
+        REQUIRE((invalidPolicy.ErrorValue().code.Value() == "job.wait_forbidden"));
         REQUIRE((completed.Value()
                      .Wait({.waitPolicy = Horo::WaitPolicy::MainThreadPumpAllowed, .timeout = Horo::Duration::FromMilliseconds(10)})
                      .HasValue()));

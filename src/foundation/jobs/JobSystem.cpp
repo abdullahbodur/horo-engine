@@ -153,13 +153,21 @@ namespace Horo {
             if (IsOnExecutionStack(record))
                 return Result<void>::Failure(
                     MakeJobError(JobErrors::WaitCapacityDeadlock, "A synchronous wait would close a re-entrant job execution cycle."));
-            if (policy == WaitPolicy::WorkerOnly && activeSchedulerIdentity != record.schedulerIdentity)
-                return Result<void>::Failure(
-                    MakeJobError(JobErrors::WaitForbidden, "WorkerOnly requires a worker executing on the owning job system."));
-            if (policy == WaitPolicy::ForbiddenOnOwnerThread && record.submittingThread == std::this_thread::get_id())
-                return Result<void>::Failure(
-                    MakeJobError(JobErrors::WaitForbidden, "The submitting owner thread is forbidden from waiting for this job."));
-            return Result<void>::Success();
+            switch (policy) {
+                case WaitPolicy::MainThreadPumpAllowed:
+                    return Result<void>::Success();
+                case WaitPolicy::WorkerOnly:
+                    if (activeSchedulerIdentity == record.schedulerIdentity)
+                        return Result<void>::Success();
+                    return Result<void>::Failure(
+                        MakeJobError(JobErrors::WaitForbidden, "WorkerOnly requires a worker executing on the owning job system."));
+                case WaitPolicy::ForbiddenOnOwnerThread:
+                    if (record.submittingThread != std::this_thread::get_id())
+                        return Result<void>::Success();
+                    return Result<void>::Failure(
+                        MakeJobError(JobErrors::WaitForbidden, "The submitting owner thread is forbidden from waiting for this job."));
+            }
+            return Result<void>::Failure(MakeJobError(JobErrors::WaitForbidden, "The bounded wait policy is not recognized."));
         }
 
         [[nodiscard]] Result<void> TerminalResult(const JobRecord &record) {
