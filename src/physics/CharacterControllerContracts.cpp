@@ -52,6 +52,16 @@ namespace Horo::Character {
         return Result<CharacterWorldId>::Success(CharacterWorldId{value});
     }
 
+    /** @copydoc CharacterWorldId::Value */
+    std::uint64_t CharacterWorldId::Value() const noexcept {
+        return value_;
+    }
+
+    /** @copydoc CharacterWorldId::IsValid */
+    bool CharacterWorldId::IsValid() const noexcept {
+        return value_ != 0;
+    }
+
     /** @copydoc ValidateCharacterControllerHandleOwner */
     Result<void> ValidateCharacterControllerHandleOwner(const CharacterControllerHandle &handle,
                                                         const std::uint64_t expectedSceneGeneration, const CharacterWorldId expectedWorld) {
