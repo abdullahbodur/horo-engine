@@ -230,10 +230,11 @@ target_link_libraries(HoroWorldStreamingTests PRIVATE HoroEngine::WorldStreaming
 horo_register_catch_test(HoroWorldStreamingTests LABELS "unit;world_streaming;headless")
 
 add_executable(HoroPrefabTests
+        unit/runtime/prefab/PrefabDocumentTests.cpp
         unit/runtime/prefab/PrefabIdentityTests.cpp
 )
 target_compile_features(HoroPrefabTests PRIVATE cxx_std_20)
-target_link_libraries(HoroPrefabTests PRIVATE HoroEngine::Prefab)
+target_link_libraries(HoroPrefabTests PRIVATE HoroEngine::PrefabAuthoring)
 horo_register_catch_test(HoroPrefabTests LABELS "unit;prefab;headless")
 
 foreach(horo_physics_probe IN ITEMS iOS Linux Darwin)

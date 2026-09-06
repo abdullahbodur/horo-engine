@@ -395,6 +395,13 @@ add_library(HoroEngine::Prefab ALIAS HoroPrefab)
 target_compile_features(HoroPrefab PUBLIC cxx_std_20)
 target_link_libraries(HoroPrefab PUBLIC HoroEngine::Foundation HoroEngine::Assets HoroEngine::GameplayApi)
 
+add_library(HoroPrefabAuthoring STATIC
+        runtime/prefab/PrefabDocument.cpp
+)
+add_library(HoroEngine::PrefabAuthoring ALIAS HoroPrefabAuthoring)
+target_compile_features(HoroPrefabAuthoring PUBLIC cxx_std_20)
+target_link_libraries(HoroPrefabAuthoring PUBLIC HoroEngine::Prefab HoroEngine::Application)
+
 add_library(HoroInput STATIC
         runtime/input/Input.cpp
         runtime/input/InputErrors.cpp
