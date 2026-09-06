@@ -344,34 +344,35 @@ namespace Horo {
     }
 
     void JobSystem::Shutdown(const ShutdownPolicy policy) const {
-        std::unique_lock shutdownLock(m_state->shutdownMutex);
         std::vector<JobFunction> releasedWork;
         {
-            std::lock_guard lock(m_state->mutex);
-            m_state->accepting = false;
-            m_state->stopping = true;
-            if (policy == ShutdownPolicy::Cancel) {
-                releasedWork.reserve(m_state->queue.size());
-                for (const auto &record : m_state->queue) {
-                    record->cancellation.RequestCancellation();
-                    releasedWork.push_back(SetTerminalState(record, JobState::Cancelled,
-                                                            MakeJobError(JobErrors::Cancelled, "Job was cancelled during shutdown.")));
-                }
-                m_state->queue.clear();
-                for (const auto &[id, record] : m_state->jobs) {
-                    (void)id;
-                    record->cancellation.RequestCancellation();
+            std::lock_guard shutdownLock(m_state->shutdownMutex);
+            {
+                std::lock_guard lock(m_state->mutex);
+                m_state->accepting = false;
+                m_state->stopping = true;
+                if (policy == ShutdownPolicy::Cancel) {
+                    releasedWork.reserve(m_state->queue.size());
+                    for (const auto &record : m_state->queue) {
+                        record->cancellation.RequestCancellation();
+                        releasedWork.push_back(SetTerminalState(record, JobState::Cancelled,
+                                                                MakeJobError(JobErrors::Cancelled, "Job was cancelled during shutdown.")));
+                    }
+                    m_state->queue.clear();
+                    for (const auto &[id, record] : m_state->jobs) {
+                        (void)id;
+                        record->cancellation.RequestCancellation();
+                    }
                 }
             }
+            m_state->workAvailable.notify_all();
+            std::ranges::for_each(m_state->workers, [](std::thread &worker) {  // NOSONAR(cpp:S6168) std::jthread not supported by
+                                                                               // AppleClang libc++ without experimental flags
+                if (worker.joinable()) {
+                    worker.join();
+                }
+            });
         }
-        m_state->workAvailable.notify_all();
-        std::ranges::for_each(m_state->workers, [](std::thread &worker) {  // NOSONAR(cpp:S6168) std::jthread not supported by AppleClang
-                                                                           // libc++ without experimental flags
-            if (worker.joinable()) {
-                worker.join();
-            }
-        });
-        shutdownLock.unlock();
         releasedWork.clear();
     }
 
