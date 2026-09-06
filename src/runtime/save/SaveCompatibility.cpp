@@ -59,14 +59,15 @@ namespace Horo::Runtime {
                                                                                     const SaveGameManifest &manifest,
                                                                                     const SaveCompatibilityPolicy &policy,
                                                                                     bool &migrationRequired) {
-            if (auto rejected = EvaluateRootVersion(ClassifyVersion(archiveVersion, policy.archiveVersions),
-                                                    SaveCompatibilityReason::UnsupportedArchiveVersion, migrationRequired))
+            using enum SaveCompatibilityReason;
+            if (auto rejected = EvaluateRootVersion(ClassifyVersion(archiveVersion, policy.archiveVersions), UnsupportedArchiveVersion,
+                                                    migrationRequired))
                 return rejected;
             if (auto rejected = EvaluateRootVersion(ClassifyVersion(manifest.saveSchemaVersion, policy.saveSchemaVersions),
-                                                    SaveCompatibilityReason::UnsupportedSaveSchema, migrationRequired))
+                                                    UnsupportedSaveSchema, migrationRequired))
                 return rejected;
-            return EvaluateRootVersion(ClassifyVersion(header.productCompatibility, policy.productVersions),
-                                       SaveCompatibilityReason::UnsupportedProductVersion, migrationRequired);
+            return EvaluateRootVersion(ClassifyVersion(header.productCompatibility, policy.productVersions), UnsupportedProductVersion,
+                                       migrationRequired);
         }
 
         /** @brief Validates stable participant policy order and independent version ranges. */
