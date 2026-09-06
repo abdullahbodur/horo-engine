@@ -15,6 +15,50 @@
 #include <limits>
 
 namespace Horo::WorldStreaming {
+    namespace Detail {
+        /** @brief Tag that keeps stable source identities distinct from other non-zero counters. */
+        struct StreamingSourceIdTag;
+        /** @brief Tag that keeps partition epochs distinct from other non-zero counters. */
+        struct PartitionEpochTag;
+        /** @brief Tag that keeps streaming generations distinct from other non-zero counters. */
+        struct StreamingGenerationTag;
+
+        /** @brief Strong, non-zero 64-bit identity shared by domain-specific tagged specializations. */
+        template <typename Tag> class StrongId64 final {
+        public:
+            /** @brief Constructs the reserved invalid identity. */
+            constexpr StrongId64() = default;
+
+            /**
+             * @brief Validates a domain-issued identity.
+             * @param value Non-zero identity value.
+             * @return Typed identity or WorldStreamingErrors::IdentityInvalid.
+             */
+            [[nodiscard]] static Result<StrongId64> Create(const std::uint64_t value) {
+                if (value == 0)
+                    return Result<StrongId64>::Failure(MakeError(WorldStreamingErrors::IdentityInvalid));
+                return Result<StrongId64>::Success(StrongId64{value});
+            }
+
+            /** @brief Returns the domain-issued value. @return Zero only for the invalid identity. */
+            [[nodiscard]] constexpr std::uint64_t Value() const noexcept {
+                return value_;
+            }
+
+            /** @brief Checks representation. @return Whether the value is non-zero. */
+            [[nodiscard]] constexpr bool IsValid() const noexcept {
+                return value_ != 0;
+            }
+
+            [[nodiscard]] constexpr auto operator<=>(const StrongId64 &) const noexcept = default;
+
+        private:
+            explicit constexpr StrongId64(const std::uint64_t value) noexcept : value_(value) {}
+
+            std::uint64_t value_{};
+        };
+    }  // namespace Detail
+
     /** @brief Canonical 16-byte world GUID representation used by world.index. */
     using SerializedWorldPartitionId = std::array<std::uint8_t, 16>;
     /** @brief Canonical little-endian representation of a streaming cell tuple. */
@@ -85,83 +129,13 @@ namespace Horo::WorldStreaming {
     };
 
     /** @brief Stable host-authored streaming relevance source identity; zero is reserved as invalid. */
-    class StreamingSourceId final {
-    public:
-        /** @brief Constructs the reserved invalid source identity. */
-        StreamingSourceId() = default;
-
-        /** @brief Validates a source value. @param value Non-zero stable value. @return Typed identity or IdentityInvalid. */
-        [[nodiscard]] static Result<StreamingSourceId> Create(std::uint64_t value);
-
-        /** @brief Returns the stable source value. @return Zero only for the invalid identity. */
-        [[nodiscard]] constexpr std::uint64_t Value() const noexcept {
-            return value_;
-        }
-
-        /** @brief Checks representation, not source liveness. @return Whether the value is non-zero. */
-        [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return value_ != 0;
-        }
-
-        [[nodiscard]] constexpr auto operator<=>(const StreamingSourceId &) const noexcept = default;
-
-    private:
-        explicit constexpr StreamingSourceId(const std::uint64_t value) noexcept : value_(value) {}
-
-        std::uint64_t value_{};
-    };
+    using StreamingSourceId = Detail::StrongId64<Detail::StreamingSourceIdTag>;
 
     /** @brief Mounted partition incarnation; zero is invalid and issued values never wrap or repeat. */
-    class PartitionEpoch final {
-    public:
-        /** @brief Constructs the reserved invalid epoch. */
-        PartitionEpoch() = default;
-        /** @brief Validates an owner-issued epoch. @param value Non-zero value. @return Typed epoch or IdentityInvalid. */
-        [[nodiscard]] static Result<PartitionEpoch> Create(std::uint64_t value);
-
-        /** @brief Returns the owner-issued value. @return Zero only for the invalid epoch. */
-        [[nodiscard]] constexpr std::uint64_t Value() const noexcept {
-            return value_;
-        }
-
-        /** @brief Checks representation. @return Whether the value is non-zero. */
-        [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return value_ != 0;
-        }
-
-        [[nodiscard]] constexpr auto operator<=>(const PartitionEpoch &) const noexcept = default;
-
-    private:
-        explicit constexpr PartitionEpoch(const std::uint64_t value) noexcept : value_(value) {}
-
-        std::uint64_t value_{};
-    };
+    using PartitionEpoch = Detail::StrongId64<Detail::PartitionEpochTag>;
 
     /** @brief One cell residency attempt; zero is invalid and issued values never wrap or repeat. */
-    class StreamingGeneration final {
-    public:
-        /** @brief Constructs the reserved invalid generation. */
-        StreamingGeneration() = default;
-        /** @brief Validates an owner-issued generation. @param value Non-zero value. @return Typed generation or IdentityInvalid. */
-        [[nodiscard]] static Result<StreamingGeneration> Create(std::uint64_t value);
-
-        /** @brief Returns the owner-issued value. @return Zero only for the invalid generation. */
-        [[nodiscard]] constexpr std::uint64_t Value() const noexcept {
-            return value_;
-        }
-
-        /** @brief Checks representation. @return Whether the value is non-zero. */
-        [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return value_ != 0;
-        }
-
-        [[nodiscard]] constexpr auto operator<=>(const StreamingGeneration &) const noexcept = default;
-
-    private:
-        explicit constexpr StreamingGeneration(const std::uint64_t value) noexcept : value_(value) {}
-
-        std::uint64_t value_{};
-    };
+    using StreamingGeneration = Detail::StrongId64<Detail::StreamingGenerationTag>;
 
     /** @brief Exact ADR-023 cell tuple within one partition. */
     struct StreamingCellId final {

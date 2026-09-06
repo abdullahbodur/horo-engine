@@ -82,27 +82,6 @@ namespace Horo::WorldStreaming {
         return Result<StreamingLayerId>::Success(StreamingLayerId{value});
     }
 
-    /** @copydoc StreamingSourceId::Create */
-    Result<StreamingSourceId> StreamingSourceId::Create(const std::uint64_t value) {
-        if (value == 0)
-            return Result<StreamingSourceId>::Failure(MakeError(WorldStreamingErrors::IdentityInvalid));
-        return Result<StreamingSourceId>::Success(StreamingSourceId{value});
-    }
-
-    /** @copydoc PartitionEpoch::Create */
-    Result<PartitionEpoch> PartitionEpoch::Create(const std::uint64_t value) {
-        if (value == 0)
-            return Result<PartitionEpoch>::Failure(MakeError(WorldStreamingErrors::IdentityInvalid));
-        return Result<PartitionEpoch>::Success(PartitionEpoch{value});
-    }
-
-    /** @copydoc StreamingGeneration::Create */
-    Result<StreamingGeneration> StreamingGeneration::Create(const std::uint64_t value) {
-        if (value == 0)
-            return Result<StreamingGeneration>::Failure(MakeError(WorldStreamingErrors::IdentityInvalid));
-        return Result<StreamingGeneration>::Success(StreamingGeneration{value});
-    }
-
     /** @copydoc StreamingFence::IsValid */
     bool StreamingFence::IsValid() const noexcept {
         return partition.IsValid() && epoch.IsValid() && cell.IsValid() && generation.IsValid();
