@@ -30,8 +30,10 @@ namespace Horo::Runtime::Ui {
 
         void ExpectError(const Result<void> &result, const ErrorCodeDescriptor &expected) {
             REQUIRE(result.HasError());
-            REQUIRE(result.ErrorValue().domain.Value() == expected.domain.Value());
-            REQUIRE(result.ErrorValue().code.Value() == expected.code.Value());
+            const Error &actual = result.ErrorValue();
+            CAPTURE(actual.message);
+            REQUIRE(actual.domain.Value() == expected.domain.Value());
+            REQUIRE(actual.code.Value() == expected.code.Value());
         }
 
         TEST_CASE("Runtime UI stable identities are typed persistent 128-bit values", "[runtime_ui][identity]") {
@@ -128,11 +130,10 @@ namespace Horo::Runtime::Ui {
             }};
             std::set<std::string_view> unique;
             for (const auto &[descriptor, code] : cases) {
-                REQUIRE(descriptor->domain.Value() == "horo.runtime_ui");
-                REQUIRE(descriptor->code.Value() == code);
+                CAPTURE(code);
+                REQUIRE((descriptor->domain.Value() == "horo.runtime_ui" && descriptor->code.Value() == code &&
+                         !descriptor->summary.empty() && !descriptor->remediationHint.empty()));
                 REQUIRE(unique.insert(descriptor->code.Value()).second);
-                REQUIRE_FALSE(descriptor->summary.empty());
-                REQUIRE_FALSE(descriptor->remediationHint.empty());
             }
             REQUIRE(UiErrors::RevisionStale.retryable);
             REQUIRE(UiErrors::GenerationExhausted.defaultSeverity == ErrorSeverity::Critical);
