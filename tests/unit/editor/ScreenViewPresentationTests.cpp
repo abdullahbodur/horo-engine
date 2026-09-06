@@ -2,6 +2,7 @@
 #include "Horo/Editor/GuiScreenHost.h"
 #include "editor/screens/project_loading/ProjectLoadingView.h"
 #include "editor/screens/welcome/WelcomeView.h"
+#include "editor/screens/workspace/EditorWorkspaceView.h"
 #include "helpers/editor_ui/HeadlessEditorGuiFixture.h"
 
 #include <array>
@@ -92,5 +93,39 @@ TEST_CASE("Project loading presentation renders active cancelled and failure sta
         const ProjectLoadingViewCommand command = DrawProjectLoadingView(state, fixture.context, content);
         fixture.imgui.EndFrame();
         REQUIRE(command == ProjectLoadingViewCommand::None);
+    }
+}
+
+TEST_CASE("Workspace presentation renders lifecycle and recovery states without panels", "[unit][editor][gui][workspace]") {
+    using namespace Horo;
+    using namespace Horo::Editor;
+
+    Tests::EditorGuiContextFixture fixture;
+    WorkspacePanelRegistry panels;
+    auto workspaceInput = fixture.input.PushContext(Input::InputContextId{"editor.workspace"}, Input::InputContextKind::EditorWorkspace);
+    EditorWorkspaceView view{fixture.context, panels, 0, fixture.input, workspaceInput};
+    EditorWorkspaceViewModel model;
+    model.projectRoot = "/projects/example";
+    model.fps = 60.0F;
+    model.canUndo = true;
+    model.canRedo = true;
+    const GuiContentRegion content{0.0F, 0.0F, 1280.0F, 800.0F};
+
+    static constexpr std::array playStates{
+        EditorPlayState::Idle,   EditorPlayState::Starting, EditorPlayState::Playing,
+        EditorPlayState::Paused, EditorPlayState::Stopping, EditorPlayState::Failed,
+    };
+    for (const EditorPlayState playState : playStates) {
+        model.playState = playState;
+        model.playError = playState == EditorPlayState::Failed ? "Runtime launch failed" : "";
+        model.recoveryAvailable = playState == EditorPlayState::Starting;
+        model.sceneExternalConflict = playState == EditorPlayState::Paused;
+        EditorWorkspaceViewCommandData command;
+
+        fixture.imgui.BeginFrame();
+        view.Draw(model, command, content);
+        fixture.imgui.EndFrame();
+
+        REQUIRE(command.command == EditorWorkspaceViewCommand::None);
     }
 }
