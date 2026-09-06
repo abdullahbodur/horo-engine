@@ -7,7 +7,10 @@
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
+#include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace {
     Horo::Editor::RecentProjectEntry MakeRecentProject(const Horo::Application::ProjectCompatibilityStatus status,
@@ -25,6 +28,46 @@ namespace {
                 },
         };
     }
+
+    class RecordingWorkspacePanel final : public Horo::Editor::IWorkspacePanel {
+    public:
+        RecordingWorkspacePanel(std::string id, const Horo::Editor::WorkspaceDockArea area) : id_{std::move(id)}, area_{area} {}
+
+        [[nodiscard]] std::string GetId() const override {
+            return id_;
+        }
+
+        [[nodiscard]] std::string GetDisplayName() const override {
+            return id_ + ".title";
+        }
+
+        [[nodiscard]] Horo::Editor::WorkspaceDockArea GetDefaultDockArea() const override {
+            return area_;
+        }
+
+        [[nodiscard]] std::vector<std::string> GetObservedEventTypes() const override {
+            return {};
+        }
+
+        void OnAttach(Horo::Editor::PanelContext &) override {}
+
+        void OnDetach() override {}
+
+        void DrawIcon(ImDrawList *drawList, const ImVec2 &position, const ImVec2 &size, const ImU32 color) override {
+            drawList->AddRect(position, {position.x + size.x, position.y + size.y}, color);
+        }
+
+        void DrawPanel(const ImVec2 &, const ImVec2 &, const Horo::Editor::EditorWorkspaceViewModel &,
+                       Horo::Editor::EditorWorkspaceViewCommandData &, const Horo::Editor::EditorGuiContext &) override {
+            ++drawCount;
+        }
+
+        int drawCount{};
+
+    private:
+        std::string id_;
+        Horo::Editor::WorkspaceDockArea area_;
+    };
 }  // namespace
 
 TEST_CASE("Welcome presentation renders recent-project compatibility states and news", "[unit][editor][gui][welcome]") {
@@ -128,4 +171,43 @@ TEST_CASE("Workspace presentation renders lifecycle and recovery states without 
 
         REQUIRE(command.command == EditorWorkspaceViewCommand::None);
     }
+}
+
+TEST_CASE("Workspace presentation routes registered panels through every dock area", "[unit][editor][gui][workspace]") {
+    using namespace Horo;
+    using namespace Horo::Editor;
+
+    Tests::EditorGuiContextFixture fixture;
+    WorkspacePanelRegistry panels;
+    const auto left = std::make_shared<RecordingWorkspacePanel>("test.left", WorkspaceDockArea::Left);
+    const auto right = std::make_shared<RecordingWorkspacePanel>("test.right", WorkspaceDockArea::Right);
+    const auto bottom = std::make_shared<RecordingWorkspacePanel>("test.bottom", WorkspaceDockArea::Bottom);
+    const auto document = std::make_shared<RecordingWorkspacePanel>("test.document", WorkspaceDockArea::Document);
+    panels.RegisterPanel(left);
+    panels.RegisterPanel(right);
+    panels.RegisterPanel(bottom);
+    panels.RegisterPanel(document);
+
+    auto workspaceInput = fixture.input.PushContext(Input::InputContextId{"editor.workspace"}, Input::InputContextKind::EditorWorkspace);
+    EditorWorkspaceView view{fixture.context, panels, 0, fixture.input, workspaceInput};
+    EditorWorkspaceViewModel model;
+    model.activeLeftPanelId = left->GetId();
+    model.activeRightPanelId = right->GetId();
+    model.activeBottomPanelId = bottom->GetId();
+    model.activeDocumentPanelId = document->GetId();
+    REQUIRE(model.activityBarLayout.Insert(left->GetId(), {ActivityBarRail::Left, 0, 0}).Succeeded());
+    REQUIRE(model.activityBarLayout.Insert(right->GetId(), {ActivityBarRail::Right, 0, 0}).Succeeded());
+    REQUIRE(model.activityBarLayout.Insert(bottom->GetId(), {ActivityBarRail::Bottom, 0, 0}).Succeeded());
+    REQUIRE(model.activityBarLayout.Insert(document->GetId(), {ActivityBarRail::DocumentTop, 0, 0}).Succeeded());
+
+    EditorWorkspaceViewCommandData command;
+    fixture.imgui.BeginFrame();
+    view.Draw(model, command, GuiContentRegion{0.0F, 0.0F, 1280.0F, 800.0F});
+    fixture.imgui.EndFrame();
+
+    REQUIRE(command.command == EditorWorkspaceViewCommand::None);
+    REQUIRE(left->drawCount == 1);
+    REQUIRE(right->drawCount == 1);
+    REQUIRE(bottom->drawCount == 1);
+    REQUIRE(document->drawCount == 1);
 }
