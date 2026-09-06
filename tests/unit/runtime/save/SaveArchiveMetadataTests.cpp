@@ -250,5 +250,21 @@ namespace {
         policy.archiveVersions.direct.minimum = V<ArchiveFormatVersion>(2);
         policy.archiveVersions.direct.maximum = V<ArchiveFormatVersion>(1);
         CHECK(EvaluateSaveCompatibility(archiveV1, Header(), Manifest(), policy).reason == SaveCompatibilityReason::InvalidMetadata);
+
+        policy = Policy();
+        policy.archiveVersions.migrationSource = policy.archiveVersions.direct;
+        CHECK(EvaluateSaveCompatibility(archiveV1, Header(), Manifest(), policy).reason == SaveCompatibilityReason::InvalidMetadata);
+
+        policy = Policy();
+        policy.saveSchemaVersions.direct = {.minimum = V<SaveSchemaVersion>(3), .maximum = V<SaveSchemaVersion>(4)};
+        policy.saveSchemaVersions.migrationSource =
+            SaveVersionRange<SaveSchemaVersionTag>{.minimum = V<SaveSchemaVersion>(1), .maximum = V<SaveSchemaVersion>(2)};
+        auto manifest = Manifest();
+        manifest.saveSchemaVersion = V<SaveSchemaVersion>(2);
+        CHECK(EvaluateSaveCompatibility(archiveV1, Header(), manifest, policy).disposition ==
+              SaveCompatibilityDisposition::MigrationRequired);
+
+        policy.saveSchemaVersions.migrationSource->maximum = V<SaveSchemaVersion>(3);
+        CHECK(EvaluateSaveCompatibility(archiveV1, Header(), manifest, policy).reason == SaveCompatibilityReason::InvalidMetadata);
     }
 }  // namespace

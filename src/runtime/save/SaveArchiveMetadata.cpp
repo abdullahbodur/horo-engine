@@ -150,8 +150,13 @@ namespace Horo::Runtime {
         template <typename Tag> [[nodiscard]] bool IsValidSupport(const SaveVersionSupport<Tag> &support) noexcept {
             if (!support.direct.minimum.IsValid() || !support.direct.maximum.IsValid() || support.direct.minimum > support.direct.maximum)
                 return false;
-            return !support.migrationSource || (support.migrationSource->minimum.IsValid() && support.migrationSource->maximum.IsValid() &&
-                                                support.migrationSource->minimum <= support.migrationSource->maximum);
+            if (!support.migrationSource)
+                return true;
+            const auto &migration = *support.migrationSource;
+            const bool migrationRangeValid =
+                migration.minimum.IsValid() && migration.maximum.IsValid() && migration.minimum <= migration.maximum;
+            const bool rangesDisjoint = migration.maximum < support.direct.minimum || support.direct.maximum < migration.minimum;
+            return migrationRangeValid && rangesDisjoint;
         }
 
         /** @brief Creates a rejected compatibility decision. */
