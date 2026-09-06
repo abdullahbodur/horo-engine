@@ -14,9 +14,15 @@ namespace Horo::Network {
         bool AddFits(const std::size_t left, const std::size_t right, const std::size_t maximum) noexcept {
             return right <= maximum && left <= maximum - right;
         }
+
+        using enum PacketQueueAdmission;
+        constexpr auto EnqueuedAdmission = Enqueued;
+        constexpr auto DroppedOldestAdmission = DroppedOldest;
+        constexpr auto ReplacedOldestAdmission = ReplacedOldest;
+        constexpr auto ConnectionMustCloseAdmission = ConnectionMustClose;
     }  // namespace
 
-    PacketQueue::PacketQueue(PacketQueueDescriptor descriptor, std::unique_ptr<std::optional<QueuedPacket>[]> records) noexcept
+    PacketQueue::PacketQueue(const PacketQueueDescriptor &descriptor, std::unique_ptr<std::optional<QueuedPacket>[]> records) noexcept
         : descriptor_(descriptor), records_(std::move(records)) {}
 
     Result<PacketQueue> PacketQueue::Create(const PacketQueueDescriptor &descriptor) {
@@ -75,33 +81,35 @@ namespace Horo::Network {
     }
 
     std::size_t PacketQueue::FindAccounting(const PacketConnectionId connection) const noexcept {
+        using enum AccountingState;
         const auto start = static_cast<std::size_t>(connection.Value()) % descriptor_.maximumPackets;
         for (std::size_t offset = 0; offset < descriptor_.maximumPackets; ++offset) {
             const auto index = (start + offset) % descriptor_.maximumPackets;
-            if (accounting_[index].state == AccountingState::Empty)
+            if (accounting_[index].state == Empty)
                 return InvalidIndex;
-            if (accounting_[index].state == AccountingState::Occupied && accounting_[index].connection == connection)
+            if (accounting_[index].state == Occupied && accounting_[index].connection == connection)
                 return index;
         }
         return InvalidIndex;
     }
 
-    std::size_t PacketQueue::FindOrCreateAccounting(const PacketConnectionId connection) noexcept {
+    std::size_t PacketQueue::FindOrCreateAccounting(const PacketConnectionId connection) const noexcept {
+        using enum AccountingState;
         const auto start = static_cast<std::size_t>(connection.Value()) % descriptor_.maximumPackets;
         auto reusable = InvalidIndex;
         for (std::size_t offset = 0; offset < descriptor_.maximumPackets; ++offset) {
             const auto index = (start + offset) % descriptor_.maximumPackets;
-            if (accounting_[index].state == AccountingState::Occupied && accounting_[index].connection == connection)
+            if (accounting_[index].state == Occupied && accounting_[index].connection == connection)
                 return index;
-            if (accounting_[index].state == AccountingState::Tombstone && reusable == InvalidIndex)
+            if (accounting_[index].state == Tombstone && reusable == InvalidIndex)
                 reusable = index;
-            if (accounting_[index].state == AccountingState::Empty) {
+            if (accounting_[index].state == Empty) {
                 reusable = reusable == InvalidIndex ? index : reusable;
                 break;
             }
         }
         auto &entry = accounting_[reusable];
-        entry = {connection, 0, 0, InvalidIndex, InvalidIndex, AccountingState::Occupied};
+        entry = {connection, 0, 0, InvalidIndex, InvalidIndex, Occupied};
         return reusable;
     }
 
@@ -169,22 +177,23 @@ namespace Horo::Network {
     }
 
     Result<PacketQueueAdmission> PacketQueue::HandleOverflow(QueuedPacket packet) noexcept {
-        if (descriptor_.overflow == PacketQueueOverflowPolicy::RejectIncoming)
+        using enum PacketQueueOverflowPolicy;
+        if (descriptor_.overflow == RejectIncoming)
             return Fail<PacketQueueAdmission>(NetworkErrors::PacketQueueFull);
-        if (descriptor_.overflow == PacketQueueOverflowPolicy::CloseConnection)
-            return Result<PacketQueueAdmission>::Success(PacketQueueAdmission::ConnectionMustClose);
+        if (descriptor_.overflow == CloseConnection)
+            return Result<PacketQueueAdmission>::Success(ConnectionMustCloseAdmission);
         const auto sameConnection = OldestFor(packet.connection);
-        if (descriptor_.overflow == PacketQueueOverflowPolicy::ReplaceOldestForConnection) {
+        if (descriptor_.overflow == ReplaceOldestForConnection) {
             if (!sameConnection.has_value() || !FitsAfterRemoving(packet, *sameConnection))
                 return Fail<PacketQueueAdmission>(NetworkErrors::PacketQueueFull);
             Erase(*sameConnection);
-            return Admit(std::move(packet), PacketQueueAdmission::ReplacedOldest);
+            return Admit(std::move(packet), ReplacedOldestAdmission);
         }
         while (!Fits(packet) && size_ != 0)
             Erase(head_);
         if (!Fits(packet))
             return Fail<PacketQueueAdmission>(NetworkErrors::PacketQueueFull);
-        return Admit(std::move(packet), PacketQueueAdmission::DroppedOldest);
+        return Admit(std::move(packet), DroppedOldestAdmission);
     }
 
     Result<PacketQueueAdmission> PacketQueue::Enqueue(QueuedPacket packet, const TransportAdmissionState state) noexcept {
@@ -195,10 +204,10 @@ namespace Horo::Network {
         if (state != TransportAdmissionState::Accepting || !packet.connection.IsValid() || !packet.payload.IsValid() ||
             packet.delivery >= DeliveryPolicy::Count)
             return Fail<PacketQueueAdmission>(NetworkErrors::PacketQueueInvalid);
-        const auto packetBytes = packet.payload.Bytes().size();
-        if (packetBytes > descriptor_.maximumBytes || packetBytes > descriptor_.maximumBytesPerConnection)
+        if (const auto packetBytes = packet.payload.Bytes().size();
+            packetBytes > descriptor_.maximumBytes || packetBytes > descriptor_.maximumBytesPerConnection)
             return Fail<PacketQueueAdmission>(NetworkErrors::PacketQueueCapacityExceeded);
-        return Fits(packet) ? Admit(std::move(packet), PacketQueueAdmission::Enqueued) : HandleOverflow(std::move(packet));
+        return Fits(packet) ? Admit(std::move(packet), EnqueuedAdmission) : HandleOverflow(std::move(packet));
     }
 
     std::optional<QueuedPacket> PacketQueue::Pop() noexcept {

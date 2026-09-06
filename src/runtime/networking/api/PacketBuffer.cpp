@@ -12,7 +12,7 @@ namespace Horo::Network {
     struct PacketBufferPoolState final {
         struct Slot final {
             std::array<std::byte, 256> inlineStorage{};
-            std::unique_ptr<std::byte[]> overflowStorage;
+            std::vector<std::byte> overflowStorage;
             std::size_t size{};
             std::size_t generation{};
             bool leased{};
@@ -34,13 +34,16 @@ namespace Horo::Network {
         class StateLock final {
         public:
             explicit StateLock(PacketBufferPoolState &state) noexcept : state_(state) {
-                while (state_.gate.test_and_set(std::memory_order_acquire)) {
-                    state_.gate.wait(true, std::memory_order_relaxed);
+                while (state_.gate.test_and_set()) {
+                    state_.gate.wait(true);
                 }
             }
 
+            StateLock(const StateLock &) = delete;
+            StateLock &operator=(const StateLock &) = delete;
+
             ~StateLock() {
-                state_.gate.clear(std::memory_order_release);
+                state_.gate.clear();
                 state_.gate.notify_one();
             }
 
@@ -53,11 +56,11 @@ namespace Horo::Network {
         }
 
         std::byte *Storage(PacketBufferPoolState::Slot &slot, const PacketBufferPoolDescriptor &descriptor) noexcept {
-            return slot.size <= descriptor.inlineBytes ? slot.inlineStorage.data() : slot.overflowStorage.get();
+            return slot.size <= descriptor.inlineBytes ? slot.inlineStorage.data() : slot.overflowStorage.data();
         }
 
         const std::byte *Storage(const PacketBufferPoolState::Slot &slot, const PacketBufferPoolDescriptor &descriptor) noexcept {
-            return slot.size <= descriptor.inlineBytes ? slot.inlineStorage.data() : slot.overflowStorage.get();
+            return slot.size <= descriptor.inlineBytes ? slot.inlineStorage.data() : slot.overflowStorage.data();
         }
     }  // namespace
 
@@ -137,7 +140,7 @@ namespace Horo::Network {
                 state->freeSlots[index] = descriptor.maximumBuffers - index - 1;
             if (descriptor.maximumBytesPerBuffer > descriptor.inlineBytes) {
                 for (auto &slot : state->slots)
-                    slot.overflowStorage = std::make_unique_for_overwrite<std::byte[]>(descriptor.maximumBytesPerBuffer);
+                    slot.overflowStorage.resize(descriptor.maximumBytesPerBuffer);
             }
             return Result<PacketBufferPool>::Success(PacketBufferPool{std::move(state)});
         } catch (const std::bad_alloc &) {
@@ -145,7 +148,7 @@ namespace Horo::Network {
         }
     }
 
-    Result<PacketBuffer> PacketBufferPool::Acquire(const std::span<const std::byte> bytes) {
+    Result<PacketBuffer> PacketBufferPool::Acquire(const std::span<const std::byte> bytes) const {
         if (!state_ || bytes.size() > state_->descriptor.maximumBytesPerBuffer)
             return Fail<PacketBuffer>(NetworkErrors::PacketBufferCapacityExceeded);
         const StateLock lock{*state_};

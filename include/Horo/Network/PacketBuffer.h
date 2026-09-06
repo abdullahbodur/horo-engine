@@ -61,7 +61,7 @@ namespace Horo::Network {
         /** @brief Prepares all slot storage. @return Pool or typed invalid/capacity/allocation failure. */
         [[nodiscard]] static Result<PacketBufferPool> Create(const PacketBufferPoolDescriptor &descriptor);
         /** @brief Copies bytes into a free prepared slot without allocation. */
-        [[nodiscard]] Result<PacketBuffer> Acquire(std::span<const std::byte> bytes);
+        [[nodiscard]] Result<PacketBuffer> Acquire(std::span<const std::byte> bytes) const;
         /** @brief Number of currently leased slots. */
         [[nodiscard]] std::size_t Outstanding() const noexcept;
 

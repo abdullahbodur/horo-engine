@@ -94,12 +94,12 @@ namespace Horo::Network {
             AccountingState state{AccountingState::Empty};
         };
 
-        explicit PacketQueue(PacketQueueDescriptor descriptor, std::unique_ptr<std::optional<QueuedPacket>[]> records) noexcept;
+        explicit PacketQueue(const PacketQueueDescriptor &descriptor, std::unique_ptr<std::optional<QueuedPacket>[]> records) noexcept;
         [[nodiscard]] bool Fits(const QueuedPacket &packet) const noexcept;
         [[nodiscard]] bool FitsAfterRemoving(const QueuedPacket &packet, std::size_t removed) const noexcept;
         [[nodiscard]] std::optional<std::size_t> OldestFor(PacketConnectionId connection) const noexcept;
         [[nodiscard]] std::size_t FindAccounting(PacketConnectionId connection) const noexcept;
-        [[nodiscard]] std::size_t FindOrCreateAccounting(PacketConnectionId connection) noexcept;
+        [[nodiscard]] std::size_t FindOrCreateAccounting(PacketConnectionId connection) const noexcept;
         [[nodiscard]] Result<PacketQueueAdmission> Admit(QueuedPacket packet, PacketQueueAdmission outcome) noexcept;
         [[nodiscard]] Result<PacketQueueAdmission> HandleOverflow(QueuedPacket packet) noexcept;
         [[nodiscard]] std::optional<QueuedPacket> Take(std::size_t index) noexcept;
