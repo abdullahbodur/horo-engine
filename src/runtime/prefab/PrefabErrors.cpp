@@ -27,6 +27,14 @@ namespace Horo::Prefab::PrefabErrors {
     const ErrorCodeDescriptor ReferenceInvalid = Describe("prefab.reference.invalid", "A prefab asset reference is invalid.",
                                                           "Use the non-zero AssetId from the Asset Registry sidecar.");
 
+    const ErrorCodeDescriptor LimitProfileInvalid =
+        Describe("prefab.limit_profile.invalid", "A prefab limit profile is invalid.",
+                 "Use positive project limits within the engine safety ceilings and satisfy every cross-field constraint.");
+
+    const ErrorCodeDescriptor WorkBudgetExceeded =
+        Describe("prefab.work_budget.exceeded", "A prefab expansion exhausted its work budget.",
+                 "Reduce the prefab expansion workload or lower the amount admitted into one candidate operation.");
+
     const ErrorCodeDescriptor DocumentInvalid = Describe("prefab.document.invalid", "A prefab authoring document is invalid.",
                                                          "Use a canonical project version, valid AssetId and exactly one document mode.");
 

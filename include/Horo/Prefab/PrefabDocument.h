@@ -10,6 +10,7 @@
 #include "Horo/Gameplay/BehaviorTypes.h"
 #include "Horo/Math/SceneMath.h"
 #include "Horo/Prefab/PrefabIdentity.h"
+#include "Horo/Prefab/PrefabLimits.h"
 
 #include <cstddef>
 #include <optional>
@@ -18,20 +19,8 @@
 #include <vector>
 
 namespace Horo::Prefab {
-    /** @brief Maximum root-inclusive hierarchy depth in one prefab source document. */
-    inline constexpr std::size_t MaximumPrefabHierarchyDepth = 16;
-    /** @brief Maximum authored object count in one concrete prefab source document. */
-    inline constexpr std::size_t MaximumPrefabObjectCount = 256;
-    /** @brief Maximum dynamic payload bytes admitted by one prefab source document. */
-    inline constexpr std::size_t MaximumPrefabPayloadBytes = 4 * 1024 * 1024;
-    /** @brief Maximum combined component and behavior occurrences on one object. */
-    inline constexpr std::size_t MaximumPrefabComponentsPerObject = 64;
     /** @brief Maximum UTF-8 bytes in one prefab-local display name. */
-    inline constexpr std::size_t MaximumPrefabObjectNameBytes = 256;
-    /** @brief Maximum direct nested placements in one concrete prefab. */
-    inline constexpr std::size_t MaximumDirectNestedPrefabPlacements = 256;
-    /** @brief Maximum distinct Asset Registry dependencies declared by one prefab. */
-    inline constexpr std::size_t MaximumPrefabReferencedAssets = 256;
+    inline constexpr std::size_t MaximumPrefabObjectNameBytes = PrefabHardLimits::ObjectNameBytes;
 
     /** @brief Exact semantic source revision used to author composition data. */
     struct PrefabSourceRevision final {
@@ -90,9 +79,10 @@ namespace Horo::Prefab {
         /**
          * @brief Validates and takes ownership of one complete authoring candidate transactionally.
          * @param candidate Candidate project version, identity, hierarchy, payloads and optional composition.
+         * @param limits Immutable project policy captured before this operation begins.
          * @return Immutable document or a stable prefab/gameplay/application validation error.
          */
-        [[nodiscard]] static Result<PrefabDocument> Create(PrefabDocumentData candidate);
+        [[nodiscard]] static Result<PrefabDocument> Create(PrefabDocumentData candidate, const PrefabLimitProfile &limits);
 
         /** @brief Returns the immutable validated source data. @return Borrowed document data. */
         [[nodiscard]] const PrefabDocumentData &Data() const noexcept;

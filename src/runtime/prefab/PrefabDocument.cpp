@@ -34,8 +34,8 @@ namespace Horo::Prefab {
         }
 
         /** @brief Adds bytes without exceeding the document payload limit. */
-        [[nodiscard]] bool AddPayloadBytes(std::size_t &total, const std::size_t bytes) noexcept {
-            if (bytes > MaximumPrefabPayloadBytes - total)
+        [[nodiscard]] bool AddPayloadBytes(std::size_t &total, const std::size_t bytes, const std::size_t maximumPayloadBytes) noexcept {
+            if (bytes > maximumPayloadBytes - total)
                 return false;
             total += bytes;
             return true;
@@ -61,7 +61,8 @@ namespace Horo::Prefab {
         }
 
         /** @brief Validates unique component occurrences and accounts for their dynamic bytes. */
-        [[nodiscard]] Result<void> ValidateComponents(const std::vector<RawComponentPayload> &components, std::size_t &payloadBytes) {
+        [[nodiscard]] Result<void> ValidateComponents(const std::vector<RawComponentPayload> &components, std::size_t &payloadBytes,
+                                                      const std::size_t maximumPayloadBytes) {
             std::unordered_set<std::uint64_t> componentInstances;
             componentInstances.reserve(components.size());
             for (const RawComponentPayload &component : components) {
@@ -69,15 +70,16 @@ namespace Horo::Prefab {
                     return validation;
                 if (!componentInstances.emplace(component.instance.Value()).second)
                     return Result<void>::Failure(MakeError(PrefabErrors::DocumentInvalid));
-                if (!AddPayloadBytes(payloadBytes, component.component.typeId.Value().size()) ||
-                    !AddPayloadBytes(payloadBytes, component.component.payload.size()))
+                if (!AddPayloadBytes(payloadBytes, component.component.typeId.Value().size(), maximumPayloadBytes) ||
+                    !AddPayloadBytes(payloadBytes, component.component.payload.size(), maximumPayloadBytes))
                     return Result<void>::Failure(MakeError(PrefabErrors::PayloadTooLarge));
             }
             return Result<void>::Success();
         }
 
         /** @brief Validates unique behavior occurrences and accounts for their dynamic bytes. */
-        [[nodiscard]] Result<void> ValidateBehaviors(const std::vector<Gameplay::BehaviorComponent> &behaviors, std::size_t &payloadBytes) {
+        [[nodiscard]] Result<void> ValidateBehaviors(const std::vector<Gameplay::BehaviorComponent> &behaviors, std::size_t &payloadBytes,
+                                                     const std::size_t maximumPayloadBytes) {
             std::unordered_set<std::uint64_t> behaviorInstances;
             behaviorInstances.reserve(behaviors.size());
             for (const Gameplay::BehaviorComponent &behavior : behaviors) {
@@ -85,10 +87,11 @@ namespace Horo::Prefab {
                     return validation;
                 if (!behaviorInstances.emplace(behavior.instanceId.value).second)
                     return Result<void>::Failure(MakeError(PrefabErrors::DocumentInvalid));
-                if (!AddPayloadBytes(payloadBytes, behavior.typeId.Value().size()))
+                if (!AddPayloadBytes(payloadBytes, behavior.typeId.Value().size(), maximumPayloadBytes))
                     return Result<void>::Failure(MakeError(PrefabErrors::PayloadTooLarge));
                 for (const Gameplay::BehaviorField &field : behavior.fields) {
-                    if (!AddPayloadBytes(payloadBytes, field.name.size()) || !AddPayloadBytes(payloadBytes, DynamicValueBytes(field.value)))
+                    if (!AddPayloadBytes(payloadBytes, field.name.size(), maximumPayloadBytes) ||
+                        !AddPayloadBytes(payloadBytes, DynamicValueBytes(field.value), maximumPayloadBytes))
                         return Result<void>::Failure(MakeError(PrefabErrors::PayloadTooLarge));
                 }
             }
@@ -96,29 +99,32 @@ namespace Horo::Prefab {
         }
 
         /** @brief Validates and accounts for one hierarchy object's portable data. */
-        [[nodiscard]] Result<void> ValidateObject(const PrefabObjectNode &object, std::size_t &payloadBytes) {
+        [[nodiscard]] Result<void> ValidateObject(const PrefabObjectNode &object, std::size_t &payloadBytes,
+                                                  const PrefabProjectPolicy &limits) {
             if (object.name.size() > MaximumPrefabObjectNameBytes || !IsValidUtf8(object.name) ||
                 !object.localTransform.TryToMatrix().HasValue())
                 return Result<void>::Failure(MakeError(PrefabErrors::DocumentInvalid));
-            if (object.components.size() > MaximumPrefabComponentsPerObject ||
-                object.behaviors.size() > MaximumPrefabComponentsPerObject - object.components.size())
+            if (object.components.size() > limits.maximumComponentsPerObject ||
+                object.behaviors.size() > limits.maximumComponentsPerObject - object.components.size())
                 return Result<void>::Failure(MakeError(PrefabErrors::ComponentCountExceeded));
-            if (!AddPayloadBytes(payloadBytes, object.name.size()))
+            if (!AddPayloadBytes(payloadBytes, object.name.size(), limits.maximumSourcePayloadBytes))
                 return Result<void>::Failure(MakeError(PrefabErrors::PayloadTooLarge));
 
-            if (const auto componentValidation = ValidateComponents(object.components, payloadBytes); componentValidation.HasError())
+            if (const auto componentValidation = ValidateComponents(object.components, payloadBytes, limits.maximumSourcePayloadBytes);
+                componentValidation.HasError())
                 return componentValidation;
-            return ValidateBehaviors(object.behaviors, payloadBytes);
+            return ValidateBehaviors(object.behaviors, payloadBytes, limits.maximumSourcePayloadBytes);
         }
 
         /** @brief Registers one non-root node and computes its root-inclusive depth. */
-        [[nodiscard]] Result<void> RegisterChild(const PrefabObjectNode &object, std::unordered_map<std::uint32_t, std::size_t> &depths) {
+        [[nodiscard]] Result<void> RegisterChild(const PrefabObjectNode &object, std::unordered_map<std::uint32_t, std::size_t> &depths,
+                                                 const std::size_t maximumHierarchyDepth) {
             if (object.localId.IsRoot() || !object.parentLocalId)
                 return Result<void>::Failure(MakeError(PrefabErrors::HierarchyInvalid));
             const auto parent = depths.find(object.parentLocalId->value);
             if (parent == depths.end() || !depths.emplace(object.localId.value, parent->second + 1).second)
                 return Result<void>::Failure(MakeError(PrefabErrors::HierarchyInvalid));
-            if (parent->second + 1 > MaximumPrefabHierarchyDepth)
+            if (parent->second + 1 > maximumHierarchyDepth)
                 return Result<void>::Failure(MakeError(PrefabErrors::HierarchyDepthExceeded));
             return Result<void>::Success();
         }
@@ -126,7 +132,8 @@ namespace Horo::Prefab {
         using ObjectDepths = std::unordered_map<std::uint32_t, std::size_t>;
 
         /** @brief Validates root-first hierarchy ordering and returns its computed object depths. */
-        [[nodiscard]] Result<ObjectDepths> ValidateHierarchy(const std::vector<PrefabObjectNode> &objects, std::size_t &payloadBytes) {
+        [[nodiscard]] Result<ObjectDepths> ValidateHierarchy(const std::vector<PrefabObjectNode> &objects, std::size_t &payloadBytes,
+                                                             const PrefabProjectPolicy &limits) {
             if (objects.empty() || !objects.front().localId.IsRoot() || objects.front().parentLocalId)
                 return Result<ObjectDepths>::Failure(MakeError(PrefabErrors::HierarchyInvalid));
 
@@ -136,11 +143,11 @@ namespace Horo::Prefab {
             for (std::size_t index = 0; index < objects.size(); ++index) {
                 const PrefabObjectNode &object = objects[index];
                 if (index != 0) {
-                    if (const auto registration = RegisterChild(object, depths); registration.HasError())
+                    if (const auto registration = RegisterChild(object, depths, limits.maximumHierarchyDepth); registration.HasError())
                         return Result<ObjectDepths>::Failure(registration.ErrorValue());
                 }
 
-                if (const auto objectValidation = ValidateObject(object, payloadBytes); objectValidation.HasError())
+                if (const auto objectValidation = ValidateObject(object, payloadBytes, limits); objectValidation.HasError())
                     return Result<ObjectDepths>::Failure(objectValidation.ErrorValue());
             }
             return Result<ObjectDepths>::Success(std::move(depths));
@@ -167,8 +174,8 @@ namespace Horo::Prefab {
 
         /** @brief Validates concrete nested placements and their occupied local slots. */
         [[nodiscard]] Result<void> ValidateNestedPlacements(const PrefabDocumentData &candidate, const ObjectDepths &objectDepths,
-                                                            const PrefabComposition &composition) {
-            if (composition.nestedPlacements.size() > MaximumDirectNestedPrefabPlacements)
+                                                            const PrefabComposition &composition, const PrefabProjectPolicy &limits) {
+            if (composition.nestedPlacements.size() > limits.maximumDirectNestedPlacements)
                 return Result<void>::Failure(MakeError(PrefabErrors::NestedPlacementCountExceeded));
             std::unordered_set<std::uint32_t> placementIds;
             placementIds.reserve(composition.nestedPlacements.size());
@@ -182,7 +189,8 @@ namespace Horo::Prefab {
         }
 
         /** @brief Validates optional concrete nesting or exclusive variant composition. */
-        [[nodiscard]] Result<void> ValidateComposition(const PrefabDocumentData &candidate, const ObjectDepths &objectDepths) {
+        [[nodiscard]] Result<void> ValidateComposition(const PrefabDocumentData &candidate, const ObjectDepths &objectDepths,
+                                                       const PrefabProjectPolicy &limits) {
             if (!candidate.composition)
                 return Result<void>::Success();
 
@@ -191,12 +199,13 @@ namespace Horo::Prefab {
                 return ValidateVariant(candidate, composition);
             if (composition.variantAuthoredAgainst || composition.nestedPlacements.empty())
                 return Result<void>::Failure(MakeError(PrefabErrors::CompositionInvalid));
-            return ValidateNestedPlacements(candidate, objectDepths, composition);
+            return ValidateNestedPlacements(candidate, objectDepths, composition, limits);
         }
 
         /** @brief Validates a unique bounded dependency list and returns its initial payload byte count. */
-        [[nodiscard]] Result<std::size_t> ValidateReferences(const std::vector<Assets::AssetId> &references) {
-            if (references.size() > MaximumPrefabReferencedAssets)
+        [[nodiscard]] Result<std::size_t> ValidateReferences(const std::vector<Assets::AssetId> &references,
+                                                             const PrefabProjectPolicy &limits) {
+            if (references.size() > limits.maximumReferencedAssets)
                 return Result<std::size_t>::Failure(MakeError(PrefabErrors::ReferenceCountExceeded));
 
             std::vector<Assets::AssetId> uniqueAssets;
@@ -206,7 +215,7 @@ namespace Horo::Prefab {
                 if (!asset.IsValid() || ContainsAsset(uniqueAssets, asset))
                     return Result<std::size_t>::Failure(MakeError(PrefabErrors::ReferenceInvalid));
                 uniqueAssets.push_back(asset);
-                if (!AddPayloadBytes(payloadBytes, asset.Bytes().size()))
+                if (!AddPayloadBytes(payloadBytes, asset.Bytes().size(), limits.maximumSourcePayloadBytes))
                     return Result<std::size_t>::Failure(MakeError(PrefabErrors::PayloadTooLarge));
             }
             return Result<std::size_t>::Success(payloadBytes);
@@ -214,25 +223,26 @@ namespace Horo::Prefab {
     }  // namespace
 
     /** @copydoc PrefabDocument::Create */
-    Result<PrefabDocument> PrefabDocument::Create(PrefabDocumentData candidate) {
+    Result<PrefabDocument> PrefabDocument::Create(PrefabDocumentData candidate, const PrefabLimitProfile &limits) {
+        const PrefabProjectPolicy &policy = limits.Policy();
         if (!candidate.assetId.IsValid() || !IsCanonicalProjectVersion(candidate.projectVersion))
             return Result<PrefabDocument>::Failure(MakeError(PrefabErrors::DocumentInvalid));
-        if (candidate.objects.size() > MaximumPrefabObjectCount)
+        if (candidate.objects.size() > policy.maximumObjectCount)
             return Result<PrefabDocument>::Failure(MakeError(PrefabErrors::ObjectCountExceeded));
-        const auto referenceValidation = ValidateReferences(candidate.referencedAssets);
+        const auto referenceValidation = ValidateReferences(candidate.referencedAssets, policy);
         if (referenceValidation.HasError())
             return Result<PrefabDocument>::Failure(referenceValidation.ErrorValue());
         std::size_t payloadBytes = referenceValidation.Value();
 
         ObjectDepths objectDepths;
         if (const bool isVariant = candidate.composition && candidate.composition->variantParent; !isVariant) {
-            auto hierarchyValidation = ValidateHierarchy(candidate.objects, payloadBytes);
+            auto hierarchyValidation = ValidateHierarchy(candidate.objects, payloadBytes, policy);
             if (hierarchyValidation.HasError())
                 return Result<PrefabDocument>::Failure(hierarchyValidation.ErrorValue());
             objectDepths = std::move(hierarchyValidation).Value();
         }
 
-        if (const auto compositionValidation = ValidateComposition(candidate, objectDepths); compositionValidation.HasError())
+        if (const auto compositionValidation = ValidateComposition(candidate, objectDepths, policy); compositionValidation.HasError())
             return Result<PrefabDocument>::Failure(compositionValidation.ErrorValue());
 
         return Result<PrefabDocument>::Success(PrefabDocument{std::move(candidate)});

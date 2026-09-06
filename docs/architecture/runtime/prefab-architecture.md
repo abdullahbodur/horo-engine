@@ -298,24 +298,29 @@ namespace Horo::Prefab {
 
 ## Prefab Document Schema And Explicit Bounds
 
-Prefab documents enforce strict structural bounds to prevent unbounded memory growth, stack
-overflows during recursive expansion, and allocation spikes:
+`PrefabHardLimits` is the single code authority for immutable engine safety ceilings.
+`PrefabProjectPolicy` may lower the configurable subset, and
+`PrefabLimitProfile::Create` validates and owns that policy before an operation starts.
+No raw project setting is accepted by a Prefab operation.
 
-```cpp
-namespace Horo::Prefab {
-    inline constexpr std::size_t MaximumPrefabHierarchyDepth = 16;
-    inline constexpr std::size_t MaximumPrefabObjectCount    = 256;
-    inline constexpr std::size_t MaximumPrefabPayloadBytes   = 4 * 1024 * 1024; // 4 MiB
-    inline constexpr std::size_t MaximumPrefabComponentsPerObject = 64;
-    inline constexpr std::size_t MaximumVariantInheritanceDepth = 8;
-    inline constexpr std::size_t MaximumNestedPrefabDepth = 16;
-    inline constexpr std::size_t MaximumDirectNestedPlacements = 256;
-    inline constexpr std::size_t MaximumPrefabBindingSlots = 64;
-    inline constexpr std::size_t MaximumPrefabBindingUses = 256;
-    inline constexpr std::size_t MaximumPrefabInstanceBindings = 64;
-    inline constexpr std::size_t MaximumRuntimeSpawnDepth = 8; // inherited lineage, including target
-}
-```
+| Bound family | Project-configurable policy | Engine hard ceiling |
+|---|---|---:|
+| source hierarchy / objects / components | yes | `16` / `256` / `64` |
+| source / expanded / cooked payload bytes | yes, independently | `4 MiB` each |
+| referenced assets / direct nested placements | yes | `256` / `256` |
+| variant / nested graph depth | yes | `8` / `16` |
+| override / conflict-or-orphan records | yes | `16,384` / `16,384` |
+| property path / value / aggregate override bytes | yes | `32` / `1 MiB` / `16 MiB` |
+| binding slots / uses / instance bindings | yes | `64` / `256` / `64` |
+| runtime spawn lineage depth | yes | `8` including the target |
+| object display-name bytes | no; hard safety only | `256` |
+
+The expansion work limit is derived, not independently configured: checked arithmetic sums
+the accepted object, object-component, dependency, direct-placement, graph-depth,
+override-path, conflict-or-orphan and binding-use maxima. An operation-local `PrefabExpansionBudget`
+charges work before performing it. Invalid policy returns `LimitProfileInvalid`; exhausting
+an already valid captured budget returns `WorkBudgetExceeded` without consuming the failed
+charge or publishing a partial candidate.
 
 Limits apply to the fully expanded hierarchy as well as individual inputs: root depth is 1,
 object count includes all nested expansions, and component count includes built-in, opaque,
@@ -331,6 +336,15 @@ hierarchy and requires exactly one immediate parent. Invalid authored graphs ret
 `InvalidHierarchy`; malformed cooked encoding returns `CorruptedPayload`; well-formed over-limit
 input returns the relevant bounds error. Combined nested/inheritance cycles return
 `CyclicComposition` at authoring/cook time.
+
+`PrefabDocument::Create` now requires a validated `PrefabLimitProfile`. This public-contract
+change prevents a document from silently validating against defaults that differ from the
+project snapshot. The only in-repository callers were Prefab document tests and were migrated
+atomically. External callers migrate by resolving project policy once, retaining the returned
+profile for the operation, and passing it with the candidate. There is no compatibility
+overload or second default authority. Project JSON/UI persistence is application-owned and is
+introduced separately; resolver, cook and spawn tickets consume the same profile when those
+operations are implemented.
 
 ### Authoring Document Structure (`PrefabDocument`)
 
