@@ -78,8 +78,8 @@ namespace Horo::Character {
     Result<void> ValidateCharacterControllerDescriptor(const CharacterControllerDescriptor &descriptor) {
         if (descriptor.sceneGeneration == 0 || !descriptor.characterWorld.IsValid() || !descriptor.physicsWorld.IsValid())
             return Result<void>::Failure(MakeError(CharacterErrors::WorldInvalid));
-        const auto capsule = Physics::ValidatePhysicsShapeDescriptor(Physics::PhysicsShapeDescriptor{descriptor.capsule});
-        if (capsule.HasError())
+        if (const auto capsule = Physics::ValidatePhysicsShapeDescriptor(Physics::PhysicsShapeDescriptor{descriptor.capsule});
+            capsule.HasError())
             return Result<void>::Failure(MakeError(CharacterErrors::DescriptorInvalid, "Controller capsule dimensions are invalid."));
         if (!Math::IsFinite(descriptor.collisionRootPosition) || !IsUnit(descriptor.up) || !Math::IsFinite(descriptor.gravity) ||
             !descriptor.collisionProfile.IsValid() || !descriptor.queryChannel.IsValid() || !IsMaterialValid(descriptor.defaultMaterial))
@@ -97,8 +97,8 @@ namespace Horo::Character {
     /** @copydoc ValidateCharacterMovementRequest */
     Result<void> ValidateCharacterMovementRequest(const CharacterMovementRequest &request, const std::uint64_t expectedSceneGeneration,
                                                   const CharacterWorldId expectedWorld) {
-        auto owner = ValidateCharacterControllerHandleOwner(request.controller, expectedSceneGeneration, expectedWorld);
-        if (owner.HasError())
+        if (auto owner = ValidateCharacterControllerHandleOwner(request.controller, expectedSceneGeneration, expectedWorld);
+            owner.HasError())
             return owner;
         if (request.tick == 0 || request.sequence == 0 ||
             (request.desiredVelocityMetersPerSecond.has_value() && !Math::IsFinite(*request.desiredVelocityMetersPerSecond)) ||
@@ -116,11 +116,10 @@ namespace Horo::Character {
 
     /** @copydoc ValidateCharacterMovementResult */
     Result<void> ValidateCharacterMovementResult(const CharacterMovementResult &result, const CharacterControllerDescriptor &descriptor) {
-        const auto descriptorValidation = ValidateCharacterControllerDescriptor(descriptor);
-        if (descriptorValidation.HasError())
+        if (const auto descriptorValidation = ValidateCharacterControllerDescriptor(descriptor); descriptorValidation.HasError())
             return descriptorValidation;
-        auto owner = ValidateCharacterControllerHandleOwner(result.controller, descriptor.sceneGeneration, descriptor.characterWorld);
-        if (owner.HasError())
+        if (auto owner = ValidateCharacterControllerHandleOwner(result.controller, descriptor.sceneGeneration, descriptor.characterWorld);
+            owner.HasError())
             return owner;
         if (result.tick == 0 || result.sequence == 0 || !Math::IsFinite(result.finalPosition) || !IsUnit(result.finalHeading) ||
             !Math::IsFinite(result.achievedVelocityMetersPerSecond) || !IsUnit(result.up) || !std::isfinite(result.groundSlopeDegrees) ||
