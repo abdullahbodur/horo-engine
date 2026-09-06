@@ -57,8 +57,8 @@ namespace Horo::Physics {
         }
 
         [[nodiscard]] bool IsSupported(const PhysicsQueryCollection value) noexcept {
-            return value == PhysicsQueryCollection::Closest || value == PhysicsQueryCollection::All ||
-                   value == PhysicsQueryCollection::ThroughFirstBlock;
+            using enum PhysicsQueryCollection;
+            return value == Closest || value == All || value == ThroughFirstBlock;
         }
 
         [[nodiscard]] bool IsSupported(const PhysicsQueryOrdering value) noexcept {

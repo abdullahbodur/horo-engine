@@ -4,17 +4,18 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <optional>
 #include <ranges>
 
 namespace Horo::Physics::Detail {
     namespace {
         /** @brief Converts one lowercase hexadecimal digit, rejecting uppercase and non-hex input. */
-        [[nodiscard]] std::optional<std::uint8_t> ParseHexDigit(const char value) noexcept {
+        [[nodiscard]] std::optional<std::byte> ParseHexDigit(const char value) noexcept {
             if (value >= '0' && value <= '9')
-                return static_cast<std::uint8_t>(value - '0');
+                return static_cast<std::byte>(value - '0');
             if (value >= 'a' && value <= 'f')
-                return static_cast<std::uint8_t>(value - 'a' + 10);
+                return static_cast<std::byte>(value - 'a' + 10);
             return std::nullopt;
         }
 
@@ -23,18 +24,16 @@ namespace Horo::Physics::Detail {
             constexpr std::array HyphenOffsets{8U, 13U, 18U, 23U};
             if (value.size() != 36)
                 return false;
-            for (const std::size_t offset : HyphenOffsets) {
-                if (value[offset] != '-')
-                    return false;
-            }
-            return true;
+            return std::ranges::all_of(HyphenOffsets, [value](const std::size_t offset) {
+                return value[offset] == '-';
+            });
         }
 
         /** @brief Decodes validated-shape UUID characters without reading across a separator. */
         [[nodiscard]] Result<std::array<std::uint8_t, 16>> DecodeUuidBytes(const std::string_view value) {
             std::array<std::uint8_t, 16> bytes{};
             std::size_t output{};
-            std::optional<std::uint8_t> high;
+            std::optional<std::byte> high;
             for (const char character : value) {
                 if (character == '-')
                     continue;
@@ -46,7 +45,7 @@ namespace Horo::Physics::Detail {
                     high = digit;
                     continue;
                 }
-                bytes[output++] = static_cast<std::uint8_t>((*high << 4U) | *digit);
+                bytes[output++] = std::to_integer<std::uint8_t>((*high << 4U) | *digit);
                 high.reset();
             }
             if (output != bytes.size() || high.has_value())
@@ -79,8 +78,9 @@ namespace Horo::Physics::Detail {
         for (std::size_t index{}; index < bytes.size(); ++index) {
             if (index == 4 || index == 6 || index == 8 || index == 10)
                 result.push_back('-');
-            result.push_back(Digits[bytes[index] >> 4U]);
-            result.push_back(Digits[bytes[index] & 0x0FU]);
+            const auto byte = static_cast<std::byte>(bytes[index]);
+            result.push_back(Digits[std::to_integer<std::size_t>(byte >> 4U)]);
+            result.push_back(Digits[std::to_integer<std::size_t>(byte & static_cast<std::byte>(0x0FU))]);
         }
         return result;
     }
