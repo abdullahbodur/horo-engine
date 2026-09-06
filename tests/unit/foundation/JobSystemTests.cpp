@@ -28,6 +28,30 @@ namespace {
         return result.HasError() && result.ErrorValue().code.Value() == "job.wait_capacity_deadlock";
     }
 
+    [[nodiscard]] Horo::JobFunction FailureJob(const char *code) {
+        return [code](const Horo::CancellationToken &) {
+            Horo::Error error = Horo::MakeError(TestFailure);
+            error.code = Horo::ErrorCode(code);
+            return Horo::Result<void>::Failure(std::move(error));
+        };
+    }
+
+    [[nodiscard]] Horo::Result<Horo::JobId> SpawnCancellationProbe(Horo::TaskGroup &group, std::atomic<bool> &started,
+                                                                   std::atomic<bool> &stopped) {
+        return group.Spawn({}, [&started, &stopped](const Horo::CancellationToken &cancellation) {
+            started.store(true, std::memory_order_release);
+            while (!cancellation.IsCancellationRequested())
+                std::this_thread::yield();
+            stopped.store(true, std::memory_order_release);
+            return Horo::Result<void>::Success();
+        });
+    }
+
+    void WaitForProbeStart(const std::atomic<bool> &started) {
+        while (!started.load(std::memory_order_acquire))
+            std::this_thread::yield();
+    }
+
     TEST_CASE("Submitted Job Reaches Succeeded Terminal State", "[unit][foundation]") {
         Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 4}};
         std::atomic executed{false};
@@ -322,18 +346,8 @@ namespace {
     TEST_CASE("Bounded Task Group Join Preserves First Failure In Spawn Order", "[unit][foundation][jobs][wait]") {
         Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 0, .maxQueuedJobs = 2}};
         Horo::TaskGroup group(jobs, Horo::TaskGroupFailurePolicy::CollectAll);
-        REQUIRE((group
-                     .Spawn({}, [](const Horo::CancellationToken &) {
-            Horo::Error error = Horo::MakeError(TestFailure);
-            error.code = Horo::ErrorCode("test.job_system.bounded_first");
-            return Horo::Result<void>::Failure(std::move(error));
-        }).HasValue()));
-        REQUIRE((group
-                     .Spawn({}, [](const Horo::CancellationToken &) {
-            Horo::Error error = Horo::MakeError(TestFailure);
-            error.code = Horo::ErrorCode("test.job_system.bounded_second");
-            return Horo::Result<void>::Failure(std::move(error));
-        }).HasValue()));
+        REQUIRE((group.Spawn({}, FailureJob("test.job_system.bounded_first")).HasValue()));
+        REQUIRE((group.Spawn({}, FailureJob("test.job_system.bounded_second")).HasValue()));
 
         const auto joined =
             group.Join({.waitPolicy = Horo::WaitPolicy::MainThreadPumpAllowed, .timeout = Horo::Duration::FromMilliseconds(100)});
@@ -349,16 +363,8 @@ namespace {
         std::atomic stopped{false};
         {
             Horo::TaskGroup group(jobs);
-            REQUIRE((group
-                         .Spawn({}, [&](const Horo::CancellationToken &cancellation) {
-                started.store(true);
-                while (!cancellation.IsCancellationRequested())
-                    std::this_thread::yield();
-                stopped.store(true);
-                return Horo::Result<void>::Success();
-            }).HasValue()));
-            while (!started.load())
-                std::this_thread::yield();
+            REQUIRE((SpawnCancellationProbe(group, started, stopped).HasValue()));
+            WaitForProbeStart(started);
             const auto timedOut =
                 group.Join({.waitPolicy = Horo::WaitPolicy::MainThreadPumpAllowed, .timeout = Horo::Duration::FromMilliseconds(1)});
             REQUIRE((timedOut.HasError()));
@@ -479,16 +485,8 @@ namespace {
         std::atomic stopped{false};
         {
             Horo::TaskGroup group(jobs);
-            REQUIRE((group
-                         .Spawn({}, [&started, &stopped](const Horo::CancellationToken &cancellation) {
-                started.store(true);
-                while (!cancellation.IsCancellationRequested())
-                    std::this_thread::yield();
-                stopped.store(true);
-                return Horo::Result<void>::Success();
-            }).HasValue()));
-            while (!started.load())
-                std::this_thread::yield();
+            REQUIRE((SpawnCancellationProbe(group, started, stopped).HasValue()));
+            WaitForProbeStart(started);
         }
         REQUIRE((stopped.load()));
         jobs.Shutdown(Horo::ShutdownPolicy::Drain);
