@@ -10,6 +10,8 @@
 #include <compare>
 #include <cstddef>
 #include <cstdint>
+#include <span>
+#include <vector>
 
 namespace Horo::Render {
     /** @brief Process-local owner identity assigned to one render-graph builder. */
@@ -144,6 +146,66 @@ namespace Horo::Render {
         RenderGraphPassRef before;
         RenderGraphPassRef after;
         RenderGraphDependencyKind kind{RenderGraphDependencyKind::ExecutionOrder};
+    };
+
+    /** @brief Immutable owning graph value produced by successful authoring finalization. */
+    class RenderGraph final {
+    public:
+        RenderGraph(const RenderGraph &) = delete;
+        RenderGraph &operator=(const RenderGraph &) = delete;
+        RenderGraph(RenderGraph &&) noexcept = default;
+        RenderGraph &operator=(RenderGraph &&) noexcept = default;
+        ~RenderGraph() = default;
+
+        /**
+         * @brief Returns the identity that owns every graph-local reference.
+         * @return Non-zero process-local owner identity.
+         */
+        [[nodiscard]] RenderGraphOwnerId Owner() const noexcept;
+
+        /**
+         * @brief Returns the finite limits admitted for this graph.
+         * @return Immutable admitted limit set owned by this graph.
+         */
+        [[nodiscard]] const RenderGraphLimits &Limits() const noexcept;
+
+        /**
+         * @brief Returns immutable passes in deterministic authoring order.
+         * @return View valid for the lifetime of this graph value.
+         */
+        [[nodiscard]] std::span<const RenderGraphPass> Passes() const noexcept;
+
+        /**
+         * @brief Returns immutable resources in deterministic authoring order.
+         * @return View valid for the lifetime of this graph value.
+         */
+        [[nodiscard]] std::span<const RenderGraphResource> Resources() const noexcept;
+
+        /**
+         * @brief Returns immutable resource uses in deterministic authoring order.
+         * @return View valid for the lifetime of this graph value.
+         */
+        [[nodiscard]] std::span<const RenderGraphResourceUsage> Usages() const noexcept;
+
+        /**
+         * @brief Returns immutable dependencies in deterministic authoring order.
+         * @return View valid for the lifetime of this graph value.
+         */
+        [[nodiscard]] std::span<const RenderGraphDependency> Dependencies() const noexcept;
+
+    private:
+        friend class RenderGraphBuilder;
+
+        RenderGraph(RenderGraphOwnerId owner, RenderGraphLimits limits, std::vector<RenderGraphPass> passes,
+                    std::vector<RenderGraphResource> resources, std::vector<RenderGraphResourceUsage> usages,
+                    std::vector<RenderGraphDependency> dependencies) noexcept;
+
+        RenderGraphOwnerId owner_;
+        RenderGraphLimits limits_;
+        std::vector<RenderGraphPass> passes_;
+        std::vector<RenderGraphResource> resources_;
+        std::vector<RenderGraphResourceUsage> usages_;
+        std::vector<RenderGraphDependency> dependencies_;
     };
 
 }  // namespace Horo::Render

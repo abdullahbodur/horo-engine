@@ -2,6 +2,8 @@
 #include "Horo/Runtime/Render/RenderGraphErrors.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <type_traits>
+#include <utility>
 
 namespace {
     using namespace Horo::Render;
@@ -46,4 +48,11 @@ TEST_CASE("Render graph errors expose stable actionable identities", "[runtime][
     REQUIRE_FALSE(RenderGraphErrors::WrongOwner.summary.empty());
     REQUIRE_FALSE(RenderGraphErrors::WrongOwner.remediationHint.empty());
     REQUIRE(RenderGraphErrors::AllocationFailed.retryable);
+}
+
+TEST_CASE("Render graph storage is move-only and immutable through its views", "[runtime][renderer][render-graph]") {
+    STATIC_REQUIRE_FALSE(std::is_copy_constructible_v<RenderGraph>);
+    STATIC_REQUIRE_FALSE(std::is_copy_assignable_v<RenderGraph>);
+    STATIC_REQUIRE(std::is_move_constructible_v<RenderGraph>);
+    STATIC_REQUIRE(std::is_same_v<decltype(std::declval<const RenderGraph &>().Passes()), std::span<const RenderGraphPass>>);
 }

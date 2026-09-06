@@ -362,6 +362,7 @@ target_include_directories(HoroInput PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(HoroInput PUBLIC HoroEngine::Foundation PRIVATE nlohmann_json::nlohmann_json)
 
 add_library(HoroRenderApi STATIC
+        runtime/renderer/api/RenderGraph.cpp
         runtime/renderer/api/RenderGraphErrors.cpp
 )
 add_library(HoroEngine::RenderApi ALIAS HoroRenderApi)
