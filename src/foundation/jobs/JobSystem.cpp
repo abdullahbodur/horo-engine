@@ -132,14 +132,13 @@ namespace Horo {
         void ExecuteJobRecord(const std::shared_ptr<JobRecord> &record) {
             const Telemetry::ScopedOperationContext operationContext{record->operationContext};
             const JobExecutionScope executionScope{*record};
+            JobFunction work;
+            {
+                std::lock_guard lock(record->Mutex());
+                work = std::move(record->work);
+            }
             try {
-                JobFunction work;
-                {
-                    std::lock_guard lock(record->Mutex());
-                    work = std::move(record->work);
-                }
                 Result<void> outcome = work(record->cancellation.Token());
-                work = {};
                 if (outcome.HasError()) {
                     const bool cancelled = record->cancellation.Token().IsCancellationRequested() &&
                                            outcome.ErrorValue().code.Value() == JobErrors::Cancelled.code.Value();
@@ -161,6 +160,7 @@ namespace Horo {
                 static_cast<void>(SetTerminalState(record, JobState::Failed,
                                                    MakeJobError(JobErrors::Failed, "Job callback threw an unknown exception.")));
             }
+            work = {};
         }
 
         [[nodiscard]] bool TryClaimJobRecord(const std::shared_ptr<JobRecord> &record) {

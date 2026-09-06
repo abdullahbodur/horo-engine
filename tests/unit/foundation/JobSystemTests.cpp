@@ -152,6 +152,26 @@ namespace {
         jobs.Shutdown(Horo::ShutdownPolicy::Drain);
     }
 
+    TEST_CASE("Completed Job Releases Reentrant Capture After Publishing Terminal State", "[unit][foundation][jobs][lifetime]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 0, .maxQueuedJobs = 1}};
+        std::optional<Horo::JobHandle> handle;
+        bool destructorReentered{};
+        auto capture = std::make_shared<ReentrantCaptureDestructor>([&] {
+            destructorReentered = handle->Wait().HasValue() && jobs.Query(handle->Id()).state == Horo::JobState::Succeeded &&
+                                  jobs.RequestCancel(handle->Id()).HasValue();
+        });
+        auto submitted = jobs.Submit({}, [capture](const Horo::CancellationToken &) {
+        });
+        REQUIRE((submitted.HasValue()));
+        handle.emplace(std::move(submitted).Value());
+        capture.reset();
+
+        REQUIRE((handle->Wait({.waitPolicy = Horo::WaitPolicy::MainThreadPumpAllowed, .timeout = Horo::Duration::FromMilliseconds(100)})
+                     .HasValue()));
+        REQUIRE((destructorReentered));
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
     TEST_CASE("Queued Termination Releases Captures Outside Job System Locks", "[unit][foundation][jobs][lifetime]") {
         VerifyReentrantCaptureRelease(false);
         VerifyReentrantCaptureRelease(true);
