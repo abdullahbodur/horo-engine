@@ -13,24 +13,6 @@
 #include <vector>
 
 namespace Horo::Network {
-    /** @brief Closed same-major payload-schema version interval. */
-    struct MessageSchemaVersionRange final {
-        MessageSchemaVersion minimum;
-        MessageSchemaVersion maximum;
-
-        /** @brief Validates the interval. @return Whether both endpoints are valid, same-major, and ordered. */
-        [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return minimum.IsValid() && maximum.IsValid() && minimum.major == maximum.major && minimum <= maximum;
-        }
-
-        /** @brief Tests exact interval membership. @param version Candidate version. @return Whether it is supported. */
-        [[nodiscard]] constexpr bool Contains(const MessageSchemaVersion version) const noexcept {
-            return IsValid() && version.major == minimum.major && version >= minimum && version <= maximum;
-        }
-
-        constexpr auto operator<=>(const MessageSchemaVersionRange &) const noexcept = default;
-    };
-
     /** @brief Metadata-only payload codec capability; contains no callback or runtime registration. */
     struct MessageCodecDescriptor final {
         ProtocolId protocol;                         /**< Owning protocol. */

@@ -187,6 +187,10 @@ namespace Horo::Network {
     TEST_CASE("Message codec registry rejects duplicates foreign schema and finite capacity violations", "[unit][network][message]") {
         CodecFixture fixture;
         const auto identities = fixture.Identities();
+        const auto emptyRegistry = MessageCodecRegistry::Create({}, identities);
+        REQUIRE(emptyRegistry.HasValue());
+        REQUIRE_FALSE(emptyRegistry.Value().FindCodec(fixture.protocols[0].id, fixture.messages[0].id).has_value());
+
         const std::array duplicateCodecs{fixture.codecs[0], fixture.codecs[0]};
         RequireError(MessageCodecRegistry::Create({duplicateCodecs, fixture.fields}, identities), NetworkErrors::MessageCodecConflict);
 

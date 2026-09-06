@@ -43,8 +43,7 @@ namespace Horo::Network {
 
         [[nodiscard]] bool WithinRegistryCapacity(const MessageCodecContributions &contributions,
                                                   const MessageCodecRegistryLimits &limits) noexcept {
-            return !contributions.codecs.empty() && contributions.codecs.size() <= limits.maximumCodecs &&
-                   contributions.fields.size() <= limits.maximumFields;
+            return contributions.codecs.size() <= limits.maximumCodecs && contributions.fields.size() <= limits.maximumFields;
         }
 
         [[nodiscard]] bool ValidCodecs(const std::vector<MessageCodecDescriptor> &codecs, const ProtocolIdentityRegistry &identities,
