@@ -182,6 +182,12 @@ world.
 
 ## Capture and Snapshot Ownership
 
+[ADR-175](../../adr/175-replication-dirty-state-capture-and-copy-strategy.md)
+selects one strategy: capture declared canonical state once after the complete owner
+commit into bounded immutable NetworkRuntime-owned storage. Per-client interest,
+baseline and delta work consumes that shared snapshot and never repeats source
+extraction.
+
 During the fixed network capture safe point, `NetworkRuntime` selects authoritative
 relevant objects and invokes the registered schema capture adapter with:
 
@@ -198,6 +204,21 @@ and derived baselines—not the source values.
 NetworkRuntime never scans ECS/component memory, reflects arbitrary fields,
 serializes `sizeof(T)`, compares padding or derives replication from editor
 metadata. Explicit capture is the only state source.
+
+Dirty marks and owner revisions are lossy, idempotent scheduling hints, never values or
+publication authority. They may be coalesced, duplicated or lost; revision-based bounded
+reconciliation and comparison against the compatible prior captured state preserve
+correctness. Polling arbitrary component memory, mirroring generic events, or maintaining
+a gameplay-owned replication shadow is prohibited. Reconciliation advances a stable
+cursor under finite per-tick object/work/byte budgets; it cannot scan the complete object
+population in one simulation tick.
+
+Candidate storage remains private until the complete world/session/authority/object/
+descriptor identity and every field validate. Failure, cancellation, capacity denial or
+stale completion preserves the prior immutable snapshot. Shutdown closes admission,
+cancels candidates and drains snapshot/owner-view pins before owner destruction.
+Advancing any identity generation immediately invalidates old snapshots and baselines;
+data for a destroyed or reused logical identity is never preserved as a fallback.
 
 ## Wire Records and Compatibility
 

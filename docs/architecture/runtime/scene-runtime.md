@@ -539,6 +539,13 @@ their declaring systems. `NetworkRuntime` may invoke a registered capture adapte
 with a validated read-only owner-thread view at the network capture safe point; it
 never scans component memory or infers wire fields from ECS layout.
 
+[ADR-175](../../adr/175-replication-dirty-state-capture-and-copy-strategy.md)
+requires that safe point to follow the complete simulation and structural commit.
+NetworkRuntime copies each admitted declared state once into a private bounded candidate
+and publishes it only after complete validation. Dirty notifications are lossy,
+idempotent scheduling hints; they carry no values and cannot replace canonical owner
+state, revision reconciliation or comparison with the prior immutable snapshot.
+
 Received replication is a bounded typed apply command carrying scene/entity,
 authority, object and schema generations. Scene revalidates them at the owner safe
 point and invokes the declaring owner's apply adapter. The adapter commits one
