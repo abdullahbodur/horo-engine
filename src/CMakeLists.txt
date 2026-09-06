@@ -9,6 +9,7 @@ add_library(HoroFoundation STATIC
         foundation/diagnostics/DiagnosticBundle.cpp
         foundation/hashing/Sha256.cpp
         foundation/math/SceneMath.cpp
+        foundation/math/WorldCoordinate64.cpp
         foundation/text/String.cpp
         foundation/logging/Logger.cpp
         foundation/logging/LogContext.cpp
@@ -367,6 +368,7 @@ target_compile_features(HoroNavigationNull PUBLIC cxx_std_20)
 target_link_libraries(HoroNavigationNull PUBLIC HoroEngine::NavigationApi)
 
 add_library(HoroWorldStreaming STATIC
+        runtime/world_streaming/WorldCellQuantization.cpp
         runtime/world_streaming/WorldStreamingErrors.cpp
         runtime/world_streaming/WorldStreamingIdentity.cpp
 )
