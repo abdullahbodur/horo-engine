@@ -70,4 +70,12 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.source.lifecycle_unavailable", ErrorSeverity::Warning,
                  "The streaming source owner is cancelling or closed to new admission.",
                  "Finish owner retirement or submit the source to a new active owner lifetime.", false);
+    const ErrorCodeDescriptor SourceShapeInvalid =
+        Describe("world_streaming.source.shape_invalid", ErrorSeverity::Error,
+                 "A streaming source shape is malformed or exceeds the bounded evaluation contract.",
+                 "Use ordered finite geometry within the declared source range limits.", true);
+    const ErrorCodeDescriptor SourceShapeUnsupported =
+        Describe("world_streaming.source.shape_unsupported", ErrorSeverity::Error,
+                 "The evaluating host does not support the requested streaming source shape.",
+                 "Enable the shape capability or submit a supported bounded source shape.", true);
 }  // namespace Horo::WorldStreaming::WorldStreamingErrors
