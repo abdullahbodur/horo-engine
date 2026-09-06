@@ -68,4 +68,42 @@ namespace Horo::Navigation {
                    requested.maximumSearchDistanceMeters <= available.maximumSearchDistanceMeters;
         }
     }  // namespace
+
+    /** @copydoc ValidateNavigationProviderCapabilities */
+    bool ValidateNavigationProviderCapabilities(const NavigationProviderCapabilities &capabilities) noexcept {
+        if (capabilities.contractVersion != 1 || capabilities.revision == 0 ||
+            !IsKnown(capabilities.availability, NavigationProviderAvailability::Count))
+            return false;
+        if (!std::ranges::all_of(capabilities.capabilities, [&capabilities](const auto support) {
+            return IsCoherentSupport(support, capabilities.availability);
+        }))
+            return false;
+
+        NavigationSupport aggregateQuerySupport{};
+        if (!ValidateQueries(capabilities, aggregateQuerySupport))
+            return false;
+        const auto grounded = capabilities.capabilities[static_cast<std::size_t>(NavigationCapability::GroundedQueries)];
+        if (aggregateQuerySupport != grounded)
+            return false;
+        if (aggregateQuerySupport == NavigationSupport::Available)
+            return capabilities.maximumConcurrentQueries > 0;
+        return capabilities.maximumConcurrentQueries == 0;
+    }
+
+    /** @copydoc QueryNavigationCapability */
+    NavigationSupport QueryNavigationCapability(const NavigationProviderCapabilities &capabilities,
+                                                const NavigationCapability capability) noexcept {
+        if (!ValidateNavigationProviderCapabilities(capabilities) || !IsKnown(capability, NavigationCapability::Count))
+            return NavigationSupport::Unknown;
+        return capabilities.capabilities[static_cast<std::size_t>(capability)];
+    }
+
+    /** @copydoc QueryNavigationSupport */
+    NavigationSupport QueryNavigationSupport(const NavigationProviderCapabilities &capabilities, const NavigationQueryKind query,
+                                             const NavigationQualityLevel quality) noexcept {
+        if (!ValidateNavigationProviderCapabilities(capabilities) || !IsKnown(query, NavigationQueryKind::Count) ||
+            !IsKnown(quality, NavigationQualityLevel::Count))
+            return NavigationSupport::Unknown;
+        return capabilities.querySupport[static_cast<std::size_t>(query)][static_cast<std::size_t>(quality)];
+    }
 }  // namespace Horo::Navigation
