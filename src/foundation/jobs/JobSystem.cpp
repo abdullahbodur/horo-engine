@@ -97,6 +97,7 @@ namespace Horo {
                 return;
             record->state = state;
             record->error = std::move(error);
+            record->work = {};
             record->completed.notify_all();
         }
 
@@ -104,7 +105,13 @@ namespace Horo {
             const Telemetry::ScopedOperationContext operationContext{record->operationContext};
             const JobExecutionScope executionScope{*record, schedulerWorker};
             try {
-                Result<void> outcome = record->work(record->cancellation.Token());
+                JobFunction work;
+                {
+                    std::lock_guard lock(record->Mutex());
+                    work = std::move(record->work);
+                }
+                Result<void> outcome = work(record->cancellation.Token());
+                work = {};
                 if (outcome.HasError()) {
                     const bool cancelled = record->cancellation.Token().IsCancellationRequested() &&
                                            outcome.ErrorValue().code.Value() == JobErrors::Cancelled.code.Value();
@@ -258,6 +265,7 @@ namespace Horo {
             if (record->state == JobState::Queued) {
                 record->state = JobState::Cancelled;
                 record->error = MakeJobError(JobErrors::Cancelled, "Job was cancelled before execution.");
+                record->work = {};
                 record->completed.notify_all();
             }
         }

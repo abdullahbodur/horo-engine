@@ -67,6 +67,32 @@ namespace {
         jobs.Shutdown(Horo::ShutdownPolicy::Drain);
     }
 
+    TEST_CASE("Terminal Jobs Release Callback Ownership", "[unit][foundation][jobs][lifetime]") {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 2}};
+        auto completedLifetime = std::make_shared<int>(1);
+        const std::weak_ptr completedProbe = completedLifetime;
+        auto completed = jobs.Submit({}, [lifetime = std::move(completedLifetime)](const Horo::CancellationToken &) {
+            REQUIRE(lifetime != nullptr);
+        });
+        REQUIRE((completed.HasValue()));
+        REQUIRE((completed.Value().Wait().HasValue()));
+        REQUIRE((completedProbe.expired()));
+
+        Horo::JobSystem queuedJobs{Horo::JobSystemConfig{.workerCount = 0, .maxQueuedJobs = 1}};
+        auto cancelledLifetime = std::make_shared<int>(2);
+        const std::weak_ptr cancelledProbe = cancelledLifetime;
+        auto cancelled = queuedJobs.Submit({}, [lifetime = std::move(cancelledLifetime)](const Horo::CancellationToken &) {
+            REQUIRE(lifetime != nullptr);
+        });
+        REQUIRE((cancelled.HasValue()));
+        REQUIRE((queuedJobs.RequestCancel(cancelled.Value().Id()).HasValue()));
+        REQUIRE((cancelled.Value().Wait().HasError()));
+        REQUIRE((cancelledProbe.expired()));
+
+        queuedJobs.Shutdown(Horo::ShutdownPolicy::Cancel);
+        jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
     TEST_CASE("Task Group Collect All Returns Failures In Spawn Order", "[unit][foundation]") {
         Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 2, .maxQueuedJobs = 8}};
         Horo::TaskGroup group(jobs, Horo::TaskGroupFailurePolicy::CollectAll);
