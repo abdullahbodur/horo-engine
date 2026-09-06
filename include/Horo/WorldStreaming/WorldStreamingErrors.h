@@ -34,4 +34,8 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor SourceCapacityExceeded;
     /** @brief Source admission is closed because its owner is cancelling or shut down. */
     extern const ErrorCodeDescriptor SourceLifecycleUnavailable;
+    /** @brief A source shape is malformed, unbounded, or violates its representation contract. */
+    extern const ErrorCodeDescriptor SourceShapeInvalid;
+    /** @brief The evaluating host does not support the requested source shape category. */
+    extern const ErrorCodeDescriptor SourceShapeUnsupported;
 }  // namespace Horo::WorldStreaming::WorldStreamingErrors

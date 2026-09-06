@@ -403,6 +403,7 @@ target_link_libraries(HoroNavigationNull PUBLIC HoroEngine::NavigationApi)
 
 add_library(HoroWorldStreaming STATIC
         runtime/world_streaming/StreamingSourceDescriptor.cpp
+        runtime/world_streaming/StreamingSourceRange.cpp
         runtime/world_streaming/WorldCellQuantization.cpp
         runtime/world_streaming/WorldStreamingErrors.cpp
         runtime/world_streaming/WorldStreamingIdentity.cpp
