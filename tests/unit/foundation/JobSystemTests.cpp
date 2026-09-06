@@ -52,6 +52,16 @@ namespace {
             std::this_thread::yield();
     }
 
+    void DestroyTimedOutTaskGroup(Horo::JobSystem &jobs, std::atomic<bool> &started, std::atomic<bool> &stopped) {
+        Horo::TaskGroup group(jobs);
+        REQUIRE((SpawnCancellationProbe(group, started, stopped).HasValue()));
+        WaitForProbeStart(started);
+        const auto timedOut =
+            group.Join({.waitPolicy = Horo::WaitPolicy::MainThreadPumpAllowed, .timeout = Horo::Duration::FromMilliseconds(1)});
+        REQUIRE((timedOut.HasError()));
+        REQUIRE((timedOut.ErrorValue().code.Value() == "job.wait_timed_out"));
+    }
+
     TEST_CASE("Submitted Job Reaches Succeeded Terminal State", "[unit][foundation]") {
         Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 4}};
         std::atomic executed{false};
@@ -361,15 +371,7 @@ namespace {
         Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 1}};
         std::atomic started{false};
         std::atomic stopped{false};
-        {
-            Horo::TaskGroup group(jobs);
-            REQUIRE((SpawnCancellationProbe(group, started, stopped).HasValue()));
-            WaitForProbeStart(started);
-            const auto timedOut =
-                group.Join({.waitPolicy = Horo::WaitPolicy::MainThreadPumpAllowed, .timeout = Horo::Duration::FromMilliseconds(1)});
-            REQUIRE((timedOut.HasError()));
-            REQUIRE((timedOut.ErrorValue().code.Value() == "job.wait_timed_out"));
-        }
+        DestroyTimedOutTaskGroup(jobs, started, stopped);
         REQUIRE((stopped.load()));
         jobs.Shutdown(Horo::ShutdownPolicy::Drain);
     }
@@ -402,13 +404,11 @@ namespace {
         const auto joinedAgain = group.Join();
         REQUIRE((joinedAgain.HasError()));
         REQUIRE((joinedAgain.ErrorValue().code.Value() == "test.job_system.first"));
-        REQUIRE((group
-                     .Spawn({},
-                            [](const Horo::CancellationToken &) {
+        const auto afterJoin = group.Spawn({}, [](const Horo::CancellationToken &) {
             return Horo::Result<void>::Success();
-        })
-                     .ErrorValue()
-                     .code.Value() == "job.task_group_closed"));
+        });
+        REQUIRE((afterJoin.HasError()));
+        REQUIRE((afterJoin.ErrorValue().code.Value() == "job.task_group_closed"));
         jobs.Shutdown(Horo::ShutdownPolicy::Drain);
     }
 
