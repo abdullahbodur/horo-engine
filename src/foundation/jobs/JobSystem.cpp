@@ -119,7 +119,10 @@ namespace Horo {
         }
 
         [[nodiscard]] Result<void> TerminalResult(const JobRecord &record) {
-            return record.state == JobState::Succeeded ? Result<void>::Success() : Result<void>::Failure(*record.error);
+            return record.state == JobState::Succeeded
+                       ? Result<void>::Success()
+                       : Result<void>::Failure(record.error.value_or(
+                             MakeJobError(JobErrors::Failed, "Terminal job state did not retain its required error payload.")));
         }
 
         [[nodiscard]] Result<void> WaitBounded(const std::shared_ptr<JobRecord> &record, const JoinOptions &options) {
@@ -128,7 +131,7 @@ namespace Horo {
 
             const auto timeout = std::chrono::nanoseconds(std::max<std::int64_t>(0, options.timeout.ToNanoseconds()));
             std::unique_lock lock(record->Mutex());
-            if (!record->completed.wait_for(lock, timeout, [&record] {
+            if (!record->completed.wait_for(lock, timeout, [record] {
                 return IsTerminal(record->state);
             }))
                 return Result<void>::Failure(MakeJobError(JobErrors::WaitTimedOut, "The job did not complete before its wait deadline."));

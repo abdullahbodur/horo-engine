@@ -120,16 +120,36 @@ namespace {
             {.waitPolicy = Horo::WaitPolicy::ForbiddenOnOwnerThread, .timeout = Horo::Duration::FromMilliseconds(10)});
         REQUIRE((ownerForbidden.HasError()));
         REQUIRE((ownerForbidden.ErrorValue().code.Value() == "job.wait_forbidden"));
+        const auto nonWorker =
+            completed.Value().Wait({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(10)});
+        REQUIRE((nonWorker.HasError()));
+        REQUIRE((nonWorker.ErrorValue().code.Value() == "job.wait_forbidden"));
+        REQUIRE((completed.Value()
+                     .Wait({.waitPolicy = Horo::WaitPolicy::MainThreadPumpAllowed, .timeout = Horo::Duration::FromMilliseconds(10)})
+                     .HasValue()));
+
+        Horo::JobSystem otherJobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 1}};
+        auto otherCompleted = otherJobs.Submit({}, [](const Horo::CancellationToken &) {
+        });
+        REQUIRE((otherCompleted.HasValue()));
+        REQUIRE((otherCompleted.Value().Wait().HasValue()));
 
         std::atomic workerAccepted{false};
-        auto verifier = jobs.Submit({}, [&completed, &workerAccepted](const Horo::CancellationToken &) {
+        std::atomic foreignWorkerRejected{false};
+        auto verifier =
+            jobs.Submit({}, [&completed, &otherCompleted, &workerAccepted, &foreignWorkerRejected](const Horo::CancellationToken &) {
             workerAccepted.store(completed.Value()
                                      .Wait({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(10)})
                                      .HasValue());
+            const auto foreign =
+                otherCompleted.Value().Wait({.waitPolicy = Horo::WaitPolicy::WorkerOnly, .timeout = Horo::Duration::FromMilliseconds(10)});
+            foreignWorkerRejected.store(foreign.HasError() && foreign.ErrorValue().code.Value() == "job.wait_forbidden");
         });
         REQUIRE((verifier.HasValue()));
         REQUIRE((verifier.Value().Wait().HasValue()));
         REQUIRE((workerAccepted.load()));
+        REQUIRE((foreignWorkerRejected.load()));
+        otherJobs.Shutdown(Horo::ShutdownPolicy::Drain);
         jobs.Shutdown(Horo::ShutdownPolicy::Drain);
     }
 
