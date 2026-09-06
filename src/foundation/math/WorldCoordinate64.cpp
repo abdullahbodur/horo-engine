@@ -35,13 +35,15 @@ namespace Horo::Math {
         }
 
         [[nodiscard]] bool FitsMillimeters(const WorldCoordinateAxis64 axis) noexcept {
-            const WorldCoordinateAxis64 minimum = NormalizeAxis(std::numeric_limits<std::int64_t>::min());
-            const WorldCoordinateAxis64 maximum = NormalizeAxis(std::numeric_limits<std::int64_t>::max());
+            static const WorldCoordinateAxis64 minimum = NormalizeAxis(std::numeric_limits<std::int64_t>::min());
+            static const WorldCoordinateAxis64 maximum = NormalizeAxis(std::numeric_limits<std::int64_t>::max());
             return axis >= minimum && axis <= maximum;
         }
 
         [[nodiscard]] std::int64_t ToMillimeters(const WorldCoordinateAxis64 axis) noexcept {
             if (axis.cellIndex < 0) {
+                // Shift one cell toward zero before multiplication so the intermediate cannot underflow before adding the normalized
+                // offset.
                 return (axis.cellIndex + 1) * WorldCoordinate64::CanonicalCellSizeMillimeters -
                        (WorldCoordinate64::CanonicalCellSizeMillimeters - axis.offsetMillimeters);
             }
