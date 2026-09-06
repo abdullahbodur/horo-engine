@@ -23,9 +23,10 @@ namespace Horo::WorldStreaming {
         }
 
         void RequireError(const Result<StreamingCellId> &result, const ErrorCodeDescriptor &descriptor) {
-            REQUIRE(result.HasError());
-            REQUIRE(result.ErrorValue().domain.Value() == descriptor.domain.Value());
-            REQUIRE(result.ErrorValue().code.Value() == descriptor.code.Value());
+            REQUIRE_FALSE(result.HasValue());
+            const auto &error = result.ErrorValue();
+            CHECK(error.domain.Value() == descriptor.domain.Value());
+            CHECK(error.code.Value() == descriptor.code.Value());
         }
 
         TEST_CASE("WorldCoordinate64 normalizes negative axes and round trips exact millimeters", "[unit][world_streaming][coordinate]") {
