@@ -3,6 +3,7 @@
 #include "Horo/Runtime/Save/SaveErrors.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <limits>
 #include <unordered_map>
 #include <unordered_set>
@@ -19,10 +20,11 @@ namespace Horo::Runtime {
 
         /** @brief Reports whether the descriptor declares one supported semantic scope. */
         [[nodiscard]] bool IsValidScope(const SaveParticipantScope scope) noexcept {
+            using enum SaveParticipantScope;
             switch (scope) {
-                case SaveParticipantScope::RuntimeScene:
-                case SaveParticipantScope::SlotPlayer:
-                case SaveParticipantScope::PersistentWorld:
+                case RuntimeScene:
+                case SlotPlayer:
+                case PersistentWorld:
                     return true;
             }
             return false;
@@ -30,10 +32,10 @@ namespace Horo::Runtime {
 
         /** @brief Reports whether role flags are non-empty and contain only supported bits. */
         [[nodiscard]] bool HasValidRoles(const SaveParticipantRole roles) noexcept {
-            constexpr std::uint8_t kSupportedRoles =
-                static_cast<std::uint8_t>(SaveParticipantRole::Capture) | static_cast<std::uint8_t>(SaveParticipantRole::Restore);
-            const std::uint8_t encodedRoles = static_cast<std::uint8_t>(roles);
-            return encodedRoles != 0 && (encodedRoles & ~kSupportedRoles) == 0;
+            constexpr auto kSupportedRoles = std::byte{static_cast<std::uint8_t>(SaveParticipantRole::Capture)} |
+                                             std::byte{static_cast<std::uint8_t>(SaveParticipantRole::Restore)};
+            const auto encodedRoles = std::byte{static_cast<std::uint8_t>(roles)};
+            return encodedRoles != std::byte{} && (encodedRoles & ~kSupportedRoles) == std::byte{};
         }
 
         /** @brief Reports whether all local limits are finite and cover declared record ownership. */
