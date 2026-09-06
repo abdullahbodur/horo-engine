@@ -101,19 +101,21 @@ namespace Horo::Navigation {
         }
 
         TEST_CASE("Navigation errors expose unique definitive descriptors", "[unit][navigation][errors]") {
-            const std::array<std::pair<const ErrorCodeDescriptor *, std::string_view>, 3> cases{{
-                {&NavigationErrors::IdentityInvalid, "navigation.identity.invalid"},
-                {&NavigationErrors::InvalidHandle, "navigation.handle.invalid"},
-                {&NavigationErrors::GenerationExhausted, "navigation.generation.exhausted"},
+            const std::array<const ErrorCodeDescriptor *, 3> descriptors{{
+                &NavigationErrors::IdentityInvalid,
+                &NavigationErrors::InvalidHandle,
+                &NavigationErrors::GenerationExhausted,
             }};
             std::set<std::string_view> unique;
-            for (const auto &[descriptor, code] : cases) {
+            for (const ErrorCodeDescriptor *descriptor : descriptors) {
                 REQUIRE(descriptor->domain.Value() == "horo.navigation");
-                REQUIRE(descriptor->code.Value() == code);
                 REQUIRE(unique.insert(descriptor->code.Value()).second);
                 REQUIRE_FALSE(descriptor->summary.empty());
                 REQUIRE_FALSE(descriptor->remediationHint.empty());
             }
+            REQUIRE(NavigationErrors::IdentityInvalid.code.Value() == "navigation.identity.invalid");
+            REQUIRE(NavigationErrors::InvalidHandle.code.Value() == "navigation.handle.invalid");
+            REQUIRE(NavigationErrors::GenerationExhausted.code.Value() == "navigation.generation.exhausted");
             REQUIRE(NavigationErrors::GenerationExhausted.defaultSeverity == ErrorSeverity::Critical);
         }
     }  // namespace

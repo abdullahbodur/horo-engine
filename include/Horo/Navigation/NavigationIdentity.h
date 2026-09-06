@@ -78,7 +78,7 @@ namespace Horo::Navigation {
 
         /** @brief Checks representation, not registry residency. @return True for a well-formed handle. */
         [[nodiscard]] constexpr bool IsValid() const noexcept {
-            return world.IsValid() && slot.IsValid() && slot.generation != 0;
+            return world.Value() != 0 && slot.index != decltype(slot)::InvalidIndex && slot.generation > 0;
         }
 
         constexpr auto operator<=>(const NavigationHandle &) const noexcept = default;
