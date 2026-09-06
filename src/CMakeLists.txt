@@ -400,7 +400,7 @@ add_library(HoroPrefabAuthoring STATIC
 )
 add_library(HoroEngine::PrefabAuthoring ALIAS HoroPrefabAuthoring)
 target_compile_features(HoroPrefabAuthoring PUBLIC cxx_std_20)
-target_link_libraries(HoroPrefabAuthoring PUBLIC HoroEngine::Prefab HoroEngine::Application)
+target_link_libraries(HoroPrefabAuthoring PUBLIC HoroEngine::Prefab HoroEngine::Application PRIVATE utf8proc)
 
 add_library(HoroInput STATIC
         runtime/input/Input.cpp

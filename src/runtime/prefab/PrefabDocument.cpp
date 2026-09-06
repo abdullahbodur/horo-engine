@@ -7,6 +7,7 @@
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
+#include <utf8proc.h>
 #include <variant>
 
 namespace Horo::Prefab {
@@ -15,6 +16,21 @@ namespace Horo::Prefab {
         [[nodiscard]] bool IsCanonicalProjectVersion(const Application::HoroVersion &version) {
             const auto parsed = Application::ParseHoroVersion(Application::FormatHoroVersion(version));
             return parsed.HasValue() && parsed.Value() == version;
+        }
+
+        /** @brief Validates a complete UTF-8 byte sequence without normalizing caller-owned display text. */
+        [[nodiscard]] bool IsValidUtf8(const std::string_view text) noexcept {
+            const auto *cursor = reinterpret_cast<const utf8proc_uint8_t *>(text.data());
+            auto remaining = static_cast<utf8proc_ssize_t>(text.size());
+            while (remaining > 0) {
+                utf8proc_int32_t codepoint{};
+                const utf8proc_ssize_t decoded = utf8proc_iterate(cursor, remaining, &codepoint);
+                if (decoded <= 0)
+                    return false;
+                cursor += decoded;
+                remaining -= decoded;
+            }
+            return true;
         }
 
         /** @brief Adds bytes without exceeding the document payload limit. */
@@ -83,7 +99,8 @@ namespace Horo::Prefab {
 
         /** @brief Validates and accounts for one hierarchy object's portable data. */
         [[nodiscard]] Result<void> ValidateObject(const PrefabObjectNode &object, std::size_t &payloadBytes) {
-            if (object.name.size() > MaximumPrefabObjectNameBytes || !object.localTransform.TryToMatrix().HasValue())
+            if (object.name.size() > MaximumPrefabObjectNameBytes || !IsValidUtf8(object.name) ||
+                !object.localTransform.TryToMatrix().HasValue())
                 return Result<void>::Failure(MakeError(PrefabErrors::DocumentInvalid));
             if (object.components.size() > MaximumPrefabComponentsPerObject ||
                 object.behaviors.size() > MaximumPrefabComponentsPerObject - object.components.size())
@@ -109,12 +126,14 @@ namespace Horo::Prefab {
             return Result<void>::Success();
         }
 
-        /** @brief Validates root-first parent-before-child hierarchy ordering and depth. */
-        [[nodiscard]] Result<void> ValidateHierarchy(const std::vector<PrefabObjectNode> &objects, std::size_t &payloadBytes) {
-            if (objects.empty() || !objects.front().localId.IsRoot() || objects.front().parentLocalId)
-                return Result<void>::Failure(MakeError(PrefabErrors::HierarchyInvalid));
+        using ObjectDepths = std::unordered_map<std::uint32_t, std::size_t>;
 
-            std::unordered_map<std::uint32_t, std::size_t> depths;
+        /** @brief Validates root-first hierarchy ordering and returns its computed object depths. */
+        [[nodiscard]] Result<ObjectDepths> ValidateHierarchy(const std::vector<PrefabObjectNode> &objects, std::size_t &payloadBytes) {
+            if (objects.empty() || !objects.front().localId.IsRoot() || objects.front().parentLocalId)
+                return Result<ObjectDepths>::Failure(MakeError(PrefabErrors::HierarchyInvalid));
+
+            ObjectDepths depths;
             depths.reserve(objects.size());
             depths.emplace(0, 1);
             for (std::size_t index = 0; index < objects.size(); ++index) {
@@ -122,14 +141,14 @@ namespace Horo::Prefab {
                 if (index != 0) {
                     const auto registration = RegisterChild(object, depths);
                     if (registration.HasError())
-                        return registration;
+                        return Result<ObjectDepths>::Failure(registration.ErrorValue());
                 }
 
                 const auto objectValidation = ValidateObject(object, payloadBytes);
                 if (objectValidation.HasError())
-                    return objectValidation;
+                    return Result<ObjectDepths>::Failure(objectValidation.ErrorValue());
             }
-            return Result<void>::Success();
+            return Result<ObjectDepths>::Success(std::move(depths));
         }
 
         /** @brief Validates one exclusive variant source. */
@@ -142,34 +161,33 @@ namespace Horo::Prefab {
         }
 
         /** @brief Validates concrete nested placements and their occupied local slots. */
-        [[nodiscard]] bool IsValidNestedPlacement(const PrefabDocumentData &candidate, const std::unordered_set<std::uint32_t> &objectIds,
+        [[nodiscard]] bool IsValidNestedPlacement(const PrefabDocumentData &candidate, const ObjectDepths &objectDepths,
                                                   const NestedPrefabPlacement &placement) {
             const LocalObjectId parent = placement.parentLocalId.value_or(LocalObjectId{});
-            return !placement.placementLocalId.IsRoot() && objectIds.contains(parent.value) && placement.sourcePrefab.IsValid() &&
+            return !placement.placementLocalId.IsRoot() && objectDepths.contains(parent.value) && placement.sourcePrefab.IsValid() &&
                    placement.sourcePrefab.Asset() != candidate.assetId && IsValidRevision(placement.authoredAgainst) &&
                    placement.localRootTransform.TryToMatrix().HasValue() &&
                    ContainsAsset(candidate.referencedAssets, placement.sourcePrefab.Asset());
         }
 
         /** @brief Validates concrete nested placements and their occupied local slots. */
-        [[nodiscard]] Result<void> ValidateNestedPlacements(const PrefabDocumentData &candidate,
-                                                            const std::unordered_set<std::uint32_t> &objectIds,
+        [[nodiscard]] Result<void> ValidateNestedPlacements(const PrefabDocumentData &candidate, const ObjectDepths &objectDepths,
                                                             const PrefabComposition &composition) {
             if (composition.nestedPlacements.size() > MaximumDirectNestedPrefabPlacements)
                 return Result<void>::Failure(MakeError(PrefabErrors::NestedPlacementCountExceeded));
-            std::unordered_set<std::uint32_t> occupiedIds = objectIds;
-            occupiedIds.reserve(objectIds.size() + composition.nestedPlacements.size());
+            std::unordered_set<std::uint32_t> placementIds;
+            placementIds.reserve(composition.nestedPlacements.size());
             for (const NestedPrefabPlacement &placement : composition.nestedPlacements) {
-                if (!occupiedIds.emplace(placement.placementLocalId.value).second ||
-                    !IsValidNestedPlacement(candidate, objectIds, placement))
+                if (objectDepths.contains(placement.placementLocalId.value) ||
+                    !placementIds.emplace(placement.placementLocalId.value).second ||
+                    !IsValidNestedPlacement(candidate, objectDepths, placement))
                     return Result<void>::Failure(MakeError(PrefabErrors::CompositionInvalid));
             }
             return Result<void>::Success();
         }
 
         /** @brief Validates optional concrete nesting or exclusive variant composition. */
-        [[nodiscard]] Result<void> ValidateComposition(const PrefabDocumentData &candidate,
-                                                       const std::unordered_set<std::uint32_t> &objectIds) {
+        [[nodiscard]] Result<void> ValidateComposition(const PrefabDocumentData &candidate, const ObjectDepths &objectDepths) {
             if (!candidate.composition)
                 return Result<void>::Success();
 
@@ -178,7 +196,7 @@ namespace Horo::Prefab {
                 return ValidateVariant(candidate, composition);
             if (composition.variantAuthoredAgainst || composition.nestedPlacements.empty())
                 return Result<void>::Failure(MakeError(PrefabErrors::CompositionInvalid));
-            return ValidateNestedPlacements(candidate, objectIds, composition);
+            return ValidateNestedPlacements(candidate, objectDepths, composition);
         }
 
         /** @brief Validates a unique bounded dependency list and returns its initial payload byte count. */
@@ -211,18 +229,16 @@ namespace Horo::Prefab {
             return Result<PrefabDocument>::Failure(referenceValidation.ErrorValue());
         std::size_t payloadBytes = referenceValidation.Value();
 
+        ObjectDepths objectDepths;
         const bool isVariant = candidate.composition && candidate.composition->variantParent;
         if (!isVariant) {
-            const auto hierarchyValidation = ValidateHierarchy(candidate.objects, payloadBytes);
+            auto hierarchyValidation = ValidateHierarchy(candidate.objects, payloadBytes);
             if (hierarchyValidation.HasError())
                 return Result<PrefabDocument>::Failure(hierarchyValidation.ErrorValue());
+            objectDepths = std::move(hierarchyValidation).Value();
         }
 
-        std::unordered_set<std::uint32_t> objectIds;
-        objectIds.reserve(candidate.objects.size());
-        for (const PrefabObjectNode &object : candidate.objects)
-            objectIds.emplace(object.localId.value);
-        const auto compositionValidation = ValidateComposition(candidate, objectIds);
+        const auto compositionValidation = ValidateComposition(candidate, objectDepths);
         if (compositionValidation.HasError())
             return Result<PrefabDocument>::Failure(compositionValidation.ErrorValue());
 

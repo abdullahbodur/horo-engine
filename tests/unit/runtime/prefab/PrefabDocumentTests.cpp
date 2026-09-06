@@ -232,6 +232,14 @@ namespace Horo::Prefab {
             auto oversizedName = Concrete();
             oversizedName.objects.front().name.assign(MaximumPrefabObjectNameBytes + 1, 'x');
             REQUIRE(PrefabDocument::Create(oversizedName).HasError());
+
+            auto invalidUtf8 = Concrete();
+            invalidUtf8.objects.front().name = std::string{"\xC3\x28", 2};
+            REQUIRE(PrefabDocument::Create(invalidUtf8).HasError());
+
+            auto validUtf8 = Concrete();
+            validUtf8.objects.front().name = std::string{"\xF0\x9F\x8C\x8D", 4};
+            REQUIRE(PrefabDocument::Create(validUtf8).HasValue());
         }
     }  // namespace
 }  // namespace Horo::Prefab
