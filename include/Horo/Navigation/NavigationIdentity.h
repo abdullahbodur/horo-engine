@@ -52,12 +52,15 @@ namespace Horo::Navigation {
 
     struct NavigationWorldIdentityTag;
     struct NavigationGenerationIdentityTag;
+    struct NavigationSnapshotIdentityTag;
     struct NavigationSurfaceIdentityTag;
 
     /** @brief Process-local world incarnation assigned once by the host and never serialized. */
     using NavigationWorldId = NavigationIdentity<NavigationWorldIdentityTag>;
     /** @brief Monotonic runtime generation used to reject topology and provider replacements. */
     using NavigationGeneration = NavigationIdentity<NavigationGenerationIdentityTag>;
+    /** @brief Transient opaque identity of one atomically published navigation read snapshot. */
+    using NavigationSnapshotToken = NavigationIdentity<NavigationSnapshotIdentityTag>;
     /** @brief Stable authored surface identity, distinct from runtime handles and native references. */
     using SurfaceId = NavigationIdentity<NavigationSurfaceIdentityTag>;
 

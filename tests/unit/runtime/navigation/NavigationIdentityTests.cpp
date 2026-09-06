@@ -47,18 +47,23 @@ namespace Horo::Navigation {
         TEST_CASE("Navigation identities reserve zero and retain exact values", "[unit][navigation][identity]") {
             REQUIRE(NavigationWorldId::Create(0).HasError());
             REQUIRE(NavigationGeneration::Create(0).HasError());
+            REQUIRE(NavigationSnapshotToken::Create(0).HasError());
             REQUIRE(SurfaceId::Create(0).HasError());
 
             const auto world = MakeIdentity<NavigationWorldId>(1);
             const auto generation = MakeIdentity<NavigationGeneration>(2);
-            const auto surface = MakeIdentity<SurfaceId>(3);
+            const auto snapshot = MakeIdentity<NavigationSnapshotToken>(3);
+            const auto surface = MakeIdentity<SurfaceId>(4);
             REQUIRE(world.Value() == 1);
             REQUIRE(generation.Value() == 2);
-            REQUIRE(surface.Value() == 3);
+            REQUIRE(snapshot.Value() == 3);
+            REQUIRE(surface.Value() == 4);
             REQUIRE(MakeIdentity<NavigationWorldId>(std::numeric_limits<std::uint64_t>::max()).IsValid());
             static_assert(!std::is_convertible_v<std::uint64_t, NavigationWorldId>);
             static_assert(!std::is_convertible_v<std::uint64_t, NavigationGeneration>);
+            static_assert(!std::is_convertible_v<std::uint64_t, NavigationSnapshotToken>);
             static_assert(!std::is_convertible_v<std::uint64_t, SurfaceId>);
+            static_assert(!std::is_same_v<NavigationSnapshotToken, NavigationGeneration>);
         }
 
         TEST_CASE("Stable surface identity serializes with canonical byte order", "[unit][navigation][identity]") {
