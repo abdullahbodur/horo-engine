@@ -56,3 +56,27 @@ TEST_CASE("Render graph storage is move-only and immutable through its views", "
     STATIC_REQUIRE(std::is_move_constructible_v<RenderGraph>);
     STATIC_REQUIRE(std::is_same_v<decltype(std::declval<const RenderGraph &>().Passes()), std::span<const RenderGraphPass>>);
 }
+
+TEST_CASE("Render graph builder owns finite storage and explicit lifecycle", "[runtime][renderer][render-graph]") {
+    auto created = RenderGraphBuilder::Create();
+    REQUIRE(created.HasValue());
+    RenderGraphBuilder builder = std::move(created).Value();
+    const RenderGraphOwnerId owner = builder.Owner();
+    REQUIRE(owner.IsValid());
+    REQUIRE(builder.State() == RenderGraphBuilderState::Open);
+
+    RenderGraphBuilder moved{std::move(builder)};
+    REQUIRE(builder.State() == RenderGraphBuilderState::MovedFrom);
+    REQUIRE_FALSE(builder.Owner().IsValid());
+    REQUIRE(moved.Owner() == owner);
+
+    moved.Shutdown();
+    moved.Shutdown();
+    REQUIRE(moved.State() == RenderGraphBuilderState::Shutdown);
+
+    RenderGraphLimits invalid = {};
+    invalid.maxPasses = 0;
+    const auto rejected = RenderGraphBuilder::Create(invalid);
+    REQUIRE(rejected.HasError());
+    REQUIRE(rejected.ErrorValue().code.Value() == "render.graph.limits_invalid");
+}

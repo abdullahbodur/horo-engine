@@ -1344,9 +1344,12 @@ resource references, semantic resource uses, explicit dependencies, queue roles,
 and finite graph limits. Pass references reuse canonical `RenderPassId` and
 `RenderPassKind` values rather than creating a competing pass identity model.
 Finalized records reside in one move-only owning `RenderGraph` exposed through
-immutable deterministic-order views. Builder ownership, validation, finalization, resource import/export classes,
-dependency DAG validation, lifetime compilation, barrier synthesis, and backend
-translation remain separate render-graph delivery stages.
+immutable deterministic-order views. `RenderGraphBuilder` owns pre-reserved finite
+CPU storage under a process-local non-reusable identity. Creation fixes
+owner-thread affinity; explicit idempotent shutdown releases storage without
+backend or GPU work. Mutation, validation, finalization, resource import/export
+classes, dependency DAG validation, lifetime compilation, barrier synthesis, and
+backend translation remain separate render-graph delivery stages.
 
 The graph:
 

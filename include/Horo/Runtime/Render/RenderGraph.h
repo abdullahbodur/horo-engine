@@ -5,12 +5,14 @@
  * @brief Backend-neutral bounded render-graph authoring contracts.
  */
 
+#include "Horo/Foundation/Result.h"
 #include "Horo/Runtime/Render/RenderBackend.h"
 
 #include <compare>
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <thread>
 #include <vector>
 
 namespace Horo::Render {
@@ -202,6 +204,67 @@ namespace Horo::Render {
 
         RenderGraphOwnerId owner_;
         RenderGraphLimits limits_;
+        std::vector<RenderGraphPass> passes_;
+        std::vector<RenderGraphResource> resources_;
+        std::vector<RenderGraphResourceUsage> usages_;
+        std::vector<RenderGraphDependency> dependencies_;
+    };
+
+    /** @brief Observable lifecycle state of a bounded render-graph builder. */
+    enum class RenderGraphBuilderState : std::uint8_t {
+        Open,
+        Finalized,
+        Cancelled,
+        Shutdown,
+        MovedFrom,
+    };
+
+    /** @brief Owner-thread-bound finite storage for backend-neutral graph authoring. */
+    class RenderGraphBuilder final {
+    public:
+        RenderGraphBuilder(const RenderGraphBuilder &) = delete;
+        RenderGraphBuilder &operator=(const RenderGraphBuilder &) = delete;
+        RenderGraphBuilder(RenderGraphBuilder &&other) noexcept;
+        RenderGraphBuilder &operator=(RenderGraphBuilder &&) = delete;
+        ~RenderGraphBuilder();
+
+        /**
+         * @brief Creates an open builder and reserves every declared finite capacity.
+         * @param limits Requested capacities constrained by the engine hard bounds.
+         * @return Open builder or a typed invalid-limit, identity, or allocation failure.
+         */
+        [[nodiscard]] static Result<RenderGraphBuilder> Create(RenderGraphLimits limits = {});
+
+        /**
+         * @brief Returns the process-local identity that scopes issued references.
+         * @return Builder owner identity, or an invalid identity after move.
+         */
+        [[nodiscard]] RenderGraphOwnerId Owner() const noexcept;
+
+        /**
+         * @brief Returns the explicit lifecycle state.
+         * @return Current builder state.
+         */
+        [[nodiscard]] RenderGraphBuilderState State() const noexcept;
+
+        /**
+         * @brief Releases retained authoring storage without backend or GPU work.
+         *
+         * Repeated calls are safe. The caller must quiesce owner-thread authoring
+         * before shutdown; teardown may then continue on another thread.
+         */
+        void Shutdown() noexcept;
+
+    private:
+        RenderGraphBuilder(RenderGraphOwnerId owner, RenderGraphLimits limits) noexcept;
+
+        [[nodiscard]] Result<void> Reserve();
+        void ReleaseStorage() noexcept;
+
+        RenderGraphOwnerId owner_;
+        RenderGraphLimits limits_;
+        std::thread::id ownerThread_;
+        RenderGraphBuilderState state_{RenderGraphBuilderState::MovedFrom};
         std::vector<RenderGraphPass> passes_;
         std::vector<RenderGraphResource> resources_;
         std::vector<RenderGraphResourceUsage> usages_;
