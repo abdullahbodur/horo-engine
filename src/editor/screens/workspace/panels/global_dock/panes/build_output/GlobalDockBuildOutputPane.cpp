@@ -46,6 +46,28 @@ namespace Horo::Editor {
             UseSeverity,
         };
 
+        using BuildStatusColorResolver = ImVec4 (*)();
+
+        struct PresentedBuildStatusMetadata {
+            BuildStatusColorResolver color;
+            const char *technicalText;
+            const char *localizationKey;
+        };
+
+        constexpr std::array PresentedBuildStatuses{
+            PresentedBuildStatusMetadata{Theme::Ok, "OK", "workspace.global_dock.build_output.row_status.succeeded"},
+            PresentedBuildStatusMetadata{Theme::Err, "FAILED", "workspace.global_dock.build_output.row_status.failed"},
+            PresentedBuildStatusMetadata{Theme::Dim, "CACHED", "workspace.global_dock.build_output.row_status.cached"},
+            PresentedBuildStatusMetadata{Theme::Warn, "CANCELLED", "workspace.global_dock.build_output.row_status.cancelled"},
+            PresentedBuildStatusMetadata{Theme::Err, "TIMED OUT", "workspace.global_dock.build_output.row_status.timed_out"},
+            PresentedBuildStatusMetadata{Theme::Err, "FATAL", "workspace.global_dock.build_output.row_status.fatal"},
+            PresentedBuildStatusMetadata{Theme::Err, "ERROR", "workspace.global_dock.build_output.row_status.failed"},
+            PresentedBuildStatusMetadata{Theme::Warn, "WARNING", "workspace.global_dock.build_output.row_status.warning"},
+            PresentedBuildStatusMetadata{Theme::Accent, "INFO", "workspace.global_dock.build_output.row_status.info"},
+            PresentedBuildStatusMetadata{Theme::Text, "INFO", "workspace.global_dock.build_output.row_status.info"},
+        };
+        static_assert(PresentedBuildStatuses.size() == static_cast<std::size_t>(PresentedBuildStatus::UseSeverity));
+
         [[nodiscard]] constexpr PresentedBuildStatus ResultStatus(const BuildOutputResult result) noexcept {
             using enum BuildOutputResult;
             switch (result) {
@@ -86,26 +108,15 @@ namespace Horo::Editor {
         }
 
         [[nodiscard]] ImVec4 StatusColor(const BuildOutputRecord &record) noexcept {
-            using ColorResolver = ImVec4 (*)();
-            constexpr std::array<ColorResolver, 10> resolvers{Theme::Ok,  Theme::Err, Theme::Dim,  Theme::Warn,   Theme::Err,
-                                                              Theme::Err, Theme::Err, Theme::Warn, Theme::Accent, Theme::Text};
-            return resolvers[static_cast<std::size_t>(PresentedStatus(record))]();
+            return PresentedBuildStatuses[static_cast<std::size_t>(PresentedStatus(record))].color();
         }
 
         [[nodiscard]] const char *TechnicalStatusText(const BuildOutputRecord &record) noexcept {
-            constexpr std::array values{"OK", "FAILED", "CACHED", "CANCELLED", "TIMED OUT", "FATAL", "ERROR", "WARNING", "INFO", "INFO"};
-            return values[static_cast<std::size_t>(PresentedStatus(record))];
+            return PresentedBuildStatuses[static_cast<std::size_t>(PresentedStatus(record))].technicalText;
         }
 
         [[nodiscard]] const char *StatusLocalizationKey(const BuildOutputRecord &record) noexcept {
-            constexpr std::array values{
-                "workspace.global_dock.build_output.row_status.succeeded", "workspace.global_dock.build_output.row_status.failed",
-                "workspace.global_dock.build_output.row_status.cached",    "workspace.global_dock.build_output.row_status.cancelled",
-                "workspace.global_dock.build_output.row_status.timed_out", "workspace.global_dock.build_output.row_status.fatal",
-                "workspace.global_dock.build_output.row_status.failed",    "workspace.global_dock.build_output.row_status.warning",
-                "workspace.global_dock.build_output.row_status.info",      "workspace.global_dock.build_output.row_status.info",
-            };
-            return values[static_cast<std::size_t>(PresentedStatus(record))];
+            return PresentedBuildStatuses[static_cast<std::size_t>(PresentedStatus(record))].localizationKey;
         }
 
         [[nodiscard]] bool IsOkRecord(const BuildOutputRecord &record) noexcept {
