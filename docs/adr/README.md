@@ -184,6 +184,7 @@ to the replacement.
 | [170](170-vtx-settings-diagnostics-capture-and-qualification-ownership.md) | VTX Settings, Diagnostics, Capture and Qualification Ownership | Proposed | 2026-09-02 |
 | [171](171-android-host-target-and-ownership.md) | Android Host, Target and Ownership | Proposed | 2026-09-02 |
 | [172](172-immersive-agent-ownership-authoring-mode-and-risk.md) | Immersive Agent Ownership, Authoring Mode and Risk | Proposed | 2026-09-02 |
+| [173](173-render-queue-submission-and-fence-contract.md) | Render Queue, Submission and Fence Contract | Proposed | 2026-09-06 |
 
 ## Conventions
 

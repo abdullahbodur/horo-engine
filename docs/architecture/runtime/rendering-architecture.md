@@ -1313,6 +1313,22 @@ privacy, and qualification ownership.
 
 ## Frame Contract
 
+[ADR-173](../../adr/173-render-queue-submission-and-fence-contract.md) owns the
+backend-neutral queue, submission-order, completion-timeline and CPU wait policy.
+Queue roles resolve through an effective frontend topology: a single-queue
+backend may map graphics, compute and transfer roles to one logical queue, while
+multi-queue mappings require admitted capabilities. Every admitted submission
+retains one frontend-issued total order, explicit GPU timeline waits and one
+signal on its own queue. Backends preserve that order without exposing native
+queue or synchronization handles.
+
+Normal frames use GPU-side dependencies and never CPU-block to order work.
+Completion polling is non-blocking; bounded readback, deterministic tests,
+teardown and documented recovery are the only CPU-blocking purposes, and each
+requires a positive finite timeout. Resource retirement consumes exact queue
+timeline evidence rather than frame indices, presentation, or CPU owner release.
+Sequence and timeline exhaustion fail before wraparound.
+
 One frame:
 
 1. acquires a backend frame token
