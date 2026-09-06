@@ -376,6 +376,18 @@ initial by-value lookup contract migrate from `result.Value().field` to
 The registry is non-copyable and non-assignable. Move construction transfers
 storage and all borrowed-pointer lifetime responsibility to the destination.
 
+Grounded agent profiles use stable project-owned non-zero identities; display names
+and localization are presentation only. Each profile owns its bake-only radius,
+height, slope, step, voxel-cell and minimum-region values. Those values are finite
+and validated before bake admission, while runtime speed and Character movement
+settings remain outside this contract. The profile identity partitions generated
+surfaces even when profiles consume the same source geometry.
+
+Renaming preserves identity and build values. Duplication copies build values into
+a caller-issued distinct identity. Deleting a referenced profile fails until the
+authoring transaction either proves it unreferenced or supplies one explicit
+surviving replacement for every exact reference; no default profile repair exists.
+
 ### NavMesh Asset And Cook Contract
 
 [ADR-105](../../adr/105-navigation-asset-and-scene-ownership-boundary.md)
