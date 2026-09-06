@@ -98,6 +98,23 @@ TEST_CASE("Render graph capacities are exact hard admission boundaries", "[runti
     }
 }
 
+TEST_CASE("Render graph supports read-only depth-stencil attachment use", "[runtime][renderer][render-graph]") {
+    auto created = RenderGraphBuilder::Create(SmallLimits());
+    REQUIRE(created.HasValue());
+    RenderGraphBuilder builder = std::move(created).Value();
+
+    auto pass = builder.AddPass(RenderPassKind::Graphics, RenderQueueRole::Graphics);
+    auto texture = builder.AddResource(RenderGraphResourceKind::Texture);
+    REQUIRE(pass.HasValue());
+    REQUIRE(texture.HasValue());
+    REQUIRE(builder.AddUsage({pass.Value(), texture.Value(), RenderGraphAccess::Read, RenderGraphUsageKind::DepthStencilAttachment})
+                .HasValue());
+
+    auto finalized = builder.Finalize();
+    REQUIRE(finalized.HasValue());
+    REQUIRE(finalized.Value().Usages().front().access == RenderGraphAccess::Read);
+}
+
 TEST_CASE("Render graph failures reject unsupported and foreign records without fallback", "[runtime][renderer][render-graph]") {
     RenderGraphLimits invalid = SmallLimits();
     invalid.maxPasses = RenderGraphLimits::HardMaxPasses + 1;

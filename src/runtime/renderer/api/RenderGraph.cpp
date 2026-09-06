@@ -118,8 +118,9 @@ namespace Horo::Render {
                 case RenderGraphUsageKind::CopySource:
                     return access == RenderGraphAccess::Read;
                 case RenderGraphUsageKind::ColorAttachment:
-                case RenderGraphUsageKind::DepthStencilAttachment:
                     return access == RenderGraphAccess::Write || access == RenderGraphAccess::ReadWrite;
+                case RenderGraphUsageKind::DepthStencilAttachment:
+                    return true;
                 case RenderGraphUsageKind::CopyDestination:
                     return access == RenderGraphAccess::Write;
                 case RenderGraphUsageKind::Storage:
@@ -355,23 +356,25 @@ namespace Horo::Render {
             return Result<void>::Failure(MakeError(RenderGraphErrors::BuilderClosed));
         }
 
-        passes_.clear();
-        resources_.clear();
-        usages_.clear();
-        dependencies_.clear();
+        ReleaseStorage();
         state_ = RenderGraphBuilderState::Cancelled;
         return Result<void>::Success();
     }
 
     /** @copydoc RenderGraphBuilder::Shutdown */
     void RenderGraphBuilder::Shutdown() noexcept {
+        ReleaseStorage();
+        if (state_ != RenderGraphBuilderState::MovedFrom) {
+            state_ = RenderGraphBuilderState::Shutdown;
+        }
+    }
+
+    /** @copydoc RenderGraphBuilder::ReleaseStorage */
+    void RenderGraphBuilder::ReleaseStorage() noexcept {
         std::vector<RenderGraphPass>{}.swap(passes_);
         std::vector<RenderGraphResource>{}.swap(resources_);
         std::vector<RenderGraphResourceUsage>{}.swap(usages_);
         std::vector<RenderGraphDependency>{}.swap(dependencies_);
-        if (state_ != RenderGraphBuilderState::MovedFrom) {
-            state_ = RenderGraphBuilderState::Shutdown;
-        }
     }
 
     /** @copydoc RenderGraphBuilder::Reserve */
