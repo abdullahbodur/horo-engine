@@ -149,6 +149,8 @@ namespace Horo::WorldStreaming {
                 &WorldStreamingErrors::SourceRevisionStale,
                 &WorldStreamingErrors::SourceCapacityExceeded,
                 &WorldStreamingErrors::SourceLifecycleUnavailable,
+                &WorldStreamingErrors::SourceDesiredStateInvalid,
+                &WorldStreamingErrors::SourceDesiredStateUnsupported,
             };
             std::set<std::string_view> codes;
             for (const ErrorCodeDescriptor *descriptor : descriptors) {

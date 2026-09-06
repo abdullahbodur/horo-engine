@@ -78,4 +78,12 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
         Describe("world_streaming.source.shape_unsupported", ErrorSeverity::Error,
                  "The evaluating host does not support the requested streaming source shape.",
                  "Enable the shape capability or submit a supported bounded source shape.", true);
+    const ErrorCodeDescriptor SourceDesiredStateInvalid =
+        Describe("world_streaming.source.desired_state_invalid", ErrorSeverity::Error,
+                 "A streaming source desired state combines residency and retention inconsistently.",
+                 "Use releasable retention for Unloaded, or request Loaded or Activated before pinning.", true);
+    const ErrorCodeDescriptor SourceDesiredStateUnsupported =
+        Describe("world_streaming.source.desired_state_unsupported", ErrorSeverity::Error,
+                 "A streaming source desired-state value is not supported by this contract version.",
+                 "Use Unloaded, Loaded or Activated residency with Releasable or Pinned retention.", true);
 }  // namespace Horo::WorldStreaming::WorldStreamingErrors

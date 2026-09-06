@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Horo/WorldStreaming/StreamingSourceDescriptor.h"
+#include "Horo/WorldStreaming/WorldStreamingIdentity.h"
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
@@ -38,7 +39,6 @@ namespace Horo::WorldStreaming::TestSupport {
                 .sourceCapacity = 3,
                 .ownerState = StreamingSourceOwnerState::Active};
     }
-
     template <typename T> void RequireError(const Result<T> &result, const ErrorCodeDescriptor &expected) {
         REQUIRE(result.HasError());
         REQUIRE(result.ErrorValue().code.Value() == expected.code.Value());

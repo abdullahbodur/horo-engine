@@ -38,4 +38,8 @@ namespace Horo::WorldStreaming::WorldStreamingErrors {
     extern const ErrorCodeDescriptor SourceShapeInvalid;
     /** @brief The evaluating host does not support the requested source shape category. */
     extern const ErrorCodeDescriptor SourceShapeUnsupported;
+    /** @brief A source desired state combines residency and retention inconsistently. */
+    extern const ErrorCodeDescriptor SourceDesiredStateInvalid;
+    /** @brief A source desired-state residency or retention value is not supported by this contract version. */
+    extern const ErrorCodeDescriptor SourceDesiredStateUnsupported;
 }  // namespace Horo::WorldStreaming::WorldStreamingErrors

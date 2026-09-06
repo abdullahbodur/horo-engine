@@ -1,13 +1,10 @@
 #include "Horo/WorldStreaming/StreamingSourceDescriptor.h"
 
 #include "Horo/WorldStreaming/WorldStreamingErrors.h"
+#include "WorldStreamingInternal.h"
 
 namespace Horo::WorldStreaming {
     namespace {
-        template <typename T> [[nodiscard]] Result<T> Failure(const ErrorCodeDescriptor &descriptor) {
-            return Result<T>::Failure(MakeError(descriptor));
-        }
-
         [[nodiscard]] constexpr bool IsSupportedIntent(const StreamingSourceIntent intent) noexcept {
             return intent >= StreamingSourceIntent::Camera && intent <= StreamingSourceIntent::Preload;
         }
@@ -18,13 +15,13 @@ namespace Horo::WorldStreaming {
 
         [[nodiscard]] Result<void> ValidateAdmissionContext(const StreamingSourceAdmissionContext &context) {
             if (!context.expectedOwner.IsValid())
-                return Failure<void>(WorldStreamingErrors::SourceDescriptorInvalid);
+                return Internal::Failure<void>(WorldStreamingErrors::SourceDescriptorInvalid);
             if (!IsKnownOwnerState(context.ownerState))
-                return Failure<void>(WorldStreamingErrors::SourceDescriptorInvalid);
+                return Internal::Failure<void>(WorldStreamingErrors::SourceDescriptorInvalid);
             if (context.currentRevision.has_value() && !context.currentRevision->IsValid())
-                return Failure<void>(WorldStreamingErrors::SourceDescriptorInvalid);
+                return Internal::Failure<void>(WorldStreamingErrors::SourceDescriptorInvalid);
             if (context.activeSourceCount > context.sourceCapacity)
-                return Failure<void>(WorldStreamingErrors::SourceDescriptorInvalid);
+                return Internal::Failure<void>(WorldStreamingErrors::SourceDescriptorInvalid);
             return Result<void>::Success();
         }
     }  // namespace
@@ -33,7 +30,7 @@ namespace Horo::WorldStreaming {
     Result<StreamingSourcePriority> StreamingSourcePriority::Create(const float value) {
         const StreamingSourcePriority priority{value};
         if (!priority.IsValid())
-            return Failure<StreamingSourcePriority>(WorldStreamingErrors::SourceDescriptorInvalid);
+            return Internal::Failure<StreamingSourcePriority>(WorldStreamingErrors::SourceDescriptorInvalid);
         return Result<StreamingSourcePriority>::Success(priority);
     }
 
@@ -50,9 +47,9 @@ namespace Horo::WorldStreaming {
     /** @copydoc ValidateStreamingSourceDescriptor */
     Result<void> ValidateStreamingSourceDescriptor(const StreamingSourceDescriptor &descriptor) {
         if (!descriptor.IsValid())
-            return Failure<void>(WorldStreamingErrors::SourceDescriptorInvalid);
+            return Internal::Failure<void>(WorldStreamingErrors::SourceDescriptorInvalid);
         if (!IsSupportedIntent(descriptor.intent))
-            return Failure<void>(WorldStreamingErrors::SourceIntentUnsupported);
+            return Internal::Failure<void>(WorldStreamingErrors::SourceIntentUnsupported);
         return Result<void>::Success();
     }
 
@@ -64,16 +61,16 @@ namespace Horo::WorldStreaming {
         if (const auto valid = ValidateAdmissionContext(context); valid.HasError())
             return Result<StreamingSourceAdmissionKind>::Failure(valid.ErrorValue());
         if (descriptor.owner != context.expectedOwner)
-            return Failure<StreamingSourceAdmissionKind>(WorldStreamingErrors::SourceOwnerStale);
+            return Internal::Failure<StreamingSourceAdmissionKind>(WorldStreamingErrors::SourceOwnerStale);
         if (context.ownerState != StreamingSourceOwnerState::Active)
-            return Failure<StreamingSourceAdmissionKind>(WorldStreamingErrors::SourceLifecycleUnavailable);
+            return Internal::Failure<StreamingSourceAdmissionKind>(WorldStreamingErrors::SourceLifecycleUnavailable);
         if (context.currentRevision.has_value()) {
             if (descriptor.revision <= *context.currentRevision)
-                return Failure<StreamingSourceAdmissionKind>(WorldStreamingErrors::SourceRevisionStale);
+                return Internal::Failure<StreamingSourceAdmissionKind>(WorldStreamingErrors::SourceRevisionStale);
             return Result<StreamingSourceAdmissionKind>::Success(StreamingSourceAdmissionKind::Replace);
         }
         if (context.activeSourceCount == context.sourceCapacity)
-            return Failure<StreamingSourceAdmissionKind>(WorldStreamingErrors::SourceCapacityExceeded);
+            return Internal::Failure<StreamingSourceAdmissionKind>(WorldStreamingErrors::SourceCapacityExceeded);
         return Result<StreamingSourceAdmissionKind>::Success(StreamingSourceAdmissionKind::Insert);
     }
 }  // namespace Horo::WorldStreaming
