@@ -1,5 +1,6 @@
 #include "Horo/Navigation/NavigationAgentProfiles.h"
 #include "Horo/Navigation/NavigationErrors.h"
+#include "navigation/NavigationTestAssertions.h"
 
 #include <array>
 #include <catch2/catch_test_macros.hpp>
@@ -14,12 +15,6 @@ namespace Horo::Navigation {
 
         NavigationAgentProfileDescriptor Profile(const std::uint64_t id, std::string displayName) {
             return {.id = ProfileId(id), .displayName = std::move(displayName), .buildGeometry = {}};
-        }
-
-        template <typename T> void RequireError(const Result<T> &result, const ErrorCodeDescriptor &expected) {
-            REQUIRE(result.HasError());
-            REQUIRE(result.ErrorValue().domain.Value() == expected.domain.Value());
-            REQUIRE(result.ErrorValue().code.Value() == expected.code.Value());
         }
     }  // namespace
 
@@ -39,11 +34,11 @@ namespace Horo::Navigation {
             for (const float invalid : invalidFiniteValues) {
                 auto profile = Profile(1, "Human");
                 profile.buildGeometry.*field = invalid;
-                RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
+                TestSupport::RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
             }
             auto profile = Profile(1, "Human");
             profile.buildGeometry.*field = -0.01F;
-            RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
+            TestSupport::RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
         }
 
         auto profile = Profile(1, "Human");
@@ -56,30 +51,30 @@ namespace Horo::Navigation {
     TEST_CASE("Grounded agent profiles validate identity name and geometry relationships before baking", "[unit][navigation][profile]") {
         auto profile = Profile(1, "Human");
         profile.id = {};
-        RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
+        TestSupport::RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
         profile = Profile(1, " \t");
-        RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
+        TestSupport::RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
         profile = Profile(1, "Human");
         profile.buildGeometry.radiusMeters = 0.0F;
-        RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
+        TestSupport::RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
         profile = Profile(1, "Human");
-        profile.buildGeometry.heightMeters = 2.0F * profile.buildGeometry.radiusMeters - 0.01F;
-        RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
+        profile.buildGeometry.heightMeters = profile.buildGeometry.radiusMeters;
+        REQUIRE(ValidateNavigationAgentProfile(profile).HasValue());
         profile = Profile(1, "Human");
         profile.buildGeometry.maxSlopeDegrees = 90.0F;
-        RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
+        TestSupport::RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
         profile = Profile(1, "Human");
         profile.buildGeometry.stepHeightMeters = profile.buildGeometry.heightMeters;
-        RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
+        TestSupport::RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
         profile = Profile(1, "Human");
         profile.buildGeometry.cellSizeMeters = 0.0F;
-        RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
+        TestSupport::RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
         profile = Profile(1, "Human");
         profile.buildGeometry.cellHeightMeters = 0.0F;
-        RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
+        TestSupport::RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
         profile = Profile(1, "Human");
         profile.buildGeometry.minimumRegionSizeMeters = -0.01F;
-        RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
+        TestSupport::RequireError(ValidateNavigationAgentProfile(profile), NavigationErrors::AgentProfileInvalid);
     }
 
     TEST_CASE("Rename preserves profile identity and duplication creates an independent build partition", "[unit][navigation][profile]") {
@@ -99,14 +94,15 @@ namespace Horo::Navigation {
         REQUIRE(ValidateNavigationAgentProfile(original).HasValue());
         REQUIRE(ValidateNavigationAgentProfile(duplicate).HasValue());
 
-        RequireError(DuplicateNavigationAgentProfile(original, original.id, "Copy"), NavigationErrors::AgentProfileInvalid);
-        RequireError(DuplicateNavigationAgentProfile(original, {}, "Copy"), NavigationErrors::AgentProfileInvalid);
-        RequireError(RenameNavigationAgentProfile(original, ""), NavigationErrors::AgentProfileInvalid);
+        TestSupport::RequireError(DuplicateNavigationAgentProfile(original, original.id, "Copy"), NavigationErrors::AgentProfileInvalid);
+        TestSupport::RequireError(DuplicateNavigationAgentProfile(original, {}, "Copy"), NavigationErrors::AgentProfileInvalid);
+        TestSupport::RequireError(RenameNavigationAgentProfile(original, ""), NavigationErrors::AgentProfileInvalid);
     }
 
     TEST_CASE("Profile deletion requires explicit deterministic reference repair", "[unit][navigation][profile]") {
         const std::array references{ProfileId(1), ProfileId(2), ProfileId(1), ProfileId(3)};
-        RequireError(RepairNavigationAgentProfileReferences(references, ProfileId(1)), NavigationErrors::AgentProfileReferenced);
+        TestSupport::RequireError(RepairNavigationAgentProfileReferences(references, ProfileId(1)),
+                                  NavigationErrors::AgentProfileReferenced);
 
         const auto repaired = RepairNavigationAgentProfileReferences(references, ProfileId(1), ProfileId(4));
         REQUIRE(repaired.HasValue());
@@ -117,7 +113,9 @@ namespace Horo::Navigation {
         REQUIRE(unreferenced.HasValue());
         REQUIRE(unreferenced.Value().repairedCount == 0);
         REQUIRE(unreferenced.Value().references == std::vector<NavigationAgentProfileId>{references.begin(), references.end()});
-        RequireError(RepairNavigationAgentProfileReferences(references, {}, ProfileId(4)), NavigationErrors::AgentProfileInvalid);
-        RequireError(RepairNavigationAgentProfileReferences(references, ProfileId(1), ProfileId(1)), NavigationErrors::AgentProfileInvalid);
+        TestSupport::RequireError(RepairNavigationAgentProfileReferences(references, {}, ProfileId(4)),
+                                  NavigationErrors::AgentProfileInvalid);
+        TestSupport::RequireError(RepairNavigationAgentProfileReferences(references, ProfileId(1), ProfileId(1)),
+                                  NavigationErrors::AgentProfileInvalid);
     }
 }  // namespace Horo::Navigation

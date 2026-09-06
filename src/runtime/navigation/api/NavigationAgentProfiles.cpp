@@ -33,8 +33,7 @@ namespace Horo::Navigation {
             const std::array positive{geometry.radiusMeters, geometry.heightMeters, geometry.cellSizeMeters, geometry.cellHeightMeters};
             const std::array nonNegative{geometry.maxSlopeDegrees, geometry.stepHeightMeters, geometry.minimumRegionSizeMeters};
             return std::ranges::all_of(positive, IsPositiveFinite) && std::ranges::all_of(nonNegative, IsNonNegativeFinite) &&
-                   geometry.heightMeters >= 2.0F * geometry.radiusMeters && geometry.maxSlopeDegrees < 90.0F &&
-                   geometry.stepHeightMeters < geometry.heightMeters;
+                   geometry.maxSlopeDegrees < 90.0F && geometry.stepHeightMeters < geometry.heightMeters;
         }
     }  // namespace
 
