@@ -1,0 +1,130 @@
+#pragma once
+
+/** @file PhysicsWorld.h
+ * @brief Explicit canonical/null Physics runtime ownership and detached world lifecycle.
+ */
+
+#include "Horo/Foundation/Result.h"
+#include "Horo/Physics/PhysicsCapabilities.h"
+#include "Horo/Physics/PhysicsIdentity.h"
+#include "Horo/Physics/PhysicsWorldSettings.h"
+
+#include <cstdint>
+#include <memory>
+#include <utility>
+
+namespace Horo::Physics {
+    /** @brief Explicit process composition; headless hosts use Canonical when simulation is required. */
+    enum class PhysicsRuntimeMode : std::uint8_t {
+        Canonical = 0,
+        Null = 1
+    };
+
+    /** @brief Observable owner lifecycle; Failed is transient and never returned as a usable runtime. */
+    enum class PhysicsRuntimeState : std::uint8_t {
+        Ready,
+        Failed,
+        Stopped
+    };
+
+    /** @brief World lifecycle including unpublished candidate, active and terminal states. */
+    enum class PhysicsWorldState : std::uint8_t {
+        Preparing,
+        PreparedSolver,
+        PreparedNull,
+        ActiveSolver,
+        ActiveNull,
+        Failed,
+        Destroyed
+    };
+
+    class PhysicsWorld;
+
+    /**
+     * @brief Process-composition owner for canonical native registration or explicit Null behavior.
+     *
+     * A headless/dedicated host selects Canonical when it requires simulation; Null is an explicit
+     * Physics-omitted composition and never an automatic fallback. The runtime and all worlds are
+     * owner-thread objects. Worlds retain an internal runtime lease so premature runtime destruction
+     * closes admission immediately but cannot tear native globals out from under a surviving world.
+     * Expected preparation failures roll back; native heap exhaustion is process-fatal because Jolt
+     * cannot unwind allocation failure through its no-exception frames.
+     */
+    class PhysicsRuntime final {
+    public:
+        /** @brief Starts the selected process Physics composition transactionally.
+         * @param mode Canonical solver or explicit Null/omitted behavior.
+         * @return Ready runtime or a typed error after complete partial-startup rollback.
+         * @pre Calls are serialized by the process composition root; no foreign Jolt owner is active.
+         */
+        [[nodiscard]] static Result<std::unique_ptr<PhysicsRuntime>> Create(PhysicsRuntimeMode mode);
+        /** @brief Closes runtime admission; surviving world leases retain required native globals until retirement. */
+        ~PhysicsRuntime();
+        PhysicsRuntime(const PhysicsRuntime &) = delete;
+        PhysicsRuntime &operator=(const PhysicsRuntime &) = delete;
+
+        /** @brief Creates an unpublished isolated world candidate from one validated snapshot.
+         * @param settings Immutable settings copied into the candidate.
+         * @return Prepared candidate or a typed error after releasing every acquired world resource.
+         * @post No public world identity, body handle, event or command admission is published.
+         */
+        [[nodiscard]] Result<std::unique_ptr<PhysicsWorld>> PrepareWorld(const PhysicsWorldSettings &settings);
+
+        /** @brief Closes candidate admission and releases native registration after all retained worlds retire; safe repeatedly. */
+        void Shutdown() noexcept;
+        /** @brief Returns the selected explicit composition. @return Canonical or Null. */
+        [[nodiscard]] PhysicsRuntimeMode Mode() const noexcept;
+        /** @brief Returns the current owner lifecycle state. @return Ready or Stopped for a successfully created runtime. */
+        [[nodiscard]] PhysicsRuntimeState State() const noexcept;
+        /** @brief Reports composition availability without inferring it from GUI/headless state.
+         * @return Omitted for Null, Available for ready Canonical, Unavailable after Canonical shutdown.
+         */
+        [[nodiscard]] PhysicsAvailability Availability() const noexcept;
+        /** @brief Reports current implemented support; Null reports every known feature Unsupported.
+         * @param capability Known Horo feature to inspect.
+         * @return WorldCreation is available only while Canonical is ready; later body/query features remain unsupported.
+         */
+        [[nodiscard]] PhysicsCapabilitySupport Capability(PhysicsCapability capability) const noexcept;
+
+    private:
+        friend class PhysicsWorld;
+        struct Impl;
+
+        /** @brief Retains the successfully prepared process owner. @param impl Owned shared runtime state. */
+        explicit PhysicsRuntime(std::shared_ptr<Impl> impl) noexcept : impl_(std::move(impl)) {}
+
+        std::shared_ptr<Impl> impl_;
+    };
+
+    /** @brief One isolated prepared or active world; owns native state and an immutable settings snapshot. */
+    class PhysicsWorld final {
+    public:
+        /** @brief Releases per-world resources before the retained process-runtime lease. */
+        ~PhysicsWorld();
+        PhysicsWorld(const PhysicsWorld &) = delete;
+        PhysicsWorld &operator=(const PhysicsWorld &) = delete;
+
+        /** @brief Binds the host-issued identity and opens this candidate's lifecycle.
+         * @param identity Non-zero process-unique world generation assigned at aggregate activation.
+         * @return Success or a typed state/invalid/duplicate-active identity error; successful binding allocates nothing.
+         * @post A successful candidate becomes ActiveSolver or ActiveNull exactly once.
+         * The host remains responsible for never reusing a historical process-local generation.
+         */
+        [[nodiscard]] Result<void> Activate(PhysicsWorldId identity);
+        /** @brief Closes admission and releases all per-world resources; safe repeatedly. */
+        void Shutdown() noexcept;
+        /** @brief Reads lifecycle state. @return Current prepared, active or destroyed state. */
+        [[nodiscard]] PhysicsWorldState State() const noexcept;
+        /** @brief Reads the retained process-local generation. @return Bound identity, or invalid before activation. */
+        [[nodiscard]] PhysicsWorldId Identity() const noexcept;
+        /** @brief Reads immutable world policy. @return Borrowed snapshot valid for this object's lifetime, including after shutdown. */
+        [[nodiscard]] const PhysicsWorldSettings &Settings() const noexcept;
+
+    private:
+        friend class PhysicsRuntime;
+        struct Impl;
+        /** @brief Takes one prepared world's ownership. @param impl Owned isolated world state. */
+        explicit PhysicsWorld(std::unique_ptr<Impl> impl) noexcept;
+        std::unique_ptr<Impl> impl_;
+    };
+}  // namespace Horo::Physics
