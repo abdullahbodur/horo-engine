@@ -186,6 +186,12 @@ operations, clear values, access declarations, barriers, and transient lifetime
 intervals belong to render-pass and render-graph contracts, not persistent
 resource descriptors.
 
+RND-003.4 implements the core buffer, texture, sampler, texture-view, and borrowed
+initial-data values in `RenderResourceDescriptors.h`. Its pure validators perform
+no native calls, retain no borrowed spans, and grant no backend or upload support.
+RND-003.6 owns asynchronous upload/readback behavior, while RND-003.8 owns exact
+effective-capability admission and native backend realization.
+
 Descriptor values remain immutable after successful creation. Resize,
 replacement, shader reload, or another structural change creates a new resident
 generation and retires the old one; it does not mutate the descriptor associated

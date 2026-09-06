@@ -6,7 +6,7 @@
  */
 
 #include "Horo/Math/SceneMath.h"
-#include "Horo/Runtime/Render/RenderResource.h"
+#include "Horo/Runtime/Render/RenderResourceDescriptors.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -17,49 +17,6 @@
 #include <vector>
 
 namespace Horo::Render {
-    /** @brief Typed purposes permitted for one resident buffer. */
-    enum class RenderBufferUsage : std::uint8_t {
-        None = 0,
-        Vertex = 1U << 0U,
-        Index = 1U << 1U,
-        CopySource = 1U << 2U,
-        CopyDestination = 1U << 3U,
-    };
-
-    /** @brief Combines independent buffer purposes without exposing backend flags. */
-    [[nodiscard]] constexpr RenderBufferUsage operator|(const RenderBufferUsage left, const RenderBufferUsage right) noexcept {
-        return static_cast<RenderBufferUsage>(static_cast<std::uint8_t>(left) | static_cast<std::uint8_t>(right));
-    }
-
-    /** @brief Reports whether every requested usage bit is present. */
-    [[nodiscard]] constexpr bool HasBufferUsage(const RenderBufferUsage value, const RenderBufferUsage requested) noexcept {
-        return (static_cast<std::uint8_t>(value) & static_cast<std::uint8_t>(requested)) == static_cast<std::uint8_t>(requested);
-    }
-
-    /** @brief Backend-neutral CPU access policy for one resident buffer. */
-    enum class RenderBufferAccess : std::uint8_t {
-        DeviceLocal,
-        HostVisible,
-    };
-
-    /** @brief Immutable structural policy for one resident buffer. */
-    struct RenderBufferDescriptor {
-        std::size_t byteSize{0};
-        RenderBufferUsage usage{RenderBufferUsage::None};
-        RenderBufferAccess access{RenderBufferAccess::DeviceLocal};
-
-        /** @brief Reports whether the size and typed policy values are valid. */
-        [[nodiscard]] constexpr bool IsValid() const noexcept {
-            constexpr std::uint8_t validUsageBits =
-                static_cast<std::uint8_t>(RenderBufferUsage::Vertex) | static_cast<std::uint8_t>(RenderBufferUsage::Index) |
-                static_cast<std::uint8_t>(RenderBufferUsage::CopySource) | static_cast<std::uint8_t>(RenderBufferUsage::CopyDestination);
-            const std::uint8_t usageBits = static_cast<std::uint8_t>(usage);
-            const bool usageValid = usageBits != 0 && (usageBits & static_cast<std::uint8_t>(~validUsageBits)) == 0;
-            const bool accessValid = access == RenderBufferAccess::DeviceLocal || access == RenderBufferAccess::HostVisible;
-            return byteSize > 0 && usageValid && accessValid;
-        }
-    };
-
     /** @brief Backend-neutral index encoding for an immutable mesh. */
     enum class RenderIndexFormat : std::uint8_t {
         UInt16,

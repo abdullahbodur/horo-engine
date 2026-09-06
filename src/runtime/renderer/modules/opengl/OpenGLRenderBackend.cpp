@@ -40,6 +40,20 @@ namespace Horo::Render {
                     return {GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8};
                 case Depth32Float:
                     return {GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT};
+                case R8Unorm:
+                case Rg8Unorm:
+                case Rgba8UnormSrgb:
+                case Bgra8Unorm:
+                case Bgra8UnormSrgb:
+                case R16Float:
+                case Rg16Float:
+                case Rgba16Float:
+                case R32Float:
+                case Rg32Float:
+                case Rgba32Float:
+                case Depth16Unorm:
+                case Depth32FloatStencil8:
+                    return {};
             }
             return {};
         }

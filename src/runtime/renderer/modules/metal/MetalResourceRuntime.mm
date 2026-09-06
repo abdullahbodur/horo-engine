@@ -25,6 +25,20 @@ namespace Horo::Render::Detail {
                     return MTLPixelFormatDepth24Unorm_Stencil8;
                 case Depth32Float:
                     return MTLPixelFormatDepth32Float;
+                case R8Unorm:
+                case Rg8Unorm:
+                case Rgba8UnormSrgb:
+                case Bgra8Unorm:
+                case Bgra8UnormSrgb:
+                case R16Float:
+                case Rg16Float:
+                case Rgba16Float:
+                case R32Float:
+                case Rg32Float:
+                case Rgba32Float:
+                case Depth16Unorm:
+                case Depth32FloatStencil8:
+                    return MTLPixelFormatInvalid;
             }
             return MTLPixelFormatInvalid;
         }

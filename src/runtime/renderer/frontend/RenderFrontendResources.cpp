@@ -7,12 +7,52 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <utility>
 
 namespace Horo::Render {
     namespace {
+        enum class ResourceDescriptorAdmission : std::uint8_t {
+            Supported,
+            Unsupported,
+        };
+
+        [[nodiscard]] constexpr ResourceDescriptorAdmission AdmitCurrentBufferDescriptor(
+            const RenderBufferDescriptor &descriptor) noexcept {
+            constexpr std::uint8_t supportedUsageBits =
+                static_cast<std::uint8_t>(RenderBufferUsage::Vertex) | static_cast<std::uint8_t>(RenderBufferUsage::Index) |
+                static_cast<std::uint8_t>(RenderBufferUsage::CopySource) | static_cast<std::uint8_t>(RenderBufferUsage::CopyDestination);
+            const std::uint8_t requested = static_cast<std::uint8_t>(descriptor.usage);
+            return (requested & static_cast<std::uint8_t>(~supportedUsageBits)) == 0 ? ResourceDescriptorAdmission::Supported
+                                                                                     : ResourceDescriptorAdmission::Unsupported;
+        }
+
+        [[nodiscard]] constexpr bool IsCurrentTextureFormatSupported(const RenderTextureFormat format) noexcept {
+            return format == RenderTextureFormat::Rgba8Unorm || format == RenderTextureFormat::Depth24Stencil8 ||
+                   format == RenderTextureFormat::Depth32Float;
+        }
+
+        [[nodiscard]] constexpr ResourceDescriptorAdmission AdmitCurrentTextureDescriptor(
+            const RenderTextureDescriptor &descriptor) noexcept {
+            constexpr std::uint8_t supportedUsageBits =
+                static_cast<std::uint8_t>(RenderTextureUsage::Sampled) | static_cast<std::uint8_t>(RenderTextureUsage::RenderAttachment);
+            const std::uint8_t requested = static_cast<std::uint8_t>(descriptor.usage);
+            const bool supported = descriptor.dimension == RenderTextureDimension::TwoD && descriptor.depth == 1 &&
+                                   descriptor.mipCount == 1 && descriptor.layerCount == 1 && descriptor.sampleCount == 1 &&
+                                   IsCurrentTextureFormatSupported(descriptor.format) &&
+                                   (requested & static_cast<std::uint8_t>(~supportedUsageBits)) == 0;
+            return supported ? ResourceDescriptorAdmission::Supported : ResourceDescriptorAdmission::Unsupported;
+        }
+
+        [[nodiscard]] constexpr ResourceDescriptorAdmission AdmitCurrentTextureViewDescriptor(
+            const RenderTextureViewDescriptor &descriptor) noexcept {
+            return descriptor.dimension == RenderTextureViewDimension::TwoD && IsCurrentTextureFormatSupported(descriptor.format)
+                       ? ResourceDescriptorAdmission::Supported
+                       : ResourceDescriptorAdmission::Unsupported;
+        }
+
         [[nodiscard]] Error MakeFrontendError(const ErrorCodeDescriptor &descriptor, std::string message) {
             return MakeError(descriptor, std::move(message));
         }
@@ -95,15 +135,21 @@ namespace Horo::Render {
             return Result<ResourceCreation<RenderBufferHandle>>::Failure(
                 MakeFrontendError(FrontendErrors::ResourceChangeDuringFrame, "A buffer cannot be created during an active frame."));
         }
-        if (!descriptor.IsValid()) {
+        if (ValidateRenderBufferDescriptor(descriptor).HasError()) {
             return Result<ResourceCreation<RenderBufferHandle>>::Failure(
                 MakeFrontendError(FrontendErrors::InvalidBufferDescriptor, "The buffer descriptor is structurally invalid."));
+        }
+        if (AdmitCurrentBufferDescriptor(descriptor) == ResourceDescriptorAdmission::Unsupported) {
+            return Result<ResourceCreation<RenderBufferHandle>>::Failure(
+                MakeFrontendError(FrontendErrors::ResourceUnsupported,
+                                  "The current renderer frontend does not implement this buffer usage combination."));
         }
         if (!backend_->Capabilities().supportsBufferResources) {
             return Result<ResourceCreation<RenderBufferHandle>>::Failure(
                 MakeFrontendError(FrontendErrors::ResourceUnsupported, "The active renderer backend does not support generic buffers."));
         }
-        if (initialData.size() != descriptor.byteSize) {
+        if (ValidateRenderBufferInitialData(descriptor, RenderBufferInitialDataView{initialData}).HasError() ||
+            initialData.size() != descriptor.byteSize) {
             return Result<ResourceCreation<RenderBufferHandle>>::Failure(
                 MakeFrontendError(FrontendErrors::ResourceBufferUploadSizeMismatch,
                                   "The initial-data byte count must equal the buffer descriptor size."));
@@ -169,9 +215,14 @@ namespace Horo::Render {
             return Result<ResourceCreation<RenderTextureHandle>>::Failure(
                 MakeFrontendError(FrontendErrors::ResourceChangeDuringFrame, "A texture cannot be created during an active frame."));
         }
-        if (!descriptor.IsValid()) {
+        if (ValidateRenderTextureDescriptor(descriptor).HasError()) {
             return Result<ResourceCreation<RenderTextureHandle>>::Failure(
                 MakeFrontendError(FrontendErrors::InvalidTextureDescriptor, "The texture descriptor is structurally invalid."));
+        }
+        if (AdmitCurrentTextureDescriptor(descriptor) == ResourceDescriptorAdmission::Unsupported) {
+            return Result<ResourceCreation<RenderTextureHandle>>::Failure(
+                MakeFrontendError(FrontendErrors::ResourceUnsupported,
+                                  "The current renderer frontend does not implement this texture descriptor combination."));
         }
         if (!backend_->Capabilities().supportsTextureResources) {
             return Result<ResourceCreation<RenderTextureHandle>>::Failure(
@@ -195,9 +246,14 @@ namespace Horo::Render {
             return Result<ResourceCreation<RenderTextureViewHandle>>::Failure(
                 MakeFrontendError(FrontendErrors::ResourceChangeDuringFrame, "A texture view cannot be created during an active frame."));
         }
-        if (!descriptor.IsValid()) {
+        if (ValidateRenderTextureViewDescriptor(descriptor).HasError()) {
             return Result<ResourceCreation<RenderTextureViewHandle>>::Failure(
                 MakeFrontendError(FrontendErrors::InvalidTextureViewDescriptor, "The texture-view descriptor is structurally invalid."));
+        }
+        if (AdmitCurrentTextureViewDescriptor(descriptor) == ResourceDescriptorAdmission::Unsupported) {
+            return Result<ResourceCreation<RenderTextureViewHandle>>::Failure(
+                MakeFrontendError(FrontendErrors::ResourceUnsupported,
+                                  "The current renderer frontend does not implement this texture-view descriptor combination."));
         }
         if (!backend_->Capabilities().supportsTextureResources) {
             return Result<ResourceCreation<RenderTextureViewHandle>>::Failure(
@@ -413,19 +469,8 @@ namespace Horo::Render {
                 MakeFrontendError(FrontendErrors::InvalidTextureViewDescriptor, "Texture-view source metadata is unavailable."));
         }
         const TextureRecord &texture = textures_[descriptor.texture.slot];
-        const bool colorFormat = texture.descriptor.format == RenderTextureFormat::Rgba8Unorm;
-        const bool aspectCompatible =
-            colorFormat ? descriptor.aspect == RenderTextureAspect::Color : descriptor.aspect != RenderTextureAspect::Color;
-        if (const std::array compatible{
-                texture.generation == descriptor.texture.generation,
-                descriptor.format == texture.descriptor.format,
-                descriptor.baseMip == 0,
-                descriptor.mipCount == texture.descriptor.mipCount,
-                descriptor.baseLayer == 0,
-                descriptor.layerCount == texture.descriptor.layerCount,
-                aspectCompatible,
-            };
-            !std::ranges::all_of(compatible, std::identity{})) {
+        if (texture.generation != descriptor.texture.generation ||
+            ValidateRenderTextureViewCompatibility(texture.descriptor, descriptor).HasError()) {
             return Result<void>::Failure(MakeFrontendError(FrontendErrors::InvalidTextureViewDescriptor,
                                                            "Texture-view format, range, or aspect is incompatible with its texture."));
         }
