@@ -128,18 +128,20 @@ namespace Horo::Navigation {
         std::size_t missingCount_{};
     };
 
-    /** @brief Complete successful value proven against complete captured coverage. */
-    template <typename ValueT> class NavigationSucceeded final {
+    /** @brief Value plus provenance whose template parameter fixes complete versus partial coverage semantics. */
+    template <typename ValueT, bool CompleteT> class NavigationPathValue final {
     public:
-        /** @brief Creates a complete outcome only from valid provenance and complete coverage evidence. */
-        [[nodiscard]] static Result<NavigationSucceeded> Create(ValueT value, NavigationOutcomeProvenance provenance,
+        /** @brief Creates a value outcome only when provenance and coverage match CompleteT. */
+        [[nodiscard]] static Result<NavigationPathValue> Create(ValueT value, NavigationOutcomeProvenance provenance,
                                                                 NavigationCoverageEvidence coverage) {
-            if (!ValidateNavigationOutcomeProvenance(provenance) || !coverage.IsComplete())
-                return Result<NavigationSucceeded>::Failure(MakeError(NavigationErrors::OutcomeDescriptorInvalid));
-            return Result<NavigationSucceeded>::Success(NavigationSucceeded{std::move(value), std::move(provenance), std::move(coverage)});
+            if (!ValidateNavigationOutcomeProvenance(provenance) || coverage.IsComplete() != CompleteT ||
+                (!CompleteT && coverage.Missing().empty()))
+                return Result<NavigationPathValue>::Failure(MakeError(NavigationErrors::OutcomeDescriptorInvalid));
+            return Result<NavigationPathValue>::Success(
+                NavigationPathValue{std::move(value), std::move(provenance), std::move(coverage)});
         }
 
-        /** @brief Returns the complete caller-owned value. */
+        /** @brief Returns the complete value or valid bounded partial prefix/frontier. */
         [[nodiscard]] const ValueT &Value() const noexcept {
             return value_;
         }
@@ -149,13 +151,13 @@ namespace Horo::Navigation {
             return provenance_;
         }
 
-        /** @brief Returns complete bounded coverage evidence. */
+        /** @brief Returns bounded evidence whose completeness is fixed by CompleteT. */
         [[nodiscard]] const NavigationCoverageEvidence &Coverage() const noexcept {
             return coverage_;
         }
 
     private:
-        NavigationSucceeded(ValueT value, NavigationOutcomeProvenance provenance, NavigationCoverageEvidence coverage)
+        NavigationPathValue(ValueT value, NavigationOutcomeProvenance provenance, NavigationCoverageEvidence coverage)
             : value_(std::move(value)), provenance_(std::move(provenance)), coverage_(std::move(coverage)) {}
 
         ValueT value_;
@@ -163,40 +165,10 @@ namespace Horo::Navigation {
         NavigationCoverageEvidence coverage_;
     };
 
+    /** @brief Complete successful value proven against complete captured coverage. */
+    template <typename ValueT> using NavigationSucceeded = NavigationPathValue<ValueT, true>;
     /** @brief Explicitly permitted partial value paired with exact missing coverage evidence. */
-    template <typename ValueT> class NavigationPartial final {
-    public:
-        /** @brief Creates a partial outcome only from valid provenance and incomplete coverage evidence. */
-        [[nodiscard]] static Result<NavigationPartial> Create(ValueT value, NavigationOutcomeProvenance provenance,
-                                                              NavigationCoverageEvidence coverage) {
-            if (!ValidateNavigationOutcomeProvenance(provenance) || coverage.IsComplete() || coverage.Missing().empty())
-                return Result<NavigationPartial>::Failure(MakeError(NavigationErrors::OutcomeDescriptorInvalid));
-            return Result<NavigationPartial>::Success(NavigationPartial{std::move(value), std::move(provenance), std::move(coverage)});
-        }
-
-        /** @brief Returns the valid bounded prefix or frontier. */
-        [[nodiscard]] const ValueT &Value() const noexcept {
-            return value_;
-        }
-
-        /** @brief Returns immutable snapshot/revision provenance. */
-        [[nodiscard]] const NavigationOutcomeProvenance &Provenance() const noexcept {
-            return provenance_;
-        }
-
-        /** @brief Returns incomplete bounded coverage evidence with explicit missing regions. */
-        [[nodiscard]] const NavigationCoverageEvidence &Coverage() const noexcept {
-            return coverage_;
-        }
-
-    private:
-        NavigationPartial(ValueT value, NavigationOutcomeProvenance provenance, NavigationCoverageEvidence coverage)
-            : value_(std::move(value)), provenance_(std::move(provenance)), coverage_(std::move(coverage)) {}
-
-        ValueT value_;
-        NavigationOutcomeProvenance provenance_;
-        NavigationCoverageEvidence coverage_;
-    };
+    template <typename ValueT> using NavigationPartial = NavigationPathValue<ValueT, false>;
 
     /** @brief Proven negative result that requires complete coverage and captured provenance. */
     class NavigationNoPath final {
