@@ -234,9 +234,8 @@ namespace Horo::Physics::Detail {
         if (world.value == nullptr)
             return Result<void>::Failure(MakeError(PhysicsErrors::InvalidState));
         auto &canonical = *static_cast<CanonicalWorld *>(world.value);
-        const JPH::EPhysicsUpdateError error =
-            canonical.system->Update(fixedDeltaSeconds, 1, canonical.scratch.get(), canonical.jobs.get());
-        if (error != JPH::EPhysicsUpdateError::None)
+        if (const auto error = canonical.system->Update(fixedDeltaSeconds, 1, canonical.scratch.get(), canonical.jobs.get());
+            error != JPH::EPhysicsUpdateError::None)
             return Result<void>::Failure(
                 MakeError(PhysicsErrors::CapacityExceeded, "Canonical fixed tick exhausted required contact or pair storage."));
         return Result<void>::Success();
