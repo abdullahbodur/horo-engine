@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <bit>
 #include <limits>
+#include <utility>
 
 namespace Horo::Runtime {
     namespace {
@@ -69,33 +70,43 @@ namespace Horo::Runtime {
         }
     }  // namespace
 
+    ValidatedSaveChunkDirectory::ValidatedSaveChunkDirectory(SaveChunkDirectory directory) : directory_(std::move(directory)) {}
+
+    /** @copydoc ValidatedSaveChunkDirectory::PayloadByteLength */
+    std::uint64_t ValidatedSaveChunkDirectory::PayloadByteLength() const noexcept {
+        return directory_.payloadByteLength;
+    }
+
+    /** @copydoc ValidatedSaveChunkDirectory::Entries */
+    std::span<const SaveChunkDirectoryEntry> ValidatedSaveChunkDirectory::Entries() const noexcept {
+        return directory_.entries;
+    }
+
     /** @copydoc ValidateSaveChunkDirectory */
-    Result<void> ValidateSaveChunkDirectory(const SaveChunkDirectory &directory, const SaveGameManifest &manifest,
-                                            const SaveChunkDirectoryLimits &limits) {
+    Result<ValidatedSaveChunkDirectory> ValidateSaveChunkDirectory(SaveChunkDirectory directory, const SaveGameManifest &manifest,
+                                                                   const SaveChunkDirectoryLimits &limits) {
         if (!HasValidLimits(limits) || directory.payloadByteLength > limits.maximumPayloadBytes ||
             directory.payloadByteLength > std::numeric_limits<std::size_t>::max() || directory.entries.size() > limits.maximumEntries)
-            return Result<void>::Failure(MakeError(SaveErrors::ArchiveFramingLimitExceeded));
-        if (ValidateSaveGameManifest(manifest).HasError() || directory.entries.empty())
-            return Result<void>::Failure(MakeError(SaveErrors::ArchiveDirectoryInvalid));
+            return Result<ValidatedSaveChunkDirectory>::Failure(MakeError(SaveErrors::ArchiveFramingLimitExceeded));
+        if (directory.entries.empty())
+            return Result<ValidatedSaveChunkDirectory>::Failure(MakeError(SaveErrors::ArchiveDirectoryInvalid));
 
         if (directory.entries.size() != CountManifestChunks(manifest))
-            return Result<void>::Failure(MakeError(SaveErrors::ArchiveDirectoryInvalid));
+            return Result<ValidatedSaveChunkDirectory>::Failure(MakeError(SaveErrors::ArchiveDirectoryInvalid));
         if (!HasValidEntries(directory, manifest, limits))
-            return Result<void>::Failure(MakeError(SaveErrors::ArchiveDirectoryInvalid));
-        return Result<void>::Success();
+            return Result<ValidatedSaveChunkDirectory>::Failure(MakeError(SaveErrors::ArchiveDirectoryInvalid));
+        return Result<ValidatedSaveChunkDirectory>::Success(ValidatedSaveChunkDirectory{std::move(directory)});
     }
 
     /** @copydoc SelectSaveChunkPayload */
     Result<std::optional<std::span<const std::byte>>> SelectSaveChunkPayload(const std::span<const std::byte> payload,
-                                                                             const SaveChunkDirectory &directory,
-                                                                             const SaveGameManifest &manifest, const SaveRecordId record,
-                                                                             const SaveChunkDirectoryLimits &limits) {
-        if (const auto valid = ValidateSaveChunkDirectory(directory, manifest, limits); valid.HasError())
-            return Result<std::optional<std::span<const std::byte>>>::Failure(valid.ErrorValue());
-        if (payload.size() != directory.payloadByteLength)
+                                                                             const ValidatedSaveChunkDirectory &directory,
+                                                                             const SaveRecordId record) {
+        if (payload.size() != directory.PayloadByteLength())
             return Result<std::optional<std::span<const std::byte>>>::Failure(MakeError(SaveErrors::ArchivePayloadTruncated));
-        const auto found = std::ranges::lower_bound(directory.entries, record, {}, &SaveChunkDirectoryEntry::record);
-        if (found == directory.entries.end() || found->record != record)
+        const std::span entries = directory.Entries();
+        const auto found = std::ranges::lower_bound(entries, record, {}, &SaveChunkDirectoryEntry::record);
+        if (found == entries.end() || found->record != record)
             return Result<std::optional<std::span<const std::byte>>>::Success(std::nullopt);
         const auto bytes = payload.subspan(static_cast<std::size_t>(found->offset), static_cast<std::size_t>(found->storedByteLength));
         if (ComputeSha256(bytes) != found->decodedHash)

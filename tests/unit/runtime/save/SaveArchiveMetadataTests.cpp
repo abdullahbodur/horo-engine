@@ -1,6 +1,6 @@
 #include "Horo/Runtime/Save/SaveArchiveMetadata.h"
+#include "SaveTestUtils.h"
 
-#include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <limits>
 #include <string>
@@ -8,16 +8,7 @@
 namespace {
     using namespace Horo;
     using namespace Horo::Runtime;
-
-    template <typename Identity> Identity Id(const std::uint8_t suffix) {
-        std::array<std::uint8_t, 16> bytes{};
-        bytes.back() = suffix;
-        return Identity::FromBytes(bytes).Value();
-    }
-
-    template <typename Version> Version V(const std::uint32_t value) {
-        return Version::Create(value).Value();
-    }
+    using namespace Horo::Runtime::Test;
 
     SaveArchiveMetadataLimits Limits() {
         SaveArchiveMetadataLimits limits;

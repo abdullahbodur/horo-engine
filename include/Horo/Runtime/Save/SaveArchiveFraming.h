@@ -51,28 +51,41 @@ namespace Horo::Runtime {
         [[nodiscard]] auto operator<=>(const SaveChunkDirectory &) const noexcept = default;
     };
 
+    /** @brief Immutable owned proof that a chunk directory passed full manifest and framing validation. */
+    class ValidatedSaveChunkDirectory final {
+    public:
+        /** @brief Returns the exact admitted payload size. @return Stored payload byte count. */
+        [[nodiscard]] std::uint64_t PayloadByteLength() const noexcept;
+        /** @brief Returns stable record-ordered validated entries. @return Borrowed immutable directory entries. */
+        [[nodiscard]] std::span<const SaveChunkDirectoryEntry> Entries() const noexcept;
+
+    private:
+        explicit ValidatedSaveChunkDirectory(SaveChunkDirectory directory);
+        SaveChunkDirectory directory_;
+
+        friend Result<ValidatedSaveChunkDirectory> ValidateSaveChunkDirectory(SaveChunkDirectory, const SaveGameManifest &,
+                                                                              const SaveChunkDirectoryLimits &);
+    };
+
     /**
      * @brief Validates directory bounds, layout, ownership, checksums, and manifest correspondence.
-     * @param directory Untrusted directory metadata.
+     * @param directory Untrusted directory metadata, consumed into an immutable validated token on success.
      * @param manifest Already validated canonical save manifest.
      * @param limits Trusted admission limits.
-     * @return Success when every offset is safe and every manifest chunk has exactly one entry.
+     * @return Owned validated directory token, or a stable framing error.
      */
-    [[nodiscard]] Result<void> ValidateSaveChunkDirectory(const SaveChunkDirectory &directory, const SaveGameManifest &manifest,
-                                                          const SaveChunkDirectoryLimits &limits = {});
+    [[nodiscard]] Result<ValidatedSaveChunkDirectory> ValidateSaveChunkDirectory(SaveChunkDirectory directory,
+                                                                                 const SaveGameManifest &manifest,
+                                                                                 const SaveChunkDirectoryLimits &limits = {});
 
     /**
      * @brief Returns one verified raw chunk without copying or decoding unrelated payloads.
      * @param payload Exact payload region bytes.
-     * @param directory Directory validated against @p manifest before access.
-     * @param manifest Canonical ownership manifest.
+     * @param directory Immutable directory token validated once before any selections.
      * @param record Desired stable chunk identity.
-     * @param limits Trusted admission limits.
      * @return Borrowed verified bytes, or an empty optional when the record is unknown and may be skipped.
      */
     [[nodiscard]] Result<std::optional<std::span<const std::byte>>> SelectSaveChunkPayload(std::span<const std::byte> payload,
-                                                                                           const SaveChunkDirectory &directory,
-                                                                                           const SaveGameManifest &manifest,
-                                                                                           SaveRecordId record,
-                                                                                           const SaveChunkDirectoryLimits &limits = {});
+                                                                                           const ValidatedSaveChunkDirectory &directory,
+                                                                                           SaveRecordId record);
 }  // namespace Horo::Runtime

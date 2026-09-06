@@ -1,26 +1,18 @@
 #include "Horo/Runtime/Save/SaveArchiveFraming.h"
+#include "SaveTestUtils.h"
 
-#include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace {
     using namespace Horo;
     using namespace Horo::Runtime;
-
-    template <typename Identity> Identity Id(const std::uint8_t suffix) {
-        std::array<std::uint8_t, 16> bytes{};
-        bytes.back() = suffix;
-        return Identity::FromBytes(bytes).Value();
-    }
-
-    template <typename Version> Version V(const std::uint32_t value) {
-        return Version::Create(value).Value();
-    }
+    using namespace Horo::Runtime::Test;
 
     std::vector<std::byte> Payload() {
         return {std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}, std::byte{5},
@@ -65,19 +57,19 @@ namespace {
 
     TEST_CASE("Selective chunk access verifies only the requested raw payload", "[runtime][save][framing]") {
         auto payload = Payload();
-        const auto directory = Directory(payload);
-        const auto selected = SelectSaveChunkPayload(payload, directory, Manifest(), Id<SaveRecordId>(21));
+        const auto directory = ValidateSaveChunkDirectory(Directory(payload), Manifest()).Value();
+        const auto selected = SelectSaveChunkPayload(payload, directory, Id<SaveRecordId>(21));
         REQUIRE(selected.HasValue());
         REQUIRE(selected.Value());
         CHECK(selected.Value()->size() == 2);
         CHECK(selected.Value()->front() == std::byte{4});
 
-        const auto unknown = SelectSaveChunkPayload(payload, directory, Manifest(), Id<SaveRecordId>(99));
+        const auto unknown = SelectSaveChunkPayload(payload, directory, Id<SaveRecordId>(99));
         REQUIRE(unknown.HasValue());
         CHECK_FALSE(unknown.Value());
 
         payload[3] = std::byte{99};
-        CHECK(SelectSaveChunkPayload(payload, directory, Manifest(), Id<SaveRecordId>(21)).HasError());
+        CHECK(SelectSaveChunkPayload(payload, directory, Id<SaveRecordId>(21)).HasError());
     }
 
     TEST_CASE("Save chunk directory rejects gaps overlap truncation and trailing bytes", "[runtime][save][framing]") {
@@ -93,10 +85,11 @@ namespace {
         CHECK(ValidateSaveChunkDirectory(directory, Manifest()).HasError());
 
         directory = Directory(payload);
-        CHECK(SelectSaveChunkPayload(std::span<const std::byte>{payload}.first(8), directory, Manifest(), Id<SaveRecordId>(20)).HasError());
+        const auto validated = ValidateSaveChunkDirectory(std::move(directory), Manifest()).Value();
+        CHECK(SelectSaveChunkPayload(std::span<const std::byte>{payload}.first(8), validated, Id<SaveRecordId>(20)).HasError());
         auto trailing = payload;
         trailing.push_back(std::byte{});
-        CHECK(SelectSaveChunkPayload(trailing, directory, Manifest(), Id<SaveRecordId>(20)).HasError());
+        CHECK(SelectSaveChunkPayload(trailing, validated, Id<SaveRecordId>(20)).HasError());
     }
 
     TEST_CASE("Save chunk directory rejects duplicate ordering ownership and manifest mismatch", "[runtime][save][framing]") {
