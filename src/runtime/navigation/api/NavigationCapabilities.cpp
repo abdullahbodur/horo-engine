@@ -34,13 +34,14 @@ namespace Horo::Navigation {
 
         /** @brief Combines exact query evidence without hiding available or temporarily unavailable support. */
         NavigationSupport CombineQuerySupport(const NavigationSupport aggregate, const NavigationSupport support) noexcept {
-            if (aggregate == NavigationSupport::Available || support == NavigationSupport::Available)
-                return NavigationSupport::Available;
-            if (aggregate == NavigationSupport::Unavailable || support == NavigationSupport::Unavailable)
-                return NavigationSupport::Unavailable;
-            if (aggregate == NavigationSupport::Unknown || support == NavigationSupport::Unknown)
-                return NavigationSupport::Unknown;
-            return NavigationSupport::Unsupported;
+            using enum NavigationSupport;
+            if (aggregate == Available || support == Available)
+                return Available;
+            if (aggregate == Unavailable || support == Unavailable)
+                return Unavailable;
+            if (aggregate == Unknown || support == Unknown)
+                return Unknown;
+            return Unsupported;
         }
 
         /** @brief Validates all query-quality support and limit pairs and derives their single aggregate support state. */
@@ -51,8 +52,8 @@ namespace Horo::Navigation {
                     const auto support = capabilities.querySupport[query][quality];
                     if (!IsCoherentSupport(support, capabilities.availability))
                         return false;
-                    const bool available = support == NavigationSupport::Available;
-                    if (available ? !ValidateLimits(capabilities.queryLimits[query][quality])
+                    if (const bool available = support == NavigationSupport::Available;
+                        available ? !ValidateLimits(capabilities.queryLimits[query][quality])
                                   : !IsZero(capabilities.queryLimits[query][quality]))
                         return false;
                     aggregate = CombineQuerySupport(aggregate, support);
@@ -101,8 +102,8 @@ namespace Horo::Navigation {
         NavigationSupport aggregateQuerySupport{};
         if (!ValidateQueries(capabilities, aggregateQuerySupport))
             return false;
-        const auto grounded = capabilities.capabilities[static_cast<std::size_t>(NavigationCapability::GroundedQueries)];
-        if (aggregateQuerySupport != grounded)
+        if (const auto grounded = capabilities.capabilities[static_cast<std::size_t>(NavigationCapability::GroundedQueries)];
+            aggregateQuerySupport != grounded)
             return false;
         if (aggregateQuerySupport == NavigationSupport::Available)
             return capabilities.maximumConcurrentQueries > 0;
@@ -129,16 +130,14 @@ namespace Horo::Navigation {
     /** @copydoc AdmitNavigationQuery */
     Result<void> AdmitNavigationQuery(const NavigationProviderCapabilities &capabilities, const std::uint64_t expectedRevision,
                                       const NavigationQueryRequirement &requirement) {
-        const auto descriptors = ValidateAdmissionDescriptors(capabilities, expectedRevision, requirement);
-        if (descriptors.HasError())
+        if (const auto descriptors = ValidateAdmissionDescriptors(capabilities, expectedRevision, requirement); descriptors.HasError())
             return descriptors;
         if (capabilities.revision != expectedRevision)
             return Result<void>::Failure(MakeError(NavigationErrors::CapabilityStale));
 
         const auto queryIndex = static_cast<std::size_t>(requirement.query);
         const auto qualityIndex = static_cast<std::size_t>(requirement.quality);
-        const auto support = AdmitSupport(capabilities.querySupport[queryIndex][qualityIndex]);
-        if (support.HasError())
+        if (const auto support = AdmitSupport(capabilities.querySupport[queryIndex][qualityIndex]); support.HasError())
             return support;
         if (!Fits(requirement.limits, capabilities.queryLimits[queryIndex][qualityIndex]))
             return Result<void>::Failure(MakeError(NavigationErrors::QueryLimitExceeded));
