@@ -354,6 +354,13 @@ add_library(HoroEngine::NavigationApi ALIAS HoroNavigationApi)
 target_compile_features(HoroNavigationApi PUBLIC cxx_std_20)
 target_link_libraries(HoroNavigationApi PUBLIC HoroEngine::Foundation)
 
+add_library(HoroNavigationNull STATIC
+        runtime/navigation/backends/null/NullProvider.cpp
+)
+add_library(HoroEngine::NavigationNull ALIAS HoroNavigationNull)
+target_compile_features(HoroNavigationNull PUBLIC cxx_std_20)
+target_link_libraries(HoroNavigationNull PUBLIC HoroEngine::NavigationApi)
+
 add_library(HoroInput STATIC
         runtime/input/Input.cpp
         runtime/input/InputErrors.cpp
