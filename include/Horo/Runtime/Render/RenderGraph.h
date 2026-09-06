@@ -155,8 +155,8 @@ namespace Horo::Render {
     public:
         RenderGraph(const RenderGraph &) = delete;
         RenderGraph &operator=(const RenderGraph &) = delete;
-        RenderGraph(RenderGraph &&) noexcept = default;
-        RenderGraph &operator=(RenderGraph &&) noexcept = default;
+        RenderGraph(RenderGraph &&other) noexcept;
+        RenderGraph &operator=(RenderGraph &&other) noexcept;
         ~RenderGraph() = default;
 
         /**
@@ -198,7 +198,7 @@ namespace Horo::Render {
     private:
         friend class RenderGraphBuilder;
 
-        RenderGraph(RenderGraphOwnerId owner, RenderGraphLimits limits, std::vector<RenderGraphPass> passes,
+        RenderGraph(RenderGraphOwnerId owner, const RenderGraphLimits &limits, std::vector<RenderGraphPass> passes,
                     std::vector<RenderGraphResource> resources, std::vector<RenderGraphResourceUsage> usages,
                     std::vector<RenderGraphDependency> dependencies) noexcept;
 
