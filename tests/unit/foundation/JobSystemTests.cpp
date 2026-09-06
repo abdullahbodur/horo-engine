@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <condition_variable>
+#include <functional>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -16,6 +17,38 @@ namespace {
         .summary = "Test child failed.",
         .remediationHint = "Inspect the test.",
     };
+
+    struct ReentrantCaptureDestructor {
+        explicit ReentrantCaptureDestructor(std::function<void()> callback) : onDestroy(std::move(callback)) {}
+
+        std::function<void()> onDestroy;
+
+        ~ReentrantCaptureDestructor() {
+            onDestroy();
+        }
+    };
+
+    void VerifyReentrantCaptureRelease(const bool shutdownCancellation) {
+        Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 0, .maxQueuedJobs = 1}};
+        std::optional<Horo::JobHandle> handle;
+        bool destructorReentered{};
+        auto capture = std::make_shared<ReentrantCaptureDestructor>([&] {
+            destructorReentered = handle->Wait().HasError() && jobs.Query(handle->Id()).state == Horo::JobState::Cancelled &&
+                                  jobs.RequestCancel(handle->Id()).HasValue();
+        });
+        auto submitted = jobs.Submit({}, [capture](const Horo::CancellationToken &) {
+        });
+        REQUIRE((submitted.HasValue()));
+        handle.emplace(std::move(submitted).Value());
+        capture.reset();
+
+        if (shutdownCancellation)
+            jobs.Shutdown(Horo::ShutdownPolicy::Cancel);
+        else
+            REQUIRE((jobs.RequestCancel(handle->Id()).HasValue()));
+        REQUIRE((destructorReentered));
+        jobs.Shutdown(Horo::ShutdownPolicy::Cancel);
+    }
 
     TEST_CASE("Submitted Job Reaches Succeeded Terminal State", "[unit][foundation]") {
         Horo::JobSystem jobs{Horo::JobSystemConfig{.workerCount = 1, .maxQueuedJobs = 4}};
@@ -155,6 +188,11 @@ namespace {
         REQUIRE((foreignWorkerRejected.load()));
         otherJobs.Shutdown(Horo::ShutdownPolicy::Drain);
         jobs.Shutdown(Horo::ShutdownPolicy::Drain);
+    }
+
+    TEST_CASE("Queued Termination Releases Captures Outside Job System Locks", "[unit][foundation][jobs][lifetime]") {
+        VerifyReentrantCaptureRelease(false);
+        VerifyReentrantCaptureRelease(true);
     }
 
     TEST_CASE("Task Group Collect All Returns Failures In Spawn Order", "[unit][foundation]") {
