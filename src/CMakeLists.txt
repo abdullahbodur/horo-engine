@@ -364,6 +364,14 @@ add_library(HoroEngine::NavigationNull ALIAS HoroNavigationNull)
 target_compile_features(HoroNavigationNull PUBLIC cxx_std_20)
 target_link_libraries(HoroNavigationNull PUBLIC HoroEngine::NavigationApi)
 
+add_library(HoroWorldStreaming STATIC
+        runtime/world_streaming/WorldStreamingErrors.cpp
+        runtime/world_streaming/WorldStreamingIdentity.cpp
+)
+add_library(HoroEngine::WorldStreaming ALIAS HoroWorldStreaming)
+target_compile_features(HoroWorldStreaming PUBLIC cxx_std_20)
+target_link_libraries(HoroWorldStreaming PUBLIC HoroEngine::Foundation)
+
 add_library(HoroInput STATIC
         runtime/input/Input.cpp
         runtime/input/InputErrors.cpp

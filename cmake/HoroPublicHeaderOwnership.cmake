@@ -167,6 +167,10 @@ horo_configure_target_header_boundary(HoroNavigationApi PUBLIC_HEADERS
 horo_configure_target_header_boundary(HoroNavigationNull PUBLIC_HEADERS
     Horo/Navigation/Backends/NullProvider.h
 )
+horo_configure_target_header_boundary(HoroWorldStreaming PUBLIC_HEADERS
+    Horo/WorldStreaming/WorldStreamingErrors.h
+    Horo/WorldStreaming/WorldStreamingIdentity.h
+)
 
 horo_configure_target_header_boundary(HoroRenderApi PUBLIC_HEADERS
     Horo/Runtime/Render/Mesh.h

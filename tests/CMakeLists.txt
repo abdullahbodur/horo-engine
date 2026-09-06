@@ -219,6 +219,13 @@ target_include_directories(HoroNavigationApiTests PRIVATE ${CMAKE_CURRENT_SOURCE
 target_link_libraries(HoroNavigationApiTests PRIVATE HoroEngine::NavigationApi HoroEngine::NavigationNull)
 horo_register_catch_test(HoroNavigationApiTests LABELS "unit;navigation;headless")
 
+add_executable(HoroWorldStreamingTests
+        unit/runtime/world_streaming/WorldStreamingIdentityTests.cpp
+)
+target_compile_features(HoroWorldStreamingTests PRIVATE cxx_std_20)
+target_link_libraries(HoroWorldStreamingTests PRIVATE HoroEngine::WorldStreaming)
+horo_register_catch_test(HoroWorldStreamingTests LABELS "unit;world_streaming;headless")
+
 foreach(horo_physics_probe IN ITEMS iOS Linux Darwin)
     set(horo_physics_expected "Canonical Physics is not qualified for this target")
     if(horo_physics_probe STREQUAL "Linux")
