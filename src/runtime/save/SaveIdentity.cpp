@@ -10,6 +10,11 @@ namespace Horo::Runtime {
             return (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') || character == '_';
         }
 
+        /** @brief Reports whether text has the fixed canonical UUID layout. */
+        [[nodiscard]] bool HasCanonicalUuidLayout(const std::string_view text) noexcept {
+            return text.size() == 36 && text[8] == '-' && text[13] == '-' && text[18] == '-' && text[23] == '-';
+        }
+
         /** @brief Parses exactly two lowercase hexadecimal characters into one byte. */
         [[nodiscard]] std::optional<std::uint8_t> ParseCanonicalByte(const std::string_view text) noexcept {
             if (text.size() != 2 || !std::ranges::all_of(text, [](const char character) {
@@ -22,6 +27,12 @@ namespace Horo::Runtime {
             if (error != std::errc{} || end != text.data() + text.size())
                 return std::nullopt;
             return static_cast<std::uint8_t>(parsedByte);
+        }
+
+        /** @brief Reports whether one participant-ID segment is canonical. */
+        [[nodiscard]] bool IsCanonicalParticipantSegment(const std::string_view segment) noexcept {
+            return !segment.empty() && segment.front() >= 'a' && segment.front() <= 'z' &&
+                   std::ranges::all_of(segment, IsCanonicalParticipantCharacter);
         }
 
         template <typename Range> [[nodiscard]] std::uint64_t StableHash64(const Range &bytes) noexcept {
@@ -37,26 +48,24 @@ namespace Horo::Runtime {
     namespace SaveIdentityDetail {
         /** @copydoc ParseUuid */
         Result<Bytes> ParseUuid(const std::string_view text) {
-            if (text.size() != 36 || text[8] != '-' || text[13] != '-' || text[18] != '-' || text[23] != '-')
+            if (!HasCanonicalUuidLayout(text))
+                return Result<Bytes>::Failure(MakeError(SaveErrors::IdentityMalformed));
+
+            std::array<char, 32> compactText{};
+            const auto compactEnd = std::ranges::copy_if(text, compactText.begin(), [](const char character) {
+                return character != '-';
+            }).out;
+            if (compactEnd != compactText.end())
                 return Result<Bytes>::Failure(MakeError(SaveErrors::IdentityMalformed));
 
             Bytes bytes{};
-            std::size_t byteIndex{};
-            for (std::size_t index = 0; index < text.size();) {
-                if (text[index] == '-') {
-                    ++index;
-                    continue;
-                }
-                if (index + 2 > text.size() || byteIndex >= bytes.size())
-                    return Result<Bytes>::Failure(MakeError(SaveErrors::IdentityMalformed));
-                const auto parsedByte = ParseCanonicalByte(text.substr(index, 2));
+            const std::string_view compactView{compactText.data(), compactText.size()};
+            for (std::size_t byteIndex = 0; byteIndex < bytes.size(); ++byteIndex) {
+                const auto parsedByte = ParseCanonicalByte(compactView.substr(byteIndex * 2, 2));
                 if (!parsedByte.has_value())
                     return Result<Bytes>::Failure(MakeError(SaveErrors::IdentityMalformed));
-                bytes[byteIndex++] = *parsedByte;
-                index += 2;
+                bytes[byteIndex] = *parsedByte;
             }
-            if (byteIndex != bytes.size())
-                return Result<Bytes>::Failure(MakeError(SaveErrors::IdentityMalformed));
             return ValidateUuid(bytes);
         }
 
@@ -91,24 +100,19 @@ namespace Horo::Runtime {
 
     /** @copydoc SaveParticipantId::Parse */
     Result<SaveParticipantId> SaveParticipantId::Parse(const std::string_view value) {
-        if (value.empty() || value.size() > MaximumSaveParticipantIdBytes || value.front() == '.' || value.back() == '.')
+        if (value.empty() || value.size() > MaximumSaveParticipantIdBytes || value.find('.') == std::string_view::npos)
             return Result<SaveParticipantId>::Failure(MakeError(SaveErrors::ParticipantIdInvalid));
-        bool segmentStart = true;
-        bool hasDot = false;
-        for (const unsigned char character : value) {
-            if (character == '.') {
-                if (segmentStart)
-                    return Result<SaveParticipantId>::Failure(MakeError(SaveErrors::ParticipantIdInvalid));
-                segmentStart = true;
-                hasDot = true;
-                continue;
-            }
-            if (!IsCanonicalParticipantCharacter(character) || (segmentStart && !(character >= 'a' && character <= 'z')))
+
+        std::size_t segmentBegin{};
+        while (segmentBegin <= value.size()) {
+            const std::size_t segmentEnd = value.find('.', segmentBegin);
+            const std::string_view segment = value.substr(segmentBegin, segmentEnd - segmentBegin);
+            if (!IsCanonicalParticipantSegment(segment))
                 return Result<SaveParticipantId>::Failure(MakeError(SaveErrors::ParticipantIdInvalid));
-            segmentStart = false;
+            if (segmentEnd == std::string_view::npos)
+                break;
+            segmentBegin = segmentEnd + 1;
         }
-        if (segmentStart || !hasDot)
-            return Result<SaveParticipantId>::Failure(MakeError(SaveErrors::ParticipantIdInvalid));
         return Result<SaveParticipantId>::Success(SaveParticipantId{std::string{value}});
     }
 
