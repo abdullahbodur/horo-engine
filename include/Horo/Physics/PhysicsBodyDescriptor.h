@@ -54,8 +54,8 @@ namespace Horo::Physics {
     struct PhysicsAuthoredBodyDescriptor final {
         PhysicsMotionType motion{PhysicsMotionType::Static};
         PhysicsMassPolicy mass;
-        Math::Vec3 initialLinearVelocity;
-        Math::Vec3 initialAngularVelocity;
+        Math::Vec3 initialLinearVelocity{};
+        Math::Vec3 initialAngularVelocity{};
     };
 
     /**
@@ -97,8 +97,8 @@ namespace Horo::Physics {
     struct PhysicsBodyState final {
         BodyHandle body;
         PhysicsPose pose;
-        Math::Vec3 linearVelocity;
-        Math::Vec3 angularVelocity;
+        Math::Vec3 linearVelocity{};
+        Math::Vec3 angularVelocity{};
         PhysicsBodyActivity activity{PhysicsBodyActivity::Awake};
     };
 

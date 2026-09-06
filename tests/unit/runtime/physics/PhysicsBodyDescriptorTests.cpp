@@ -144,6 +144,8 @@ namespace Horo::Physics {
 
         TEST_CASE("Physics authored body intent validates each motion and typed mass alternative", "[physics][body]") {
             auto authored = MakeAuthoredBody();
+            REQUIRE(authored.initialLinearVelocity == Math::Vec3{});
+            REQUIRE(authored.initialAngularVelocity == Math::Vec3{});
             REQUIRE(ValidatePhysicsAuthoredBodyDescriptor(authored).HasValue());
             authored.motion = PhysicsMotionType::Kinematic;
             authored.initialLinearVelocity = {1, 2, 3};
@@ -211,6 +213,8 @@ namespace Horo::Physics {
 
         TEST_CASE("Physics body state is query evidence independent of authored speed admission", "[physics][body]") {
             auto state = MakeBodyState();
+            REQUIRE(state.linearVelocity == Math::Vec3{});
+            REQUIRE(state.angularVelocity == Math::Vec3{});
             state.pose.translation = {1, 2, 3};
             state.linearVelocity = {600, 0, 0};
             state.angularVelocity = {0, 3, 0};
