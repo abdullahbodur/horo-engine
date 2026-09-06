@@ -7,6 +7,7 @@
 
 #include "Horo/Foundation/Result.h"
 #include "Horo/Runtime/Render/RenderBackend.h"
+#include "Horo/Runtime/Render/RenderSubmission.h"
 
 #include <compare>
 #include <cstddef>
@@ -61,13 +62,6 @@ namespace Horo::Render {
         }
 
         [[nodiscard]] constexpr auto operator<=>(const RenderGraphResourceId &) const noexcept = default;
-    };
-
-    /** @brief Logical queue role requested by an authored pass without native queue identity. */
-    enum class RenderQueueRole : std::uint8_t {
-        Graphics,
-        Compute,
-        Transfer,
     };
 
     /** @brief Coarse logical resource category used during initial graph authoring. */

@@ -29,7 +29,7 @@ namespace Horo::Render {
 
         /** @brief Reports whether the queue role belongs to the public contract. */
         [[nodiscard]] bool IsKnown(const RenderQueueRole queue) noexcept {
-            return static_cast<std::uint8_t>(queue) <= static_cast<std::uint8_t>(RenderQueueRole::Transfer);
+            return IsRenderQueueRoleValid(queue);
         }
 
         /** @brief Reports whether the resource kind belongs to the public contract. */
