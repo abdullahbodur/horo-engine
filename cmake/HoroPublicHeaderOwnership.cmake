@@ -174,6 +174,10 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
     Horo/Physics/PhysicsWorldDescriptor.h
     Horo/Physics/PhysicsWorldSettings.h
 )
+horo_configure_target_header_boundary(HoroAI PUBLIC_HEADERS
+    Horo/AI/AIErrors.h
+    Horo/AI/AIIdentity.h
+)
 horo_configure_target_header_boundary(HoroNavigationApi PUBLIC_HEADERS
     Horo/Navigation/NavigationAreas.h
     Horo/Navigation/NavigationAgentProfiles.h

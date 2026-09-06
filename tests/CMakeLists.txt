@@ -214,6 +214,13 @@ target_compile_definitions(HoroPhysicsTests PRIVATE HORO_TEST_PHYSICS_NATIVE=$<B
 target_link_libraries(HoroPhysicsTests PRIVATE HoroEngine::Physics HoroEngine::Runtime HoroEngine::Platform)
 horo_register_catch_test(HoroPhysicsTests LABELS "unit;physics;headless")
 
+add_executable(HoroAITests
+        unit/runtime/ai/AIIdentityTests.cpp
+)
+target_compile_features(HoroAITests PRIVATE cxx_std_20)
+target_link_libraries(HoroAITests PRIVATE HoroEngine::AI)
+horo_register_catch_test(HoroAITests LABELS "unit;ai;headless")
+
 add_executable(HoroNavigationApiTests
         support/navigation/DeterministicNavigationProvider.cpp
         unit/runtime/navigation/NavigationAreaRegistryTests.cpp

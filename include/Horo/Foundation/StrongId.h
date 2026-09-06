@@ -19,6 +19,9 @@ namespace Horo::Foundation::Detail {
      */
     template <typename Tag, const ErrorCodeDescriptor &InvalidIdentityError> class NonZeroId64 final {
     public:
+        /** @brief Compile-time identity-domain tag retained for typed serialization adapters. */
+        using IdentityTag = Tag;
+
         /** @brief Constructs the reserved invalid zero identity. */
         constexpr NonZeroId64() = default;
 
