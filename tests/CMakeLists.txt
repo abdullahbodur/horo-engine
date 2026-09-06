@@ -207,9 +207,7 @@ target_link_libraries(HoroPhysicsTests PRIVATE HoroEngine::Physics HoroEngine::R
 horo_register_catch_test(HoroPhysicsTests LABELS "unit;physics;headless")
 
 add_executable(HoroNavigationApiTests
-        unit/runtime/navigation/NavigationCapabilitiesTests.cpp
         unit/runtime/navigation/NavigationIdentityTests.cpp
-        unit/runtime/navigation/NavigationOutcomesTests.cpp
 )
 target_compile_features(HoroNavigationApiTests PRIVATE cxx_std_20)
 target_link_libraries(HoroNavigationApiTests PRIVATE HoroEngine::NavigationApi)

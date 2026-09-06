@@ -155,10 +155,8 @@ horo_configure_target_header_boundary(HoroPhysics PUBLIC_HEADERS
     Horo/Physics/PhysicsWorldSettings.h
 )
 horo_configure_target_header_boundary(HoroNavigationApi PUBLIC_HEADERS
-    Horo/Navigation/NavigationCapabilities.h
     Horo/Navigation/NavigationErrors.h
     Horo/Navigation/NavigationIdentity.h
-    Horo/Navigation/NavigationOutcomes.h
 )
 
 horo_configure_target_header_boundary(HoroRenderApi PUBLIC_HEADERS
